@@ -1,0 +1,373 @@
+/* 由 @plume/ui 对应目录的组件使用，见 ui.css。 */
+
+/* overlay/：对话框、遮罩、弹层、菜单的行、悬停提示、菜单里的开关旋钮。 */
+
+/*
+ * 对话框的来和去。
+ *
+ * 遮罩和卡片分开动：遮罩只淡入淡出，因为一层会动的压暗读起来像窗口本身在挪。卡片从它将要停的位置长出来，
+ * 而不是升上来——居中卡片上 6px 的上升读起来像对话框从某处飘进来，而它从没从任何地方来过。离开比到达快，
+ * 也不回弹——一个会弹的退场是在要人看它。
+ *
+ * 遮罩只压暗。背后模糊试过 4px 和 2px，都去掉了：它把后面的窗口变成一片雾，而那正是你马上要回去的窗口。
+ */
+.plume-scrim-in,
+.plume-scrim-out {
+	/* 浓度和 Overlay.tsx 的 SCRIM_ALPHA 一致：窗口自己的按钮按那个数跟着压暗。 */
+	background: color-mix(in srgb, var(--plume-shade) 22%, transparent);
+}
+
+.plume-scrim-in {
+	animation: plume-scrim-in 150ms ease-out;
+}
+
+.plume-scrim-out {
+	animation: plume-scrim-out 100ms ease-in forwards;
+}
+
+/*
+ * `will-change` 让卡片在入场之后也留在自己的图层上，而不只是入场期间。
+ *
+ * 在任意高度的窗口里居中，卡片通常落在像素之间。动画期间它是一个图层，文字在图层上栅格化；动画结束时图层
+ * 被丢掉，文字重画到像素网格上——对话框停稳一拍之后，标题下面的几行挪了四分之一个设备像素，读起来是文字
+ * 抽了一下。留在图层上，最后一帧画的字就是留下来的字。用 `opacity` 而不是 `transform`，后者会让卡片成为里面
+ * 任何 `position: fixed` 元素的包含块。
+ */
+.plume-dialog-in {
+	animation: plume-dialog-in 150ms var(--plume-e-out);
+	will-change: opacity;
+}
+
+.plume-dialog-out {
+	animation: plume-dialog-out 100ms ease-in forwards;
+}
+
+@keyframes plume-scrim-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/*
+ * 退场只写终点。起点是元素自己的样式，`Overlay` 在关闭时把它设成屏幕上的那一帧——所以还在到达途中就被关掉
+ * 的对话框从它到了的地方回去，而不是先跳到完全不透明。
+ */
+@keyframes plume-scrim-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes plume-dialog-in {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes plume-dialog-out {
+	to {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+}
+
+.plume-dialog-surface {
+	box-shadow: var(--plume-shadow-dialog);
+}
+
+.plume-dialog-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: var(--plume-control);
+	padding: 0 16px;
+	border-radius: var(--plume-radius-field);
+	font-size: var(--plume-ui-size);
+	/* 中文可在任意字间断行，放进 flex 行会被挤成竖排；不换行后 min-content 即整段文字，flex 压不动它。 */
+	white-space: nowrap;
+	transition:
+		background-color var(--plume-t-quick),
+		color var(--plume-t-quick);
+}
+
+.plume-dialog-action-primary {
+	background: var(--plume-ink);
+	color: var(--plume-shell);
+}
+
+.plume-dialog-action-primary:hover {
+	opacity: 0.9;
+}
+
+.plume-dialog-action-secondary {
+	background: var(--plume-card);
+	color: var(--plume-ink);
+}
+
+.plume-dialog-action-secondary:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-dialog-action-danger {
+	background: color-mix(in srgb, var(--plume-danger) 10%, transparent);
+	color: var(--plume-danger);
+}
+
+.plume-dialog-action-danger:hover {
+	background: color-mix(in srgb, var(--plume-danger) 18%, transparent);
+}
+
+/*
+ * 弹层从离触发元素最近的那一点长出来，两者之间的联系读得出来。
+ *
+ * 一个关键帧，不是三个。方向只靠 `transform-origin` 表达——缩放和淡入在三个方向上一字不差——三份同一个动画
+ * 就是三次让其中一份走样的机会。原点在放置时量出来、以行内样式交过来；写死的 `center` 对每个没有居中在触发
+ * 元素上的菜单都是错的，而大多数菜单都不居中：右对齐的菜单会从它自己的中间长出来。
+ *
+ * 这里的 `transform-origin` 是给不经 React 的调用方的兜底（比如第三方库自己建的、只往下展开的面板）。
+ */
+@keyframes plume-pop-in {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.plume-pop-in {
+	transform-origin: top center;
+	animation: plume-pop-in 130ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/*
+ * 离开比到达快——用完的菜单应该让开。两个方向都缩放而不是位移：一个小面板哪怕滑几个像素也读起来像抽动，
+ * 再叠一条过冲的曲线就成了回弹。
+ */
+@keyframes plume-pop-out {
+	to {
+		opacity: 0;
+		transform: scale(0.97);
+	}
+}
+
+.plume-pop-out {
+	animation: plume-pop-out 120ms ease-in forwards;
+	pointer-events: none;
+}
+
+/*
+ * 菜单行共用的状态。
+ *
+ * 写成一个类而不是重复的一串工具类，应用里每个菜单的高亮才一模一样——形状不标准的行也能拿到同样的状态。
+ * 圆角 6px：菜单里的行（`.plume-menu-card` 里，包括钉在底部、不在滚动区里的那几行）和列表里的行是同一档。
+ */
+.plume-item {
+	border-radius: var(--plume-radius-item);
+	color: var(--plume-ink);
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-out),
+		color var(--plume-t-quick) var(--plume-e-out);
+}
+
+/*
+ * 悬停填底；选中不填。
+ *
+ * 勾已经说明了选的是哪个。再填一次底，选中行看着就像一直被悬停——指针在另一行上时，两行同时显得激活，
+ * 下一次点击会选哪一行就不再一目了然。
+ */
+.plume-item:hover:not(:disabled) {
+	background: var(--plume-card-hover);
+}
+
+.plume-item:active:not(:disabled) {
+	background: var(--plume-elevated);
+}
+
+.plume-item:disabled {
+	opacity: 0.4;
+}
+
+.plume-item[data-danger="true"] {
+	color: var(--plume-danger);
+}
+
+.plume-item[data-danger="true"]:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-danger) 12%, transparent);
+}
+
+/*
+ * 菜单行的图标列（`MenuItem`）。
+ *
+ * 图标比字淡一档，指针停上来时和字一起变实，一行读起来是一个整体；危险的行连图标一起变红，不是灰图标配红字。
+ * lucide 图标的大小和线宽在这里统一：各个菜单传进来的有 12.5、13、14px，线宽也各不相同，排在一起参差不齐。
+ * 应用图标（`img`）不受影响。
+ */
+.plume-menu-icon {
+	color: var(--plume-ink-muted);
+	transition: color var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-menu-icon > svg.lucide {
+	width: 15px;
+	height: 15px;
+	stroke-width: 1.75;
+}
+
+.plume-item:hover:not(:disabled) .plume-menu-icon {
+	color: var(--plume-ink);
+}
+
+.plume-item[data-danger="true"] .plume-menu-icon {
+	color: inherit;
+}
+
+/* 行尾表示「选中」的勾：强调色，大小统一。调用处给勾单独上了色的（比如完全访问的红勾）照它的。 */
+.plume-menu-trailing:has(> svg.lucide-check) {
+	color: var(--plume-accent);
+}
+
+.plume-menu-trailing > svg.lucide-check {
+	width: 14px;
+	height: 14px;
+	stroke-width: 2;
+}
+
+/*
+ * 菜单和浮层的卡片：实底、一层淡阴影。
+ *
+ * 不用半透明加大模糊、顶边内高光、深色下重阴影的毛玻璃：放在一张小菜单上显得又厚又花。浮层本来就几乎不透明，
+ * 模糊透不出什么东西，只剩那些装饰。深浅主题同一组阴影。
+ */
+.plume-menu-card {
+	border-radius: var(--plume-radius-menu);
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-menu);
+}
+
+/*
+ * 四边一样的内衬。
+ *
+ * 滑块要落在圆角的裁切以内，行离卡片每条边要一样远。上下一种外边距、右边另一种，是两个答案：悬停底色看着
+ * 被推向左边，只有一行的菜单右边还多出 4px 的空条，给一根并不存在的滚动条。
+ */
+.plume-menu-scroll {
+	margin: var(--plume-menu-inset);
+}
+
+/*
+ * 菜单分隔线下面的行（`MenuFooter`）用同样的留白。用内边距而不是外边距：footer 的盒子带着分隔线，分隔线
+ * 仍要横贯整张卡片。
+ */
+.plume-menu-foot {
+	padding: var(--plume-menu-inset);
+}
+
+/*
+ * 悬停提示的面。
+ *
+ * 不画成又一张浮起的卡片的样子：提示是临时的注记，这么小的尺寸，和其他一切同一套配色的带框面板读起来是又
+ * 一块要解析的界面。
+ */
+.plume-tooltip {
+	width: max-content;
+	max-width: min(360px, calc(100vw - 12px));
+	/*
+	 * 高度也封顶：气泡不接指针、滚不动，长出窗口的部分谁也读不到。长文本该在调用处截短，这里只是兜底，
+	 * 不让它越过窗口。
+	 */
+	max-height: calc(100vh - 12px);
+	overflow: hidden;
+	/*
+	 * 最后的手段，给一个断行机会都没有的串。长路径和文件名在 `tooltip.ts` 里已经在 `/`、`_`、`.` 之类的后面
+	 * 加了断行点，那里还会把换了行的标签收窄到平衡宽度（行内的 `width`）——所以一行永远不会只剩一个字符。
+	 */
+	overflow-wrap: anywhere;
+	padding: 4px 8px;
+	border-radius: var(--plume-radius-item);
+	font-size: calc(var(--plume-ui-size) - 2px);
+	line-height: 1.45;
+	/*
+	 * 换行，而不是 `nowrap`，否则上面的 max-width 毫无意义：一句话长的提示会作为一行铺满整个窗口。短标签
+	 * 仍然是一行，因为气泡是定位出来的，而不是排在一个能挤它的列里。
+	 */
+	text-wrap: pretty;
+	/*
+	 * 提示里的换行保留；连续的空格不保留。
+	 *
+	 * 提示通常是一个短语、一行。有几个要说的更多——比如一行列表项说它属于哪里、是什么时候的，各占一行——
+	 * 没有这个，它们会折叠掉换行，成一整句连着的话。`pre-line` 保留调用方写的换行，太长的仍会折行，`pre` 不会。
+	 */
+	white-space: pre-line;
+	/* 不反色：跟随主题的浮层底色，加一圈细边。 */
+	border: 1px solid var(--plume-line-float);
+	background: var(--plume-float);
+	color: var(--plume-ink);
+	box-shadow: var(--plume-shadow-tip);
+	/*
+	 * 两个动画，因为离开不是把进来倒着放。
+	 *
+	 * 到达时从无到有、轻微过冲再落定——这条曲线是应用里其他在指针下出现的东西用的那条。离开更快、不缩放：
+	 * 一个在离开时缩小的气泡，恰好在它已经不相关的那一刻把注意力引到自己身上。
+	 */
+	animation: plume-tip-in 150ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+	will-change: opacity, transform;
+}
+
+.plume-tooltip[data-leaving] {
+	animation: plume-tip-out 110ms ease-in forwards;
+	pointer-events: none;
+}
+
+@keyframes plume-tip-in {
+	from {
+		opacity: 0;
+		transform: translateY(-3px) scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes plume-tip-out {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+	to {
+		opacity: 0;
+		transform: translateY(-2px);
+	}
+}
+
+.plume-knob {
+	background: var(--plume-knob);
+	border-color: color-mix(in srgb, var(--plume-shade) 14%, transparent);
+	box-shadow: var(--plume-shadow-knob);
+}
+
+/*
+ * 深色下也是白的。
+ *
+ * 用中灰的话，放在关闭状态的深色轨道上还算得体，一旦打开，灰旋钮压在强调色上就不是「亮起来」而是「脏了
+ * 一块」：开关最重要的那一刻反而最不清楚。
+ *
+ * 白色在两种轨道上都成立，只是深色下需要压暗一点边框和更深的投影，才不会在深底上发光过头。
+ */
+@media (prefers-color-scheme: dark) {
+	.plume-knob {
+		border-color: color-mix(in srgb, var(--plume-shade) 32%, transparent);
+	}
+}

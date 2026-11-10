@@ -1,0 +1,107 @@
+@layer components {
+	.markdown .md-image {
+		display: inline-block;
+		max-width: 100%;
+		height: auto;
+		vertical-align: middle;
+		border-radius: var(--plume-radius-field);
+	}
+
+	.markdown .md-image[data-block],
+	.markdown .md-image-pending {
+		display: block;
+		margin-block: 6px;
+	}
+
+	.markdown .md-image[data-waiting] {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.markdown .md-image[data-reveal] {
+		animation: md-image-reveal var(--plume-t-slow) var(--plume-e-out) both;
+	}
+
+	.markdown .md-image-pending {
+		position: relative;
+		width: 240px;
+		max-width: 100%;
+		aspect-ratio: 4 / 3;
+		overflow: hidden;
+		border-radius: var(--plume-radius-field);
+		background: color-mix(in oklab, var(--plume-ink) 5%, transparent);
+	}
+
+	.md-image-pending::before,
+	.md-image-pending::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+		background-size: 9px 9px;
+		background-position: center;
+		mask-repeat: no-repeat;
+	}
+
+	.md-image-pending::before {
+		background-image: radial-gradient(circle, color-mix(in oklab, var(--plume-ink) 42%, transparent) 0.8px, transparent 1.3px);
+		mask-image: radial-gradient(closest-side, var(--plume-ink), transparent), radial-gradient(closest-side, var(--plume-ink), transparent);
+		mask-size:
+			90% 90%,
+			75% 75%;
+		mask-position:
+			100% 0%,
+			0% 75%;
+		animation: md-image-drift calc(var(--plume-t-slow) * 9) ease-in-out infinite alternate;
+	}
+
+	.md-image-pending::after {
+		background-image: radial-gradient(circle, color-mix(in oklab, var(--plume-ink) 70%, transparent) 1.1px, transparent 1.6px);
+		mask-image: linear-gradient(135deg, transparent 40%, var(--plume-ink) 50%, transparent 60%);
+		mask-size: 250% 250%;
+		mask-position: 0% 0%;
+		animation: md-image-sweep calc(var(--plume-t-slow) * 7) ease-in-out infinite;
+	}
+
+	@keyframes md-image-reveal {
+		from {
+			opacity: 0;
+			filter: blur(14px) saturate(0.7);
+			transform: scale(1.025);
+		}
+		to {
+			opacity: 1;
+			filter: none;
+			transform: none;
+		}
+	}
+
+	@keyframes md-image-sweep {
+		from {
+			mask-position: 100% 100%;
+		}
+		to {
+			mask-position: 0% 0%;
+		}
+	}
+
+	@keyframes md-image-drift {
+		0% {
+			mask-position:
+				100% 0%,
+				0% 75%;
+		}
+		50% {
+			mask-position:
+				35% 100%,
+				75% 15%;
+		}
+		100% {
+			mask-position:
+				0% 15%,
+				100% 100%;
+		}
+	}
+}

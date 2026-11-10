@@ -1,0 +1,20 @@
+{
+  "name": "@plume/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@plume/llm": "workspace:*",
+    "@plume/rpc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0"
+  }
+}

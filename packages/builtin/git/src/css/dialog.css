@@ -1,0 +1,439 @@
+/*
+ * 提交与推送弹窗、输入框上方的分支签和改动计数、面板顶上的仓库选择：CommitPushDialog.tsx、composer.tsx、RepoPicker.tsx 用的类。
+ * 字号交给外面包的 Text，这里只管布局和颜色；颜色、圆角、时长都取 token。
+ */
+
+/* ── 几处共用的小件 ─────────────────────────────────────────────── */
+
+/* 一行放不下就省略，而不是把同一行的图标和数字挤出去。 */
+.git-dialog-truncate {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.git-dialog-icon-faint {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+}
+
+.git-dialog-icon-muted {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+/* ── 提交与推送弹窗 ─────────────────────────────────────────────── */
+
+.git-dialog {
+	display: flex;
+	flex-direction: column;
+	padding: 16px;
+}
+
+/* 提交到哪儿那一行。 */
+.git-dialog-target {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-bottom: 10px;
+}
+
+.git-dialog-new-branch {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 6px;
+}
+
+/* 新分支名直接写在这一行里，不像一个输入框：它是「提交到哪」这句话的后半截。 */
+.git-dialog-branch-input {
+	min-width: 0;
+	flex: 1;
+	border: none;
+	background: transparent;
+	padding: 0;
+	color: var(--plume-ink);
+}
+
+/* 提示语不加粗：加粗的灰字读起来像一个已经填好的名字。 */
+.git-dialog-branch-input::placeholder {
+	font-weight: normal;
+	color: var(--plume-ink-faint);
+}
+
+.git-dialog-branch-input:focus {
+	outline: none;
+}
+
+/* 往左退一点，让分支图标和下面输入框里的字对齐，悬停的底色仍然把图标包进去。 */
+.git-dialog-branch-button {
+	margin-left: -4px;
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	border-radius: var(--plume-radius-field);
+	padding: 2px 4px;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-dialog-branch-button:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-dialog-branch-button:disabled {
+	opacity: 0.4;
+}
+
+.git-dialog-menu-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+}
+
+/* 写提交说明的框：和主输入框同样的描边，聚焦时描边深一档。 */
+.git-dialog-message {
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-panel);
+	transition: border-color var(--plume-t-base) var(--plume-e-soft);
+}
+
+.git-dialog-message:focus-within {
+	border-color: color-mix(in srgb, var(--plume-ink-faint) 60%, transparent);
+}
+
+.git-dialog-message-body {
+	position: relative;
+}
+
+.git-dialog-textarea {
+	display: block;
+	width: 100%;
+	resize: none;
+	overflow-y: auto;
+	border: none;
+	background: transparent;
+	padding: var(--plume-composer-in) var(--plume-composer-x);
+	color: var(--plume-ink);
+}
+
+.git-dialog-textarea::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+.git-dialog-textarea:focus {
+	outline: none;
+}
+
+.git-dialog-textarea:disabled {
+	opacity: 0.6;
+}
+
+/* 转圈落在第一行字的高度上：模型写的字会从那里出来。 */
+.git-dialog-spinner {
+	pointer-events: none;
+	position: absolute;
+	top: calc(var(--plume-composer-in) + 3px);
+	right: var(--plume-composer-x);
+}
+
+.git-dialog-language {
+	display: flex;
+	justify-content: flex-end;
+	padding: 0 var(--plume-composer-x) var(--plume-composer-in);
+}
+
+/* 按钮自带内边距，往右退一点，字和上面输入框里的字右边对齐。 */
+.git-dialog-language-button {
+	margin-right: -4px;
+}
+
+/* 带上未暂存的改动：整行都能点。 */
+.git-dialog-include {
+	margin-top: 6px;
+	display: flex;
+	width: 100%;
+	cursor: pointer;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	border-radius: var(--plume-radius-item);
+	padding: 6px 4px;
+	user-select: none;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-dialog-include:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-dialog-include-main {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 自己画的勾选框：没勾时勾号透明，框的大小不变，勾上那一下整行的字不挪。 */
+.git-dialog-check {
+	display: flex;
+	width: 15px;
+	height: 15px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card);
+	color: transparent;
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		border-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-dialog-check[data-checked] {
+	border-color: var(--plume-accent);
+	background: var(--plume-accent);
+	color: var(--plume-on-accent);
+}
+
+/* 读屏和键盘用的那个原生勾选框：看不见，但还在可访问树里。 */
+.git-dialog-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
+}
+
+.git-dialog-counts {
+	flex-shrink: 0;
+}
+
+.git-dialog-added {
+	color: var(--plume-ok);
+}
+
+.git-dialog-removed {
+	color: var(--plume-danger);
+}
+
+/* 底部三行动作之间留一道窄缝，悬停的底色不连成一片。 */
+.git-dialog-actions {
+	margin-top: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.git-dialog-action {
+	display: flex;
+	height: 36px;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 8px;
+	text-align: left;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-dialog-action:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-dialog-action:disabled {
+	pointer-events: none;
+	opacity: 0.4;
+}
+
+.git-dialog-action-main {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+}
+
+/* 转圈和图标占同一格：换了尺寸，按下那一下整行的字会横着挪。 */
+.git-dialog-action-icon {
+	display: flex;
+	width: 15px;
+	height: 15px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	color: var(--plume-ink-faint);
+}
+
+.git-dialog-kbd {
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-item);
+	padding: 1px 4px;
+}
+
+/* ── 输入框上方的分支签和改动计数 ───────────────────────────────── */
+
+/* 包着签的那一层只带字号；签在一行里可以缩，改动计数不缩。 */
+.git-chip-slot {
+	display: flex;
+	min-width: 0;
+}
+
+.git-chip {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 8px 0 12px;
+	color: var(--plume-ink);
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		opacity var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-chip:hover,
+.git-chip[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+/* 切换期间淡一点，名字读起来是「暂时还是这个」。 */
+.git-chip[aria-busy="true"] {
+	opacity: 0.6;
+}
+
+.git-chip-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+.git-chip-name {
+	min-width: 0;
+}
+
+.git-chip-marks {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* 菜单里的分支名：名字比菜单宽时悬停滚动，盒子要能缩。 */
+.git-chip-menu-name {
+	display: block;
+	min-width: 0;
+}
+
+.git-chip-menu-empty {
+	padding: 20px 10px;
+	text-align: center;
+}
+
+/* 分支还没读到时的几行占位，高度和真的行一样，菜单不会先矮后高。 */
+.git-chip-skeleton {
+	display: flex;
+	height: 30px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px;
+}
+
+.git-chip-skeleton-icon {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card);
+}
+
+.git-chip-skeleton-bar {
+	height: 11px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card);
+}
+
+.git-changes-slot {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.git-changes {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 8px;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-changes:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-changes-added {
+	color: var(--plume-ok);
+}
+
+.git-changes-removed {
+	color: var(--plume-danger);
+}
+
+.git-changes-icon {
+	flex-shrink: 0;
+}
+
+/* ── 面板顶上的仓库选择 ─────────────────────────────────────────── */
+
+.git-repo-picker {
+	display: flex;
+	height: 32px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	padding: 0 10px;
+	text-align: left;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-repo-picker:hover,
+.git-repo-picker[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+.git-repo-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+}
+
+.git-repo-name {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+}
+
+.git-repo-name-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.git-repo-count {
+	flex-shrink: 0;
+}
+
+.git-repo-caret {
+	color: var(--plume-ink-faint);
+}

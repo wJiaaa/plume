@@ -1,0 +1,24 @@
+{
+  "name": "@plume/documents",
+  "version": "0.1.0",
+  "description": "文件面板和插件共用的只读表格、SQLite 和 Word 预览。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "文档预览"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "docx-preview": "^0.4.1",
+    "react": "^19.3.1",
+    "vitest": "^5.1.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

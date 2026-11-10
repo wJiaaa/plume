@@ -1,0 +1,75 @@
+{
+  "name": "@plume/llm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/ai/index.d.ts",
+      "default": "./src/ai/index.ts"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./src/types.ts"
+    },
+    "./failure": {
+      "types": "./dist/ai/failure.d.ts",
+      "default": "./src/ai/failure.ts"
+    },
+    "./retry-policy": {
+      "types": "./dist/config/retry-policy.d.ts",
+      "default": "./src/config/retry-policy.ts"
+    },
+    "./thinking-options": {
+      "types": "./dist/ai/thinking-options.d.ts",
+      "default": "./src/ai/thinking-options.ts"
+    },
+    "./endpoint": {
+      "types": "./dist/ai/endpoint.d.ts",
+      "default": "./src/ai/endpoint.ts"
+    },
+    "./cache-routing": {
+      "types": "./dist/ai/cache-routing.d.ts",
+      "default": "./src/ai/cache-routing.ts"
+    },
+    "./image-models": {
+      "types": "./dist/config/image-models.d.ts",
+      "default": "./src/config/image-models.ts"
+    },
+    "./images": {
+      "types": "./dist/images/generate.d.ts",
+      "default": "./src/images/generate.ts"
+    },
+    "./image-dimensions": {
+      "types": "./dist/images/dimensions.d.ts",
+      "default": "./src/images/dimensions.ts"
+    },
+    "./image-types": {
+      "types": "./dist/images/types.d.ts",
+      "default": "./src/images/types.ts"
+    },
+    "./model-catalog": {
+      "types": "./dist/model-catalog.d.ts",
+      "default": "./src/model-catalog.ts"
+    },
+    "./model-catalog-format": {
+      "types": "./dist/model-catalog-format.d.ts",
+      "default": "./src/model-catalog-format.ts"
+    },
+    "./prefix-fingerprint": {
+      "types": "./dist/ai/prefix-fingerprint.d.ts",
+      "default": "./src/ai/prefix-fingerprint.ts"
+    },
+    "./vendors": {
+      "types": "./dist/ai/vendors/index.d.ts",
+      "default": "./src/ai/vendors/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0"
+  }
+}

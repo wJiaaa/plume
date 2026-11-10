@@ -1,0 +1,300 @@
+/*
+ * 附件：输入框上方和气泡外面那一排格子、正文里那枚标签、拖文件进来时盖的那一层。取值只用 token。
+ */
+
+@layer components {
+	/* 托盘的内衬在会折叠的那层里面一层：收起时内衬跟着被裁掉，而不是在关上的那一帧一下子没了。 */
+	.plume-composer-attachments {
+		display: flex;
+		flex-direction: column;
+		gap: var(--plume-composer-in);
+		/* 不加下内衬：输入框自己上面已经有 `--plume-composer-in`，叠两层就是缩略图底下一条宽带。 */
+		padding: var(--plume-composer-in) var(--plume-composer-x) 0;
+	}
+
+	/* ── 一排格子：输入框上方独占一行横着滚，气泡外面铺开换行 ── */
+
+	.plume-attachments {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.plume-attachments-track {
+		display: flex;
+		/* 中线对齐：一排里高的是图片，矮的是退回成文件的横条，对齐中线就够了，不把矮的拉高。 */
+		align-items: center;
+		min-width: 0;
+		/* 纵向 12、横向 8：取下的叉往上探出 8px，换行后不会压到上一行格子的下缘。 */
+		gap: 12px 8px;
+	}
+
+	.plume-attachments-row {
+		flex-wrap: nowrap;
+		/* 占满而不是按内容宽：按内容宽的话轨道永远等不到溢出，横滚和两头化开都不会发生。 */
+		align-self: stretch;
+		overflow: auto hidden;
+		/*
+		 * 叉只探出格子的上边和右边：这一层的正负边距互相抵消，会滚的容器不会把探出去的半个叉裁掉；横向跟
+		 * `--plume-composer-x` 对齐。
+		 */
+		--plume-attachment-bleed: 8px;
+		padding: var(--plume-attachment-bleed) calc(var(--plume-composer-x) - 4px) 0;
+		margin: calc(var(--plume-attachment-bleed) * -1) calc(4px - var(--plume-composer-x)) 0;
+		scroll-padding-inline: calc(var(--plume-composer-x) - 4px);
+		scrollbar-width: none;
+	}
+
+	.plume-attachments-row::-webkit-scrollbar {
+		display: none;
+	}
+
+	/*
+	 * 两头化开是盖上去的一层渐变，不是遮罩：遮罩连子元素一起裁，最靠边那个格子探出去的叉会一起淡掉。代价是它得知道
+	 * 底下是什么颜色——输入框的 `float`。
+	 */
+	.plume-attachments[data-plume-layout="row"]::before,
+	.plume-attachments[data-plume-layout="row"]::after {
+		content: "";
+		position: absolute;
+		z-index: 1;
+		top: 0;
+		bottom: 0;
+		width: 28px;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.plume-attachments[data-plume-layout="row"]::before {
+		left: calc(4px - var(--plume-composer-x));
+		background: linear-gradient(to right, var(--plume-float), transparent);
+	}
+
+	.plume-attachments[data-plume-layout="row"]::after {
+		right: calc(4px - var(--plume-composer-x));
+		background: linear-gradient(to left, var(--plume-float), transparent);
+	}
+
+	/* 谁溢出谁才化开，两侧分开问；属性是 `AttachmentStrip` 量出来写上去的。一条选择器一条规则，不合并。 */
+	.plume-attachments:has([data-fade-start])::before {
+		opacity: 1;
+	}
+
+	.plume-attachments:has([data-fade-end])::after {
+		opacity: 1;
+	}
+
+	.plume-attachment {
+		position: relative;
+		flex: none;
+	}
+
+	.plume-attachment-body {
+		display: block;
+		overflow: hidden;
+		border: 1px solid var(--plume-line);
+		border-radius: var(--plume-radius-field);
+		background: var(--plume-card);
+		text-align: start;
+		transition:
+			opacity var(--plume-t-quick) var(--plume-e-out),
+			border-color var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.plume-attachment-body:enabled:hover {
+		border-color: var(--plume-line-float);
+		opacity: 0.92;
+	}
+
+	/* 图片的边长由 `thumbnail` 给，写在行内；这里只管它是方的。 */
+	[data-plume-shape="image"] .plume-attachment-body {
+		aspect-ratio: 1;
+	}
+
+	/* 文件是一条，不是一个方块：文件名是横向的文本，同样的宽度一行放得下的比方块里两行还多。 */
+	[data-plume-shape="file"] .plume-attachment-body {
+		height: 32px;
+		min-width: 0;
+		max-width: 260px;
+		padding: 0 26px 0 8px;
+		font-size: var(--text-caption);
+		line-height: 1;
+	}
+
+	.plume-attachment-name {
+		min-width: 0;
+		overflow: hidden;
+		color: var(--plume-ink);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.plume-attachment-control {
+		opacity: 0;
+		transition: opacity var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.plume-attachment:hover .plume-attachment-control {
+		opacity: 1;
+	}
+
+	/* 键盘那一路：Tab 走到叉上时它得看得见。 */
+	.plume-attachment:has(:focus-visible) .plume-attachment-control {
+		opacity: 1;
+	}
+
+	/* 触屏上没有「先悬停」这一步，不常驻就是不存在。 */
+	@media (hover: none) {
+		.plume-attachment-control {
+			opacity: 1;
+		}
+	}
+
+	/* ── 正文里那枚标签 ──
+	 *
+	 * 输入框里是编辑器的部件，气泡里是一个 span，同一个类名、同一个样子。底色只有一种，颜色全在图标上：按门类给
+	 * 每枚配一种底色的话，一句话里排开五枚，整行成了一条彩带。
+	 */
+
+	.plume-attachment-token {
+		color: var(--plume-ink);
+	}
+
+	/*
+	 * 输入框里那一枚：`【` + 名字 + `】`，两个方括号留着、画成透明，它们让出来的 2em 分给图标、留白和外边距：
+	 *
+	 *   标记前 0.2em | 底色 [ 0.26em | 图标 0.92em | 0.2em | 名字 | 0.26em ] | 标记后 0.16em
+	 *
+	 * 靠相对定位挪画面：`.plume-token-paint` 整体右移 `--plume-token-before`，名字再右移 `--plume-token-shift`；
+	 * 底色多出来的右内边距由收尾那个 `】` 的负外边距叠回去。
+	 */
+	.plume-token-body {
+		--plume-token-before: 0.2em;
+		--plume-token-pad: 0.26em;
+		--plume-token-glyph-size: 0.92em;
+		--plume-token-gap: 0.2em;
+		--plume-token-end: 0.26em;
+		/* 名字从排版位置（`【` 之后 1em）挪到图标后面要走多远。 */
+		--plume-token-shift: calc(var(--plume-token-pad) + var(--plume-token-glyph-size) + var(--plume-token-gap) - 1em);
+	}
+
+	.plume-token-paint {
+		position: relative;
+		left: var(--plume-token-before);
+		padding: 2px calc(var(--plume-token-shift) + var(--plume-token-end)) 2px 0;
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--plume-ink-faint) 13%, transparent);
+		/* 换行时两截各自带圆角，而不是中间被切开一刀。 */
+		box-decoration-break: clone;
+		-webkit-box-decoration-break: clone;
+		transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.plume-token-name {
+		position: relative;
+		left: var(--plume-token-shift);
+	}
+
+	.plume-token-body > .plume-token-bracket:last-child {
+		margin-left: calc((var(--plume-token-shift) + var(--plume-token-end)) * -1);
+	}
+
+	.plume-composer-field .plume-attachment-token {
+		cursor: pointer;
+	}
+
+	.plume-attachment-token:hover .plume-token-paint {
+		background: color-mix(in srgb, var(--plume-ink-faint) 22%, transparent);
+	}
+
+	/* 气泡里那一枚没有方括号，底色直接上在标签本身。 */
+	.plume-user-bubble .plume-attachment-token {
+		padding: 2px 6px;
+		margin: 0 1px;
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--plume-ink-faint) 13%, transparent);
+		box-decoration-break: clone;
+		-webkit-box-decoration-break: clone;
+		cursor: pointer;
+		transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.plume-user-bubble .plume-attachment-token:hover {
+		background: color-mix(in srgb, var(--plume-ink-faint) 22%, transparent);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.plume-token-paint,
+		.plume-user-bubble .plume-attachment-token {
+			background: color-mix(in srgb, var(--plume-ink-faint) 22%, transparent);
+		}
+
+		.plume-attachment-token:hover .plume-token-paint,
+		.plume-user-bubble .plume-attachment-token:hover {
+			background: color-mix(in srgb, var(--plume-ink-faint) 34%, transparent);
+		}
+	}
+
+	/* 方括号只占位，不露脸。定位的参照系是这一个字符：标签会折行，整枚的包含块会落在两行之间。 */
+	.plume-token-bracket {
+		position: relative;
+		color: transparent;
+	}
+
+	/* 图标住在头一个方括号那一格里，绝对定位，一个像素都不占。 */
+	.plume-token-bracket > .plume-token-glyph {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: var(--plume-token-pad);
+		width: var(--plume-token-glyph-size);
+		height: var(--plume-token-glyph-size);
+		margin: auto 0;
+	}
+
+	.plume-user-bubble .plume-attachment-token > .plume-token-glyph {
+		display: inline-block;
+		width: 0.95em;
+		height: 0.95em;
+		margin-right: 0.34em;
+		vertical-align: -0.15em;
+	}
+
+	/*
+	 * 只有名字进了提示词的那些（压缩包、可执行文件），图标淡一档：这件事得说，但它不是出错，横一条提示在屏幕上，
+	 * 读的人会去找自己哪里做错了。
+	 */
+	.plume-attachment-token[data-bodiless] .plume-token-glyph {
+		opacity: 0.42;
+	}
+
+	/* ── 拖着文件悬在对话区上时盖的那一层 ──
+	 *
+	 * 位置和圆角是拖进来那一刻从对话区量的（行内样式），挂在 body 上、`fixed`，不会被里面哪一层 `overflow: hidden`
+	 * 裁掉。整层不接事件：拖放事件照常落到底下那一栏上，放下时由它收。
+	 */
+	.plume-drop-overlay {
+		position: fixed;
+		z-index: 60;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
+		background: color-mix(in srgb, var(--plume-accent) 12%, color-mix(in srgb, var(--plume-shade) 38%, transparent));
+		animation: plume-scrim-in var(--plume-t-quick) ease-out;
+	}
+
+	.plume-drop-overlay-label {
+		padding: 7px 16px;
+		border: 1px solid color-mix(in srgb, var(--plume-accent) 60%, transparent);
+		border-radius: var(--plume-radius-field);
+		/* 不随主题变：深底白字在浅深两套里都读得清。 */
+		background: color-mix(in srgb, var(--plume-accent) 72%, var(--plume-shade));
+		box-shadow: var(--plume-shadow-overlay);
+		color: var(--plume-on-accent);
+		font-size: var(--text-body);
+		font-weight: 500;
+		animation: plume-dialog-in var(--plume-t-base) var(--plume-e-out);
+	}
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@plume/plugin-sdk",
+  "version": "0.1.0",
+  "description": "写 Plume 插件用的类型、命令（新建、检查、构建、安装）、插件模板和给 agent 的 skill。随 Plume 应用一起发，不经 npm。",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "plume-plugin": "./bin/plume-plugin.mjs"
+  },
+  "exports": {
+    "./tsconfig.json": "./tsconfig.json",
+    "./build": "./lib/build.mjs"
+  },
+  "scripts": {
+    "typecheck": "node scripts/build-types.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.68.0",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@plume/contract": "workspace:*",
+    "@plume/llm": "workspace:*",
+    "@plume/rpc": "workspace:*",
+    "@plume/styles": "workspace:*",
+    "@plume/ui": "workspace:*",
+    "@types/react-dom": "^19.2.0"
+  }
+}

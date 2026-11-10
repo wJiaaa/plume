@@ -1,0 +1,28 @@
+{
+  "name": "@plume/web",
+  "version": "0.1.0",
+  "description": "让 agent 上网：web_search 搜网页（Tavily、DeepSeek、Brave、Exa 或免配置的 DuckDuckGo），web_fetch 把一个网址读成文字；设置页里选用哪一家、填 API key。",
+  "author": "Plume",
+  "keywords": [
+    "web",
+    "search",
+    "fetch",
+    "网页搜索",
+    "抓取"
+  ],
+  "plume": {
+    "displayName": "网页搜索",
+    "category": "工具"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0"
+  }
+}

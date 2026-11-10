@@ -1,0 +1,400 @@
+/* 由 @plume/ui 对应目录的组件使用，见 ui.css。 */
+
+/* ---------------------------------------------------------------------------
+ * 主输入框工具栏上的控件：边长跟着 `--plume-composer-control` 走，那个数变了，这一排仍然是一行。
+ * ------------------------------------------------------------------------- */
+
+.plume-composer-control {
+	height: var(--plume-composer-control);
+}
+
+.plume-composer-icon {
+	width: var(--plume-composer-control);
+}
+
+/* ---------------------------------------------------------------------------
+ * 单行字段
+ *
+ * 和对话框按钮同一种无描边的形状，给一切能往里打字、从里面挑选的东西。10px 带描边的字段挨着
+ * 34px 无描边的按钮，是对「控件长什么样」的两种回答；这是第二种，用在第一类控件上。
+ * ------------------------------------------------------------------------- */
+
+.plume-field {
+	height: var(--plume-control);
+	padding: 0 16px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	color: var(--plume-ink);
+	font-size: var(--text-label);
+	transition:
+		background-color var(--plume-t-quick),
+		color var(--plume-t-quick);
+}
+
+button.plume-field,
+div.plume-field {
+	display: flex;
+	align-items: center;
+}
+
+.plume-field:hover,
+.plume-field:focus,
+.plume-field:focus-within {
+	background: var(--plume-card-hover);
+}
+
+.plume-field::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+/*
+ * 设置卡片和对话框里的线和控件。
+ *
+ * 两者都是 `float` 那张纸，比页面亮一档；而 `line` / `line-soft` 是从页面底色往前景走出来的，
+ * 画在这张纸上反而比纸暗——分隔线成了一道暗槽，滑块的轨道、关着的开关几乎看不见。和
+ * `--plume-line-float` 同一个道理，所以在这张纸这一层把两条线换成那一套：`line` 就是它，
+ * `line-soft` 取它的三分之二，和页面上两条线的比例一样。
+ *
+ * 控件和卡片同底，靠一圈细线立住，而不是垫一块比卡片暗的底。线用 inset 阴影画，
+ * 不占尺寸，行高和控件的中线都不动。只改底和线，出错时的红底仍然由下面那条规则给。
+ *
+ * 弹出层也是这张纸，但只收它里面的字段：菜单的分隔线和别的控件各有各的写法，不跟着换。
+ * 弹出层被调用方直接卸掉时留下的残影（`afterimage.ts`）去掉了 `data-plume-popover`，也照这张纸画，
+ * 不然淡出那一下里字段会先换一副样子。
+ */
+:is(.plume-settings-card, [data-plume-modal]),
+:is([data-plume-popover], [data-plume-popover-ghost]) .plume-field {
+	--plume-line: var(--plume-line-float);
+	--plume-line-soft: color-mix(in srgb, var(--plume-line-float) 65%, transparent);
+}
+
+:is(.plume-settings-card, [data-plume-modal]) :is(.plume-field, [data-segmented]),
+:is([data-plume-popover], [data-plume-popover-ghost]) .plume-field {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--plume-line);
+	transition-property: background-color, color, box-shadow;
+}
+
+:is(.plume-settings-card, [data-plume-modal], [data-plume-popover]) .plume-field:is(:hover, :focus, :focus-within) {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--plume-ink-faint) 55%, transparent);
+}
+
+:is(.plume-settings-card, [data-plume-modal]) .plume-textarea-shell {
+	background: transparent;
+}
+
+.plume-field.plume-field-invalid,
+.plume-field[aria-invalid="true"] {
+	background: color-mix(in srgb, var(--plume-danger) 10%, transparent);
+	color: var(--plume-danger);
+}
+
+/*
+ * 列表里重复出现的下拉：平时只有字，指到、展开、聚焦时才浮出底色。
+ *
+ * 一列七行，每行两颗灰底胶囊，页面读起来是十四个输入框——而真正要找的是那一两个改过的。
+ * 没改过的（跟随默认）字淡一档，改过的（`data-set`）是正常的字色，扫一眼就看得出哪里动过。
+ */
+.plume-field-quiet {
+	display: flex;
+	align-items: center;
+	/* 和框里那种一样高：同一页上、同一排里的控件共用一个高度（`--plume-control`），只是不画底。 */
+	height: var(--plume-control);
+	padding: 0 10px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink-muted);
+	font-size: var(--text-label);
+	transition:
+		background-color var(--plume-t-quick),
+		color var(--plume-t-quick);
+}
+
+.plume-field-quiet[data-set] {
+	color: var(--plume-ink);
+}
+
+.plume-field-quiet:hover,
+.plume-field-quiet:focus-visible,
+.plume-field-quiet[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+	color: var(--plume-ink);
+}
+
+.plume-field-compact {
+	height: 26px;
+	padding: 0 10px;
+	font-size: var(--text-detail);
+}
+
+/*
+ * 胶囊每边 16px 的内边距对一个名字是对的，可右边放上步进按钮之后，两位数的字号就被吃掉了。
+ * 数字字段保持同样的高度和底色，只收窄内边距，让数字露得出来。
+ */
+.plume-field.plume-number-field {
+	padding-left: 2px;
+	padding-right: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 装不下的那些字
+ *
+ * 输入框滚起来之后，上下两头是硬切的：最上面那行被拦腰截断，露出半截字形；最下面那行同样。截断
+ * 本身不是问题——内容比框高，总得切在某个地方——问题是切口看着像渲染坏了：半个「3」和一条边框之间
+ * 没有任何过渡，人第一眼读到的是「这里画错了」，而不是「上面还有」。
+ *
+ * 滚动区域用 `.plume-fade-y`（`scroll.css`）把内容的 alpha 收下去，让它化进边缘。那一套是给
+ * `Scroller` 写的，而 `Scroller` 管不到 textarea：textarea 自己就是滚动容器，里面没有可以包一层的
+ * 节点。所以这里是同一个想法的第二种写法——同一条缓动曲线，同样是收 alpha 而不是刷一层颜色（刷颜色
+ * 要猜底色，猜错就是一道横在内容上的带子），只是变量少了几个，因为输入框里没有钉住的行要绕开。
+ *
+ * 两个变量**可继承**，这是和 `.plume-fade-y` 唯一实质的不同：`useFieldFade` 写在外壳上，遮罩画在
+ * 里面那层字上。主输入框不挂这条遮罩，原因见 `useFieldFade`。
+ * ------------------------------------------------------------------------- */
+
+@property --plume-field-fade-top {
+	syntax: "<length>";
+	inherits: true;
+	initial-value: 0;
+}
+
+@property --plume-field-fade-bottom {
+	syntax: "<length>";
+	inherits: true;
+	initial-value: 0;
+}
+
+/*
+ * 深浅跟着滚动量走，不是两档开关。
+ *
+ * `useFieldFade` 写进来的是 `min(一行, 已经滚过去多少)`：刚推开两个像素，虚化就只有两个像素，
+ * 和手上的动作对得上。所以这里**没有** transition——补间会让虚化落在滚轮后面，而滚动本身每一帧
+ * 都在更新这个数，自己就是连续的。它只在「一整屏都装得下」和「开始滚了」之间跳变，而那一跳两端
+ * 都是 0。
+ *
+ * 遮罩只读 alpha，用哪种颜色都一样；这里取主题的字色，只是为了不写色值。
+ */
+.plume-field-fade {
+	mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		color-mix(in srgb, var(--plume-ink) 6%, transparent) calc(var(--plume-field-fade-top) * 0.12),
+		color-mix(in srgb, var(--plume-ink) 19%, transparent) calc(var(--plume-field-fade-top) * 0.26),
+		color-mix(in srgb, var(--plume-ink) 38%, transparent) calc(var(--plume-field-fade-top) * 0.41),
+		color-mix(in srgb, var(--plume-ink) 60%, transparent) calc(var(--plume-field-fade-top) * 0.57),
+		color-mix(in srgb, var(--plume-ink) 80%, transparent) calc(var(--plume-field-fade-top) * 0.72),
+		color-mix(in srgb, var(--plume-ink) 94%, transparent) calc(var(--plume-field-fade-top) * 0.86),
+		var(--plume-ink) var(--plume-field-fade-top),
+		var(--plume-ink) calc(100% - var(--plume-field-fade-bottom)),
+		color-mix(in srgb, var(--plume-ink) 94%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.86),
+		color-mix(in srgb, var(--plume-ink) 80%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.72),
+		color-mix(in srgb, var(--plume-ink) 60%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.57),
+		color-mix(in srgb, var(--plume-ink) 38%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.41),
+		color-mix(in srgb, var(--plume-ink) 19%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.26),
+		color-mix(in srgb, var(--plume-ink) 6%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.12),
+		transparent 100%
+	);
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		color-mix(in srgb, var(--plume-ink) 6%, transparent) calc(var(--plume-field-fade-top) * 0.12),
+		color-mix(in srgb, var(--plume-ink) 19%, transparent) calc(var(--plume-field-fade-top) * 0.26),
+		color-mix(in srgb, var(--plume-ink) 38%, transparent) calc(var(--plume-field-fade-top) * 0.41),
+		color-mix(in srgb, var(--plume-ink) 60%, transparent) calc(var(--plume-field-fade-top) * 0.57),
+		color-mix(in srgb, var(--plume-ink) 80%, transparent) calc(var(--plume-field-fade-top) * 0.72),
+		color-mix(in srgb, var(--plume-ink) 94%, transparent) calc(var(--plume-field-fade-top) * 0.86),
+		var(--plume-ink) var(--plume-field-fade-top),
+		var(--plume-ink) calc(100% - var(--plume-field-fade-bottom)),
+		color-mix(in srgb, var(--plume-ink) 94%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.86),
+		color-mix(in srgb, var(--plume-ink) 80%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.72),
+		color-mix(in srgb, var(--plume-ink) 60%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.57),
+		color-mix(in srgb, var(--plume-ink) 38%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.41),
+		color-mix(in srgb, var(--plume-ink) 19%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.26),
+		color-mix(in srgb, var(--plume-ink) 6%, transparent) calc(100% - var(--plume-field-fade-bottom) * 0.12),
+		transparent 100%
+	);
+}
+
+/* ---------------------------------------------------------------------------
+ * 多行输入框，一家人
+ *
+ * 各处的多行输入框在界面上是同一件东西：一块可以写很多字的地方。各写各的会长出好几种圆角、内衬
+ * 和底色，差异不是设计，是先后写下的几次即兴发挥。
+ *
+ * 内衬直接取 `--plume-composer-in` / `--plume-composer-x`，不是另起一套接近的数：主输入框的呼吸感由
+ * 那两个变量定，而「打字的地方」只该有一种呼吸感。往后调那两个数，这些框跟着一起动。
+ *
+ * 边框画在外壳上而不是这里，这一点是被虚化逼出来的：mask 收的是元素画出来的**一切**，边框也在
+ * 其中——描边和字写在同一个元素上，滚到顶端时框的上下两条边会跟着字一起淡掉，看上去像框破了个
+ * 口子。所以 `.plume-textarea-shell` 管边界，`.plume-textarea` 只管字。
+ * ------------------------------------------------------------------------- */
+
+/*
+ * 底和字色都由外壳出，成对地出。
+ *
+ * 外壳的底可能被换成代码主题的，而代码主题的底在浅色界面下可能是深的。字色若钉死在里面那层上，
+ * 就会出现「深底 + 深字」——那一段直接看不见了。所以这里定一对默认值，里面那层 `inherit`：谁换掉
+ * 底，字跟着一起换。
+ */
+.plume-textarea-shell {
+	border: 1px solid var(--plume-line-soft);
+	/* 和单行字段同一个圆角：同一个组件在设置页、对话框和别处不该是两种角。 */
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	color: var(--plume-ink);
+	transition: border-color var(--plume-t-base) var(--plume-e-out);
+}
+
+.plume-textarea-shell:focus-within {
+	border-color: color-mix(in srgb, var(--plume-ink-faint) 55%, transparent);
+}
+
+.plume-textarea {
+	display: block;
+	width: 100%;
+	padding: var(--plume-composer-in) var(--plume-composer-x);
+	border: 0;
+	background: transparent;
+	/* 外壳说了算——见它上面那段：底和字色是一对，不能一个跟着主题走另一个钉死。 */
+	color: inherit;
+	font-size: var(--text-label);
+	line-height: 1.625;
+	resize: none;
+	outline: none;
+	overflow-wrap: break-word;
+}
+
+/*
+ * 按行读的那几个框：发版说明、自定义指令。
+ *
+ * 字号写在这里而不是留给调用方的 `text-detail`，是因为上面那条 `font-size` 未分层，压得过工具
+ * 类——写了也不生效，而且不报错。字体族没写进 `.plume-textarea`，所以 `font-mono` 那条工具类照常
+ * 有效；这里一并收进来，只是为了「等宽 + 小一号」这对固定搭配不必在每处各写一遍。
+ */
+.plume-textarea-mono {
+	font-family: var(--plume-font-mono);
+	font-size: var(--text-detail);
+}
+
+/*
+ * 能拉高的那几处：系统提示词、钩子参数，都是写着写着就长的东西。
+ *
+ * 属性选择器而不是一条 `resize-y` 工具类——`.plume-textarea` 的 `resize: none` 未分层，压得过
+ * `@layer utilities`，那条工具类会安静地不生效。
+ */
+.plume-textarea[data-resizable] {
+	resize: vertical;
+}
+
+.plume-textarea::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+.plume-textarea:disabled {
+	opacity: 0.6;
+}
+
+/* ---------------------------------------------------------------------------
+ * 骨架占位
+ *
+ * 给正在路上的东西占位，形状就是它落地后的样子。有了它，第一次加载读起来是「正在填进来」，而不是
+ * 一张空页紧跟着一跳——排版已经是对的，只差内容。
+ *
+ * 有意做得暗、做得慢。一闪一闪很亮的骨架会和它代替的内容抢注意力，而它出现的时候正是没东西可看的时候。
+ *
+ * 减少动态效果时不用单独关：全局那条规则把动画压成一次、瞬间跑完，光带停在块外面，块就静静待着，
+ * 不动也照样说着「还没好」。
+ * ------------------------------------------------------------------------- */
+
+.plume-skeleton {
+	position: relative;
+	overflow: hidden;
+	background: color-mix(in oklab, var(--plume-ink) 7%, transparent);
+}
+
+.plume-skeleton::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	transform: translateX(-100%);
+	background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--plume-ink) 5%, transparent), transparent);
+	animation: plume-skeleton 1.5s ease-in-out infinite;
+}
+
+@keyframes plume-skeleton {
+	to {
+		transform: translateX(100%);
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * 标签条（`TabStrip`）：一条槽，里面浮着一个滑块。
+ *
+ * 写在这里而不用工具类，是因为最顺手的那一对 token 在两种主题之一下是错的，这件事值得在一个不会被
+ * 顺手改掉的地方说一次。`bg-card` 叠在 `bg-elevated` 上，深色下读起来是滑块坐在槽*里*，浅色下读起来
+ * 是滑块坐在一个*坑*里：每一种面都从背景往前景走，所以浅色下「elevated」比它底下的 card 更暗，选中的
+ * 那个反倒成了凹进去的。
+ *
+ * 所以槽是前景色的一层薄纱——浅色窗格上压暗、深色窗格上提亮，两边按构造都对——滑块用 `--plume-shell`，
+ * 侧栏旁边那块面板的颜色。
+ *
+ * 滑块不用 `--plume-float`：深色下它约是底色往前景混 10%，而槽（侧栏再叠 7% 前景）约 11%，两者几乎同亮，
+ * 选中项只能靠阴影分辨。换成面板色后，深色下是比槽暗一截的块，浅色下是灰槽里的一块白，两个主题都分得开。
+ * ------------------------------------------------------------------------- */
+
+.plume-tabs {
+	background: color-mix(in srgb, var(--plume-ink) 7%, transparent);
+}
+
+.plume-tabs-knob {
+	background: var(--plume-shell);
+	/*
+	 * 一道细边加一小段投影，读起来是浮起来的，而不是一块换了颜色的矩形，靠的主要就是这个。浅色下底色是
+	 * 近白压在近白上，没有边的话滑块根本没有形状。投影是开关旋钮那一档（`--plume-shadow-knob`）；边用
+	 * outline 而不是阴影里的一圈，这样下面能单独去掉它。
+	 */
+	box-shadow: var(--plume-shadow-knob);
+	outline: 0.5px solid color-mix(in srgb, var(--plume-ink) 6%, transparent);
+}
+
+/* 深色只靠投影：深色页面上的一圈细边读起来是一道接缝。 */
+@media (prefers-color-scheme: dark) {
+	.plume-tabs-knob {
+		outline: none;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * 行尾动作（`RowDeleteButton`）
+ *
+ * 用透明度藏，不改几何：位置一直占着，露出来时这一行不挪。触屏设备没有悬停这个手势，动作一直显示。
+ * ------------------------------------------------------------------------- */
+
+.plume-row-action {
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.plume-row-action {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	[data-row-actions]:hover .plume-row-action,
+	[data-row-actions]:focus-within .plume-row-action,
+	.plume-row-action:focus-within,
+	.plume-row-action[data-pending="true"] {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * 页面自己画的顶行（`PageTopRow`）：整行拖窗口，行里能点的东西挖成不拖动的。
+ * ------------------------------------------------------------------------- */
+
+.plume-top-row :is(button, a[href], input, select, textarea, [role="button"], [contenteditable="true"]) {
+	app-region: no-drag;
+}

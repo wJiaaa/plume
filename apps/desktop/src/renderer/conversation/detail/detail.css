@@ -1,0 +1,78 @@
+/*
+ * 工具卡片展开后的代码：命令和 JSON 的配色、改动的 diff。取值只用 token。
+ */
+@layer components {
+	/* 命令、JSON 的配色：和回复里代码块同一套语法色，一条命令在两处读起来一样。 */
+	.tool-tok-command,
+	.tool-tok-key {
+		color: var(--plume-syntax-keyword);
+	}
+
+	.tool-tok-flag {
+		color: var(--plume-syntax-attribute);
+	}
+
+	.tool-tok-string {
+		color: var(--plume-syntax-string);
+	}
+
+	.tool-tok-number {
+		color: var(--plume-syntax-number);
+	}
+
+	.tool-tok-operator {
+		color: var(--plume-syntax-operator);
+	}
+
+	.tool-tok-variable {
+		color: var(--plume-syntax-function);
+	}
+
+	.tool-tok-comment {
+		color: var(--plume-syntax-comment);
+		font-style: italic;
+	}
+
+	/*
+	 * diff 铺在代码底色上，和别处读代码一样。行号栏和竖条钉在左边、代码从它们底下横滚过去，所以要不透明：各档是行的底色
+	 * 先和代码底色混好的结果，看着一样，又挡得住。
+	 */
+	.tool-diff-scroll {
+		background: var(--plume-code-bg);
+		color: var(--plume-code-fg);
+	}
+
+	.tool-diff-add {
+		background: color-mix(in srgb, var(--plume-ok) 8%, transparent);
+	}
+
+	.tool-diff-remove {
+		background: color-mix(in srgb, var(--plume-danger) 8%, transparent);
+	}
+
+	.tool-diff-gutter {
+		background: var(--plume-code-bg);
+		color: color-mix(in srgb, var(--plume-ink-faint) 70%, transparent);
+	}
+
+	.tool-diff-add .tool-diff-gutter {
+		background: color-mix(in srgb, var(--plume-ok) 8%, var(--plume-code-bg));
+	}
+
+	.tool-diff-remove .tool-diff-gutter {
+		background: color-mix(in srgb, var(--plume-danger) 8%, var(--plume-code-bg));
+	}
+
+	/* 加的行一条绿色竖条，删的行一条红色，没改的行是代码底色。 */
+	.tool-diff-rail {
+		background: var(--plume-code-bg);
+	}
+
+	.tool-diff-add .tool-diff-rail {
+		background: color-mix(in srgb, var(--plume-ok) 70%, transparent);
+	}
+
+	.tool-diff-remove .tool-diff-rail {
+		background: color-mix(in srgb, var(--plume-danger) 70%, transparent);
+	}
+}

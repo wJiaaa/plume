@@ -1,0 +1,104 @@
+# 安装包里有什么。macOS 在 mac 上打 dmg（arm64 + x64），Windows 在 Windows 上打 nsis
+# （x64 + arm64），一台机器一次打两个架构：别的架构的原生二进制靠 pnpm-workspace.yaml 的 supportedArchitectures 装齐，
+# 打包时按目标挑（scripts/before-pack.mjs），打完由 scripts/check-native-arch.mjs 核对（`pnpm package` 经 scripts/package.mjs 都做了）。
+appId: dev.plume.app
+productName: Plume
+executableName: Plume
+artifactName: ${productName}-${version}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+# 不写 electronDist：一次打两个架构，装好的那份 Electron 只是本机架构的，写死成它的话另一个包里装的是这台机器的
+# Electron。不写就按每个目标下载对应的那份（同一个版本，缓存在 electron 的下载缓存里，第二次起不再下载）。yml 里的
+# electronDist 只能是一个路径，按目标选的函数写法要 JS 配置文件，不值得为省一次下载换掉配置格式。
+
+# out/ 是 electron-vite 的产物。workspace 里的 @plume/* 已经打进产物，不带；别的生产依赖照常带上，
+# 主进程以后要用（electron-vite 把它们留成外部依赖）时不用再改这里。
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/node_modules/@plume/**"
+
+# 主进程按路径读的东西（beforePack 按正在打的平台、架构先放进 .stage/）：
+# - builtin：内置插件，每个插件只有发出去的那几样（市场插件不随应用发，装的时候下载）；
+# - plugin-sdk：写插件的命令和类型，`~/.plume/bin/plume-plugin` 用应用的二进制跑它；带的 esbuild、tsc 二进制按架构挑。
+# .stage 整个放进资源目录：不能分开写 from: .stage/plugin-sdk，electron-builder 会丢掉来源目录顶层的 node_modules
+# （app-builder-lib 的 util/filter.js 写死的），SDK 就没了 esbuild、TypeScript；下一层的 node_modules 不受影响。
+extraResources:
+  - from: .stage
+    to: .
+
+# 复制资源之前按正在打的平台和架构备好二进制（scripts/before-pack.mjs）：
+# - ripgrep：plume.tools 的 grep 工具调它，主进程经 PLUME_RIPGREP 指过去（src/main/ripgrep.ts）。没有它工具退回
+#   慢几十倍的 JavaScript 扫描，而从图标启动的应用 PATH 里从来没有用户的 rg。下载一份到 vendor/ripgrep/
+#   （sha256 写死），下面 mac、win 的 extraResources 从那里取；
+# - 内置插件：整理进 .stage/builtin，只留这个平台、架构的原生模块；
+# - 插件 SDK：整理进 .stage/plugin-sdk/，只带这个架构的 esbuild、tsc。
+beforePack: ./scripts/before-pack.mjs
+
+# 每个包只带自己平台、架构的那份按平台分的原生模块。现在 app.asar 里没有这样的依赖（node-pty、koffi 在插件里，
+# 走 extraResources，由上面的 beforePack 裁），这两条管的是以后进了 apps/desktop 生产依赖的那种：
+# koffi 一个平台、架构一个包，supportedArchitectures 让每份都装上了；node-pty 一个包里放着各平台的 prebuilds。
+# 写成 `!` 规则：node_modules 里的生产依赖默认全带，正向规则不起作用。koffi 按 Node 的 process.platform 起名，没有宏可用，
+# 所以每个平台写一遍；`${arch}` 按每次打的架构展开。
+
+mac:
+  files:
+    - "!**/node_modules/@koromix/koffi-!(darwin-${arch})/**"
+    - "!**/node_modules/node-pty/prebuilds/!(darwin-${arch})/**"
+  category: public.app-category.developer-tools
+  # Icon Composer 的文档：头像是透明的抠图，底色（浅色时淡蓝、深色图标风格时亮蓝的渐变）写在 icon.json 里。
+  # macOS 26 起，自己不带圆角底的旧式图标会被垫上一块灰底；electron-builder 用 actool（要 Xcode 26 以上）编成
+  # Assets.car，另出一份 .icns 给旧系统。路径相对 buildResources（build/）。
+  icon: icon.icon
+  # zip 给应用内更新用：里面直接是 Plume.app，可以原地替换（main/update/install-update.ts）；dmg 给第一次手动安装。
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # 和顶层的 extraResources 合在一起。许可文本随二进制一起带。
+  extraResources:
+    - from: vendor/ripgrep/darwin-${arch}
+      to: ripgrep
+      filter: ["rg", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+  # 兜底的 ad-hoc 签：钥匙串里有证书时 scripts/package.mjs 换成证书（make-signing-cert.sh）。完全不签的包被 Gatekeeper
+  # 当成「已损坏」，连「仍要打开」都没有。ad-hoc 签的版本 macOS 按可执行文件的哈希认人，每次更新都是新应用、权限重置；
+  # 用证书签（自签的也行）按证书认人，更新后还是同一个应用。
+  identity: "-"
+  # plume://open-session?id=… 由系统交给应用（main/deep-link.ts）；不在这里声明，系统就不会把地址送过来。
+  protocols:
+    - name: Plume
+      schemes: [plume]
+
+win:
+  # 见 mac 上面的说明。
+  files:
+    - "!**/node_modules/@koromix/koffi-!(win32-${arch})/**"
+    - "!**/node_modules/node-pty/prebuilds/!(win32-${arch})/**"
+  # 带圆角底的那张 PNG；electron-builder 把它转成 .ico 放进 exe。窗口、通知、通知区域的图标是主进程按路径读的
+  # （src/main/index.ts 的 icon.png?asset、tray.ts 的 assets/tray/），已经打进 app.asar，不用另放。
+  icon: ../src/assets/icon.png
+  # 和顶层的 extraResources 合在一起，同 mac。
+  extraResources:
+    - from: vendor/ripgrep/win32-${arch}
+      to: ripgrep
+      filter: ["rg.exe", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+  # 没有 Windows 代码签名证书，不签：SmartScreen 第一次会拦一下「未知发布者」，点「仍要运行」能装。
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+# 让人选装在哪，装给当前用户（不要管理员权限）。
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+
+publish: null

@@ -1,0 +1,21 @@
+{
+  // 只给 scripts/build-types.mjs 用：从公开接口的源码生成类型声明到 dist/。插件作者用的是 tsconfig.json。
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": [],
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "../..",
+    "outDir": "dist"
+  },
+  "files": [
+    "../../contract/src/index.ts",
+    "../../contract/src/ui.ts",
+    "../../client/ui/src/index.tsx",
+    "../../client/ui/src/icons/index.ts",
+    "../../client/styles/src/index.ts",
+    "../../infra/rpc/src/index.ts"
+  ]
+}

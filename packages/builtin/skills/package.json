@@ -1,0 +1,27 @@
+{
+  "name": "@plume/skills",
+  "version": "0.1.0",
+  "description": "让 agent 用你写的技能：读项目和个人目录里的 SKILL.md（也认 .claude/skills、.agents/skills）和别的插件带来的技能，任务对得上时自己调用，也能在输入框里敲 / 点名；设置页里开关、打开、删除。",
+  "author": "Plume",
+  "keywords": [
+    "skills",
+    "SKILL.md",
+    "技能"
+  ],
+  "plume": {
+    "displayName": "技能",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "yaml": "2.9.1"
+  }
+}

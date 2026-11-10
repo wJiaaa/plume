@@ -1,0 +1,12 @@
+/*
+ * @plume/ui 组件自己的样式：Tailwind 工具类写不出来的部分（关键帧、遮罩渐隐、伪元素、滚动条、按状态切换的组合）。
+ * 类名都以 plume- 开头，取值只用 theme.css 的 token。产品的样式入口在 Tailwind 之后引入它，不进 layer，
+ * 和同等优先级的工具类冲突时以这里为准。顺序就是层叠顺序，不要随意调换。
+ */
+
+@import "./ui/scroll.css";
+@import "./ui/controls.css";
+@import "./ui/flow.css";
+@import "./ui/motion.css";
+@import "./ui/overlay.css";
+@import "./ui/image.css";

@@ -1,0 +1,73 @@
+[
+  { "title": "文字", "names": ["Text"] },
+  { "title": "按钮", "names": ["Button", "IconButton"] },
+  {
+    "title": "输入",
+    "names": [
+      "Input",
+      "Textarea",
+      "TextArea",
+      "Select",
+      "InlineSelect",
+      "Toggle",
+      "ComposerToggle",
+      "WorktreeToggle",
+      "Segmented",
+      "TabStrip",
+      "SearchField",
+      "NumberField",
+      "Slider",
+      "ColorField",
+      "TimeField",
+      "ShortcutRecorder",
+      "useFieldFade",
+      "ChoiceMark"
+    ]
+  },
+  {
+    "title": "弹层、菜单、对话框",
+    "names": [
+      "Popover",
+      "ContextMenu",
+      "MenuItem",
+      "MenuSeparator",
+      "MenuLabel",
+      "Dialog",
+      "DialogAction",
+      "Confirm",
+      "useConfirmer",
+      "useConfirmGate",
+      "Tooltip",
+      "usePopover",
+      "MenuBody",
+      "MenuSearch",
+      "MENU_MAX_HEIGHT",
+      "Overlay"
+    ]
+  },
+  { "title": "卡片和代码", "names": ["Card", "CodeBlock", "DiffView"] },
+  { "title": "审批卡", "names": ["ApprovalFrame", "ApprovalExpiry"] },
+  { "title": "设置分区", "names": ["SettingsSectionTitle", "SettingsCard", "SettingsRow", "SettingsNotice"] },
+  { "title": "面板", "names": ["PanelEmpty", "RetainedViews", "useNarrow", "useLiveRefresh"] },
+  { "title": "页面", "names": ["PageTopRow"] },
+  { "title": "加载和占位", "names": ["ActionSpinner", "BreatheLoader", "SkeletonList", "SkeletonBar", "useSlowLoad"] },
+  { "title": "列表的行", "names": ["HoverRow", "HoverRowMark", "HoverRowReveal", "hoverSlot", "Caret", "MarkNumber"] },
+  { "title": "过程行", "names": ["FlowRow"] },
+  { "title": "文件图标", "names": ["lookFor", "iconColour"] },
+  { "title": "滚动", "names": ["Scroller", "OverlayScrollbar", "ScrollText", "Sideways"] },
+  { "title": "语言", "names": ["useI18n"] },
+  { "title": "时间", "names": ["relativeTime", "TimeAgo"] },
+  { "title": "键盘", "names": ["macKeyboard", "composingKey", "shortcutLetter", "shortcutLabel", "acceleratorLabel"] },
+  { "title": "动效", "names": ["motionReduced", "CountUp", "useRolled", "RollingText", "useNow", "Collapse"] },
+  { "title": "折叠", "names": ["Disclosure"] },
+  {
+    "title": "智能体头像",
+    "names": ["AgentAvatar", "AvatarPile", "assignAvatars", "AVATAR_SHAPES", "AVATAR_COLORS", "COLOR_ART", "parseAvatar", "formatAvatar", "freshAvatar"]
+  },
+  { "title": "字体", "names": ["withHanFallback"] },
+  { "title": "图片标注", "names": ["useAnnotator", "AnnotateCanvas", "AnnotateToolbar", "useToolbarPlacement"] },
+  {
+    "title": "选区几何",
+    "names": ["HANDLES", "HANDLE_CURSOR", "handlePoint", "hitHandle", "insideRect", "rectFromPoints", "resizeRect", "moveRect", "clampRect"]
+  }
+]

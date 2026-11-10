@@ -1,0 +1,74 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+
+  // 没人用的导出、依赖和文件（`pnpm knip`，pre-push 时跑）。
+  //
+  // 每个包都要有入口：knip 不认识的包，它的死代码也就看不见。测试也是入口——为了让测试直接驱动而导出的函数
+  // 不算死代码。插件的入口是构建约定的，不写在 package.json 里，所以下面替它们写上。
+  "workspaces": {
+    ".": {
+      "entry": [
+        // 都是人手动跑或钩子替人跑的命令，没人 import 它们，本来就该这样。
+        "scripts/**/*.{mjs,ts}",
+        // Magpie 按 package.json 的 `magpie.agent` 加载它，不是 pnpm workspace 的包。
+        "integrations/magpie/plume.agent.js",
+        // 工具评测：人手动跑的命令和它们起的子进程（MCP 假服务、Electron 里的预览检查）。
+        "test/tool-eval/{run,smoke,demo,wiring-scan,*-eval,formats.test,preview-inspect,mcp-fixture-server}.{ts,mjs}",
+      ],
+      // dependency-cruiser 按名字动态加载它做解析器（见 .dependency-cruiser.cjs 的 parser），knip 看不见。
+      // git-cliff 由 scripts/release.mjs 经 `pnpm exec` 调用。
+      // 工具评测：electron 是 preview-inspect.mjs 在 Electron 里跑时的内置模块，MCP SDK 经 createRequire 借 plume.mcp 的依赖。
+      "ignoreDependencies": ["@swc/core", "git-cliff", "electron", "@modelcontextprotocol/sdk"],
+    },
+    "apps/desktop": {
+      // 主进程、预加载、渲染进程的入口 knip 从 electron.vite.config.ts 读得到，这里只补它读不到的。
+      "entry": [
+        // agent 进程（utilityProcess）的入口，配置里写在 rolldownOptions.input 下。
+        "src/main/agent-process.ts",
+        // 渲染进程的样式表由 index.html 的 <link> 引入，knip 不读 HTML。
+        "src/renderer/styles.css",
+        "test/**/*.test.ts",
+        "scripts/*.mjs",
+      ],
+      // agent 进程经 @plume/document-text 用到它，这里没人直接 import，但必须写在这个包的依赖里：
+      // electron-vite 只把这里声明的依赖留在产物外面（见 electron.vite.config.ts 的 externalizeDeps），打包也只带这些。
+      // fflate 同理，只是冒烟（main/smoke-files.ts）直接 import 了它，knip 看得见，不用登记。
+      "ignoreDependencies": ["unpdf"],
+      // 带上 CSS：样式表里 `@import "tailwindcss"`、`@import "@plume/styles/…"`，knip 要跟进去才知道这些依赖有人用。
+      "project": ["src/**/*.{ts,tsx,css}"],
+    },
+    "packages/core/agent": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+    },
+    // 模型调用包保持它自己的写法（见它的 README），它的死代码不归这里管。
+    "packages/core/llm": {
+      "ignore": ["**"],
+    },
+    "packages/{contract,infra/*,client/*}": {
+      // 和插件那一组同理写成一个模式（带上本来就是入口的 src/index），没有测试的包才不会被提示模式写错。
+      "entry": ["{src/index.{ts,tsx},test/**/*.test.{ts,tsx}}"],
+      "project": ["src/**/*.{ts,tsx}"],
+    },
+    "packages/sdk/plugin-sdk": {
+      "entry": ["bin/*.mjs", "lib/*.mjs", "scripts/*.mjs", "test/**/*.test.mjs"],
+      // 模板是 `plume-plugin init` 复制出去的文件，在仓库里没人引它。
+      "ignore": ["template/**"],
+      // scripts/build-types.mjs 从这几个包的源码生成类型声明，按路径读，不 import。
+      "ignoreDependencies": ["@plume/contract", "@plume/llm", "@plume/rpc", "@plume/styles", "@plume/ui", "@types/react-dom"],
+    },
+    // 插件的两个入口是构建约定的（逻辑入口 src/index.ts、界面入口 src/ui.tsx），不写在 package.json 的 exports 里。
+    "packages/builtin/*": {
+      // 写成一个模式：不是每个插件都有界面入口和测试，分开写的话没匹配到的那几条会被当成配置写错。
+      "entry": ["{src/index.ts,src/ui.tsx,test/**/*.test.{ts,tsx}}"],
+      "project": ["src/**/*.{ts,tsx}"],
+    },
+  },
+
+  // 插件界面入口的 react 运行时由宿主的 import map 给，类型经插件 SDK，不必写进插件的依赖。放在顶层而不是插件那一组：
+  // 没有界面入口的插件不 import react，写在那一组会对它们逐个提示「用不着这条」。
+  "ignoreDependencies": ["react"],
+
+  // 沙箱在 Linux 上调用的外部程序，本来就不该装在这台机器上；mkfifo 是测试里造命名管道用的系统命令。
+  "ignoreBinaries": ["bwrap", "mkfifo"],
+}

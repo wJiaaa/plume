@@ -1,0 +1,769 @@
+/* 由 @plume/ui 对应目录的组件使用，见 ui.css。 */
+
+/*
+ * 截断的父元素里滚动的标签，自己也要截断。
+ *
+ * `truncate` 给溢出所在块的行内内容加省略号。`RollingText` 把值包在一个行内块里——它必须这样，否则滚动没有
+ * 东西可变换——而行内块是原子框：`text-overflow` 管不到它，`overflow: hidden` 把它从半个字形处切掉，一个
+ * 省略号也不画。太长的模型名在输入框里就是这样被切开的，没有任何东西说明后面还有。
+ *
+ * 用 `block`，而不是保留 `inline-block` 再给它加省略。带 `overflow: hidden` 的行内块从底边而不是从字取基线，
+ * 会把下伸部那么高的空白塞进上面的行框，标签比这一行里其他控件高出一两个像素。块没有基线可丢。
+ *
+ * 用子代选择器，不用后代选择器。这条规则是给自己被要求截断的 `RollingText` 的——那是外层，值框是它唯一的
+ * 孩子。匹配任何截断的祖先的话，只要有一个滚动标签被放进被裁切的标题里，其他滚动标签就都被抓进来，而它们
+ * 都不溢出，也不该被限宽。
+ */
+.truncate > .plume-roll-value {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------------------
+ * 加载记号
+ *
+ * 三个记号，分工明确。
+ *
+ * **虚线环**（`.plume-dash`）说的是「这一条正在跑」：它是某个对象的状态值，站在一列同族状态记号
+ * 中间——上下是 ✓、✗、时钟、待办圆点。任务清单的每一步、流水线的每一行、工具卡的运行中。
+ *
+ * **亮弧**（`.plume-arc`）说的是「你按的那下正在回来」：它顶替一个刚被按下的动作图标，或者填在
+ * 一个刚被清空的角标位上。按钮上的忙碌都是它。
+ *
+ * **呼吸**（`.plume-breathe`）只在侧栏的会话行上。那一处的问题和别处不是同一个，见下面它自己的
+ * 注释——一列会话可能同时有好几个在跑，而那一列你还要用来读标题。
+ *
+ * 前两个都是 r=10、`stroke-width` 2 的描边圆，和 lucide 的 `CheckCircle2`、`XCircle`、`Clock`
+ * 精确重合。这一条是这一节真正的规矩：**「正在忙」和它的邻居是同一个形状**。换成一枚八条射线的
+ * 星芒，一列圆里混一个星，笔触还比空心圆环重——每次都会从队列里跳出来一次。
+ *
+ * 「一段弧转起来眼睛会跟着那个头走」，所以禁的是**头**，不是**转**：虚线环六段等分，转过 60° 就回到
+ * 自身，没有可追踪的端点；亮弧有头，所以给它垫一圈轨道，让图形的轮廓恒定是一个整圆。下面各自的注释里
+ * 还会说一遍。
+ * ------------------------------------------------------------------------- */
+
+@keyframes plume-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * 虚线环：六段等分，匀速转
+ *
+ * 周长是 2π×10 = 62.83，六段每段 10.47，`dasharray` 取它的一半 5.236 —— 圆头两端各外扩 1，
+ * 所以画出来是 7.2 的实线配 3.2 的缝，比 1:1 密一点，在 11px（用到的最小尺寸）上仍然数得出是
+ * 虚的。段数再多就在那个尺寸上并成一圈灰。
+ *
+ * 1100ms 一周、`linear`。六段每段 183ms，比这快虚线会拖成残影，比这慢会读作「卡住了」。不用
+ * 缓动：匀速的圆周没有起止，一旦有加减速，那个慢下来的位置就成了它的头。
+ * ------------------------------------------------------------------------- */
+
+.plume-dash circle {
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-dasharray: 5.236 5.236;
+	transform-origin: 12px 12px;
+	animation: plume-spin 1100ms linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+ * 亮弧：一段 110° 的弧，沿一圈淡轨道跑
+ *
+ * 轨道不是装饰，是这个记号成立的条件。亮弧单独转的话，图形的轮廓跟着弧一起走，在按钮那个方寸
+ * 之间读成「有东西在里面甩」；垫一圈淡的，形状恒定是一个完整的圆，动的只有亮处——和隔壁那些
+ * 状态图标一样是个圆，只不过这个圆里有东西在走。
+ *
+ * 110° 是 62.83 里的 19.2。再短会读成「一个点在轨道上跑」，再长就把轨道盖住了，残留也就没了。
+ * ------------------------------------------------------------------------- */
+
+.plume-arc {
+	--plume-track: 0.18;
+}
+
+/*
+ * 实心底的按钮上要浓一档。
+ *
+ * `bg-ink` / `bg-accent` 那几处（发布、安装、保存、更新）的 `currentColor` 是底色的反色，0.18
+ * 的白压在实色上基本看不见，轨道一消失这个记号就退回成「一段弧在甩」。0.35 是在那几个底色上
+ * 都还读得出是轨道、又不至于抢过亮弧的那一档。
+ */
+.plume-arc--on-fill {
+	--plume-track: 0.35;
+}
+
+.plume-arc circle {
+	stroke: currentColor;
+	stroke-width: 2;
+}
+
+.plume-arc-track {
+	opacity: var(--plume-track);
+}
+
+.plume-arc-head {
+	stroke-linecap: round;
+	stroke-dasharray: 19.2 43.63;
+	transform-origin: 12px 12px;
+	animation: plume-spin 1100ms linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+ * 关掉动效之后换一副样子，而不是停在某一帧
+ *
+ * 全局的减少动态效果规则（渲染进程 styles.css 的 base 层）把时长压到 0.01ms 并只跑一遍，动画照常
+ * 结束——`fill-mode` 是 `none`，于是两个记号都弹回 `rotate(0)`。
+ *
+ * 虚线环停下来要**把虚线也收掉**，换成一圈半透明的实线。因为任务清单里「还没开始」那一档正是一圈
+ * 虚线圆：在，但显然还没开始。跑起来的时候两者分得开——一个亮蓝在转，一个淡灰不动；一旦关掉动效，
+ * 两圈静止的虚线就只剩颜色深浅这一点差别了。所以这一档让它变实：虚的那个仍然只表示「还没开始」。
+ *
+ * 亮弧更麻烦：一段停在十二点方向的弧配一圈轨道，长得和「下到三成」的进度环一模一样，而它压根
+ * 不知道进度。所以这一档直接把弧收掉，只留轨道并提亮——一个安静的半透明圆环，不动，也不撒谎。
+ * ------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-dash circle {
+		stroke-dasharray: none;
+		opacity: 0.5;
+	}
+
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-arc-head {
+		display: none;
+	}
+
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-arc-track {
+		opacity: 0.5;
+	}
+}
+
+:root[data-reduce-motion="on"] .plume-dash circle {
+	stroke-dasharray: none;
+	opacity: 0.5;
+}
+
+:root[data-reduce-motion="on"] .plume-arc-head {
+	display: none;
+}
+
+:root[data-reduce-motion="on"] .plume-arc-track {
+	opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------------------
+ * 呼吸：一圈波纹离开静止的中心，颜色一路走过调色板
+ *
+ * 只给侧栏的会话行。那一行是一列记号里的一个，要在 11px 上还认得出，而且一列里可能同时好几个
+ * 在跑——那一列你还得用来读标题。所以这里连「亮处在走」都不要：什么都不旋转、什么都不位移，
+ * 余光里它只是缓缓涨落的一团。
+ *
+ * 缓动抄的是 SpinKit（tobiasahlin），它那些数值值得照搬而不是重新发明：每一条动画都在正弦曲线
+ * 上。从零写起、`linear` 加均分几何的版本读起来就是机械的，原因正是这个。
+ *
+ * 颜色是说「跑了多久」的那一半。一次呼吸 2.4s，色相在其间走 accent → violet → accent，于是扫一眼
+ * 知道它活着，多看一会儿知道它**还**活着——而没有任何东西变快或变响。两个颜色本来就在调色板里；这里
+ * 没有引入新颜色，只是把已有的走了一遍。
+ * ------------------------------------------------------------------------- */
+
+@keyframes plume-breathe-wave {
+	0% {
+		transform: scale(0.3);
+		opacity: 0.55;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 0;
+	}
+}
+
+/*
+ * 核心走色相，而它绝不能怎么变大小。
+ *
+ * 它待在一列 7px 的记号里——等待、完成、失败都是 7px——而画它的槽是 12px，所以这里每 0.1 的
+ * scale 就是 1.2px，对面是一排从不动弹的邻居。峰值到 0.86 的话就是 10.3px：比它上面那颗点大出
+ * 一半，偏偏又是整列里最惹眼的一行。
+ *
+ * 0.58 → 0.62 让它读起来就是 7px，把这口气花在颜色上。
+ */
+@keyframes plume-breathe-core {
+	0%,
+	100% {
+		transform: scale(0.58);
+		background: var(--plume-accent);
+	}
+	33% {
+		transform: scale(0.62);
+		background: var(--plume-accent);
+	}
+	66% {
+		transform: scale(0.6);
+		background: var(--plume-violet);
+	}
+}
+
+@keyframes plume-breathe-hue {
+	0%,
+	100% {
+		border-color: var(--plume-accent);
+	}
+	33% {
+		border-color: var(--plume-accent);
+	}
+	66% {
+		border-color: var(--plume-violet);
+	}
+}
+
+.plume-breathe {
+	position: relative;
+	display: block;
+}
+
+/*
+ * 波纹和核心共用一个周期，但不共用曲线。
+ *
+ * 波纹是 ease-out——它是被抛出去的，一路慢下来。色相走的是 `ease-in-out`，于是它在每个色上多留
+ * 一会儿，而不是匀速滑过去。两道波纹差半个周期，所以总有一道正在离场。
+ */
+.plume-breathe i {
+	position: absolute;
+	inset: 0;
+	display: block;
+	border: 1.5px solid var(--plume-accent);
+	border-radius: 50%;
+	animation:
+		plume-breathe-wave 2.4s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite,
+		plume-breathe-hue 2.4s ease-in-out infinite;
+}
+
+.plume-breathe i:nth-of-type(2) {
+	animation-delay: -1.2s;
+}
+
+.plume-breathe b {
+	position: absolute;
+	inset: 0;
+	display: block;
+	border-radius: 50%;
+	background: var(--plume-accent);
+	transform: scale(0.62);
+	animation: plume-breathe-core 2.4s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+
+/* 空状态的两拍进场（使用统计页的 EmptyHint）：记号从 0.5 倍弹到位，字随后从下面淡上来。 */
+@keyframes plume-settle {
+	0% {
+		opacity: 0;
+		transform: scale(0.5);
+	}
+	60% {
+		opacity: 1;
+		transform: scale(1.15);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes plume-fade-up {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* 换页：只动透明度，从 0.88 起。`RetainedViews` 的默认到达类。 */
+@keyframes plume-page-in {
+	from {
+		opacity: 0.88;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+.plume-page-enter {
+	animation: plume-page-in var(--plume-t-quick) var(--plume-e-out);
+}
+
+/*
+ * 一个值替换另一个值。
+ *
+ * 给原地变化的字——一档的名字、描述它的那句话。硬换的话，眼睛除了字形不同以外收不到任何「发生了什么」的
+ * 信号，在正拖着的控件上读起来像渲染瑕疵，而不是反馈。
+ *
+ * 总是往下：新值从上面来、推进位置，一连串的变化读起来是一个东西在被拨动，而不是字在闪。距离用 `em`，随它
+ * 所在的字号缩放。
+ *
+ * 由 React 的 `key` 驱动而不是切换类——给元素 `key={value}`，它重新挂载，动画就重新开始。没有状态、没有
+ * 计时器、不用清理。
+ */
+@keyframes plume-roll-in {
+	from {
+		opacity: 0;
+		transform: translateY(-0.5em);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.plume-roll {
+	animation: plume-roll-in var(--plume-t-base) var(--plume-e-out);
+}
+
+/*
+ * 扫过一行字的那道光。
+ *
+ * 字始终是它自己的颜色，光带经过时只让一段字**更深**。没有任何东西淡出；这一行每一刻都读得清，动的是强调，
+ * 不是存在。反过来让光带把字往背景色提亮的话，字只在光带扫过的那一瞬看得见——一行一直在闪、永远读不了的字。
+ */
+@keyframes plume-glide {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+
+.plume-glide {
+	background-image: linear-gradient(
+		100deg,
+		var(--plume-ink-faint) 0%,
+		var(--plume-ink-faint) 42%,
+		var(--plume-ink) 50%,
+		var(--plume-ink-faint) 58%,
+		var(--plume-ink-faint) 100%
+	);
+	background-size: 300% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: plume-glide 2.6s linear infinite;
+}
+
+/* 没有动效时，它就是这一行平常的颜色。 */
+@media (prefers-reduced-motion: reduce) {
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-glide {
+		background: none;
+		color: var(--plume-ink-faint);
+		-webkit-background-clip: border-box;
+		background-clip: border-box;
+	}
+}
+
+:root[data-reduce-motion="on"] .plume-glide {
+	background: none;
+	color: var(--plume-ink-faint);
+	-webkit-background-clip: border-box;
+	background-clip: border-box;
+}
+
+/*
+ * 流水行上换掉的那句话（`RollWords`）。
+ *
+ * 宽度由组件在换句时钉成像素再放开，这里只给它过渡；`overflow: hidden` 让变宽的那段时间里新句不压到
+ * 后面的东西上，也让落进来的字像是从一道缝里出来。不设 `max-width`：不换句的时候它就是字本身那么宽，
+ * 装不下时越出去的是外面的 `ScrollText`，那边的虚化和悬停自读照旧。
+ */
+.plume-roll-words {
+	display: inline-block;
+	overflow: hidden;
+	vertical-align: top;
+	white-space: nowrap;
+	transition: width var(--plume-t-slow) var(--plume-e-out);
+}
+
+/* 和 `.plume-roll` 同一个落下的动作，慢一档：这些行是安静的，换句不该像按钮被点了一下。 */
+.plume-roll-soft {
+	animation: plume-roll-in var(--plume-t-slow) var(--plume-e-out);
+}
+
+/*
+ * 拖一条边的时候，会动的东西不缓动。
+ *
+ * 拖动是一串事件，每一个开始的过渡都被下一个盖掉——窗格追着指针而不是跟着它，合成层还会在已经重绘过的区域上
+ * 留下拖影。
+ *
+ * **标在元素自己身上，绝不是祖先上的标记。** 写成 `:root[data-resizing] *` 的话，把通配收窄成点名的后代有帮助
+ * 但治不了，因为根上的属性仍然是对整份文档提的问题；元素上的属性只让那个元素失效。测量和由谁加这个属性，见
+ * `@plume/ui` 的 `motion/freeze.ts`。
+ *
+ * `.plume-freeze` 标出可能要定住的，`[data-plume-frozen]` 是它正被定住。定住的状态用属性不用类，因为窗格的
+ * `className` 归 React 管、会整条重写——那会引起的闪动见 `motion/freeze.ts`。只标拖动时会缓动的元素，别的不标。
+ *
+ * 写进 base 层：减少动态效果那条全局规则在 base 层里带 `!important`，而 `!important` 的层叠是反过来的，层里的
+ * 压过不在层里的。放进同一层、用更高的特异性压过它，定住时动画才是 0，而不是 0.01ms。
+ */
+@layer base {
+	:root [data-plume-frozen] {
+		/* 停掉过渡用 `transition-property: none`：效果和时长压成 0 一样，正在跑的过渡当场取消。 */
+		transition-property: none !important;
+		animation-duration: 0s !important;
+		animation-delay: 0s !important;
+	}
+}
+
+/*
+ * 拖动期间窗格里什么都接不到指针。
+ *
+ * 窗格里可能是一个 <webview>，那是另一个进程：拖动一越过它，指针就被它吞掉，而指针捕获——处理得了同文档的
+ * iframe——够不着它。拖动期间让窗格不参与命中测试才盖住这种情况。拖动本身监听在 window 上，不受影响。
+ */
+[data-plume-inert] {
+	pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * 智能体的脸（`@plume/ui` 的 `avatar/AgentAvatar.tsx`）
+ *
+ * 分四层套着动，各管一件事，互不抢 `transform`：
+ *
+ *   .plume-avatar-bob     干活时上下颠、排队时慢慢喘气、做完蹦一下
+ *   .plume-avatar-squish  悬停时的果冻、出错时的抖——以脚底为原点，像落在地上
+ *   .plume-avatar-look    眼睛看向指针（位移由脚本写进两个变量）
+ *   .plume-avatar-scan    干活时眼睛左右扫
+ *   .plume-avatar-eyes    眨眼
+ *
+ * 全部是一次性的或者只在干活时循环。「减少动态效果」由全局那条规则统一压掉时长，这里不用再写一遍。
+ * ------------------------------------------------------------------------- */
+
+.plume-avatar {
+	position: relative;
+	display: inline-grid;
+	flex-shrink: 0;
+	width: var(--plume-avatar-size);
+	height: var(--plume-avatar-size);
+	vertical-align: middle;
+}
+
+.plume-avatar > svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+}
+
+.plume-avatar-body {
+	fill: var(--plume-avatar-color);
+	transition: fill var(--plume-t-base) var(--plume-e-out);
+}
+
+.plume-avatar-eyes {
+	fill: var(--plume-avatar-eye);
+	stroke: var(--plume-avatar-eye);
+}
+
+.plume-avatar-eyes rect {
+	stroke: none;
+}
+
+.plume-avatar-bob,
+.plume-avatar-squish,
+.plume-avatar-look,
+.plume-avatar-scan,
+.plume-avatar-eyes {
+	transform-box: fill-box;
+	transform-origin: 50% 50%;
+}
+
+.plume-avatar-squish {
+	transform-origin: 50% 100%;
+}
+
+.plume-avatar-look {
+	transform: translate(var(--plume-look-x, 0), var(--plume-look-y, 0));
+	transition: transform var(--plume-t-base) var(--plume-e-out);
+}
+
+/* 眨眼：眼睛压成一条缝再睁开，190ms，比一次悬停反馈还快一点。 */
+.plume-avatar[data-blink] .plume-avatar-eyes {
+	animation: plume-avatar-blink 190ms ease-in-out;
+}
+
+@keyframes plume-avatar-blink {
+	0%,
+	100% {
+		transform: scaleY(1);
+	}
+	45%,
+	55% {
+		transform: scaleY(0.1);
+	}
+}
+
+/* 指针进来：先被按扁，再弹高，再落稳。 */
+.plume-avatar[data-poke] .plume-avatar-squish {
+	animation: plume-avatar-jelly 640ms var(--plume-e-out);
+}
+
+@keyframes plume-avatar-jelly {
+	0% {
+		transform: scale(1, 1);
+	}
+	20% {
+		transform: scale(1.13, 0.87);
+	}
+	42% {
+		transform: scale(0.93, 1.09);
+	}
+	63% {
+		transform: scale(1.04, 0.97);
+	}
+	82% {
+		transform: scale(0.99, 1.01);
+	}
+	100% {
+		transform: scale(1, 1);
+	}
+}
+
+/* 干活：颠，眼睛扫。颠的幅度是身高的 6%——再大就像在跳，而它只是忙。 */
+.plume-avatar[data-mood="working"] .plume-avatar-bob {
+	animation: plume-avatar-bob 1.15s ease-in-out infinite;
+}
+
+.plume-avatar[data-mood="working"] .plume-avatar-scan {
+	animation: plume-avatar-scan 2.8s ease-in-out infinite;
+}
+
+@keyframes plume-avatar-bob {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-6%);
+	}
+}
+
+@keyframes plume-avatar-scan {
+	0%,
+	16% {
+		transform: translateX(0);
+	}
+	28%,
+	46% {
+		transform: translateX(-4.5px);
+	}
+	58%,
+	76% {
+		transform: translateX(4.5px);
+	}
+	88%,
+	100% {
+		transform: translateX(0);
+	}
+}
+
+/* 排队：褪色、慢慢起伏。它存在，只是还没轮到。 */
+.plume-avatar[data-mood="waiting"] {
+	opacity: 0.5;
+}
+
+.plume-avatar[data-mood="waiting"] .plume-avatar-bob {
+	animation: plume-avatar-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes plume-avatar-breathe {
+	0%,
+	100% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(0.95);
+	}
+}
+
+/* 被叫停的：灰一点，闭着眼。出错的不褪色——出错要被看见。 */
+.plume-avatar[data-mood="stopped"] {
+	filter: saturate(0.25);
+	opacity: 0.75;
+}
+
+/* 做完的那一刻蹦一下：起跳、落地压扁、弹回。 */
+.plume-avatar[data-cheer] .plume-avatar-bob {
+	animation: plume-avatar-cheer 560ms var(--plume-e-out);
+}
+
+@keyframes plume-avatar-cheer {
+	0% {
+		transform: translateY(0) scale(1, 1);
+	}
+	30% {
+		transform: translateY(-16%) scale(0.96, 1.05);
+	}
+	62% {
+		transform: translateY(0) scale(1.08, 0.92);
+	}
+	100% {
+		transform: translateY(0) scale(1, 1);
+	}
+}
+
+/* 出错、被停的那一刻摇两下头。 */
+.plume-avatar[data-shake] .plume-avatar-squish {
+	animation: plume-avatar-shake 460ms ease-in-out;
+}
+
+@keyframes plume-avatar-shake {
+	0%,
+	100% {
+		transform: rotate(0);
+	}
+	20% {
+		transform: rotate(-9deg);
+	}
+	45% {
+		transform: rotate(7deg);
+	}
+	70% {
+		transform: rotate(-4deg);
+	}
+}
+
+/*
+ * 右下角的状态点，外面一圈底色把它从脸上剥开——所在的面是什么颜色，调用方用
+ * `--plume-avatar-ring` 说，默认是窗口底色。
+ */
+.plume-avatar-badge {
+	position: absolute;
+	right: -8%;
+	bottom: -8%;
+	width: max(6px, 32%);
+	height: max(6px, 32%);
+	max-width: 11px;
+	max-height: 11px;
+	border-radius: 9999px;
+	box-shadow: 0 0 0 2px var(--plume-avatar-ring, var(--plume-shell));
+}
+
+.plume-avatar-badge[data-tone="running"] {
+	background: var(--plume-accent);
+}
+
+.plume-avatar-badge[data-tone="running"]::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: var(--plume-accent);
+	animation: plume-avatar-ping 1.6s var(--plume-e-out) infinite;
+}
+
+.plume-avatar-badge[data-tone="failed"] {
+	background: var(--plume-danger);
+}
+
+@keyframes plume-avatar-ping {
+	0% {
+		transform: scale(1);
+		opacity: 0.55;
+	}
+	70%,
+	100% {
+		transform: scale(2.4);
+		opacity: 0;
+	}
+}
+
+/*
+ * 一摞脸（`AvatarPile`）：每张垫一枚圆底，后一枚压住前一枚的三成。
+ *
+ * 被压住的那枚在上一枚的位置挖掉一个圆洞——整枚圆底再外扩一道缝。洞是真的洞，缝里露出来的就是
+ * 这一摞所在的底。用所在面的颜色画一道 2px 外圈、靠圆底的填色去盖，两样都不成立：填色是
+ * `--plume-elevated`，前景色的一层薄纱，下面那张脸直接透上来；外圈要调用方说出底色，而底是半透明
+ * 的（`bg-card/60`）、悬停会变色、或是窗口毛玻璃时，它就成了一道压在下层脸上的弧线。洞没有颜色
+ * 可以说错。
+ *
+ * 指针进来时往右松开一点：挂在最近的 `.group/pile` 上。每枚每一档挪 `--plume-pile-spread`，洞的位置
+ * 也读同一个变量，所以洞跟着上一枚一起走，不会先跳到它的终点；注册这个变量，它才能过渡。
+ */
+@property --plume-pile-spread {
+	syntax: "<length>";
+	inherits: true;
+	initial-value: 0;
+}
+
+/*
+ * 每枚都放进同一格，由 `transform` 按整像素的间距挪到位置上，而不是并排排开。
+ *
+ * 并排时每枚落在自己的小数 x 上（22px 的 0.68 是 14.96px），浏览器各自把圆底对齐到像素，于是
+ * 圆底和给它挖的洞最多能差将近一个像素：1 倍屏上一道缝量出来 1.3px，下一道 2.7px。放进同一格
+ * 后一起对齐一次，整像素的步长让它们都落在同一套网格上。
+ *
+ * 宽度也算上松开挪出去的距离。最后一枚挪得最远，只留静止时的宽度的话，那几像素就压到旁边的字上——
+ * 「2 个子 Agent 运行中」的「2」被一张脸盖住半个。留白一直留着而不是悬停时才加：字跟着指针左右晃，
+ * 比那几像素的空白难看得多。
+ */
+.plume-avatar-pile {
+	--plume-pile-step: round(var(--plume-pile-size) * 0.68, 1px);
+	--plume-pile-fan: 2px;
+	--plume-pile-gap: 2px;
+	/* 每道软边（圆底和洞都一样）的一半：合起来是一个设备像素。 */
+	--plume-pile-aa: 0.5px;
+	display: inline-grid;
+	flex-shrink: 0;
+	align-items: center;
+	width: calc(var(--plume-pile-size) + (var(--plume-pile-n, 1) - 1) * (var(--plume-pile-step) + var(--plume-pile-fan)));
+	transition: --plume-pile-spread var(--plume-t-base) var(--plume-e-out);
+}
+
+@media (min-resolution: 2dppx) {
+	.plume-avatar-pile {
+		--plume-pile-aa: 0.25px;
+	}
+}
+
+.group\/pile:hover .plume-avatar-pile,
+.group\/pile[aria-expanded="true"] .plume-avatar-pile {
+	--plume-pile-spread: var(--plume-pile-fan);
+}
+
+/*
+ * 圆底由遮罩画，不用 `border-radius`。
+ *
+ * 带遮罩的元素在 1 倍屏上画出来的圆边细约三分之一个像素（量出来边缘那一像素的覆盖率 16%，不带遮罩
+ * 的是 45%），带洞的几枚就比最上面那枚小一圈，旁边的缝也更宽——2.4px 对 2.1px。每一枚、包括最上面
+ * 那枚，都用同一个渐变圆，边缘就一样了。遮罩只看透明度，颜色写 black。
+ */
+.plume-avatar-coin {
+	--plume-pile-disc: radial-gradient(circle closest-side, black calc(100% - var(--plume-pile-aa)), transparent calc(100% + var(--plume-pile-aa)));
+	position: relative;
+	grid-area: 1 / 1;
+	display: inline-grid;
+	place-items: center;
+	width: var(--plume-pile-size);
+	height: var(--plume-pile-size);
+	background: var(--plume-elevated);
+	transform: translateX(calc(var(--plume-pile-i) * (var(--plume-pile-step) + var(--plume-pile-spread))));
+	mask: var(--plume-pile-disc);
+}
+
+/* 下一枚的圆心在一个步长加一份松开距离之外。 */
+.plume-avatar-coin:not(:last-child) {
+	--plume-pile-hole: calc(var(--plume-pile-size) / 2 + var(--plume-pile-gap));
+	mask:
+		radial-gradient(
+			circle at calc(50% + var(--plume-pile-step) + var(--plume-pile-spread)) 50%,
+			transparent calc(var(--plume-pile-hole) - var(--plume-pile-aa)),
+			black calc(var(--plume-pile-hole) + var(--plume-pile-aa))
+		),
+		var(--plume-pile-disc);
+	mask-composite: intersect;
+}
+
+.plume-avatar-coin-more {
+	font-size: var(--text-caption);
+	font-variant-numeric: tabular-nums;
+	color: var(--plume-ink-muted);
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@plume/sandbox",
+  "version": "0.1.0",
+  "description": "沙箱：在这台机器能给的约束里跑 shell 命令（macOS 用 seatbelt，Linux 用 bubblewrap、不行时用 Landlock，Windows 用受限令牌），作为服务 sandbox 给别的插件用。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "沙箱"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/platform": "workspace:*",
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "koffi": "^3.3.7"
+  }
+}

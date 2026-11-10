@@ -1,0 +1,51 @@
+/** 文件工具留下的本轮净变化；快照和撤销由提供 file.changes 服务的插件负责。 */
+export interface ChangeHunk {
+	oldStart: number;
+	newStart: number;
+	lines: { type: "context" | "add" | "remove"; text: string; oldLine?: number; newLine?: number }[];
+}
+
+export interface ChangedFile {
+	/** 真实绝对路径；界面只在显示时相对化，文件菜单和撤销不丢失工作目录。 */
+	path: string;
+	added: number;
+	removed: number;
+	hunks: ChangeHunk[];
+	canUndo: boolean;
+	/** 不能撤销时给人看的原因，按当前界面语言返回。 */
+	undoReason?: string;
+	/** 不能撤销的原因归哪一类；快照读不出来时不给，那时 `FileChangesSummary.warnings` 不为空。 */
+	undoProblem?: UndoProblem;
+}
+
+/** 不能自动退回的几种情况：改动来自命令、中途被别处改过、不在项目内、之后被改过。 */
+export type UndoProblem = "command" | "interleaved" | "outside" | "modified";
+
+export interface FileChangesSummary {
+	files: ChangedFile[];
+	warnings: string[];
+}
+
+/** 快照标识来自工具结果的 changeId / changeIds，不接受界面传来的文件原文。 */
+export interface FileChangesService {
+	collect(sessionId: string, cwd: string, ids: readonly string[]): Promise<FileChangesSummary>;
+	/** path 不给时撤销全部；写入前重新校验快照、当前内容和项目边界。 */
+	undo(sessionId: string, cwd: string, ids: readonly string[], path?: string): Promise<void>;
+}
+
+/** 撤回、编辑重发截掉一段对话时，那段里改过的一个文件。`problem` 为 null 的能安全退回到截断点之前。 */
+export interface RevertFile {
+	path: string;
+	added: number;
+	removed: number;
+	problem: UndoProblem | null;
+}
+
+/**
+ * 截掉的那段改过哪些文件。`unrecorded` 说有改动没记下来（快照缺了、命令影响的文件太多没记全），这时退回的不完整，
+ * 一个文件都不该写。
+ */
+export interface RevertPlan {
+	files: RevertFile[];
+	unrecorded: boolean;
+}

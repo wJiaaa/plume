@@ -1,0 +1,27 @@
+{
+  "name": "@plume/todo",
+  "version": "0.1.0",
+  "description": "给 agent 一张待办清单：多步任务先列清单，做完一项勾一项；清单卡片一直跟着对话，看得到在做哪一步、还剩多少。",
+  "author": "Plume",
+  "keywords": [
+    "todo",
+    "计划",
+    "清单"
+  ],
+  "plume": {
+    "displayName": "待办清单",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1"
+  }
+}

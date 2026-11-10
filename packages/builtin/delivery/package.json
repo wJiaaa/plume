@@ -1,0 +1,29 @@
+{
+  "name": "@plume/delivery",
+  "version": "0.1.0",
+  "description": "按轮汇总文件净变更、验证结果和交付记录，并安全撤销工具记录的改动。",
+  "author": "Plume",
+  "keywords": [
+    "delivery",
+    "交付",
+    "验证",
+    "撤销"
+  ],
+  "plume": {
+    "displayName": "文件交付",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@plume/commands",
+  "version": "0.1.0",
+  "description": "在输入框里敲 / 用你写的命令：读项目和个人目录里的 Markdown 命令文件（也认 .claude/commands），发送时展开成正文；设置页里新建、编辑、删除。",
+  "author": "Plume",
+  "keywords": [
+    "commands",
+    "slash",
+    "命令",
+    "斜杠命令"
+  ],
+  "plume": {
+    "displayName": "命令",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0"
+  }
+}

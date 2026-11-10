@@ -1,0 +1,398 @@
+/*
+ * Git 面板本身、改动 / 历史 / 分支三个视图、分组标题和行用到的布局。
+ *
+ * 插件单独构建，产品的 Tailwind 扫不到这里的类名，所以布局、悬停写在这里；字号、字重、文字颜色的档位交给 Text，
+ * 这里只在一段文字里要换颜色、或者整行跟着状态变色时取 var(--plume-*)。
+ */
+
+/* ── 通用 ─────────────────────────────────────────────── */
+
+.git-fill {
+	flex: 1 1 0%;
+}
+
+.git-grow {
+	min-width: 0;
+	flex: 1 1 0%;
+}
+
+.git-spacer {
+	min-width: 4px;
+	flex: 1 1 0%;
+}
+
+.git-shrink-0 {
+	flex-shrink: 0;
+}
+
+.git-fixed {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.git-block {
+	display: block;
+}
+
+.git-inline-flex {
+	display: inline-flex;
+}
+
+.git-truncate {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.git-row-6 {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.git-row-8 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.git-stretch {
+	display: flex;
+	align-items: stretch;
+}
+
+.git-gap-2 {
+	gap: 2px;
+}
+
+/* 盖在行上的按钮条本身不接指针（悬停要落到行上），按钮自己要接。 */
+.git-pointer {
+	pointer-events: auto;
+}
+
+.git-push-right {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+/* 一段文字里换个颜色：分支名比它后面的上游更重要，diff 统计的加减各是各的色。 */
+.git-ink {
+	color: var(--plume-ink);
+}
+
+.git-faint {
+	color: var(--plume-ink-faint);
+}
+
+.git-accent {
+	color: var(--plume-accent);
+}
+
+.git-ok {
+	color: var(--plume-ok);
+}
+
+.git-danger {
+	color: var(--plume-danger);
+}
+
+.git-count {
+	color: var(--plume-ink-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 占位和列表的内边距：骨架和到达的行站在同一个位置上。 */
+.git-skeleton-pad {
+	flex: 1 1 0%;
+	padding: 8px 6px 0;
+}
+
+.git-list-pad {
+	padding: 0 6px 8px;
+}
+
+.git-list-pad-wide {
+	padding: 0 8px 8px;
+}
+
+/* ── 面板外框、同步那一行、视图那一排 ─────────────────── */
+
+.git-panel {
+	display: flex;
+	min-height: 0;
+	min-width: 0;
+	flex: 1 1 0%;
+	flex-direction: column;
+}
+
+.git-sync-row {
+	display: flex;
+	height: 32px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 0 10px;
+}
+
+.git-sync-detail {
+	padding-left: 6px;
+	color: var(--plume-ink-faint);
+}
+
+/* 同步那一行里写出字的那颗：比图标按钮宽，高度和它们一样。 */
+.git-sync-word {
+	display: flex;
+	height: 22px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 6px;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-sync-word:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-sync-word:active {
+	background: var(--plume-elevated);
+}
+
+.git-sync-word:disabled {
+	opacity: 0.4;
+}
+
+.git-views {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 0 6px 6px;
+}
+
+/* ── 空状态 ───────────────────────────────────────────── */
+
+.git-problem-stack {
+	display: flex;
+	width: 100%;
+	max-width: 280px;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+
+/* git 原话：等宽、能选中复制，长了在框里滚，不把按钮推出面板。 */
+.git-problem {
+	display: block;
+	max-height: 144px;
+	width: 100%;
+	overflow-y: auto;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card);
+	padding: 10px;
+	text-align: left;
+	user-select: text;
+}
+
+.git-empty-actions {
+	margin-top: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+/* ── 分组标题和行 ─────────────────────────────────────── */
+
+.git-group-header {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 6px 4px;
+}
+
+.git-group-actions {
+	margin-left: auto;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+}
+
+.git-checkout-row {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 6px;
+	border-radius: var(--plume-radius-field);
+	padding: 4px 6px;
+	text-align: left;
+	color: var(--plume-ink-muted);
+	transition: color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-checkout-row:hover {
+	color: var(--plume-ink);
+}
+
+.git-checkout-row[aria-current] {
+	color: var(--plume-accent);
+}
+
+.git-checkout-mark {
+	color: var(--plume-ink-faint);
+}
+
+.git-checkout-row[aria-current] .git-checkout-mark {
+	color: var(--plume-accent);
+}
+
+/* 分支名比文件夹先让：它可以很长，而文件夹名说的是「哪一个」。 */
+.git-checkout-branch {
+	margin-left: auto;
+	min-width: 0;
+	max-width: 42%;
+	flex-shrink: 4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.git-branch-row {
+	border-radius: var(--plume-radius-item);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-branch-row:hover {
+	background: var(--plume-card-hover);
+}
+
+.git-branch-line {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+}
+
+.git-mark-accent {
+	color: var(--plume-accent);
+}
+
+.git-mark-faint {
+	color: var(--plume-ink-faint);
+}
+
+/* 「当前」占一个固定宽度：有它没它，名字的尾巴都止于同一处。 */
+.git-branch-current {
+	width: 36px;
+	flex-shrink: 0;
+	text-align: right;
+}
+
+/* ── 分支页：比较、新建 ───────────────────────────────── */
+
+.git-compare-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 4px;
+}
+
+.git-arrow {
+	padding: 0 4px;
+	color: var(--plume-ink-faint);
+}
+
+.git-new-branch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 4px 6px;
+}
+
+/* 字号跟外面的 Text 走：`plume-field` 自带的是控件档，放在紧凑的一行里显得大。 */
+.plume-field.git-branch-field {
+	width: 100%;
+	min-width: 0;
+	font-size: inherit;
+}
+
+/* ── 历史 ─────────────────────────────────────────────── */
+
+.git-commit-row {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 0%;
+	align-items: center;
+	gap: 8px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 6px;
+	text-align: left;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-commit-row:hover {
+	background: var(--plume-card-hover);
+}
+
+/* 标签比标题先让，见 HistoryView。 */
+.git-commit-refs {
+	display: flex;
+	min-width: 0;
+	flex-shrink: 3;
+	gap: 4px;
+	overflow: hidden;
+}
+
+.git-commit-ref {
+	max-width: 132px;
+	flex-shrink: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-item);
+	padding: 1px 4px;
+}
+
+.git-commit-body {
+	min-width: 0;
+	flex: 1 1 0%;
+	padding: 0 4px 6px 8px;
+}
+
+.git-commit-skeleton {
+	padding: 10px 8px 10px 0;
+}
+
+.git-commit-skeleton > * + * {
+	margin-top: 8px;
+}
+
+/* 文件图标的位置：方的，和后面那条圆头的名字分得开。 */
+.git-skeleton-mark {
+	flex-shrink: 0;
+	border-radius: 0;
+}
+
+/* ── 提交图 ───────────────────────────────────────────── */
+
+.git-graph-through {
+	position: relative;
+	flex-shrink: 0;
+}
+
+.git-graph-fill {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}

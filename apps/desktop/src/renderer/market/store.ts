@@ -1,0 +1,183 @@
+/**
+ * 「扩展」页的状态：agent 进程报告的插件状态、主进程读到的目录和本机插件、更新状态，看的是哪一类，以及打开的是
+ * 哪一个插件的详情页。侧栏那一行的更新数目和市场页读同一份，才不会一处说装了、一处还说没装。
+ */
+
+import type { AgentService, PluginStatus } from "@plume/contract";
+import type { Remote } from "@plume/rpc";
+import { translate } from "@plume/ui";
+import { useMemo, useSyncExternalStore } from "react";
+import type { MarketResult, MarketState, PluginUpdateState } from "../../shared/market.ts";
+import { loadPluginUis } from "../plugins.tsx";
+import { type CatalogItem, merge } from "./catalog.ts";
+
+export type MarketNotice = { tone: "error" | "note"; text: string };
+
+/** 「扩展」的三类：插件由产品画，技能、连接器由管它们的插件画（`page: "extensions-skills"`、`"extensions-connectors"`）。 */
+export type MarketTab = "plugins" | "skills" | "connectors";
+
+interface MarketStore {
+	plugins: PluginStatus[];
+	market?: MarketState;
+	/** 读目录还没回来。 */
+	loading: boolean;
+	/** 看的是哪一类。 */
+	tab: MarketTab;
+	/** 市场里打开的详情页，按目录名。 */
+	focus: string | null;
+	updates?: PluginUpdateState;
+	notice?: MarketNotice;
+}
+
+let store: MarketStore = { plugins: [], loading: false, tab: "plugins", focus: null };
+const listeners = new Set<() => void>();
+let agent: Remote<AgentService>;
+
+function set(patch: Partial<MarketStore>): void {
+	store = { ...store, ...patch };
+	for (const listener of listeners) listener();
+}
+
+export function useMarketStore(): MarketStore {
+	return useSyncExternalStore(
+		(listener) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		() => store,
+	);
+}
+
+/** 合好的目录，见 catalog.ts。 */
+export function useCatalog(): CatalogItem[] {
+	const { market, plugins, updates } = useMarketStore();
+	const outdated = (updates ?? market?.updates)?.outdated;
+	return useMemo(
+		() =>
+			merge(
+				market?.entries ?? [],
+				market?.installed ?? [],
+				plugins,
+				outdated?.map((item) => item.id),
+			),
+		[market, plugins, outdated],
+	);
+}
+
+export function startMarket(service: Remote<AgentService>): void {
+	agent = service;
+	window.plume.market.onChanged((updates) => set({ updates }));
+	agent.listPlugins().then(
+		(plugins) => set({ plugins }),
+		(error: unknown) => console.error("没拿到插件状态：", error),
+	);
+	// 侧栏的待更新数要在打开市场之前就有。
+	void reloadMarket();
+}
+
+/** agent 进程推来的插件状态：界面入口跟着装上、撤下，市场和设置页重读一次本机插件。 */
+export function pluginsChanged(plugins: PluginStatus[]): void {
+	set({ plugins });
+	void loadPluginUis(plugins, agent);
+	void reloadMarket();
+}
+
+/** 重读目录和本机插件；主进程顺便对一遍账，自动更新开着就更新。 */
+export async function reloadMarket(): Promise<void> {
+	set({ loading: true });
+	try {
+		const market = await window.plume.market.read();
+		// 连不上市场时目录是上次读到的（或空的），说一声；已装的插件照常列着。
+		const notice = market.catalogError ? { tone: "error" as const, text: translate("market.unreachable", { reason: market.catalogError }) } : undefined;
+		set({ market, updates: market.updates, loading: false, ...(notice ? { notice } : {}) });
+	} catch (error) {
+		set({ loading: false, notice: { tone: "error", text: errorText(error) } });
+	}
+}
+
+/** 打开一个插件的详情（null 是回到网格）；详情属于「插件」那一类，返回时回到插件的网格。 */
+export function focusPlugin(key: string | null): void {
+	set(key === null ? { focus: null } : { focus: key, tab: "plugins" });
+}
+
+/** 换到另一类；开着的详情页一起关掉，详情只属于「插件」那一类。 */
+export function setMarketTab(tab: MarketTab): void {
+	set({ tab, focus: null });
+}
+
+export function setMarketNotice(notice: MarketNotice | undefined): void {
+	set({ notice });
+}
+
+/** 装、卸、更新的结果翻成一句话；成功时没有话说。 */
+function resultText(name: string, result: MarketResult): string | undefined {
+	if (result.ok) return undefined;
+	const message =
+		result.error === "failed"
+			? result.message
+			: translate(
+					result.error === "local"
+						? "market.localOwned"
+						: result.error === "builtin"
+							? "market.builtinOwned"
+							: result.error === "invalid"
+								? "market.notAPlugin"
+								: "market.notInCatalog",
+				);
+	return translate("install.failedWith", { name, message });
+}
+
+export async function installPlugin(item: CatalogItem): Promise<boolean> {
+	return report(item.name, await window.plume.market.install(item.key));
+}
+
+/** 「从文件夹安装」：人选一个构建好的插件文件夹，装上后打开它的详情；取消了什么都不做。 */
+export async function installFromFolder(): Promise<void> {
+	const dir = await window.plume.pickFolder(translate("market.pickPluginFolder"));
+	if (!dir) return;
+	// 和主进程一样，文件夹名就是插件的目录名。
+	const id = dir.slice(dir.lastIndexOf("/") + 1);
+	if (await report(id, await window.plume.market.installFolder(dir))) focusPlugin(id);
+}
+
+export async function uninstallPlugin(item: CatalogItem): Promise<boolean> {
+	return report(item.name, await window.plume.market.uninstall(item.key));
+}
+
+/** 更新这几个（缺省全部落后的）；失败的逐个说。 */
+export async function updatePlugins(keys?: string[]): Promise<void> {
+	const updates = await window.plume.market.update(keys);
+	set({ updates });
+	const failed = updates.failed.filter((failure) => !keys || keys.includes(failure.id));
+	if (failed.length > 0) {
+		set({
+			notice: { tone: "error", text: failed.map((failure) => translate("install.failedWith", { name: failure.name, message: failure.message })).join("\n") },
+		});
+	}
+	await reloadMarket();
+}
+
+export async function setAutoUpdate(auto: boolean): Promise<void> {
+	set({ updates: await window.plume.market.setAutoUpdate(auto) });
+	await reloadMarket();
+}
+
+/** 开关一个插件，立即生效；新的状态经 plugins 事件回来。`label` 是出错时说给人听的名字。 */
+export async function setPluginEnabled(name: string, label: string, enabled: boolean): Promise<void> {
+	try {
+		await agent.setPluginEnabled(name, enabled);
+	} catch (error) {
+		set({ notice: { tone: "error", text: translate("install.failedWith", { name: label, message: errorText(error) }) } });
+	}
+}
+
+async function report(name: string, result: MarketResult): Promise<boolean> {
+	const text = resultText(name, result);
+	if (text) set({ notice: { tone: "error", text } });
+	await reloadMarket();
+	return result.ok;
+}
+
+function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}

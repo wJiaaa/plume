@@ -1,0 +1,336 @@
+/*
+ * 设计 token。每一处界面都从这里挑，不写临时的色值、字号、圆角。
+ *
+ * 颜色只有三个种子：背景 --plume-bg、前景 --plume-fg、强调色 --plume-accent，加一个对比度 --plume-contrast（0–1）。
+ * 其余色阶都由种子推出来：面从背景往前景走，字从背景往前景走得更远，都乘对比度。
+ * 换一个背景也不会得到看不清的字或看不见的线；皮肤通常只改种子，个别 token 不满意再单独覆盖。
+ *
+ * - 产品和 @plume/ui 用 Tailwind 工具类（bg-card、text-ink-muted、border-line……），由下面的 @theme 映射到 token；
+ *   Tailwind 自带的色板、字号清空了，只能用这里的；圆角用 Tailwind 的刻度加这里几档有语义的。可复用的类名组合在同一个包的 index.ts。
+ * - 每个 token 用在哪、什么时候加新的，见 spec/tech/tokens.md；写法规则见 spec/tech/styling.md。
+ * - 插件的界面入口单独构建，产品的 Tailwind 扫不到它们自己写的类名：插件用 @plume/ui 的组件、
+ *   @plume/styles 导出的类名组合，要自己写样式时用 var(--plume-*)，深浅色和皮肤都自动跟着变。
+ * - 皮肤插件经 ui.skin 覆盖这些变量；token 有增减时同步 @plume/contract/ui 的 SkinToken。
+ *
+ * 改了默认背景记得同步 apps/desktop/src/main/index.ts 里窗口的 backgroundColor。
+ */
+
+:root {
+	color-scheme: light dark;
+
+	/* ── 种子 ── */
+	--plume-bg: #f8f8f8;
+	--plume-fg: #262626;
+	--plume-accent: #339cff;
+	/* 0–1，每一档推导都乘 0.5 + 它，也就是 0.5×–1.5×。 */
+	--plume-contrast: 0.6;
+
+	/*
+	 * 推导的系数，按深浅色不同。不是 token，皮肤不改。
+	 *
+	 * 浅色下面和线分开算：面贴近页面（0.45×），线离页面远（1.7×）。共用一条曲线时线会比它要分隔的卡片还浅，
+	 * 每一层只能靠变灰来分开，叠三层整个界面就是灰的。深色下面变亮和字变亮是同一个方向，共用一条曲线（1×）。
+	 */
+	--plume-k: calc(0.5 + var(--plume-contrast));
+	--plume-k-surface: 0.45;
+	--plume-k-rule: 1.7;
+	/* 最浅那档字：浅色 52%、深色 56%，在最浅的面上也有 3:1。 */
+	--plume-k-faint: 52%;
+
+	/* ── 面 ── */
+	/* 窗口底色。 */
+	--plume-shell: var(--plume-bg);
+	/* 窗口最外层，数据皮肤可将它与正文区分开。 */
+	--plume-root: var(--plume-shell);
+	/* 强调色弱底；数据皮肤可直接指定，不再从强调色透明度推导。 */
+	--plume-accent-dim: color-mix(in srgb, var(--plume-accent) 10%, transparent);
+	--plume-sidebar: color-mix(in srgb, var(--plume-fg) calc(4.2% * var(--plume-k) * var(--plume-k-surface)), var(--plume-bg));
+	/* 卡片：工具卡片、用户消息。 */
+	--plume-card: color-mix(in srgb, var(--plume-fg) calc(6% * var(--plume-k) * var(--plume-k-surface)), var(--plume-bg));
+	/* 悬停、选中：前景色的一层薄纱，压在什么上面都看得出来。 */
+	--plume-card-hover: color-mix(in srgb, var(--plume-fg) 5%, transparent);
+	--plume-elevated: color-mix(in srgb, var(--plume-fg) 8.5%, transparent);
+	/* 输入框像纸：浅色下比页面更亮，往白走，而不是往前景走成灰的。 */
+	--plume-input: color-mix(in srgb, #fff 65%, var(--plume-bg));
+	/* 浮在最上面的：菜单、弹层。比它盖住的东西亮。 */
+	--plume-float: color-mix(in srgb, #fff 80%, var(--plume-bg));
+	/* 开关的圆点。深色下也是白的：灰圆点压在打开时的强调色上像脏了一块，开关最该清楚的时候反而最不清楚。 */
+	--plume-knob: #fff;
+	/*
+	 * 纯黑，只按透明度用（color-mix 到 transparent）：对话框的遮罩、白色旋钮的描边。深色下也是黑的：
+	 * 遮罩压暗的是窗口，从前景推出来的话深色下会变成一层灰雾。
+	 */
+	--plume-shade: #000;
+	/* 毛玻璃窗口的底：盖在系统材质上的半透明一层。浅色往页面色，深色往浮层色（比页面亮），材质透出来的颜色不会压过字。 */
+	--plume-window-tint: color-mix(in srgb, var(--plume-shell) 70%, transparent);
+
+	/* ── 线 ── */
+	--plume-line: color-mix(in srgb, var(--plume-fg) calc(7.5% * var(--plume-k) * var(--plume-k-rule)), var(--plume-bg));
+	--plume-line-soft: color-mix(in srgb, var(--plume-fg) calc(5% * var(--plume-k) * var(--plume-k-rule)), var(--plume-bg));
+	/* 画在浮层上的线：按前景的透明度算，落在什么面上都同样高出一档。 */
+	--plume-line-float: color-mix(in srgb, var(--plume-fg) 10%, transparent);
+
+	/* ── 字 ── */
+	--plume-ink: var(--plume-fg);
+	/* 次要文字在每一种面上 ≥4.5:1，最浅那档 ≥3:1。 */
+	--plume-ink-muted: color-mix(in srgb, var(--plume-fg) 70%, var(--plume-bg));
+	--plume-ink-faint: color-mix(in srgb, var(--plume-fg) var(--plume-k-faint), var(--plume-bg));
+
+	/* ── 状态 ── 浅底用透明度修饰（bg-danger/10），不另设 token。 */
+	--plume-ok: #3ecf8e;
+	/* 浅色单独一档更深的红：深色那档放到白底上，压在它自己 10% 的浅粉底上只有 3:1。 */
+	--plume-danger: #c92a30;
+	--plume-warning: #d97706;
+	/* 第二种色相：运行中的呼吸灯在 accent 和它之间走，不表示状态。 */
+	--plume-violet: #b18cf5;
+	/* 压在 accent 实色上的字（未读数这种小圆标），深浅色都是白的。 */
+	--plume-on-accent: #fff;
+	/* 图表：accent、violet、ok 之后再要几种排在一起分得开的色相（使用统计按模型拆的柱和列表）。不表示状态。 */
+	--plume-chart-2: #0d9488;
+	--plume-chart-3: #d97706;
+	--plume-chart-4: #9333ea;
+	--plume-chart-5: #e11d48;
+	--plume-chart-6: #65a30d;
+
+	/* ── 代码 ── 代码画在页面底色上；diff 是两层浅底，字仍是正文色。 */
+	--plume-code-bg: var(--plume-bg);
+	--plume-code-fg: var(--plume-ink);
+	--plume-code-line-height: 1.6;
+	--plume-code-tracking: 0em;
+	--plume-inline-code-bg: var(--plume-card-hover);
+	--plume-inline-code-fg: var(--plume-ink);
+	--plume-inline-code-ring: transparent;
+	--plume-diff-add: rgb(51 128 63 / 0.12);
+	--plume-diff-remove: rgb(200 64 47 / 0.1);
+	/*
+	 * 语法配色：回复里代码块的关键字、字符串这些，只经 var() 用在高亮样式里。按读代码时最常找的东西分档：
+	 * 被定义的名字（function）、类型（type）、字面量（string、number），注释最淡。变量名和没有规则认领的字是正文色。
+	 */
+	--plume-syntax-keyword: #2b62c6;
+	--plume-syntax-string: #0f7d78;
+	--plume-syntax-number: #9a6a00;
+	--plume-syntax-comment: #8a8a8a;
+	--plume-syntax-function: #8a45a5;
+	--plume-syntax-type: #33803f;
+	--plume-syntax-variable: var(--plume-ink);
+	--plume-syntax-operator: var(--plume-syntax-punctuation);
+	--plume-syntax-punctuation: #5f5f5f;
+	--plume-syntax-tag: #2b62c6;
+	--plume-syntax-attribute: #9a6a00;
+
+	/*
+	 * ── 圆角 ── 其余用 Tailwind 的刻度（lg 8、2xl 16、full……），落在两档中间的往小取。这里是有语义的几档。
+	 */
+	/* 面板：一整块内容区。 */
+	--plume-radius-panel: 12px;
+	/* 输入框、按钮共用一个，一排按钮挨着输入框不会像两套控件拼在一起。 */
+	--plume-radius-field: 8px;
+	/* 菜单里的行。 */
+	--plume-radius-item: 6px;
+	/* 浮起的菜单卡片。行是 item 6px，卡片 10px，中间留 menu-inset 4px。 */
+	--plume-radius-menu: 10px;
+
+	/* ── 尺寸 ── 输入框、下拉的高度。按钮是 32（h-8），一排里控件高度只有这两种。不给皮肤改。 */
+	--plume-control: 34px;
+	/* 菜单：卡片四边的内衬一样宽，悬停底色离左右边一样近；一行 32。 */
+	--plume-menu-inset: 4px;
+	--plume-menu-row: 32px;
+	/*
+	 * 主输入框：in 是卡片里所有上下内边距（字、附件条、工具栏底边），x 是左右内边距，
+	 * out 是卡片到窗格两边和窗口底边的外边距，control 是工具栏上每个按钮的边长。
+	 */
+	--plume-composer-in: 12px;
+	--plume-composer-x: 16px;
+	--plume-composer-out: 24px;
+	--plume-composer-control: 28px;
+	/*
+	 * 对话那一列的最大宽度：对话、审批卡、输入框共用。定值，窄窗格里铺满、宽了只居中，侧栏和面板开合时
+	 * 正文只平移、不重新断行。
+	 */
+	--plume-content: 864px;
+	/* 窗格外框：工作区围着窗格的内边距，和卡片里面离窗口边多远（内边距 + 窗格间距 + 1px 描边）。 */
+	--plume-frame-pad: 2px;
+	--plume-pane-chrome: 5px;
+
+	/* ── 字体 ── 不打包字体；等宽栈在 monospace 前加中文字体，否则 Windows 上代码里的中文落到宋体。 */
+	--plume-font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+	--plume-font-mono:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+		"Noto Sans CJK SC", monospace;
+	/* 字号都从这两个算：界面一个，代码一个。 */
+	--plume-ui-size: 14px;
+	--plume-code-size: 12px;
+
+	/*
+	 * ── 动效 ── 时长按「什么在动」分档：quick 是状态变化（悬停、按下），base 是位置和尺寸，slow 是新出现的东西。
+	 * 曲线按方向：out 减速落定，用于出现；in 是它的镜像，用于离开；soft 用于原地变化。
+	 */
+	--plume-t-quick: 150ms;
+	--plume-t-base: 220ms;
+	--plume-t-reveal: 260ms;
+	--plume-t-slow: 340ms;
+	--plume-e-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--plume-e-in: cubic-bezier(0.55, 0, 1, 0.45);
+	--plume-e-soft: cubic-bezier(0.4, 0, 0.2, 1);
+
+	/* ── 阴影 ── 按用途分档。rest：贴在页面上的卡片，比如主输入框。 */
+	--plume-shadow-rest: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05);
+	/* 菜单、弹层卡片。 */
+	--plume-shadow-menu: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	/* 悬停提示。 */
+	--plume-shadow-tip: 0 4px 14px -4px rgb(0 0 0 / 0.3);
+	/* 对话框。 */
+	--plume-shadow-dialog: 0 18px 60px rgb(0 0 0 / 0.16), 0 2px 8px rgb(0 0 0 / 0.06);
+	/* 压在图片上的深色浮条：底下是什么不知道，所以重。 */
+	--plume-shadow-overlay: 0 8px 32px rgb(0 0 0 / 0.45);
+	/* 开关和分段控件的旋钮。 */
+	--plume-shadow-knob: 0 1px 2.5px rgb(0 0 0 / 0.16);
+	/* 半透明浮层：顶边一道内高光，像玻璃有厚度。 */
+	--plume-shadow-glass: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 6px 20px -6px rgb(0 0 0 / 0.13), 0 1px 5px -2px rgb(0 0 0 / 0.09);
+	/* 提示条。浅色下和玻璃一样；深色下见下面。 */
+	--plume-shadow-toast: var(--plume-shadow-glass);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--plume-bg: #171717;
+		--plume-fg: #d4d4d4;
+
+		--plume-k-surface: 1;
+		--plume-k-rule: 1;
+		--plume-k-faint: 56%;
+
+		--plume-card-hover: color-mix(in srgb, var(--plume-fg) 6.2%, transparent);
+		--plume-elevated: color-mix(in srgb, var(--plume-fg) 10%, transparent);
+		/* 深色下输入框和浮层也往前景走（变亮），和其他面同一个方向。 */
+		--plume-input: color-mix(in srgb, var(--plume-fg) calc(3.5% * var(--plume-k)), var(--plume-bg));
+		--plume-float: color-mix(in srgb, var(--plume-fg) calc(10% * var(--plume-k)), var(--plume-bg));
+		--plume-window-tint: color-mix(in srgb, var(--plume-float) 60%, transparent);
+
+		--plume-danger: #f2555a;
+		--plume-warning: #fbbf24;
+		--plume-chart-2: #2dd4bf;
+		--plume-chart-3: #fbbf24;
+		--plume-chart-4: #c084fc;
+		--plume-chart-5: #fb7185;
+		--plume-chart-6: #a3e635;
+
+		--plume-diff-add: rgb(127 201 138 / 0.14);
+		--plume-diff-remove: rgb(240 113 113 / 0.13);
+
+		--plume-syntax-keyword: #79b8ff;
+		--plume-syntax-string: #6fd2c8;
+		--plume-syntax-number: #e3c07b;
+		--plume-syntax-comment: #6b6b6b;
+		--plume-syntax-function: #c39ac9;
+		--plume-syntax-type: #7fc98a;
+		--plume-syntax-punctuation: #a0a0a0;
+		--plume-syntax-tag: #79b8ff;
+		--plume-syntax-attribute: #e3c07b;
+
+		/* 深底上同样的投影看不见，旋钮像贴在轨道上；玻璃的内高光要压暗，否则是一道亮线。 */
+		--plume-shadow-knob: 0 1px 3px rgb(0 0 0 / 0.55);
+		--plume-shadow-glass: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 1px 6px -2px rgb(0 0 0 / 0.38);
+		/* 深底上一圈大范围的黑晕加顶边高光，提示条像悬在半空；只留一道贴边的影子，靠浮层底和描边分层。 */
+		--plume-shadow-toast: 0 1px 2px rgb(0 0 0 / 0.28);
+	}
+}
+
+@theme {
+	--color-*: initial;
+	--text-*: initial;
+}
+
+@theme inline {
+	--color-shell: var(--plume-shell);
+	--color-root: var(--plume-root);
+	--color-accent-dim: var(--plume-accent-dim);
+	--color-sidebar: var(--plume-sidebar);
+	--color-card: var(--plume-card);
+	--color-card-hover: var(--plume-card-hover);
+	--color-elevated: var(--plume-elevated);
+	--color-input: var(--plume-input);
+	--color-float: var(--plume-float);
+	--color-knob: var(--plume-knob);
+	--color-shade: var(--plume-shade);
+	--color-window-tint: var(--plume-window-tint);
+	--color-line: var(--plume-line);
+	--color-line-soft: var(--plume-line-soft);
+	--color-line-float: var(--plume-line-float);
+	--color-ink: var(--plume-ink);
+	--color-ink-muted: var(--plume-ink-muted);
+	--color-ink-faint: var(--plume-ink-faint);
+	--color-accent: var(--plume-accent);
+	--color-ok: var(--plume-ok);
+	--color-danger: var(--plume-danger);
+	--color-warning: var(--plume-warning);
+	--color-violet: var(--plume-violet);
+	--color-chart-2: var(--plume-chart-2);
+	--color-chart-3: var(--plume-chart-3);
+	--color-chart-4: var(--plume-chart-4);
+	--color-chart-5: var(--plume-chart-5);
+	--color-chart-6: var(--plume-chart-6);
+	--color-on-accent: var(--plume-on-accent);
+	--color-code-bg: var(--plume-code-bg);
+	--color-code-fg: var(--plume-code-fg);
+	--color-diff-add: var(--plume-diff-add);
+	--color-diff-remove: var(--plume-diff-remove);
+
+	--radius-panel: var(--plume-radius-panel);
+	--radius-field: var(--plume-radius-field);
+	--radius-item: var(--plume-radius-item);
+	--radius-menu: var(--plume-radius-menu);
+
+	--spacing-control: var(--plume-control);
+
+	--font-sans: var(--plume-font-sans);
+	--font-mono: var(--plume-font-mono);
+
+	/*
+	 * 字号七档加代码一档，都是界面字号的 calc，改一个数整套一起动。档与档至少差 1px，各自带行高和字距：
+	 * 字越大字距越紧。字重不放进档里，和字号配对写在用的地方（title 用 medium，heading、display 用 semibold）。
+	 */
+	--text-caption: calc(var(--plume-ui-size) - 2px);
+	--text-caption--line-height: 1.45;
+	--text-detail: calc(var(--plume-ui-size) - 1px);
+	--text-detail--line-height: 1.5;
+	/* 工作字号：行、控件、表格，大部分界面。 */
+	--text-label: var(--plume-ui-size);
+	--text-label--line-height: 1.5;
+	/* 正文：比控件松，句子是顺着读的。 */
+	--text-body: calc(var(--plume-ui-size) + 1px);
+	--text-body--line-height: 1.7;
+	--text-title: calc(var(--plume-ui-size) + 3px);
+	--text-title--line-height: 1.4;
+	--text-title--letter-spacing: -0.01em;
+	--text-heading: calc(var(--plume-ui-size) + 7px);
+	--text-heading--line-height: 1.3;
+	--text-heading--letter-spacing: -0.015em;
+	--text-display: calc(var(--plume-ui-size) + 16px);
+	--text-display--line-height: 1.2;
+	--text-display--letter-spacing: -0.022em;
+	/* 代码另起一档：另一种字体，按列读；行高 1.6 比正文紧，缩进和括号的形状不被拉散。 */
+	--text-code: var(--plume-code-size);
+	--text-code--line-height: var(--plume-code-line-height);
+	--text-code--letter-spacing: var(--plume-code-tracking);
+	/* 角标里的数字：图标按钮角上的计数 9px、小圆标里的未读数 10px。只给数字用，不放字。 */
+	--text-badge: calc(var(--plume-ui-size) - 5px);
+	--text-badge--line-height: 1;
+	--text-mark: calc(var(--plume-ui-size) - 4px);
+	--text-mark--line-height: 1;
+
+	--ease-out: var(--plume-e-out);
+	--ease-in: var(--plume-e-in);
+	--ease-soft: var(--plume-e-soft);
+	--default-transition-duration: var(--plume-t-quick);
+	--default-transition-timing-function: var(--plume-e-soft);
+
+	--shadow-rest: var(--plume-shadow-rest);
+	--shadow-menu: var(--plume-shadow-menu);
+	--shadow-tip: var(--plume-shadow-tip);
+	--shadow-dialog: var(--plume-shadow-dialog);
+	--shadow-overlay: var(--plume-shadow-overlay);
+	--shadow-knob: var(--plume-shadow-knob);
+	--shadow-glass: var(--plume-shadow-glass);
+	--shadow-toast: var(--plume-shadow-toast);
+}

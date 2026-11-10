@@ -1,0 +1,28 @@
+{
+  "name": "@plume/mcp",
+  "version": "0.1.0",
+  "description": "接入 MCP 服务：本地命令（stdio）或远程地址（Streamable HTTP、SSE）的工具交给 agent 用，每次调用前问你；设置页里添加、编辑、开关、重新连接，看连接状态和工具。",
+  "author": "Plume",
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "tools",
+    "工具"
+  ],
+  "plume": {
+    "displayName": "MCP",
+    "category": "工具"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0"
+  }
+}

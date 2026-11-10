@@ -1,0 +1,445 @@
+.plume-diagnostics-grow {
+	min-width: 0;
+	flex: 1;
+}
+.plume-diagnostics-break {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.plume-diagnostics-scroll {
+	min-height: 0;
+	flex: 1;
+}
+.plume-diagnostics-task-content {
+	position: relative;
+	padding: 8px 8px 12px;
+}
+.plume-diagnostics-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	min-width: 0;
+}
+.plume-diagnostics-section-head {
+	padding: 12px 6px 4px;
+}
+.plume-diagnostics-controls {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	gap: 4px;
+	padding: 6px 8px 4px;
+	min-width: 0;
+}
+.plume-diagnostics-task-content > .plume-diagnostics-controls {
+	padding-inline: 0;
+	margin-bottom: 8px;
+}
+.plume-diagnostics-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	min-height: 32px;
+	padding: 5px 8px;
+	text-align: left;
+	color: var(--plume-ink);
+	border-radius: var(--plume-radius-field);
+	transition: background var(--plume-t-quick);
+}
+.plume-diagnostics-row:hover,
+.plume-diagnostics-trace-row:hover {
+	background: var(--plume-card-hover);
+}
+.plume-diagnostics-row:active,
+.plume-diagnostics-trace-row:active {
+	background: var(--plume-elevated);
+}
+.plume-diagnostics-row > svg,
+.plume-diagnostics-actions > *,
+.plume-diagnostics-dot {
+	flex-shrink: 0;
+}
+.plume-diagnostics-actions {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+.plume-diagnostics-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-ink-faint);
+}
+.plume-diagnostics-dot[data-status="running"] {
+	background: var(--plume-accent);
+}
+.plume-diagnostics-dot[data-status="done"] {
+	background: var(--plume-ok);
+}
+.plume-diagnostics-dot[data-status="error"] {
+	background: var(--plume-danger);
+}
+.plume-diagnostics-job {
+	padding: 4px 6px;
+	border-radius: var(--plume-radius-field);
+}
+.plume-diagnostics-endpoint {
+	padding-left: 12px;
+}
+.plume-diagnostics-alert {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+}
+.plume-diagnostics-job-output {
+	margin: 4px 0 8px 12px;
+	max-height: 220px;
+	overflow: auto;
+}
+.plume-diagnostics-job-output pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.plume-diagnostics-todo {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 6px;
+	color: var(--plume-ink-faint);
+}
+.plume-diagnostics-completed {
+	text-decoration: line-through;
+	flex: 1;
+	min-width: 0;
+}
+.plume-diagnostics-records {
+	position: relative;
+}
+.plume-diagnostics-record {
+	position: absolute;
+	left: 0;
+	right: 0;
+	display: flow-root;
+	padding-bottom: 4px;
+}
+.plume-diagnostics-record[data-open="true"] {
+	z-index: 2;
+}
+.plume-diagnostics-record[data-open="true"] .plume-diagnostics-record-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--plume-shell);
+}
+.plume-diagnostics-record[data-open="true"] .plume-diagnostics-row {
+	border: 1px solid var(--plume-line-soft);
+	border-bottom: 0;
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	background: var(--plume-card);
+}
+.plume-diagnostics-record-body {
+	border: 1px solid var(--plume-line-soft);
+	border-top: 0;
+	border-bottom-left-radius: var(--plume-radius-field);
+	border-bottom-right-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+}
+.plume-diagnostics-run-detail {
+	padding: 8px 12px 12px;
+}
+.plume-diagnostics-text {
+	min-width: 0;
+	padding: 8px 0;
+}
+.plume-diagnostics-text > .plume-diagnostics-heading {
+	padding-bottom: 4px;
+}
+.plume-diagnostics-text pre {
+	max-height: 420px;
+	overflow: auto;
+}
+.plume-diagnostics-trace {
+	container-type: inline-size;
+	min-height: 0;
+	min-width: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+.plume-diagnostics-timeline-wrap {
+	flex-shrink: 0;
+	padding: 6px 12px;
+}
+.plume-diagnostics-timeline {
+	height: 40px;
+	position: relative;
+	border-bottom: 1px solid var(--plume-line-soft);
+	touch-action: none;
+}
+.plume-diagnostics-time-bar {
+	position: absolute;
+	top: 5px;
+	min-width: 3px;
+	height: 10px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-accent);
+	opacity: 0.65;
+}
+.plume-diagnostics-time-bar[data-source="tool-call"] {
+	top: 23px;
+	background: var(--plume-ok);
+}
+.plume-diagnostics-time-bar[data-status="error"] {
+	background: var(--plume-danger);
+}
+.plume-diagnostics-time-bar:hover,
+.plume-diagnostics-time-bar[data-selected="true"] {
+	opacity: 1;
+	outline: 1px solid var(--plume-ink-muted);
+}
+.plume-diagnostics-time-range {
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	background: var(--plume-accent-dim);
+	border: 1px solid var(--plume-accent);
+}
+.plume-diagnostics-totals {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	padding: 0 12px 6px;
+}
+.plume-diagnostics-totals > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.plume-diagnostics-trace-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+.plume-diagnostics-ledger {
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+.plume-diagnostics-trace-rows {
+	position: relative;
+}
+.plume-diagnostics-trace-row {
+	position: absolute;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: 100%;
+	padding: 0 10px;
+	text-align: left;
+	border-radius: var(--plume-radius-item);
+}
+.plume-diagnostics-trace-row[aria-pressed="true"] {
+	background: var(--plume-card-hover);
+}
+.plume-diagnostics-seq {
+	width: 28px;
+	text-align: right;
+	flex-shrink: 0;
+}
+.plume-diagnostics-source {
+	width: 76px;
+	flex-shrink: 0;
+}
+.plume-diagnostics-turn {
+	background: var(--plume-card);
+}
+.plume-diagnostics-inspector {
+	position: relative;
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 360px;
+	max-width: calc(100% - 320px);
+	border-left: 1px solid var(--plume-line-soft);
+}
+.plume-diagnostics-resize {
+	position: absolute;
+	z-index: 1;
+	top: 0;
+	bottom: 0;
+	left: -4px;
+	width: 8px;
+	cursor: col-resize;
+	touch-action: none;
+}
+.plume-diagnostics-inspector-head {
+	height: 36px;
+	flex-shrink: 0;
+	padding: 0 8px;
+}
+.plume-diagnostics-tabs {
+	padding: 0 8px 4px;
+	border-bottom: 1px solid var(--plume-line-soft);
+}
+.plume-diagnostics-inspector-body {
+	min-height: 0;
+	overflow: auto;
+	padding: 12px;
+}
+.plume-diagnostics-inspector-body .plume-diagnostics-run-detail {
+	padding-inline: 0;
+}
+.plume-diagnostics-facts > div {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 12px;
+	padding: 3px 0;
+}
+.plume-diagnostics-image {
+	overflow: hidden;
+	border-radius: var(--plume-radius-item);
+}
+.plume-diagnostics-image img {
+	max-height: 220px;
+	max-width: 100%;
+	object-fit: contain;
+}
+.plume-diagnostics-environment {
+	pointer-events: auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	max-height: 100%;
+	width: 100%;
+	overflow: hidden;
+	border-radius: var(--plume-radius-panel);
+	border: 1px solid var(--plume-line-soft);
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-glass);
+}
+.plume-diagnostics-environment-head {
+	display: flex;
+	align-items: center;
+	height: 36px;
+	flex-shrink: 0;
+	gap: 8px;
+	padding: 0 6px 0 14px;
+}
+/* 卡片在右边那一列里，高度由那一列给（从顶到转录底），太长正文自己滚。 */
+.plume-diagnostics-environment-body {
+	overflow-y: auto;
+	min-height: 0;
+	padding: 0 6px 4px;
+}
+.plume-diagnostics-environment-section {
+	padding: 4px 0;
+}
+/* 别的插件加的一节没东西时是空的：不占位，也不让它挨着的两节之间多出一条线。 */
+.plume-diagnostics-environment-section:empty {
+	display: none;
+}
+.plume-diagnostics-environment-section:not(:empty) ~ .plume-diagnostics-environment-section:not(:empty) {
+	border-top: 1px solid var(--plume-line-soft);
+}
+.plume-diagnostics-truncate {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.plume-diagnostics-wakeup {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--plume-radius-item);
+}
+.plume-diagnostics-wakeup > svg {
+	flex-shrink: 0;
+	margin-top: 3px;
+	color: var(--plume-ink-muted);
+}
+.plume-diagnostics-note {
+	padding: 2px 8px 4px;
+}
+.plume-diagnostics-toggle {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.plume-diagnostics-toggle-dot {
+	position: absolute;
+	top: -4px;
+	right: -6px;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-accent);
+}
+.plume-diagnostics-section-label {
+	display: flex;
+	align-items: center;
+	height: 28px;
+	padding: 0 8px;
+}
+.plume-diagnostics-pictures {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 6px;
+	padding: 0 8px 6px;
+}
+.plume-diagnostics-pictures .plume-diagnostics-image {
+	aspect-ratio: 4 / 3;
+	background: var(--plume-card);
+}
+.plume-diagnostics-pictures img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.plume-diagnostics-file {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+.plume-diagnostics-child-list {
+	overflow: auto;
+	padding: 8px;
+}
+@container (max-width: 700px) {
+	.plume-diagnostics-trace-body[data-has-detail="true"] .plume-diagnostics-ledger {
+		display: none;
+	}
+	.plume-diagnostics-inspector {
+		width: 100% !important;
+		min-width: 0;
+		max-width: none;
+		border-left: 0;
+	}
+	.plume-diagnostics-resize {
+		display: none;
+	}
+}
+@container (max-width: 360px) {
+	.plume-diagnostics-source {
+		display: none;
+	}
+}
+
+.plume-diagnostics-inspector-head:focus {
+	outline: none;
+}

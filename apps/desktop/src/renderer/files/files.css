@@ -1,0 +1,59 @@
+/*
+ * 文件面板（files/）里 Tailwind 写不出来的样式。编辑器本身的配色在 CodeView.tsx 的主题里：CodeMirror 的基础样式
+ * 不在任何层里，这里的规则压不过它。
+ */
+
+@layer components {
+	/* 代码按字一个一个地读，连字会把 `!=`、`=>` 画成另一个符号。 */
+	.file-code .cm-content {
+		font-variant-ligatures: none;
+		font-feature-settings: normal;
+	}
+
+	/* 查找框用界面的字，不用代码的字。CodeMirror 的基础样式不给这个框设字体，分层的规则在这里管得到。 */
+	.file-code .cm-panel.cm-search {
+		font-family: var(--plume-font-sans);
+		font-size: var(--text-detail);
+	}
+
+	/* 不然 flex 的基准是内容盒，每个框悄悄多占边框和内边距，窄面板里把关闭按钮挤出这一行。 */
+	.file-code .cm-textfield {
+		box-sizing: border-box;
+	}
+
+	/* 图片底下的棋盘格：透明的地方读得出是「这里什么都没有」，不和面板底色混成一片。 */
+	.file-image-checker {
+		background-image:
+			linear-gradient(45deg, color-mix(in srgb, var(--plume-ink) 6%, transparent) 25%, transparent 25%),
+			linear-gradient(-45deg, color-mix(in srgb, var(--plume-ink) 6%, transparent) 25%, transparent 25%),
+			linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--plume-ink) 6%, transparent) 75%),
+			linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--plume-ink) 6%, transparent) 75%);
+		background-size: 14px 14px;
+		background-position:
+			0 0,
+			0 7px,
+			7px -7px,
+			-7px 0;
+	}
+
+	/* 缩放过以后倍数变化滑过去；第一次适应和拖动时不滑，见 ImagePane.tsx 的 `gliding`。 */
+	.file-image[data-gliding] {
+		transition: transform var(--plume-t-quick) linear;
+	}
+
+	/* 查找框按钮上的图标（search-chrome.ts），和 lucide 的描边一样。 */
+	.file-code .cm-panel.cm-search svg {
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+}
+
+/* 跳到的那几行淡回底色，见 CodeView.tsx 的 `.cm-file-reveal`。 */
+@keyframes file-reveal {
+	to {
+		background-color: transparent;
+	}
+}

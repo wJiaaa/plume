@@ -1,0 +1,146 @@
+/*
+ * 清单卡片的布局和悬停。插件单独构建，产品的 Tailwind 扫不到这里的类名；字交给 Text，颜色只取 var(--plume-*)。
+ */
+
+.plume-todo-card {
+	overflow: hidden;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-card);
+}
+
+/* 浮在转录上：要自己的实底和阴影，压在正文上面也读得清。 */
+.plume-todo-card[data-placement="floating"] {
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-glass);
+}
+
+/* 标题行：收放是铺满整行的一层按钮，行里其余的东西让指针穿过去，只有在做那一步的动作压在它上面接住点击。 */
+.plume-todo-head {
+	position: relative;
+	display: flex;
+	height: 36px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px;
+	transition: background-color var(--plume-t-quick);
+}
+
+.plume-todo-head:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-todo-head > :not(button):not(.plume-todo-head-action) {
+	pointer-events: none;
+}
+
+.plume-todo-toggle {
+	position: absolute;
+	inset: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.plume-todo-head-action {
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+}
+
+.plume-todo-mark-button {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--plume-ink-faint);
+	cursor: pointer;
+	transition: color var(--plume-t-quick);
+}
+
+.plume-todo-mark-button:hover {
+	color: var(--plume-ink);
+}
+
+.plume-todo-grow {
+	min-width: 0;
+	flex: 1 1 0%;
+}
+
+/* 展开、收起用 grid 的行高过渡，不量高度。 */
+.plume-todo-reveal {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--plume-t-base);
+}
+
+.plume-todo-reveal[data-open="true"] {
+	grid-template-rows: 1fr;
+}
+
+.plume-todo-reveal > .plume-todo-body {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.plume-todo-body {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.plume-todo-scroll {
+	max-height: min(280px, 38vh);
+}
+
+.plume-todo-rows {
+	padding: 6px;
+}
+
+.plume-todo-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 6px;
+	border-radius: var(--plume-radius-item);
+}
+
+.plume-todo-mark {
+	display: flex;
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+}
+
+.plume-todo-dot {
+	display: block;
+	width: 7px;
+	height: 7px;
+	border-radius: var(--plume-radius-item);
+}
+
+.plume-todo-bars {
+	gap: 2px;
+}
+
+.plume-todo-bars > span {
+	display: block;
+	width: 2px;
+	height: 8px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-ink-faint);
+}
+
+.plume-todo-done {
+	text-decoration: line-through;
+	text-decoration-color: var(--plume-line);
+}
+
+/* 收起时给读屏留一句还剩几项。 */
+.plume-todo-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}

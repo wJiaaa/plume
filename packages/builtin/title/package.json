@@ -1,0 +1,29 @@
+{
+  "name": "@plume/title",
+  "version": "0.1.0",
+  "description": "会话的第一条消息较长时，在后台让模型把它总结成一句简短的标题，替换侧栏和标题栏上默认取的消息开头。",
+  "author": "Plume",
+  "keywords": [
+    "标题",
+    "会话",
+    "总结",
+    "title"
+  ],
+  "plume": {
+    "displayName": "智能标题",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1",
+    "vitest": "^5.1.0"
+  }
+}

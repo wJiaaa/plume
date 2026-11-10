@@ -1,0 +1,515 @@
+/* 由 @plume/ui 对应目录的组件使用，见 ui.css。 */
+
+/*
+ * 滚动面、滑块、边缘渐隐、跑马灯标题、悬停行的让位、折叠区。组件在 @plume/ui 的 scroll/、row/、layout/。
+ *
+ * 遮罩（mask-image）只看 alpha，不看颜色，所以下面渐变里的 black 只是「不透明」的意思，不是一个色值，
+ * 换成哪种颜色效果都一样；半透明的那几档用 color-mix 和 transparent 混出对应的 alpha。
+ */
+
+/*
+ * 哪里都没有原生滚动条。
+ *
+ * 滚动一律经过 `Scroller`（或给别人的元素用的 `OverlayScrollbar`），滑块是自己画的。原生滚动条会预留一条槽，
+ * 列表一长过它的盒子内容就横向挪一下，也不认应用的配色。全局关掉而不是逐个元素关：忘了用 `Scroller` 的
+ * 滚动面会明显不对，而不是悄悄地不一致。
+ */
+@layer base {
+	* {
+		scrollbar-width: none;
+	}
+
+	::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+		display: none;
+	}
+}
+
+/*
+ * 浮在内容上的卡片描边：一圈 10% 的描边，悬停和聚焦时加深到 15%，聚焦不再加重阴影。阴影只有一层很淡的
+ * 投影，深浅两色主题同一个值。主输入框和「回到最新」那个圆按钮共用它，浮在转录上的东西看上去是同一种。
+ */
+.plume-composer {
+	border-color: color-mix(in srgb, var(--plume-ink) 10%, transparent);
+	box-shadow: var(--plume-shadow-rest);
+}
+
+.plume-composer:hover,
+.plume-composer:focus-within {
+	border-color: color-mix(in srgb, var(--plume-ink) 15%, transparent);
+}
+
+/*
+ * 输入框被点中（焦点在里面）时，描边带一点强调色：一眼看得出字会打到哪。只给输入框的卡片（div），
+ * 「回到最新」是按钮，点完它焦点留在上面，不该跟着变色。参照 Finch：强调色 34% 混进加深的描边。
+ */
+div.plume-composer:focus-within {
+	border-color: color-mix(in srgb, var(--plume-accent) 34%, color-mix(in srgb, var(--plume-ink) 15%, transparent));
+}
+
+/*
+ * 转录底部给浮在它上面的控件留的空间。
+ *
+ * 「回到最新」高 32px，离滚动面底边 12px。没有这段，它会盖住内容最后的 24px——那正是最新的消息，
+ * 停在底部存在的唯一意义就是给你看它——于是一份完美滚到末尾的转录，看上去按钮底下还藏着什么。
+ *
+ * 用滚动内容末尾的内边距，而不是 `follow.ts` 里的算术，这个区别是承重的：`scrollTop` 不可能超过
+ * `scrollHeight - clientHeight`，在跟随规则里减掉一个 inset，`atBottom` 就永远够不着，钉住一份永远
+ * 满足不了自己判断的转录。作为内边距，它只是让页面变长，页面的底部也就成了最新消息真正读得到的地方。
+ */
+:root {
+	--plume-bottom-inset: 44px;
+}
+
+/*
+ * 看不见，但仍然在那里等着被抓。
+ *
+ * 只在滚动面被悬停时才接点击是错的：要够到滑块，就得把指针放上去，而指针在它上面正是那条规则在等的
+ * 条件——于是滑块能不能拖，取决于指针过来的路上有没有恰好划过列表。滑块就是它本来的样子。
+ */
+.plume-thumb {
+	opacity: 0;
+	/* 明写出来，因为它所在的轨道是 `none`，而这个属性会继承。看不见不等于不在：滑块是你伸手要抓的东西，
+	   在你伸手之前它就得在那里。 */
+	pointer-events: auto;
+	/* 宽度和偏移也过渡，给下面指针底下变粗用。 */
+	transition:
+		opacity var(--plume-t-base) var(--plume-e-out),
+		width var(--plume-t-quick) var(--plume-e-out),
+		right var(--plume-t-quick) var(--plume-e-out);
+}
+
+/*
+ * 比标记更宽、往里伸的抓取区。
+ *
+ * 滑块 6px，因为它看起来就该是 6px。但 6px 不该是要求人**点中**的大小：它贴着窗格的边，macOS 上窗口最外面
+ * 那几个像素属于系统的调整尺寸边框，剩下的是一个多数尝试都会落空的目标——按下确实到了滑块，没有报错、
+ * 也没有被盖住，照样没法用。
+ *
+ * 往里伸而不是往外，理由相同：外面是窗口边框。也比滑块高，抓一个短滑块时不会从两端滑掉。
+ */
+.plume-thumb::after,
+.plume-hthumb::after {
+	content: "";
+	position: absolute;
+}
+
+.plume-thumb::after {
+	inset: -4px -2px -4px -9px;
+}
+
+.plume-hthumb::after {
+	inset: -9px -4px -2px;
+}
+
+.plume-scroll-host:hover .plume-thumb {
+	opacity: 0.5;
+}
+
+/*
+ * 刚好让开滑块，而不是单独一列。
+ *
+ * 滑块占 8px（宽 6，离边 2），外边距已经给了 4——再给 20px 的话，带滚动条的菜单右边是 24px 的空槽、
+ * 行却从左边 9px 开始，每一行都像被推向左边，滑块浮在空带中间而不是它所滚动的列表边上。
+ *
+ * 12px 而不是 4：滑块占掉其中八个——`right: 2px` 加它自己的 `6px`——给 4 的话，行会伸到它底下四个像素。
+ * 量的是行右边到滑块左边的距离，要的是一丝空隙。
+ */
+.plume-menu-scroll:has(.plume-thumb) > .plume-scroll-view {
+	padding-right: 12px;
+}
+
+/* 审批卡里的理由和命令留在滑块加宽的拖动热区外面：人要读清楚了再答，字不能被滑块压着。 */
+.plume-approval-scroll:has(.plume-thumb) > .plume-scroll-view {
+	padding-right: 20px;
+}
+
+/*
+ * 指针底下变粗，和系统自己的一样。
+ *
+ * 一次两件事：更好按住，而且在你决定抓之前就告诉你它能抓——对一个平时只是 6px 平条的滑块，这是仅有的
+ * 反馈。它往左长（`right` 减少多少宽度就加多少），外边缘不动，滑块看上去不会挪。
+ */
+.plume-scroll-host .plume-thumb:hover,
+.plume-thumb.plume-thumb-active {
+	opacity: 0.85;
+	width: 9px;
+	right: 1px;
+}
+
+.plume-hthumb:hover,
+.plume-hthumb.plume-hthumb-active {
+	height: 9px;
+	bottom: 1px;
+}
+
+/* 拖滑块时不能选中它经过的文字。 */
+.plume-scroll-host:has(.plume-thumb-active),
+.plume-scroll-host:has(.plume-hthumb-active),
+.plume-hscroll-own:has(.plume-hthumb-active) {
+	user-select: none;
+}
+
+/*
+ * 指针离开时两个方向的滑块都淡出。
+ *
+ * 横向溢出确实不会自己说话——跑到右边外面的一行看着和在那里结束的一行一样。但让横滑块一直显示的代价，
+ * 是每个宽文件下面都挂着一条灰条，而一直都在的滚动条就不再是信号了。两个方向一样处理，系统也是这样做的。
+ */
+.plume-hthumb {
+	opacity: 0;
+	pointer-events: auto;
+	transition:
+		opacity var(--plume-t-base) var(--plume-e-out),
+		height var(--plume-t-quick) var(--plume-e-out),
+		bottom var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-scroll-host:hover .plume-hthumb {
+	opacity: 0.55;
+}
+
+.plume-hthumb:hover,
+.plume-hthumb.plume-hthumb-active {
+	opacity: 0.85;
+}
+
+/*
+ * 回复里每一个自带横滑块的块（`.plume-hscroll-own`：代码块、行间公式、图表、表格）只听它自己的，不听它所在的转录。
+ *
+ * 上面那条是后代选择器，而转录是一个 `.plume-scroll-host`——于是在对话里悬停任何东西，屏幕上每一张宽表格的
+ * 下沿都一起亮起来。这和滚动条的用处正相反：它说的是**这个**东西可以拖。
+ *
+ * 这里靠的是顺序而不是权重——它们和上面的规则权重完全一样，写在后面才赢。active 那条不是悬停态的重复：
+ * 指针离开表格之后拖动还在继续，没有它，滑块会从一只仍然握着它的手底下消失。
+ */
+.plume-hscroll-own:not(:hover) .plume-hthumb {
+	opacity: 0;
+}
+
+.plume-hscroll-own:hover .plume-hthumb {
+	opacity: 0.55;
+}
+
+.plume-hscroll-own .plume-hthumb:hover,
+.plume-hscroll-own .plume-hthumb.plume-hthumb-active {
+	opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------
+ * 滚动列表的柔和边缘
+ *
+ * 遮罩在内容上，而不是往上面刷一层颜色——这就是它能用和它不能用之间的全部区别。
+ *
+ * 用窗格自己的颜色画一条带、由每个调用方传颜色进来，只在调用方猜对了颜色的地方才对；在不是平涂的面上
+ * ——卡片、带底色的 diff 行、半透明的窗格——它就是一条有自己边界的带，横在列表顶上，读起来像渲染出错。
+ *
+ * 把内容自己的 alpha 降下去，里面就没有可以猜错的颜色。压在玻璃上、卡片上、桌面透出来的随便什么上都对，
+ * 也不需要调用方传任何东西进来。
+ *
+ * 各档的取值描的是一条 ease-out 曲线，而不是直线。alpha 上的线性渐变看起来并不线性——眼睛在稀的那一头
+ * 敏感得多，于是渐隐看上去先撑住、然后戛然而止，止住的地方读起来像有人画了一道淡淡的线。输入框上方的
+ * 「虚线」从来不是边框，而是一段两档渐变的终点。
+ *
+ * 两个深度默认都是零，所有档都塌到两端之一，遮罩整个不透明——所以「没有渐隐」是同一条声明换了数字，
+ * 出现是一个长度在插值，而不是第二层叠在第一层上淡入。
+ * ------------------------------------------------------------------------- */
+
+@property --plume-fade-top {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --plume-fade-bottom {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0;
+}
+
+.plume-fade-y {
+	mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		color-mix(in srgb, black 6%, transparent) calc(var(--plume-fade-top) * 0.12),
+		color-mix(in srgb, black 19%, transparent) calc(var(--plume-fade-top) * 0.26),
+		color-mix(in srgb, black 38%, transparent) calc(var(--plume-fade-top) * 0.41),
+		color-mix(in srgb, black 60%, transparent) calc(var(--plume-fade-top) * 0.57),
+		color-mix(in srgb, black 80%, transparent) calc(var(--plume-fade-top) * 0.72),
+		color-mix(in srgb, black 94%, transparent) calc(var(--plume-fade-top) * 0.86),
+		black var(--plume-fade-top),
+		black calc(100% - var(--plume-fade-bottom)),
+		color-mix(in srgb, black 94%, transparent) calc(100% - var(--plume-fade-bottom) * 0.86),
+		color-mix(in srgb, black 80%, transparent) calc(100% - var(--plume-fade-bottom) * 0.72),
+		color-mix(in srgb, black 60%, transparent) calc(100% - var(--plume-fade-bottom) * 0.57),
+		color-mix(in srgb, black 38%, transparent) calc(100% - var(--plume-fade-bottom) * 0.41),
+		color-mix(in srgb, black 19%, transparent) calc(100% - var(--plume-fade-bottom) * 0.26),
+		color-mix(in srgb, black 6%, transparent) calc(100% - var(--plume-fade-bottom) * 0.12),
+		transparent 100%
+	);
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		transparent 0,
+		color-mix(in srgb, black 6%, transparent) calc(var(--plume-fade-top) * 0.12),
+		color-mix(in srgb, black 19%, transparent) calc(var(--plume-fade-top) * 0.26),
+		color-mix(in srgb, black 38%, transparent) calc(var(--plume-fade-top) * 0.41),
+		color-mix(in srgb, black 60%, transparent) calc(var(--plume-fade-top) * 0.57),
+		color-mix(in srgb, black 80%, transparent) calc(var(--plume-fade-top) * 0.72),
+		color-mix(in srgb, black 94%, transparent) calc(var(--plume-fade-top) * 0.86),
+		black var(--plume-fade-top),
+		black calc(100% - var(--plume-fade-bottom)),
+		color-mix(in srgb, black 94%, transparent) calc(100% - var(--plume-fade-bottom) * 0.86),
+		color-mix(in srgb, black 80%, transparent) calc(100% - var(--plume-fade-bottom) * 0.72),
+		color-mix(in srgb, black 60%, transparent) calc(100% - var(--plume-fade-bottom) * 0.57),
+		color-mix(in srgb, black 38%, transparent) calc(100% - var(--plume-fade-bottom) * 0.41),
+		color-mix(in srgb, black 19%, transparent) calc(100% - var(--plume-fade-bottom) * 0.26),
+		color-mix(in srgb, black 6%, transparent) calc(100% - var(--plume-fade-bottom) * 0.12),
+		transparent 100%
+	);
+	transition:
+		--plume-fade-top var(--plume-t-base) var(--plume-e-out),
+		--plume-fade-bottom var(--plume-t-base) var(--plume-e-out);
+}
+
+/*
+ * 一段展开，而不是出现。
+ *
+ * `grid-template-rows` 从 0fr 到 1fr，是动画到一个没人量过的高度的唯一办法：内容保持自然尺寸，长高的是它
+ * 所在的那一行。`max-height` 是猜，猜小了会裁掉，猜大了动画大半时间都在做看不见的事。
+ *
+ * 子元素要裁掉溢出，否则动画前半段它的内容会从一个比它矮的行里溢出来。裁剪用 `clip` 不用 `hidden`：`hidden`
+ * 让这一层成了滚动容器，里面吸顶的行（侧栏的项目名）就改以它为参照，跟着列表滚走；`clip` 只裁不滚。
+ * 代价是它不再算滚动容器，网格子项的最小尺寸回到内容尺寸：高度靠 `min-height: 0` 压到 0fr，宽度靠
+ * `minmax(0, 1fr)` 的列，不然一行很长的标题会把这一列撑出容器。
+ */
+.plume-reveal {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--plume-t-slow) var(--plume-e-out),
+		opacity var(--plume-t-base) var(--plume-e-out);
+}
+
+.plume-reveal:not([data-open="true"]) {
+	overflow: hidden;
+}
+
+.plume-reveal > * {
+	overflow: clip;
+	min-height: 0;
+}
+
+.plume-reveal[data-open="true"] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * 装不下的单行标签
+ *
+ * 柔化标题两头的是两件不同的事：`plume-fade-edge` 给比盒子长的字，`plume-fade-tail` 给马上要有悬停控件压上来的字。
+ * 一个会话行两者都有，要是各写各的 `mask-image`，悬停时第二个直接替换掉第一个——在字开始滚动时接住它的
+ * 左边渐隐恰恰在需要它的时候消失，字从一道硬边里冒出来。
+ *
+ * 所以只有一张遮罩、三个长度。哪条规则都不拥有形状；各自只说自己那一边伸多深，长度不是会被覆盖的声明，
+ * 所以它们能组合。都注册过，才能插值——没注册的自定义属性会在形状之间跳，而不是缓过去。
+ * ------------------------------------------------------------------------- */
+@property --plume-fade-left {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --plume-fade-right {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0;
+}
+
+/*
+ * 悬停图标底下整段透明的一截。`--plume-fade-right` 只是化开的那段；图标落在化开的那段里，最后几个字在置顶和
+ * 归档底下仍然读得出来。clear 是必须完全消失的长度，化开发生在它**之前**。
+ */
+@property --plume-fade-clear {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0;
+}
+
+/*
+ * 清掉的那一截有没有在显示，0 到 1。过渡挂在这个数上，不挂在 `--plume-fade-clear` 那个长度上。
+ *
+ * 那一截多宽归布局管，显不显示归指针管，两者分开动。让长度自己带过渡的话：指针停在项目行上，点一下折叠，
+ * 计数挤进来、标题变窄，盖住的那段从 48px 变成 29px，这个变化也被缓了：化开的那段先跟着盒子退 19px，再慢慢
+ * 爬回按钮那里。展开时反过来，字先伸到按钮底下再退出来。长度必须落在布局变化的那一帧；只有显示和隐藏才缓。
+ */
+@property --plume-fade-reveal {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+.plume-fade-edge,
+.plume-fade-tail {
+	mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		black var(--plume-fade-left),
+		black calc(100% - var(--plume-fade-right) - var(--plume-fade-clear) * var(--plume-fade-reveal)),
+		transparent calc(100% - var(--plume-fade-clear) * var(--plume-fade-reveal)),
+		transparent 100%
+	);
+	/* 顺序和属性对应：左边的渐隐等滚动，右边那一对跟着压上来的控件走。出去时没有延迟——这一行直接弹回开头。 */
+	transition:
+		--plume-fade-left var(--plume-t-quick) var(--plume-e-out),
+		--plume-fade-right var(--plume-t-quick) var(--plume-e-out),
+		--plume-fade-reveal var(--plume-t-quick) var(--plume-e-out);
+}
+
+/*
+ * 右边化开，而不是以省略号结尾。静止时左边是硬的，因为字从那里开始；字一开始滚动，也会从那一边跑出去，
+ * 于是左边出现一道对应的渐隐来接住它。
+ */
+.plume-fade-edge {
+	--plume-fade-right: 22px;
+}
+
+/*
+ * 静止时装得下，只有悬停时控件压上来才装不下的那一种：虚化跟着控件一起来，不常驻。
+ *
+ * `ScrollText` 把「装不下」分成两种（见那边的 `data-plume-scroll-fit`）。这一种静止时是一整行完好的
+ * 字，右边什么都没有——给它常驻一道虚化，等于把一个本来读得全的标题平白抹淡。
+ *
+ * 反过来，悬停时它必须有：那一刻遮罩要在控件底下清出一段空白（`--plume-fade-clear`），而从实到透明
+ * 之间如果没有长度，那就是一刀切——13 个字的标题鼠标一放上去少掉最后一个字，断口齐得像裁纸刀
+ * 裁的。两个长度都注册过，0 到 22px 是渐变的，所以虚化是跟着控件淡进来的。
+ */
+.plume-fade-edge[data-plume-scroll-fit="yield"] {
+	--plume-fade-right: 0;
+}
+
+/* 一条规则一个选择器：`:has()` 被当成不支持时，整个逗号组会连着 `:hover` 那半边一起被剪掉。 */
+[data-plume-hover-row]:hover .plume-fade-edge[data-plume-scroll-fit="yield"] {
+	--plume-fade-right: 22px;
+}
+
+[data-plume-hover-row]:has(:focus-visible) .plume-fade-edge[data-plume-scroll-fit="yield"] {
+	--plume-fade-right: 22px;
+}
+
+/*
+ * 朝一个方向连续地走，后面跟一份副本，循环才无缝。
+ *
+ * 左右来回扫（`alternate`）读起来像这一行在抽搐——眼睛得一次次重新找到这一行的开头。稳稳地朝一个方向走，
+ * 才像在读。有意用 `linear`：缓动的跑马灯在每一圈的两头看起来都会卡一下。
+ *
+ * 延迟是为了让一个只是路过列表、要去别处的指针，不会让它碰到的每一行都动起来。
+ *
+ * 两遍，不是 `infinite`。点一个会话，指针就停在它那一行上，一直循环的话，读转录的整段时间里合成器都闲不
+ * 下来——量过，什么别的都没发生时，GPU 进程约 11%、渲染进程约 5%。两遍把标题读出来两次；循环结束在它
+ * 开始的地方（后面那份正好落在第一份上），所以停下来是看不出的。指针移开再回来就重新开始。
+ *
+ * 有意一条规则一个选择器。Lightning CSS 会剪掉它认为构建目标不支持的规则，`:has()` 曾经带走过整个逗号
+ * 分隔的组——连同 `:hover` 那一半，效果就悄悄整个没了。
+ */
+.plume-marquee-track {
+	display: inline-flex;
+	gap: 44px;
+	white-space: nowrap;
+}
+
+.plume-scroll-text-track {
+	position: relative;
+	display: inline-block;
+}
+
+.plume-scroll:hover .plume-marquee-track {
+	animation: plume-marquee var(--plume-scroll, 8s) linear 300ms 2;
+}
+
+/*
+ * 后面那份是为循环存在的。静止时，在一个满宽的裁剪盒里 `left: 100%` 会把它画在第一份上面。像素的 `left`
+ * 加上悬停前隐藏，长标题在指针要求它动之前一直是一行。
+ */
+.plume-scroll:hover [data-plume-scroll-dup],
+.plume-scroll:has(:focus-visible) [data-plume-scroll-dup] {
+	visibility: visible;
+}
+
+.plume-scroll:has(:focus-visible) .plume-marquee-track {
+	animation: plume-marquee var(--plume-scroll, 8s) linear 300ms 2;
+}
+
+/*
+ * 左边的渐隐等它要接住的跑马灯；右边的不能等。
+ *
+ * 两个延迟，按属性声明的顺序。只给一个值会把两边都延迟，而右边回应的是压到字上来的归档按钮——标题还在
+ * 决定要不要动的时候，那个控件已经在那里了。
+ *
+ * 只给会滚的那种壳（`data-plume-scroll-fit`，`ScrollText` 打的），不给每一个挂着 `plume-fade-edge` 的东西。
+ * 左边这道虚化存在的理由是接住滚出去的字；不滚的行左边没有东西在离开，化开就只是糊。别处挂着
+ * `plume-scroll`、自己声明了两头深浅的 `plume-fade-edge`（比如正在逐字写的一句），这里的选择器权重一样
+ * 重、又排在后面，不加这个限定就会在悬停时让它左边平白淡掉 13px。
+ */
+.plume-scroll:hover .plume-fade-edge[data-plume-scroll-fit] {
+	--plume-fade-left: 13px;
+	transition-delay: 320ms, 0ms, 0ms;
+}
+
+.plume-scroll:has(:focus-visible) .plume-fade-edge[data-plume-scroll-fit] {
+	--plume-fade-left: 13px;
+	transition-delay: 320ms, 0ms, 0ms;
+}
+
+/* 一圈把第一份带出左边，第二份正好留在第一份开始的位置。 */
+@keyframes plume-marquee {
+	to {
+		transform: translateX(var(--plume-marquee, 0));
+	}
+}
+
+/*
+ * 减少动态效果要的是滚动没有，而不是变快。`<html data-reduce-motion>` 三档：on 强制停、off 强制动、
+ * 没写或 system 跟随系统。
+ */
+@media (prefers-reduced-motion: reduce) {
+	:root:not([data-reduce-motion="off"]) .plume-marquee-track {
+		animation: none !important;
+	}
+}
+
+:root[data-reduce-motion="on"] .plume-marquee-track {
+	animation: none !important;
+}
+
+/*
+ * 给控件即将出现的地方让位的字。
+ *
+ * 在标题末尾刷一段 `card-hover` 的渐变来垫悬停控件，只在这个 token 是不透明灰的时候管用；它是半透明的
+ * 一层纱——好让悬停在半透明侧栏上也看得出来——渐变就什么都盖不住，归档图标直接落在最后几个字上。
+ *
+ * 所以改用和 `plume-fade-edge` 共用的那张遮罩。悬停时露出 `--plume-fade-clear`，最后 N 个像素是没了，而不只是
+ * 变淡——更长的 `--plume-fade-right` 仍会在图标底下留下约 70% 不透明度的字。
+ *
+ * 宽度一直设着；显不显示看 `--plume-fade-reveal`（见上面）。新的宽度落在它变化的那一帧，只有显示和隐藏才缓：
+ * 指针底下折叠或展开一个项目，盖住的那段跟着计数变宽变窄，不能慢慢爬。
+ */
+[data-plume-hover-row] .plume-fade-tail {
+	/* 图标底下整段清空——多宽由行来说。所有列表一个属性。每种行各起 group 名字会走样，渐隐就漏掉图标。 */
+	--plume-fade-clear: var(--plume-row-controls, 30px);
+}
+
+/*
+ * 用 `:focus-visible`，不用 `:focus-within`。
+ *
+ * 清掉的那段和压在标题上的控件一样宽，所以它只属于那些会把控件带出来的状态。`:focus-within` 不在其中：
+ * 点一行会让它的按钮获得焦点并留住，于是指针离开、控件消失了，标题末尾却还留着一个洞，那里什么都没有。
+ * 键盘焦点确实会把控件带出来，而 `:has(:focus-visible)` 正好是它、也只是它。
+ */
+[data-plume-hover-row]:hover .plume-fade-tail,
+[data-plume-hover-row]:has(:focus-visible) .plume-fade-tail {
+	--plume-fade-reveal: 1;
+}

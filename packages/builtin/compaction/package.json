@@ -1,0 +1,20 @@
+{
+  "name": "@plume/compaction",
+  "version": "0.1.0",
+  "description": "上下文快满时先剪掉过大的工具结果，还不够就把较早的那段换成一份结构化的摘要，最近的原样留着。缓存还热时摘要从主请求分叉；recall 把摘要过的原文读回来；/compact 现在就压。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "上下文压缩"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "vitest": "^5.1.0"
+  }
+}

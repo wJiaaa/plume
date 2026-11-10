@@ -1,0 +1,253 @@
+/*
+ * plume.git 里工作树那几样（开关、工作树签和菜单、侧栏 ⑂、设置页）的布局和颜色。插件单独构建，产品的 Tailwind 扫不到这里的类名；字交给 Text，颜色只取 var(--plume-*)。
+ */
+
+.worktree-warning {
+	flex-shrink: 0;
+	color: var(--plume-warning);
+}
+
+.worktree-ok {
+	color: var(--plume-ok);
+}
+
+/* 侧栏行首的 ⑂：和空心圈一样淡，读标题时不抢眼。 */
+.worktree-mark {
+	display: flex;
+	color: var(--plume-ink-faint);
+}
+
+/* 合并、同步在跑：图标闪着说「在做」。 */
+.worktree-pulse {
+	animation: worktree-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes worktree-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.45;
+	}
+}
+
+/* 工作树签：和分支签同一个样子。 */
+.worktree-chip-slot {
+	display: flex;
+	min-width: 0;
+}
+
+.worktree-chip {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--plume-radius-field);
+	padding: 0 8px 0 12px;
+	color: var(--plume-ink);
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.worktree-chip:hover,
+.worktree-chip[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+/* 目录被收走了：名字还在，说的东西眼下不在盘上。 */
+.worktree-chip[data-dimmed] {
+	color: var(--plume-ink-muted);
+}
+
+.worktree-chip-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+.worktree-chip-name {
+	min-width: 0;
+}
+
+.worktree-chip-marks {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* 没建成的提醒：只有一颗琥珀色的记号。 */
+.worktree-failed {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	border-radius: var(--plume-radius-field);
+	padding: 0 8px;
+	color: var(--plume-warning);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.worktree-failed:hover,
+.worktree-failed[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+.worktree-failed-note {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+}
+
+.worktree-failed-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.worktree-failed-reason {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow-wrap: anywhere;
+}
+
+/* 菜单顶上的分支名和一行状态。 */
+.worktree-status {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 12px 4px;
+}
+
+.worktree-status-facts {
+	margin: 0;
+}
+
+.worktree-conflicts-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.worktree-conflicts {
+	overflow: hidden;
+	margin: 0;
+	padding: 0 12px 4px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 菜单底下那一行：做完的结果。 */
+.worktree-note-block {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 12px;
+}
+
+.worktree-note {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+}
+
+/* 归档那一行的图标和结果的图标对齐：抵掉菜单体自己的左右留白。 */
+.worktree-note-archive {
+	margin: 0 -6px;
+}
+
+.worktree-note-icon {
+	flex-shrink: 0;
+	margin-top: 1px;
+}
+
+.worktree-note-text {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* 设置页。 */
+.worktree-intro {
+	max-width: 600px;
+	margin: 0 0 28px;
+}
+
+.worktree-card {
+	margin-bottom: 36px;
+}
+
+.worktree-root {
+	width: 288px;
+	font-family: var(--plume-font-mono);
+}
+
+.worktree-list-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.worktree-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 40px 0;
+	border: 1px dashed var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	text-align: center;
+}
+
+.worktree-empty-icon {
+	margin-bottom: 4px;
+	color: var(--plume-ink-faint);
+}
+
+.worktree-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 14px;
+}
+
+.worktree-row + .worktree-row {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.worktree-row-body {
+	min-width: 0;
+	flex: 1;
+}
+
+.worktree-row-head {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+.worktree-row-label,
+.worktree-row-path {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.worktree-row-branch {
+	padding: 2px 6px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card-hover);
+}
+
+.worktree-row-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}

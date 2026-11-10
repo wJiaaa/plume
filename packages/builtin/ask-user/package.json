@@ -1,0 +1,28 @@
+{
+  "name": "@plume/ask-user",
+  "version": "0.1.0",
+  "description": "向你提问：Agent 拿不准、要你拿主意时停下来问一句；选项带说明和推荐，可以自己写，也可以跳过。",
+  "author": "Plume",
+  "keywords": [
+    "ask_user",
+    "提问",
+    "澄清"
+  ],
+  "plume": {
+    "displayName": "向你提问",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1",
+    "vitest": "^5.1.0"
+  }
+}

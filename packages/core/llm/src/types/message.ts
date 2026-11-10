@@ -1,0 +1,516 @@
+/**
+ * The neutral message shape, and what a reply costs.
+ *
+ * One shape flows through the whole system. Provider adapters translate it into their wire format
+ * on the way out and back on the way in, so the agent loop, the session store and the desktop UI
+ * never see provider-specific JSON.
+ */
+
+// A reply records which wire format produced it, so it can be replayed to the right adapter.
+import type { ApiFormat } from "./provider.ts";
+import type { Failure } from "../ai/failure.ts";
+
+// ---------------------------------------------------------------------------
+// Content blocks
+// ---------------------------------------------------------------------------
+
+export interface TextContent {
+	type: "text";
+	text: string;
+	/** Opaque provider handle (Responses item id, etc.) needed to replay this block. */
+	signature?: string;
+	/**
+	 * Responses 上 message 项自带的 `phase`：`commentary` 是干活途中的播报，`final_answer` 是收尾的答复。
+	 *
+	 * 最终答复按设计要能单独读懂，会把同一次回复里先播报过的话再说一遍——不记下来就分不清哪段是哪段，
+	 * 界面两段都画、看上去整段重复。回放时也要原样带回去，模型靠它认出自己哪些话是播报。见 `restated`。
+	 */
+	phase?: "commentary" | "final_answer";
+	/**
+	 * 这段正文写完了（适配器发了 `text_end`）。只出现在流式的 `message_update` 里，不进最终存下的消息。
+	 *
+	 * 界面靠它分清「写完了、在等这条回复收尾」和「写到一半停住了」：有的网关在最后一个字和收尾事件之间
+	 * 要空一两秒，两者光看正文长得一样。见 `agent/stream-turn.ts`。
+	 */
+	ended?: true;
+}
+
+export interface ThinkingContent {
+	type: "thinking";
+	thinking: string;
+	/** Opaque provider handle: Anthropic thinking signature or Responses reasoning item id. */
+	signature?: string;
+	/** Provider-encrypted reasoning payload, replayed verbatim on the next turn. */
+	encrypted?: string;
+	/** Safety filters removed the visible text but the encrypted payload is still replayable. */
+	redacted?: boolean;
+	/**
+	 * 入站时这段推理挂在哪个键上——原样记下，下一轮用同一个键还回去。
+	 *
+	 * Chat Completions 上同一件事有三个字段名：`reasoning_content`（DeepSeek、llama.cpp）、`reasoning`
+	 * （OpenRouter）、`reasoning_text`。一个只认自己那个键的端点，收到另一个键就当没收到。
+	 *
+	 * 只有 Chat Completions 这一条链写和读它；缺省（旧会话、Anthropic 和 Responses 产生的块）一律按
+	 * `reasoning_content` 处理，也就是这条链从前唯一发过的那个键——所以加这个字段不改变任何既有语义。
+	 *
+	 * 值也可能是 `"<think>"`：推理是从正文开头内联的标签里切出来的，回放时要包回 content 原样还回去，
+	 * 而不是换成某个字段。见 `ai/think-tag.ts`。
+	 */
+	reasoningField?: string;
+	/**
+	 * 这段推理开始的时刻（`Date.now()`），由各适配器在思考块开始时记下，结束时据此算出 `durationMs`。
+	 * 界面在推理还在写的时候拿它给这一段选一个固定的说法。
+	 */
+	startedAt?: number;
+	/**
+	 * 这段推理从开始到写完用了多久，毫秒，由各适配器在思考块结束时记下。写完之后界面读它，不再拿现在比。
+	 *
+	 * 缺省是旧会话、或者推理写到一半就断了（没等到结束事件）——那时说不出一个真的时长，界面不编一个。
+	 * 一次性把整块推理吐出来的中转上，开始和结束几乎同时到，这里就只有几毫秒：量的是看得见的那一段。
+	 */
+	durationMs?: number;
+}
+
+export interface ImageContent {
+	type: "image";
+	/** base64, no data: prefix. Empty on the display path when pixels live in `media`. */
+	data: string;
+	mimeType: string;
+	/**
+	 * Content-addressed file under `session-media`.
+	 *
+	 * The window only ever sees this name. The model gets `data` back at the
+	 * request boundary, not when a conversation is opened.
+	 */
+	media?: string;
+	/**
+	 * The `session-media` picture this one is a marked-up copy of, when it is one.
+	 *
+	 * For the gallery's history: an annotated copy is new bytes, so without this the edit made from it
+	 * would start a history of its own. Never reaches a provider — the adapters read `data` and `mimeType`.
+	 */
+	from?: string;
+}
+
+export interface ToolCallContent {
+	type: "toolCall";
+	id: string;
+	name: string;
+	arguments: Record<string, unknown>;
+	/** Raw argument text as streamed; kept for salvage when JSON is truncated. */
+	argumentsText?: string;
+	/** Provider item id (Responses `item.id`), distinct from the `call_id` in `id`. */
+	signature?: string;
+}
+
+export type AssistantContent = TextContent | ThinkingContent | ToolCallContent;
+export type UserContent = TextContent | ImageContent;
+
+// ---------------------------------------------------------------------------
+// Usage & stop reasons
+// ---------------------------------------------------------------------------
+
+export interface Usage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	reasoning?: number;
+	total: number;
+	cost: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+		total: number;
+		/** How these dollar values were obtained. Absent on logs written before this field existed. */
+		source?: "manual" | "catalog" | "provider" | "mixed";
+		/** The selected rates are stored so later catalogue updates cannot rewrite history. */
+		rates?: {
+			input: number;
+			output: number;
+			cacheRead: number;
+			cacheWrite: number;
+		};
+	};
+}
+
+export function emptyUsage(): Usage {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		total: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
+
+function isEmptyUsage(usage: Usage): boolean {
+	return usage.input === 0 && usage.output === 0 && usage.cacheRead === 0 &&
+		usage.cacheWrite === 0 && (usage.reasoning ?? 0) === 0 && usage.total === 0 &&
+		usage.cost.input === 0 && usage.cost.output === 0 && usage.cost.cacheRead === 0 &&
+		usage.cost.cacheWrite === 0 && usage.cost.total === 0;
+}
+
+export function addUsage(a: Usage, b: Usage): Usage {
+	// Empty accumulators contribute no pricing provenance; every billed request does.
+	const first = isEmptyUsage(a) ? b.cost : a.cost;
+	const second = isEmptyUsage(b) ? a.cost : b.cost;
+	const source = first.source === second.source ? first.source : "mixed";
+	const sameRates =
+		first.rates !== undefined &&
+		second.rates !== undefined &&
+		first.rates.input === second.rates.input &&
+		first.rates.output === second.rates.output &&
+		first.rates.cacheRead === second.rates.cacheRead &&
+		first.rates.cacheWrite === second.rates.cacheWrite;
+	return {
+		input: a.input + b.input,
+		output: a.output + b.output,
+		cacheRead: a.cacheRead + b.cacheRead,
+		cacheWrite: a.cacheWrite + b.cacheWrite,
+		reasoning: (a.reasoning ?? 0) + (b.reasoning ?? 0),
+		total: a.total + b.total,
+		cost: {
+			input: a.cost.input + b.cost.input,
+			output: a.cost.output + b.cost.output,
+			cacheRead: a.cost.cacheRead + b.cost.cacheRead,
+			cacheWrite: a.cost.cacheWrite + b.cost.cacheWrite,
+			total: a.cost.total + b.cost.total,
+			...(source !== undefined ? { source } : {}),
+			...(sameRates ? { rates: first.rates } : {}),
+		},
+	};
+}
+
+/** What the request behind a reply actually sent and received, retries excluded. See `lastAttemptUsage`. */
+export function requestUsage(message: Pick<AssistantMessage, "usage" | "lastAttemptUsage">): Usage {
+	return message.lastAttemptUsage ?? message.usage;
+}
+
+export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted";
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+/**
+ * One attached file, as a message records it.
+ *
+ * A named type rather than the shape written inline, which is what it used to be — in nine places
+ * across seven files, because every layer between the composer and the session log restates the
+ * option bag it forwards. Two fields were added to the message and reached none of those
+ * signatures; the values still flowed (a structural type does not strip anything at runtime), but
+ * the next person to write against the type would have dropped them, and the one after that would
+ * have had no way to know they existed.
+ */
+export interface MessageAttachment {
+	name: string;
+	/** `fileKind` on the desktop side — image, document, archive, text. Purely for the icon. */
+	kind?: string;
+	mimeType?: string;
+	/**
+	 * Where the file came from on this machine, when it came from a file at all.
+	 *
+	 * What it buys: a sent message can still offer to open the spreadsheet it carried, or show it
+	 * where it lives. Without it the bubble knows a name and nothing else, so the only honest
+	 * thing it can do with a file it is displaying is display it.
+	 *
+	 * Optional because a good share of attachments never were files. A pasted screenshot, a
+	 * region grabbed inside the app — those are pixels in memory with a name invented for them,
+	 * and there is nothing on disk to open. Absent is also what every message written before this
+	 * field existed looks like, which is the same thing and wants the same treatment: offer
+	 * nothing rather than offer something that fails.
+	 *
+	 * Not a promise that the file is still there. It records where it was at send time; anything
+	 * acting on it checks first, because the transcript outlives the file by design.
+	 */
+	path?: string;
+	/**
+	 * What it was called on screen — 「图片 1」 for a pasted screenshot whose `name` is the
+	 * `image.png` the clipboard invented.
+	 *
+	 * Kept because the message text refers to it by this name: a draft writes 【图片 1】 where the
+	 * file was dropped, and the bubble has to find that mark again to draw it as a label rather
+	 * than as a stray pair of brackets. Absent on messages written before labels existed, where
+	 * the mark spelled the filename instead — both are still recognised.
+	 */
+	label?: string;
+}
+
+/** Runtime-owned facts carried beside a lossy summary, never extracted from summary text. */
+export interface CompactionContext {
+	originalRequest?: string;
+	latestRequest?: string;
+	/** Ordered excerpts of real user messages; rendering has its own window budget. */
+	requests?: { ordinal: number; text: string; timestamp: number }[];
+	todos?: { content: string; status: "pending" | "in_progress" | "completed" }[];
+	/** 人批准过的计划；摘要可以忘，它不能。见 `runtime/plan/plan-mode.ts`。 */
+	plan?: ApprovedPlan;
+}
+
+/**
+ * 计划模式里交上去、被人批准的那份计划：一段 Markdown。
+ *
+ * 不拆成字段。拆过一次（现状、方案、改动、验证……），每份计划都被套进同一张表，三行的小改动也得
+ * 填满六栏；该写什么由提示词说，怎么写由模型按这件事的大小定。计划也不是清单：怎么拆步是执行时
+ * 模型自己用 `todo_write` 记的账。
+ */
+export interface ApprovedPlan {
+	/** 计划全文，Markdown。 */
+	plan: string;
+	/** 人批准时附上的注意事项（多是在计划上划线留的评论）：不改计划，执行时照着做。 */
+	notes?: string;
+	/** 批准时写出的计划文件，绝对路径，写完不再改：交给别的会话的就是这一份。宿主没有临时目录时没有。 */
+	file?: string;
+	/** 人选了「在新会话里执行」：实施在另一个会话里，这个会话不再执行它。 */
+	handoff?: true;
+	/** 交接时人给那个新会话挑的模型。没挑就没有，宿主用默认模型开。 */
+	modelId?: string;
+	approvedAt: number;
+}
+
+export interface UserMessage {
+	role: "user";
+	content: UserContent[];
+	timestamp: number;
+	/** Set when the message was injected by the runtime rather than typed by a human. */
+	synthetic?: boolean;
+	/** Only runtime-generated compaction heads carry this snapshot. */
+	compactionContext?: CompactionContext;
+	/** File references survive another compaction without parsing model-written summaries. */
+	compactionFiles?: { read: string[]; changed: string[] };
+	/** An explicit runtime control discarded the old plan; it did not mark work completed. */
+	clearsTaskPlan?: boolean;
+	/**
+	 * 会话中途改了的 system prompt 段落：段落 id → 新文本，`null` 是这一段没了。
+	 *
+	 * 存成数据而不是让下一轮去解析正文：正文是写给模型的，措辞会改；而下一轮
+	 * 要据此算出「模型此刻以为各段是什么」，重启后也要从日志算出同一个答案。见 `prompt/update.ts`。
+	 */
+	promptUpdate?: { section: string; text: string | null }[];
+	/**
+	 * Who sent this, when it was not the person looking at the transcript.
+	 *
+	 * A task dispatched from the side chat lands in the main conversation as an ordinary user
+	 * message. Without this you would scroll back and find an instruction you have no memory
+	 * of writing, in your own voice, with no way to tell where it came from.
+	 *
+	 * `parent` 是子智能体转录里「派它出去的那个 Agent 说的话」——开头那份任务、续跑时补的那一句。
+	 * 面板上它不该画成人发的气泡：那不是看着面板的人说的。
+	 */
+	origin?: "side-chat" | "parent";
+	/**
+	 * 侧边聊天每次提问前附上的主会话进展，读到了哪里。
+	 *
+	 * 只附上次之后新增的那一段，所以下一次要知道从哪接着读；`lastAt` 是读到的最后一条的时间戳，
+	 * 主会话被撤回、同一位置换成了别的消息时对不上，就整段重读。见 `runtime/side-chat/side-session.ts`。
+	 */
+	mainChat?: { seen: number; lastAt: number };
+	/** Clean user input text for UI display, excluding injected skill or session instructions. */
+	displayText?: string;
+	/** Skill triggered by this prompt, along with its filesystem path for viewing. */
+	skillRef?: {
+		name: string;
+		path?: string;
+		pluginId?: string;
+	};
+	/** Historical sessions referenced by @ in this prompt. */
+	sessionRefs?: Array<{
+		id: string;
+		title: string;
+	}>;
+
+	/**
+	 * 后台子代理送回来的结果、或后台命令结束的消息——这条消息是运行时替它们递过来的，不是人说的话。
+	 *
+	 * 人在主会话等子代理的时候插了话，父会话先去回应人，子代理留在后台接着跑；它们跑完之后，结果
+	 * 作为这样一条消息回到主会话（见 `runtime/agent-session/delivery-message.ts`）。`content` 是给模型读的报告
+	 * 原文；这一项给界面画成一行「谁的结果到了」，而不是一个人发的气泡——那不是人说的话，而报告
+	 * 本身在派发卡片和子智能体面板里都看得到。
+	 */
+	delivery?: DeliveredReport[];
+	/**
+	 * 另一个会话的模型发来的消息——不是看着这个面板的人说的话。
+	 *
+	 * `content` 是给模型读的那份（外面套着 `<session-message>`）；这一项给界面画成「来自 X」，
+	 * 并让回信的那一方接上同一条链（见 `runtime/agent-session/peer-letters.ts`）。
+	 */
+	peer?: PeerLetter[];
+	/**
+	 * 被正在跑的那次运行接了进去，而不是开了一次新的运行。
+	 *
+	 * 循环把它接进去的那一刻打上（`agent/loop.ts` 的 `takeSteering`），因为只有那里知道它到底进没
+	 * 进去：会话忙时收下的话，循环没来得及取的，会排到下一次运行开头，那时它开的是新的一次。界面
+	 * 靠它分辨送达是把空闲的会话叫醒了，还是插在一轮中间——后者不是新的一轮。
+	 */
+	steered?: true;
+	/**
+	 * 这句话打断了正在跑的那一轮：会话先停下手上的事，再拿它开新的一轮（`AgentSession.prompt` 的
+	 * `deliver: "interrupt"`，排队条上的「现在就发」）。
+	 *
+	 * 只在真的打断了什么时才打上——会话闲着时它就是一句普通的话。发给模型时据此说清楚它是在模型
+	 * 工作时说的、上一条回复是被它截断的（`prompt/steering.ts`）；不说的话，模型看到的只是自己写到
+	 * 一半的回复后面跟着一条新消息，分不清那半截是被人停下的还是自己断的。
+	 */
+	interrupting?: true;
+	/**
+	 * The files that were attached, by name and kind — never their contents.
+	 *
+	 * A text attachment's body is expanded into the prompt, which is what the model needs and the
+	 * last thing a reader wants to scroll past: a thousand-line document arrived as a thousand lines
+	 * inside the message bubble, and getting back above it was a chore. `displayText` keeps the
+	 * bubble to what was actually typed, and this is what lets it still say which files went with it.
+	 *
+	 * Metadata only, deliberately. The contents are already in `content`; a second copy here would
+	 * double the size of every session log for something no reader ever looks at.
+	 */
+	attachments?: MessageAttachment[];
+}
+
+/** 送达消息里的一份报告是谁的、怎么收场的。 */
+export interface DeliveredReport {
+	/** 登记簿里的 id；后台命令是它的任务 id。 */
+	id: string;
+	/**
+	 * 后台命令结束了，而不是子代理跑完了。这时 `agent` 为空，`description` 是模型起任务时写的那句
+	 * 说明（没写就是命令本身），`command` 是完整命令，`exitCode` 为 null 表示被信号终止。
+	 */
+	kind?: "job" | "session" | "wakeup";
+	/*
+	 * `session`：一个从建议卡片上开出来的会话交回了第一轮的回复。`id` 是那个会话的 id，`description` 是它的
+	 * 标题，`agent` 为空。
+	 *
+	 * `wakeup`：模型自己安排的定时唤醒到点了（`session-wakeups.ts`）。`id` 是那个任务的 id，`description`
+	 * 是给人看的那句（唤醒的理由，cron 的 prompt 第一行），`command` 是 cron 表达式，一次性唤醒没有。
+	 */
+	command?: string;
+	exitCode?: number | null;
+	agent: string;
+	description: string;
+	status: "done" | "failed" | "aborted";
+	/** 没做完就停下了（检查点、原地打转、上游出错）——报告是阶段性的。 */
+	incomplete?: boolean;
+	/** 不带 `kind` 时：交回这份的插件，宿主照实填，界面交给这个插件登记的那一行（`ui.agentDelivery`）画。 */
+	plugin?: string;
+	/**
+	 * `kind` 为 `job` 时，这不是命令结束，是 `monitor` 送来的一批新输出：`lines` 行，`exitCode` 不设。
+	 * 达到上限自己停了的，最后一批带着 `stopped`。
+	 */
+	monitor?: { lines: number; stopped?: "max_events" | "idle" };
+}
+
+/**
+ * 另一个会话发来的一条消息。
+ *
+ * 请求、通知、答复走同一条路：对方在跑就在两步之间读到，闲着就开一轮。问是发出即返回，请求的答复
+ * 由收件方用 `reply_session` 交回，作为一封 `answer` 信送到发件方；通知没有答复。
+ */
+export interface PeerLetter {
+	/** 这一封的 id：发件方据此认出交回的回答、或兜底时它进了哪一次运行，见桌面端的 `session-peers.ts`。旧记录里没有。 */
+	id?: string;
+	/** 请求：发件方要一个答复。没有就是通知（或答复）。 */
+	request?: true;
+	/**
+	 * 这是对我问过的请求的答复：`replied` 是对方用 `reply_session` 交回的；`unreplied` 是对方读到请求的那一轮
+	 * 收场了却没回，正文是那一轮最后说的话；`dropped` 是请求没被读到就被对方的人停下了；`closed` 是对方会话关了。
+	 * 后三种由路由器代写，见桌面端的 `session-peers.ts`。
+	 */
+	answer?: "replied" | "unreplied" | "dropped" | "closed";
+	/** 答复对着我发过的哪几封：每封开头一截，按发出的顺序。 */
+	re?: string[];
+	/** 对方会话的 id，界面据此跳过去。 */
+	sessionId: string;
+	/** 寄出那一刻对方的地址，`名字 [ref]`；要再找它时原样当作 `to`。 */
+	from: string;
+	text: string;
+	/** 对方的工作目录，跨项目时路径的意思会变，模型要知道是从哪儿说的。 */
+	cwd?: string;
+	/** 这封信所在的往来链，按经手的会话 id 排；跳数上限在桌面端的 `peer-policy.ts`。 */
+	chain?: string[];
+}
+
+export interface RequestPrefix {
+	/** 这次请求体切成了几段（工具、系统提示词、逐条消息）。 */
+	segments: number;
+	/** 第一处和上一次不同的段及其前后长度（字符）；没有就是上一次原样是这次的前缀。 */
+	change?: { segment: string; before: number; after: number };
+}
+
+export interface AssistantMessage {
+	role: "assistant";
+	content: AssistantContent[];
+	api: ApiFormat;
+	provider: string;
+	model: string;
+	usage: Usage;
+	/**
+	 * The final attempt's own usage, set only when failed attempts were folded into `usage`.
+	 *
+	 * `usage` is the bill, and the bill has to include what abandoned retries cost. The context
+	 * window, though, held one request, not their sum, so anything asking "how big was the
+	 * conversation" reads this instead — through `requestUsage`. Absent without retries and on
+	 * logs written before it existed; `usage` is then that one request.
+	 */
+	lastAttemptUsage?: Usage;
+	stopReason: StopReason;
+	errorMessage?: string;
+	/**
+	 * Whether what ended this was the connection rather than the request.
+	 *
+	 * A dropped socket and a rejected API key both arrive as `stopReason: "error"`, and only one of
+	 * them is worth going back for. Which it was is known exactly once — where the error is caught,
+	 * with the cause still attached — and by the time it has been flattened into a message string
+	 * telling them apart is pattern-matching on prose. So it is written down while it is still a
+	 * fact.
+	 */
+	errorRetryable?: boolean;
+	/**
+	 * 这次失败是什么——分类的结果，不是一串给人猜的字符串。
+	 *
+	 * `errorMessage` 留着是为了读得懂旧会话，但它把一次失败压成了一行字，之后每个想知道「这该不该
+	 * 重试」「这句话该怎么说给人听」「有没有下一步可给」的地方，都只能对着那行字做模式匹配。结论
+	 * 在 `failure.ts` 里只产生一次，然后一路带着走。
+	 */
+	failure?: Failure;
+	/**
+	 * 这次请求体和同一会话上一次相比，前缀从哪里开始不同。缓存未命中的归因证据，见
+	 * `ai/prefix-fingerprint.ts`。没有这个字段是没量（旧日志、第一次请求、替身流）。
+	 */
+	prefix?: RequestPrefix;
+	/** Provider response id, used for Responses-API conversation chaining. */
+	responseId?: string;
+	/** Latency in milliseconds from request start to completion */
+	durationMs?: number;
+	/** Latency in milliseconds of actual streaming token generation (from first token chunk to completion) */
+	sseDurationMs?: number;
+	timestamp: number;
+}
+
+export interface ToolResultMessage {
+	/** Actual execution boundary; absent in historical messages. */
+	startedAt?: number;
+	durationMs?: number;
+	role: "toolResult";
+	toolCallId: string;
+	toolName: string;
+	content: UserContent[];
+	/** Structured payload for rich UI rendering; never sent to the model. */
+	details?: unknown;
+	/** 只给人看、不交给模型的图（Plume 的 `ToolOutput.shownImages`）：和 `details` 一样不进请求体。 */
+	shownImages?: ImageContent[];
+	isError: boolean;
+	/** See `ToolResult.uneventful`. Carried on the message so compaction can see it. */
+	uneventful?: boolean;
+	/**
+	 * See `ToolResult.terminate`. Carried on the message so the loop can see it.
+	 *
+	 * 和 `details` 一样，只在本进程里活着——不进 provider 的请求体。写进会话日志是无害的：循环只
+	 * 看自己这一轮刚拿到的结果，重放历史时没人会再读它。
+	 */
+	terminate?: boolean;
+	timestamp: number;
+}
+
+export type Message = UserMessage | AssistantMessage | ToolResultMessage;

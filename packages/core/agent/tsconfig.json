@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023", "ES2024.Promise"],
+    // 端到端的测试带上内置插件的源码（test/builtins.ts），插件目录里解析不到宿主的包，在这里指过去。
+    "paths": {
+      "@plume/contract": ["../../contract/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

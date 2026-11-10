@@ -1,0 +1,30 @@
+/*
+ * 几个视图共用的效果：展开时的淡入、读取时的闪动、紧凑字段。diff 和图片的样式在 css/diff.css。
+ * 按文字引入，由 ui.tsx 挂到页面上；取值只用 token。
+ */
+
+/* 展开的东西长出来，而不是一帧之内多出来。 */
+.git-enter {
+	animation: plume-fade-up var(--plume-t-quick) var(--plume-e-out);
+}
+
+/* 还在读、还在切换：一样东西在那里，只是还没定下来。 */
+.git-pulse {
+	animation: git-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes git-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.45;
+	}
+}
+
+/* 分支列表里那一行的高度：和行一样高的紧凑字段。字号由外面包的 Text 给。 */
+.git-field-compact {
+	height: 26px;
+	padding: 0 10px;
+}

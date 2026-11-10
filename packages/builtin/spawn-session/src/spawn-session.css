@@ -1,0 +1,127 @@
+/* 对话里那张建议卡片：标题、一两句理由、「开始」那一排，右上角收起。 */
+.plume-spawn-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	width: 100%;
+	max-width: 420px;
+	padding: 10px 6px 10px 12px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
+}
+
+.plume-spawn-card-icon {
+	flex-shrink: 0;
+	margin-top: 2px;
+	color: var(--plume-ink-muted);
+}
+
+.plume-spawn-card-body {
+	min-width: 0;
+	flex: 1;
+}
+
+.plume-spawn-card-body > p {
+	margin: 0;
+}
+
+.plume-spawn-card-body > .plume-spawn-summary {
+	margin-top: 2px;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.plume-spawn-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+/* 过程行的标题本是「思考」这种两三个字的词，加粗读作标签；这里后面跟着的是会话名，不加粗。 */
+.plume-spawn-plain {
+	font-weight: normal;
+}
+
+.plume-spawn-failed {
+	color: var(--plume-danger);
+}
+
+/* 开始以后那一行，第一轮还在跑时后面挂着「交回这里」。 */
+.plume-spawn-started {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* 环境卡片里那一节：小标题和别的节一样高、一样缩进。 */
+.plume-spawn-section-label {
+	display: flex;
+	align-items: center;
+	height: 28px;
+	padding: 0 8px;
+}
+
+.plume-spawn-pending {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--plume-radius-field);
+}
+
+.plume-spawn-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	min-height: 32px;
+	padding: 5px 8px;
+	border: 0;
+	background: transparent;
+	color: var(--plume-ink);
+	text-align: left;
+	cursor: pointer;
+	border-radius: var(--plume-radius-field);
+}
+
+.plume-spawn-row:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-spawn-row:active {
+	background: var(--plume-elevated);
+}
+
+.plume-spawn-grow {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-spawn-dot {
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-ink-faint);
+}
+
+.plume-spawn-dot[data-status="running"] {
+	background: var(--plume-accent);
+}
+
+.plume-spawn-dot[data-status="done"] {
+	background: var(--plume-ok);
+}
+
+.plume-spawn-dot[data-status="failed"] {
+	background: var(--plume-danger);
+}

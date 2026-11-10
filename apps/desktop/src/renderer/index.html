@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<!-- 插件界面入口的裸模块名指向产品正在用的实例（见 main/protocols.ts），这样插件和产品共用同一份 React、@plume/ui 和 @plume/styles。 -->
+		<script type="importmap">
+			{
+				"imports": {
+					"react": "plume-host://shared/react.js",
+					"react/jsx-runtime": "plume-host://shared/react%2Fjsx-runtime.js",
+					"@plume/ui": "plume-host://shared/%40plume%2Fui.js",
+					"@plume/styles": "plume-host://shared/%40plume%2Fstyles.js"
+				}
+			}
+		</script>
+		<title>Plume</title>
+		<link rel="stylesheet" href="./styles.css" />
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="./main.tsx"></script>
+	</body>
+</html>

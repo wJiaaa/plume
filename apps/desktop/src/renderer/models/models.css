@@ -1,0 +1,101 @@
+/*
+ * 模型菜单和思考档位滑杆里，工具类写不清的部分。取值只用 token。
+ */
+
+@layer components {
+	/*
+	 * 模型清单是菜单行「选中不填底」的唯一例外：最右边那一格被「上下文多大」和「收藏」轮流占着，腾不出放勾的位置，
+	 * 「现在用的是哪个」只能由底色来说。悬停是中性灰（松手会变成的那一行），选中是带色相的一块（现在就是的那一行），
+	 * 同时出现也一眼分得清。选中且被指着时比不指着更明显，否则指针一压上去像是取消了选中。
+	 *
+	 * `.plume-item` 和 `.plume-model-row` 叠着写：`.plume-item:hover:not(:disabled)` 和它特异性一样，只靠写在后面赢，
+	 * 挪一下 import 顺序就会悄悄输掉。
+	 */
+	.plume-item.plume-model-row[data-selected="true"] {
+		background: color-mix(in srgb, var(--plume-accent) 12%, transparent);
+	}
+
+	.plume-item.plume-model-row[data-selected="true"]:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--plume-accent) 20%, transparent);
+	}
+
+	/*
+	 * 可搜索的清单里方向键和指针共用一个高亮（`data-active`），只认它、不再认 :hover：指针停在一行、方向键走到另一行时，
+	 * 两行同时亮就看不出回车会选哪个。指针一动那一行自己会变成 active，用鼠标的人看到的和以前一样。
+	 */
+	.plume-item.plume-model-row[data-nav]:hover:not([data-active="true"]):not([data-selected="true"]) {
+		background: transparent;
+	}
+
+	.plume-item.plume-model-row[data-active="true"]:not([data-selected="true"]) {
+		background: var(--plume-card-hover);
+	}
+
+	.plume-item.plume-model-row[data-active="true"][data-selected="true"] {
+		background: color-mix(in srgb, var(--plume-accent) 20%, transparent);
+	}
+
+	/*
+	 * 一格两用：不指着时是上下文窗口，指上去换成收藏的星。星是绝对定位的，宽度由窗口那几个字定，每行右边缘才在一条线上。
+	 * 换的时候窗口往上抬一点淡出，星从下面顶上来；都走 quick，这是一个状态而不是一段位移。
+	 */
+	.plume-model-window,
+	.plume-model-star {
+		transition:
+			opacity var(--plume-t-quick) var(--plume-e-out),
+			transform var(--plume-t-quick) var(--plume-e-out),
+			color var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.plume-model-star {
+		opacity: 0;
+		transform: translateY(4px);
+		/* 按钮铺满整格（星本身才 12px，热区要够大），焦点框描在里面，不然比行还高、压到上下两行。 */
+		border-radius: var(--plume-radius-item);
+	}
+
+	.plume-model-star:focus-visible {
+		outline-offset: -2px;
+	}
+
+	.plume-model-row:hover .plume-model-window {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+
+	.plume-model-row:hover .plume-model-star,
+	.plume-model-star:focus-visible {
+		opacity: 1;
+		transform: none;
+	}
+
+	/* 键盘走到星上时底下的窗口也让位，否则两样字叠在一格。用 :focus-visible：鼠标点收藏时指针本来就在行上，交换早发生了。 */
+	.plume-model-row:has(.plume-model-star:focus-visible) .plume-model-window {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+
+	/* 思考档位到最高一档时，亮着的点阵往回跑的脉冲：起得陡、拖得长，像尾焰而不是正弦波。 */
+	@keyframes plume-thrust {
+		0% {
+			opacity: var(--plume-matrix-low, 0.35);
+			transform: scale(1);
+		}
+		18% {
+			opacity: 1;
+			transform: scale(1.35);
+		}
+		70% {
+			opacity: var(--plume-matrix-low, 0.35);
+			transform: scale(1);
+		}
+		100% {
+			opacity: var(--plume-matrix-low, 0.35);
+			transform: scale(1);
+		}
+	}
+
+	.plume-thrust {
+		animation: plume-thrust 1.5s var(--plume-e-soft) infinite;
+	}
+}

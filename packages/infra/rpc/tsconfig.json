@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // 两端分别是渲染进程和 Node：AbortSignal、structuredClone 借 DOM 的声明做类型检查。
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src", "test"]
+}

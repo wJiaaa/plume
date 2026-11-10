@@ -1,0 +1,52 @@
+{
+  "name": "plume",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "lefthook install",
+    "dev": "pnpm build:plugins && node scripts/dev.mjs",
+    "build": "pnpm build:plugins && pnpm --filter @plume/desktop build",
+    "build:plugins": "node scripts/build-plugins.mjs",
+    "package": "pnpm --filter \"@plume/plugin-sdk...\" typecheck && node scripts/build-plugins.mjs --builtin && pnpm --filter @plume/desktop package",
+    "catalog:update": "node --experimental-strip-types scripts/update-model-catalog.ts",
+    "release": "node scripts/release.mjs",
+    "dump:session": "node --experimental-strip-types scripts/session-dump.ts",
+    "audit:sessions": "node --experimental-strip-types scripts/session-audit.ts",
+    "audit:prune": "node --experimental-strip-types scripts/session-prune-audit.ts",
+    "audit:interface": "node --experimental-strip-types scripts/interface-audit.ts",
+    "probe:prune": "node --experimental-transform-types scripts/probe-prune-accuracy.ts",
+    "tool-eval": "node --experimental-transform-types test/tool-eval/run.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "test": "pnpm -r --no-bail test && pnpm test:root",
+    "test:root": "node --experimental-transform-types --test \"scripts/test/*.test.ts\" test/tool-eval/formats.test.ts",
+    "check:styles": "node scripts/check-styles.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm fmt:check && pnpm test && pnpm check:styles && pnpm check:i18n && pnpm check:plugins && pnpm check:links && pnpm arch",
+    "check:i18n": "node scripts/check-i18n.mjs && node scripts/check-i18n-unused.mjs",
+    "check:plugins": "node scripts/check-plugins.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "knip": "knip",
+    "arch": "depcruise --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json apps packages scripts",
+    "arch:baseline": "depcruise --config .dependency-cruiser.cjs --output-type baseline apps packages scripts > .dependency-cruiser-known-violations.json",
+    "plugin": "node packages/sdk/plugin-sdk/bin/plume-plugin.mjs"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.16.21",
+    "@tailwindcss/node": "^4.3.4",
+    "@types/node": "^24.10.0",
+    "dependency-cruiser": "^18.7.2",
+    "git-cliff": "^2.14.2",
+    "knip": "^6.44.1",
+    "lefthook": "^2.2.2",
+    "oxfmt": "^0.76.0",
+    "oxlint": "^1.91.0",
+    "typescript": "^7.0.2"
+  }
+}

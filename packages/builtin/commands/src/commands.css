@@ -1,0 +1,179 @@
+/* 设置页「命令」那一节的布局。字交给 Text，颜色只取 var(--plume-*)。 */
+
+.cmd-intro {
+	margin: 0 0 16px;
+}
+
+.cmd-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 20px 0 12px;
+}
+
+.cmd-head-title {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.cmd-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.cmd-search {
+	width: 100%;
+	height: 32px;
+	padding: 0 10px;
+	margin-bottom: 12px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-input);
+	color: var(--plume-ink);
+	outline: none;
+}
+
+.cmd-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 40px 24px;
+	text-align: center;
+}
+
+.cmd-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	cursor: default;
+}
+
+.cmd-row + .cmd-row {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.cmd-row:hover {
+	background: var(--plume-card-hover);
+}
+
+/* 内置命令那几行点不开，悬停不铺底色。 */
+.cmd-row-static:hover {
+	background: transparent;
+}
+
+.cmd-row-mark {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	color: var(--plume-ink-muted);
+}
+
+.cmd-row-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.cmd-row-body > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cmd-row-side {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+.cmd-problems {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px;
+	margin-top: 16px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
+}
+
+.cmd-field {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 32px;
+	padding: 0 10px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-input);
+}
+
+.cmd-field input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--plume-ink);
+	outline: none;
+}
+
+.cmd-form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* 顶上「看哪一层」的胶囊，和钩子页、技能页的同一个样子：一圈细线立住，不垫底色。 */
+.cmd-scope {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	max-width: 240px;
+	padding: 0 14px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.cmd-scope:hover,
+.cmd-scope[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+.cmd-scope-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cmd-scope-caret {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+	transition: transform var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.cmd-scope-caret[data-open] {
+	transform: rotate(180deg);
+}
+
+.cmd-where {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	margin-top: 8px;
+}

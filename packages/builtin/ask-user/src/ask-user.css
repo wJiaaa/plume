@@ -1,0 +1,167 @@
+/*
+ * 提问卡的布局。外框是 @plume/ui 的 ApprovalFrame；插件单独构建，产品的 Tailwind 扫不到这里的类名，字交给 Text，
+ * 颜色只取 var(--plume-*)。
+ */
+
+.plume-ask-icon {
+	flex-shrink: 0;
+	color: var(--plume-accent);
+}
+
+.plume-ask-note {
+	flex-shrink: 0;
+	padding: 0 16px 4px;
+}
+
+.plume-ask-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.plume-ask-form {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	outline: none;
+}
+
+.plume-ask-scroll {
+	min-height: 0;
+	max-height: min(320px, 36dvh);
+}
+
+.plume-ask-body {
+	padding: 8px 16px;
+}
+
+.plume-ask-from {
+	margin-bottom: 6px;
+	overflow-wrap: anywhere;
+}
+
+.plume-ask-question {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.plume-ask-options {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 6px;
+	margin: 12px 0 0;
+	padding: 0;
+	border: 0;
+}
+
+/*
+ * 一个选项一行，整行可点。选中只是一层淡淡的强调色底，不另画记号和序号。
+ * `position: relative` 不是装饰：行里那颗看不见的 input 以这一行为包含块，列表滚下去再点下面的选项时，聚焦滚动的是列表，
+ * 不是卡片外面那层裁切的容器。
+ */
+.plume-ask-choice {
+	position: relative;
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	cursor: pointer;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	text-align: left;
+	transition: background-color var(--plume-t-quick);
+}
+
+.plume-ask-choice:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-ask-choice[data-on],
+.plume-ask-choice[data-on]:hover {
+	background: color-mix(in srgb, var(--plume-accent) 8%, transparent);
+}
+
+.plume-ask-choice-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.plume-ask-label {
+	display: block;
+	overflow-wrap: anywhere;
+}
+
+.plume-ask-description {
+	display: block;
+	margin-top: 2px;
+}
+
+.plume-ask-recommended {
+	flex-shrink: 0;
+	align-self: center;
+	padding: 2px 8px;
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-accent) 10%, transparent);
+}
+
+.plume-ask-other-row {
+	flex-shrink: 0;
+	padding: 4px 16px;
+}
+
+.plume-ask-other-label {
+	flex-shrink: 0;
+}
+
+.plume-ask-custom-wrap {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+}
+
+.plume-ask-custom {
+	height: 28px;
+	min-width: 0;
+	flex: 1;
+	padding: 0 10px;
+	border: 0;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-shell);
+	color: var(--plume-ink);
+	outline: none;
+}
+
+.plume-ask-custom::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+.plume-ask-footer {
+	flex-shrink: 0;
+	padding: 4px 16px 12px;
+}
+
+.plume-ask-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+/* 跳过推到最左，和取消、确认隔开。 */
+.plume-ask-skip {
+	display: flex;
+	margin-right: auto;
+}
+
+.plume-ask-hint {
+	margin-top: 8px;
+	overflow-wrap: anywhere;
+}

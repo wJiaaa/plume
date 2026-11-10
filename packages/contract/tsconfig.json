@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 只有类型。AbortSignal 借 DOM 的声明；Node 和浏览器两边都有。
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

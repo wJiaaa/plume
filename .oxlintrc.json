@@ -1,0 +1,167 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "react", "react-hooks", "react-perf", "import", "jsx-a11y"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        // `const { session, cwd, ...rest } = props` 是从对象里剔掉几个字段的写法，剔掉的那几个本来就不用。
+        "ignoreRestSiblings": true
+      }
+    ],
+    "eqeqeq": ["error", "smart"],
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error"]
+      }
+    ],
+    "typescript/no-explicit-any": "off",
+    "typescript/consistent-type-imports": "off",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/no-new-array": "error",
+    "react/jsx-key": "error",
+    "react/no-array-index-key": "off",
+    "react-perf/jsx-no-new-object-as-prop": "off",
+    "react-perf/jsx-no-new-array-as-prop": "off",
+    "react-perf/jsx-no-new-function-as-prop": "off",
+    "jsx-a11y/click-events-have-key-events": "off",
+    "jsx-a11y/no-static-element-interactions": "off",
+    "react/react-in-jsx-scope": "off",
+    "no-await-in-loop": "off",
+    "react-perf/jsx-no-jsx-as-prop": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    "jsx-a11y/no-autofocus": "off",
+    "import/no-unassigned-import": "off",
+    "jsx-a11y/control-has-associated-label": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "no-shadow": "off",
+    "jsx-a11y/media-has-caption": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "no-underscore-dangle": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "react/style-prop-object": "off",
+    "react/no-unstable-nested-components": [
+      "warn",
+      {
+        "allowAsProps": true
+      }
+    ],
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+
+    // ---------------------------------------------------------------------
+    // React 编译器的那批规则。每一条要么开着，要么写明为什么关、关掉时欠着多少条。
+    // 数字是 2026-11-05 用 `oxlint -A all -D react/<规则>` 逐条数出来的。
+    // ---------------------------------------------------------------------
+
+    /*
+     * 关着。9 条，全是误报：插件接口的 hook 挂在对象上（`ui.useFileMenu`、`ui.useModelDefaults`、
+     * 插件自己的 `state.useDelivery`），规则认定从对象上取的 hook 每次渲染可能换一个。在 Plume 的插件接口里
+     * 这是设计——`ui` 在插件界面入口装上后就不变。hook 的调用顺序由 react-hooks/rules-of-hooks 查。
+     */
+    "react/hooks": "off",
+    // 开着，现在没有违规。测试给外层变量赋值是它的正常写法，见下面 overrides 的豁免。
+    "react/globals": "error",
+    // 开着。DOM 的 `style` 收的是对象，传别的就是写错了。
+    "react/style-prop-object": "error",
+
+    /*
+     * 关着的几条，共同的理由：它们说的不是「代码写错了」，而是「React 编译器要接管记忆化，你自己写的那套先让开」。
+     * 仓库没有开编译器，规则要求的改法在这里只剩成本；违规量也大到不可能一次清完，红着跑的检查会被无视，比关着更糟。
+     */
+    // 128 条。ref 在渲染里被读写：测量布局、记上一次的值、存计时器。
+    "react/refs": "off",
+    // 54 条。同步外部状态的 effect：窗口尺寸、agent 进程推来的事件、滚动位置。
+    "react/set-state-in-effect": "off",
+    // 51 条。要求 effect 依赖完备到编译器的标准，比开着的 react-hooks/exhaustive-deps 严得多，两条同时开会打架。
+    "react/exhaustive-effect-dependencies": "off",
+    // 38 条。要求 props 与 state 全程不可变；有几处刻意在原地改可变结构再整体替换。
+    "react/immutability": "off",
+    // 3 条 + 16 条。手写的 useMemo / useCallback 和编译器的记忆化怎么共处，没开编译器时没有意义。
+    "react/preserve-manual-memoization": "off",
+    "react/memo-dependencies": "off",
+    // 14 条。渲染时读当前时间、取随机数（显示「多久以前」、`useRef(Date.now())`），结果是稳定的；
+    // 按规则改要换成 effect + state，等于为了一条规则加一次定时重渲染。
+    "react/purity": "off",
+    // 开着，现在没有违规。
+    "react/no-deriving-state-in-effects": "error",
+
+    /*
+     * 关着。12 条全是有意的：校验输入时拒收控制字符（标签名、令牌、实例地址、路径段、面板窗口的标题），
+     * 写出控制字符的范围正是目的。
+     */
+    "no-control-regex": "off",
+    /*
+     * 关着。16 条全是遍历时集合会变的快照：监听器在回调里退订、关掉的页从表里删、`childNodes` 是活的 NodeList、
+     * 关窗口时 pinned 跟着少一个。照规则去掉拷贝就成了边遍历边改集合。
+     */
+    "unicorn/no-useless-spread": "off",
+    /*
+     * 关着。6 条全是误报：条件里的值在别处变——AbortSignal、别的回调设的标志、同一个条件里另一个在自增的下标。
+     * 规则只看循环体里有没有改它。
+     */
+    "no-unmodified-loop-condition": "off"
+  },
+  "overrides": [
+    {
+      // 插件宿主给插件作者的诊断：同名的东西重新注册、覆盖了别的插件的，打在开发者工具里。
+      "files": ["apps/desktop/src/renderer/plugins.tsx"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/test/**"],
+      "rules": {
+        "no-console": "off",
+        "typescript/no-non-null-assertion": "off",
+        // 测试给外层变量赋值是它的工作方式：`let captured; ... 断言 captured`。
+        "react/globals": "off",
+        // 测试里按记录分段拼字面量（一条 git 输出、一段 diff 一截），比拼成一长串读得出每段是什么。
+        "no-useless-concat": "off"
+      }
+    },
+    {
+      // 命令行脚本、主进程、agent 进程：往终端和日志里打字就是它们的输出。
+      "files": ["scripts/**", "**/scripts/**", "**/bin/**", "**/lib/**", "apps/desktop/src/main/**", "packages/core/**", "packages/infra/**"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["packages/core/**", "packages/infra/**", "apps/desktop/src/main/**"],
+      "rules": {
+        "react-hooks/rules-of-hooks": "off",
+        "react-hooks/exhaustive-deps": "off",
+        // 主进程里的 postMessage 是 Electron 的 parentPort 和 MessagePortMain，没有 targetOrigin 这个参数。
+        "unicorn/require-post-message-target-origin": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/out/**",
+    "**/build/**",
+    "**/.stage/**",
+    "**/release/**",
+    ".smoke/**",
+    // 模型调用包保持它自己的写法，不归这里的 lint 管（见它的 README）。
+    "packages/core/llm/**"
+  ]
+}

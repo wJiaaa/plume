@@ -1,0 +1,21 @@
+{
+  "name": "@plume/prompt",
+  "version": "0.1.0",
+  "description": "系统提示词：身份、做事的准则、边界、环境、个性化和项目指令，会话内冻结、中途的改动作为增量消息送达，以及消息里的日期和插话、打断说明。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "系统提示词"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/platform": "workspace:*",
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "vitest": "^5.1.0"
+  }
+}

@@ -1,0 +1,156 @@
+name: 安装包
+
+# 手动运行或推 `v*` tag：Windows 打 nsis（x64 + arm64），macOS 打 dmg 和 zip（arm64 + x64），再按全部安装包生成 SHA256SUMS，
+# 都上传到这次运行的 Artifacts。macOS 有证书（secret MAC_CERTIFICATE_P12）就用证书签，没有就 ad-hoc；Windows 不签。
+# 还不发布：发布仓库是 wJiaaa/plume（应用里检查更新读的也是它，见 apps/desktop/src/main/update/updates.ts 的 RELEASE_REPO），
+# 还差一个 publish job：把 Artifacts 收齐、连同 SHA256SUMS 一起 `gh release create`。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 要打包的平台
+        type: choice
+        # 只需要某一个平台时单独选它，不用等另一个
+        options: [all, windows, macos]
+        default: all
+
+permissions:
+  contents: read
+
+# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件，用不着插件仓库。
+
+jobs:
+  windows:
+    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # 仓库的 package.json 没写 packageManager，版本在这里给
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      # pnpm-workspace.yaml 的 supportedArchitectures 让另一个架构的原生模块也装上
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成插件 SDK 的类型声明
+        run: pnpm --filter "@plume/plugin-sdk..." typecheck
+
+      - name: 构建内置插件
+        run: node scripts/build-plugins.mjs --builtin
+
+      - name: 构建 Windows 安装包（x64 与 arm64）并核验原生模块架构
+        run: pnpm --filter @plume/desktop package --win nsis --x64 --arm64 --publish never
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Plume-Windows
+          path: apps/desktop/release/Plume-*.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  macos:
+    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos'
+    # 图标是 Icon Composer 的 icon.icon，要 Xcode 26 的 actool 才能编译；
+    # 更早的镜像会静默退回 Electron 默认图标
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 生成插件 SDK 的类型声明
+        run: pnpm --filter "@plume/plugin-sdk..." typecheck
+
+      - name: 构建内置插件
+        run: node scripts/build-plugins.mjs --builtin
+
+      # 自签证书 Plume Code Signing（make-signing-cert.sh 生成）导进临时钥匙串，package.mjs 找到它就用它签。证书签名让每次更新
+      # 在 macOS 看来是同一个应用，屏幕录制等权限不会被重置；ad-hoc 做不到，见 electron-builder.yml 里 mac.identity 的说明。
+      # 推 tag 时缺证书直接失败，手动打包只警告
+      - name: 准备签名证书
+        timeout-minutes: 5
+        env:
+          REQUIRE_SIGNING: ${{ github.event_name == 'push' }}
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: bash .github/scripts/prepare-signing.sh
+
+      # zip 给应用内更新用：它直接装着 Plume.app，可以原地替换；dmg 给第一次手动安装
+      - name: 构建 macOS 安装包（arm64 与 x64）并核验原生模块架构
+        run: pnpm --filter @plume/desktop package --mac dmg zip --arm64 --x64 --publish never
+
+      # 证书没导进去时 electron-builder 会悄悄退回 ad-hoc，包照样能装能跑，只是权限每次更新都被重置
+      - name: 核验签名身份
+        env:
+          REQUIRE_SIGNING: ${{ github.event_name == 'push' }}
+          HAVE_CERT: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
+        run: bash .github/scripts/check-signature.sh
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Plume-macOS
+          path: |
+            apps/desktop/release/Plume-*.dmg
+            apps/desktop/release/Plume-*.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  # 应用内更新先按文件名在这里查到校验值，对得上才安装；没有这个文件就不装（apps/desktop/src/main/update/update-checksum.ts）
+  checksums:
+    needs: [windows, macos]
+    # 只打了一个平台（手动选的）时另一个是 skipped，照样给打出来的那些生成
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: 收齐各平台安装包
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 生成 SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 上传 SHA256SUMS
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7

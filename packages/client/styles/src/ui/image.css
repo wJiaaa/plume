@@ -1,0 +1,199 @@
+/* 由 @plume/ui 对应目录的组件使用，见 ui.css。 */
+
+/* image/：标注工具条、标注画布上的编辑记号，以及看图器的深色浮条。 */
+
+/*
+ * 这一页的颜色都是字面量，不取 token（在 scripts/check-styles.mjs 的 ALLOWED_COLORS 里登记过）。
+ *
+ * 工具条和看图器的按钮压在一张图上——截图浮层里压的还是别的应用的屏幕——底下是什么颜色谁也不知道，
+ * 跟着主题和皮肤变的面色在那里没有意义：浅色主题下一条浅色工具条压在白底截图上就看不见了。所以它们
+ * 永远是一块深色的玻璃加白字，选中框、手柄永远是同一种天蓝，和画布本身的白底一样，与主题无关。
+ */
+
+/* ---------------------------------------------------------------------------
+ * 深色玻璃：工具条、看图器的缩放条，以及工具条上方那个属性气泡（更实一点，压在工具条外面的图上）。
+ * 边框宽度、圆角、阴影、模糊由组件的类名给，这里只有颜色。
+ * ------------------------------------------------------------------------- */
+
+.plume-image-glass {
+	border-color: rgb(255 255 255 / 0.12);
+	background-color: rgb(28 28 30 / 0.92);
+}
+
+.plume-image-bubble {
+	border-color: rgb(255 255 255 / 0.12);
+	background-color: rgb(28 28 30 / 0.95);
+}
+
+/* 一排按钮之间的竖线。 */
+.plume-image-rule {
+	background-color: rgb(255 255 255 / 0.15);
+}
+
+/* ---------------------------------------------------------------------------
+ * 玻璃上的按钮
+ * ------------------------------------------------------------------------- */
+
+/* 工具按钮：平时是半透明的白字，悬停有底；`-on` 是手里正拿着的那个工具，白底深色字。 */
+.plume-image-tool {
+	color: rgb(255 255 255 / 0.65);
+}
+
+.plume-image-tool:hover {
+	background-color: rgb(255 255 255 / 0.12);
+	color: #fff;
+}
+
+.plume-image-tool-on,
+.plume-image-tool-on:hover {
+	background-color: #fff;
+	color: #1c1c1e;
+}
+
+/* 没有底的按钮：退出标注。 */
+.plume-image-quiet {
+	color: rgb(255 255 255 / 0.65);
+}
+
+.plume-image-quiet:hover {
+	color: #fff;
+}
+
+/* 结束这一次标注的那个按钮：整条上唯一一块实心的白。 */
+.plume-image-confirm {
+	background-color: #fff;
+	color: #1c1c1e;
+}
+
+/* 气泡里的粗细档。 */
+.plume-image-weight {
+	color: rgb(255 255 255 / 0.55);
+}
+
+.plume-image-weight:hover {
+	background-color: rgb(255 255 255 / 0.1);
+	color: #fff;
+}
+
+.plume-image-weight-on,
+.plume-image-weight-on:hover {
+	background-color: rgb(255 255 255 / 0.2);
+	color: #fff;
+}
+
+/* 选中的色块：先一圈和玻璃同色的空隙，再一圈白，色块和环之间隔开，深色的那块也认得出被选中。 */
+.plume-image-swatch-on {
+	box-shadow:
+		0 0 0 2px #1c1c1e,
+		0 0 0 4px rgb(255 255 255 / 0.85);
+}
+
+/* 看图器的按钮：缩放条里的没有底，飘在图上的（左右翻页、右上角一排）自己带一块半透明的黑底。 */
+.plume-image-control {
+	color: rgb(255 255 255 / 0.85);
+}
+
+.plume-image-control:hover {
+	color: #fff;
+}
+
+/* 缩放条里的按钮：条本身就是底，悬停才垫一层。 */
+.plume-image-pill:hover {
+	background-color: rgb(255 255 255 / 0.12);
+}
+
+/* 缩放比例：比按钮的图标淡一点，它是读数。 */
+.plume-image-reading {
+	color: rgb(255 255 255 / 0.8);
+}
+
+.plume-image-reading:hover {
+	background-color: rgb(255 255 255 / 0.12);
+	color: #fff;
+}
+
+/* 第几张 / 共几张。 */
+.plume-image-count {
+	color: rgb(255 255 255 / 0.85);
+}
+
+/*
+ * 「不要底色」的色块：棋盘格。
+ *
+ * 18px 的色块放在近黑的工具条上，格子要大、要亮才读得出「这里什么都没有」；按面板尺寸调的那种淡格子在这里
+ * 只有一格多一点，几乎看不见。
+ */
+.plume-image-checker {
+	background-color: rgb(255 255 255 / 0.16);
+	background-image:
+		linear-gradient(45deg, rgb(255 255 255 / 0.55) 25%, transparent 25%), linear-gradient(-45deg, rgb(255 255 255 / 0.55) 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, rgb(255 255 255 / 0.55) 75%), linear-gradient(-45deg, transparent 75%, rgb(255 255 255 / 0.55) 75%);
+	background-size: 8px 8px;
+	background-position:
+		0 0,
+		0 4px,
+		4px -4px,
+		-4px 0;
+}
+
+/* 只属于某个工具的控件，选到那个工具时冒出来，而不是平时灰着摆在那里。 */
+@keyframes plume-tool-in {
+	from {
+		opacity: 0;
+		transform: translateY(3px) scale(0.9);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * 画布上的编辑记号：不会进保存出去的图，只在编辑时画在画布上面。
+ * 边框宽度、圆角跟着缩放算，写在组件的行内样式里；这里只有颜色和线型。
+ * ------------------------------------------------------------------------- */
+
+/* 画布自己的底：透明的图片标注时也是一张白纸。 */
+.plume-annotate-paper {
+	background-color: #fff;
+}
+
+/* 马赛克笔刷的落点：白圈加一道淡黑的外环，压在亮处、暗处都看得见。 */
+.plume-annotate-brush {
+	border-color: rgb(255 255 255 / 0.8);
+	background-color: rgb(255 255 255 / 0.15);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+/* 选中的那个标记外面的虚线框。 */
+.plume-annotate-frame {
+	border-style: dashed;
+	border-color: oklch(74.6% 0.16 232.661);
+	background-color: oklch(74.6% 0.16 232.661 / 0.1);
+}
+
+/* 选中标记上能拖的点。 */
+.plume-annotate-grip {
+	border-style: solid;
+	border-color: #fff;
+	background-color: oklch(68.5% 0.169 237.323);
+	box-shadow:
+		0 1px 3px 0 rgb(0 0 0 / 0.1),
+		0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+/* 正在写的文字外面那圈虚线：只属于编辑，不属于文字。 */
+.plume-annotate-typing {
+	border-style: dashed;
+	border-color: oklch(74.6% 0.16 232.661 / 0.7);
+}
+
+/* 正在写的文字右下角拖宽度的把手。 */
+.plume-annotate-width {
+	border-style: solid;
+	border-color: #fff;
+	background-color: oklch(74.6% 0.16 232.661);
+	box-shadow:
+		0 1px 3px 0 rgb(0 0 0 / 0.1),
+		0 1px 2px -1px rgb(0 0 0 / 0.1);
+}

@@ -1,0 +1,696 @@
+/*
+ * 回复里的 Markdown（`.markdown`）：标题、列表、表格、代码块、任务框、折叠段、文件签。
+ *
+ * 字号跟着界面字号走，不写死像素：最下面两级标题落在同一档，靠字重区分。聊天气泡里分四级字号从来分不出
+ * 四个层次，h3 以下的嵌套已经比容器还深。取值只用 token。
+ */
+@layer components {
+	/* 回复正文的字号、行高、字距和各元素字重。 */
+	.markdown {
+		font-size: var(--text-label);
+		line-height: 1.75;
+		letter-spacing: 0.025em;
+		color: var(--plume-ink);
+		/*
+		 * 没有空格的长串（URL、base64、贴进来的 JSON）找不到断点，会顶出容器、被外层裁掉，裁掉的字就没了。
+		 * 用 `break-word` 不用 `anywhere`：后者把表格单元格的最小宽度压到一个字，自动布局的表格列会被挤窄。
+		 */
+		overflow-wrap: break-word;
+	}
+
+	.markdown > * + * {
+		margin-top: 0.75em;
+	}
+
+	/*
+	 * 第一个元素不带上边距。标题的 `margin-top` 是给「正文之后又起一节」准备的；一段回答以标题开头时，
+	 * 上方的空隙本来就归容器管，再加一次就比以句子开头的回复矮一截地飘在下面。
+	 */
+	.markdown > :first-child {
+		margin-top: 0;
+	}
+
+	.markdown > :last-child {
+		margin-bottom: 0;
+	}
+
+	.markdown h1,
+	.markdown h2,
+	.markdown h3,
+	.markdown h4 {
+		font-weight: 600;
+		margin-top: 1.6em;
+		margin-bottom: 0.6em;
+	}
+
+	.markdown h1 {
+		font-size: calc(var(--text-label) + 4px);
+	}
+
+	.markdown h2 {
+		font-size: calc(var(--text-label) + 2px);
+	}
+
+	.markdown h3,
+	.markdown h4 {
+		font-size: var(--text-label);
+	}
+
+	.markdown strong {
+		font-weight: 500;
+	}
+
+	/*
+	 * Windows 的中文字体没有中等字重：微软雅黑只有常规和粗体，上面的 500 落到常规上。标签还有字号、颜色分高低，
+	 * `**加粗**` 除了字重什么都没有，画成和前后文一样的常规体就等于没加。多升一档到粗体。平台标记由预加载脚本打上。
+	 */
+	:root[data-platform="win32"] .markdown strong {
+		font-weight: 600;
+	}
+
+	.markdown ul,
+	.markdown ol {
+		padding-left: 1.35em;
+	}
+
+	.markdown ul {
+		list-style: disc;
+	}
+
+	.markdown ul ul {
+		list-style: circle;
+	}
+
+	.markdown ol {
+		list-style: decimal;
+	}
+
+	.markdown li {
+		margin-top: 0.3em;
+	}
+
+	.markdown li::marker {
+		color: var(--plume-ink-faint);
+	}
+
+	.markdown li > ul,
+	.markdown li > ol {
+		margin-top: 0.3em;
+	}
+
+	/*
+	 * 列表项里的块。上面的间距规则只管 `.markdown` 的直接子元素，写在列表项下面的表格、代码块会紧贴着
+	 * 引出它的那句话。
+	 */
+	.markdown li > .markdown-table,
+	.markdown li > .markdown-code,
+	.markdown li > pre,
+	.markdown li > blockquote,
+	.markdown li > p {
+		margin-top: 0.5em;
+		margin-bottom: 0.5em;
+	}
+
+	.markdown li > *:last-child {
+		margin-bottom: 0;
+	}
+
+	/*
+	 * 代码不用连字、不合成斜体。注释是斜体，而很多等宽字体只有正体：浏览器会把正体几何地斜切去冒充，
+	 * 拉丁字母还过得去，中文没有斜体传统，斜切后明显变形。关掉合成，有真斜体的字体用真斜体，没有的保持
+	 * 正体，注释照样靠颜色区分。
+	 */
+	.markdown code,
+	.markdown pre {
+		font-variant-ligatures: none;
+		font-feature-settings: normal;
+		font-synthesis: none;
+		line-height: var(--text-code--line-height);
+		letter-spacing: var(--plume-code-tracking);
+	}
+
+	.markdown pre {
+		background: var(--plume-code-bg);
+		color: var(--plume-code-fg);
+		border: 1px solid color-mix(in srgb, var(--plume-code-fg) 12%, transparent);
+		border-radius: var(--plume-radius-field);
+		padding: 12px 14px;
+		overflow-x: auto;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+
+	.markdown pre code {
+		background: transparent;
+		color: inherit;
+		/* 行内代码的描边不适用于围栏块里的那一枚：外面的 `pre` 自己已经有一圈边了。 */
+		box-shadow: none;
+		padding: 0;
+		font-size: var(--text-code);
+		line-height: var(--text-code--line-height);
+		white-space: pre;
+		word-break: normal;
+	}
+
+	/*
+	 * 围栏代码块：标题栏（图标、语言、换行 / 复制）和代码同在一个框里。
+	 *
+	 * 框画在外层，里面的 `pre` 把自己那套底色、描边、圆角撤掉，否则标题栏和代码是两块拼起来的。
+	 * 按钮常驻：它们一块只出现一次，不会满页重复。
+	 */
+	.markdown .markdown-code {
+		/* 横向滑块的定位框，见 `MarkdownCode`。 */
+		position: relative;
+		background: var(--plume-code-bg);
+		color: var(--plume-code-fg);
+		border: 1px solid color-mix(in srgb, var(--plume-code-fg) 12%, transparent);
+		border-radius: var(--plume-radius-field);
+		max-width: 100%;
+		box-sizing: border-box;
+		overflow: hidden;
+	}
+
+	.markdown .markdown-code-head {
+		/* 代码主题可与页面深浅不同，标题栏控件必须跟随代码字色。 */
+		--plume-ink: var(--plume-code-fg);
+		--plume-ink-faint: color-mix(in srgb, var(--plume-code-fg) 65%, transparent);
+		--plume-card-hover: color-mix(in srgb, var(--plume-code-fg) 8%, transparent);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 8px 0 14px;
+		font-family: var(--plume-font-mono);
+		font-size: var(--text-code);
+		line-height: 24px;
+		color: color-mix(in srgb, var(--plume-code-fg) 80%, transparent);
+		user-select: none;
+	}
+
+	.markdown .markdown-code > pre {
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		padding: 6px 14px 12px;
+	}
+
+	/* 正在输出的代码块里的一段，见 `MarkdownCode` 的 `fading`：块级，浏览器才能只重排正在长的那一段。 */
+	.markdown .markdown-code-chunk {
+		display: block;
+	}
+
+	.markdown .markdown-code[data-wrap] pre code {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	.markdown code {
+		font-family: var(--plume-font-mono);
+		font-size: var(--text-code);
+		background: var(--plume-inline-code-bg);
+		color: var(--plume-inline-code-fg);
+		box-shadow: inset 0 0 0 1px var(--plume-inline-code-ring);
+		border-radius: var(--plume-radius-item);
+		padding: 1.5px 5px;
+		box-decoration-break: clone;
+		-webkit-box-decoration-break: clone;
+		word-break: break-all;
+		overflow-wrap: anywhere;
+	}
+
+	.markdown a {
+		color: var(--plume-accent);
+		font-weight: 500;
+		text-decoration: none;
+	}
+
+	.markdown a:hover {
+		text-decoration: underline;
+	}
+
+	.markdown blockquote {
+		border-left: 2px solid var(--plume-line);
+		padding-left: 12px;
+		color: var(--plume-ink-muted);
+	}
+
+	/*
+	 * 表格是一行行事实，不是方格纸：只画横线，列靠对齐就能看清。框画在会横滚的外层上，画在表上的话
+	 * 会跟着内容滑出视野、右边敞着。宽度只够装下内容：拉满一栏的话多出来的像素全给了最后一列，列和列
+	 * 之间空出一道要跳过去的缝。
+	 *
+	 * `overflow: hidden` 是为了圆角。换行开关是滚动层的兄弟节点，不会跟着单元格滑走。
+	 */
+	.markdown .markdown-table {
+		position: relative;
+		width: fit-content;
+		max-width: 100%;
+		overflow: hidden;
+		border: 1px solid var(--plume-line-soft);
+		border-radius: var(--plume-radius-field);
+	}
+
+	.markdown .markdown-table-scroll {
+		overflow-x: auto;
+	}
+
+	/*
+	 * 一次读完整格，而不是拖进视野里看。默认仍是不换行（见下面）；窄窗格里的宽表、要横滚着对比两行就
+	 * 看不到第一列的时候，换一种看法。只改单元格，表随之按框的宽度排。
+	 */
+	.markdown .markdown-table[data-wrap="true"] th,
+	.markdown .markdown-table[data-wrap="true"] td {
+		white-space: normal;
+		/* 够让一列不至于缩成一行一个字，又小到四列还放得进侧边的窗格。 */
+		min-width: 6em;
+	}
+
+	/*
+	 * 代码块复制按钮的位置，转过来对着表头。开关存在时那块渐变底一直在，表头的字压不到图标底下；
+	 * 颜色和表头一样，读起来是表头到头了，而不是第二个框。
+	 */
+	.markdown .markdown-table-corner {
+		position: absolute;
+		top: 0;
+		right: 0;
+		z-index: 4;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		width: 44px;
+		height: calc(14px + 1.55 * var(--text-label) + 1px);
+		padding-right: 8px;
+		background: linear-gradient(to right, transparent, var(--plume-card) 16px);
+		pointer-events: none;
+	}
+
+	.markdown .markdown-table-toggle {
+		opacity: 0;
+		pointer-events: none;
+		transition:
+			opacity var(--plume-t-base) var(--plume-e-out),
+			color var(--plume-t-quick) var(--plume-e-out),
+			background-color var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.markdown .markdown-table:hover .markdown-table-toggle,
+	.markdown .markdown-table-toggle:focus-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.markdown .markdown-table[data-control="true"][data-wrap="true"] thead th:last-child {
+		padding-right: 44px;
+	}
+
+	.markdown table {
+		border-collapse: collapse;
+		font-size: var(--text-label);
+	}
+
+	.markdown th,
+	.markdown td {
+		padding: 7px 12px;
+		text-align: left;
+		vertical-align: top;
+		/* 在词中间把一格拆开，比横滚一点更糟。 */
+		white-space: nowrap;
+	}
+
+	.markdown thead th {
+		background: var(--plume-card);
+		/* 表头是标签不是标题：常规字重、最浅那档颜色。 */
+		font-weight: 400;
+		color: var(--plume-ink-faint);
+		/* 表头下面这条是唯一值得留的线：它把标签和数据分开。 */
+		border-bottom: 1px solid var(--plume-line);
+	}
+
+	.markdown tbody tr + tr td {
+		border-top: 1px solid var(--plume-line-soft);
+	}
+
+	/* 数字等宽，一列数才对得齐。 */
+	.markdown td {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.markdown hr {
+		border: 0;
+		border-top: 1px solid var(--plume-line);
+		margin: 1.5em 0;
+	}
+
+	/*
+	 * 任务列表。框已经在说「这是一项」，旁边再加个圆点是说两遍，所以有框的那一项不要圆点。按项去掉而不是
+	 * 按整个列表：任务列表中间常夹着一条普通的说明，整表去掉的话它就什么都没有、缩进也和邻居不一样。
+	 * 负的外边距把框放在圆点原来的位置，每一行的字还从同一条竖线开始。
+	 */
+	.markdown .markdown-task {
+		list-style: none;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5em;
+		margin-left: -1.35em;
+	}
+
+	.markdown-task-box {
+		flex: none;
+		width: 13px;
+		height: 13px;
+		margin-top: calc((1.75em - 13px) / 2);
+		border: 1px solid var(--plume-line);
+		border-radius: var(--plume-radius-item);
+		color: transparent;
+		transition:
+			background-color var(--plume-t-quick) var(--plume-e-soft),
+			border-color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.markdown-task[data-done="true"] .markdown-task-box {
+		background: var(--plume-ok);
+		border-color: var(--plume-ok);
+		color: var(--plume-on-accent);
+	}
+
+	/* 做完的字仍然读得清——划掉之后就成了谜题而不是记录。 */
+	.markdown-task[data-done="true"] > span:last-child {
+		color: var(--plume-ink-muted);
+	}
+
+	/*
+	 * 一个按键，画成按键的样子。`<kbd>Cmd</kbd>` 是让人按一下什么，浏览器默认的斜体等宽和代码分不出来；
+	 * 带着底边的键帽一眼就是一个实体键。
+	 */
+	.markdown kbd {
+		display: inline-block;
+		min-width: 1.5em;
+		padding: 1px 5px;
+		border: 1px solid var(--plume-line);
+		border-bottom-width: 2px;
+		border-radius: var(--plume-radius-item);
+		background: var(--plume-card);
+		font-family: var(--plume-font-sans);
+		font-size: 0.86em;
+		line-height: 1.5;
+		text-align: center;
+		/* 键帽坐在文字基线上；不这样的话它的边框会把行距顶开。 */
+		vertical-align: 1px;
+	}
+
+	.markdown sub,
+	.markdown sup {
+		font-size: 0.75em;
+		line-height: 0;
+	}
+
+	.markdown mark {
+		padding: 0 2px;
+		border-radius: var(--plume-radius-item);
+		background: color-mix(in oklab, var(--plume-accent) 26%, transparent);
+		color: inherit;
+	}
+
+	/*
+	 * 公式。KaTeX 按 `em` 定尺寸，跟着周围的字号走，不需要自己的一档。行间公式留出空间、横着滚：宽的等式
+	 * 应该伸出栏外，而不是被折成几行——折行会改变它的意思。
+	 */
+	.markdown .markdown-math-block {
+		overflow: auto hidden;
+		padding: 2px 0;
+	}
+
+	/* 行间公式和图的框：横向滑块定位在它里面。 */
+	.markdown .markdown-math-frame,
+	.markdown .markdown-mermaid-frame {
+		position: relative;
+	}
+
+	/* KaTeX 还没到、或者解析不了时显示的 TeX 源码。 */
+	.markdown .markdown-math-raw {
+		font-family: var(--plume-font-mono);
+		font-size: var(--text-code);
+		color: var(--plume-ink-muted);
+		white-space: pre-wrap;
+	}
+
+	/* KaTeX 给 `\text` 带了自己的颜色；用页面的。 */
+	.markdown .katex {
+		color: inherit;
+		font-size: 1.06em;
+	}
+
+	/*
+	 * 文档里的块级 HTML 元素，比如包着一段居中文字的 `<p align="center">`。顶上的间距规则只管直接子元素，
+	 * 不补这一条的话 `<div>` 里的段落会紧贴在一起，外面的却松着。
+	 */
+	.markdown .markdown-html > * + * {
+		margin-top: 0.75em;
+	}
+
+	/* 居中的盒子不让列表、代码、表格也居中：`text-align` 会继承，圆点却还挂在左边。 */
+	.markdown .markdown-html ul,
+	.markdown .markdown-html ol,
+	.markdown .markdown-html pre,
+	.markdown .markdown-html .markdown-table {
+		text-align: left;
+	}
+
+	/*
+	 * 文件签：单行，类型图标加强调色的名字，悬停才托出底色。短的跟着字走，长的到上限就省略，永不折行。
+	 *
+	 * `--markdown-file-chip-max` 是宽栏里的上限，免得一个文件名横贯整行；窄栏里取行宽和它中较小的。签是一个
+	 * 原子的行内盒，行末放不下时整枚挪到下一行——不会图标在这行、名字在下一行。
+	 *
+	 * 打开方式和在访达中显示不在签里：悬停时浮在签上方，见下面的 `[data-file-actions]`。
+	 */
+	.markdown [data-file-link] {
+		--markdown-file-chip-max: 20em;
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		max-width: min(100%, var(--markdown-file-chip-max));
+		padding: 1.5px 4px;
+		border-radius: var(--plume-radius-item);
+		/* 落在句子的基线上，基线取自名字（见 `[data-file-name]`）。`middle` 按拉丁字母的 x 高居中，名字会比周围的中文低一截。 */
+		vertical-align: baseline;
+		line-height: 1;
+		white-space: nowrap;
+		transition: background-color var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	/*
+	 * 指针在签上（连同它的条）时深一档。条在签外，得有东西说明它是哪一枚的：两样一起亮，就不用猜。链接的
+	 * 下划线关掉了，这也是这枚可点的东西在悬停时唯一的反应。
+	 */
+	.markdown [data-file-link]:hover,
+	.markdown [data-file-link]:has(:focus-visible) {
+		background: var(--plume-card-hover);
+	}
+
+	.markdown [data-file-link] > a {
+		display: inline-flex;
+		align-items: center;
+		min-width: 0;
+		max-width: 100%;
+		gap: 0.3em;
+		color: var(--plume-accent);
+		text-decoration: none;
+	}
+
+	.markdown [data-file-link] > a:hover {
+		text-decoration: none;
+	}
+
+	.markdown [data-file-link] > a svg {
+		flex-shrink: 0;
+	}
+
+	.markdown [data-file-name] {
+		/* 签的基线来自名字；交给图标的话，SVG 的底边顶替了基线，名字被抬高 1.5px。 */
+		align-self: baseline;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/*
+	 * `:42` 跟在名字后面，名字太长时省略的是名字：行号是这枚签比单写文件名多出来的那点信息，不能先被裁掉。
+	 * 负的外边距抵掉 `<a>` 的 gap，冒号贴着名字；淡一档，读起来是名字的附注。
+	 */
+	.markdown [data-file-line] {
+		align-self: baseline;
+		flex-shrink: 0;
+		margin-inline-start: -0.3em;
+		opacity: 0.7;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/*
+	 * 签里那枚 `<code>` 不是一块行内代码，是签的内容。底色、内边距、圆角归签管，里面这枚什么都不画——描边
+	 * 同理，否则每枚签里多出一个贴着文字的小框，套在签自己的框里。
+	 */
+	.markdown [data-file-link] code {
+		background: transparent;
+		padding: 0;
+		border-radius: 0;
+		color: inherit;
+		box-shadow: none;
+	}
+
+	/*
+	 * 复制的那一下（`copy-chips.ts`）：签摊成行内，浮条不进剪贴板。flex 项目在浏览器生成的纯文本里前后各带
+	 * 一个换行，行内的不带。图标也要：基础样式把 svg 设成块，它会把名字前那个空格换成一个换行。
+	 */
+	.markdown [data-file-link][data-copying],
+	.markdown [data-file-link][data-copying] > a,
+	.markdown [data-file-link][data-copying] > a > svg {
+		display: inline;
+	}
+
+	.markdown [data-file-link][data-copying] > [data-file-actions] {
+		display: none;
+	}
+
+	/*
+	 * 出口条：悬停时浮在签上方的一张小卡片，两个按钮在里面。
+	 *
+	 * 这一层只管定位：和签一样宽，卡片在里面对着指针进来的位置（`MarkdownLink.tsx` 算出来写进
+	 * `--markdown-file-actions-x`）；焦点没有指针可对，就靠右。这一层自己不接指针：一条签那么宽的透明带
+	 * 压在上一行上，悬停期间会吞掉那一行的每次点击和选择。
+	 *
+	 * 上方还是下方由 `MarkdownLink.tsx` 的 `actionsSide` 在指针到来时量：伸出裁剪框的那截画不出来，签在
+	 * 滚动区第一行时条就放到下方。高度那笔账（28 + 4）两边各记一份。
+	 */
+	.markdown [data-file-actions] {
+		position: absolute;
+		inset-inline: 0;
+		bottom: 100%;
+		z-index: 2;
+		display: flex;
+		padding-bottom: 4px;
+		pointer-events: none;
+	}
+
+	.markdown [data-file-link][data-file-actions-side="below"] > [data-file-actions] {
+		top: 100%;
+		bottom: auto;
+		padding-top: 4px;
+		padding-bottom: 0;
+	}
+
+	/*
+	 * 卡片本身：钉在滚动内容里的小浮面——不透明的浮层底色、给浮层用的细线、很轻的阴影，够把它从字上托起来，
+	 * 比菜单的轻得多，因为它比菜单小得多。线必须是 `--plume-line-float`：`--plume-line-soft` 按页面底色推，
+	 * 落在比页面亮的面上会变深，深色主题里轮廓消失、条沉进字里。
+	 *
+	 * 按钮是 `IconButton` 的 `sm`（22px，6px 圆角）；2px 内衬，卡片 8px 的圆角和按钮同心。
+	 */
+	.markdown [data-file-actions-bar] {
+		position: relative;
+		/*
+		 * 没有指针位置时取 `auto`：flex 行里的 auto 外边距把卡片推到右端，卡片比签宽时它算出 0，卡片左对齐
+		 * 而不是挂出左边——一个值管两种情况。
+		 */
+		margin-inline-start: var(--markdown-file-actions-x, auto);
+		flex: none;
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 2px;
+		border: 1px solid var(--plume-line-float);
+		border-radius: var(--plume-radius-menu);
+		background: var(--plume-float);
+		box-shadow: var(--plume-shadow-glass);
+		pointer-events: auto;
+	}
+
+	/*
+	 * 卡片朝签伸回去，盖住 4px 的间隙。不然指针从文件名直着往上走，有一瞬两样都不在；离开时的宽限（下面）
+	 * 接得住，但最直的那条路不该靠兜底。
+	 */
+	.markdown [data-file-actions-bar]::after {
+		content: "";
+		position: absolute;
+		inset-inline: 0;
+		top: 100%;
+		height: 5px;
+	}
+
+	.markdown [data-file-link][data-file-actions-side="below"] [data-file-actions-bar]::after {
+		top: auto;
+		bottom: 100%;
+	}
+
+	/* 键盘焦点环贴着按钮：全局的 2px 外移在卡片只有 2px 内衬时会落在卡片的细线上，像是从卡片里滑出去了。 */
+	.markdown [data-file-actions-bar] button:focus-visible {
+		outline-offset: 0;
+	}
+
+	/*
+	 * 出现和消失。动的是外面那层：`visibility` 决定它接不接指针，`opacity` 和 3px 的位移让它升到位。
+	 *
+	 * 两段等待是意图而不是动画：
+	 *
+	 * - 进来时先等 `--markdown-file-actions-settle`：指针扫过一段话，不然每经过一枚签就闪一次条；只算停下的那枚。
+	 * - 离开时先等 `--markdown-file-actions-linger` 再淡出，淡完才 `hidden`。从长文件名的远端奔向条的指针，
+	 *   路上会离开签；这段等待就是给那条斜线的。期间条还是 `visible`，指针落到条上，签又算作悬停，条就留下。
+	 *
+	 * `visibility` 用阶跃而不是零时长：进来 `step-start`，等待一结束就接指针；出去 `step-end`，淡完的那一刻
+	 * 放手。减少动态效果时淡出压成一瞬，也在同一瞬放手，不留一块看不见却还接指针的区域。
+	 */
+	.markdown [data-file-actions] {
+		--markdown-file-actions-settle: calc(var(--plume-t-quick) * 0.4);
+		--markdown-file-actions-linger: calc(var(--plume-t-quick) * 2 / 3);
+		visibility: hidden;
+		opacity: 0;
+		transform: translateY(3px);
+		transition:
+			opacity var(--plume-t-quick) var(--plume-e-in) var(--markdown-file-actions-linger),
+			transform var(--plume-t-quick) var(--plume-e-in) var(--markdown-file-actions-linger),
+			visibility var(--plume-t-quick) step-end var(--markdown-file-actions-linger);
+	}
+
+	.markdown [data-file-link][data-file-actions-side="below"] > [data-file-actions] {
+		transform: translateY(-3px);
+	}
+
+	/* 放在定位规则之后：特异性相同，靠先后盖过上面的 `translateY(-3px)`。 */
+	.markdown [data-file-link]:hover > [data-file-actions],
+	.markdown [data-file-link]:has(:focus-visible) > [data-file-actions] {
+		visibility: visible;
+		opacity: 1;
+		transform: none;
+		transition:
+			opacity var(--plume-t-quick) var(--plume-e-out) var(--markdown-file-actions-settle),
+			transform var(--plume-t-quick) var(--plume-e-out) var(--markdown-file-actions-settle),
+			visibility var(--plume-t-quick) step-start var(--markdown-file-actions-settle);
+	}
+
+	/*
+	 * 键盘到这里时不等也不动：Tab 过来的人要知道自己在哪，焦点环不该先于它框住的东西到；下一次 Tab 进到条里，
+	 * 所以链接拿到焦点的那一刻条就得在。
+	 */
+	.markdown [data-file-link]:has(:focus-visible) > [data-file-actions] {
+		transition: none;
+	}
+
+	/*
+	 * 一段大到画不动的正文切开之后的那些片，见 `Markdown.tsx` 的 `HugeParagraph`。
+	 *
+	 * `content-visibility: auto` 让屏幕外的片不布局也不画。`contain-intrinsic-size` 里的 `auto` 让浏览器
+	 * 记住每一片画出来时的真实高度，滚动条不会在每次进出视口时跳一下；9000px 只是头一次见到它时的估值
+	 * （每片 50 KB、一行一百来个字符、行高 21px）。片之间不留间距：它们本来是同一段话。
+	 */
+	.markdown-huge > .markdown-huge-slice {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 9000px;
+		margin: 0;
+	}
+}
+
+/*
+ * 正在输出的字淡入不在这里：透明度由 `FadeText.tsx` 按拍子算好写进 `style`，`.markdown-fade` 只是
+ * 「这几个字还在淡」的标记。CSS 动画试过两种，都不行——动 `opacity` 会给每组字提一个合成层，层树每帧
+ * 重排；动注册过的自定义属性不提层，可它只能在主线程逐帧算，高刷屏上页面每帧都脏。
+ */

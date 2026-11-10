@@ -1,0 +1,29 @@
+{
+  "name": "@plume/spawn-session",
+  "version": "0.1.0",
+  "description": "模型看到值得另开一个会话去做的事时，在对话里放一张建议卡片，人点了开始才开；要求交回的，新会话跑完第一轮后把回复送回这个对话。人要它做完就归档时，这一轮收场后归档这个对话。",
+  "author": "Plume",
+  "keywords": [
+    "会话",
+    "建议",
+    "spawn_session",
+    "archive_session"
+  ],
+  "plume": {
+    "displayName": "建议新会话",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1",
+    "vitest": "^5.1.0"
+  }
+}

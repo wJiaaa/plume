@@ -1,0 +1,20 @@
+{
+  "name": "@magpie-community/agent-plume",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plume as a magpie agent: pick one of magpie's models for it on the Agents page",
+  "type": "module",
+  "files": [
+    "plume.agent.js",
+    "icon.js",
+    "README.md"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-agent",
+    "plume"
+  ],
+  "magpie": {
+    "agent": "./plume.agent.js"
+  }
+}

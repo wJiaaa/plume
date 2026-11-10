@@ -1,0 +1,500 @@
+/*
+ * 渲染进程的样式入口：Tailwind + @plume/styles 的 token。规则见 spec/tech/styling.md。
+ * 只扫描产品界面和渲染进程共享的库（packages/client：@plume/styles、@plume/ui）；
+ * 插件单独构建，见 @plume/styles 的 theme.css。
+ */
+
+@import "tailwindcss" source(none);
+@import "@plume/styles/theme.css";
+@import "@plume/styles/ui.css";
+/* 回复里公式的排版，见 markdown/math.ts。 */
+@import "katex/dist/katex.min.css";
+@import "./market/market.css";
+@import "./models/models.css";
+@import "./composer/composer.css";
+@import "./composer/attachments.css";
+@import "./markdown/markdown.css";
+@import "./markdown/images.css";
+@import "./conversation/conversation.css";
+@import "./conversation/detail/detail.css";
+@import "./files/files.css";
+
+@source "./";
+@source "../../../../packages/client";
+
+@layer base {
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
+
+	/* 截屏浮层和钉图窗口是透明窗口：底色由插件画的组件自己定，页面不铺外壳色。 */
+	html[data-screen-window],
+	html[data-screen-window] body {
+		background: transparent;
+	}
+
+	body {
+		@apply bg-root font-sans text-label text-ink tabular-nums;
+		line-height: 1.6;
+		/* 窗口里没有该回弹的东西。 */
+		overscroll-behavior: none;
+	}
+
+	:root {
+		--plume-control-cursor: default;
+	}
+
+	:root[data-pointer-cursor="true"] {
+		--plume-control-cursor: pointer;
+	}
+
+	/* 工具类和组件也会声明光标，偏好必须盖过它们；输入区仍保留文本光标。 */
+	:root
+		:is(
+			button,
+			select,
+			a,
+			summary,
+			label:has(input),
+			input[type="checkbox"],
+			input[type="radio"],
+			[role="tab"],
+			[role="switch"],
+			[role="button"],
+			[role="link"],
+			[role="menuitem"],
+			[role="menuitemradio"],
+			[role="menuitemcheckbox"],
+			[role="option"],
+			[role="radio"],
+			[role="checkbox"],
+			[role="combobox"],
+			[role="treeitem"],
+			.cursor-pointer
+		) {
+		cursor: var(--plume-control-cursor) !important;
+	}
+
+	:root
+		:is(
+			input:not(
+				[type="checkbox"],
+				[type="radio"],
+				[type="range"],
+				[type="button"],
+				[type="submit"],
+				[type="reset"],
+				[type="color"],
+				[type="file"],
+				[type="image"]
+			),
+			textarea,
+			[contenteditable="true"]
+		) {
+		cursor: text !important;
+	}
+
+	:root :is(:disabled, [aria-disabled="true"]),
+	:root :is(:disabled, [aria-disabled="true"]) *,
+	:root label:has(input:disabled):not(:has(input:enabled)) {
+		cursor: default !important;
+	}
+
+	/*
+	 * 焦点：去掉 Chromium 的默认轮廓，键盘焦点统一是 2px 强调色、外移 2px。
+	 * 输入框不画焦点环，聚焦时底色深一档（见 @plume/styles 的 field）。
+	 */
+	input:focus,
+	textarea:focus,
+	select:focus,
+	button:focus {
+		outline: none;
+	}
+
+	button:focus-visible,
+	a:focus-visible,
+	summary:focus-visible,
+	[tabindex]:focus-visible {
+		outline: 2px solid var(--plume-accent);
+		outline-offset: 2px;
+	}
+
+	/*
+	 * 减少动态效果：时长压到看不出中间帧，而不是 animation: none，依赖 animationend / transitionend 的代码照样收到事件。
+	 * on / off 优先于系统，未设置时跟随系统；延迟也清掉，避免错峰进场仍然让人等。
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) *,
+		:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) *::before,
+		:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) *::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			animation-delay: initial !important;
+			transition-duration: 0.01ms !important;
+			transition-delay: initial !important;
+		}
+	}
+
+	:root[data-reduce-motion="on"] *,
+	:root[data-reduce-motion="on"] *::before,
+	:root[data-reduce-motion="on"] *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		animation-delay: initial !important;
+		transition-duration: 0.01ms !important;
+		transition-delay: initial !important;
+	}
+
+	/* 毛玻璃：页面底下是系统材质，body 不能再铺一层实色；外壳的半透明底色见 app.tsx 的 Shell。 */
+	:root[data-vibrancy="on"] body {
+		background: transparent;
+	}
+
+	/* 字体平滑，见 appearance.ts。 */
+	:root[data-font-smoothing] body {
+		@apply antialiased;
+	}
+
+	/* 窗口最小化时渲染不节流（见 main/index.ts），动画要自己停。 */
+	:root[data-minimized] *,
+	:root[data-minimized] *::before,
+	:root[data-minimized] *::after {
+		animation-play-state: paused !important;
+	}
+}
+
+/*
+ * 会话背景图（见 chat-backdrop.tsx）。伪元素、遮罩、@starting-style 这些工具类写不清，所以写成组件层的 CSS；
+ * 取值仍只用 token。遮罩只看透明度，颜色写 black。
+ *
+	 * 一层铺满对话区、cover 裁切的图，从上到下同一个浓度。有了消息以后整张图压淡，给正文让位。
+	 * 标题栏是透明的覆盖层，背景图向上铺满标题栏，避免在标题栏下沿切出一道横边。
+	 * 不往下淡出：整张图往下淡只会让对话区下半截空着。
+	 */
+@layer components {
+	.chat-backdrop {
+		position: absolute;
+		inset: 0;
+		top: calc(-1 * var(--plume-pane-header, 0px));
+		z-index: -1;
+		overflow: hidden;
+		pointer-events: none;
+		background-image: var(--chat-backdrop-image);
+		background-position: center;
+		background-size: cover;
+		background-repeat: no-repeat;
+		transition: opacity var(--plume-t-slow) var(--plume-e-out);
+
+		/* 第一次挂上时从透明进来，而不是图一读完就硬切出现。 */
+		@starting-style {
+			opacity: 0;
+		}
+	}
+
+	/*
+	 * 有消息以后：整张图盖一层底色，压到原来的一半，整片一样，不分区域。
+	 * 图保持清楚，不糊：糊开以后字是好读了，图也就认不出来了。只垫在正文那一栏底下会把图切出一道竖条。
+	 * 压淡是盖一层底色而不动 opacity：那样会走这一层的淡入过渡，图在字底下再慢慢退三百多毫秒。
+	 */
+	.chat-backdrop > .chat-backdrop-veil {
+		/* 压在雾化的扫描线和渐变（::after）之上，横纹跟着一起变淡。 */
+		z-index: 1;
+		background: color-mix(in srgb, var(--plume-shell) 50%, transparent);
+	}
+
+	/*
+	 * 雾化：同一张图叠三份，往下越来越糊，再盖一层往底色走的渐变和细扫描线。
+	 * 糊只作用在图上，所以是两个子层各自 blur，而不是整层糊——整层糊会把遮罩的边也糊开。
+	 * 只有它往下淡出：淡进底色就是这种效果本身，不是给正文让位。
+	 */
+	.chat-backdrop[data-backdrop="haze"] {
+		--haze-soft: 7px;
+		--haze-strong: 18px;
+		--haze-soft-mask: linear-gradient(to bottom, transparent 18%, black 60%);
+		--haze-strong-mask: linear-gradient(to bottom, transparent 28%, black 76%);
+		--haze-overlay: linear-gradient(
+			to bottom,
+			transparent 16%,
+			color-mix(in srgb, var(--plume-shell) 26%, transparent) 38%,
+			color-mix(in srgb, var(--plume-shell) 55%, transparent) 55%,
+			color-mix(in srgb, var(--plume-shell) 78%, transparent) 75%
+		);
+		mask-image: linear-gradient(
+			to bottom,
+			black 0 19%,
+			color-mix(in srgb, black 94%, transparent) 30%,
+			color-mix(in srgb, black 72%, transparent) 42%,
+			color-mix(in srgb, black 42%, transparent) 54%,
+			color-mix(in srgb, black 16%, transparent) 66%,
+			color-mix(in srgb, black 4%, transparent) 78%,
+			transparent 90%
+		);
+	}
+
+	.chat-backdrop > span {
+		position: absolute;
+		inset: 0;
+		background-image: var(--chat-backdrop-image);
+		background-position: center;
+		background-size: cover;
+		background-repeat: no-repeat;
+	}
+
+	.chat-backdrop[data-fit="tile"],
+	.chat-backdrop[data-fit="tile"] > span {
+		background-size: auto;
+		background-repeat: repeat;
+	}
+
+	.chat-backdrop > .chat-backdrop-haze-soft {
+		filter: blur(var(--haze-soft));
+		mask-image: var(--haze-soft-mask);
+	}
+
+	.chat-backdrop > .chat-backdrop-haze-strong {
+		filter: blur(var(--haze-strong));
+		mask-image: var(--haze-strong-mask);
+	}
+
+	.chat-backdrop[data-backdrop="haze"]::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background-image:
+			repeating-linear-gradient(to bottom, color-mix(in srgb, var(--plume-shell) 36%, transparent) 0 1px, transparent 1px 3px), var(--haze-overlay);
+	}
+
+	/*
+	 * 提示条的来和去（toast/Toaster.tsx）。从它要停的位置略往上一点落下来；来时带一点缩放，把「出来了一张卡片」和
+	 * 「页面重排了」分开，走时不缩：边走边缩读起来像被吸走，不像被关掉。都是 CSS 动画，减少动态效果时由 base 层统一压短。
+	 */
+	.plume-toast-in {
+		animation: plume-toast-in var(--plume-t-base) var(--plume-e-out);
+	}
+
+	/* 时长和 Toaster.tsx 的 LEAVE_MS 一致。 */
+	.plume-toast-out {
+		animation: plume-toast-out 170ms ease-in forwards;
+		pointer-events: none;
+	}
+
+	@keyframes plume-toast-in {
+		from {
+			opacity: 0;
+			transform: translateY(-10px) scale(0.97);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	@keyframes plume-toast-out {
+		from {
+			opacity: 1;
+			transform: none;
+		}
+		to {
+			opacity: 0;
+			transform: translateY(-8px);
+		}
+	}
+
+	/*
+	 * 收起面板后正文标题栏右端的「显示面板」（app.tsx 的 TitleBar）。面板带着自己那颗一模一样的「隐藏面板」往右滑走，
+	 * 这边当场画出来的话，滑动的那段时间里两颗图标同时在屏幕上，读起来是一道虚影。所以等滑完（同一个 --plume-t-base）
+	 * 再淡进来；减少动态效果时延迟由 base 层清掉，面板也不滑，当场出现。
+	 */
+	.plume-panel-toggle-in {
+		animation: plume-panel-toggle-in var(--plume-t-quick) var(--plume-e-out) var(--plume-t-base) both;
+	}
+
+	@keyframes plume-panel-toggle-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	/*
+	 * 晚一点才淡进来的加载记号（app.tsx 里会话还没读完时对话区那一圈）。读完得比这个延迟早，它就从没露面，
+	 * 不会刚闪一下转圈就被内容顶掉；减少动态效果时延迟由 base 层清掉，当场出现。
+	 */
+	.plume-defer-in {
+		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) 170ms both;
+	}
+
+	@keyframes plume-defer-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	/* 换一句话时新的那句淡进来（运行行上的说法和读数）。 */
+	.plume-fade-in {
+		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) both;
+	}
+}
+
+@layer components {
+	@keyframes sidebar-card-in {
+		from {
+			opacity: 0;
+			transform: translateX(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+	@keyframes sidebar-card-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+	.sidebar-card-in {
+		animation: sidebar-card-in var(--plume-t-quick) ease-out;
+	}
+	.sidebar-card-out {
+		animation: sidebar-card-out var(--plume-t-quick) ease-in forwards;
+	}
+}
+
+/*
+ * 侧栏里吸顶的标题（项目名、「聊天」，见 sidebar/ProjectList.tsx）铺上侧栏底下那层的底色，滑到下面的行被盖住：
+ * 名字一直在，会话一直看得见，下一个名字把上一个顶走。不让行滑到标题底下之前自己淡没：行只能整行一起没，
+ * 不是标题底下空一截，就是名字单独挂着。
+ *
+ * 停靠的侧栏透明，底色跟外圈：不透明的窗口是侧栏色，皮肤管着时是根底色（`data-plume-head-fill`，见 app.tsx）；
+ * 抽屉（`data-plume-drawer`）自己铺侧栏色。
+ *
+ * 毛玻璃底下没有哪种实色对得上透出来的材质，铺了就是玻璃上一块别的颜色；`backdrop-filter` 也模糊不到同一个
+ * 滚动面里的行。所以标题不铺底，改成把列表滑到标题底下的那一截遮掉：标题后面那一块（这一组的 `Collapse`）
+ * 挂一条按标题高度内缩的视图时间线，`exit-crossing` 换算成「这一块有多少已经在标题下沿上面」，遮罩切在那里。
+ * 一组一条时间线，不是一行一条：行在列表里换位置（按更新时间重排）时逐行的时间线要重建，几个会话并行跑久了
+ * 合成线程每帧都要算一遍被取消的那些。
+ */
+@property --sidebar-under {
+	syntax: "<length-percentage>";
+	inherits: false;
+	initial-value: 0%;
+}
+
+@layer components {
+	[data-plume-head] {
+		background: var(--plume-sidebar);
+	}
+	[data-plume-head-fill="root"] aside:not([data-plume-drawer]) [data-plume-head] {
+		background: var(--plume-root);
+	}
+
+	@keyframes sidebar-under-head {
+		from {
+			--sidebar-under: 0%;
+		}
+		to {
+			--sidebar-under: 100%;
+		}
+	}
+	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head] {
+		background: transparent;
+	}
+	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head] + * {
+		/* 渐隐只占标题下沿、字下面那一截：放宽到中线时，滑上去那一行的下半截字会半透明地叠在标题的字上。 */
+		--sidebar-under-fade: 8px;
+		animation: sidebar-under-head linear both;
+		/* 项目名那一行 32px。 */
+		animation-timeline: view(block 32px 0);
+		/* 用 `exit-crossing` 不用 `exit`：比侧栏还高的一块，顶边还没到标题时 `exit` 就开始了。 */
+		animation-range: exit-crossing 0% exit-crossing 100%;
+		mask-image: linear-gradient(to bottom, transparent calc(var(--sidebar-under) - var(--sidebar-under-fade)), black var(--sidebar-under));
+		/* 遮罩裁到这一块的边框盒，会切掉行的焦点环（外移 2px）：盒子往外撑 4px、外边距收回来，排版不动。 */
+		padding: 4px;
+		margin: -4px;
+	}
+	/* 「聊天」的标题是分区标题那一行，28px，比项目名矮 4px；照 32px 淡，紧挨着的那一行还没滑进标题就先淡掉一截。 */
+	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head]:has(> [data-plume-section]) + * {
+		--sidebar-under-fade: 6px;
+		animation-timeline: view(block 28px 0);
+	}
+}
+
+/* 复制窗口内内容时，不把浮在内容上方的导航与通知拼进每一片。 */
+@layer components {
+	html[data-capturing-window] :is([data-unread], [data-plume-toaster], .plume-tooltip) {
+		visibility: hidden !important;
+	}
+}
+
+/*
+ * 侧栏底行的更新圆点（见 update/UpdateBadge.tsx）。
+ *
+ * 颜色说阶段：有东西可下是强调色，暂停是灰的，下好等重启是绿的，失败是红的；20px 放不下字，扫一眼就知道状态。
+ * 用一层淡底配同色图标，不用实心圆配白图标：它和 16px 的细线设置图标同一行，实心的在任何尺寸下都是侧栏里最吵的东西。
+ * 悬停时字从 0fr 展到 1fr 的栅格列里出来，按字的真实宽度动；设置那一行的字同时淡下去让位，不被挤成两层。
+ * 不在下载时一直展开：那会把设置那一行的字一直挤着，进度交给环。
+ */
+@layer components {
+	.update-dot {
+		background: color-mix(in srgb, var(--plume-accent) 16%, transparent);
+		color: var(--plume-accent);
+		transition:
+			background-color var(--plume-t-base) var(--plume-e-soft),
+			color var(--plume-t-base) var(--plume-e-soft);
+	}
+	.update-dot:hover {
+		background: color-mix(in srgb, var(--plume-accent) 28%, transparent);
+	}
+	.update-dot:is([data-phase="downloading"], [data-phase="preparing"]) {
+		background: color-mix(in srgb, var(--plume-accent) 22%, transparent);
+	}
+	.update-dot[data-phase="paused"] {
+		background: color-mix(in srgb, var(--plume-ink) 14%, transparent);
+		color: color-mix(in srgb, var(--plume-ink) 50%, transparent);
+	}
+	.update-dot[data-phase="paused"]:hover {
+		background: color-mix(in srgb, var(--plume-ink) 20%, transparent);
+	}
+	.update-dot[data-phase="ready"] {
+		background: color-mix(in srgb, var(--plume-ok) 18%, transparent);
+		color: var(--plume-ok);
+	}
+	.update-dot[data-phase="ready"]:hover {
+		background: color-mix(in srgb, var(--plume-ok) 30%, transparent);
+	}
+	.update-dot[data-phase="failed"] {
+		background: color-mix(in srgb, var(--plume-danger) 16%, transparent);
+		color: var(--plume-danger);
+	}
+	.update-dot[data-phase="failed"]:hover {
+		background: color-mix(in srgb, var(--plume-danger) 28%, transparent);
+	}
+	.update-dot-label {
+		display: grid;
+		grid-template-columns: 0fr;
+		transition: grid-template-columns var(--plume-t-base) var(--plume-e-out);
+	}
+	.update-dot-label > span {
+		overflow: hidden;
+	}
+	/* 键盘也能展开：只靠悬停的提示键盘读不到。 */
+	.update-dot:is(:hover, :focus-visible) .update-dot-label {
+		grid-template-columns: 1fr;
+	}
+	.sidebar-foot-label {
+		transition: opacity var(--plume-t-base) var(--plume-e-out);
+	}
+	[data-plume-sidebar-foot]:has(.update-dot:is(:hover, :focus-visible)) .sidebar-foot-label {
+		opacity: 0.25;
+	}
+}

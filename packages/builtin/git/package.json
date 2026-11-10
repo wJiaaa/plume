@@ -1,0 +1,32 @@
+{
+  "name": "@plume/git",
+  "version": "0.1.0",
+  "description": "在 Plume 里用 Git：输入框上方显示分支和没提交的改动，Git 面板里看改动、历史、分支，暂存、提交、推送、拉取，提交说明可以让模型来写；每个对话可以在自己的工作树和分支里改，做完合回去。",
+  "author": "Plume",
+  "keywords": [
+    "git",
+    "worktree",
+    "工作树",
+    "版本管理",
+    "提交",
+    "分支",
+    "面板",
+    "并行"
+  ],
+  "plume": {
+    "displayName": "Git",
+    "category": "工具"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1"
+  }
+}

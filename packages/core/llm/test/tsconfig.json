@@ -1,0 +1,12 @@
+{
+  // 只给编辑器用：测试不在上级 tsconfig 里，编辑器会退回默认配置，而 TypeScript 7 默认不加载 @types/node，
+  // node:test、node:assert 都会报找不到。pnpm check 不检查这里，测试由 Node 去掉类型后直接运行。
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": ".."
+  },
+  "include": ["."]
+}

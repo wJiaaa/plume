@@ -1,0 +1,648 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import type { SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
+import { applyDraft, checkDraft, readMagpieServers, type ServerConfig, withValues } from "../src/config.ts";
+import { Connections, type ConnectionsOptions } from "../src/connections.ts";
+import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
+import { missingFor, resolveServer } from "../src/placeholders.ts";
+import { bindArguments, commandSegment, splitArguments } from "../src/prompts.ts";
+import { callTool, deferredSection, findTool, type McpTool, rank } from "../src/search.ts";
+import { mcpResource } from "../src/resources.ts";
+import { mcpResult, normalizeInputSchema, qualifiedToolName, RESULT_CHARS } from "../src/tools.ts";
+import { openServers, sealServers } from "../src/sealed.ts";
+import { looksSecret } from "../src/vars.ts";
+import { OAuthStore } from "../src/oauth.ts";
+
+const FIXTURE = fileURLToPath(new URL("./fixtures/echo-server.mjs", import.meta.url));
+
+/** 服务 `secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把该加密的交给它。 */
+const SEALED = "plume-sealed:v1:";
+const fakeSecrets: SecretsService = {
+	seal: async (value) => SEALED + Buffer.from(value).toString("base64"),
+	unseal: async (sealed) =>
+		sealed.startsWith(`${SEALED}lost`) ? null : sealed.startsWith(SEALED) ? Buffer.from(sealed.slice(SEALED.length), "base64").toString() : null,
+	isSealed: (value) => value.startsWith(SEALED),
+};
+
+test("像密钥的名字按词认，不按子串", () => {
+	for (const name of ["GITHUB_TOKEN", "APIKEY", "Authorization", "X-Api-Key", "DATABASE_URL", "PGPASSWORD"]) assert.equal(looksSecret(name), true, name);
+	for (const name of ["PATH", "API_BASE_URL", "DEBUG", "Accept"]) assert.equal(looksSecret(name), false, name);
+});
+
+test("草稿：逐个字段核对；编辑时没给值的变量留着原来的，换了种类不带过去", () => {
+	assert.equal(checkDraft({ name: " ", transport: "stdio", command: "npx" }), "badName");
+	assert.equal(checkDraft({ name: "a", transport: "stdio", command: "" }), "badCommand");
+	assert.equal(checkDraft({ name: "a", transport: "http", url: "ftp://x" }), "badUrl");
+	assert.equal(checkDraft({ name: "a", transport: "stdio", command: "npx", vars: [{ name: "1BAD" }] }), "badVar");
+	const previous: ServerConfig = {
+		id: "s1",
+		name: "gh",
+		transport: "stdio",
+		command: "npx",
+		env: { GITHUB_TOKEN: "secret-value", DEBUG: "1" },
+		enabled: false,
+	};
+	const draft = checkDraft({
+		name: " gh ",
+		transport: "stdio",
+		command: "npx",
+		args: ["-y", "server"],
+		vars: [{ name: "GITHUB_TOKEN" }, { name: "DEBUG", value: "2" }],
+	});
+	assert.ok(typeof draft === "object");
+	assert.deepEqual(applyDraft(draft, "s1", previous), {
+		id: "s1",
+		name: "gh",
+		enabled: false,
+		transport: "stdio",
+		command: "npx",
+		args: ["-y", "server"],
+		env: { GITHUB_TOKEN: "secret-value", DEBUG: "2" },
+	});
+	const remote = checkDraft({ name: "gh", transport: "http", url: "https://example.com/mcp", vars: [{ name: "GITHUB_TOKEN" }] });
+	assert.ok(typeof remote === "object");
+	assert.deepEqual(applyDraft(remote, "s1", previous), {
+		id: "s1",
+		name: "gh",
+		enabled: false,
+		transport: "http",
+		url: "https://example.com/mcp",
+		headers: { GITHUB_TOKEN: "" },
+	});
+	// 远程服务改地址时，填过的空位值留着；三个开关照草稿来。
+	const http: ServerConfig = {
+		id: "h1",
+		name: "linear",
+		transport: "http",
+		url: "https://a/mcp",
+		headers: { Authorization: "Bearer ${TOKEN}" },
+		env: { TOKEN: "t-1" },
+		enabled: true,
+	};
+	const moved = checkDraft({ name: "linear", transport: "http", url: "https://b/mcp", vars: [{ name: "Authorization" }], pinned: true, perSession: true });
+	assert.ok(typeof moved === "object");
+	assert.deepEqual(applyDraft(moved, "h1", http), {
+		id: "h1",
+		name: "linear",
+		enabled: true,
+		pinned: true,
+		perSession: true,
+		transport: "http",
+		url: "https://b/mcp",
+		headers: { Authorization: "Bearer ${TOKEN}" },
+		env: { TOKEN: "t-1" },
+	});
+	assert.deepEqual(withValues(http, [{ name: "TOKEN", value: "" }]), {
+		id: "h1",
+		name: "linear",
+		transport: "http",
+		url: "https://a/mcp",
+		headers: { Authorization: "Bearer ${TOKEN}" },
+		enabled: true,
+	});
+});
+
+test("Magpie 分发的服务：三种传输照 Claude 格式转换，坏条目和重名跳过，读不懂的文件不转述原文", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-magpie-"));
+	try {
+		const file = join(dir, "mcp.json");
+		const warnings: string[] = [];
+		const log = { warn: (message: string) => void warnings.push(message) };
+		const own: ServerConfig = { id: "mcp-own", name: "GitHub", transport: "stdio", command: "gh-mcp", enabled: true };
+		assert.deepEqual(await readMagpieServers(file, [own], log), []);
+		assert.equal(warnings.length, 0);
+		await writeFile(
+			file,
+			"\uFEFF" +
+				JSON.stringify({
+					mcpServers: {
+						local: { command: "node", args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } },
+						remote: { type: "http", url: "https://example.invalid/mcp", headers: { Authorization: "Bearer ${TOKEN}" } },
+						events: { type: "sse", url: "https://example.invalid/sse", disabled: true },
+						github: { command: "node" },
+						bad: { type: "websocket", url: "wss://example.invalid" },
+						badArgs: { command: "node", args: [42] },
+					},
+				}),
+		);
+		const servers = (await readMagpieServers(file, [own], log)) ?? [];
+		assert.deepEqual(
+			servers.map((server) => [server.id, server.transport, server.enabled, server.managedBy]),
+			[
+				["magpie__local", "stdio", true, "magpie"],
+				["magpie__remote", "http", true, "magpie"],
+				["magpie__events", "sse", false, "magpie"],
+			],
+		);
+		assert.deepEqual(servers[0], { ...servers[0], args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } });
+		assert.equal(servers[1]?.transport !== "stdio" && servers[1]?.headers?.Authorization, "Bearer ${TOKEN}");
+		assert.equal(warnings.length, 3);
+		await writeFile(file, '{"secret":"do-not-log",broken');
+		assert.equal(await readMagpieServers(file, [own], log), null);
+		assert.ok(warnings.every((message) => !message.includes("do-not-log")));
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("空位：先取服务自己的值，再取环境；整个值是空位的不算有值；远程服务的取值处不随请求带走", () => {
+	const stdio: ServerConfig = {
+		id: "s",
+		name: "s",
+		transport: "stdio",
+		command: "${BIN}",
+		args: ["--token=${TOKEN}"],
+		env: { TOKEN: "${TOKEN}", MODE: "x" },
+		enabled: true,
+	};
+	assert.deepEqual(missingFor(stdio, { BIN: "npx" }), ["TOKEN"]);
+	const filled = withValues(stdio, [{ name: "TOKEN", value: "abc" }]);
+	assert.deepEqual(missingFor(filled, { BIN: "npx" }), []);
+	assert.deepEqual(resolveServer(filled, { BIN: "npx" }), { ...filled, command: "npx", args: ["--token=abc"], env: { TOKEN: "abc", MODE: "x" } });
+	const http: ServerConfig = {
+		id: "h",
+		name: "h",
+		transport: "http",
+		url: "https://x/${PATH_PART}",
+		headers: { Authorization: "Bearer ${TOKEN}" },
+		env: { TOKEN: "t" },
+		enabled: true,
+	};
+	assert.deepEqual(resolveServer(http, { PATH_PART: "mcp" }), {
+		id: "h",
+		name: "h",
+		transport: "http",
+		url: "https://x/mcp",
+		headers: { Authorization: "Bearer t" },
+		enabled: true,
+	});
+});
+
+test("prompt 命令：名字折成小写连字符；只有一个参数时整段给它，否则按名字、按位置给，缺必填的报出来", () => {
+	assert.equal(commandSegment("Code Review!"), "code-review");
+	assert.equal(commandSegment("审查"), "");
+	assert.deepEqual(splitArguments(`a "b c" ''`), ["a", "b c", ""]);
+	const one = { arguments: [{ name: "text", required: true }] };
+	assert.deepEqual(bindArguments(one, "整段 话"), { ok: true, args: { text: "整段 话" } });
+	const two = { arguments: [{ name: "repo", required: true }, { name: "focus" }] };
+	assert.deepEqual(bindArguments(two, "focus=tests plume more words"), { ok: true, args: { focus: "tests", repo: "plume more words" } });
+	assert.deepEqual(bindArguments(two, ""), { ok: false, missing: ["repo"] });
+});
+
+function fakeTool(server: string, tool: string, description: string, pinned = false): McpTool {
+	return {
+		name: `mcp__${server}__${tool}`,
+		server: { id: server, name: server },
+		tool,
+		description,
+		parameters: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
+		readOnly: false,
+		pinned,
+		execute: async (args) => ({ output: `ran ${tool} ${JSON.stringify(args)}` }),
+	};
+}
+
+test("按需搜索：工具名里的词最重；mcp_call 按几种写法找到工具，参数缺必填的不调", async () => {
+	const tools = [
+		fakeTool("linear", "create_issue", "Create an issue."),
+		fakeTool("linear", "list_projects", "List projects."),
+		fakeTool("github", "create_pull_request", "Open a pull request about an issue."),
+	];
+	assert.deepEqual(
+		rank(tools, "create issue").map((tool) => tool.name),
+		["mcp__linear__create_issue", "mcp__github__create_pull_request"],
+	);
+	assert.equal(findTool(tools, "linear:create_issue")?.name, "mcp__linear__create_issue");
+	assert.equal(findTool(tools, "list_projects")?.name, "mcp__linear__list_projects");
+	const call = callTool(() => tools);
+	const run = fakeRun([]);
+	assert.deepEqual(await call.execute({ tool: "mcp__linear__create_issue", arguments: '{"title":"x"}' }, run), { output: 'ran create_issue {"title":"x"}' });
+	assert.match((await call.execute({ tool: "mcp__linear__create_issue", arguments: {} }, run)).output, /required arguments are missing \(title\)/);
+	assert.match((await call.execute({ tool: "mcp__linear__nope" }, run)).output, /^No tool named "mcp__linear__nope"\. Closest: /);
+	assert.match(deferredSection(tools), /- MCP server linear \(2 tools\): create_issue, list_projects\n- MCP server github \(1 tools\): create_pull_request$/);
+});
+
+test("工具名：放得下又没改过字的原样，否则截短加哈希，同一个工具每次一样", () => {
+	assert.equal(qualifiedToolName("github", "search_code"), "mcp__github__search_code");
+	const dotted = qualifiedToolName("github", "repo.search");
+	assert.match(dotted, /^mcp__github__repo_search_[0-9a-f]{8}$/);
+	assert.equal(qualifiedToolName("github", "repo.search"), dotted);
+	const long = qualifiedToolName("server", "x".repeat(80));
+	assert.equal(long.length, 64);
+	assert.notEqual(qualifiedToolName("a", "b", new Set(["mcp__a__b"])), "mcp__a__b");
+});
+
+test("参数 Schema 不是 object 的换成任意参数；array 补上 items", () => {
+	assert.deepEqual(normalizeInputSchema(undefined), { type: "object", properties: {}, additionalProperties: true });
+	assert.deepEqual(normalizeInputSchema({ type: "object", properties: { list: { type: "array" } } }), {
+		type: "object",
+		properties: { list: { type: "array", items: {} } },
+	});
+});
+
+test("结果换成文字：结构化结果和正文不重复，音频写一句说明，太长的截掉中间", () => {
+	const text = (response: Parameters<typeof mcpResult>[0]) => mcpResult(response).output;
+	assert.equal(text({ content: [{ type: "text", text: '{"b":1,"a":2}' }], structuredContent: { a: 2, b: 1 } }), '{"b":1,"a":2}');
+	assert.equal(text({ content: [], structuredContent: { a: 1 } }), 'structuredContent: {"a":1}');
+	assert.equal(text({ content: [] }), "(the server returned no content)");
+	assert.equal(
+		text({ content: [{ type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" }] }),
+		"[audio (audio/wav, 1 KiB) omitted: Plume does not pass audio to the model]",
+	);
+	const long = text({ content: [{ type: "text", text: "x".repeat(RESULT_CHARS * 2) }] });
+	assert.equal([...long].length, RESULT_CHARS);
+	assert.match(long, /characters omitted by Plume/);
+});
+
+test("太长的结果全文存进临时目录的 mcp-results/，截短的那份告诉模型去哪读", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-test-"));
+	try {
+		const full = "y".repeat(RESULT_CHARS * 2);
+		const short = mcpResult({ content: [{ type: "text", text: full }] }, dir).output;
+		const [saved] = await readdir(join(dir, "mcp-results"));
+		assert.ok(saved);
+		assert.ok(short.includes(`the full result is saved at ${join(dir, "mcp-results", saved)}`));
+		assert.equal(await readFile(join(dir, "mcp-results", saved), "utf8"), full);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+/** 这么多字节的图，base64。 */
+const imageOf = (bytes: number) => Buffer.alloc(bytes, 7).toString("base64");
+
+test("小图直接交给模型；200 KiB 以上存进临时目录给路径、记在给人看的那份里；超过 5 MB 只说一声", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-test-"));
+	try {
+		const small = imageOf(1023);
+		const inline = mcpResult(
+			{
+				content: [
+					{ type: "text", text: "hi" },
+					{ type: "image", data: small, mimeType: "image/png" },
+				],
+			},
+			dir,
+		);
+		assert.equal(inline.output, "hi");
+		assert.deepEqual(inline.images, [{ data: small, mimeType: "image/png" }]);
+		assert.deepEqual(inline.shown, []);
+		// 只回了一张图也不说「没有内容」。
+		assert.equal(mcpResult({ content: [{ type: "image", data: small, mimeType: "image/png" }] }, dir).output, "");
+
+		const big = imageOf(300 * 1024);
+		const parked = mcpResult({ content: [{ type: "image", data: big, mimeType: "image/jpeg" }] }, dir);
+		assert.deepEqual(parked.images, []);
+		assert.deepEqual(parked.shown, [{ data: big, mimeType: "image/jpeg" }]);
+		const [saved] = await readdir(join(dir, "mcp-images"));
+		assert.ok(saved && saved.endsWith(".jpeg"));
+		const path = join(dir, "mcp-images", saved);
+		assert.equal(
+			parked.output,
+			`[image (image/jpeg, 300 KiB) not attached inline to save context; it is shown to the user and saved at ${path} — \`read\` that path if you need to look at it]`,
+		);
+		assert.deepEqual(await readFile(path), Buffer.from(big, "base64"));
+
+		// 没有临时目录（设置页探测）时不存，照样给人看。
+		const nowhere = mcpResult({ content: [{ type: "image", data: big, mimeType: "image/png" }] });
+		assert.match(nowhere.output, /it is shown to the user\]$/);
+		assert.equal(nowhere.shown.length, 1);
+
+		const huge = mcpResult({ content: [{ type: "image", data: imageOf(6 * 1024 * 1024), mimeType: "image/png" }] }, dir);
+		assert.equal(huge.output, "[image (image/png, 6.0 MB) omitted: over the 5 MB limit]");
+		assert.deepEqual([huge.images, huge.shown], [[], []]);
+
+		// 模型那边不收的格式只说一声。
+		assert.match(mcpResult({ content: [{ type: "image", data: small, mimeType: "image/svg+xml" }] }).output, /only PNG, JPEG, GIF and WebP/);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("嵌入资源里的 image/* 按图的规则，别的二进制写一句说明", () => {
+	const small = imageOf(1023);
+	const image = mcpResult({ content: [{ type: "resource", resource: { uri: "file:///a.png", mimeType: "image/png", blob: small } }] });
+	assert.deepEqual(image.images, [{ data: small, mimeType: "image/png" }]);
+	const binary = mcpResult({ content: [{ type: "resource", resource: { uri: "file:///a.bin", mimeType: "application/zip", blob: small } }] });
+	assert.equal(binary.output, "[resource file:///a.bin (application/zip, 1 KiB) is binary and not shown]");
+	assert.deepEqual(binary.images, []);
+});
+
+function fakeRun(asked: string[], sessionId = "s"): ToolRun {
+	return {
+		sessionId,
+		toolCallId: "call",
+		cwd: "/",
+		scratchDir: join(tmpdir(), "plume-mcp-test-scratch", sessionId),
+		signal: new AbortController().signal,
+		progress() {},
+		async ask(content) {
+			asked.push(content.title);
+			return "once";
+		},
+		permissionMode: async () => "auto",
+		tools: () => [],
+		calls: [],
+	};
+}
+
+async function until(check: () => boolean, ms = 15_000): Promise<void> {
+	const deadline = Date.now() + ms;
+	while (!check()) {
+		if (Date.now() > deadline) throw new Error("等太久了");
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+}
+
+async function withConnections(
+	body: (connections: Connections, tools: Map<string, ToolDefinition>) => Promise<void>,
+	options?: ConnectionsOptions,
+): Promise<void> {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-test-"));
+	const tools = new Map<string, ToolDefinition>();
+	const connections = new Connections(
+		{
+			register(tool) {
+				tools.set(tool.name, tool);
+				return () => void tools.delete(tool.name);
+			},
+			warn() {},
+			dataDir: dir,
+			secrets: fakeSecrets,
+		},
+		options,
+	);
+	try {
+		await body(connections, tools);
+	} finally {
+		await connections.closeAll();
+		await rm(dir, { recursive: true, force: true });
+	}
+}
+
+const ECHO_TOOLS = ["echo", "shout", "pid", "exit", "ask"];
+
+test("连上真的 stdio 服务：登记工具、调用前问人、信任只读后不问、关掉后撤下；起不来时带着 stderr，密钥打码", () =>
+	withConnections(async (connections, tools) => {
+		const server: ServerConfig = {
+			id: "e1",
+			name: "echo",
+			transport: "stdio",
+			command: process.execPath,
+			args: [FIXTURE],
+			env: { ECHO_TOKEN: "sekrit-123" },
+			enabled: true,
+		};
+		connections.sync([server], { retry: false });
+		assert.equal(connections.status(server).state, "connecting");
+		await until(() => connections.status(server).state !== "connecting");
+		assert.equal(connections.status(server).state, "connected", connections.status(server).error);
+		assert.deepEqual(
+			[...tools.keys()],
+			ECHO_TOOLS.map((tool) => `mcp__echo__${tool}`),
+		);
+		assert.equal(tools.get("mcp__echo__echo")?.mutating, false);
+		assert.equal(tools.get("mcp__echo__shout")?.mutating, true);
+
+		const asked: string[] = [];
+		const shout = await tools.get("mcp__echo__shout")?.execute({ text: "hi" }, fakeRun(asked));
+		assert.deepEqual(shout, { output: 'HI\n\nstructuredContent: {"loud":"HI"}', details: { server: "echo", tool: "shout" } });
+		assert.deepEqual(asked, ["echo → shout"]);
+
+		// 改名、信任只读不重连，只重新登记；信任以后只读的工具在「帮我批准」下不再问。
+		const trusted = { ...server, name: "loud", trustReadOnly: true };
+		connections.sync([trusted], { retry: false });
+		assert.deepEqual(
+			[...tools.keys()],
+			ECHO_TOOLS.map((tool) => `mcp__loud__${tool}`),
+		);
+		const echo = await tools.get("mcp__loud__echo")?.execute({ text: "hi" }, fakeRun(asked));
+		assert.equal(echo?.output, "echo: hi");
+		assert.deepEqual(asked, ["echo → shout"]);
+
+		connections.sync([{ ...trusted, enabled: false }], { retry: false });
+		assert.equal(tools.size, 0);
+		assert.equal(connections.status({ ...trusted, enabled: false }).state, "disabled");
+
+		const crashing: ServerConfig = { ...server, id: "e2", env: { ECHO_TOKEN: "sekrit-123", ECHO_CRASH: "1" } };
+		connections.sync([crashing], { retry: false });
+		await until(() => connections.status(crashing).state !== "connecting");
+		const status = connections.status(crashing);
+		assert.equal(status.state, "failed");
+		assert.ok(status.error);
+		assert.equal(status.stderr, "starting with token [secret]");
+	}));
+
+test("断了自己重连，工具留着、调用等它；prompt 能取；每个会话一份的各起一个进程；缺值时不启动，填上就连", () =>
+	withConnections(
+		async (connections, tools) => {
+			const server: ServerConfig = { id: "e1", name: "echo", transport: "stdio", command: process.execPath, args: [FIXTURE], enabled: true };
+			connections.sync([server], { retry: false });
+			await until(() => connections.status(server).state === "connected");
+			assert.equal(await connections.getPrompt("e1", "greet", { name: "Ann" }), "Say hello to Ann.");
+			assert.deepEqual(
+				connections.prompts().map(({ prompts }) => prompts.map((prompt) => prompt.prompt)),
+				[["greet"]],
+			);
+
+			assert.equal((await tools.get("mcp__echo__exit")?.execute({}, fakeRun([])))?.output, "bye");
+			await until(() => connections.status(server).state === "reconnecting");
+			assert.equal(tools.size, ECHO_TOOLS.length);
+			// 重连期间的调用等它连上。
+			assert.equal((await tools.get("mcp__echo__echo")?.execute({ text: "again" }, fakeRun([])))?.output, "echo: again");
+			assert.equal(connections.status(server).state, "connected");
+
+			connections.sync([{ ...server, perSession: true }], { retry: false });
+			const pid = async (session: string) => (await tools.get("mcp__echo__pid")?.execute({}, fakeRun([], session)))?.output;
+			const a = await pid("a");
+			assert.equal(await pid("a"), a);
+			assert.notEqual(await pid("b"), a);
+			connections.closeSession("a");
+			assert.notEqual(await pid("a"), a);
+
+			const keyed: ServerConfig = {
+				id: "e2",
+				name: "keyed",
+				transport: "stdio",
+				command: process.execPath,
+				args: [FIXTURE],
+				env: { ECHO_TOKEN: "${PLUME_MCP_TEST_UNSET}" },
+				enabled: true,
+			};
+			connections.sync([server, keyed], { retry: false });
+			await until(() => connections.status(keyed).state !== "connecting");
+			assert.deepEqual(connections.status(keyed), { state: "missing", tools: [], missing: ["PLUME_MCP_TEST_UNSET"] });
+			connections.sync([server, withValues(keyed, [{ name: "PLUME_MCP_TEST_UNSET", value: "v" }])], { retry: true });
+			await until(() => connections.status(keyed).state !== "connecting");
+			assert.equal(connections.status(keyed).state, "connected");
+		},
+		{ reconnect: { baseMs: 50 } },
+	));
+
+test("资源：mcp:// 列出连着的服务声明的，服务段和工具名一致；带空段的 uri 原样读，文本段拼起来，二进制和不认识的服务报给模型", () =>
+	withConnections(async (connections) => {
+		const server: ServerConfig = { id: "e1", name: "my echo", transport: "stdio", command: process.execPath, args: [FIXTURE], enabled: true };
+		connections.sync([server], { retry: false });
+		await until(() => connections.status(server).state === "connected");
+		const handler = mcpResource(connections);
+		const scope = { sessionId: "s", cwd: "/", scratchDir: "/tmp" };
+		assert.deepEqual(await handler.list?.(scope), [
+			{ value: "mcp://my_echo/file:///var/log/build.log", description: "build log" },
+			{ value: "mcp://my_echo/icon://logo", description: "logo" },
+		]);
+		const address = (path: string) => ({ scheme: "mcp", path, segments: path.split("/").filter(Boolean), raw: `mcp://${path}` });
+		const log = await handler.resolve(address("my_echo/file:///var/log/build.log"), scope);
+		assert.equal(log.content, "step 1 ok\n\nstep 2 failed");
+		assert.equal(log.origin, "MCP 服务器 my_echo");
+		await assert.rejects(handler.resolve(address("my_echo/icon://logo"), scope), /二进制/);
+		await assert.rejects(handler.resolve(address("other/x"), scope), /没有叫“other”的 MCP 服务器/);
+		await assert.rejects(handler.resolve(address("my_echo"), scope), /mcp:\/\/<服务器>\/<资源>/);
+	}));
+
+test("表单：读平铺的 Schema，选项两种写法；嵌套的认不出；提交前按字段核对", () => {
+	const fields = formFields({
+		type: "object",
+		properties: {
+			name: { type: "string", title: "Name", minLength: 2 },
+			size: { type: "string", enum: ["s", "m"], enumNames: ["Small", "Medium"] },
+			tone: { type: "string", oneOf: [{ const: "warm", title: "Warm" }] },
+			mail: { type: "string", format: "email" },
+			count: { type: "integer", minimum: 1 },
+			ok: { type: "boolean", default: true },
+		},
+		required: ["name", "count"],
+	});
+	assert.deepEqual(
+		fields.map((field) => [field.name, field.type, field.required]),
+		[
+			["name", "string", true],
+			["size", "string", false],
+			["tone", "string", false],
+			["mail", "string", false],
+			["count", "integer", true],
+			["ok", "boolean", false],
+		],
+	);
+	assert.deepEqual(fields[1]?.options, [
+		{ value: "s", label: "Small" },
+		{ value: "m", label: "Medium" },
+	]);
+	assert.deepEqual(fields[2]?.options, [{ value: "warm", label: "Warm" }]);
+	assert.throws(() => formFields({ type: "object", properties: { deep: { type: "object" } } }), UnsupportedFormError);
+
+	assert.deepEqual(checkFormValues(fields, { name: "A", size: "x", mail: "nope", count: 1.5 }), {
+		ok: false,
+		problems: { name: "minLength", size: "option", mail: "format", count: "type" },
+	});
+	assert.deepEqual(checkFormValues(fields, { name: "Ann", count: 2, ok: false, extra: "dropped" }), { ok: true, values: { name: "Ann", count: 2, ok: false } });
+	assert.equal(readFormRequest("not json"), null);
+});
+
+test("服务中途要人填表：恰好一个调用在跑时经它问人；回答先交回、对不上的拒收；不给、认不出的表都回给服务", () =>
+	withConnections(async (connections, tools) => {
+		const server: ServerConfig = { id: "e1", name: "echo", transport: "stdio", command: process.execPath, args: [FIXTURE], enabled: true };
+		connections.sync([server], { retry: false });
+		await until(() => connections.status(server).state !== "connecting");
+		assert.equal(connections.status(server).state, "connected", connections.status(server).error);
+
+		const formRun = (reply: (form: string) => "once" | "reject", seen: { kind: string; title: string; userOnly?: boolean }[]): ToolRun => ({
+			...fakeRun([]),
+			async ask(content) {
+				seen.push({ kind: content.kind, title: content.title, ...(content.userOnly ? { userOnly: true } : {}) });
+				if (content.kind !== FORM_KIND) return "once";
+				const request = readFormRequest(content.detail);
+				assert.ok(request);
+				assert.equal(request.message, "Tell me about you");
+				return reply(request.form);
+			},
+		});
+
+		const seen: { kind: string; title: string; userOnly?: boolean }[] = [];
+		const accepted = await tools.get("mcp__echo__ask")?.execute(
+			{ text: "you" },
+			formRun((form) => {
+				assert.equal(connections.forms.answer(form, { action: "accept", values: { name: "Ann", age: "3" } }), "invalid");
+				assert.equal(connections.forms.answer(form, { action: "accept", values: { name: "Ann", age: 3, plan: "pro" } }), undefined);
+				return "once";
+			}, seen),
+		);
+		assert.equal(accepted?.output, JSON.stringify({ action: "accept", content: { name: "Ann", age: 3, plan: "pro" } }));
+		assert.deepEqual(
+			seen.map((one) => one.kind),
+			["mcp", FORM_KIND],
+		);
+		assert.deepEqual(seen[1], { kind: FORM_KIND, title: "echo", userOnly: true });
+		assert.equal(connections.forms.answer("whatever", { action: "cancel" }), "gone");
+
+		const declined = await tools.get("mcp__echo__ask")?.execute(
+			{ text: "you" },
+			formRun((form) => {
+				connections.forms.answer(form, { action: "decline" });
+				return "reject";
+			}, []),
+		);
+		assert.equal(declined?.output, JSON.stringify({ action: "decline" }));
+		// 卡上没交回答就关了（产品的通用卡）：当作没做决定。
+		const closed = await tools.get("mcp__echo__ask")?.execute(
+			{ text: "you" },
+			formRun(() => "reject", []),
+		);
+		assert.equal(closed?.output, JSON.stringify({ action: "cancel" }));
+
+		const bad = await tools.get("mcp__echo__ask")?.execute(
+			{ text: "bad" },
+			formRun(() => assert.fail("认不出的表不该问人"), []),
+		);
+		// 嵌套的表 SDK 在协议这层就拒了（错误码 -32603）；它认得、我们画不出的那些由 `formFields` 拒（InvalidParams）。
+		assert.match(String(bad?.output), /^elicit failed: MCP error/);
+	}));
+
+test("存配置时只留还在的服务的登录：删掉的、撤回的令牌文件一起清掉", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-oauth-"));
+	try {
+		const store = new OAuthStore(dir, fakeSecrets);
+		const server = (id: string): ServerConfig => ({ id, name: id, transport: "http", url: `https://example.invalid/${id}`, enabled: true });
+		for (const id of ["mcp-kept", "mcp-gone", "magpie__withdrawn"])
+			await store.update(server(id) as never, (record) => ({ ...record, tokens: { access_token: id, token_type: "Bearer" } }));
+		const files = await readdir(join(dir, "oauth"));
+		assert.equal(files.length, 3);
+		for (const name of files) assert.ok((await readFile(join(dir, "oauth", name), "utf8")).startsWith(SEALED), "令牌文件整份加密");
+		await store.keepOnly([{ id: "mcp-kept" }]);
+		assert.equal((await readdir(join(dir, "oauth"))).length, 1);
+		assert.equal((await store.read(server("mcp-kept") as never)).tokens?.access_token, "mcp-kept");
+		assert.equal((await store.read(server("mcp-gone") as never)).tokens, undefined);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("写盘时像密钥的值加密，空位、不像密钥的、已经加密的原样；读回来解开，解不开的当成没填", async () => {
+	const servers: ServerConfig[] = [
+		{
+			id: "a",
+			name: "a",
+			enabled: true,
+			transport: "stdio",
+			command: "npx",
+			env: { GITHUB_TOKEN: "ghp_x", DEBUG: "1", API_KEY: "${API_KEY}", PGPASSWORD: "" },
+		},
+		{ id: "b", name: "b", enabled: true, transport: "http", url: "https://x", headers: { Authorization: "Bearer t0k", Accept: "json" }, env: { TOKEN: "abc" } },
+	];
+	const sealed = await sealServers(servers, fakeSecrets);
+	const a = sealed[0]!;
+	const b = sealed[1]!;
+	assert.ok(a.transport === "stdio" && b.transport === "http");
+	assert.ok(fakeSecrets.isSealed(a.env!.GITHUB_TOKEN!));
+	assert.deepEqual({ ...a.env, GITHUB_TOKEN: "" }, { GITHUB_TOKEN: "", DEBUG: "1", API_KEY: "${API_KEY}", PGPASSWORD: "" });
+	assert.ok(fakeSecrets.isSealed(b.headers!.Authorization!) && fakeSecrets.isSealed(b.env!.TOKEN!));
+	assert.equal(b.headers!.Accept, "json");
+	assert.ok(!JSON.stringify(sealed).includes("ghp_x") && !JSON.stringify(sealed).includes("t0k"));
+	assert.deepEqual(await sealServers(sealed, fakeSecrets), sealed, "已经是密文的不再套一层");
+	assert.deepEqual(await openServers(sealed, fakeSecrets), servers);
+	const lost = await openServers([{ ...servers[0]!, env: { GITHUB_TOKEN: `${SEALED}lost`, DEBUG: "1" } } as ServerConfig], fakeSecrets);
+	assert.deepEqual(lost[0]!.transport === "stdio" && lost[0]!.env, { GITHUB_TOKEN: "", DEBUG: "1" });
+});

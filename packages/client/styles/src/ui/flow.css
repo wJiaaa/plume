@@ -1,0 +1,77 @@
+/*
+ * 流水行：一轮对话里的思考、一段工具活，共用的骨架（见 row/FlowRow.tsx）。产品和插件画过程行都用它。
+ *
+ * 高度锁死，不由内容撑：撑出来的高度随字号、图标、有没有尾部装饰而变，同类的行彼此差一两个像素，连着五行就是一条不齐的
+ * 左边缘。按内容宽，装不下才封顶在一整列：撑满一列时挂在行上的提示对着整列居中，字在左边、提示框飘在中间。
+ */
+.plume-flow-row {
+	display: flex;
+	align-items: center;
+	width: fit-content;
+	max-width: 100%;
+	height: 24px;
+	min-width: 0;
+	border-radius: var(--plume-radius-field);
+}
+
+/* 前置槽：只放图标，而且它一直在。 */
+.plume-flow-lead {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	margin-right: 6px;
+}
+
+/* 词和读数之间那个点：一个 2px 的圆点，不是「·」这个字符——字符的大小和基线跟着字体走。 */
+.plume-flow-dot {
+	flex: none;
+	width: 2px;
+	height: 2px;
+	margin: 0 6px;
+	border-radius: 50%;
+	background: currentcolor;
+	opacity: 0.45;
+}
+
+/* 摘要按内容宽，不抢剩下的空间：尾部的「+12 -0」紧跟在那句话后面，行尾留给箭头。装不下时交给 ScrollText。 */
+.plume-flow-summary {
+	min-width: 0;
+	flex: 0 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/*
+ * 尾部附注紧跟摘要。外层的宽度由 FlowTrail 在内容变的时候缓过去；左边那 8px 在里层，没有尾巴时一起是 0。
+ * 横向用 clip 而不是 hidden：hidden 会把纵向一起裁掉，弹出来的记号会被削一截。
+ */
+.plume-flow-trail {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	overflow-x: clip;
+	white-space: nowrap;
+	transition: width var(--plume-t-slow) var(--plume-e-out);
+}
+
+.plume-flow-trail-in {
+	display: inline-flex;
+	align-items: center;
+	padding-left: 8px;
+}
+
+/* 展开箭头：紧跟在字后面，打开时转 90°。 */
+.plume-flow-chevron {
+	flex: none;
+	margin-left: 6px;
+	opacity: 0.8;
+	transition: transform var(--plume-t-base) var(--plume-e-out);
+}
+
+.plume-flow-row[data-open] .plume-flow-chevron {
+	transform: rotate(90deg);
+}

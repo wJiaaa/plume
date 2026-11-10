@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // 这个包的代码不是按这一项写的；保持原样，不为编译选项改代码。
+    "noUncheckedIndexedAccess": false,
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    // 给使用方的类型声明：使用方按声明做类型检查，不会用它们更严的选项去检查这里的源码。
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  // 只检查源码；测试由 Node 去掉类型后直接运行，里面的夹具故意只写用得到的字段。
+  "include": ["src"]
+}

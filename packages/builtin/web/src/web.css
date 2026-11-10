@@ -1,0 +1,162 @@
+/* plume.web 设置分区的布局。文字交给 Text，这里只管排版和颜色。 */
+
+.web-intro {
+	max-width: 600px;
+	margin: 0 0 28px;
+}
+
+.web-card {
+	margin-bottom: 36px;
+}
+
+/* 「用哪一个」的一条：整条是一个按钮，圈和文字并排。 */
+.web-choice {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color var(--plume-t-quick);
+}
+
+.web-choice + .web-choice {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.web-choice:hover {
+	background: var(--plume-card-hover);
+}
+
+/* 单选圈：18px 见方，圆角取最大的那档 token，比边长的一半大就是圆。 */
+.web-radio {
+	display: flex;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-panel);
+	transition:
+		border-color var(--plume-t-quick),
+		background-color var(--plume-t-quick);
+}
+
+/* 没选中的圈在悬停底色上重一档：line 和 card-hover 太接近，指过去圈会化进底色里。 */
+.web-choice:hover .web-radio:not([data-on]) {
+	border-color: var(--plume-ink-faint);
+}
+
+.web-radio[data-on] {
+	border-color: var(--plume-accent);
+	background: var(--plume-accent);
+	color: var(--plume-shell);
+}
+
+.web-choice-body {
+	min-width: 0;
+	flex: 1;
+}
+
+.web-choice-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.web-choice-detail {
+	display: block;
+	margin-top: 4px;
+}
+
+.web-ok {
+	color: var(--plume-ok);
+}
+
+/* 「API key」的一行：名字和申请链接在上，输入框在下。 */
+.web-key-row {
+	padding: 14px 16px;
+}
+
+.web-key-row + .web-key-row {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.web-key-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.web-signup {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	transition: color var(--plume-t-quick);
+}
+
+.web-signup:hover {
+	color: var(--plume-ink);
+}
+
+.web-key-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 外框是产品的 plume-field（设置卡片里换成透明底加细线）；输入框和眼睛按钮在同一条 flex 里，长 key 的圆点不会盖住它。 */
+.web-key-field {
+	min-width: 0;
+	flex: 1;
+	gap: 6px;
+}
+
+.web-key-input {
+	height: 100%;
+	min-width: 0;
+	flex: 1;
+	border: 0;
+	outline: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.web-key-input::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+.web-key-eye {
+	margin-right: -6px;
+}
+
+/* 页脚的信任说明。 */
+.web-trust {
+	display: flex;
+	max-width: 600px;
+	align-items: flex-start;
+	gap: 8px;
+	padding-bottom: 32px;
+	color: var(--plume-ink-faint);
+}
+
+.web-trust > svg {
+	flex-shrink: 0;
+	margin-top: 3px;
+}
+
+.web-trust > p {
+	margin: 0;
+}

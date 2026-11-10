@@ -1,0 +1,22 @@
+node_modules/
+out/
+dist/
+# 插件 SDK 生成类型声明时的临时目录，生成完改名成 dist/（packages/sdk/plugin-sdk/scripts/build-types.mjs）
+.dist-*/
+*.tsbuildinfo
+.DS_Store
+.smoke/
+# pnpm dev 在本机起的插件市场（scripts/dev.mjs）
+/.market/
+/model.json
+# 打包：随应用发的插件目录和 SDK（apps/desktop/scripts/stage-resources.mjs）、安装包
+apps/desktop/.stage/
+# 随包带的 ripgrep（apps/desktop/scripts/fetch-ripgrep.mjs）
+apps/desktop/vendor/
+# 技能插件随包带的 plume-plugin 技能：构建插件时从 skills/plume-plugin 复制（scripts/build-plugins.mjs）
+packages/builtin/skills/skills/
+apps/desktop/release/
+# 工具评测每次运行写下的结果（test/tool-eval/run.ts 等）
+test/tool-eval/results/
+# 本地笔记，不进仓库
+/notes/

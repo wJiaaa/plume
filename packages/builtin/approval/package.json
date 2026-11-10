@@ -1,0 +1,21 @@
+{
+  "name": "@plume/approval",
+  "version": "0.1.0",
+  "description": "自动审核：「帮我批准」档下判断一次操作危不危险，危险的才问人（删除、改写 git 历史、提权、下载并执行、碰项目外和密钥文件……）。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "自动审核"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plume/platform": "workspace:*",
+    "@plume/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "vitest": "^5.1.0"
+  }
+}

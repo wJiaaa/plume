@@ -1,0 +1,63 @@
+# Git 钩子：让检查不再是「记得的时候跑一下」。
+#
+# 分工是有意的：pre-commit 只碰暂存的文件和一秒内跑完的检查，快到没人想去 `--no-verify`；pre-push 跑全量，
+# 那是错误还便宜的最后一刻（仓库没有 CI 在后面兜着）。
+#
+# `pnpm install` 时由根目录的 `prepare` 装上（`lefthook install`）。要临时跳过：LEFTHOOK=0 git commit …
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format-and-lint
+      # 先排版再 lint：两个都会改文件，并行跑会互相覆盖。排除哪些文件见 .oxfmtrc.json 的 ignorePatterns，
+      # 暂存的全是被排除的文件（Markdown、lockfile）时 oxfmt 什么也不做，不算失败。
+      # 修完都过一遍 check-only-commit.mjs：`git commit -- <路径>` 时自动修的进不了暂存区，修过了就拦下让人再提交一次。
+      group:
+        piped: true
+        jobs:
+          - name: format
+            glob: "*.{ts,tsx,mts,cts,mjs,cjs,js,jsx,json,jsonc,css,yml,yaml}"
+            run: ./node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files} && node scripts/check-only-commit.mjs {staged_files}
+            stage_fixed: true
+
+          - name: lint
+            glob: "*.{ts,tsx,mts,cts,mjs,js,jsx}"
+            run: ./node_modules/.bin/oxlint --deny-warnings --fix {staged_files} && node scripts/check-only-commit.mjs {staged_files}
+            stage_fixed: true
+
+    - name: whitespace
+      # 行尾空格和冲突标记，直接问 git。
+      run: git diff --cached --check
+
+    - name: styles
+      # 样式规则查的是整个产品和插件的类名、token，全量跑一遍不到一秒，比按文件判断简单。
+      glob: "*.{ts,tsx,css}"
+      run: node scripts/check-styles.mjs
+
+    - name: i18n
+      glob: "*.{ts,tsx,mjs}"
+      run: node scripts/check-i18n.mjs && node scripts/check-i18n-unused.mjs
+
+    - name: plugins
+      # 插件只引用公开接口；skill 跟得上插件接口。改插件、宿主接口或 skill 时都可能打破它。
+      glob: "{packages/builtin/**,packages/contract/**,packages/client/**,skills/**}"
+      run: node scripts/check-plugins.mjs
+
+    - name: links
+      # 改名、挪走一个文件，指向它的链接在别的 Markdown 里；所以任何文件变了都全量查一遍。
+      run: node scripts/check-links.mjs
+
+# 提交信息的格式，见 spec/tech/commits.md。这是信息还能不经 rebase 就改的唯一时刻。
+commit-msg:
+  jobs:
+    - name: commit-msg
+      run: node scripts/check-commit-msg.mjs {1}
+
+pre-push:
+  jobs:
+    - name: check
+      # 类型检查、lint、格式、测试、样式、文案、插件、链接、依赖方向。
+      run: pnpm check
+
+    - name: knip
+      run: pnpm knip

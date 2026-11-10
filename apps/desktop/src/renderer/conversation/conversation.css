@@ -1,0 +1,43 @@
+/*
+ * 转录里工具类写不清的那几样：用户气泡里的 Markdown、折起来的长消息、问题导航的悬停预览。取值只用 token。
+ */
+
+@layer components {
+	/* 气泡里的 Markdown 跟气泡的行高走，不用回复正文那副舒展的行距和字距：一句短话在气泡里不该比旁边的回复松。 */
+	.plume-user-bubble .markdown {
+		font-size: inherit;
+		line-height: inherit;
+		letter-spacing: 0;
+	}
+
+	/* 折起来的长消息：露出几行由 `BubbleText` 给，最后三行化开，告诉人底下还有。遮罩只看透明度，颜色写 black。 */
+	.plume-bubble-fold[data-folded] {
+		overflow: hidden;
+		mask-image: linear-gradient(to bottom, black calc(100% - 3lh), transparent);
+	}
+
+	/* 问题导航的预览：指上去从左边滑出来一点，点了就当场收，不演退场。 */
+	.plume-question-preview {
+		opacity: 0;
+		transform: translate(-4px, var(--plume-preview-y, 0));
+		transition:
+			opacity var(--plume-t-quick) var(--plume-e-out),
+			transform var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.plume-question-preview[data-open="true"] {
+		opacity: 1;
+		transform: translate(0, var(--plume-preview-y, 0));
+	}
+
+	@starting-style {
+		.plume-question-preview[data-open="true"] {
+			opacity: 0;
+			transform: translate(-4px, var(--plume-preview-y, 0));
+		}
+	}
+
+	.plume-question-preview[data-dismissed="true"] {
+		transition: none;
+	}
+}

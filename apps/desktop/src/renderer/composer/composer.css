@@ -1,0 +1,395 @@
+/*
+ * 主输入框：卡片外的边距、底色、工具栏和发送按钮，以及输入框里 Markdown 的样子。取值只用 token。
+ */
+
+@layer components {
+	@keyframes plume-draft-chip-in {
+		from {
+			opacity: 0;
+			clip-path: inset(0 0 100% 0);
+			transform: translateY(-12px);
+		}
+		to {
+			opacity: 1;
+			clip-path: inset(0 0 0 0);
+			transform: translateY(0);
+		}
+	}
+
+	.plume-draft-chip {
+		border-color: color-mix(in srgb, var(--plume-ink) 10%, transparent);
+		background: transparent;
+		transition:
+			border-color var(--plume-t-quick),
+			background-color var(--plume-t-quick);
+		animation: plume-draft-chip-in var(--plume-t-reveal) var(--plume-e-out) both;
+	}
+
+	.plume-draft-chip:hover {
+		border-color: color-mix(in srgb, var(--plume-ink) 15%, transparent);
+		background: color-mix(in srgb, var(--plume-float) 50%, transparent);
+	}
+
+	/* 四个建议以四分之一段展开时长错开，不同时抢输入框的注意力。 */
+	.plume-draft-chip:nth-child(2) {
+		animation-delay: calc(var(--plume-t-reveal) / 4);
+	}
+	.plume-draft-chip:nth-child(3) {
+		animation-delay: calc(var(--plume-t-reveal) / 2);
+	}
+	.plume-draft-chip:nth-child(4) {
+		animation-delay: calc(var(--plume-t-reveal) * 3 / 4);
+	}
+
+	/*
+	 * 欢迎页的插图是黑发黑衣，深色底上轮廓会和背景糊成一片，所以深色下沿边缘补一圈很淡的亮边；浅色底本身分得开，不加。
+	 */
+	@media (prefers-color-scheme: dark) {
+		.plume-welcome-mark {
+			filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--plume-ink) 35%, transparent));
+		}
+	}
+
+	@keyframes plume-composer-arrive {
+		from {
+			opacity: 0;
+			transform: translateY(16px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	.plume-composer-arrive {
+		animation: plume-composer-arrive var(--plume-t-base) var(--plume-e-out);
+	}
+
+	/*
+	 * 输入框离对话区左右和下沿是同一个数，卡片和上面的消息共用一条边。下沿减掉对话卡片离窗口那一截，
+	 * 输入框的底边才落在窗口的同一条线上。
+	 */
+	.plume-composer-dock {
+		padding: 0 var(--plume-composer-out) calc(var(--plume-composer-out) - var(--plume-pane-chrome));
+	}
+
+	.plume-composer-dock[data-center] {
+		padding: 0;
+	}
+
+	.plume-composer-dock[data-compact] {
+		padding-inline: var(--plume-composer-x);
+	}
+
+	.plume-composer-tray {
+		border-radius: var(--radius-2xl);
+		background: color-mix(in srgb, var(--plume-ink) 3%, transparent);
+		box-shadow: var(--plume-shadow-rest);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.plume-composer-tray {
+			background: color-mix(in srgb, var(--plume-ink) 5%, transparent);
+		}
+	}
+
+	.plume-composer-bar {
+		padding: 0 var(--plume-composer-x) var(--plume-composer-in);
+	}
+
+	.plume-composer-hint {
+		padding: var(--plume-composer-in) var(--plume-composer-x) 0;
+	}
+
+	/*
+	 * 排队条：一行收起、展开走 grid-template-rows，行与行之间没有间距，卡片跟着一起矮下去。
+	 * 卡片和输入框之间那道缝跟行走同一条曲线：进场 e-out，收起 e-in，合起来才是输入框上方这一块长高的量。
+	 * 描边用 outline：border 占布局，0→1px 画不出中间态，只在最后一帧跳出来。
+	 */
+	.plume-composer-queue {
+		margin-bottom: var(--plume-composer-in);
+		outline: 1px solid var(--plume-line-soft);
+		outline-offset: -1px;
+		contain: layout style;
+		transition:
+			margin-bottom var(--plume-t-base) var(--plume-e-out),
+			outline-color var(--plume-t-base) var(--plume-e-out);
+	}
+
+	.plume-composer-queue[data-empty] {
+		margin-bottom: 0;
+		outline-color: transparent;
+		transition:
+			margin-bottom var(--plume-t-base) var(--plume-e-in),
+			outline-color var(--plume-t-quick) var(--plume-e-in);
+	}
+
+	@starting-style {
+		.plume-composer-queue {
+			margin-bottom: 0;
+			outline-color: transparent;
+		}
+	}
+
+	@keyframes plume-queue-in {
+		from {
+			grid-template-rows: 0fr;
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			grid-template-rows: 1fr;
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	.plume-queue-row {
+		display: grid;
+		grid-template-rows: 1fr;
+		/* 让位的那几条走这条；被拖着的那一条在下面关掉。 */
+		transition: transform var(--plume-t-base) var(--plume-e-out);
+	}
+
+	/* 只在刚挂上时播，播完由 `QueuedMessages` 摘掉。 */
+	.plume-queue-row[data-entering] {
+		animation: plume-queue-in var(--plume-t-base) var(--plume-e-out);
+	}
+
+	.plume-queue-row > * {
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	/* 人拿走的那一条收起来而不是消失。`animation: none`：刚进来就被撤掉时，入场和收起不撞在一起。 */
+	.plume-queue-row[data-leaving] {
+		grid-template-rows: 0fr;
+		opacity: 0;
+		animation: none;
+		transition:
+			grid-template-rows var(--plume-t-base) var(--plume-e-in),
+			opacity var(--plume-t-quick) var(--plume-e-in);
+	}
+
+	/* 编辑退回输入框的那一条往下落一点，说它是落进了下面的框。 */
+	.plume-queue-row[data-leaving][data-recalled] {
+		transform: translateY(6px);
+		transition:
+			grid-template-rows var(--plume-t-base) var(--plume-e-in),
+			opacity var(--plume-t-quick) var(--plume-e-in),
+			transform var(--plume-t-base) var(--plume-e-out);
+	}
+
+	/* 被拖着的那一条紧跟指针，不补间；换位落定的那一帧也不补间，见 `QueuedMessages` 的 settling。 */
+	.plume-queue-row[data-dragging],
+	.plume-queue-row[data-settling] {
+		transition: none;
+	}
+
+	.plume-queue-row[data-dragging] {
+		position: relative;
+		z-index: 1;
+		cursor: grabbing;
+	}
+
+	.plume-queue-row[data-dragging] [data-queue-grip] {
+		cursor: grabbing;
+	}
+
+	/* 发送、停止两枚图标叠在同一格里直接换，不淡入也不缩放。 */
+	.plume-send-icon {
+		position: absolute;
+		display: grid;
+		place-items: center;
+		opacity: 0;
+	}
+
+	.plume-send-icon[data-active="true"] {
+		opacity: 1;
+	}
+}
+
+/*
+ * 这一排为放下模型名让出的部分（`composer/fit.ts`）：级别是量出来的，各部分自己标在第几级让。写在这里而不是组件里的条件类名：
+ * 标的部分在输入框、插件里，量在 `ComposerShell`。`display: none` 而不是隐藏或透明：要的是宽度，占着位置的隐藏什么都还不回来。
+ * 不进 @layer：标了可让的元素自己带着 `flex` 这类工具类，工具类那一层排在 components 后面，写在层里的 `display: none` 永远输给它。
+ */
+.plume-composer-bar[data-plume-fit="1"] [data-plume-fit-drop="1"],
+.plume-composer-bar[data-plume-fit="2"] [data-plume-fit-drop="1"],
+.plume-composer-bar[data-plume-fit="2"] [data-plume-fit-drop="2"] {
+	display: none;
+}
+
+/* 覆盖共享卡片的不分层阴影：只让托盘投影，避免两层之间出现暗缝。 */
+.plume-composer-tray .plume-composer {
+	box-shadow: none;
+}
+
+/*
+ * 以下是输入框里的编辑器（CodeMirror），故意不进 @layer。
+ *
+ * CodeMirror 的默认样式（等宽字体、内边距、聚焦虚线框、黑色光标）是运行时插进页面的，不在任何 layer 里；
+ * 层里的规则不论选择器多具体都输给不分层的，写进 @layer 一条也盖不掉它。所以这一段不分层，选择器都比它的
+ * （`.ͼ1 .cm-line` 这样两级）多一级。只管 `.plume-composer-field` 里面，碰不到别的界面。
+ */
+
+.plume-composer-field .cm-editor {
+	/* 到八行（160px 的字）或窗口的三分之一为止，再多就在框里滚。 */
+	max-height: min(calc(160px + var(--plume-composer-in) * 2), 34vh);
+	font-size: var(--text-label);
+	color: var(--plume-ink);
+}
+
+.plume-composer-field .cm-editor.cm-focused {
+	outline: none;
+}
+
+.plume-composer-field .cm-editor .cm-scroller {
+	overflow-y: auto;
+	font-family: inherit;
+	line-height: 20px;
+}
+
+.plume-composer-field .cm-editor .cm-content {
+	/* 空框两行高：40px 的字加上下内衬。 */
+	min-height: calc(40px + var(--plume-composer-in) * 2);
+	padding: var(--plume-composer-in) 0;
+	caret-color: var(--plume-ink);
+}
+
+.plume-composer-field .cm-editor .cm-line {
+	padding: 0 var(--plume-composer-x);
+}
+
+.plume-composer-field .cm-editor .cm-placeholder {
+	color: var(--plume-ink-faint);
+}
+
+/*
+ * 输入框里的 Markdown，和回复正文同一套比例：标题只比正文大 4px、2px，再往下只靠字重分；加粗是 medium。
+ * 这是一块打字的地方，不是排版页面，所以不加段间距，行与行仍然是打字时的样子。
+ */
+.plume-composer-field .cm-line.plume-md-h1,
+.plume-composer-field .cm-line.plume-md-h2,
+.plume-composer-field .cm-line.plume-md-h3 {
+	font-weight: 600;
+	line-height: var(--text-title--line-height);
+}
+
+.plume-composer-field .cm-line.plume-md-h1 {
+	font-size: calc(var(--text-label) + 4px);
+}
+
+.plume-composer-field .cm-line.plume-md-h2 {
+	font-size: calc(var(--text-label) + 2px);
+}
+
+.plume-composer-field .plume-md-strong {
+	font-weight: 500;
+}
+
+.plume-composer-field .plume-md-em {
+	font-style: italic;
+}
+
+.plume-composer-field .plume-md-del {
+	text-decoration: line-through;
+	color: var(--plume-ink-muted);
+}
+
+.plume-composer-field .plume-md-link {
+	color: var(--plume-accent);
+	font-weight: 500;
+}
+
+/* 露出来的标记符号、围栏的 ```、列表的点和编号：在，但退到字后面。 */
+.plume-composer-field .plume-md-syntax,
+.plume-composer-field .plume-md-bullet {
+	color: var(--plume-ink-faint);
+}
+
+/* 行内代码：底色只包住字，不加描边，不会把这一行顶高。 */
+.plume-composer-field .plume-md-code {
+	font-family: var(--plume-font-mono);
+	font-size: var(--text-code);
+	background: var(--plume-card-hover);
+	border-radius: var(--plume-radius-item);
+	padding: 1.5px 5px;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+}
+
+/*
+ * 围栏代码块：每一行铺同一块底，连起来是一块，首尾两行收圆角。行左右各缩进 8px，
+ * 底色不贴卡片边，字仍和上下的正文对齐。
+ */
+.plume-composer-field .cm-line.plume-md-codeblock {
+	margin: 0 calc(var(--plume-composer-x) - 8px);
+	padding: 0 8px;
+	font-family: var(--plume-font-mono);
+	font-size: var(--text-code);
+	background: var(--plume-card);
+}
+
+.plume-composer-field .cm-line.plume-md-codeblock-first {
+	border-top-left-radius: var(--plume-radius-item);
+	border-top-right-radius: var(--plume-radius-item);
+}
+
+.plume-composer-field .cm-line.plume-md-codeblock-last {
+	border-bottom-left-radius: var(--plume-radius-item);
+	border-bottom-right-radius: var(--plume-radius-item);
+}
+
+/* 引用：左边一道 2px 的线，字淡一档，字的起点比正文往里 12px。 */
+.plume-composer-field .cm-line.plume-md-quote {
+	margin-left: var(--plume-composer-x);
+	padding-left: 12px;
+	border-left: 2px solid var(--plume-line);
+	color: var(--plume-ink-muted);
+}
+
+/*
+ * 行首认得出的 `/命令`：强调色的字垫一层很淡的强调色底。不加内边距：字在编辑器里原地排，加了就和光标错开。
+ * 转录里人敲的 `/compact` 那只气泡也这样画：它是一条没发给模型的命令。
+ */
+.plume-composer-field .plume-command-token,
+.plume-user-bubble .plume-command-token {
+	color: var(--plume-accent);
+	background: color-mix(in srgb, var(--plume-accent) 9%, transparent);
+	border-radius: var(--radius-sm);
+	box-decoration-break: clone;
+}
+
+/* 参数提示：灰字绝对定位在命令后面，提示再长也不会让输入框多出一行，超出的部分由输入框裁掉。 */
+.plume-composer-field .plume-command-hint {
+	position: absolute;
+	white-space: nowrap;
+	color: var(--plume-ink-faint);
+	pointer-events: none;
+}
+
+/* 菜单收起时留着上一帧的条目，只是看不见，下次打开不从空白长出来。 */
+.plume-command-menu {
+	visibility: hidden;
+}
+
+.plume-command-menu[data-open="true"] {
+	visibility: visible;
+}
+
+/* 用键盘选中的那一行，说明长了也自己滚起来读完：焦点一直在输入框里，悬停规则管不到它。 */
+.plume-command-option[aria-selected="true"] .plume-marquee-track {
+	animation: plume-marquee var(--plume-scroll, 8s) linear 300ms infinite;
+}
+
+.plume-command-option[aria-selected="true"] .plume-fade-edge {
+	--plume-fade-left: 13px;
+}
+
+/* 引用里的 @ 换成智能体的脸，正文和光标仍由编辑器排版。 */
+.plume-mention-face {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	margin-right: 2px;
+}

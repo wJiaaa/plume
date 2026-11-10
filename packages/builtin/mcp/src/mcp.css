@@ -1,0 +1,474 @@
+/* 「扩展 › 连接器」的布局。字交给 Text，颜色只取 var(--plume-*)。 */
+
+/* 分类标签下面那一行，靠右：搜索、刷新、添加。 */
+.mcp-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+}
+
+.mcp-search {
+	width: 240px;
+	margin-right: 4px;
+}
+
+.mcp-problem {
+	padding: 12px 14px;
+	margin-top: 16px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
+}
+
+.mcp-input {
+	width: 100%;
+	height: 32px;
+	padding: 0 10px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-input);
+	color: var(--plume-ink);
+	outline: none;
+}
+
+.mcp-input[aria-invalid="true"] {
+	border-color: var(--plume-danger);
+}
+
+.mcp-mono {
+	font-family: var(--plume-font-mono);
+}
+
+.mcp-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	margin-top: 20px;
+	padding: 48px 24px;
+	border: 1px dashed var(--plume-line-soft);
+	border-radius: var(--plume-radius-panel);
+	text-align: center;
+}
+
+/* 和「插件」那一类的卡片同一套：一列起，「扩展」那一栏够宽时两列、三列。 */
+.mcp-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+	gap: 12px;
+	padding-top: 20px;
+}
+
+@container (min-width: 42rem) {
+	.mcp-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@container (min-width: 64rem) {
+	.mcp-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+.mcp-card {
+	min-width: 0;
+	border: 1px solid color-mix(in srgb, var(--plume-line-soft) 70%, transparent);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		border-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.mcp-card:hover,
+.mcp-card:focus-within {
+	border-color: var(--plume-line-soft);
+	background: color-mix(in srgb, var(--plume-card-hover) 60%, transparent);
+}
+
+/* 有事要人做、或点开了工具和编辑：占满一行。 */
+.mcp-card[data-wide] {
+	grid-column: 1 / -1;
+}
+
+.mcp-card-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+}
+
+.mcp-mark {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
+	background: linear-gradient(to bottom, var(--plume-card), color-mix(in srgb, var(--plume-card) 40%, transparent));
+	color: var(--plume-ink-faint);
+}
+
+/* 关着的淡一档：一眼分得出哪些在用。 */
+.mcp-card[data-off] .mcp-mark,
+.mcp-card[data-off] .mcp-card-body {
+	opacity: 0.55;
+}
+
+.mcp-card-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.mcp-card-body > :first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcp-state {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.mcp-dot {
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-line);
+}
+
+.mcp-dot[data-tone="ok"] {
+	background: var(--plume-ok);
+}
+
+.mcp-dot[data-tone="danger"] {
+	background: var(--plume-danger);
+}
+
+.mcp-dot[data-tone="busy"] {
+	background: var(--plume-accent);
+}
+
+.mcp-tone {
+	color: var(--plume-ink-faint);
+}
+
+.mcp-tone[data-tone="ok"] {
+	color: var(--plume-ok);
+}
+
+.mcp-tone[data-tone="danger"] {
+	color: var(--plume-danger);
+}
+
+/* 「N 个工具」本身就是工具列表的开关。 */
+.mcp-tools-toggle {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	text-underline-offset: 2px;
+}
+
+.mcp-tools-toggle:hover,
+.mcp-tools-toggle[aria-expanded="true"] {
+	text-decoration: underline;
+}
+
+.mcp-card-side {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+}
+
+/* 编辑按钮悬停、聚焦或展开着时才出现：头上那一行读的是名字和状态。 */
+.mcp-reveal {
+	opacity: 0;
+	transition: opacity var(--plume-t-quick);
+}
+
+.mcp-card-head:hover .mcp-reveal,
+.mcp-card-head:focus-within .mcp-reveal,
+.mcp-reveal[data-open="true"] {
+	opacity: 1;
+}
+
+/* 卡片头下面的一段：连不上的原因、缺的值、登录。 */
+.mcp-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 14px;
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.mcp-trouble-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.mcp-trouble-error {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.mcp-stderr {
+	display: block;
+	max-height: 160px;
+	padding: 8px 10px;
+	margin-top: 4px;
+	overflow: auto;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card-hover);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.mcp-tools {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 14px 12px;
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.mcp-tool {
+	overflow-wrap: anywhere;
+}
+
+.mcp-form {
+	display: grid;
+	gap: 16px;
+}
+
+.mcp-fit {
+	width: fit-content;
+}
+
+.mcp-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.mcp-field-label {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.mcp-pair {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: start;
+	gap: 12px;
+}
+
+.mcp-vars {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.mcp-var {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mcp-var-name {
+	flex-shrink: 0;
+	width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcp-var-value {
+	flex: 1;
+	min-width: 0;
+}
+
+.mcp-switch {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.mcp-switch-text {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.mcp-spacer {
+	flex: 1;
+}
+
+/* 卡片里就地编辑的那一块。 */
+.mcp-editor {
+	display: grid;
+	gap: 16px;
+	padding: 14px 14px 16px;
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+/* 套在编辑块外面、只用来整块禁用（Magpie 分发的服务）：去掉 fieldset 自带的边框、内外边距和最小宽度。 */
+.mcp-editor-lock {
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+
+/* 服务中途要人填的表：和产品的审批卡同一块玻璃，压在输入框正上方。 */
+.mcp-form-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	max-height: min(560px, calc(100dvh - 14rem));
+	overflow: hidden;
+	padding: 14px 16px 12px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-float) 92%, transparent);
+	box-shadow: var(--plume-shadow-glass);
+	backdrop-filter: blur(40px) saturate(1.6);
+}
+
+/* 标题一行，右边是倒计时和后面还排着几张。 */
+.mcp-form-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+.mcp-form-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcp-form-scroll {
+	min-height: 0;
+	max-height: min(360px, 40dvh);
+	margin: 0 -8px;
+}
+
+.mcp-form-body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 8px;
+}
+
+.mcp-form-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	margin: 6px 0 0;
+	padding: 0;
+	border: 0;
+}
+
+.mcp-form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.mcp-form-legend {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 2px;
+	padding: 0;
+}
+
+.mcp-form-label {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.mcp-choice {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: var(--plume-radius-item);
+	cursor: pointer;
+}
+
+.mcp-choice:hover,
+.mcp-choice[data-on="true"] {
+	background: var(--plume-card-hover);
+}
+
+.mcp-choice > [data-plume-choice] {
+	margin-top: 2px;
+}
+
+.mcp-choice-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	overflow-wrap: anywhere;
+}
+
+/* 原生的勾选框只留给键盘和读屏，样子由 ChoiceMark 画。 */
+.mcp-hidden-input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.mcp-form-actions {
+	display: flex;
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.mcp-documents {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.mcp-document-preview {
+	display: flex;
+	flex-direction: column;
+	height: 420px;
+	min-width: 0;
+	overflow: hidden;
+}

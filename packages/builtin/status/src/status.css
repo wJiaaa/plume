@@ -1,0 +1,171 @@
+/*
+ * 上下文用量那一格：圆环按钮和点开的读数。插件单独构建，产品的 Tailwind 扫不到这里的类名，
+ * 所以写成样式表，由 ui.tsx 挂到页面上。文字的字号、行高由 @plume/ui 的 Text 出，取值只用 token。
+ */
+
+/*
+ * 悬停不铺底色，和旁边的按钮不同：圆环是读数，card-hover 的底和轨道几乎一个颜色，铺上去占比就看不清了。
+ * 改成提亮圆环本身，一样说明「这能点」。尺寸跟着输入框工具栏的控件边长（plume-composer-control / icon）。
+ */
+.status-ring {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--plume-radius-field);
+	opacity: 0.8;
+	transition: opacity var(--plume-t-quick);
+}
+
+.status-ring:hover,
+.status-ring[aria-expanded="true"] {
+	opacity: 1;
+}
+
+/* 轨道比转圈的那个重：这个不动，读数低时弧只有几个像素，轨道太淡整个控件就融进输入框了。 */
+.status-ring-track {
+	color: var(--plume-line);
+}
+
+.status-ring-fill {
+	color: var(--plume-accent);
+}
+
+.status-ring-fill[data-tight] {
+	color: var(--plume-danger);
+}
+
+.status-card {
+	padding: 12px 14px;
+}
+
+.status-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.status-bar {
+	display: flex;
+	height: 5px;
+	margin-top: 8px;
+	overflow: hidden;
+	/* 比条高，浏览器按高度收成胶囊。 */
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-line);
+}
+
+.status-bar-fill {
+	height: 100%;
+}
+
+/* 接近上限的提醒：另起一段，上面一道细线隔开。 */
+.status-section {
+	margin-top: 10px;
+	padding-top: 8px;
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.status-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 10px;
+}
+
+.status-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 4px;
+}
+
+.status-swatch {
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	background: var(--plume-line);
+}
+
+/* 已用的各段：同一个强调色，按大小一档比一档浅（1 - 0.16 × 第几段，最浅 24%）。 */
+.status-card [data-shade="0"] {
+	background: var(--plume-accent);
+}
+
+.status-card [data-shade="1"] {
+	background: color-mix(in srgb, var(--plume-accent) 84%, transparent);
+}
+
+.status-card [data-shade="2"] {
+	background: color-mix(in srgb, var(--plume-accent) 68%, transparent);
+}
+
+.status-card [data-shade="3"] {
+	background: color-mix(in srgb, var(--plume-accent) 52%, transparent);
+}
+
+.status-card [data-shade="4"] {
+	background: color-mix(in srgb, var(--plume-accent) 36%, transparent);
+}
+
+.status-card [data-shade="5"] {
+	background: color-mix(in srgb, var(--plume-accent) 24%, transparent);
+}
+
+.status-swatch[data-tight],
+.status-bar-fill[data-tight] {
+	background: var(--plume-danger);
+}
+
+.status-row-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.status-row-share {
+	flex-shrink: 0;
+	width: 44px;
+	text-align: right;
+}
+
+/* 「记忆文件」那一行右边：两段合计和文件数，和上面各行的数字、占比两列对齐。 */
+.status-files-sum {
+	display: flex;
+	gap: 8px;
+	padding-right: 4px;
+}
+
+/* 一个文件一行：平时是淡字，指针经过时整行变深，说明它能点开。 */
+.status-file {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	color: var(--plume-ink-faint);
+	text-align: left;
+	transition: color var(--plume-t-quick);
+}
+
+.status-file:hover,
+.status-file:hover .status-file-text {
+	color: var(--plume-ink);
+}
+
+.status-file-icon {
+	flex-shrink: 0;
+}
+
+.status-file-path {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+}
+
+.status-file-none {
+	padding: 4px 0;
+}

@@ -1,0 +1,180 @@
+[
+  {
+    "type": "cycle",
+    "from": "apps/desktop/src/renderer/files/FileHeader.tsx",
+    "to": "apps/desktop/src/renderer/files/FileViewer.tsx",
+    "unresolvedTo": "./FileViewer.tsx",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "apps/desktop/src/renderer/files/FileViewer.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/MarkdownLink.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/plugins.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/PluginFilePreview.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/FileHeader.tsx",
+        "dependencyTypes": ["local", "import"]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "apps/desktop/src/renderer/files/FileViewer.tsx",
+    "to": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+    "unresolvedTo": "../markdown/Markdown.tsx",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/MarkdownLink.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/plugins.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/PluginFilePreview.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/FileViewer.tsx",
+        "dependencyTypes": ["local", "import"]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "apps/desktop/src/renderer/markdown/inline.ts",
+    "to": "apps/desktop/src/renderer/markdown/html.ts",
+    "unresolvedTo": "./html.ts",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "apps/desktop/src/renderer/markdown/html.ts",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/inline.ts",
+        "dependencyTypes": ["local", "import", "type-only"]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+    "to": "apps/desktop/src/renderer/markdown/ReplyCode.tsx",
+    "unresolvedTo": "./ReplyCode.tsx",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "apps/desktop/src/renderer/markdown/ReplyCode.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/plugins.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/PluginFilePreview.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/FileHeader.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/files/FileViewer.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+        "dependencyTypes": ["local", "import"]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "apps/desktop/src/renderer/markdown/PluginMarkdown.tsx",
+    "to": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+    "unresolvedTo": "./Markdown.tsx",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "apps/desktop/src/renderer/markdown/Markdown.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/MarkdownLink.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/plugins.tsx",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "apps/desktop/src/renderer/markdown/PluginMarkdown.tsx",
+        "dependencyTypes": ["local", "import"]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/core/agent/src/models.ts",
+    "to": "packages/core/agent/src/magpie.ts",
+    "unresolvedTo": "./magpie.ts",
+    "dependencyTypes": ["local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "packages/core/agent/src/magpie.ts",
+        "dependencyTypes": ["local", "import"]
+      },
+      {
+        "name": "packages/core/agent/src/models.ts",
+        "dependencyTypes": ["local", "import", "type-only"]
+      }
+    ]
+  }
+]
