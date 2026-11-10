@@ -11,7 +11,7 @@ import { computeDiff, type FileDiff, formatDiff } from "../diff.ts";
 import { findEditMatch, replacementFor } from "./edit-match.ts";
 import { withTextFile } from "./file-write.ts";
 import { formatCharWindow, MAX_LINE_CHARS } from "./long-line.ts";
-import { displayPath, resolveWorkspacePath } from "./paths.ts";
+import { displayPath, resolveWorkspacePath, scratchDirsOf } from "./paths.ts";
 import { scratchFile } from "./scratch-file.ts";
 import { changedSince, markRead, readRecord } from "./read-state.ts";
 import { declinedResult, errorResult } from "./result.ts";
@@ -95,7 +95,7 @@ export const editTool: Tool<EditArgs> = {
 				const after = args.replace_all ? before.split(target).join(replacement) : before.replace(target, () => replacement);
 				const count = args.replace_all ? occurrences : 1;
 				const diff = computeDiff(before, after);
-				const shown = displayPath(ctx.cwd, resolveWorkspacePath(ctx.cwd, file ?? args.path));
+				const shown = displayPath(ctx.cwd, resolveWorkspacePath(ctx.cwd, file ?? args.path, scratchDirsOf(ctx)));
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({

@@ -40,6 +40,8 @@ export interface ToolContext {
 	sessionId?: string;
 	/** 会话的临时目录（`ToolRun.scratchDir`）；直接工具测试可不给，不给就没有 `scratch://`。 */
 	scratchDir?: string;
+	/** 同一脉的会话（子会话、分叉、建议开出的新会话）的临时目录（`ToolRun.scratchDirs`），写不用问人；不给时只算 `scratchDir`，见 `scratchDirsOf`。 */
+	scratchDirs?: readonly string[];
 	/** 资源地址（`scratch://` 之类，见 `resources/`）；不给时地址都按普通路径读。 */
 	resources?: ResourceRouter;
 	signal?: AbortSignal;
@@ -101,6 +103,7 @@ export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		...(run.allowedPaths ? { allowedPaths: new Set(run.allowedPaths) } : {}),
 		sessionId: run.sessionId,
 		scratchDir: run.scratchDir,
+		...(run.scratchDirs ? { scratchDirs: run.scratchDirs } : {}),
 		...(env.resources ? { resources: env.resources } : {}),
 		...(env.dataDir ? { dataDir: env.dataDir } : {}),
 		signal: run.signal,

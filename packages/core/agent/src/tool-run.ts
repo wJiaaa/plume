@@ -51,6 +51,8 @@ export interface ToolScope {
 	allowedPaths?(): Promise<readonly string[]>;
 	/** 这个会话的临时目录，交给工具（`ToolRun.scratchDir`）。 */
 	scratchDir: string;
+	/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`），每个调用执行前现算：这一轮中途开出去的子智能体、新会话也算。 */
+	scratchDirs?(): readonly string[];
 	signal: AbortSignal;
 	host: PluginHost;
 	log: Log;
@@ -227,6 +229,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			{
 				sessionId: from.sessionId,
 				cwd: from.cwd,
+				...(scope.scratchDirs ? { scratchDirs: scope.scratchDirs() } : {}),
 				call: from.call,
 				tool: from.tool,
 				request,
@@ -274,6 +277,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				toolCallId: call.id,
 				cwd: input.cwd,
 				scratchDir: scope.scratchDir,
+				...(scope.scratchDirs ? { scratchDirs: scope.scratchDirs() } : {}),
 				projectRoots: scope.projectRoots,
 				...(allowedPaths.length > 0 ? { allowedPaths } : {}),
 				signal: input.signal,

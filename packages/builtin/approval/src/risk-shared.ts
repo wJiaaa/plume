@@ -21,15 +21,26 @@ export const SAFE: RiskVerdict = { risky: false };
 
 export const risky = (code: RiskCode, params?: RiskParams): RiskVerdict => ({ risky: true, code, ...(params ? { params } : {}) });
 
-/** 宿主放各会话临时目录的地方（`<数据目录>/scratch`，见 `ToolRun.scratchDir`），插件加载时经 `setAppScratch` 告诉这里。 */
-let appScratch: string | undefined;
+/**
+ * 正在判定的这次调用所在会话同一脉的临时目录（`ToolApproval.scratchDirs`），只在 `withScratchDirs` 里有值。
+ *
+ * 不一层层传参：从 `assess` 往下十来个判定函数都只带着 `cwd`，草稿区和它是同一件事。判定是同步的，设上、跑完、复原，
+ * 中间插不进别的会话的判定。别的会话的临时目录不在里面：往那里写、删那里的东西是动别的对话的草稿，要问。
+ */
+let sessionScratch: readonly string[] = [];
 
-export function setAppScratch(dir: string): void {
-	appScratch = dir;
+export function withScratchDirs<T>(dirs: readonly string[], judge: () => T): T {
+	const previous = sessionScratch;
+	sessionScratch = dirs;
+	try {
+		return judge();
+	} finally {
+		sessionScratch = previous;
+	}
 }
 
 /**
- * 正当干活的地方：项目、系统临时目录，和会话的临时目录。
+ * 正当干活的地方：项目、系统临时目录，和同一脉的会话的临时目录。
  *
  * 临时目录算进来，是因为 agent 本来就往那里放草稿：一个预览、一份日志、一个用完就扔的脚本。问人「agent 能不能写它的草稿」
  * 不是安全问题，是毛病，而且会让一次无人值守的运行停在第一份草稿上。
@@ -44,7 +55,7 @@ export function scratchRoots(cwd?: string): string[] {
 	 * 只认 API 给的，测试里看着对，真命令照样被拦。
 	 */
 	const roots = [tmpdir(), "/tmp", "/private/tmp"];
-	if (appScratch) roots.push(appScratch);
+	roots.push(...sessionScratch);
 	if (cwd) roots.push(cwd);
 	// 根是 `/` 会让整台机器都成了「草稿」：丢掉它，不信它。
 	return roots.map((root) => root.replace(/\/+$/, "")).filter((root) => root.length > 1);

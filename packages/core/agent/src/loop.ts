@@ -29,6 +29,7 @@ export interface TurnScope {
 	projectRoots?: readonly string[];
 	allowedPaths?: ToolScope["allowedPaths"];
 	scratchDir: ToolScope["scratchDir"];
+	scratchDirs?: ToolScope["scratchDirs"];
 	signal: AbortSignal;
 	host: PluginHost;
 	log: Log;

@@ -94,8 +94,9 @@ it("工作区和临时区不问就能读", () => {
 	expect(assessRead(join(WS, "src/index.ts"), WS).decision).toBe("allow");
 	expect(assessRead(WS, WS).decision).toBe("allow");
 	expect(assessRead(join(tmpdir(), "build.log"), WS).decision).toBe("allow");
-	// 会话的临时目录：太大没交给模型的图、截断前的全文都在这里，读回来不用问。
+	// 会话的临时目录：太大没交给模型的图、截断前的全文都在这里，读回来不用问；别的会话的也一样，读不分会话。
 	expect(assessRead(join(scratchHome(), "s1", "mcp-images", "a.png"), WS).decision).toBe("allow");
+	expect(assessRead(join(scratchHome(), "other", "tool-output", "a.log"), WS).decision).toBe("allow");
 	expect(assessRead("/tmp/build.log", WS).decision).toBe("allow");
 });
 

@@ -29,10 +29,10 @@
 
 内置插件 `plume.approval`，随应用提供、不能停用：
 
-- **命令**：递归删除和强制通配删除（项目内相对路径、系统临时目录、会话临时目录除外）、删根目录或家目录；强制推送、`reset --hard`、`clean -f`、`checkout .`、`rebase`；`sudo`、关机、格式化、`dd`、`chown`、改系统服务和定时任务；下载并直接执行（`curl … | sh`、`irm … | iex` 等）；读写密钥文件；写系统路径和 shell 启动文件；上传本机文件；发布包、清理 docker、删集群资源；用 `open` 启动程序；PowerShell / cmd 的递归删除和 Windows 危险程序（`Format-Volume`、`Set-ExecutionPolicy`、`reg delete`、`Start-Process -Verb RunAs` 等）。
+- **命令**：递归删除和强制通配删除（项目内相对路径、系统临时目录、同一脉的会话——子智能体、侧边聊天、分叉、建议开出的新会话和它们的来源——的临时目录除外；别的会话的临时目录照样问）、删根目录或家目录；强制推送、`reset --hard`、`clean -f`、`checkout .`、`rebase`；`sudo`、关机、格式化、`dd`、`chown`、改系统服务和定时任务；下载并直接执行（`curl … | sh`、`irm … | iex` 等）；读写密钥文件；写系统路径和 shell 启动文件；上传本机文件；发布包、清理 docker、删集群资源；用 `open` 启动程序；PowerShell / cmd 的递归删除和 Windows 危险程序（`Format-Volume`、`Set-ExecutionPolicy`、`reg delete`、`Start-Process -Verb RunAs` 等）。
 - `env`、`xargs`、`bash -c`、`eval`、`find -exec`、`powershell -Command`、`-EncodedCommand`（解码后判）、`cmd /c` 包着的命令按里面那条判断。
 - shell 可能是 PowerShell 的地方，一行命令按 bash 和 PowerShell 两种语法各判一遍，任一种读出危险都问人。
-- **写文件**：写项目外（临时目录除外）、写敏感路径、改 shell 启动文件。
+- **写文件**：写项目外（系统临时目录和同一脉的会话的临时目录除外）、写敏感路径、改 shell 启动文件。
 - **读**：读工作区外的一律问人。
 - 不判网络请求和 MCP 工具：网页读取只发 GET、不弹审批；MCP 工具按它们的注解单独处理。
 - 本机密钥名单（读取要问）包括数据目录里的 `settings.json`、`credentials.json`、`vault.key`。

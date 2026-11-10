@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { assessCommand, assessWrite } from "../src/risk.ts";
-import { setAppScratch } from "../src/risk-shared.ts";
+import { withScratchDirs } from "../src/risk-shared.ts";
 import { splitCommands } from "../src/shell-split.ts";
 
 const safe = (command: string) => expect(assessCommand(command).risky, `应放行: ${command}`).toBe(false);
@@ -134,17 +134,22 @@ it("写项目外先问", () => {
 	expect(assessWrite("/Users/me/.ssh/config", cwd).risky).toBe(true);
 });
 
-it("会话的临时目录是干活的地方，数据目录的其余部分不是", () => {
-	setAppScratch("/Users/me/.plume/scratch");
-	try {
-		const cwd = "/Users/me/project";
-		expect(assessWrite("/Users/me/.plume/scratch/s1/probe.py", cwd).risky).toBe(false);
+it("这棵会话树的临时目录是干活的地方，别的会话的和数据目录的其余部分不是", () => {
+	const cwd = "/Users/me/project";
+	const tree = ["/Users/me/.plume/scratch/parent", "/Users/me/.plume/scratch/child"];
+	withScratchDirs(tree, () => {
+		expect(assessWrite("/Users/me/.plume/scratch/parent/probe.py", cwd).risky).toBe(false);
+		expect(assessWrite("/Users/me/.plume/scratch/child/report.md", cwd).risky).toBe(false);
+		expect(assessWrite("/Users/me/.plume/scratch/other/a.md", cwd).risky).toBe(true);
 		expect(assessWrite("/Users/me/.plume/settings.json", cwd).risky).toBe(true);
-		safe("rm -f /Users/me/.plume/scratch/s1/old.log");
-		risky("rm -rf /Users/me/.plume/scratch/*");
-	} finally {
-		setAppScratch("");
-	}
+		safe("rm -f /Users/me/.plume/scratch/parent/old.log");
+		expect(assessCommand("rm -rf /Users/me/.plume/scratch/child/tool-output", cwd).risky).toBe(false);
+		expect(assessCommand("rm -rf /Users/me/.plume/scratch/other", cwd).risky).toBe(true);
+		expect(assessCommand("rm -rf /Users/me/.plume/scratch/parent/*", cwd).risky).toBe(true);
+		expect(assessCommand("rm -rf /Users/me/.plume/scratch/*", cwd).risky).toBe(true);
+	});
+	// 判定完就复原：下一次判定不带着上一个会话的临时目录。
+	expect(assessWrite("/Users/me/.plume/scratch/parent/probe.py", cwd).risky).toBe(true);
 });
 
 it("重定向进系统路径先问", () => {

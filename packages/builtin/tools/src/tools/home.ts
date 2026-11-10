@@ -27,6 +27,7 @@ export function appHome(): string {
 /**
  * 各会话临时目录的上一级：宿主把每个会话的临时目录（`ToolRun.scratchDir`）放在 `<数据目录>/scratch/<会话 id>`。
  * 数据目录里只有这一块对文件工具开着：系统提示词让模型把不该进项目的文件放这里，拒了它，模型会去找别的路写。
+ * 读整块都不问（`read-access.ts`）；写只限同一脉的会话的那几个（`ToolRun.scratchDirs`，见 `paths.ts`）。
  */
 export function scratchHome(): string {
 	return join(appHome(), "scratch");

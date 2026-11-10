@@ -76,6 +76,13 @@ export interface ToolRun {
 	allowedPaths?: readonly string[];
 	/** 这个会话的临时目录，见 `ModelContext.scratchDir`。 */
 	scratchDir: string;
+	/**
+	 * 和这个会话同一脉的会话的临时目录，含 `scratchDir`：沿子会话（`SessionSummary.parentId`：子智能体、侧边聊天）、分叉
+	 * （`forkedFrom`）、建议开出的新会话（`spawnedFrom`）的来处连在一起的那些，两头都算。它们互相交接草稿——子智能体把报告写进
+	 * 父会话的临时目录，分叉接着改来源会话里的那份——往这些里写、删不用问人；别的会话的临时目录不在里面，那是别的对话的草稿。
+	 * 只管写：读哪个会话的临时目录都不问。宿主每次调用时现算（子会话、分叉随时会多）；不给时只算 `scratchDir`。
+	 */
+	scratchDirs?: readonly string[];
 	/** 用户停止这一轮时中止。 */
 	signal: AbortSignal;
 	/** 执行中的输出，推给界面。 */
@@ -466,6 +473,8 @@ export type CompactSummary =
 export interface ToolApproval {
 	sessionId: string;
 	cwd: string;
+	/** 这个会话能当草稿区用的临时目录，同 `ToolRun.scratchDirs`；帮我批准把写进、删掉这些里面的东西算作正当干活。 */
+	scratchDirs?: readonly string[];
 	/** 模型发起的调用，`args` 是原始参数。 */
 	call: ToolCall;
 	tool: { name: string; mutating: boolean; plugin: string };

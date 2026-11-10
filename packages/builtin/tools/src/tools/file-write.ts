@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import { words } from "../messages.ts";
 import { beginMutation } from "./change-lock.ts";
 import { fileIdentity, recordFileChange, sameIdentity, type FileIdentity } from "./file-changes.ts";
-import { resolveFilePath } from "./paths.ts";
+import { resolveFilePath, scratchDirsOf } from "./paths.ts";
 import type { FileStamp } from "./read-state.ts";
 import type { ToolContext } from "./types.ts";
 
@@ -30,7 +30,7 @@ export async function withTextFile<T>(ctx: ToolContext, input: string, action: (
 }
 
 async function queuedTextFile<T>(ctx: ToolContext, input: string, action: (file: TextFile) => Promise<T>): Promise<T> {
-	const path = await resolveFilePath(ctx.cwd, input);
+	const path = await resolveFilePath(ctx.cwd, input, scratchDirsOf(ctx));
 	const initial = await lstat(path).catch((error: NodeJS.ErrnoException) => {
 		if (error.code === "ENOENT") return null;
 		throw error;
@@ -64,7 +64,7 @@ async function queuedTextFile<T>(ctx: ToolContext, input: string, action: (file:
 				write: async (content) => {
 					ctx.signal?.throwIfAborted();
 					// 审批之后、第一个破坏性操作之前再核对一遍。
-					if ((await resolveFilePath(ctx.cwd, input)) !== path) throw changed();
+					if ((await resolveFilePath(ctx.cwd, input, scratchDirsOf(ctx))) !== path) throw changed();
 					if (handle) {
 						const current = await lstat(path),
 							opened = await handle.stat();

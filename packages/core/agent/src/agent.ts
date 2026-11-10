@@ -472,6 +472,39 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	let projects = (await files.read<ProjectEntry[]>(projectsFile)) ?? [];
 
+	/**
+	 * 和这个会话同一脉的会话，含它自己：沿子会话（`parentId`）、分叉（`forkedFrom`）、建议开出的新会话（`spawnedFrom`）的来处
+	 * 连在一起的那些。它们互相交接草稿：子智能体把报告写进父会话的临时目录；分叉、新会话复制或接过来的话里指着来源的临时目录，
+	 * 接着用、接着改的就是那几份。两头都算，来源也够得着分叉和新会话的。来处已经删掉的，连线断在那里。
+	 *
+	 * 每次现算：子会话、分叉随时会多。别的会话不在里面，那是别的对话的草稿。
+	 */
+	function lineage(sessionId: string): string[] {
+		const links = new Map<string, string[]>();
+		for (const { summary } of sessions.values()) {
+			for (const from of [summary.parentId, summary.forkedFrom?.sessionId, summary.spawnedFrom?.sessionId]) {
+				if (!from || !sessions.has(from)) continue;
+				links.set(summary.id, [...(links.get(summary.id) ?? []), from]);
+				links.set(from, [...(links.get(from) ?? []), summary.id]);
+			}
+		}
+		const found = new Set([sessionId]);
+		for (const id of found) for (const next of links.get(id) ?? []) found.add(next);
+		return [...found];
+	}
+	/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`），见 `lineage`。 */
+	const lineageScratchDirs = (sessionId: string) => lineage(sessionId).map(scratchDir);
+
+	/**
+	 * 界面经文件接口（读、列目录、改名、删、`plume-media`）能碰的、工作目录以外的那些目录：同项目的其他目录，加上同一脉的会话的
+	 * 临时目录。和工具侧是同一个范围（`ToolRun.scratchDirs`）：模型写在那里的报告、截断前的全文，回复里就会指着它，界面不认的话
+	 * 那些文件签都点不开。
+	 *
+	 * 这是访问边界，不是搜索范围：`@` 补全和 `locateFiles` 仍只在工作目录和项目目录里找，不然 `tool-output/` 里的日志
+	 * 会混进补全和同名候选。
+	 */
+	const sessionRoots = ({ id, cwd, project }: SessionSummary) => [...projectRootsFor(projects, cwd, project), ...lineageScratchDirs(id)];
+
 	/** 侧边聊天交给父会话的那几件事走到了哪：子会话的回执条，见 `HandedTask`。 */
 	const handed = new HandedTasks((sideId) => emitHanded(sideId));
 	/** 这一轮是为交过来的哪件事跑的：按这一轮的第一句认，收场时落到那件事上。 */
@@ -1789,6 +1822,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					projectRoots: projectRootsFor(projects, session.summary.cwd, session.summary.project),
 					allowedPaths: () => attachedPaths(session),
 					scratchDir: scratchDir(sessionId),
+					scratchDirs: () => lineageScratchDirs(sessionId),
 					signal: controller.signal,
 					host,
 					log,
@@ -2403,31 +2437,31 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			).flat();
 		},
 		async listDirectory(sessionId, path) {
-			const { cwd, project } = find(sessionId).summary;
-			return listSessionDirectory(cwd, path, projectRootsFor(projects, cwd, project));
+			const { summary } = find(sessionId);
+			return listSessionDirectory(summary.cwd, path, sessionRoots(summary));
 		},
 		async renameFile(sessionId, path, name) {
-			const { cwd, project } = find(sessionId).summary;
-			const to = await renameSessionFile(cwd, path, name, projectRootsFor(projects, cwd, project));
-			emit({ type: "fileMoved", from: resolve(cwd, path), to: resolve(cwd, to) });
+			const { summary } = find(sessionId);
+			const to = await renameSessionFile(summary.cwd, path, name, sessionRoots(summary));
+			emit({ type: "fileMoved", from: resolve(summary.cwd, path), to: resolve(summary.cwd, to) });
 			return to;
 		},
 		async fileOperation(sessionId, operation) {
-			const { cwd, project } = find(sessionId).summary;
-			const result = await operateSessionFile(cwd, operation, projectRootsFor(projects, cwd, project), options.trash);
-			if (operation.type === "rename" && result.ok && result.path) emit({ type: "fileMoved", from: resolve(cwd, operation.from), to: result.path });
+			const { summary } = find(sessionId);
+			const result = await operateSessionFile(summary.cwd, operation, sessionRoots(summary), options.trash);
+			if (operation.type === "rename" && result.ok && result.path) emit({ type: "fileMoved", from: resolve(summary.cwd, operation.from), to: result.path });
 			if ((operation.type === "trash" || operation.type === "remove") && result.paths?.length) emit({ type: "fileRemoved", paths: result.paths });
 			return result;
 		},
 		async readFileBytes(sessionId, path, modifiedAt, call) {
 			const session = find(sessionId);
-			return readSessionFileBytes(session.summary.cwd, path, modifiedAt, call.signal, projectRootsFor(projects, session.summary.cwd, session.summary.project));
+			return readSessionFileBytes(session.summary.cwd, path, modifiedAt, call.signal, sessionRoots(session.summary));
 		},
 		async readFile(sessionId, path) {
 			const session = sessions.get(sessionId);
 			if (!session) return null;
 			return (
-				(await readSessionFile(session.summary.cwd, path, projectRootsFor(projects, session.summary.cwd, session.summary.project))) ??
+				(await readSessionFile(session.summary.cwd, path, sessionRoots(session.summary))) ??
 				(await readManagedMedia(mediaDir, path)) ??
 				// 「记忆文件」里列的那几个，在会话边界外也只读放行，见 `readListedFile`。
 				readListedFile(session.contextEstimate?.memoryFiles.map((file) => file.path) ?? [], path)
@@ -2499,10 +2533,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async filePath(sessionId, path) {
 			const session = sessions.get(sessionId);
 			if (!session) return null;
-			return (
-				(await sessionFilePath(session.summary.cwd, path, projectRootsFor(projects, session.summary.cwd, session.summary.project))) ??
-				managedMediaPath(mediaDir, path)
-			);
+			return (await sessionFilePath(session.summary.cwd, path, sessionRoots(session.summary))) ?? managedMediaPath(mediaDir, path);
 		},
 		async shutdown() {
 			quitting = true;

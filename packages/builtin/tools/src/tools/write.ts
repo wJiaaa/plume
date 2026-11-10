@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { computeDiff, formatDiff } from "../diff.ts";
 import { withTextFile } from "./file-write.ts";
-import { displayPath, resolveWorkspacePath } from "./paths.ts";
+import { displayPath, resolveWorkspacePath, scratchDirsOf } from "./paths.ts";
 import { resourceScope, scratchFile } from "./scratch-file.ts";
 import { changedSince, markRead, readRecord } from "./read-state.ts";
 import { declinedResult, errorResult } from "./result.ts";
@@ -65,7 +65,7 @@ export const writeTool: Tool<WriteArgs> = {
 				const written = previous ? encodeText(content, previous.layout) : content;
 				const after = decodeText(written).text;
 				const diff = computeDiff(previous?.text ?? "", after);
-				const shown = displayPath(ctx.cwd, resolveWorkspacePath(ctx.cwd, args.path));
+				const shown = displayPath(ctx.cwd, resolveWorkspacePath(ctx.cwd, args.path, scratchDirsOf(ctx)));
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({

@@ -9,23 +9,22 @@
  * 挂在里层（order 1000）：别的插件在外层能先替人答，或者整个换掉这套规则。
  */
 
-import { join } from "node:path";
 import type { Plugin } from "@plume/contract";
 import { assess } from "./assess.ts";
 import { riskText } from "./messages.ts";
-import { setAppScratch } from "./risk-shared.ts";
+import { withScratchDirs } from "./risk-shared.ts";
 
 export default {
 	name: "plume.approval",
 	apply(ctx) {
-		setAppScratch(join(ctx.appDataDir, "scratch"));
 		ctx.hook(
 			"tool.approve",
 			async (input, next) => {
 				const { request } = input;
 				if (input.permissionMode !== "auto" || input.byLayer || request.escalation !== undefined || request.userOnly || request.subject === undefined)
 					return next(input);
-				const verdict = assess(request.kind, request.subject, input.cwd);
+				const { kind, subject } = request;
+				const verdict = withScratchDirs(input.scratchDirs ?? [], () => assess(kind, subject, input.cwd));
 				if (!verdict.risky) return "once";
 				// 卡片上已有的理由（读项目外时说批准意味着什么）留着；规则说不出名字的，卡片照常画。
 				if (request.reason !== undefined || verdict.code === undefined) return next(input);

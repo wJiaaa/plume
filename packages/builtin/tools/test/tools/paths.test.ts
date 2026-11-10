@@ -35,9 +35,12 @@ it("应用自己的数据目录不写", () => {
 	}
 });
 
-/** 系统提示词让模型把不该进项目的文件放进会话的临时目录：数据目录里只有这一块能写。 */
-it("会话的临时目录能写", () => {
-	expect(resolveWorkspacePath(CWD, join(HOME, "scratch", "s1", "probe.py"))).toBe(join(HOME, "scratch", "s1", "probe.py"));
+/** 系统提示词让模型把不该进项目的文件放进会话的临时目录：数据目录里只有这一块能写，同一棵会话树的算在一起。 */
+it("这棵会话树的临时目录能写，别的会话的不行", () => {
+	const tree = [join(HOME, "scratch", "parent"), join(HOME, "scratch", "child")];
+	expect(resolveWorkspacePath(CWD, join(HOME, "scratch", "parent", "probe.py"), tree)).toBe(join(HOME, "scratch", "parent", "probe.py"));
+	expect(resolveWorkspacePath(CWD, join(HOME, "scratch", "child", "report.md"), tree)).toBe(join(HOME, "scratch", "child", "report.md"));
+	expect(() => resolveWorkspacePath(CWD, join(HOME, "scratch", "other", "a.md"), tree)).toThrow(/Plume's own data directory/);
 });
 
 it("没给路径是错误，不是工作区根", () => {

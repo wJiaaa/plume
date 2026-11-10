@@ -95,7 +95,10 @@ export function assessRead(absolute: string, cwd: string, options: ReadAccessOpt
 	if (withinOrIs(cwd, absolute)) return { decision: "allow" };
 	// 在密钥规则之后，和工作区一样：把一个目录放进项目是说「这是我要做的」，不是「读我放在里面的密钥」。
 	for (const root of options.projectRoots ?? []) if (withinOrIs(root, absolute)) return { decision: "allow" };
-	// 模型自己的草稿：太大没交给它的图、截断前的全文都存在这里，让它读回来还要问人，只会让人替它点头。
+	/*
+	 * 模型自己的草稿：太大没交给它的图、截断前的全文都存在这里，让它读回来还要问人，只会让人替它点头。读不分是哪个会话的：
+	 * 子智能体的报告、别的对话存下的全文，读都不问。写只限同一脉的会话的，见 `paths.ts` 的 `scratchDirsOf`。
+	 */
 	if (withinOrIs(scratchHome(), absolute)) return { decision: "allow" };
 
 	const temp = tmpdir();

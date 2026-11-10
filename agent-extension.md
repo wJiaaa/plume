@@ -19,7 +19,7 @@
 | 审批 | 可变 | 哪些调用要问是本体定的（写了 `asks` 的工具自己问，其余会改动的执行前问，层可以调 `ask`），排在 `tool.execute` 所有层的里面；权限模式（请求批准 / 帮我批准 / 完全访问）的含义也是本体的：完全访问、`approved`、「以后不再问」的名单直接放行，提权和 `userOnly` 只认人答；其余经 `tool.approve`，内置插件 plume.approval 按帮我批准的风险规则放行，插件在外层替人答或交给里层弹卡。插件也可在 `tool.execute` 外层预先放行（`approved`）或拦截 |
 | 系统提示词、历史消息、工具列表 | 可变 | `model.context`；系统提示词按段（`sections`）给出，插件按段名加、换、删；只作用于这一次请求，会话里存的不变。系统提示词由 plume.prompt 按会话冻结，中途变了的段作为增量消息接在下一轮开头 |
 | 工具卡片 | 可变 | 插件的界面入口按工具名注册；没注册的用产品的通用卡片。结果里的图（交给模型的 `images`，和 `shownImages` 里只给人看的）通用卡片都画 |
-| 会话的临时目录 | 不可变 | 宿主给每个会话一个（`<数据目录>/scratch/<会话 id>`，`ToolRun.scratchDir`、`ModelContext.scratchDir`），会话删掉时连目录一起删；里面放什么由插件定（太大没交给模型的图、截断前的全文），plume.prompt 把它写进系统提示词 |
+| 会话的临时目录 | 不可变 | 宿主给每个会话一个（`<数据目录>/scratch/<会话 id>`，`ToolRun.scratchDir`、`ModelContext.scratchDir`），会话删掉时连目录一起删；同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的）的临时目录经 `ToolRun.scratchDirs`、`ToolApproval.scratchDirs` 给出，互相写不问，别的会话的写不进或要问；读哪个会话的临时目录都不问；里面放什么由插件定（太大没交给模型的图、截断前的全文），plume.prompt 把它写进系统提示词 |
 | 资源地址 | 可变 | 服务 `resources`（内置插件 plume.tools 提供）：`scheme://路径`，read、ls 认它；插件经 `register` 加只读的 scheme（技能插件的 `skill://`），经 `keepArtifact` 把大块原文存成 `artifact://`；唯一可写的是 plume.tools 自己的 `scratch://` |
 | 插件的密钥 | 可变 | 服务 `secrets`（内置插件 plume.secrets 提供）：`seal` 把令牌、密码加密成带 `plume-sealed:v1:` 前缀的文本，插件写回自己的配置，`unseal` 解回、`isSealed` 认出密文；钥匙在 plume.secrets 的数据目录，模型读它要问人；装一个提供 `secrets` 的插件就换掉存钥匙的办法（换了以后旧密文解不开，按没填处理） |
 | 审批卡 | 部分可变 | 产品的一张卡，压在输入框上方；插件在 `tool.execute` 里调 `ask` 时，卡上是这次调用的参数和它给的理由。插件可以经 `ui.approvalCard` 按工具名（MCP 的表单按 `kind`）画自己那几种卡（计划、提问、表单、SSH 命令），经 `waiting` 说等这张卡时的那句状态；放不放行、过期、排队（+N）是本体的 |
