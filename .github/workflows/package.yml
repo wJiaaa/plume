@@ -1,6 +1,6 @@
 name: 安装包
 
-# 手动运行或推 `v*` tag：Windows 打 nsis（x64 + arm64），macOS 打 dmg 和 zip（arm64、x64 各一个 job 并行），再按全部安装包生成 SHA256SUMS，
+# 手动运行或推 `v*` tag：Windows 打 nsis（x64 + arm64），macOS 打 dmg 和 zip（arm64 + x64），再按全部安装包生成 SHA256SUMS，
 # 都上传到这次运行的 Artifacts。macOS 有证书（secret MAC_CERTIFICATE_P12）就用证书签，没有就 ad-hoc；Windows 不签。
 # 推 tag 时最后由 publish 把安装包和 SHA256SUMS 发成这个仓库的 Release（应用里检查更新读的就是它，见
 # apps/desktop/src/main/update/updates.ts 的 RELEASE_REPO）；手动运行只打包、不发布。
@@ -70,10 +70,6 @@ jobs:
     # 更早的镜像会静默退回 Electron 默认图标
     runs-on: macos-26
     timeout-minutes: 45
-    # 两个架构在一台机器上是串行打的，分开并行约省一半打包时间；代价是要排到两台 macOS 机器
-    strategy:
-      matrix:
-        arch: [arm64, x64]
     steps:
       - name: 检出代码
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -110,9 +106,8 @@ jobs:
         run: bash .github/scripts/prepare-signing.sh
 
       # zip 给应用内更新用：它直接装着 Plume.app，可以原地替换；dmg 给第一次手动安装
-      # 命令行给了架构，electron-builder.yml 里 mac.target 的 arch 列表就不起作用，只打这一个
-      - name: 构建 macOS 安装包（${{ matrix.arch }}）并核验原生模块架构
-        run: pnpm --filter @plume/desktop package --mac dmg zip --${{ matrix.arch }} --publish never
+      - name: 构建 macOS 安装包（arm64 与 x64）并核验原生模块架构
+        run: pnpm --filter @plume/desktop package --mac dmg zip --arm64 --x64 --publish never
 
       # 证书没导进去时 electron-builder 会悄悄退回 ad-hoc，包照样能装能跑，只是权限每次更新都被重置
       - name: 核验签名身份
@@ -124,7 +119,7 @@ jobs:
       - name: 上传安装包
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: Plume-macOS-${{ matrix.arch }}
+          name: Plume-macOS
           path: |
             apps/desktop/release/Plume-*.dmg
             apps/desktop/release/Plume-*.zip
