@@ -11,15 +11,14 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { MARKET_DIR } from "./market.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const MESSAGES = join(ROOT, "packages/client/ui/src/i18n/messages");
 const CATALOGS = ["zh-CN.ts", "en.ts"].map((name) => join(MESSAGES, name));
-// 市场插件在旁边的插件仓库里（scripts/market.mjs），没放在旁边时跳过。
-const SCANNED = ["apps", "packages", MARKET_DIR].map((dir) => join(ROOT, dir)).filter((dir) => existsSync(dir));
+// 市场插件拿不到产品的词条目录（文案自带在 src/messages.ts），不用扫。
+const SCANNED = ["apps", "packages"].map((dir) => join(ROOT, dir));
 
 function walk(dir, out = []) {
 	for (const name of readdirSync(dir)) {

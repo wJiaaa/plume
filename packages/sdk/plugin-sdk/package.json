@@ -10,6 +10,7 @@
   "exports": {
     "./tsconfig.json": "./tsconfig.json",
     "./build": "./lib/build.mjs",
+    "./lint": "./lib/lint/index.mjs",
     "./manifest": "./lib/manifest.mjs"
   },
   "scripts": {
@@ -21,6 +22,7 @@
     "@types/react": "^19.2.0",
     "esbuild": "^0.28.2",
     "lucide-react": "^1.68.0",
+    "tailwindcss": "^4.3.4",
     "typescript": "^7.0.2"
   },
   "devDependencies": {

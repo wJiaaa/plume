@@ -37,7 +37,7 @@ test("init 出独立项目：不写依赖，SDK 链进 node_modules，带上 ski
 	assert.doesNotMatch(readFileSync(join(dir, "src/index.ts"), "utf8"), /__NAME__|__TOOL__/);
 });
 
-test("模板只靠 SDK 就能过类型检查（含 @plume/ui/icons）", () => {
+test("模板只靠 SDK 就能过类型检查和插件规则（含 @plume/ui/icons）", async () => {
 	// 加一个图标，顺带验证 @plume/ui/icons 的类型和构建。
 	const ui = join(dir, "src/ui.tsx");
 	const source = readFileSync(ui, "utf8");
@@ -48,7 +48,7 @@ test("模板只靠 SDK 就能过类型检查（含 @plume/ui/icons）", () => {
 			.replace(/^import .* from "@plume\/ui";$/m, '$&\nimport { Smile } from "@plume/ui/icons";')
 			.replace("<Card title={text.greeting}>", "<Card title={text.greeting}>\n\t\t\t<Smile size={14} />"),
 	);
-	assert.ok(checkPlugin(dir));
+	assert.ok(await checkPlugin(dir));
 });
 
 test("构建出的产物：逻辑入口能加载，界面入口把共享模块留给宿主、图标打进去", async () => {

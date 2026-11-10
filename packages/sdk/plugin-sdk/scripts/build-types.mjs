@@ -5,7 +5,7 @@
  * `@plume/styles` 由 SDK 的 tsconfig.json 用 paths 指到这里生成的声明上，写法和仓库里的插件一模一样。
  *
  * 1. 用 tsconfig.types.json 从这几个包的源码生成声明到 dist/，目录和源码一一对应（rootDir 是 packages/）。
- * 2. `@plume/llm` 自己在 typecheck 时生成声明，这里只复制它的 dist/ 进来。
+ * 2. `@plume/llm` 自己在 typecheck 时生成声明，这里只复制它的 dist/ 进来；@plume/styles 的 theme.css 也复制一份（插件检查认类名用）。
  * 3. 声明里留下的 `@plume/*` 引用改成相对路径：发出去以后这些包都不存在。
  * 4. `@plume/ui` 只开放 packages/client/ui/plugin-api.json 里的名字：dist/ui.d.ts 只转出这些。
  *
@@ -57,6 +57,8 @@ if (!existsSync(join(llmDist, "types.d.ts"))) {
 	process.exit(1);
 }
 cpSync(llmDist, join(staging, "core/llm"), { recursive: true });
+// 插件检查认类名要和产品的 Tailwind 一致（lib/lint/styles.mjs），带一份 token。
+cpSync(join(packages, "client/styles/src/theme.css"), join(staging, "theme.css"));
 
 function declarations(dir, out = []) {
 	for (const name of readdirSync(dir)) {

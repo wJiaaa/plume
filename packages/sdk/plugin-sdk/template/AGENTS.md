@@ -8,7 +8,7 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `~/.plume/bin/plume-plugin check` | 类型检查 |
+| `~/.plume/bin/plume-plugin check` | 类型检查，加上插件规则：只引用公开接口、不写死色值和 Tailwind 类、界面文字不写死中文 |
 | `~/.plume/bin/plume-plugin build` | 打出 `dist/index.mjs`（和 `dist/ui.mjs`） |
 | `~/.plume/bin/plume-plugin install` | 把 `package.json`、`README.md`、`dist/` 复制进 `~/.plume/plugins/<目录名>/`，Plume 开着的话当场加载 |
 | `~/.plume/bin/plume-plugin dev` | 构建、装上，之后一改源码就重新构建、装上 |

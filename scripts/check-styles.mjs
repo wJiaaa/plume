@@ -21,7 +21,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
-import { MARKET_DIR } from "./market.mjs";
+import {
+	colorLiterals,
+	inlineProblems,
+	pluginStyleProblems,
+	stringLiterals,
+	stripComments,
+	tailwindProbe,
+} from "../packages/sdk/plugin-sdk/lib/lint/styles.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const rendererDir = join(root, "apps/desktop/src/renderer");
@@ -32,13 +39,14 @@ const skinFile = join(root, "packages/contract/src/ui.ts");
 const SCANNED = ["apps/desktop/src/renderer", "packages/client"];
 /** 不经 Tailwind 的代码：只查规则 3。 */
 const OTHER = ["apps/desktop/src/main", "apps/desktop/src/preload"];
-/** 插件：查规则 3 和 5。市场插件在旁边的插件仓库里（scripts/market.mjs）。插件 SDK 的模板就是仓库外插件的起点，和插件按同一套规则查。 */
-const PLUGINS = [MARKET_DIR, "packages/builtin", "packages/sdk/plugin-sdk/template"];
+/**
+ * 插件：查规则 3、5、6、7，规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/styles.mjs），色值的例外写在文件里
+ * （`color-exempt`），不在下面的表里。插件 SDK 的模板就是仓库外插件的起点，和插件按同一套规则查。市场插件在插件仓库里，由它自己的检查管。
+ */
+const PLUGINS = ["packages/builtin", "packages/sdk/plugin-sdk/template"];
 
 /** 允许出现的色值：文件 → 值 → 原因。 */
 const ALLOWED_COLORS = {
-	"../plume-plugins/plugins/preview/test/interaction.test.ts": { "*": "校验页面提供的十六进制色值，不是界面主题颜色" },
-	"../plume-plugins/plugins/review/src/review.ts": { "#123": "审阅流程正文里举例的 PR 编号，不是颜色" },
 	"apps/desktop/src/main/smoke-preview.ts": { "*": "冒烟页面的设计旋钮初值，用来验证用户选色，不是宿主界面的固定颜色" },
 	"packages/client/ui/src/inputs/ColorField.tsx": { "*": "色块底色来自用户输入，字色按亮度选择黑白，不跟随主题" },
 	"packages/client/styles/src/theme.css": { "*": "token 就定义在这里" },
@@ -53,35 +61,12 @@ const ALLOWED_COLORS = {
 	"apps/desktop/src/renderer/models/ModelIcon.tsx": {
 		"*": "模型品牌标是各家官方发布的矢量和配色，是商标本身，不跟皮肤变",
 	},
-	"../plume-plugins/plugins/usage/src/ModelIcon.tsx": {
-		"*": "使用统计插件自带的一份模型品牌标，同上：各家官方发布的矢量和配色，是商标本身，不跟皮肤变",
-	},
 	"packages/client/ui/src/fileIcon.tsx": {
 		"*": "文件类型图标的颜色是编辑器里通行的约定（TS 蓝、JS 黄……），不跟皮肤变，也不在种子推导的色阶里；浅深两套各给一个值",
 	},
 	"apps/desktop/src/renderer/composer/attachments/FileKindIcon.tsx": {
 		"*": "附件门类图标的颜色是通行的约定（Word 蓝、Excel 绿、PDF 红），不跟主题和皮肤变，也不在种子推导的色阶里",
 	},
-	"../plume-plugins/plugins/terminal/src/look.ts": {
-		"*": "xterm 画在 canvas 上，只认字面色值：十六个 ANSI 槽是程序说的「红」「绿」，不能映射成 token；读不到 CSS 变量时的底色、字色兜底同理",
-	},
-	"../plume-plugins/plugins/terminal/src/TerminalSearch.tsx": {
-		"*": "xterm 的查找高亮只认 #RRGGBB，用不了 CSS 变量；琥珀色在浅深两种主题下各一组，匹配到的字还读得清",
-	},
-	"../plume-plugins/plugins/ssh/src/look.ts": {
-		"*": "SSH 插件的终端同样是 xterm，画在 canvas 上只认字面色值：ANSI 槽和读不到 CSS 变量时的兜底，理由同 plugins/terminal/src/look.ts",
-	},
-	"../plume-plugins/plugins/ssh/src/TerminalSearch.tsx": {
-		"*": "SSH 插件终端的查找高亮同样只认 #RRGGBB，理由同 plugins/terminal/src/TerminalSearch.tsx",
-	},
-	"../plume-plugins/plugins/browser/src/page-scripts.ts": {
-		"*": "选取元素时的框和标签画在网页里（闭合的 shadow root），底下是网页自己的颜色，和 Plume 的主题、皮肤无关，页面里也读不到 Plume 的 token",
-	},
-	"../plume-plugins/plugins/screenshot/src/screenshot.css": {
-		"*": "截图浮层、放大镜、钉图窗口压在别的应用的屏幕上，底下什么颜色都可能有：深色玻璃加白字和压暗都是固定的，跟主题和皮肤变就会在某些屏幕上看不见；SVG 遮罩只认黑白",
-	},
-	"../plume-plugins/plugins/skin-studio/src/presets.ts": { "*": "工坊的预设皮肤是持久化配色数据，供缩略图预览和 ui.skin 应用，不是固定界面色" },
-	"../plume-plugins/plugins/skin-studio/src/palette.ts": { "*": "按皮肤的强调色选择黑或白的字，确保强调色实底上的文字可读" },
 	"packages/client/ui/src/avatar/art.ts": {
 		"*": "智能体头像的颜料：身体和眼睛是这幅画自己的颜色，亮暗主题、皮肤换了都不该跟着变",
 	},
@@ -152,21 +137,10 @@ const THEMED_CLASS = new RegExp(String.raw`^${VARIANTS}(?:${THEMED.join("|")})-`
 const ARBITRARY_VALUE = new RegExp(String.raw`^${VARIANTS}(?:${THEMED.join("|")})-\[`);
 const ARBITRARY_PROPERTY =
 	/^(?:[^\s:]+:)*\[(?:color|background|background-color|border-color|outline-color|fill|stroke|font|font-size|font-family|line-height|letter-spacing|border-radius|box-shadow)\s*:/;
-const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/g;
 /** 时长类名：数字和不取 --plume-t-* 的任意值不行；duration-[var(--plume-t-base)]、duration-(--plume-t-base) 可以。 */
 const DURATION_CLASS = /^(?:[^\s:]+:)*duration-(?:\d|\[(?!var\(--plume-t-))/;
 /** 按下时的缩放、位移（规则 9）。 */
 const PRESS_MOTION = /^(?:[^\s:]+:)*active:-?(?:scale|translate)-/;
-/** CSS 里的过渡时长。0.01ms 是减少动态效果那条规则本身。 */
-const CSS_TRANSITION = /transition(?:-duration)?\s*:([^;]*)/g;
-const TIME_LITERAL = /(?<![\w.-])(?!0\.01ms)\d*\.?\d+m?s\b/;
-/** 行内 style 里只能取 var(--plume-*) 的属性；只看字面量值，类型注解不算。 */
-const INLINE_STYLE =
-	/\b(color|background|backgroundColor|borderColor|borderRadius|fontSize|lineHeight|letterSpacing|fontFamily|boxShadow|transition|transitionDuration)\s*:\s*(-?\d[\w.%]*|"[^"\n]*"|'[^'\n]*'|`[^`]*`)/g;
-const INLINE_OK = /var\(--plume-|^["'`](?:transparent|inherit|currentColor|none)["'`]$/;
-/** 插件 CSS 里归 token 和组件管的属性（规则 5）：值只能是单个 var(--plume-*) 或关键字，calc 拼档位也不行。 */
-const PLUGIN_CSS_TYPE = /(?<![\w-])(font|font-size|line-height|letter-spacing|font-family|font-weight|border-radius|box-shadow)\s*:\s*([^;}]+)/g;
-const PLUGIN_CSS_OK = /^(?:var\(--plume-[\w-]+\)|inherit|initial|unset|normal|none|0)$/;
 
 const problems = [];
 const report = (file, index, text, rule, message) => {
@@ -185,70 +159,26 @@ async function filesUnder(dir, extensions) {
 	return out;
 }
 
-/** 字符串字面量的内容和位置；模板字符串里的 ${…} 换成空格（里面的字面量会被单独取到）。 */
-function stringLiterals(text) {
-	const out = [];
-	const pattern = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g;
-	for (const match of text.matchAll(pattern)) {
-		const body = match[1] ?? match[2] ?? match[3] ?? "";
-		out.push({ index: match.index, body: match[3] === undefined ? body : body.replace(/\$\{[^}]*\}/g, " ") });
-	}
-	return out;
-}
-
-/** 去掉注释，保留换行，行号不变。字符串里的 // 不动。 */
-function stripComments(text, css) {
-	const pattern = css ? /\/\*[\s\S]*?\*\//g : /\/\*[\s\S]*?\*\/|(?<![:"'`\\])\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g;
-	return text.replace(pattern, (match) => (match.startsWith("/") ? match.replace(/[^\n]/g, " ") : match));
-}
-
-/** 用产品的样式入口编译，问每个类名能不能生成样式。build 是增量的：输出变长了说明这个类名有效。 */
+/** 用产品的样式入口编译，问每个类名能不能生成样式。 */
 async function tailwind() {
 	const entry = join(rendererDir, "styles.css");
-	const compiler = await compile(await readFile(entry, "utf8"), { base: dirname(entry), onDependency() {} });
-	let last = compiler.build([]);
-	const known = new Map();
-	return (candidate) => {
-		if (!known.has(candidate)) {
-			const next = compiler.build([candidate]);
-			known.set(candidate, next !== last);
-			last = next;
-		}
-		return known.get(candidate);
-	};
+	return tailwindProbe(await compile(await readFile(entry, "utf8"), { base: dirname(entry), onDependency() {} }));
 }
 
 function checkColors(file, text) {
 	const allowed = ALLOWED_COLORS[relative(root, file)] ?? {};
 	if (allowed["*"]) return;
-	const css = extname(file) === ".css";
-	const code = stripComments(text, css);
-	const chunks = css ? [{ index: 0, body: code }] : stringLiterals(code);
-	for (const { index, body } of chunks) {
-		for (const match of body.matchAll(COLOR_LITERAL)) {
-			if (allowed[match[0]]) continue;
-			report(file, index + match.index, text, "色值", `${match[0]}：颜色只在 theme.css 里定义，这里用 token 类或 var(--plume-*)`);
-		}
+	for (const { index, value } of colorLiterals(text, extname(file) === ".css")) {
+		if (allowed[value]) continue;
+		report(file, index, text, "色值", `${value}：颜色只在 theme.css 里定义，这里用 token 类或 var(--plume-*)`);
 	}
 }
 
 /** 行内 style 和 CSS 里的过渡时长（规则 6、7）。 */
 function checkInline(file, text) {
-	const css = extname(file) === ".css";
-	const code = stripComments(text, css);
-	if (css) {
-		for (const match of code.matchAll(CSS_TRANSITION)) {
-			const time = match[1].match(TIME_LITERAL);
-			if (time) report(file, match.index, text, "时长", `${time[0]}：过渡时长用 var(--plume-t-quick / base / slow)`);
-		}
-		return;
-	}
 	// 主题表的 background 是待选的配色数据，不是 JSX 行内样式；色值许可仍由上面的表单独管理。
 	if (relative(root, file) === "packages/client/ui/src/lib/code/themes.ts") return;
-	for (const match of code.matchAll(INLINE_STYLE)) {
-		if (!INLINE_OK.test(match[2]))
-			report(file, match.index, text, "行内样式", `${match[1]}: ${match[2]}：行内样式的颜色、圆角、字号、字体、阴影、过渡只取 var(--plume-*)`);
-	}
+	for (const { index, rule, message } of inlineProblems(text, extname(file) === ".css")) report(file, index, text, rule, message);
 }
 
 // ── 规则 8：按 theme.css 的声明算颜色 ───────────────────────────────
@@ -379,30 +309,10 @@ async function main() {
 		for (const file of await filesUnder(join(root, dir), [".ts", ".tsx"])) checkColors(file, await readFile(file, "utf8"));
 	}
 
-	// 规则 3、5：插件。
+	// 规则 3、5、6、7：插件。
 	for (const file of (await Promise.all(PLUGINS.map((dir) => filesUnder(join(root, dir), [".ts", ".tsx", ".css"])))).flat()) {
 		const text = await readFile(file, "utf8");
-		checkColors(file, text);
-		checkInline(file, text);
-		for (const match of stripComments(text, extname(file) === ".css").matchAll(/className=(?:"([^"]*)"|\{\s*"([^"]*)"\s*\}|\{\s*`([^`]*)`\s*\})/g)) {
-			const body = (match[1] ?? match[2] ?? match[3] ?? "").replace(/\$\{[^}]*\}/g, " ");
-			for (const candidate of body.split(/\s+/).filter(Boolean)) {
-				if (valid(candidate))
-					report(file, match.index, text, "插件类名", `${candidate}：插件单独构建，产品扫不到它自己写的 Tailwind 类，用 @plume/styles 导出的组合`);
-			}
-		}
-		if (extname(file) === ".css") {
-			for (const match of stripComments(text, true).matchAll(PLUGIN_CSS_TYPE)) {
-				if (!PLUGIN_CSS_OK.test(match[2].trim()))
-					report(
-						file,
-						match.index,
-						text,
-						"插件样式",
-						`${match[1]}: ${match[2].trim()}：插件 CSS 只管布局，文字用 @plume/ui 的 Text，圆角、阴影取单个 var(--plume-*)`,
-					);
-			}
-		}
+		for (const { index, rule, message } of pluginStyleProblems(file, text, valid)) report(file, index, text, rule, message);
 	}
 
 	// 规则 4：SkinToken 和 theme.css 一一对应。推导系数（k）、动效（t、e）、阴影、控件和菜单、主输入框、对话列、窗格的尺寸不给皮肤改。

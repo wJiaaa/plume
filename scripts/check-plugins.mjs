@@ -1,14 +1,9 @@
 /**
  * 插件检查（`pnpm check` 的一部分）：写插件只靠 skill `skills/plume-plugin` 和公开接口，这里查两头都守住了。
  *
- * 1. 插件只引用公开接口：市场插件（旁边插件仓库的 plugins/*，见 scripts/market.mjs）、packages/builtin/* 的 src 里，import / export from / import() / require() 只能是
- *    - 相对路径，且不出插件自己的目录；
- *    - `node:*`；
- *    - `@plume/contract`、`@plume/contract/ui`，而且只能 `import type` / `export type`（它只有类型，运行时从 ctx / ui 上拿）；
- *    - 界面入口共享的 `react`、`react/jsx-runtime`、`@plume/ui`、`@plume/ui/icons`、`@plume/styles`；
- *    - 插件自己 package.json 里声明的第三方包（及其子路径）；
- *    - `packages/infra/` 下的通用库（不懂 agent 业务，构建时打进插件），同样要在 package.json 里声明。
- *    `@plume/` 下的其他包是宿主的实现，声明了也不行。
+ * 1. 内置插件（packages/builtin/*）只引用公开接口：规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/imports.mjs），
+ *    另外允许 `packages/infra/` 下的通用库（不懂 agent 业务，构建时打进插件），同样要在 package.json 里声明。
+ *    从 `@plume/ui` 引用的值只能是给插件用的名单里的（见规则 3）。市场插件在插件仓库里，由它自己的检查管。
  * 2. skill 跟得上接口：`PluginContext`、`UiContext` 的每个成员和 `Hooks` 的每个钩子名，skill 里都要提到
  *    （写成 `ctx.成员`、`ui.成员`、钩子名）；skill 里写的 `ctx.x`、`ui.x`、`hook("x"` 也必须真的存在。
  *    只查名字在不在，参数和语义变了还得人改 skill。
@@ -21,8 +16,8 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
-import { MARKET_DIR } from "./market.mjs";
+import { dirname, join, relative, resolve } from "node:path";
+import { importProblems, stripComments } from "../packages/sdk/plugin-sdk/lib/lint/imports.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const SKILL = join(root, "skills/plume-plugin");
@@ -31,9 +26,7 @@ const UI_API = join(root, "packages/client/ui/plugin-api.json");
 const STYLES_SRC = join(root, "packages/client/styles/src/index.ts");
 const COMPONENTS_DOC = join(SKILL, "references/components.md");
 const UI_PUBLIC = new Set(JSON.parse(readFileSync(UI_API, "utf8")).flatMap((group) => group.names));
-const PLUGIN_ROOTS = [MARKET_DIR, "packages/builtin"];
-const CONTRACT = new Set(["@plume/contract", "@plume/contract/ui"]);
-const SHARED = new Set(["react", "react/jsx-runtime", "@plume/ui", "@plume/ui/icons", "@plume/styles"]);
+const BUILTIN = join(root, "packages/builtin");
 /** packages/infra/ 下的通用库：不懂 agent 业务，插件可以声明了打包进去。 */
 const INFRA = new Set(
 	readdirSync(join(root, "packages/infra"))
@@ -56,29 +49,6 @@ function walk(dir, exts, out = []) {
 	return out;
 }
 
-/** 去掉注释。行注释只认行首或空白后的 `//`，字符串里的 URL 不受影响。 */
-const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
-
-/** 包名：`@scope/name/sub` → `@scope/name`，`name/sub` → `name`。 */
-const packageOf = (specifier) =>
-	specifier
-		.split("/")
-		.slice(0, specifier.startsWith("@") ? 2 : 1)
-		.join("/");
-
-/** 一个文件里的引用：{ specifier, typeOnly }。import 子句只由标识符、花括号、逗号、星号、空白组成，不会跨进代码里。 */
-function imports(text) {
-	const code = stripComments(text);
-	const found = [];
-	for (const match of code.matchAll(/\bimport\s+(type\s+)?(?:[\w$*{},\s]+?\s+from\s*)?["']([^"']+)["']/g))
-		found.push({ specifier: match[2], typeOnly: Boolean(match[1]) });
-	for (const match of code.matchAll(/\bexport\s+(type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[\w$,\s]*\})\s*from\s*["']([^"']+)["']/g))
-		found.push({ specifier: match[2], typeOnly: Boolean(match[1]) });
-	// `typeof import("x")` 只是类型，但和运行时的 import() 一样要在白名单里，按非纯类型算更严。
-	for (const match of code.matchAll(/\b(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/g)) found.push({ specifier: match[1], typeOnly: false });
-	return found;
-}
-
 /** 从 `@plume/ui` 引用的值（`import type` 和 `type X` 是类型，不算）。 */
 function uiValueImports(text) {
 	const names = [];
@@ -94,40 +64,18 @@ function uiValueImports(text) {
 	return names;
 }
 
-// 规则 1：插件只引用公开接口。
-for (const base of PLUGIN_ROOTS) {
-	const dir = join(root, base);
-	if (!existsSync(dir)) continue;
-	for (const name of readdirSync(dir)) {
-		const pluginDir = join(dir, name);
-		const manifestFile = join(pluginDir, "package.json");
-		if (!existsSync(manifestFile)) continue;
-		const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
-		const declared = new Set(
-			Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }).filter((dep) => !dep.startsWith("@plume/") || INFRA.has(dep)),
-		);
-		for (const file of walk(join(pluginDir, "src"), [".ts", ".tsx"])) {
-			for (const { specifier, typeOnly } of imports(readFileSync(file, "utf8"))) {
-				if (specifier.startsWith(".")) {
-					const target = resolve(dirname(file), specifier);
-					if (target !== pluginDir && !target.startsWith(pluginDir + sep)) report(file, `${specifier}：出了插件自己的目录`);
-				} else if (specifier.startsWith("node:") || SHARED.has(specifier)) {
-					// 公开的运行时模块。
-				} else if (CONTRACT.has(specifier)) {
-					if (!typeOnly) report(file, `${specifier}：只能 import type / export type，运行时的东西从 ctx / ui 上拿`);
-				} else if (specifier.startsWith("@plume/") && !INFRA.has(packageOf(specifier))) {
-					report(file, `${specifier}：不是公开接口，插件只能用 @plume/contract（类型）、@plume/ui、@plume/ui/icons、@plume/styles 和 packages/infra 下的库`);
-				} else if (!declared.has(packageOf(specifier))) {
-					report(file, `${specifier}：没在插件的 package.json 里声明`);
-				}
-			}
-			for (const name of uiValueImports(readFileSync(file, "utf8"))) {
-				if (!UI_PUBLIC.has(name))
-					report(
-						file,
-						`@plume/ui 的 ${name} 不在给插件用的名单里（packages/client/ui/plugin-api.json），可用的见 skills/plume-plugin/references/components.md`,
-					);
-			}
+// 规则 1：内置插件只引用公开接口。
+for (const name of readdirSync(BUILTIN)) {
+	const pluginDir = join(BUILTIN, name);
+	if (!existsSync(join(pluginDir, "package.json"))) continue;
+	for (const { file, message } of importProblems(pluginDir, { allow: INFRA })) report(file, message);
+	for (const file of walk(join(pluginDir, "src"), [".ts", ".tsx"])) {
+		for (const imported of uiValueImports(readFileSync(file, "utf8"))) {
+			if (!UI_PUBLIC.has(imported))
+				report(
+					file,
+					`@plume/ui 的 ${imported} 不在给插件用的名单里（packages/client/ui/plugin-api.json），可用的见 skills/plume-plugin/references/components.md`,
+				);
 		}
 	}
 }

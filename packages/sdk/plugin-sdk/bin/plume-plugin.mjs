@@ -4,7 +4,7 @@
  * 用 Plume 自己的运行时跑这个文件，插件作者的机器上不用装 Node 和 npm。
  *
  *   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
- *   plume-plugin check [目录]              类型检查，缺省当前目录
+ *   plume-plugin check [目录]              类型检查和插件规则（公开接口、样式、文案），缺省当前目录
  *   plume-plugin build [目录]
  *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/plugins，Plume 开着就当场加载
  *   plume-plugin dev [目录] [--to 目录]      构建、装上，之后一改源码就重新来一遍
@@ -47,8 +47,8 @@ try {
 				: "  写法见 .claude/skills/plume-plugin/SKILL.md；写完 plume-plugin check、plume-plugin dev",
 		);
 	} else if (command === "check") {
-		if (!checkPlugin(dir)) process.exitCode = 1;
-		else console.log("✓ 类型检查通过");
+		if (!(await checkPlugin(dir))) process.exitCode = 1;
+		else console.log("✓ 检查通过");
 	} else if (command === "build") {
 		console.log(`✓ ${await buildPlugin(dir)}`);
 	} else if (command === "install") {
