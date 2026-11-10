@@ -16,7 +16,6 @@
     "@plume/agent": "workspace:*",
     "@plume/contract": "workspace:*",
     "@plume/llm": "workspace:*",
-    "@plumeai/plugin-sdk": "workspace:*",
     "@plume/rpc": "workspace:*",
     "@plume/styles": "workspace:*",
     "@plume/ui": "workspace:*",
@@ -54,6 +53,7 @@
     "unpdf": "^1.9.1"
   },
   "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
     "@tailwindcss/vite": "^4.3.4",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
