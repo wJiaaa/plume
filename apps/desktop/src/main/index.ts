@@ -31,6 +31,7 @@ import {
 	CATALOG_FILE_ENV,
 	type ConnectMessage,
 	DATA_DIR_ENV,
+	PLUGIN_STATE_DIR_ENV,
 	LOCALE_ENV,
 	NATIVE_ROOTS_ENV,
 	type MainProcessApi,
@@ -200,7 +201,10 @@ async function boot(): Promise<void> {
 	const catalogUrl = process.env.PLUME_MARKET_URL || MARKET_URL;
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
 	const builtinDir = app.isPackaged ? join(process.resourcesPath, "builtin") : resolve(app.getAppPath(), "../../packages/builtin");
-	const installDir = smoke ? join(smoke.dir, "plugins") : join(plumeHome(), "plugins");
+	// 开发版（没打包）和装好的应用共用会话和设置，插件那一份分开：市场装的插件、停用名单、自动更新开关、插件数据都在数据目录的 dev/ 下。
+	// 不分的话，开发时从本机市场装的插件会被装好的应用加载，两边还会按各自的市场把对方装的版本换掉。冒烟有自己的数据目录，不用分。
+	const pluginHome = app.isPackaged || smoke ? dataDir : join(dataDir, "dev");
+	const installDir = smoke ? join(smoke.dir, "plugins") : join(pluginHome, "plugins");
 	const sdkDir = app.isPackaged ? join(process.resourcesPath, "plugin-sdk") : resolve(app.getAppPath(), "../../packages/sdk/plugin-sdk");
 	// 写插件用的命令 ~/.plume/bin/plume-plugin（见 plugin-cli.ts）；写不了不耽误应用本身。
 	const cliDir = smoke ? join(smoke.dir, "bin") : join(plumeHome(), "bin");
@@ -215,7 +219,7 @@ async function boot(): Promise<void> {
 		builtinDir,
 		installDir,
 		localRoots,
-		settingsFile: join(plumeHome(), "market.json"),
+		settingsFile: join(pluginHome, "market.json"),
 		pluginDirs,
 		agent: { addPlugin: async (dir) => await agent.addPlugin(dir), removePlugin: async (key) => await agent.removePlugin(key) },
 		announce: announceToWindows,
@@ -245,6 +249,7 @@ async function boot(): Promise<void> {
 		env: {
 			...process.env,
 			[DATA_DIR_ENV]: dataDir,
+			[PLUGIN_STATE_DIR_ENV]: pluginHome,
 			[SETTINGS_FILE_ENV]: settingsFile,
 			[PLUGINS_ENV]: JSON.stringify(plugins),
 			// 会在 Plume 开着时被换掉的插件目录；内置插件不在里面。

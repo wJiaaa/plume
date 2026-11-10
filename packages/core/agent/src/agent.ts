@@ -163,8 +163,10 @@ function userMessage(input: OutgoingMessage): UserMessage {
 }
 
 export interface AgentOptions {
-	/** 会话、插件数据都在这里。 */
+	/** 会话、模型设置等都在这里；插件数据缺省也在，见 `pluginStateDir`。 */
 	dataDir: string;
+	/** 停用名单 `plugins.json` 和插件数据 `plugin-data/` 改放到这里（开发版和装好的应用分开插件、共用会话）；不给就在 `dataDir`。 */
+	pluginStateDir?: string;
 	/** 模型设置存在这个 JSON 文件里；供应商的 API key 不在里面，加密存在 `dataDir` 的 `credentials.json`（见 `vault.ts`）。 */
 	settingsFile: string;
 	/** 按顺序加载。工具重名时后登记的生效。 */
@@ -300,7 +302,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/** 不属于任何项目的聊天都开在这里：会话总得有个工作目录，又不该拿哪个项目的目录凑数。 */
 	const chatsDir = join(dataDir, "workspaces", "general");
 
-	const pluginsFile = join(dataDir, "plugins.json");
+	const pluginStateDir = options.pluginStateDir ?? dataDir;
+	const pluginsFile = join(pluginStateDir, "plugins.json");
 	const config = (await files.read<{ disabled?: unknown }>(pluginsFile)) ?? {};
 	const disabled = new Set(Array.isArray(config.disabled) ? config.disabled.filter((name): name is string => typeof name === "string") : []);
 	const watchers = new Set<(event: AgentEvent) => void>();
@@ -343,7 +346,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const launchedPrompts = new WeakSet<UserMessage>();
 	const host = new PluginHost({
 		// 不叫 plugins：数据目录下的 plugins/ 是插件市场装插件的地方。
-		dataDir: join(dataDir, "plugin-data"),
+		dataDir: join(pluginStateDir, "plugin-data"),
 		appDataDir: dataDir,
 		disabled,
 		log,

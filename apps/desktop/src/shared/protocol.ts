@@ -7,6 +7,8 @@ import type { AgentEvent, CallContext, PluginStatus, SessionSummary, WebPageEven
 
 /** 启动 agent 进程时经环境变量传入：数据目录、模型设置文件、插件目录列表（JSON）、界面语言。 */
 export const DATA_DIR_ENV = "PLUME_DATA_DIR";
+/** 停用名单 `plugins.json` 和插件数据 `plugin-data/` 放在哪；开发版和数据目录不同，见 main/index.ts 的 pluginHome。 */
+export const PLUGIN_STATE_DIR_ENV = "PLUME_PLUGIN_STATE_DIR";
 export const SETTINGS_FILE_ENV = "PLUME_SETTINGS_FILE";
 export const PLUGINS_ENV = "PLUME_PLUGINS";
 export const LOCALE_ENV = "PLUME_LOCALE";

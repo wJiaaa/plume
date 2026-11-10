@@ -18,6 +18,7 @@ import {
 	LOCALE_ENV,
 	type MainProcessApi,
 	NATIVE_ROOTS_ENV,
+	PLUGIN_STATE_DIR_ENV,
 	PLUGINS_ENV,
 	type PluginDir,
 	SETTINGS_FILE_ENV,
@@ -77,6 +78,7 @@ function entryOf({ key, dir, builtin }: PluginDir): PluginEntry {
 
 const ready = createAgent({
 	dataDir,
+	...(process.env[PLUGIN_STATE_DIR_ENV] ? { pluginStateDir: process.env[PLUGIN_STATE_DIR_ENV] } : {}),
 	settingsFile,
 	trash: async (path) => await main.trash(path),
 	...(process.env[CATALOG_FILE_ENV] ? { catalogFile: process.env[CATALOG_FILE_ENV] } : {}),

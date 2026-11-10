@@ -80,7 +80,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 模型目录（上下文、能力、价格的参考值，见 `@plume/llm/model-catalog`）缓存在 `~/.plume/model-catalog.json`：agent 进程启动时先读缓存，再每小时同步一次（`packages/core/agent/src/model-catalog-sync.ts`），界面经 `modelCatalog(版本)` 取，版本没变不传整份；冒烟验证不同步。导出、导入供应商的文件由主进程弹系统对话框选路径（`plume:providers:save-path` / `open-path`），读写文件的是 agent 进程；导出的文件带 key，权限只给本人。
 
-数据目录是 `~/.plume`，设了 `PLUME_HOME` 就换到那里（见 `apps/desktop/src/main/home.ts`），这时 Electron 的 userData 也跟着放进它的 `chromium/`：模型设置 `settings.json`、`sessions/`（会话库，各会话排着的话也在里面）、`session-media/`、各会话的临时目录 `scratch/<会话 id>/`（随会话删掉）、`projects.json`、`workspaces/`、插件市场装的 `plugins/<目录名>/` 和 `market.json`、插件私有目录 `plugin-data/<插件名>/`、`plugins.json`、外观、界面语言和窗口位置。
+数据目录是 `~/.plume`，设了 `PLUME_HOME` 就换到那里（见 `apps/desktop/src/main/home.ts`），这时 Electron 的 userData 也跟着放进它的 `chromium/`：模型设置 `settings.json`、`sessions/`（会话库，各会话排着的话也在里面）、`session-media/`、各会话的临时目录 `scratch/<会话 id>/`（随会话删掉）、`projects.json`、`workspaces/`、插件市场装的 `plugins/<目录名>/` 和 `market.json`、插件私有目录 `plugin-data/<插件名>/`、`plugins.json`、外观、界面语言和窗口位置。开发版（没打包、不是冒烟）把插件那四样（`plugins/`、`market.json`、`plugins.json`、`plugin-data/`）放进 `dev/`，会话和设置照样和装好的应用共用（`apps/desktop/src/main/index.ts` 的 `pluginHome`）。
 
 外观设置（主题、配色、会话背景）由主进程存在数据目录的 `appearance.json`，只记用户改过的字段；背景图复制在 `backgrounds/`。主进程开窗前按它设好 `nativeTheme`，渲染进程启动时经预加载脚本同步取一次，把配色写成 `--plume-*` 种子（见 `apps/desktop/src/main/appearance.ts`、`renderer/appearance-settings.ts`）。
 
