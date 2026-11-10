@@ -1,6 +1,6 @@
 {
   "name": "@plumeai/plugin-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "写 Plume 插件用的类型、命令（新建、检查、构建、安装）、插件模板和给 agent 的 skill。随 Plume 应用带一份，也发在 npm 上（插件仓库按版本依赖）。",
   "license": "MIT",
   "repository": {
