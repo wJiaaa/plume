@@ -10,6 +10,7 @@
     "dev": "pnpm build:plugins && pnpm --filter @plume/desktop dev",
     "build": "pnpm build:plugins && pnpm --filter @plume/desktop build",
     "build:plugins": "node scripts/build-plugins.mjs",
+    "publish:sdk": "node packages/sdk/plugin-sdk/scripts/publish.mjs",
     "package": "pnpm --filter \"@plumeai/plugin-sdk...\" typecheck && pnpm build:plugins && pnpm --filter @plume/desktop package",
     "catalog:update": "node --experimental-strip-types scripts/update-model-catalog.ts",
     "release": "node scripts/release.mjs",

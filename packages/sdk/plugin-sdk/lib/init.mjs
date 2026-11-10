@@ -4,13 +4,13 @@
  * 两种情况：
  * - 独立项目（SDK 随 Plume 应用发来，或者目标不在 Plume 仓库里）：不经 npm，node_modules 里链到这份 SDK（见 link.mjs）；
  *   另外带上 skill、AGENTS.md、CLAUDE.md、.gitignore，让接手的 agent 一打开项目就知道怎么写。
- * - Plume 的仓库里（SDK 就是本体仓库里这份、目标在一个 pnpm workspace 里）：本体仓库里依赖写 `workspace:*`，
- *   旁边插件仓库（plume-plugins）里写 `link:` 指回本体仓库的 SDK；skill 和 AGENTS.md 用仓库根目录的，不另带；
- *   构建交给本体仓库的 `pnpm build:plugins`。
+ * - 目标在一个 pnpm workspace 里（Plume 本体仓库，或插件仓库 plume-plugins 这样的插件集合）：本体仓库里 SDK 依赖写
+ *   `workspace:*`，别的 workspace 里写 npm 上的版本 `^<这份 SDK 的版本>`；skill 和 AGENTS.md 用仓库根目录的，不另带；
+ *   构建交给仓库的 `pnpm build:plugins`。
  */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { linkSdk } from "./link.mjs";
 import { DIR_NAME } from "./manifest.mjs";
 
@@ -31,9 +31,12 @@ function workspaceOf(start) {
 	return undefined;
 }
 
-/** SDK 所在的 pnpm workspace 根目录；随应用发出去的那份没有。 */
+/** 这份 SDK 是从 npm 装进某个项目的（在 node_modules 里）。 */
+const installed = sdk.split(sep).includes("node_modules");
+
+/** SDK 源码所在的 pnpm workspace 根目录（Plume 本体仓库）；随应用发的、从 npm 装的那份没有。 */
 function workspaceRoot() {
-	return workspaceOf(sdk);
+	return installed ? undefined : workspaceOf(sdk);
 }
 
 /** skill 的来源：随应用发的那份里是 skill/（打包时复制进去），仓库里是根目录的 skills/plume-plugin。 */
@@ -68,10 +71,10 @@ export function initPlugin(target, options = {}) {
 	if (!DIR_NAME.test(key)) throw new Error(`目录名 ${key} 不行：只能用小写字母、数字和连字符`);
 	if (existsSync(dir)) throw new Error(`${dir} 已经存在`);
 	const root = workspaceRoot();
-	// 目标所在的 workspace：本体仓库自己，或者旁边的插件仓库。随应用发的 SDK 没有仓库，总是独立项目。
-	const home = root === undefined ? undefined : workspaceOf(dirname(dir));
+	// 目标所在的 workspace：SDK 源码所在的本体仓库，或者从 npm 装了 SDK 的仓库（比如插件仓库）。随应用发的 SDK 总是建独立项目。
+	const home = root !== undefined || installed ? workspaceOf(dirname(dir)) : undefined;
 	const workspace = home !== undefined;
-	const sdkDep = home === root ? "workspace:*" : `link:${relative(dir, sdk).replaceAll("\\", "/")}`;
+	const sdkDep = home !== undefined && home === root ? "workspace:*" : `^${manifest.version}`;
 	const name = options.name ?? (workspace ? `plume.${key}` : key);
 	if (!PLUGIN_NAME.test(name)) throw new Error(`插件名 ${name} 不行：小写字母、数字、连字符，用点分段`);
 	const displayName = options.displayName ?? key;

@@ -26,7 +26,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | `node:*`、自己 `package.json` 里声明的第三方包 | 逻辑入口随便用；界面入口只能用浏览器能跑的 |
 | 仓库里的插件（见文末） | 照着写 |
 
-宿主运行时的一切从 `ctx` / `ui` 上拿。SDK 的类型里只有上表这些：`@plume/ui` 只开放 [references/components.md](references/components.md) 里的名字，引用别的类型检查就失败；在 Plume 的仓库里还会查 import（本体仓库 `pnpm check:plugins`，插件仓库 `pnpm check:host`）。
+宿主运行时的一切从 `ctx` / `ui` 上拿。SDK 的类型里只有上表这些：`@plume/ui` 只开放 [references/components.md](references/components.md) 里的名字，引用别的类型检查就失败；`plume-plugin check` 还会查 import、色值和 Tailwind 类、写死的中文（Plume 的两个仓库里是 `pnpm check:plugins`，同一套规则）。
 
 ## 先判断能不能做成插件
 
@@ -77,8 +77,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 5. **样式和文案**（有界面或给人看的文字时）：读 [references/style-i18n.md](references/style-i18n.md)。
 6. **构建和加载**：
    - 独立项目：`plume-plugin dev` 构建、装进 `~/.plume/plugins/<目录名>/`，之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。也可以把插件的上级目录放进环境变量 `PLUME_PLUGIN_PATHS`，Plume 同样盯着那里。
-   - Plume 的插件仓库里（`plugins/<目录名>`）：`pnpm build:plugins` 打出 `dist/`，在应用的「扩展」里装上；装上、开关、卸下当场生效，重新构建后市场按新版处理。
-7. **自检**：对照文末清单，再跑类型检查（独立项目 `plume-plugin check`，仓库里 `pnpm check`）。
+   - Plume 的插件仓库里（`plugins/<目录名>`）：`pnpm plugin dev plugins/<目录名>`，和独立项目一样构建、装进本机的 Plume；要连市场一起试（安装、更新），`pnpm market` 起一个本机市场，Plume 启动前设它打印的 `PLUME_MARKET_URL`。
+7. **自检**：对照文末清单，再跑检查（独立项目 `plume-plugin check`：类型检查加插件规则；仓库里 `pnpm check`）。
 
 ## 目录骨架
 

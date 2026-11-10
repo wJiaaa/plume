@@ -1,9 +1,18 @@
 {
   "name": "@plumeai/plugin-sdk",
   "version": "0.1.1",
-  "description": "写 Plume 插件用的类型、命令（新建、检查、构建、安装）、插件模板和给 agent 的 skill。随 Plume 应用一起发，不经 npm。",
+  "description": "写 Plume 插件用的类型、命令（新建、检查、构建、安装）、插件模板和给 agent 的 skill。随 Plume 应用带一份，也发在 npm 上（插件仓库按版本依赖）。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wJiaaa/plume.git",
+    "directory": "packages/sdk/plugin-sdk"
+  },
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "bin": {
     "plume-plugin": "./bin/plume-plugin.mjs"
   },
@@ -11,7 +20,8 @@
     "./tsconfig.json": "./tsconfig.json",
     "./build": "./lib/build.mjs",
     "./lint": "./lib/lint/index.mjs",
-    "./manifest": "./lib/manifest.mjs"
+    "./manifest": "./lib/manifest.mjs",
+    "./targets": "./lib/targets.mjs"
   },
   "scripts": {
     "typecheck": "node scripts/build-types.mjs",

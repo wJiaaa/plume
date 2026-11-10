@@ -19,7 +19,7 @@ on:
 permissions:
   contents: read
 
-# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件。
+# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件。推 tag 时最后由 sdk 把插件 SDK 发到 npm。
 
 jobs:
   windows:
@@ -186,3 +186,39 @@ jobs:
         run: |
           node scripts/changelog-section.mjs "$TAG" > "$RUNNER_TEMP/notes.md"
           gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+
+  # 插件 SDK 发到 npm（插件仓库和别的插件项目按版本依赖它），和本机的 `pnpm publish:sdk` 同一份脚本（packages/sdk/plugin-sdk/scripts/publish.mjs）：
+  # npm 上已有这个版本就跳过，本机先发过也不失败。版本号和应用一样，Release 发出去之后再发：插件不会先用上还没发布的宿主能力。
+  # 用 npm 的 trusted publishing（GitHub OIDC），不存 token：npmjs.com 上 @plumeai/plugin-sdk 的设置里要登记这个仓库的 package.yml。
+  sdk:
+    needs: [publish]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+        with:
+          version: 10
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # trusted publishing 要 npm 11.5.1 以上
+      - name: 发布插件 SDK
+        run: |
+          npm install -g npm@^11.5.1
+          pnpm publish:sdk
