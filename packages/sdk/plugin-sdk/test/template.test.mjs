@@ -20,7 +20,7 @@ const work = mkdtempSync(join(tmpdir(), "plume-plugin-sdk-"));
 const dir = join(work, "hello-world");
 
 before(() => {
-	assert.ok(existsSync(join(sdk, "dist/ui.d.ts")), "先生成 SDK 的类型声明：pnpm --filter @plume/plugin-sdk typecheck");
+	assert.ok(existsSync(join(sdk, "dist/ui.d.ts")), "先生成 SDK 的类型声明：pnpm --filter @plumeai/plugin-sdk typecheck");
 	initPlugin(dir);
 });
 
@@ -29,7 +29,7 @@ after(() => rmSync(work, { recursive: true, force: true }));
 test("init 出独立项目：不写依赖，SDK 链进 node_modules，带上 skill 和给 agent 的说明", () => {
 	const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 	assert.equal(pkg.devDependencies, undefined);
-	assert.equal(realpathSync(join(dir, "node_modules/@plume/plugin-sdk")), realpathSync(sdk));
+	assert.equal(realpathSync(join(dir, "node_modules/@plumeai/plugin-sdk")), realpathSync(sdk));
 	for (const name of ["@types/node", "@types/react"]) assert.ok(existsSync(join(dir, "node_modules", name, "package.json")), name);
 	for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore", ".claude/skills/plume-plugin/SKILL.md", "src/index.ts", "src/ui.tsx"]) {
 		assert.ok(existsSync(join(dir, file)), file);

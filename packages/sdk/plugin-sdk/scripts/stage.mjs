@@ -19,7 +19,7 @@ const target = process.argv[3] ?? `${process.platform}-${process.arch}`;
 const [platform, arch] = target.split("-");
 /** 必须带上的原生二进制包：`plume-plugin` 构建插件靠它们，按 Node 的平台、架构命名。 */
 const NATIVE = [`@esbuild/${target}`, `@typescript/typescript-${target}`];
-if (!existsSync(join(sdk, "dist/ui.d.ts"))) throw new Error("先生成 SDK 的类型声明：pnpm --filter @plume/plugin-sdk typecheck");
+if (!existsSync(join(sdk, "dist/ui.d.ts"))) throw new Error("先生成 SDK 的类型声明：pnpm --filter @plumeai/plugin-sdk typecheck");
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 

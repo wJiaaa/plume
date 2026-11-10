@@ -94,7 +94,7 @@ export function initPlugin(target, options = {}) {
 		...(workspace
 			? {
 					scripts: { typecheck: "tsc -p tsconfig.json" },
-					devDependencies: { "@plume/plugin-sdk": sdkDep, "@types/node": deps["@types/node"], "@types/react": deps["@types/react"] },
+					devDependencies: { "@plumeai/plugin-sdk": sdkDep, "@types/node": deps["@types/node"], "@types/react": deps["@types/react"] },
 				}
 			: {}),
 	};

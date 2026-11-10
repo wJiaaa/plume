@@ -19,7 +19,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 能用的 | 用来做什么 |
 | --- | --- |
 | 本 skill | 怎么写、有哪些约束 |
-| 插件 SDK `@plume/plugin-sdk` | 类型声明、`plume-plugin` 命令（新建、检查、构建、安装、开发）、tsconfig；下面这些模块名的类型都由它提供。随 Plume 应用发，不经 npm |
+| 插件 SDK `@plumeai/plugin-sdk` | 类型声明、`plume-plugin` 命令（新建、检查、构建、安装、开发）、tsconfig；下面这些模块名的类型都由它提供。随 Plume 应用发，不经 npm |
 | `@plume/contract`（逻辑入口）、`@plume/contract/ui`（界面入口） | 接口类型，以类型声明里的注释为准；只能 `import type` |
 | `react`、`react/jsx-runtime`、`@plume/ui`、`@plume/styles` | 界面入口运行时和产品共用同一份实例 |
 | `@plume/ui/icons` | 图标，打包进插件，只打用到的 |
@@ -86,8 +86,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 ```
 <目录名>/
-├── package.json       # plume.displayName、plume.category 是「扩展」里的名字和分类；仓库里还写 @plume/plugin-sdk 等开发依赖
-├── tsconfig.json      # 继承 @plume/plugin-sdk/tsconfig.json
+├── package.json       # plume.displayName、plume.category 是「扩展」里的名字和分类；仓库里还写 @plumeai/plugin-sdk 等开发依赖
+├── tsconfig.json      # 继承 @plumeai/plugin-sdk/tsconfig.json
 ├── README.md          # 「扩展」里的介绍：它做了什么、怎么用
 ├── images/           # 可选：README 引用的图片（相对路径 `images/xx.png`），随包分发
 ├── icon.png           # 可选：插件图标，市场、详情和设置页共用，随安装包分发

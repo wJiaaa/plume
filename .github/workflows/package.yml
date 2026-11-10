@@ -47,7 +47,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 生成插件 SDK 的类型声明
-        run: pnpm --filter "@plume/plugin-sdk..." typecheck
+        run: pnpm --filter "@plumeai/plugin-sdk..." typecheck
 
       - name: 构建内置插件
         run: node scripts/build-plugins.mjs --builtin
@@ -93,7 +93,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 生成插件 SDK 的类型声明
-        run: pnpm --filter "@plume/plugin-sdk..." typecheck
+        run: pnpm --filter "@plumeai/plugin-sdk..." typecheck
 
       - name: 构建内置插件
         run: node scripts/build-plugins.mjs --builtin

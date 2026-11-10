@@ -1,7 +1,7 @@
 /**
  * 让插件项目找到 SDK：在它的 node_modules 里建几个链接，指到这份 SDK（随 Plume 应用发的那份，或仓库里这份）。
  *
- * 不经 npm：插件的 tsconfig 写 `"extends": "@plume/plugin-sdk/tsconfig.json"`，`types` 写 `["node"]`，
+ * 不经 npm：插件的 tsconfig 写 `"extends": "@plumeai/plugin-sdk/tsconfig.json"`，`types` 写 `["node"]`，
  * 这几个名字靠链接解析到 SDK 自带的副本上，插件的写法和仓库里的一样。
  * Plume 挪了位置，或者用 npm 装了别的包（npm 会删掉它不认识的链接），重新跑一次 `plume-plugin link`。
  */
@@ -16,7 +16,7 @@ const require = createRequire(join(sdk, "package.json"));
 /** 链进插件 node_modules 的包 → 它在 SDK 这边的目录。 */
 function targets() {
 	return {
-		"@plume/plugin-sdk": sdk,
+		"@plumeai/plugin-sdk": sdk,
 		"@types/node": dirname(require.resolve("@types/node/package.json")),
 		"@types/react": dirname(require.resolve("@types/react/package.json")),
 	};

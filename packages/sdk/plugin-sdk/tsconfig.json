@@ -1,5 +1,5 @@
 {
-  // 插件继承这一份：`"extends": "@plume/plugin-sdk/tsconfig.json"`。
+  // 插件继承这一份：`"extends": "@plumeai/plugin-sdk/tsconfig.json"`。
   // paths 把宿主的公开接口指到 SDK 生成的声明上（路径相对这个文件），插件的写法和仓库里的一样。
   "compilerOptions": {
     "target": "ES2023",

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-这是一个 Plume 插件。写法、约束和自检清单见 skill `plume-plugin`：`.claude/skills/plume-plugin/SKILL.md`（SDK 里也有一份：`node_modules/@plume/plugin-sdk/skill/`，随 Plume 更新）。动手前先读它；只依赖 skill 里列的公开接口。
+这是一个 Plume 插件。写法、约束和自检清单见 skill `plume-plugin`：`.claude/skills/plume-plugin/SKILL.md`（SDK 里也有一份：`node_modules/@plumeai/plugin-sdk/skill/`，随 Plume 更新）。动手前先读它；只依赖 skill 里列的公开接口。
 
 ## 命令
 

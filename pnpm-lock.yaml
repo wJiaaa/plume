@@ -189,7 +189,7 @@ importers:
       '@plume/platform':
         specifier: workspace:*
         version: link:../../infra/platform
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -201,7 +201,7 @@ importers:
 
   packages/builtin/ask-user:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -219,7 +219,7 @@ importers:
 
   packages/builtin/commands:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -231,7 +231,7 @@ importers:
 
   packages/builtin/compaction:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -243,7 +243,7 @@ importers:
 
   packages/builtin/delivery:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -261,7 +261,7 @@ importers:
 
   packages/builtin/diagnostics:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -279,7 +279,7 @@ importers:
 
   packages/builtin/documents:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -303,7 +303,7 @@ importers:
 
   packages/builtin/git:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -321,7 +321,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.1
         version: 1.32.1(zod@4.6.7)
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -336,7 +336,7 @@ importers:
       '@plume/platform':
         specifier: workspace:*
         version: link:../../infra/platform
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -355,7 +355,7 @@ importers:
       '@plume/platform':
         specifier: workspace:*
         version: link:../../infra/platform
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -367,7 +367,7 @@ importers:
 
   packages/builtin/secrets:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -376,7 +376,7 @@ importers:
 
   packages/builtin/skills:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -391,7 +391,7 @@ importers:
 
   packages/builtin/spawn-session:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -409,7 +409,7 @@ importers:
 
   packages/builtin/status:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -424,7 +424,7 @@ importers:
 
   packages/builtin/title:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -442,7 +442,7 @@ importers:
 
   packages/builtin/todo:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -463,7 +463,7 @@ importers:
       '@plume/platform':
         specifier: workspace:*
         version: link:../../infra/platform
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':
@@ -481,7 +481,7 @@ importers:
 
   packages/builtin/web:
     devDependencies:
-      '@plume/plugin-sdk':
+      '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
       '@types/node':

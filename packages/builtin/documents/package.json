@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@plume/plugin-sdk": "workspace:*",
+    "@plumeai/plugin-sdk": "workspace:*",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.0",
     "docx-preview": "^0.4.1",

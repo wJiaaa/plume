@@ -21,7 +21,7 @@
     "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "devDependencies": {
-    "@plume/plugin-sdk": "workspace:*",
+    "@plumeai/plugin-sdk": "workspace:*",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.0"
   }
