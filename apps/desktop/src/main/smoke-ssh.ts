@@ -4,9 +4,8 @@ import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
-import { app, type BrowserWindow } from "electron";
+import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 const ASK = "冒烟：看一下这台机器的磁盘";
 const DONE = "根分区用了 92%，先看看哪些日志最大。";
@@ -20,7 +19,7 @@ const DONE = "根分区用了 92%，先看看哪些日志最大。";
 export async function checkSsh(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -49,7 +48,10 @@ export async function checkSsh(options: {
 		await writeFile(join(outDir, name), (await window.webContents.capturePage()).toPNG());
 	};
 
-	const script = resolve(app.getAppPath(), "../../../plume-plugins/plugins/ssh/test/smoke-server.mjs");
+	// 假 SSH 服务是插件仓库里 SSH 插件的测试件，这一段要指到插件仓库（scripts/smoke.mjs 没设时跳过这段）。
+	const plugins = process.env.PLUME_PLUGINS_DIR;
+	if (!plugins) throw new Error("ssh 段要用插件仓库里的假 SSH 服务：设 PLUME_PLUGINS_DIR=<插件仓库>/plugins");
+	const script = join(resolve(plugins), "ssh/test/smoke-server.mjs");
 	const server = spawn(process.execPath, [script], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "inherit"] });
 	try {
 		const port = await new Promise<number>((done, fail) => {
@@ -63,7 +65,7 @@ export async function checkSsh(options: {
 		});
 
 		if (!plugin.cli) throw new Error("没有插件安装命令");
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "ssh"), "--to", plugin.installDir]);
+		await plugin.install("ssh");
 		await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.ssh" && item.state === "active"), "SSH 插件加载");
 		await until(
 			`(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "SSH 主机"); button?.click(); return Boolean(button); })()`,

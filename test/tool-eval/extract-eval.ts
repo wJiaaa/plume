@@ -16,9 +16,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message, Plugin, PluginContext } from "../../packages/contract/src/index.ts";
-import { extractMemory } from "../../../plume-plugins/plugins/memory/src/extract.ts";
+import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { loadModel } from "./model.ts";
+
+const { extractMemory } = await pluginSource("memory/src/extract.ts");
 
 const say = (line = "") => process.stderr.write(`${line}\n`);
 const GREEN = "\x1b[32m";

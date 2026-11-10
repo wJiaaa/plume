@@ -7,10 +7,10 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "dev": "pnpm build:plugins && node scripts/dev.mjs",
+    "dev": "pnpm build:plugins && pnpm --filter @plume/desktop dev",
     "build": "pnpm build:plugins && pnpm --filter @plume/desktop build",
     "build:plugins": "node scripts/build-plugins.mjs",
-    "package": "pnpm --filter \"@plumeai/plugin-sdk...\" typecheck && node scripts/build-plugins.mjs --builtin && pnpm --filter @plume/desktop package",
+    "package": "pnpm --filter \"@plumeai/plugin-sdk...\" typecheck && pnpm build:plugins && pnpm --filter @plume/desktop package",
     "catalog:update": "node --experimental-strip-types scripts/update-model-catalog.ts",
     "release": "node scripts/release.mjs",
     "dump:session": "node --experimental-strip-types scripts/session-dump.ts",

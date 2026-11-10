@@ -6,8 +6,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .smoke/
-# pnpm dev 在本机起的插件市场（scripts/dev.mjs）
-/.market/
 /model.json
 # 打包：随应用发的插件目录和 SDK（apps/desktop/scripts/stage-resources.mjs）、安装包
 apps/desktop/.stage/

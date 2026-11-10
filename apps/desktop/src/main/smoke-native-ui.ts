@@ -34,7 +34,7 @@ const REPLY = [
 export async function checkNativeUi(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -93,7 +93,7 @@ export async function checkNativeUi(options: {
 	// 窗口刚改过尺寸、转录还在跟着重排时，算好的落点可能已经不在按钮上：经共用的 clickReal 点，点空了会再点。
 	const clickReal = (selector: string) => clickRealIn(window, selector, `原生界面验证：${selector}`);
 	assert.ok(plugin.cli);
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "native-ui"), "--to", plugin.installDir]);
+	await plugin.install("native-ui");
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.native-ui" && item.state === "active"), "插件启用");
 
 	const probeDir = join(outDir, "ui-probe");

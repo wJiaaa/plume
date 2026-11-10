@@ -197,7 +197,7 @@ async function boot(): Promise<void> {
 	// 冒烟验证用自己目录里的模型设置，不碰用户的。
 	const settingsFile = smoke ? join(smoke.dir, "model.json") : await userSettingsFile();
 	// 插件：从插件市场装进 ~/.plume/plugins 的（冒烟时装在冒烟目录里），加上 PLUME_PLUGIN_PATHS 下本机直接放的。
-	// 市场的目录在网上（market-remote.ts）；开发和冒烟用 PLUME_MARKET_URL 指到本机起的服务（scripts/market-serve.mjs）。
+	// 市场的目录在网上（market-remote.ts）；设了 PLUME_MARKET_URL 就用它（比如插件仓库在本机起的市场，联调没发布的插件）。
 	const catalogUrl = process.env.PLUME_MARKET_URL || MARKET_URL;
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
 	const builtinDir = app.isPackaged ? join(process.resourcesPath, "builtin") : resolve(app.getAppPath(), "../../packages/builtin");
@@ -414,8 +414,11 @@ async function boot(): Promise<void> {
 			shutdown,
 			plugin: {
 				cli: pluginCli,
-				// 插件作者的路子（plume-plugin install 一个构建好的文件夹）装的是旁边插件仓库里构建好的插件。
-				pluginsDir: resolve(app.getAppPath(), "../../../plume-plugins/plugins"),
+				// 各段要用的市场插件从市场装（PLUME_MARKET_URL，缺省线上的），和人在「扩展」里点安装走同一条路。
+				install: async (name: string) => {
+					const result = await market.install(name);
+					if (!result.ok) throw new Error(`market install ${name}: ${result.error === "failed" ? result.message : result.error}`);
+				},
 				builtinDir,
 				installDir,
 			},

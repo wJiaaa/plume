@@ -4,7 +4,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 const PLAN = "冒烟：先定个计划";
 const READY = "计划定了：用 SQLite。";
@@ -23,7 +22,7 @@ const GOT = "收到答复：单机，所以 SQLite。";
 export async function checkPeers(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -60,7 +59,7 @@ export async function checkPeers(options: {
 	const ref = (id: string) => id.replace(/-/g, "").slice(0, 6);
 
 	if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "sessions"), "--to", plugin.installDir]);
+	await plugin.install("sessions");
 	await wait(async () => (await agent.plugins()).some((status) => status.key === "sessions" && status.state === "active"), "装上会话互通插件");
 
 	let planId = "";

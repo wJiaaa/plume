@@ -22,11 +22,13 @@ import type { ToolRun } from "../../packages/contract/src/index.ts";
 import { grepTool } from "../../packages/builtin/tools/src/tools/grep.ts";
 import { gitListedFiles } from "../../packages/builtin/tools/src/tools/project-files.ts";
 import { authorizeRead } from "../../packages/builtin/tools/src/tools/read-access.ts";
-import lsp from "../../../plume-plugins/plugins/lsp/src/index.ts";
-import { lspTool } from "../../../plume-plugins/plugins/lsp/src/lsp-tool.ts";
-import { CodeIntelManager } from "../../../plume-plugins/plugins/lsp/src/manager.ts";
+import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { loadModel } from "./model.ts";
+
+const { default: lsp } = await pluginSource("lsp/src/index.ts");
+const { lspTool } = await pluginSource("lsp/src/lsp-tool.ts");
+const { CodeIntelManager } = await pluginSource("lsp/src/manager.ts");
 
 /*
  * 写 stderr，不写 stdout：机制部分不到一秒就跑完，行为部分要等模型。stdout 接到管道时有缓冲，快的那部分结果会一直憋到慢的跑完，
@@ -87,7 +89,7 @@ function runFor(cwd: string): ToolRun {
 }
 
 /** 和 plume.lsp 注册的同一个工具，只把语言服务器那一套换成 `manager`。 */
-function lspWith(manager: CodeIntelManager) {
+function lspWith(manager: InstanceType<typeof CodeIntelManager>) {
 	return lspTool({
 		managerFor: () => manager,
 		listFiles: gitListedFiles,

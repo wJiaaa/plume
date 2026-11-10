@@ -1,22 +1,15 @@
 /**
- * 构建市场插件（旁边插件仓库的 plugins/，见 scripts/market.mjs）和 packages/builtin/（内置插件）下的每个插件。怎么打包由插件 SDK 定（packages/sdk/plugin-sdk/lib/build.mjs），
- * 和插件作者在仓库外用 `plume-plugin build` 的是同一份：仓库里的插件不走另一条路。
- *
- * `--builtin` 只构建内置插件：打安装包只要它们（市场插件不随应用发），用不着旁边的插件仓库。
+ * 构建 packages/builtin/（内置插件）下的每个插件。怎么打包由插件 SDK 定（packages/sdk/plugin-sdk/lib/build.mjs），
+ * 和插件作者在仓库外用 `plume-plugin build` 的是同一份：仓库里的插件不走另一条路。市场插件在插件仓库里，由它自己构建。
  */
 
 import { cp, readdir, rm } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { buildPlugin } from "../packages/sdk/plugin-sdk/lib/build.mjs";
-import { MARKET_DIR } from "./market.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
-const roots = (process.argv.includes("--builtin") ? ["packages/builtin"] : [MARKET_DIR, "packages/builtin"]).map((dir) => join(repo, dir));
-const dirs = (
-	await Promise.all(
-		roots.map(async (root) => (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => join(root, entry.name))),
-	)
-).flat();
+const builtin = join(repo, "packages/builtin");
+const dirs = (await readdir(builtin, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => join(builtin, entry.name));
 let failed = false;
 
 // 技能插件随包带上写插件的技能（插件市场的「新建插件」点名它）。正本在仓库根目录的 skills/plume-plugin，

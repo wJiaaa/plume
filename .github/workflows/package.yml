@@ -19,7 +19,7 @@ on:
 permissions:
   contents: read
 
-# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件，用不着插件仓库。
+# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件。
 
 jobs:
   windows:
@@ -50,7 +50,7 @@ jobs:
         run: pnpm --filter "@plumeai/plugin-sdk..." typecheck
 
       - name: 构建内置插件
-        run: node scripts/build-plugins.mjs --builtin
+        run: node scripts/build-plugins.mjs
 
       - name: 构建 Windows 安装包（x64 与 arm64）并核验原生模块架构
         run: pnpm --filter @plume/desktop package --win nsis --x64 --arm64 --publish never
@@ -96,7 +96,7 @@ jobs:
         run: pnpm --filter "@plumeai/plugin-sdk..." typecheck
 
       - name: 构建内置插件
-        run: node scripts/build-plugins.mjs --builtin
+        run: node scripts/build-plugins.mjs
 
       # 自签证书 Plume Code Signing（make-signing-cert.sh 生成）导进临时钥匙串，package.mjs 找到它就用它签。证书签名让每次更新
       # 在 macOS 看来是同一个应用，屏幕录制等权限不会被重置；ad-hoc 做不到，见 electron-builder.yml 里 mac.identity 的说明。

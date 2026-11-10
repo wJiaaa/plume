@@ -2,8 +2,8 @@
  * 依赖方向（`pnpm arch`，`pnpm check` 的一部分）：packages/README.md「依赖方向」和 spec/safety.md 第 4 条写的那几条，
  * 变成机器查的规则，而不是只靠文档请人遵守。
  *
- * 插件那一侧（插件仓库的 `plugins/*`、`packages/builtin/*` 只引用公开接口）由 `pnpm check:plugins` 查，这里不重复。
- * 市场插件在旁边的插件仓库里，从这里引用它们的路径是 `../plume-plugins/`，下面的规则照样拦。
+ * 插件那一侧（`packages/builtin/*` 只引用公开接口）由 `pnpm check:plugins` 查，这里不重复。市场插件在单独的插件仓库里，
+ * 这里不引用它的任何文件（no-plugin-repo）；评测、审计要用插件源码时经 scripts/plugin-source.ts 在运行时按 PLUME_PLUGINS_DIR 加载。
  *
  * 已有的违规登记在 `.dependency-cruiser-known-violations.json`，照常通过；新加的违规直接失败。基线只能
  * 有意地重新生成（`pnpm arch:baseline`），变小是清理，变大要说得出理由。
@@ -31,11 +31,19 @@ module.exports = {
 		},
 
 		{
+			name: "no-plugin-repo",
+			comment: "市场插件在单独的插件仓库里，这个仓库不引用它的文件：没有插件仓库时这里的检查、构建、测试照样能跑。",
+			severity: "error",
+			from: {},
+			to: { path: "^\\.\\./plume-plugins/" },
+		},
+
+		{
 			name: "infra-stands-alone",
 			comment: "infra/ 是和产品无关的通用基础设施，换个产品也能用：不依赖其他组和 contract，也不认识插件。",
 			severity: "error",
 			from: { path: "^packages/infra/" },
-			to: { path: "^(packages/(contract|core|client|builtin|sdk)|\\.\\./plume-plugins)/" },
+			to: { path: "^packages/(contract|core|client|builtin|sdk)/" },
 		},
 
 		{
@@ -48,12 +56,10 @@ module.exports = {
 
 		{
 			name: "core-knows-no-plugin",
-			comment:
-				"循环不认识任何具体插件，插件由应用传给 createAgent：core/ 不依赖 client/、builtin/ 和市场插件。" +
-				"core/agent 的端到端测试带上内置插件的源码，只在测试里。",
+			comment: "循环不认识任何具体插件，插件由应用传给 createAgent：core/ 不依赖 client/、builtin/。core/agent 的端到端测试带上内置插件的源码，只在测试里。",
 			severity: "error",
 			from: { path: "^packages/core/", pathNot: "^packages/core/[^/]+/test/" },
-			to: { path: "^(packages/(client|builtin)|\\.\\./plume-plugins)/" },
+			to: { path: "^packages/(client|builtin)/" },
 		},
 
 		{
@@ -71,7 +77,7 @@ module.exports = {
 			comment: "client/ 是渲染进程的共享库，产品界面和插件界面入口都用：不引 agent 进程的 core/、内置插件、SDK、桌面端和插件。",
 			severity: "error",
 			from: { path: "^packages/client/" },
-			to: { path: "^(packages/(core|builtin|sdk)|apps|\\.\\./plume-plugins)/" },
+			to: { path: "^(packages/(core|builtin|sdk)|apps)/" },
 		},
 
 		{

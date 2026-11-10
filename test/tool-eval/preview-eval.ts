@@ -26,11 +26,13 @@ import { type AssistantMessage, requestUsage } from "../../packages/core/llm/src
 import { BUILTINS } from "../../packages/core/agent/test/builtins.ts";
 import todo from "../../packages/builtin/todo/src/index.ts";
 import web from "../../packages/builtin/web/src/index.ts";
-import nativeUi from "../../../plume-plugins/plugins/native-ui/src/index.ts";
-import { problemsIn } from "../../../plume-plugins/plugins/native-ui/src/notes.ts";
-import preview from "../../../plume-plugins/plugins/preview/src/index.ts";
+import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { loadModel } from "./model.ts";
+
+const { default: nativeUi } = await pluginSource("native-ui/src/index.ts");
+const { problemsIn } = await pluginSource("native-ui/src/notes.ts");
+const { default: preview } = await pluginSource("preview/src/index.ts");
 
 const say = (line = "") => process.stderr.write(`${line}\n`);
 const run = promisify(execFile);

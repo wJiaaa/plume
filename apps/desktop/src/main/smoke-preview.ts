@@ -5,7 +5,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { clipboard, nativeImage, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 const HTML = `<!doctype html><html><head><style>
 body{color:var(--foreground);font-family:var(--font-sans)}section{padding:20px;background:var(--card);border-radius:var(--radius)}h2{margin:0 0 12px}button{background:var(--primary);color:var(--primary-foreground);border:0;padding:8px 16px;border-radius:var(--radius)}.long{height:2400px;padding-top:24px}
@@ -27,7 +26,7 @@ export async function checkPreview({
 }: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -60,7 +59,7 @@ export async function checkPreview({
 		await writeFile(join(outDir, name), (await window.webContents.capturePage()).toPNG());
 	};
 	assert.ok(plugin.cli);
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "preview"), "--to", plugin.installDir]);
+	await plugin.install("preview");
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.preview" && item.state === "active"), "插件安装");
 	let step = 0;
 	let id = "";

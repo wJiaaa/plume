@@ -15,9 +15,11 @@
  */
 
 import type { Message } from "../packages/contract/src/index.ts";
-import { problemsIn } from "../../plume-plugins/plugins/native-ui/src/notes.ts";
+import { pluginSource } from "./plugin-source.ts";
 import { copiedCount } from "./audit-copies.ts";
 import { openSessionsReadOnly, storedSessions } from "./session-records.ts";
+
+const { problemsIn } = await pluginSource("native-ui/src/notes.ts");
 
 const asJson = process.argv.includes("--json");
 /** 有没有 ```ui 围栏。只用来分出「写了界面块的回复」，问题由 `problemsIn` 查。 */

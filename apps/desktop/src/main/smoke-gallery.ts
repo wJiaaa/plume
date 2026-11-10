@@ -7,13 +7,12 @@ import type { Remote } from "@plume/rpc";
 import { BrowserWindow, nativeImage, shell } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /** 真生图插件、会话事件和窗口交接；模型与生图服务只访问本机，系统定位出口用记录替身。 */
 export async function checkGallery(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -99,7 +98,7 @@ export async function checkGallery(options: {
 	};
 	try {
 		assert.ok(plugin.cli, "插件启动脚本存在");
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "image"), "--to", plugin.installDir]);
+		await plugin.install("image");
 		await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.image" && item.state === "active"), "生图插件加载");
 		window.webContents.send("plume:command", "settings");
 		await click("button", "模型设置");

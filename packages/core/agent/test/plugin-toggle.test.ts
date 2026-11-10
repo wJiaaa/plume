@@ -2,12 +2,25 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import type { ModelContext } from "@plume/contract";
-import nativeUi from "../../../../../plume-plugins/plugins/native-ui/src/index.ts";
+import type { ModelContext, Plugin } from "@plume/contract";
 import { PluginHost } from "../src/host.ts";
 
-it("原生 UI 的模型说明和只读帮助工具随插件启停，不改变原始消息", async () => {
-	const dir = await mkdtemp(join(tmpdir(), "plume-native-ui-"));
+// 往系统提示词里加一节、注册一个只读工具的插件（原生 UI 插件就是这样）：停用后两样都撤下，再启用原样回来；层不改调用方的原始消息。
+const hint: Plugin = {
+	name: "test.hint",
+	apply(ctx) {
+		ctx.hook("model.context", (input, next) => next({ ...input, sections: [...input.sections, { id: "hint", text: "需要时调 hint_help" }] }));
+		ctx.tools.register({
+			name: "hint_help",
+			description: "读说明",
+			parameters: { type: "object", properties: {} },
+			execute: async () => ({ output: "说明" }),
+		});
+	},
+};
+
+it("模型说明和只读工具随插件启停，不改变原始消息", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-plugin-toggle-"));
 	const host = new PluginHost({
 		dataDir: dir,
 		appDataDir: dir,
@@ -34,16 +47,16 @@ it("原生 UI 的模型说明和只读帮助工具随插件启停，不改变原
 			tools: [],
 		};
 		const before = structuredClone(input);
-		await host.load([{ key: "native-ui", load: async () => nativeUi }]);
+		await host.load([{ key: "hint", load: async () => hint }]);
 		const active = await host.run("model.context", input, async (value) => value);
-		expect(active.sections.map((section) => section.text).join("\n")).toContain("ui_help");
+		expect(active.sections.map((section) => section.text).join("\n")).toContain("hint_help");
 		expect(active.sections.length).toBeGreaterThan(before.sections.length);
-		expect(host.toolSpecs().length).toBeGreaterThan(0);
+		expect(host.toolSpecs().map((spec) => spec.name)).toEqual(["hint_help"]);
 		expect(input).toEqual(before);
-		await host.setEnabled(nativeUi.name, false);
+		await host.setEnabled(hint.name, false);
 		expect(host.toolSpecs()).toEqual([]);
-		expect((await host.run("model.context", input, async (value) => value)).systemPrompt).toBe("base");
-		await host.setEnabled(nativeUi.name, true);
+		expect((await host.run("model.context", input, async (value) => value)).sections).toEqual(before.sections);
+		await host.setEnabled(hint.name, true);
 		expect((await host.run("model.context", input, async (value) => value)).sections).toEqual(active.sections);
 	} finally {
 		await host.dispose();

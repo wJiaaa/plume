@@ -4,7 +4,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
 const STARTED = "服务起来了，监视和唤醒都安排好了。";
@@ -28,7 +27,7 @@ const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')
 export async function checkEnvironment(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 	part: "wakeup" | "summary";
@@ -182,7 +181,7 @@ export async function checkEnvironment(options: {
 	/** 说三句人话（摘要要够三句），这一轮结束静下来一分钟后卡片里出现摘要；生成摘要不算在会话里，不出现在对话中。 */
 	async function checkSummary() {
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "summary"), "--to", plugin.installDir]);
+		await plugin.install("summary");
 		await wait(async () => (await agent.plugins()).some((status) => status.key === "summary" && status.state === "active"), "装上会话摘要插件");
 		let summaries = 0;
 		const replies = [STARTED, ...REPLIES];

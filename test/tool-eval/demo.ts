@@ -57,7 +57,7 @@ async function demoOutline(target: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-	const target = process.argv[2] ?? "../plume-plugins/plugins/subagents/src/registry.ts";
+	const target = process.argv[2] ?? "packages/core/agent/src/host.ts";
 	console.log(`\n${BOLD}Plume · read 的结构视图${OFF}`);
 	await demoOutline(target);
 	console.log(`\n${DIM}${"─".repeat(74)}${OFF}\n`);

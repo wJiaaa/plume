@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { nativeTheme, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /** 只用本次冒烟数据目录；通过真实界面选肤、复制、AI工具应用和停用恢复。 */
 export async function checkSkinStudio(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -88,8 +87,7 @@ export async function checkSkinStudio(options: {
 	const before = await readFile(join(plumeHome(), "appearance.json"), "utf8");
 	const originalInk = await token("ink");
 	assert.ok(plugin.cli);
-	assert.ok(!(await readdir(plugin.pluginsDir)).includes("youthful-skin"), "青春清爽不再作为独立插件分发");
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "skin-studio"), "--to", plugin.installDir]);
+	await plugin.install("skin-studio");
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊安装");
 	await button("换肤工坊");
 	for (const [base, bg, ink, accent] of [

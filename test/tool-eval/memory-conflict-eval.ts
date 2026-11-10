@@ -19,11 +19,13 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Plugin } from "../../packages/contract/src/index.ts";
-import memory from "../../../plume-plugins/plugins/memory/src/index.ts";
-import { memoryHome, projectDir } from "../../../plume-plugins/plugins/memory/src/paths.ts";
-import { writeLessons } from "../../../plume-plugins/plugins/memory/src/project-memory.ts";
+import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { loadModel } from "./model.ts";
+
+const { default: memory } = await pluginSource("memory/src/index.ts");
+const { memoryHome, projectDir } = await pluginSource("memory/src/paths.ts");
+const { writeLessons } = await pluginSource("memory/src/project-memory.ts");
 
 const say = (line = "") => process.stderr.write(`${line}\n`);
 const GREEN = "\x1b[32m";

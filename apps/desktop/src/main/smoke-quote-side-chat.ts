@@ -4,19 +4,18 @@ import type { Remote } from "@plume/rpc";
 import { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 import { windowClosed } from "./smoke-panels.ts";
 
 /** 专项入口只准备主会话、一个其他面板和侧聊，复用完整冒烟的同一组断言。 */
 export async function prepareQuoteSideChat(
 	options: Parameters<typeof checkQuoteSideChat>[0] & {
 		agent: Remote<AgentProcessApi>;
-		plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+		plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	},
 ): Promise<void> {
 	const { window, agent, plugin, page, until, click, setModel } = options;
 	if (!plugin.cli) throw new Error("没有插件安装命令");
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "side-chat"), "--to", plugin.installDir]);
+	await plugin.install("side-chat");
 	const end = Date.now() + 15_000;
 	while (!(await agent.plugins()).some((item) => item.name === "plume.side-chat" && item.state === "active")) {
 		if (Date.now() > end) throw new Error("侧边聊天插件未加载");

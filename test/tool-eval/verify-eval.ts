@@ -12,10 +12,12 @@ import { execSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import subagents from "../../../plume-plugins/plugins/subagents/src/index.ts";
+import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { dispatchOnce } from "./dispatch.ts";
 import { loadModel } from "./model.ts";
+
+const { default: subagents } = await pluginSource("subagents/src/index.ts");
 
 const say = (line = "") => process.stderr.write(`${line}\n`);
 const GREEN = "\x1b[32m";

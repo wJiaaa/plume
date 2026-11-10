@@ -4,7 +4,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /**
  * 钩子插件的界面：工作区里放一条没信任的项目钩子（PreToolUse 拦下 bash），装上插件、开一个会话，看输入框上方说「待审核」，
@@ -14,7 +13,7 @@ import { runPluginCli } from "./smoke-plugin-cli.ts";
 export async function checkHooks(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	workspace: string;
 	outDir: string;
 	page(code: string): Promise<unknown>;
@@ -62,7 +61,7 @@ export async function checkHooks(options: {
 	await writeFile(file, JSON.stringify({ hooks: { events: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: blockCommand }] }] } } }));
 	try {
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "hooks"), "--to", plugin.installDir]);
+		await plugin.install("hooks");
 		const deadline = Date.now() + 15_000;
 		while (!(await agent.plugins()).some((status) => status.key === "hooks" && status.state === "active")) {
 			if (Date.now() > deadline) throw new Error("等待超时：装上 hooks 插件");

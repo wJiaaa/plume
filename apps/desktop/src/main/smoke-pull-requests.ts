@@ -9,13 +9,12 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /** 从已有的闲置会话进入；只替换 GitLab 服务，账号、列表、评论和草稿都走实际插件。 */
 export async function checkPullRequests(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	workspace: string;
 }): Promise<void> {
@@ -235,7 +234,7 @@ export async function checkPullRequests(options: {
 			});
 		});
 		baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "pull-requests"), "--to", plugin.installDir]);
+		await plugin.install("pull-requests");
 		await waitMain(
 			async () =>
 				(await agent.plugins()).some((status) => status.key === "pull-requests" && status.name === "plume.pull-requests" && status.state === "active"),

@@ -7,7 +7,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import { BrowserWindow, webContents } from "electron";
 import type { Remote } from "@plume/rpc";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /** 冒烟里假模型的一次请求：看得到工具表和消息，回一段。 */
 export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
@@ -21,7 +20,7 @@ export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
 export async function checkBrowser(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ModelOverride | undefined): void;
 }): Promise<void> {
@@ -65,7 +64,7 @@ export async function checkBrowser(options: {
 	await writeFile(local, "<title>Local smoke</title><p>read from disk</p>");
 	try {
 		if (!plugin.cli) throw new Error("没有 plume-plugin 启动脚本，装不了浏览器插件");
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "browser"), "--to", plugin.installDir]);
+		await plugin.install("browser");
 		await waitMain(async () => (await agent.plugins()).some((status) => status.key === "browser" && status.state === "active"), "装上浏览器插件");
 
 		// 从开始页开一个浏览器标签：空白页，地址栏打开本机那一页。

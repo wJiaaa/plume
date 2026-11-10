@@ -62,7 +62,6 @@ import { checkSsh } from "./smoke-ssh.ts";
 import { checkSpawnSession } from "./smoke-spawn-session.ts";
 import { checkHooks } from "./smoke-hooks.ts";
 import { checkBrowser, type ModelOverride } from "./smoke-browser.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 import { checkNavigation } from "./smoke-navigation.ts";
 import { checkCompact } from "./smoke-compact.ts";
 import { checkPanelsFramework, checkSideChatWindow } from "./smoke-panels.ts";
@@ -97,7 +96,7 @@ interface SmokeOptions {
 	file: string;
 	shutdown(): Promise<void>;
 	/** 启动脚本（写不了时没有）、插件市场的目录、安装目录。 */
-	plugin: { cli: string | undefined | void; pluginsDir: string; builtinDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; builtinDir: string; installDir: string };
 }
 
 export async function runSmoke({ window, agent, workspace, file, shutdown, plugin }: SmokeOptions): Promise<void> {
@@ -1198,7 +1197,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		// 扩展（插件市场）的界面在单独的 market 段；主流程只经 plume-plugin 装上后面要用的定时任务和终端。
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-		for (const name of ["scheduled", "terminal"]) await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, name), "--to", plugin.installDir]);
+		for (const name of ["scheduled", "terminal"]) await plugin.install(name);
 		await waitFor(async () => {
 			const loaded = await agent.plugins();
 			return ["scheduled", "terminal"].every((key) => loaded.find((item) => item.key === key)?.state === "active");
@@ -1605,7 +1604,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 审批卡压在主输入框上方、标明是哪个子 Agent 问的；跑完点工具卡片上的 ↗，子 Agent 面板画出它的全过程。
 		// 再敲 `/btw 问题`：这句话不进主对话，新开一格侧边聊天，回答画在那里。
 		for (const name of ["subagents", "side-chat"]) {
-			await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, name), "--to", plugin.installDir]);
+			await plugin.install(name);
 			await waitFor(async () => (await agent.plugins()).some((status) => status.key === name && status.state === "active"), `装上 ${name} 插件`);
 		}
 		await click("[data-plume-row] button");
@@ -1726,7 +1725,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		// 下一步建议（市场里的插件）、用量与状态（内置插件）：用宿主开的三个扩展点（灰字建议、回复过滤、输入框工具栏右边那一格）。
 		// 回复末尾的 `:followup[…]` 不画进正文、变成输入框的灰字，按 Tab 整段填进去；模型选择左边是上下文用量的圆环，点开写出窗口占用。
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "followups"), "--to", plugin.installDir]);
+		await plugin.install("followups");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "followups" && status.state === "active"), "装上 followups 插件");
 		const hintFrom = model.requests.length;
 		await page(`document.querySelector('[data-screen=chat] .cm-content').focus()`);
@@ -1776,7 +1775,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-screen=chat] .cm-placeholder') !== null`, "清掉填进去的草稿");
 
 		// 6. 使用统计、存储：上面那一轮的调用记进了花销。使用统计是市场里的插件，装上后在设置 › 数据里「存储」上面多一页。
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "usage"), "--to", plugin.installDir]);
+		await plugin.install("usage");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "usage" && status.state === "active"), "装上 usage 插件");
 		await click("button", "设置");
 		await click("[aria-label=设置章节] button", "使用统计");
@@ -1792,7 +1791,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`/\\d/.test(document.querySelector('[data-usage-total]')?.textContent ?? '')`, "存储页量出会话记录");
 		await capture(window, join(outDir, "smoke-storage.png"));
 		// 插件的设置放在哪：IM 机器人只和自己有关，画进它在市场里的详情、不占设置导航；使用统计占导航一行，详情里给去那里的入口。
-		await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "im"), "--to", plugin.installDir]);
+		await plugin.install("im");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "im" && status.state === "active"), "装上 im 插件");
 		await click("button", "返回工作区");
 		await click("[data-nav=market]");

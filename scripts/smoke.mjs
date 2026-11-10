@@ -16,10 +16,10 @@
  *
  * 多个会话同时跑：构建产物（apps/desktop/out、各插件的 dist）是共用的，构建前会被清掉。所以构建排队，一次一个（.smoke/.build.lock），
  * 构建完趁还拿着锁把产物快照到这次运行自己的 app/ 下，各段的 Electron 都从这一份快照启动；别的会话之后再构建，动不到正在跑的这一份。
- * 快照按仓库的目录结构摆，宿主从 apps/desktop 往上找插件目录的路子不用改；macOS 上是 APFS 的克隆，几乎不占时间和空间。跑完删掉。
+ * 快照按仓库的目录结构摆，宿主从 apps/desktop 往上找内置插件的路子不用改；macOS 上是 APFS 的克隆，几乎不占时间和空间。跑完删掉。
  *
- * 插件市场也在锁里打一份到这次运行的 .market/ 下（scripts/market-serve.mjs，只打本机平台），在本机服务起来，各段经
- * PLUME_MARKET_URL 从它装市场插件，和装线上的走同一条路。
+ * 各段要用的市场插件从市场装：缺省是线上的市场（要联网），设了 PLUME_MARKET_URL 就用它（比如插件仓库在本机起的市场，
+ * 联调还没发布的插件）。`ssh` 段要用插件仓库里的假 SSH 服务，设了 PLUME_PLUGINS_DIR=<插件仓库>/plugins 才跑。
  */
 
 import { spawn } from "node:child_process";
@@ -30,8 +30,6 @@ import { cp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node
 import { setTimeout as sleep } from "node:timers/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { stopProcessTree } from "../apps/desktop/scripts/stop-process.mjs";
-import { MARKET_DIR } from "./market.mjs";
-import { buildMarket, serveMarket } from "./market-serve.mjs";
 import { changedSuites } from "./smoke-changed.mjs";
 
 /**
@@ -41,6 +39,8 @@ import { changedSuites } from "./smoke-changed.mjs";
 const SMOKE_ENTRY = "apps/desktop/src/main/smoke.ts";
 /** 主流程里已经走过同样的检查，单独跑只用来复现。 */
 const REPRO_ONLY = new Set(["files"]);
+/** 要设 PLUME_PLUGINS_DIR 才能跑的段：没设时跑全部也跳过它们。 */
+const NEEDS_PLUGINS_DIR = new Set(["ssh"]);
 /** 用时长的先起，整轮结束得早；没列的排在后面。 */
 const LONG_FIRST = ["main", "environment", "environment-summary", "market", "desktop-compat", "native-ui", "conversations", "session-menu"];
 /** 大半时间在等定时器（定时唤醒、摘要的一分钟），几乎不占算力：不占 PLUME_SMOKE_JOBS 的名额。 */
@@ -60,21 +60,14 @@ if (process.env.PLUME_SMOKE_OUT && suites.length > 1) fail("设了 PLUME_SMOKE_O
 const single = suites.length === 1;
 const file = process.env.PLUME_SMOKE_OUT ? resolve(process.env.PLUME_SMOKE_OUT) : join(repo, ".smoke", stamp, "smoke.png");
 const runDir = dirname(file);
-// 快照照两个仓库并排的样子放：本仓库在 app/plume，市场插件在 app/plume-plugins/plugins（scripts/market.mjs），
-// 应用从快照里按同一条相对路径找到市场目录。
-const snapshotRoot = join(runDir, "app");
-const snapshot = join(snapshotRoot, "plume");
-// 带点：各段的输出目录是 <段名>/，其中就有 market 段，不能和它撞上。
-const marketDir = join(runDir, ".market");
+const snapshot = join(runDir, "app");
 console.log(`冒烟输出目录：${runDir}`);
 
 await pruneRuns();
 await withBuildLock(async () => {
 	await run("pnpm", ["build"]);
 	await takeSnapshot();
-	buildMarket(marketDir);
 });
-const market = await serveMarket(marketDir);
 
 // 直接起 Electron 的二进制，不经 node_modules/.bin 里的启动脚本：Windows 上那是 `electron.cmd`，不经 shell 起不来。
 const electron = createRequire(join(repo, "apps/desktop/package.json"))("electron");
@@ -83,9 +76,7 @@ let results;
 try {
 	results = single ? [await runSuite(suites[0], file, "inherit")] : await runAll();
 } finally {
-	await market.close();
-	await rm(snapshotRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-	await rm(marketDir, { recursive: true, force: true });
+	await rm(snapshot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 const failed = results.filter((result) => !result.ok);
 if (!single) {
@@ -104,13 +95,16 @@ async function declaredSuites() {
 
 function pickSuites(only, known) {
 	const suite = (name) => ({ name, clipboard: CLIPBOARD.has(name), idle: IDLE.has(name) });
-	const all = known.filter((name) => !REPRO_ONLY.has(name));
-	if (!only) return all.map(suite);
+	const all = known.filter((name) => !REPRO_ONLY.has(name) && (process.env.PLUME_PLUGINS_DIR || !NEEDS_PLUGINS_DIR.has(name)));
+	if (!only) {
+		const skipped = known.filter((name) => NEEDS_PLUGINS_DIR.has(name) && !all.includes(name));
+		if (skipped.length > 0) console.log(`没设 PLUME_PLUGINS_DIR，跳过 ${skipped.join("、")}`);
+		return all.map(suite);
+	}
 	if (only === "changed") {
-		const { suites, reasons, notes, base, count } = changedSuites(repo, SMOKE_ENTRY, all);
+		const { suites, reasons, base, count } = changedSuites(repo, SMOKE_ENTRY, all);
 		console.log(`相对 ${base} 改了 ${count} 个文件，挑出 ${suites.length} 段：`);
 		for (const name of suites) console.log(`  ${name} ← ${reasons.get(name)}`);
-		for (const note of notes) console.log(`  （${note}）`);
 		if (suites.length === 0) {
 			console.log("这些改动不用跑冒烟。");
 			process.exit(0);
@@ -169,7 +163,7 @@ async function runSuite(suite, out, output) {
 	const dir = dirname(out);
 	await mkdir(dir, { recursive: true });
 	const log = join(dir, "smoke.log");
-	const env = { ...process.env, PLUME_SMOKE_OUT: out, PLUME_MARKET_URL: market.url };
+	const env = { ...process.env, PLUME_SMOKE_OUT: out };
 	if (suite.name === "main") delete env.PLUME_SMOKE_ONLY;
 	else env.PLUME_SMOKE_ONLY = suite.name;
 	const begin = Date.now();
@@ -297,7 +291,7 @@ function run(command, args) {
  * 根目录的 node_modules 也链过去，PLUME_SMOKE_OUT 指到仓库外时依赖照样找得到。
  */
 async function takeSnapshot() {
-	await rm(snapshotRoot, { recursive: true, force: true });
+	await rm(snapshot, { recursive: true, force: true });
 	const clone = (from, to, filter) => cp(join(repo, from), join(snapshot, to ?? from), { recursive: true, mode: constants.COPYFILE_FICLONE, filter });
 	const link = async (path) => {
 		if (!existsSync(join(repo, path))) return;
@@ -306,13 +300,11 @@ async function takeSnapshot() {
 	};
 	await Promise.all([clone("apps/desktop/out"), clone("apps/desktop/package.json")]);
 	await Promise.all(["node_modules", "apps/desktop/node_modules", "apps/desktop/vendor", "packages/sdk/plugin-sdk"].map(link));
-	for (const root of [MARKET_DIR, "packages/builtin"]) {
-		for (const entry of await readdir(join(repo, root), { withFileTypes: true })) {
-			if (!entry.isDirectory()) continue;
-			const dir = `${root}/${entry.name}`;
-			const modules = join(repo, dir, "node_modules");
-			await clone(dir, dir, (source) => source !== modules);
-			await link(`${dir}/node_modules`);
-		}
+	for (const entry of await readdir(join(repo, "packages/builtin"), { withFileTypes: true })) {
+		if (!entry.isDirectory()) continue;
+		const dir = `packages/builtin/${entry.name}`;
+		const modules = join(repo, dir, "node_modules");
+		await clone(dir, dir, (source) => source !== modules);
+		await link(`${dir}/node_modules`);
 	}
 }

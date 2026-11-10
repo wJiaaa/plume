@@ -54,7 +54,7 @@ const README_IMAGE_TYPES: Record<string, string> = {
 };
 
 export interface MarketOptions {
-	/** 市场目录 marketplace.json 的地址：线上是插件仓库的 GitHub Pages，开发和冒烟是本机起的服务。 */
+	/** 市场目录 marketplace.json 的地址：缺省是插件仓库的 GitHub Pages，PLUME_MARKET_URL 可换成别的（比如插件仓库在本机起的市场）。 */
 	catalogUrl: string;
 	/** 内置插件的目录，每个一个子目录。 */
 	builtinDir: string;

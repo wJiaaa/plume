@@ -4,7 +4,6 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 /**
  * 使用统计的环图和缓存未命中：经界面发一轮带工具调用的对话（两次主请求），装上使用统计，看 Token 构成、耗时构成画出环图，
@@ -13,7 +12,7 @@ import { runPluginCli } from "./smoke-plugin-cli.ts";
 export async function checkUsage(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; pluginsDir: string; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -28,7 +27,7 @@ export async function checkUsage(options: {
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(code), label);
 	if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-	await runPluginCli(plugin.cli, ["install", join(plugin.pluginsDir, "usage"), "--to", plugin.installDir]);
+	await plugin.install("usage");
 	await wait(async () => (await agent.plugins()).some((status) => status.key === "usage" && status.state === "active"), "装上 usage 插件");
 
 	// 第一次请求读一个文件，第二次收尾：工具结果进第二次请求，耗时里有工具执行。
