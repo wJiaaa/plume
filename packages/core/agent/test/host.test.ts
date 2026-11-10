@@ -236,6 +236,36 @@ describe("PluginHost", () => {
 		expect(list?.().map((plugin) => plugin.name)).toEqual(["reader", "bundle"]);
 	});
 
+	it("ctx.plugins.onChange 在装上、卸下、启停以后叫，那时 list 已经是新的；某个出错不拦着别的，停用后撤下", async () => {
+		const seen: string[][] = [];
+		const h = host();
+		await h.load([
+			entry({
+				name: "broken",
+				apply: (ctx) =>
+					ctx.plugins.onChange(() => {
+						throw new Error("boom");
+					}),
+			} satisfies Plugin),
+			{
+				...entry({
+					name: "watcher",
+					apply: (ctx) => ctx.plugins.onChange(() => void seen.push(ctx.plugins.list().map((plugin) => plugin.name))),
+				} satisfies Plugin),
+				dir: "/p/watcher",
+			},
+		]);
+		expect(seen).toEqual([["watcher"]]);
+		await h.add({ ...entry({ name: "extra", apply: () => {} } satisfies Plugin), dir: "/p/extra" });
+		await h.setEnabled("extra", false);
+		await h.setEnabled("extra", true);
+		await h.remove("extra");
+		expect(seen.slice(1)).toEqual([["watcher", "extra"], ["watcher"], ["watcher", "extra"], ["watcher"]]);
+		await h.setEnabled("watcher", false);
+		await h.add({ ...entry({ name: "late", apply: () => {} } satisfies Plugin), dir: "/p/late" });
+		expect(seen).toHaveLength(5);
+	});
+
 	it("会话删掉时告诉登记过的插件，某个出错不拦着别的；停用后撤下", async () => {
 		const seen: string[] = [];
 		const h = host();

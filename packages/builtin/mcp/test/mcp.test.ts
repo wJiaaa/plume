@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import type { SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
-import { applyDraft, checkDraft, readMagpieServers, type ServerConfig, withValues } from "../src/config.ts";
+import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
 import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
-import { missingFor, resolveServer } from "../src/placeholders.ts";
+import { missingFor, placeholdersOf, resolveServer } from "../src/placeholders.ts";
 import { bindArguments, commandSegment, splitArguments } from "../src/prompts.ts";
 import { callTool, deferredSection, findTool, type McpTool, rank } from "../src/search.ts";
 import { mcpResource } from "../src/resources.ts";
 import { mcpResult, normalizeInputSchema, qualifiedToolName, RESULT_CHARS } from "../src/tools.ts";
-import { openServers, sealServers } from "../src/sealed.ts";
+import { openServers, openStates, sealServers, sealStates } from "../src/sealed.ts";
 import { looksSecret } from "../src/vars.ts";
 import { OAuthStore } from "../src/oauth.ts";
 
@@ -106,6 +106,71 @@ test("草稿：逐个字段核对；编辑时没给值的变量留着原来的�
 	});
 });
 
+test("插件带来的服务：读插件目录的 .mcp.json，人改过的开关和填的值盖在上面，重名和坏文件跳过", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-plugins-"));
+	try {
+		const github = join(dir, "github");
+		const broken = join(dir, "broken");
+		const plain = join(dir, "plain");
+		for (const plugin of [github, broken, plain]) await mkdir(plugin);
+		await writeFile(join(github, "package.json"), JSON.stringify({ plume: { displayName: "GitHub 连接器" } }));
+		await writeFile(
+			join(github, ".mcp.json"),
+			JSON.stringify({
+				mcpServers: {
+					github: { command: "npx", args: ["-y", "server-github"], env: { GITHUB_TOKEN: "${GITHUB_TOKEN}" } },
+					remote: { type: "http", url: "https://example.invalid/mcp", headers: { Authorization: "Bearer ${TOKEN}" } },
+					Own: { command: "node" },
+				},
+			}),
+		);
+		await writeFile(join(broken, ".mcp.json"), "{broken");
+		const warnings: string[] = [];
+		const log = { warn: (message: string) => void warnings.push(message) };
+		const own: ServerConfig = { id: "mcp-own", name: "own", transport: "stdio", command: "own", enabled: true };
+		const plugins = [
+			{ name: "plume.github", dir: github },
+			{ name: "plume.broken", dir: broken },
+			{ name: "plume.plain", dir: plain },
+		];
+		const states = { "plugin__plume.github__github": { enabled: false, env: { GITHUB_TOKEN: "ghp_x" } } };
+		const servers = await readPluginServers(plugins, [own], states, log);
+		assert.deepEqual(
+			servers.map((server) => [server.id, server.transport, server.enabled, server.managedBy, server.plugin]),
+			[
+				["plugin__plume.github__github", "stdio", false, "plugin", "GitHub 连接器"],
+				["plugin__plume.github__remote", "http", true, "plugin", "GitHub 连接器"],
+			],
+		);
+		assert.deepEqual(servers[0]?.env, { GITHUB_TOKEN: "ghp_x" });
+		assert.equal(missingFor(servers[0] as ServerConfig, {}).length, 0);
+		assert.deepEqual(missingFor(servers[1] as ServerConfig, {}), ["TOKEN"]);
+		// 和自己的重名一条，坏文件一条；没有 .mcp.json 的插件不提。
+		assert.equal(warnings.length, 2);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("插件服务上人改过的存进 servers.json 的 plugins，密钥加密，读回来解开", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-states-"));
+	try {
+		const file = join(dir, "servers.json");
+		const secrets = fakeSecrets;
+		const states = { "plugin__plume.github__github": { enabled: true, env: { GITHUB_TOKEN: "ghp_secret", REGION: "eu" } } };
+		await writeServers(file, [], await sealStates(states, secrets));
+		const raw = await readFile(file, "utf8");
+		assert.ok(!raw.includes("ghp_secret"));
+		assert.ok(raw.includes('"REGION": "eu"'));
+		const read = await readServers(file);
+		assert.deepEqual(await openStates(read.plugins, secrets), states);
+		await writeServers(file, [], {});
+		assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { servers: [] });
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test("Magpie 分发的服务：三种传输照 Claude 格式转换，坏条目和重名跳过，读不懂的文件不转述原文", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-magpie-"));
 	try {
@@ -180,6 +245,34 @@ test("空位：先取服务自己的值，再取环境；整个值是空位的�
 		headers: { Authorization: "Bearer t" },
 		enabled: true,
 	});
+});
+
+test("可选空位 ${NAME:-默认值}：不算缺；没值用默认值；空位全落空的环境变量和请求头整条不发", () => {
+	const stdio: ServerConfig = {
+		id: "s",
+		name: "s",
+		transport: "stdio",
+		command: "npx",
+		args: ["--region=${REGION:-us}"],
+		env: { JIRA_URL: "${JIRA_URL:-}", MODE: "${MODE:-}x", TOKEN: "${TOKEN}" },
+		enabled: true,
+	};
+	assert.deepEqual(placeholdersOf(stdio), [
+		{ name: "REGION", optional: true },
+		{ name: "JIRA_URL", optional: true },
+		{ name: "MODE", optional: true },
+		{ name: "TOKEN", optional: false },
+	]);
+	assert.deepEqual(missingFor(stdio, {}), ["TOKEN"]);
+	assert.deepEqual(resolveServer(stdio, { TOKEN: "t" }), { ...stdio, args: ["--region=us"], env: { TOKEN: "t" } });
+	assert.deepEqual(resolveServer(stdio, { TOKEN: "t", JIRA_URL: "https://j", REGION: "eu" }).env, { JIRA_URL: "https://j", TOKEN: "t" });
+	assert.deepEqual(resolveServer(stdio, { TOKEN: "t", MODE: "a" }).env, { MODE: "ax", TOKEN: "t" });
+	// 同一个名字有一处是必填，就是必填。
+	assert.deepEqual(placeholdersOf({ ...stdio, args: ["${TOKEN:-}"], env: { TOKEN: "${TOKEN}" } }), [{ name: "TOKEN", optional: false }]);
+	const http: ServerConfig = { id: "h", name: "h", transport: "http", url: "https://x/mcp", headers: { Authorization: "Bearer ${HF_TOKEN:-}" }, enabled: true };
+	assert.deepEqual(missingFor(http, {}), []);
+	assert.deepEqual(resolveServer(http, {}), { ...http, headers: {} });
+	assert.deepEqual(resolveServer({ ...http, env: { HF_TOKEN: "hf_x" } }, {}), { ...http, headers: { Authorization: "Bearer hf_x" } });
 });
 
 test("prompt 命令：名字折成小写连字符；只有一个参数时整段给它，否则按名字、按位置给，缺必填的报出来", () => {

@@ -16,6 +16,7 @@
     "@plume/agent": "workspace:*",
     "@plume/contract": "workspace:*",
     "@plume/llm": "workspace:*",
+    "@plumeai/plugin-sdk": "workspace:*",
     "@plume/rpc": "workspace:*",
     "@plume/styles": "workspace:*",
     "@plume/ui": "workspace:*",

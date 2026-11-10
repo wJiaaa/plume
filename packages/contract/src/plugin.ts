@@ -1104,6 +1104,11 @@ export interface PluginContext {
 		 * 每次调用都是当时的样子：插件装上、卸下、停用以后再调就变了。
 		 */
 		list(): InstalledPlugin[];
+		/**
+		 * 插件装上、卸下、启用、停用以后叫一次，这时 `list()` 已经是新的样子；停用时撤下。给按别的插件随包文件配东西、
+		 * 又不能等到下一轮才发现的插件用：MCP 插件读各插件的 `.mcp.json`，装上就连。
+		 */
+		onChange(listener: () => void): void;
 	};
 	/**
 	 * 提供一项服务（见 `Services`），停用时撤下。同一项服务有几个插件提供时，非内置的优先于内置的，同是非内置的
@@ -1115,6 +1120,33 @@ export interface PluginContext {
 	 * 在这次加载里一直有效：提供方换了，插件会先停用再重新加载，到时重新拿。
 	 */
 	use<K extends keyof Services>(name: K): Services[K];
+}
+
+/**
+ * 插件包是哪一类（`package.json` 的 `plume.kind`），决定它在「扩展」页的哪个分类里：普通插件；技能合集（只带 `skills/`）；
+ * 连接器（只带 `.mcp.json` 里的 MCP 服务）。装法、更新、卸载都一样。没写是普通插件。
+ */
+export type PluginKind = "plugin" | "skill" | "connector";
+
+/**
+ * 插件 `package.json` 里给市场看的说明，`@plumeai/plugin-sdk/manifest` 的 `readManifest` 读出的样子；市场目录 `marketplace.json`
+ * 的一条照抄一份（加上目录名 `name`）。没写或类型不对的字段不出现。
+ */
+export interface PluginManifest {
+	kind: PluginKind;
+	/** 显示名，`plume.displayName`。 */
+	displayName?: string;
+	description?: string;
+	/** 市场按它判断更新：x.y.z，发出去以后不可变。 */
+	version?: string;
+	author?: string;
+	/** 货架，`plume.category`。 */
+	category?: string;
+	keywords?: string[];
+	homepage?: string;
+	license?: string;
+	/** 详情页「试试这样问」，`plume.defaultPrompt`。 */
+	prompts?: string[];
 }
 
 /** 一个启用着的插件。 */

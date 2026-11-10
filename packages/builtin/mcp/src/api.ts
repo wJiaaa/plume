@@ -15,6 +15,8 @@ export interface VarView {
 	secret: boolean;
 	/** 像密钥的那些填了没有。 */
 	filled: boolean;
+	/** 可选的空位（`${NAME:-默认值}`）：不填也能启动。 */
+	optional?: boolean;
 }
 
 export interface ServerView {
@@ -32,7 +34,12 @@ export interface ServerView {
 	perSession: boolean;
 	/** Magpie 资源库分发的：名字、开关、启动方式、变量和删除都在 Magpie 里改，这里只看状态、重连、登录。 */
 	managed: boolean;
-	/** 远程服务里人填的 `${NAME}` 空位值（stdio 的就是 `vars`）。 */
+	/** 插件带来的：带来它的插件的显示名。能开关、填空位的值，启动方式改不了、删不掉，卸载插件就没了。 */
+	plugin?: string;
+	/**
+	 * 人填的 `${NAME}` 空位值：远程服务的是存着的那些（stdio 的就是 `vars`）；插件带来的是声明里的每个空位，
+	 * 填没填、可不可选都列出来，随时能改（启动方式锁着，只有这里能动）。
+	 */
 	values: VarView[];
 	/** 用 OAuth 登录（远程服务，请求头里没写 `Authorization`）。 */
 	oauth: boolean;

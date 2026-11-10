@@ -5,6 +5,7 @@ import { merge, UNFILED } from "../src/renderer/market/catalog.ts";
 
 const entry: MarketEntry = {
 	id: "example",
+	kind: "plugin",
 	name: "市场名称",
 	description: "市场说明",
 	version: "1.1.0",
@@ -13,6 +14,7 @@ const entry: MarketEntry = {
 };
 const installed: InstalledPlugin = {
 	id: "example",
+	kind: "plugin",
 	name: "本机名称",
 	description: "本机说明",
 	version: "1.0.0",

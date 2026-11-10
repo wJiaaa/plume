@@ -15,7 +15,7 @@ const plugin = (id: string, version: string, body = "export default {};") => ({
 test("目录读自索引：只留这台机器有包、字段齐全的条目，图标是 PNG 才画", async (t) => {
 	const served = await serveMarket(t);
 	const index = await served.publish([
-		{ ...plugin("good", "1.0.0"), icon: PNG, extra: { category: "开发", keywords: ["a", 1, ""] } },
+		{ ...plugin("good", "1.0.0"), icon: PNG, extra: { category: "开发", keywords: ["a", 1, ""], kind: "connector" } },
 		{ ...plugin("plain", "1.0.0"), icon: Buffer.from("not a PNG") },
 	]);
 	const builds = { [TARGET]: (index.plugins[0].builds as Record<string, unknown>)[TARGET] };
@@ -42,6 +42,9 @@ test("目录读自索引：只留这台机器有包、字段齐全的条目，�
 	assert.deepEqual(good.keywords, ["a"]);
 	assert.equal(good.version, "1.0.0");
 	assert.equal(Object.hasOwn(plain, "logo"), false);
+	// 类别照索引；没写的是普通插件。
+	assert.equal(good.kind, "connector");
+	assert.equal(plain.kind, "plugin");
 });
 
 test("安装下载这台机器的包、核对后解开；按版本号判断更新，同一版本换了内容不算", async (t) => {

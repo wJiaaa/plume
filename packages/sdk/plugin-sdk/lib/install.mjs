@@ -1,5 +1,5 @@
 /**
- * 把构建好的插件装进本机的 Plume：复制 package.json、README.md、images/、icon.png、dist/ 和随包的 skills/ 到 `~/.plume/plugins/<目录名>/`，
+ * 把构建好的插件装进本机的 Plume：复制 package.json、README.md、images/、icon.png、dist/、随包的 skills/、.mcp.json 和 LICENSE 到 `~/.plume/plugins/<目录名>/`，
  * 和插件市场装的放在同一个地方。Plume 监视这个目录，开着的话当场加载（已经装过的就换成新的）。
  *
  * 先复制进旁边的暂存目录再整个换上去：Plume 看到的要么是旧的一份，要么是新的一份，不会是复制到一半的。
@@ -13,10 +13,7 @@ import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { DIR_NAME } from "./init.mjs";
-
-/** 和插件市场一样，只发这几样：说明、介绍和它引用的图片（images/）、图标、构建产物和随包的技能。 */
-const SHIPPED = ["package.json", "README.md", "images", "icon.png", "dist", "skills"];
+import { DIR_NAME, PLUGIN_ENTRY, SHIPPED } from "./manifest.mjs";
 
 /**
  * @param {string} source 插件目录
@@ -27,7 +24,7 @@ export function installPlugin(source, root = join(process.env.PLUME_HOME || join
 	const dir = resolve(source);
 	const key = basename(dir);
 	if (!DIR_NAME.test(key)) throw new Error(`目录名 ${key} 不行：只能用小写字母、数字和连字符`);
-	if (!existsSync(join(dir, "dist/index.mjs"))) throw new Error("没有 dist/index.mjs，先构建");
+	if (!existsSync(join(dir, PLUGIN_ENTRY))) throw new Error(`没有 ${PLUGIN_ENTRY}，先构建`);
 	const target = join(root, key);
 	// 暂存目录不在 root 里面：Plume 只认 root 下一层的目录，暂存的不会被当成插件。
 	const staging = join(root, "..", ".plugins-staging", key);

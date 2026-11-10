@@ -20,13 +20,14 @@ import { createHash } from "node:crypto";
 import { constants, existsSync, type FSWatcher, mkdirSync, watch } from "node:fs";
 import { cp, mkdir, open, readdir, readFile, realpath, rm, stat as statOf, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { DIR_NAME, PLUGIN_ENTRY, readManifest, SHIPPED } from "@plumeai/plugin-sdk/manifest";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import type { InstalledPlugin, MarketEntry, MarketInfo, MarketResult, MarketState, PluginUpdateState } from "../shared/market.ts";
 import type { PluginDir } from "../shared/protocol.ts";
-import { discoverPlugins, PLUGIN_KEY } from "./discover.ts";
+import { discoverPlugins } from "./discover.ts";
 import { nativeText } from "./i18n.ts";
 import { resolvedLocale } from "./locale.ts";
-import { downloadPackage, fetchBytes, fetchCatalog, fetchReadme, MAX_README_IMAGE_BYTES, PackageError, type RemoteEntry } from "./market-remote.ts";
+import { downloadPackage, fetchBytes, fetchCatalog, fetchReadme, MAX_README_IMAGE_BYTES, marketInfo, PackageError, type RemoteEntry } from "./market-remote.ts";
 import { discard, swapIn } from "./plugin-swap.ts";
 import { heldOpen } from "./rename-retry.ts";
 import { isNewer } from "./update/version.ts";
@@ -40,8 +41,6 @@ const SETTLE_MS = 300;
 /** 市场的目录读过以后多久内不再读：装、卸、对账都用这份；市场页每次打开和定时检查时重读。 */
 const CATALOG_FRESH_MS = 5 * 60_000;
 
-/** 发给插件的文件：说明、介绍和它引用的图片、图标、构建产物和随包的技能。源码、node_modules 不算。 */
-const SHIPPED = ["package.json", "README.md", "images", "icon.png", "dist", "skills"];
 /** 图标随目录下发给界面，限制单张大小，避免坏文件撑大市场数据。 */
 const MAX_ICON_BYTES = 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -338,7 +337,7 @@ export function createMarket(options: MarketOptions): Market {
 		installFolder: (dir) =>
 			serial(async () => {
 				const id = basename(dir);
-				if (!isAbsolute(dir) || !PLUGIN_KEY.test(id) || !existsSync(join(dir, "dist/index.mjs"))) return { ok: false, error: "invalid" };
+				if (!isAbsolute(dir) || !DIR_NAME.test(id) || !existsSync(join(dir, PLUGIN_ENTRY))) return { ok: false, error: "invalid" };
 				const have = (await installed()).find((plugin) => plugin.id === id);
 				if (have?.source === "local" || have?.source === "builtin") return { ok: false, error: have.source };
 				return result(() => put(id, copyFolder(dir), have !== undefined));
@@ -377,7 +376,7 @@ export function createMarket(options: MarketOptions): Market {
 		},
 		async readmeImage(id, path) {
 			const type = imageType(path);
-			if (!PLUGIN_KEY.test(id) || !type) return null;
+			if (!DIR_NAME.test(id) || !type) return null;
 			const assets = (await remote(false)).find((entry) => entry.info.id === id)?.assets;
 			// URL 把 %2e%2e 也当成上一级：解析出来的地址还得在这个插件的 assets 下。
 			const url = assets ? new URL(path, assets) : undefined;
@@ -414,36 +413,11 @@ export function createMarket(options: MarketOptions): Market {
 /** 读插件目录的 package.json 和发给插件的文件的指纹。字段类型不对的当没写，一个坏字段不拖垮整页。 */
 async function readInfo(id: string, dir: string): Promise<MarketInfo & { hash: string }> {
 	const manifest = await readFile(join(dir, "package.json"), "utf8").then(
-		(raw) => JSON.parse(raw) as Record<string, unknown>,
-		() => ({}) as Record<string, unknown>,
+		(raw) => readManifest(JSON.parse(raw)),
+		() => readManifest(null),
 	);
-	const plume = (typeof manifest.plume === "object" && manifest.plume !== null ? manifest.plume : {}) as Record<string, unknown>;
-	const string = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
-	const author = string(manifest.author) ?? string((manifest.author as { name?: unknown } | undefined)?.name);
-	const keywords = Array.isArray(manifest.keywords) ? manifest.keywords.filter((word): word is string => typeof word === "string") : undefined;
-	const info: MarketInfo & { hash: string } = {
-		id,
-		name: string(plume.displayName) ?? id,
-		description: string(manifest.description) ?? "",
-		hash: await hashOf(dir),
-	};
 	const icon = await readIcon(dir);
-	const optional = {
-		logo: icon ? `data:image/png;base64,${icon.toString("base64")}` : undefined,
-		version: string(manifest.version),
-		author,
-		category: string(plume.category),
-		keywords,
-		homepage: string(manifest.homepage),
-		license: string(manifest.license),
-		prompts: Array.isArray(plume.defaultPrompt) ? nonEmpty(plume.defaultPrompt.flatMap((line) => string(line) ?? [])) : undefined,
-	};
-	for (const [key, value] of Object.entries(optional)) if (value !== undefined) Object.assign(info, { [key]: value });
-	return info;
-}
-
-function nonEmpty<T>(list: T[]): T[] | undefined {
-	return list.length ? list : undefined;
+	return { ...marketInfo(id, manifest), ...(icon ? { logo: `data:image/png;base64,${icon.toString("base64")}` } : {}), hash: await hashOf(dir) };
 }
 
 /** README 里一张图的相对路径能不能取、是什么类型：只能往下走，只认常见的图片扩展名。 */

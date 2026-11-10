@@ -188,6 +188,8 @@ export class PluginHost {
 	/** 工具名 → 登记过的同名工具，后登记的在最后、生效；它撤下后前一个恢复。 */
 	private readonly tools = new Map<string, RegisteredTool[]>();
 	private readonly deletedListeners = new Set<{ plugin: string; listener: (sessionId: string) => void }>();
+	/** 登记了 `ctx.plugins.onChange` 的插件。 */
+	private readonly pluginListeners = new Set<{ plugin: string; listener: () => void }>();
 	private readonly contextResetListeners = new Set<{ plugin: string; listener: (sessionId: string) => void }>();
 	private readonly stoppedListeners = new Set<{ plugin: string; listener: (sessionId: string) => void }>();
 	private readonly archivedListeners = new Set<{ plugin: string; listener: (sessionId: string, archived: boolean) => void }>();
@@ -252,6 +254,17 @@ export class PluginHost {
 				listener(sessionId);
 			} catch (error) {
 				this.options.log(plugin, "error", `处理会话删除出错：${errorText(error)}`);
+			}
+		}
+	}
+
+	/** 有插件装上、卸下、启停了：告诉登记过 `ctx.plugins.onChange` 的插件。某个插件出错只记日志，不拦着别的。 */
+	private pluginsChanged(): void {
+		for (const { plugin, listener } of [...this.pluginListeners]) {
+			try {
+				listener();
+			} catch (error) {
+				this.options.log(plugin, "error", `处理插件变化出错：${errorText(error)}`);
 			}
 		}
 	}
@@ -322,6 +335,7 @@ export class PluginHost {
 	async load(entries: PluginEntry[]): Promise<void> {
 		for (const entry of entries) await this.loadOne(entry);
 		await this.settle();
+		this.pluginsChanged();
 	}
 
 	status(): PluginStatus[] {
@@ -333,6 +347,7 @@ export class PluginHost {
 		if (this.records.some((record) => record.status.key === entry.key)) throw new Error(text("plugin.keyTaken", { key: entry.key }));
 		await this.loadOne(entry);
 		await this.settle();
+		this.pluginsChanged();
 	}
 
 	/** 运行中卸下一个插件：撤销它的全部注册，从列表里拿掉。没有这个 key 时什么都不做。 */
@@ -342,6 +357,7 @@ export class PluginHost {
 		if (record.status.state === "active") await this.unwind(record);
 		this.records.splice(this.records.indexOf(record), 1);
 		await this.settle();
+		this.pluginsChanged();
 	}
 
 	/**
@@ -363,6 +379,7 @@ export class PluginHost {
 			}
 		}
 		await this.settle();
+		this.pluginsChanged();
 		return [...this.disabled];
 	}
 
@@ -746,6 +763,12 @@ export class PluginHost {
 					this.records.flatMap((other) =>
 						other.status.state === "active" && other.dir ? [{ name: other.status.name, dir: other.dir, builtin: other.builtin }] : [],
 					),
+				onChange: (listener) => {
+					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
+					const entry = { plugin: name, listener };
+					own(() => void this.pluginListeners.delete(entry));
+					this.pluginListeners.add(entry);
+				},
 			},
 			hook: <N extends HookName>(hook: N, run: HookLayer<N>, options: { order?: number } = {}) => {
 				if (!HOOKS.has(hook)) throw new Error(text("plugin.noHook", { hook: String(hook) }));

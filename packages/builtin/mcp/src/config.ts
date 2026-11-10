@@ -1,5 +1,7 @@
 /**
- * MCP 服务的配置：存在插件数据目录的 `servers.json`，设置页经逻辑入口改它。
+ * MCP 服务的配置：存在插件数据目录的 `servers.json`，设置页经逻辑入口改它。另有两处来源只读进来、不抄进这个文件：
+ * Magpie 分发的（`readMagpieServers`）和插件随包带的 `.mcp.json`（`readPluginServers`）；后者人能开关、填空位的值，
+ * 改的这两样记在 `servers.json` 的 `plugins` 里。
  *
  * 环境变量和请求头里常有密钥，所以界面只拿得到不像密钥的值；像密钥的只告诉它「填了」，改的时候不填就是留着原来的
  * （`VarDraft.value` 为 undefined）。密钥只在 agent 进程里用，写进文件时经服务 `secrets` 加密，
@@ -7,6 +9,7 @@
  */
 
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ENV_NAME, HEADER_NAME } from "./vars.ts";
 
 interface ServerBase {
@@ -20,8 +23,19 @@ interface ServerBase {
 	pinned?: boolean;
 	/** 每个会话各起一份，不和别的会话共用连接：给把状态存在进程里的服务（浏览器、数据库会话）。 */
 	perSession?: boolean;
-	/** Magpie 资源库分发的：读自 `magpie/mcp.json`，不写进 `servers.json`，在 Plume 里只能看状态、重连、登录。 */
-	managedBy?: "magpie";
+	/**
+	 * 不是人在这里加的，不写进 `servers.json` 的 `servers`：magpie 是 Magpie 资源库分发的（`magpie/mcp.json`），在 Plume 里
+	 * 只能看状态、重连、登录；plugin 是插件随包带的（插件目录的 `.mcp.json`），另外能开关、填空位的值，卸载插件就没了。
+	 */
+	managedBy?: "magpie" | "plugin";
+	/** 带来它的插件的显示名（managedBy 为 plugin 时）。 */
+	plugin?: string;
+}
+
+/** 插件带来的一台服务上，人改过的：开关、填的空位值。存在 `servers.json` 的 `plugins` 里，按服务 id。 */
+export interface PluginServerState {
+	enabled?: boolean;
+	env?: Record<string, string>;
 }
 
 interface StdioServer extends ServerBase {
@@ -96,16 +110,22 @@ function readServer(raw: unknown): ServerConfig | null {
 	return null;
 }
 
-export async function readServers(file: string): Promise<{ servers: ServerConfig[]; error?: string }> {
+export async function readServers(file: string): Promise<{ servers: ServerConfig[]; plugins: Record<string, PluginServerState>; error?: string }> {
 	const raw = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? null : Promise.reject(error)));
-	if (raw === null) return { servers: [] };
+	if (raw === null) return { servers: [], plugins: {} };
 	try {
-		const parsed = JSON.parse(raw) as { servers?: unknown };
+		const parsed = JSON.parse(raw) as { servers?: unknown; plugins?: unknown };
 		const list = Array.isArray(parsed.servers) ? parsed.servers : [];
-		return { servers: list.map(readServer).filter((server): server is ServerConfig => server !== null) };
+		const plugins: Record<string, PluginServerState> = {};
+		for (const [id, state] of Object.entries(isRecord(parsed.plugins) ? parsed.plugins : {})) {
+			if (!isRecord(state)) continue;
+			const env = strings(state.env);
+			plugins[id] = { ...(typeof state.enabled === "boolean" ? { enabled: state.enabled } : {}), ...(env ? { env } : {}) };
+		}
+		return { servers: list.map(readServer).filter((server): server is ServerConfig => server !== null), plugins };
 	} catch (error) {
 		// i18n-exempt：解析器的原话，界面另配标题。
-		return { servers: [], error: error instanceof Error ? error.message : String(error) };
+		return { servers: [], plugins: {}, error: error instanceof Error ? error.message : String(error) };
 	}
 }
 
@@ -137,7 +157,7 @@ export async function readMagpieServers(file: string, own: readonly ServerConfig
 	}
 	const out: ServerConfig[] = [];
 	for (const [name, config] of entries) {
-		const server = isRecord(config) && name.trim() ? magpieServer(name, config) : null;
+		const server = isRecord(config) && name.trim() ? declaredServer(name, config, { id: `magpie__${name}`, managedBy: "magpie" }) : null;
 		if (!server) {
 			log.warn(`Magpie 的 MCP 条目 ${name} 格式无效，已跳过`);
 			continue;
@@ -152,15 +172,68 @@ export async function readMagpieServers(file: string, own: readonly ServerConfig
 	return out;
 }
 
+/**
+ * 插件带来的服务：每个开着的插件目录里的 `.mcp.json`，和 Magpie 的同一种 Claude 格式；插件仓库的连接器（`plume.kind` 为
+ * connector）就是只带这个文件的插件。id 是 `plugin__<插件名>__<名字>`，人改过的开关和填的值（`states`）盖在上面。
+ * 和已有的服务重名的跳过、留一句诊断，保留先来的（自己加的、Magpie 的、先加载的插件的）。没有这个文件的插件不算，
+ * 读不懂的整份跳过；每次现读，插件卸了它带来的服务也就没了。
+ */
+export async function readPluginServers(
+	plugins: readonly { name: string; dir: string }[],
+	taken: readonly ServerConfig[],
+	states: Readonly<Record<string, PluginServerState>>,
+	log: { warn(message: string): void },
+): Promise<ServerConfig[]> {
+	const out: ServerConfig[] = [];
+	for (const plugin of plugins) {
+		const raw = await readFile(join(plugin.dir, ".mcp.json"), "utf8").catch(() => null);
+		if (raw === null) continue;
+		let entries: [string, unknown][];
+		try {
+			const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ""));
+			if (!isRecord(parsed) || !isRecord(parsed.mcpServers)) throw new Error("invalid");
+			entries = Object.entries(parsed.mcpServers);
+		} catch {
+			log.warn(`插件 ${plugin.name} 的 .mcp.json 不是有效的 MCP 配置，已跳过`);
+			continue;
+		}
+		const label = await displayName(plugin.dir);
+		for (const [name, config] of entries) {
+			const id = `plugin__${plugin.name}__${name}`;
+			const declared = isRecord(config) && name.trim() ? declaredServer(name, config, { id, managedBy: "plugin", plugin: label ?? plugin.name }) : null;
+			if (!declared) {
+				log.warn(`插件 ${plugin.name} 的 MCP 条目 ${name} 格式无效，已跳过`);
+				continue;
+			}
+			if ([...taken, ...out].some((other) => other.id === id || other.name.trim().toLowerCase() === name.trim().toLowerCase())) {
+				log.warn(`插件 ${plugin.name} 的 MCP 条目 ${name} 和已有的服务重名，保留已有的`);
+				continue;
+			}
+			const state = states[id] ?? {};
+			const env = { ...declared.env, ...state.env };
+			const { env: _declared, ...rest } = declared;
+			out.push({ ...rest, enabled: state.enabled ?? declared.enabled, ...(Object.keys(env).length > 0 ? { env } : {}) } as ServerConfig);
+		}
+	}
+	return out;
+}
+
+/** 插件 `package.json` 里的 `plume.displayName`，卡片上写「由 … 提供」。 */
+async function displayName(dir: string): Promise<string | undefined> {
+	const manifest: unknown = await readFile(join(dir, "package.json"), "utf8").then(JSON.parse, () => null);
+	const name = isRecord(manifest) && isRecord(manifest.plume) ? manifest.plume.displayName : undefined;
+	return typeof name === "string" && name.trim() ? name.trim() : undefined;
+}
+
 /** Claude 格式的一条：有 `command`（或 `type: "stdio"`）是本地进程，否则要有 `url`，`type` 只认 http、sse。 */
-function magpieServer(name: string, config: Record<string, unknown>): ServerConfig | null {
+function declaredServer(name: string, config: Record<string, unknown>, origin: Pick<ServerBase, "id" | "managedBy" | "plugin">): ServerConfig | null {
 	const { type, command, args, url, disabled } = config;
 	if (type !== undefined && type !== "stdio" && type !== "http" && type !== "sse") return null;
 	if (disabled !== undefined && typeof disabled !== "boolean") return null;
 	const allStrings = (value: unknown) => value === undefined || (isRecord(value) && Object.values(value).every((item) => typeof item === "string"));
 	if (!allStrings(config.env) || !allStrings(config.headers)) return null;
 	if (args !== undefined && (!Array.isArray(args) || args.some((arg) => typeof arg !== "string"))) return null;
-	const base = { id: `magpie__${name}`, name, enabled: disabled !== true, managedBy: "magpie" as const };
+	const base = { ...origin, name, enabled: disabled !== true };
 	const env = strings(config.env);
 	if (type === "stdio" || (type === undefined && command !== undefined)) {
 		if (typeof command !== "string" || !command.trim()) return null;
@@ -172,8 +245,9 @@ function magpieServer(name: string, config: Record<string, unknown>): ServerConf
 	return { ...base, transport: type === "sse" ? "sse" : "http", url, ...(headers ? { headers } : {}) };
 }
 
-export async function writeServers(file: string, servers: readonly ServerConfig[]): Promise<void> {
-	await writeFile(file, `${JSON.stringify({ servers }, null, "\t")}\n`, { mode: 0o600 });
+export async function writeServers(file: string, servers: readonly ServerConfig[], plugins: Readonly<Record<string, PluginServerState>>): Promise<void> {
+	const body = Object.keys(plugins).length > 0 ? { servers, plugins } : { servers };
+	await writeFile(file, `${JSON.stringify(body, null, "\t")}\n`, { mode: 0o600 });
 }
 
 /** 按草稿生成新的配置；`previous` 是在编辑的那一条，没改的密钥从它那里拿。 */

@@ -18,12 +18,11 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { trimNative } from "../../../packages/sdk/plugin-sdk/lib/targets.mjs";
+import { PLUGIN_ENTRY, SHIPPED } from "../../../packages/sdk/plugin-sdk/lib/manifest.mjs";
 
 const desktop = resolve(import.meta.dirname, "..");
 const repo = resolve(desktop, "../..");
 const stage = join(desktop, ".stage");
-/** 和 src/main/market.ts 的 SHIPPED 一致。 */
-const SHIPPED = ["package.json", "README.md", "images", "icon.png", "dist", "skills"];
 const target = process.argv[2] ?? `${process.platform}-${process.arch}`;
 
 rmSync(stage, { recursive: true, force: true });
@@ -32,7 +31,7 @@ for (const [from, to] of [["packages/builtin", "builtin"]]) {
 	for (const entry of readdirSync(catalog, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const source = join(catalog, entry.name);
-		if (!existsSync(join(source, "dist/index.mjs"))) throw new Error(`插件 ${entry.name} 没构建：先 pnpm build:plugins`);
+		if (!existsSync(join(source, PLUGIN_ENTRY))) throw new Error(`插件 ${entry.name} 没构建：先 pnpm build:plugins`);
 		const dir = join(stage, to, entry.name);
 		mkdirSync(dir, { recursive: true });
 		for (const name of SHIPPED) {

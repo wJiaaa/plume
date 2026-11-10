@@ -1,14 +1,12 @@
 /**
- * 在插件目录里找插件：每个子目录一个，有 dist/index.mjs 的才算。只读一层，不递归。
+ * 在插件目录里找插件：每个子目录一个，有逻辑入口（dist/index.mjs）的才算。只读一层，不递归。
  */
 
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { DIR_NAME, PLUGIN_ENTRY } from "@plumeai/plugin-sdk/manifest";
 import type { PluginDir } from "../shared/protocol.ts";
-
-/** 目录名要能当 plume-plugin:// 的主机名。 */
-export const PLUGIN_KEY = /^[a-z0-9][a-z0-9-]*$/;
 
 export async function discoverPlugins(roots: string[], log: (message: string) => void): Promise<PluginDir[]> {
 	const found: PluginDir[] = [];
@@ -21,8 +19,8 @@ export async function discoverPlugins(roots: string[], log: (message: string) =>
 		}
 		for (const name of names.sort()) {
 			const dir = resolve(root, name);
-			if (!existsSync(join(dir, "dist/index.mjs"))) continue;
-			if (!PLUGIN_KEY.test(name)) {
+			if (!existsSync(join(dir, PLUGIN_ENTRY))) continue;
+			if (!DIR_NAME.test(name)) {
 				log(`忽略插件目录 ${dir}：目录名只能用小写字母、数字和连字符`);
 				continue;
 			}

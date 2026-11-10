@@ -2,7 +2,8 @@
  * 扩展：还能给 Plume 加什么，以及已经有了什么。分三类——插件、技能、连接器，页头就是这三类的切换（`KindTabs`）。
  *
  * 技能和连接器（MCP）由管它们的内置插件画（`page: "extensions-skills"`、`"extensions-connectors"`）：装了哪些、开着
- * 没有、配好没有，人到这里找，设置里不另设一页。下面说的都是「插件」那一类，由这里画。
+ * 没有、配好没有，人到这里找，设置里不另设一页。市场里这两类的条目（`plume.kind` 是 skill、connector 的插件）按货架
+ * 接在那一节下面，装法、详情页和插件一样。下面说的都是「插件」那一类，由这里画。
  *
  * 按货架排开的标记和一句话，为了扫着看而排，每张一个动作；开关、更新、卸载、插件自己的设置都在它的详情页
  * （detail.tsx）。「我装了什么」也在这里回答：筛选条最前面是「已安装」，筛出装着的那几张卡片——设置里不另设一页。
@@ -118,10 +119,10 @@ export function MarketScreen({
 		};
 	}, []);
 
-	// 市场回答「还能装什么」：随应用发的插件不在这里。
-	const listed = items.filter((item) => !isBuiltin(item));
+	// 市场回答「还能装什么」：随应用发的插件不在这里；技能合集、连接器在另两类里。
+	const listed = items.filter((item) => item.kind === "plugin" && !isBuiltin(item));
 	// 已安装：市场装的、本机添加的，加上没加载起来的内置插件。
-	const installed = items.filter((item) => isInstalled(item) && (!isBuiltin(item) || item.status?.state === "failed"));
+	const installed = items.filter((item) => item.kind === "plugin" && isInstalled(item) && (!isBuiltin(item) || item.status?.state === "failed"));
 	const published = listed.filter((item) => item.entry !== null);
 	const localOnly = listed.filter((item) => item.entry === null);
 	const categories = useMemo(() => shelves(published).map((shelf) => ({ name: shelf.category, count: shelf.items.length })), [published]);
@@ -160,7 +161,7 @@ export function MarketScreen({
 						<KindTabs value={tab} onChange={setMarketTab} />
 
 						{tab !== "plugins" ? (
-							<ExtensionSections tab={tab} />
+							<ExtensionSections tab={tab} items={items} />
 						) : (
 							<>
 								<div className="flex flex-wrap gap-1" role="group" aria-label={t("pluginDetail.category")}>
@@ -299,10 +300,17 @@ function KindTabs({ value, onChange }: { value: MarketTab; onChange: (tab: Marke
 	);
 }
 
-/** 技能、连接器两类的内容：管它们的插件画的那一节（一般各只有一个插件），和插件那一类同宽，卡片网格由它们自己画。 */
-function ExtensionSections({ tab }: { tab: Exclude<MarketTab, "plugins"> }) {
+/**
+ * 技能、连接器两类的内容：管它们的插件画的那一节（一般各只有一个插件），和插件那一类同宽，卡片网格由它们自己画；
+ * 下面接着市场里这一类的条目，按货架排，卡片和详情页同插件那一类。装上的技能、连接器也出现在上面那一节里。
+ */
+function ExtensionSections({ tab, items }: { tab: Exclude<MarketTab, "plugins">; items: CatalogItem[] }) {
+	const { t } = useI18n();
 	usePluginUis();
 	const sections = listPageSettingsSections(tab === "skills" ? "extensions-skills" : "extensions-connectors");
+	const kind = tab === "skills" ? "skill" : "connector";
+	const offered = items.filter((item) => item.kind === kind && !isBuiltin(item));
+	let arrival = 0;
 	return (
 		<div key={tab} className="market-swap-in" data-market-tab={tab}>
 			{sections.map((entry) => (
@@ -310,6 +318,18 @@ function ExtensionSections({ tab }: { tab: Exclude<MarketTab, "plugins"> }) {
 					<entry.component />
 				</ErrorBoundary>
 			))}
+			{offered.length > 0 && (
+				<section className="pt-10" data-market-offered={kind}>
+					<h2 className="text-heading font-semibold text-ink">{t("market.fromMarket")}</h2>
+					{shelves(offered).map((shelf) => (
+						<Shelf key={shelf.category} id={shelf.category} title={shelf.category === UNFILED ? t("common.other") : shelf.category} count={shelf.items.length}>
+							{shelf.items.map((item) => (
+								<CatalogCard key={item.key} index={arrival++} item={item} onOpen={() => focusPlugin(item.key)} />
+							))}
+						</Shelf>
+					))}
+				</section>
+			)}
 		</div>
 	);
 }

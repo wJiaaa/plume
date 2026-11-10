@@ -290,10 +290,10 @@ function ServerCard({
 				</span>
 			</div>
 
-			{server.managed && (
+			{(server.managed || server.plugin !== undefined) && (
 				<div className="mcp-section" data-mcp-managed="">
 					<Text as="p" size="detail" tone="muted">
-						{text.magpieManaged}
+						{server.managed ? text.magpieManaged : text.pluginManaged(server.plugin ?? "")}
 					</Text>
 				</div>
 			)}
@@ -392,8 +392,8 @@ function ServerCard({
 								{text.logout}
 							</MenuItem>
 						)}
-						{server.enabled && !server.managed && <MenuSeparator />}
-						{!server.managed && (
+						{server.enabled && !server.managed && server.plugin === undefined && <MenuSeparator />}
+						{!server.managed && server.plugin === undefined && (
 							<MenuItem
 								danger
 								icon={<Trash2 size={13} strokeWidth={1.8} />}
@@ -498,15 +498,17 @@ function ServerEditor({
 	};
 	const flip = (flag: keyof EditorFields["flags"]) => (value: boolean) => change("flags", { ...fields.flags, [flag]: value });
 
+	// Magpie 分发的整块锁住；插件带来的只有空位的值能填（下面那一节在锁外）。
+	const locked = server.managed || server.plugin !== undefined;
 	return (
-		<fieldset className="mcp-editor-lock" disabled={server.managed}>
-			<div
-				className="mcp-editor"
-				data-mcp-editor=""
-				onBlur={(event) => {
-					if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit(fields);
-				}}
-			>
+		<div
+			className="mcp-editor"
+			data-mcp-editor=""
+			onBlur={(event) => {
+				if (!locked && !event.currentTarget.contains(event.relatedTarget as Node | null)) commit(fields);
+			}}
+		>
+			<fieldset className="mcp-editor-lock" disabled={locked}>
 				<Field
 					id={`plume-mcp-name-${server.id}`}
 					label={text.name}
@@ -551,11 +553,13 @@ function ServerEditor({
 				<Field label={stdio ? text.env : text.headers} optional hint={text.varsHint} text={text}>
 					<VarRows rows={fields.rows} kind={stdio ? "stdio" : "http"} text={text} onChange={set("rows")} />
 				</Field>
-				{!stdio && server.values.length > 0 && (
-					<Field label={text.values} hint={text.valuesHint} text={text}>
-						<ValueRows names={server.values.map((item) => item.name)} known={server.values} text={text} onFill={onFill} removable />
-					</Field>
-				)}
+			</fieldset>
+			{(!stdio || server.plugin !== undefined) && server.values.length > 0 && (
+				<Field label={text.values} hint={text.valuesHint} text={text}>
+					<ValueRows names={server.values.map((item) => item.name)} known={server.values} text={text} onFill={onFill} removable />
+				</Field>
+			)}
+			<fieldset className="mcp-editor-lock" disabled={locked}>
 				<Switch label={text.trustReadOnly} hint={text.trustReadOnlyHint} checked={fields.flags.trustReadOnly} onChange={flip("trustReadOnly")} />
 				<Switch label={text.pinned} hint={text.pinnedHint} checked={fields.flags.pinned} onChange={flip("pinned")} />
 				<Switch label={text.perSession} hint={text.perSessionHint} checked={fields.flags.perSession} onChange={flip("perSession")} />
@@ -569,14 +573,14 @@ function ServerEditor({
 						</Button>
 					</div>
 				)}
-			</div>
-		</fieldset>
+			</fieldset>
+		</div>
 	);
 }
 
 /**
  * 填 `${NAME}` 空位：一行一个，失焦就存。值是写进去的，不读出来：像密钥的用密码框，填过的写「已填写」。
- * `removable` 的（远程服务存着的值）能删掉。
+ * `removable` 的（远程服务存着的值、插件带来的服务填过的值）能删掉；可选的空位没填时提示可以不填。
  */
 /** 没传 known 时用同一个空数组：默认参数写 `[]` 每次渲染都是新的。 */
 const NO_VARS: VarView[] = [];
@@ -612,7 +616,7 @@ function ValueRows({
 								type={secret ? "password" : "text"}
 								value={value}
 								aria-label={name}
-								placeholder={current?.filled ? text.varFilled : secret ? text.paste : text.fill}
+								placeholder={current?.filled ? text.varFilled : current?.optional ? text.optionalValue : secret ? text.paste : text.fill}
 								spellCheck={false}
 								autoComplete="off"
 								onChange={(event) => setDrafts((was) => ({ ...was, [name]: event.target.value }))}
@@ -624,7 +628,7 @@ function ValueRows({
 								}}
 							/>
 						</Text>
-						{removable && (
+						{removable && current?.filled !== false && (
 							<IconButton
 								tone="danger"
 								size="sm"

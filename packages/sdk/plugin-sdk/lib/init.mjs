@@ -12,12 +12,11 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { linkSdk } from "./link.mjs";
+import { DIR_NAME } from "./manifest.mjs";
 
 const sdk = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(readFileSync(join(sdk, "package.json"), "utf8"));
 
-/** 目录名也是 plume-plugin:// 的主机名。 */
-export const DIR_NAME = /^[a-z0-9][a-z0-9-]*$/;
 /** 插件名：小写，点分段，段里可以有连字符。 */
 export const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/;
 

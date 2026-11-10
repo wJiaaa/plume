@@ -9,7 +9,8 @@
   },
   "exports": {
     "./tsconfig.json": "./tsconfig.json",
-    "./build": "./lib/build.mjs"
+    "./build": "./lib/build.mjs",
+    "./manifest": "./lib/manifest.mjs"
   },
   "scripts": {
     "typecheck": "node scripts/build-types.mjs",

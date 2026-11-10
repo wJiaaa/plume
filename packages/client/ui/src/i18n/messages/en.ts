@@ -358,6 +358,7 @@ export const en = {
 	"market.title": "Extensions",
 	"market.skills": "Skills",
 	"market.connectors": "Connectors",
+	"market.fromMarket": "Add from the marketplace",
 	"market.autoUpdate": "Auto-update",
 	"market.updatesN": "{n} with a new version",
 	"market.updatingN": "Updating {n}…",

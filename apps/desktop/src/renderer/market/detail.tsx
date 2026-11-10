@@ -33,6 +33,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { listPluginSettingsSections, localized, type SettingsSectionEntry, usePluginUis } from "../plugins.tsx";
 import { Toggle } from "../settings/controls.tsx";
 import type { SettingsSection } from "../settings/pages.tsx";
+import type { PluginKind } from "@plume/contract";
 import { type CatalogItem, isBuiltin, isEnabled, isInstalled, UNFILED } from "./catalog.ts";
 import { PluginIcon } from "./plugin-icon.tsx";
 import { Readme } from "./readme.tsx";
@@ -178,7 +179,7 @@ function DetailBody({
 			)}
 
 			{/* 3. 设置。 */}
-			<PluginSettings plugin={item.status?.name} onOpenSettings={onOpenSettings} />
+			<PluginSettings plugin={item.status?.name} kind={isInstalled(item) ? item.kind : undefined} onOpenSettings={onOpenSettings} />
 
 			{/* 4. 试试这样问。 */}
 			{prompts.length > 0 && (
@@ -273,9 +274,18 @@ function DetailBody({
 
 /**
  * 插件自己的设置：没给 `page` 的分区画在这里，给了的（导航里一行、产品某一页、「扩展」的另一类）列成去那里的入口，同一处只列一次。
- * 插件没开着时它的界面入口没装上，分区一个都没有，这一节也就不画。
+ * 插件没开着时它的界面入口没装上，分区一个都没有，这一节也就不画。装上的技能合集、连接器没有界面入口，它们的技能和服务
+ * 在「扩展」的那一类里管（连接器在那里填变量），入口照样列出。
  */
-function PluginSettings({ plugin, onOpenSettings }: { plugin: string | undefined; onOpenSettings: (section: SettingsSection) => void }) {
+function PluginSettings({
+	plugin,
+	kind,
+	onOpenSettings,
+}: {
+	plugin: string | undefined;
+	/** 装着的那份是哪一类；没装是 undefined。 */ kind: PluginKind | undefined;
+	onOpenSettings: (section: SettingsSection) => void;
+}) {
 	const { t, resolvedLocale } = useI18n();
 	usePluginUis();
 	const sections = plugin ? listPluginSettingsSections(plugin) : [];
@@ -297,6 +307,8 @@ function PluginSettings({ plugin, onOpenSettings }: { plugin: string | undefined
 		if (entry.page === "extensions-skills") tabs.set("skills", t("market.skills"));
 		if (entry.page === "extensions-connectors") tabs.set("connectors", t("market.connectors"));
 	}
+	if (kind === "skill") tabs.set("skills", t("market.skills"));
+	if (kind === "connector") tabs.set("connectors", t("market.connectors"));
 	if (inline.length === 0 && links.size === 0 && tabs.size === 0) return null;
 	return (
 		<section className="pt-8" data-plugin-settings="">

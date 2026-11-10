@@ -55,6 +55,7 @@ const zhCN = {
 	fileBroken: "配置文件读不懂，先修好或删掉它再改",
 	notFound: "没有这台 MCP 服务了",
 	magpieManaged: "由 Magpie 管理。请在 Magpie 资源库修改、启停或移除，重启 Plume 后生效；缺少的密钥也在 Magpie 中填写。",
+	pluginManaged: (plugin: string) => `由插件「${plugin}」提供。可以开关，在「启动方式与环境变量」里填写或更换空位的值；启动方式不能改，要移除请卸载这个插件。`,
 	draftProblem: {
 		invalid: "表单里有认不出的内容",
 		badName: "要填名称",
@@ -68,6 +69,7 @@ const zhCN = {
 	missingTitle: (n: number) => `还缺 ${n} 项，填上之后才能启动`,
 	fill: "填写后失焦自动保存",
 	paste: "粘贴密钥，失焦自动保存",
+	optionalValue: "可选，不填也能用",
 	pinned: "常驻",
 	pinnedHint:
 		"MCP 工具很多时，Plume 只在工具表里放一个搜索入口，模型要用哪台服务器的工具再去搜。打开后，这台服务器的工具每轮都直接给模型，省掉搜索那一步；适合几乎每次都要用的服务器。",
@@ -90,7 +92,7 @@ const zhCN = {
 	},
 	launch: "启动方式与环境变量",
 	values: "空位的值",
-	valuesHint: "地址和请求头里的 ${NAME} 从这里取值，没有的再从登录 shell 的环境变量里找。",
+	valuesHint: "配置里的 ${NAME} 从这里取值，没有的再从登录 shell 的环境变量里找。",
 	promptSource: (server: string) => `MCP · ${server}`,
 	promptGone: (name: string) => `/${name} 已经不在了：那台 MCP 服务断开了，或者不再提供它`,
 	promptMissing: (names: string[]) => `还要填 ${names.join("、")}，写成 名字=值 或按顺序写在命令后面`,
@@ -175,6 +177,8 @@ export const MESSAGES: Record<Locale, Messages> = {
 		notFound: "That MCP server is gone",
 		magpieManaged:
 			"Managed by Magpie. Edit, enable or remove this server in Magpie’s Library, then restart Plume to apply the change. Fill missing credentials in Magpie.",
+		pluginManaged: (plugin) =>
+			`Provided by the “${plugin}” plugin. You can turn it on or off, and fill in or change its values under “How it starts, and its environment”; its launch settings can’t be changed — uninstall the plugin to remove it.`,
 		draftProblem: {
 			invalid: "The form has something unrecognisable in it",
 			badName: "A name is required",
@@ -188,6 +192,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		missingTitle: (n) => (n === 1 ? "1 value is missing; fill it in to start the server" : `${n} values are missing; fill them in to start the server`),
 		fill: "Saved when you leave the field",
 		paste: "Paste the key — saved when you leave the field",
+		optionalValue: "Optional — works without it",
 		pinned: "Always loaded",
 		pinnedHint:
 			"When many MCP tools are connected, Plume gives the model a search tool instead of every tool, and it looks up a server's tools when it needs them. Turn this on to give the model this server's tools every turn and skip the search. Use it for a server you need in almost every conversation.",
@@ -215,7 +220,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		},
 		launch: "How it starts, and its environment",
 		values: "Placeholder values",
-		valuesHint: "${NAME} in the URL and headers is filled from here, then from your login shell's environment.",
+		valuesHint: "${NAME} in the configuration is filled from here, then from your login shell's environment.",
 		promptSource: (server) => `MCP · ${server}`,
 		promptGone: (name) => `/${name} is gone: its MCP server disconnected or no longer offers it`,
 		promptMissing: (names) => `Still needs ${names.join(", ")} — write name=value or put them in order after the command`,

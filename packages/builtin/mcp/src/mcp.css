@@ -328,12 +328,12 @@
 	border-top: 1px solid var(--plume-line-soft);
 }
 
-/* 套在编辑块外面、只用来整块禁用（Magpie 分发的服务）：去掉 fieldset 自带的边框、内外边距和最小宽度。 */
+/*
+ * 编辑块里锁住的那几段（Magpie 分发的整块，插件带来的除了空位的值）：只用来禁用，不占一层盒子，
+ * 里面的字段照样是编辑块网格里的格子。
+ */
 .mcp-editor-lock {
-	min-inline-size: 0;
-	margin: 0;
-	padding: 0;
-	border: none;
+	display: contents;
 }
 
 /* 服务中途要人填的表：和产品的审批卡同一块玻璃，压在输入框正上方。 */

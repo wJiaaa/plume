@@ -7,6 +7,7 @@
  */
 
 import type { PluginStatus } from "@plume/contract";
+import type { PluginKind } from "@plume/contract";
 import type { InstalledPlugin, MarketEntry } from "../../shared/market.ts";
 
 /** 没写货架的条目。不是谁选的分类，见 `shelves`。 */
@@ -35,6 +36,8 @@ const SHELF_ORDER: readonly string[] = [
 export interface CatalogItem {
 	/** 目录名：条目 id、安装目录名、agent 进程里的 key，三处是同一个。 */
 	key: string;
+	/** 摆在「扩展」页哪一类里。 */
+	kind: PluginKind;
 	name: string;
 	description: string;
 	logo?: string;
@@ -81,6 +84,7 @@ export function merge(entries: MarketEntry[], installed: InstalledPlugin[], stat
 	const statusOf = (key: string) => statuses.find((status) => status.key === key);
 	const from = (info: MarketEntry | InstalledPlugin) => ({
 		key: info.id,
+		kind: info.kind,
 		name: info.name,
 		description: info.description,
 		...(info.logo ? { logo: info.logo } : {}),

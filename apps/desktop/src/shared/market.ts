@@ -6,10 +6,14 @@
  * agent 进程随即加载；卸载删掉那个目录。按版本号判断有没有更新：发出去的版本不可变。
  */
 
-/** 条目和已装插件共有的说明，读自插件的 package.json 和 icon.png（目录里的条目由市场的索引转述）。 */
+import type { PluginKind } from "@plume/contract";
+
+/** 条目和已装插件共有的说明，读自插件的 package.json 和 icon.png（目录里的条目由市场的索引转述），读法见 `@plumeai/plugin-sdk/manifest`。 */
 export interface MarketInfo {
 	/** 目录名：条目的 id，也是安装目录名和 plume-plugin:// 的主机名。 */
 	id: string;
+	/** 摆在「扩展」页哪一类里：插件、技能、连接器，`plume.kind`，没写是插件。 */
+	kind: PluginKind;
 	/** 显示名，`plume.displayName`，没写时用目录名。 */
 	name: string;
 	description: string;

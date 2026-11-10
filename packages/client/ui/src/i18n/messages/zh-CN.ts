@@ -353,6 +353,7 @@ export const zhCN = {
 	"market.title": "扩展",
 	"market.skills": "技能",
 	"market.connectors": "连接器",
+	"market.fromMarket": "从市场添加",
 	"market.autoUpdate": "自动更新",
 	"market.updatesN": "{n} 个有新版本",
 	"market.updatingN": "正在更新 {n} 个…",

@@ -16,8 +16,9 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { MarketEntry } from "../shared/market.ts";
-import { PLUGIN_KEY } from "./discover.ts";
+import type { PluginManifest } from "@plume/contract";
+import { PLUGIN_ENTRY, readCatalogInfo } from "@plumeai/plugin-sdk/manifest";
+import type { MarketEntry, MarketInfo } from "../shared/market.ts";
 
 /** 索引不该有这么大；再大就是出错了。 */
 const MAX_INDEX_BYTES = 8 * 1024 * 1024;
@@ -100,7 +101,11 @@ function iconOf(url: URL): Promise<string | undefined> {
 }
 
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
-const texts = (value: unknown) => (Array.isArray(value) ? value.flatMap((item) => text(item) ?? []) : []);
+
+/** 插件的说明给界面的样子：显示名没写用目录名，说明没写是空串。 */
+export function marketInfo(id: string, { displayName, description, ...rest }: PluginManifest): MarketInfo {
+	return { id, name: displayName ?? id, description: description ?? "", ...rest };
+}
 
 /**
  * 读索引，只留这台机器有包的插件。字段类型不对的当没写；名字不合规矩、没有说明或版本、包的登记不全的整条跳过，
@@ -112,26 +117,16 @@ export async function fetchCatalog(indexUrl: string, target = TARGET): Promise<R
 	if (!Array.isArray(index.plugins)) throw new Error("marketplace.json has no plugins");
 	const found: { entry: RemoteEntry; icon?: URL }[] = [];
 	for (const raw of index.plugins as Record<string, unknown>[]) {
-		const id = text(raw?.name);
-		const version = text(raw?.version);
-		const name = text(raw?.displayName) ?? id;
+		const catalogInfo = readCatalogInfo(raw);
+		if (!catalogInfo?.version) continue;
+		const { name: id, ...manifest } = catalogInfo;
 		const builds = (typeof raw?.builds === "object" && raw.builds !== null ? raw.builds : {}) as Record<string, Record<string, unknown> | undefined>;
 		const build = builds[target];
 		const path = text(build?.path);
 		const sha256 = text(build?.sha256)?.toLowerCase();
 		const size = build?.size;
-		if (!id || !PLUGIN_KEY.test(id) || !version || !name || !path || !sha256 || !/^[0-9a-f]{64}$/.test(sha256) || typeof size !== "number") continue;
-		const info: MarketEntry = { id, name, description: text(raw.description) ?? "", version };
-		const optional = {
-			author: text(raw.author),
-			category: text(raw.category),
-			keywords: texts(raw.keywords),
-			homepage: text(raw.homepage),
-			license: text(raw.license),
-			prompts: texts(raw.prompts),
-		};
-		for (const [key, value] of Object.entries(optional))
-			if (value !== undefined && !(Array.isArray(value) && value.length === 0)) Object.assign(info, { [key]: value });
+		if (!path || !sha256 || !/^[0-9a-f]{64}$/.test(sha256) || typeof size !== "number") continue;
+		const info: MarketEntry = marketInfo(id, manifest);
 		const readme = text(raw.readme);
 		const icon = text(raw.icon);
 		found.push({
@@ -178,7 +173,7 @@ export async function downloadPackage(entry: RemoteEntry, into: string): Promise
 	} finally {
 		await rm(archive, { force: true });
 	}
-	if (!existsSync(join(into, "dist/index.mjs"))) throw new PackageError("unpack", "dist/index.mjs missing");
+	if (!existsSync(join(into, PLUGIN_ENTRY))) throw new PackageError("unpack", `${PLUGIN_ENTRY} missing`);
 }
 
 /**

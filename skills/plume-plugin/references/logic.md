@@ -50,6 +50,7 @@ export default {
 | `ctx.pages` | 驱动界面入口画的网页（`<webview>`）：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`，`onEvent` 收页面的事件。见下文「网页」 |
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见下面「`/` 命令」），停用时撤下 |
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
+| `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
 
