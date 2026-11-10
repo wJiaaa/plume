@@ -621,7 +621,7 @@ export class Connections implements McpResources {
 				slot.state === "connecting" || slot.state === "reconnecting"
 					? "is still reconnecting"
 					: slot.state === "needs-login"
-						? "needs the user to sign in (Extensions › Connectors)"
+						? "needs the user to sign in (Marketplace › Connectors)"
 						: "is not connected";
 			return { output: `MCP call failed: "${server.name}" ${why}.${explain(slot)}`, isError: true };
 		}

@@ -70,7 +70,7 @@ export async function checkNativeUi(options: {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
 		await page(`document.querySelector('[data-nav=market]').click()`);
-		await page(`document.querySelector('nav[aria-label="扩展"] button')?.click()`);
+		await page(`document.querySelector('nav[aria-label="插件市场"] button')?.click()`);
 		await until(`document.querySelector('[data-card="native-ui"] > button') !== null`, "市场列出原生界面插件");
 		await page(`document.querySelector('[data-card="native-ui"] > button').click()`);
 		const toggle = '[data-plugin-detail="native-ui"] [role=switch]';

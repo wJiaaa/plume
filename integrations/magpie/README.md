@@ -50,7 +50,7 @@ Plume 每次用到模型设置都重新读这个文件，所以 Magpie 改完，
 
 在 Magpie 资源库中选择 Plume，即可分发这些资源。需要支持 `agent.library` 的 Magpie 版本；旧版本请先更新。
 
-MCP 文件使用 Claude 格式的 `mcpServers` 对象，支持 stdio、HTTP 和 SSE，以及命令、参数、环境变量、地址和请求头里的 `${NAME}` 空位（从登录 shell 的环境变量里取）。Plume 给这些服务的 id 加 `magpie__` 前缀，「扩展 › 连接器」里标明「由 Magpie 管理」：名称、开关、启动方式、变量和删除都锁住，在 Magpie 中修改，缺少的密钥也在 Magpie 中填写；连接状态、工具列表、重连和 OAuth 登录仍可在 Plume 中查看或操作。
+MCP 文件使用 Claude 格式的 `mcpServers` 对象，支持 stdio、HTTP 和 SSE，以及命令、参数、环境变量、地址和请求头里的 `${NAME}` 空位（从登录 shell 的环境变量里取）。Plume 给这些服务的 id 加 `magpie__` 前缀，「插件市场 › 连接器」里标明「由 Magpie 管理」：名称、开关、启动方式、变量和删除都锁住，在 Magpie 中修改，缺少的密钥也在 Magpie 中填写；连接状态、工具列表、重连和 OAuth 登录仍可在 Plume 中查看或操作。
 
 Plume 不把分发的指令和 MCP 配置另存进自己的设置，所以在 Magpie 中撤回后不会留下副本。已有手动配置保留；名称和已有服务重名（不分大小写）时保留自己的服务并记录警告，因为名称就是工具名里的那一段。格式损坏或无效的 MCP 条目会记录警告并跳过，原文件不被改写。
 

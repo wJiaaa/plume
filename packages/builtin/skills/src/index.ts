@@ -1,7 +1,7 @@
 /**
  * plume.skills 的逻辑入口，跑在 agent 进程：系统提示词里列出技能（`model.context` 加一段），模型调 `skill` 工具时把那个技能的
  * 正文交回去；技能也进输入框的 `/` 菜单，人点了、或在话里写 `/skill:名字` 就让模型用它。技能写了 `allowed-tools` 的，
- * 生效期间别的工具经 tool.execute 的层拒掉。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「扩展 › 技能」经 `ctx.serve`
+ * 生效期间别的工具经 tool.execute 的层拒掉。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
  * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经服务 `resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
@@ -230,7 +230,7 @@ export default {
 		});
 
 		/**
-		 * 「扩展 › 技能」列的：选了项目时连那个项目的，加上个人的和插件带来的。`files` 是读到的全部 `SKILL.md`，被同名遮住的也在。
+		 * 「插件市场 › 技能」列的：选了项目时连那个项目的，加上个人的和插件带来的。`files` 是读到的全部 `SKILL.md`，被同名遮住的也在。
 		 * 界面传来的 `cwd` 只用来拼出那几个技能目录去读，不是字符串就当没选项目。
 		 */
 		const listed = async (cwd: unknown): Promise<{ view: SkillsView; files: Set<string> }> => {

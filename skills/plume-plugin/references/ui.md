@@ -77,7 +77,7 @@ export default {
 | `ui.pageBadge(id, { count, label } \| null)` | 侧栏去处里本插件那一页的那一行右端挂一个数（没人看见的失败），`label` 给读屏和悬停提示；`null` 或 0 拿掉，人正在那一页上时不画，停用时一起拿掉 |
 | `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
 | `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开：有插件接手点击（`takesClicks`，内置浏览器）时开在它那里，否则系统浏览器；限制同 `ui.openExternal` |
-| `ui.settingsSection(id, Component, options)` | 加一节设置：默认画进本插件详情的「设置」一节；`page: "nav"` 时单独占设置导航一行（`group` 选「Agent 能力」「数据」「代码与版本控制」组），给别的 `page` 时画进产品的那一页（「个性化」「智能体」，或「智能体」里「会话」那张卡的一行，或「扩展」的「技能」「连接器」两类），见下文 |
+| `ui.settingsSection(id, Component, options)` | 加一节设置：默认画进本插件详情的「设置」一节；`page: "nav"` 时单独占设置导航一行（`group` 选「Agent 能力」「数据」「代码与版本控制」组），给别的 `page` 时画进产品的那一页（「个性化」「智能体」，或「智能体」里「会话」那张卡的一行，或「插件市场」的「技能」「连接器」两类），见下文 |
 | `ui.ModelSelect` | 产品的模型下拉：`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说 |
 | `ui.useModelDefaults()` | React hook：`{ defaultModel?, sessionModel?, thinking }`——新会话的默认模型、当前会话的模型、默认思考档位，「跟随」时写哪个模型名用它 |
 | `ui.useProjects()` | React hook：侧栏里的项目 `{ id, name, path }[]`，随增删更新；几个项目可能登记在同一个目录上 |
@@ -416,7 +416,7 @@ function SidePanel({ tab }: PanelProps) {
 
 ## 设置分区
 
-先想清楚放哪：**只和这个插件有关的选项**（它自己的开关、阈值、账号）不给 `page`，画进插件详情（「扩展」里点开它）的「设置」一节，不占设置导航：
+先想清楚放哪：**只和这个插件有关的选项**（它自己的开关、阈值、账号）不给 `page`，画进插件详情（「插件市场」里点开它）的「设置」一节，不占设置导航：
 
 ```tsx
 ui.settingsSection("im", ImSettings, { title: (locale) => MESSAGES[locale].title, detail: (locale) => MESSAGES[locale].detail });
@@ -446,7 +446,7 @@ ui.settingsSection("usage", UsagePage, { title: (locale) => MESSAGES[locale].tit
 ui.settingsSection("memory", MemorySettings, { title: (locale) => MESSAGES[locale].title, page: "personalization" });
 ```
 
-管技能、MCP 连接器的插件给 `page: "extensions-skills"`、`"extensions-connectors"`：画进「扩展」页的「技能」「连接器」两类，在分类标签下面、宽度和设置页一样，整节（介绍、列表、添加按钮）由组件自己画；插件详情里是「去 扩展 › 技能」这样的入口。内置的 `plume.skills`、`plume.mcp` 就是这样放的：
+管技能、MCP 连接器的插件给 `page: "extensions-skills"`、`"extensions-connectors"`：画进「插件市场」页的「技能」「连接器」两类，在分类标签下面、宽度和设置页一样，整节（介绍、列表、添加按钮）由组件自己画；插件详情里是「去 插件市场 › 技能」这样的入口。内置的 `plume.skills`、`plume.mcp` 就是这样放的：
 
 ```tsx
 ui.settingsSection("skills", SkillsSettings, { title: (locale) => MESSAGES[locale].settingsTitle, icon: WandSparkles, page: "extensions-skills" });

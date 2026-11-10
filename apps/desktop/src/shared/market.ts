@@ -12,7 +12,7 @@ import type { PluginKind } from "@plume/contract";
 export interface MarketInfo {
 	/** 目录名：条目的 id，也是安装目录名和 plume-plugin:// 的主机名。 */
 	id: string;
-	/** 摆在「扩展」页哪一类里：插件、技能、连接器，`plume.kind`，没写是插件。 */
+	/** 摆在「插件市场」页哪一类里：插件、技能、连接器，`plume.kind`，没写是插件。 */
 	kind: PluginKind;
 	/** 显示名，`plume.displayName`，没写时用目录名。 */
 	name: string;

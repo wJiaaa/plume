@@ -68,7 +68,7 @@ export async function checkSkinStudio(options: {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
 		await page(`document.querySelector('[data-nav=market]').click()`);
-		await page(`document.querySelector('nav[aria-label="扩展"] button')?.click()`);
+		await page(`document.querySelector('nav[aria-label="插件市场"] button')?.click()`);
 		await until(`document.querySelector('[data-card="skin-studio"] > button') !== null`, "市场列出换肤工坊");
 		await page(`document.querySelector('[data-card="skin-studio"] > button').click()`);
 		await until(`document.querySelector(${JSON.stringify(studioSwitch)}) !== null`, "工坊详情有开关");

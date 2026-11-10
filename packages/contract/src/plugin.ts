@@ -1123,7 +1123,7 @@ export interface PluginContext {
 }
 
 /**
- * 插件包是哪一类（`package.json` 的 `plume.kind`），决定它在「扩展」页的哪个分类里：普通插件；技能合集（只带 `skills/`）；
+ * 插件包是哪一类（`package.json` 的 `plume.kind`），决定它在「插件市场」页的哪个分类里：普通插件；技能合集（只带 `skills/`）；
  * 连接器（只带 `.mcp.json` 里的 MCP 服务）。装法、更新、卸载都一样。没写是普通插件。
  */
 export type PluginKind = "plugin" | "skill" | "connector";

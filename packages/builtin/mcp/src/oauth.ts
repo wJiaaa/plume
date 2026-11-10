@@ -34,7 +34,7 @@ export class McpNeedsLogin extends Error {
 	readonly reason: LoginReason;
 	constructor(server: string, reason: LoginReason) {
 		// i18n-exempt：给日志和模型看的原因，设置页按 `reason` 另说。
-		super(`MCP server "${server}" needs you to sign in (${reason}). Sign in under Extensions › Connectors.`);
+		super(`MCP server "${server}" needs you to sign in (${reason}). Sign in under Marketplace › Connectors.`);
 		this.name = "McpNeedsLogin";
 		this.reason = reason;
 	}

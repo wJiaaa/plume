@@ -1,5 +1,5 @@
 /**
- * 「扩展」页的状态：agent 进程报告的插件状态、主进程读到的目录和本机插件、更新状态，看的是哪一类，以及打开的是
+ * 「插件市场」页的状态：agent 进程报告的插件状态、主进程读到的目录和本机插件、更新状态，看的是哪一类，以及打开的是
  * 哪一个插件的详情页。侧栏那一行的更新数目和市场页读同一份，才不会一处说装了、一处还说没装。
  */
 
@@ -13,7 +13,7 @@ import { type CatalogItem, merge } from "./catalog.ts";
 
 export type MarketNotice = { tone: "error" | "note"; text: string };
 
-/** 「扩展」的三类：插件由产品画，技能、连接器由管它们的插件画（`page: "extensions-skills"`、`"extensions-connectors"`）。 */
+/** 「插件市场」的三类：插件由产品画，技能、连接器由管它们的插件画（`page: "extensions-skills"`、`"extensions-connectors"`）。 */
 export type MarketTab = "plugins" | "skills" | "connectors";
 
 interface MarketStore {

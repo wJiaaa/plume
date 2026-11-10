@@ -19,7 +19,7 @@
 | [browser-and-preview.md](browser-and-preview.md) | 内置浏览器、回复内交互网页 |
 | [terminal-and-ssh.md](terminal-and-ssh.md) | 本机终端面板、SSH 运维台与 AI 运维助手 |
 | [git.md](git.md) | 分支签、Git 面板、对话工作树、拉取请求 |
-| [plugins-and-market.md](plugins-and-market.md) | 「扩展」页、插件安装更新与卸载、创建插件与热加载、内置与市场插件清单、IM 机器人、密钥加密 |
+| [plugins-and-market.md](plugins-and-market.md) | 「插件市场」页、插件安装更新与卸载、创建插件与热加载、内置与市场插件清单、IM 机器人、密钥加密 |
 | [settings.md](settings.md) | 设置导航、常规、请求重试、项目配置、模型设置与 Magpie、个性化、存储、使用统计、关于、数据目录 |
 | [appearance.md](appearance.md) | 主题与配色、代码外观、偏好设置、换肤工坊、首页背景 |
 | [window-and-layout.md](window-and-layout.md) | 面板区与快捷键、面板和会话独立窗口、Windows 窗口外壳、菜单栏图标与 `plume://` 链接、系统通知、提示条、菜单 |

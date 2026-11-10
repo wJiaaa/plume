@@ -86,9 +86,9 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 ```
 <目录名>/
-├── package.json       # plume.displayName、plume.category 是「扩展」里的名字和分类；仓库里还写 @plumeai/plugin-sdk 等开发依赖
+├── package.json       # plume.displayName、plume.category 是「插件市场」里的名字和分类；仓库里还写 @plumeai/plugin-sdk 等开发依赖
 ├── tsconfig.json      # 继承 @plumeai/plugin-sdk/tsconfig.json
-├── README.md          # 「扩展」里的介绍：它做了什么、怎么用
+├── README.md          # 「插件市场」里的介绍：它做了什么、怎么用
 ├── images/           # 可选：README 引用的图片（相对路径 `images/xx.png`），随包分发
 ├── icon.png           # 可选：插件图标，市场、详情和设置页共用，随安装包分发
 ├── AGENTS.md、CLAUDE.md、.claude/skills/plume-plugin/   # 只有独立项目有：给接手的 agent
@@ -103,7 +103,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 用 serve / remote 时再加 `src/api.ts`，放两个入口共用的接口类型。
 
-- `package.json` 的 `description`、`keywords`、`plume.displayName`、`plume.category` 填好，「扩展」里显示它们。
+- `package.json` 的 `description`、`keywords`、`plume.displayName`、`plume.category` 填好，「插件市场」里显示它们。
 - `plume.defaultPrompt` 可选，几句示例提问（字符串数组，最多显示四句）：插件装上并开着时，详情页「试试这样问」列出它们，点一句开新对话、写进输入框。
 - README 里的图片：插件目录里的写相对路径（放在 `images/` 下，支持 PNG、JPEG、GIF、WebP、SVG，每张不超过 5 MiB），网上的写 https 地址；带深色版本的 `<picture>` 按窗口明暗选。
 - 根目录的 `icon.png` 会自动作为插件图标，不用配置；使用正方形 PNG，建议 192×192，文件不超过 1 MiB。不提供或图片损坏时显示默认标记。

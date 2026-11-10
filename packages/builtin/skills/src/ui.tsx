@@ -1,5 +1,5 @@
 /**
- * plume.skills 的界面入口，跑在渲染进程：「扩展」页里「技能」那一类，`skill` 工具在转录里的说法。技能目录和 `skill` 工具在逻辑入口，
+ * plume.skills 的界面入口，跑在渲染进程：「插件市场」页里「技能」那一类，`skill` 工具在转录里的说法。技能目录和 `skill` 工具在逻辑入口，
  * 这里按目录分组列出，开关、打开 SKILL.md、删除（整个目录移到废纸篓）。
  *
  * 上方的项目选择决定列哪个项目的技能（`.plume/skills`、`.claude/skills`、`.agents/skills`），不选只列个人的
@@ -91,7 +91,7 @@ function problemText(diagnostic: SkillDiagnostic, text: Messages): string {
 }
 
 /**
- * 看的是哪个项目的技能，null 是只看个人的。放在组件外面：活在这次运行里，切到别的类、离开「扩展」再回来还停在上次看的那个。
+ * 看的是哪个项目的技能，null 是只看个人的。放在组件外面：活在这次运行里，切到别的类、离开「插件市场」再回来还停在上次看的那个。
  */
 let shownProject: string | null = null;
 

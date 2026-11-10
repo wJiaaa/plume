@@ -36,7 +36,7 @@ const SHELF_ORDER: readonly string[] = [
 export interface CatalogItem {
 	/** 目录名：条目 id、安装目录名、agent 进程里的 key，三处是同一个。 */
 	key: string;
-	/** 摆在「扩展」页哪一类里。 */
+	/** 摆在「插件市场」页哪一类里。 */
 	kind: PluginKind;
 	name: string;
 	description: string;

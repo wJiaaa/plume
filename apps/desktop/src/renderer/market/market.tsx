@@ -270,7 +270,7 @@ export function MarketScreen({
 
 /**
  * 三类的切换，就是页头：三个大字，选中的是正文色，别的淡下去，像几个并排的标题而不是一条控件。
- * 页上不再另写「扩展」两个字——侧栏那一行和顶行已经说了这是哪儿。
+ * 页上不再另写「插件市场」几个字——侧栏那一行和顶行已经说了这是哪儿。
  */
 function KindTabs({ value, onChange }: { value: MarketTab; onChange: (tab: MarketTab) => void }) {
 	const { t } = useI18n();
@@ -335,7 +335,7 @@ function ExtensionSections({ tab, items }: { tab: Exclude<MarketTab, "plugins">;
 }
 
 /**
- * 市场在窗口顶行里的那一截：详情页是「扩展 › 名字」的面包屑，插件的网格页是右端的「创建插件」、重读和 ⋯。
+ * 市场在窗口顶行里的那一截：详情页是「插件市场 › 名字」的面包屑，插件的网格页是右端的「创建插件」、重读和 ⋯。
  * 顶行本身可以拖窗口，只有能点的那一组标 no-drag，空着的地方照样能拖。
  *
  * 「创建插件」两条路：新建是开一个新对话、输入框里放好写插件的技能，让 agent 照人说的写；从文件夹安装是把本机

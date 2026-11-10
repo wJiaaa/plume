@@ -414,7 +414,7 @@ async function boot(): Promise<void> {
 			shutdown,
 			plugin: {
 				cli: pluginCli,
-				// 各段要用的市场插件从市场装（PLUME_MARKET_URL，缺省线上的），和人在「扩展」里点安装走同一条路。
+				// 各段要用的市场插件从市场装（PLUME_MARKET_URL，缺省线上的），和人在「插件市场」里点安装走同一条路。
 				install: async (name: string) => {
 					const result = await market.install(name);
 					if (!result.ok) throw new Error(`market install ${name}: ${result.error === "failed" ? result.message : result.error}`);

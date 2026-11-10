@@ -3,7 +3,7 @@
  * 全程经界面操作：
  *
  * 1. 在「模型设置」里添加假服务这个供应商和它的模型，把供应商导出成文件再导回来，在设置 › 常规里关掉智能标题总结；
- *    到侧栏的「扩展」里装上定时任务和终端两个插件（不重启，装上就加载），打开定时任务的详情页看 README，
+ *    到侧栏的「插件市场」里装上定时任务和终端两个插件（不重启，装上就加载），打开定时任务的详情页看 README，
  *    再点筛选条的「已安装」看它们都在、在详情页停用再启用；然后从欢迎页选择项目（文件夹直接给准备好的工作目录），发一句话；
  * 2. 假模型一次回三个工具调用：todo_write、bash `cat hello.txt`、edit hello.txt；
  * 3. 发送前在输入框的权限签上从默认的「帮我批准」切到「请求批准」（菜单里有三档）：帮我批准下项目里的 edit 不问；
@@ -1123,8 +1123,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await until(`document.querySelector('[data-plugin-detail="scheduled"] [data-readme] h1') !== null`, "详情页画出 README");
 			await delay(300);
 			await capture(window, join(outDir, "smoke-plugin-detail.png"));
-			// 回到网格：面包屑里的「扩展」，不是侧栏那一行（同名，点了不关详情）。
-			const marketCrumb = 'nav[aria-label="扩展"] button';
+			// 回到网格：面包屑里的「插件市场」，不是侧栏那一行（同名，点了不关详情）。
+			const marketCrumb = 'nav[aria-label="插件市场"] button';
 			await click(marketCrumb);
 			// 筛选条最前面是「已安装」：市场装的两个；内置插件都加载好了，一个都不列。
 			await click("[data-screen=market] button[aria-pressed]", "已安装");
@@ -1803,7 +1803,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-plugin-settings-inline.png"));
-		await click('nav[aria-label="扩展"] button');
+		await click('nav[aria-label="插件市场"] button');
 		await until(`document.querySelector('[data-card="usage"] > button') !== null`, "回到市场网格");
 		await click(`[data-card="usage"] > button`);
 		await until(`document.querySelector('[data-plugin-detail="usage"] [data-plugin-settings] button') !== null`, "使用统计的详情里有去设置的入口");

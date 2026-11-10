@@ -273,9 +273,9 @@ function DetailBody({
 }
 
 /**
- * 插件自己的设置：没给 `page` 的分区画在这里，给了的（导航里一行、产品某一页、「扩展」的另一类）列成去那里的入口，同一处只列一次。
+ * 插件自己的设置：没给 `page` 的分区画在这里，给了的（导航里一行、产品某一页、「插件市场」的另一类）列成去那里的入口，同一处只列一次。
  * 插件没开着时它的界面入口没装上，分区一个都没有，这一节也就不画。装上的技能合集、连接器没有界面入口，它们的技能和服务
- * 在「扩展」的那一类里管（连接器在那里填变量），入口照样列出。
+ * 在「插件市场」的那一类里管（连接器在那里填变量），入口照样列出。
  */
 function PluginSettings({
 	plugin,
@@ -301,7 +301,7 @@ function PluginSettings({
 				: t(entry.page === "general" ? "settings.general" : entry.page === "personalization" ? "settings.personalization" : "settings.agents"),
 		);
 	}
-	// 画进「扩展」另两类的，入口是换到那一类。
+	// 画进「插件市场」另两类的，入口是换到那一类。
 	const tabs = new Map<Exclude<MarketTab, "plugins">, string>();
 	for (const entry of sections) {
 		if (entry.page === "extensions-skills") tabs.set("skills", t("market.skills"));
