@@ -69,6 +69,11 @@ import { registerWindowOverlayIpc } from "./window-overlay.ts";
 
 registerSchemes();
 
+// 应用名在任何人问它之前定下。package.json 里只有 name（@plume/desktop），electron-builder.yml 的 productName 不写进去，
+// 不设的话 app.getName() 就是 @plume/desktop：应用内更新按它找解出来的 Plume.app 找不到，应用菜单的「关于」「退出」
+// 跟着它叫，开发时程序坞写着 Electron。它也决定 userData 的默认目录，所以要在下面改 userData 之前设。
+app.setName("Plume");
+
 const smoke = smokeOutput();
 if (smoke) process.env.PLUME_HOME = join(smoke.dir, "home");
 // 换了数据目录时，Chromium 自己的目录（缓存、localStorage、单实例锁）也跟过去，两份数据才不会互相串。
