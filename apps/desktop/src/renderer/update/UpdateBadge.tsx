@@ -8,7 +8,7 @@
  * 没有什么能把它藏起来：有新版本就在，装上为止。
  */
 
-import { ActionSpinner, useI18n } from "@plume/ui";
+import { useI18n } from "@plume/ui";
 import { ArrowDownToLine, Pause, RefreshCw, TriangleAlert } from "@plume/ui/icons";
 import { useState } from "react";
 import type { UpdatePhase } from "../../shared/update.ts";
@@ -47,7 +47,7 @@ export function UpdateBadge({ compact = false }: { compact?: boolean }) {
 			>
 				<span className="relative flex shrink-0 items-center justify-center">
 					{/* 环套在图标上，不套在按钮上：按钮悬停时变成胶囊，图标一直是圆的。 */}
-					{fraction !== null && phase.at !== "preparing" ? <ProgressRing fraction={fraction} inset={(size - 2 - glyph) / 2} /> : null}
+					{fraction !== null ? <ProgressRing fraction={fraction} spinning={phase.at === "preparing"} inset={(size - 2 - glyph) / 2} /> : null}
 					<PhaseGlyph phase={phase} size={glyph} />
 				</span>
 				{/* 外层把宽度从 0fr 展到 1fr，里层裁掉还放不下的部分。 */}
@@ -62,21 +62,23 @@ export function UpdateBadge({ compact = false }: { compact?: boolean }) {
 	);
 }
 
-/** 中间的图标说这是关于什么。暂停画出暂停：不动的下载和在动的看起来一模一样。准备中没有百分比可画，转一个圈。 */
+/** 中间的图标说这是关于什么。暂停画出暂停：不动的下载和在动的看起来一模一样。 */
 function PhaseGlyph({ phase, size }: { phase: UpdatePhase; size: number }) {
 	if (phase.at === "failed") return <TriangleAlert size={size} strokeWidth={2.4} className="shrink-0" />;
 	if (phase.at === "ready") return <RefreshCw size={size} strokeWidth={2.6} className="shrink-0" />;
 	if (phase.at === "paused") return <Pause size={size - 1} strokeWidth={2.6} className="shrink-0" fill="currentColor" />;
-	if (phase.at === "preparing") return <ActionSpinner size={size + 2} />;
 	return <ArrowDownToLine size={size + 1} strokeWidth={2.4} className="shrink-0" />;
 }
 
-/** 随下载合拢的环，从十二点钟开始。刚开始的几秒四舍五入是 0%，留一点看得见的最小值，不然和没开始分不清。 */
-function ProgressRing({ fraction, inset }: { fraction: number; inset: number }) {
+/**
+ * 随下载合拢的环，从十二点钟开始。刚开始的几秒四舍五入是 0%，留一点看得见的最小值，不然和没开始分不清。
+ * 准备中没有百分比可画，是四分之一段弧绕着转（`data-spinning`，见 styles.css）。
+ */
+function ProgressRing({ fraction, spinning, inset }: { fraction: number; spinning: boolean; inset: number }) {
 	const radius = 10;
 	const circumference = 2 * Math.PI * radius;
 	return (
-		<svg aria-hidden data-ring="" viewBox="0 0 24 24" style={{ inset: -inset }} className="absolute -rotate-90">
+		<svg aria-hidden data-ring="" data-spinning={spinning ? "" : undefined} viewBox="0 0 24 24" style={{ inset: -inset }} className="absolute -rotate-90">
 			{/* 轨道：8% 的弧看得出是一圈里的一小段，而不是孤零零一个点。 */}
 			<circle cx="12" cy="12" r={radius} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.32" />
 			<circle
@@ -88,7 +90,7 @@ function ProgressRing({ fraction, inset }: { fraction: number; inset: number }) 
 				strokeWidth="2"
 				strokeLinecap="round"
 				strokeDasharray={circumference}
-				strokeDashoffset={circumference * (1 - Math.max(0.07, fraction))}
+				strokeDashoffset={circumference * (1 - (spinning ? 0.25 : Math.max(0.07, fraction)))}
 				className="transition-[stroke-dashoffset] duration-[var(--plume-t-slow)] ease-out"
 			/>
 		</svg>

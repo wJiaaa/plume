@@ -34,7 +34,10 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 	await until(`document.querySelector('[data-plume-version-status]')?.textContent.includes('暂时查不到新版本')`, "「检查更新…」打开关于页、查完说查不了");
 	await until(`document.body.textContent.includes(${JSON.stringify(`v${await page<string>("window.plume.version")}`)})`, "关于页写着当前版本");
 	await until(`${buttonWith("检查更新")} && !${buttonWith("检查更新")}.disabled`, "检查更新按钮可点");
-	await until(`document.body.textContent.includes('打开发布页')`, "查不了时也给发布页");
+	await until(
+		`document.querySelector('[data-plume-about] img') !== null && document.querySelector('[data-plume-open-releases]') !== null`,
+		"头图有图标，查不了时也给发布页",
+	);
 
 	// 间隔：改成每 12 小时，存在 localStorage 里。
 	await page(`${buttonWith("每 6 小时（默认）")}.click()`);

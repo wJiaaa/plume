@@ -115,8 +115,12 @@ export function UpdateDialog({ info, phase, onClose }: { info: UpdateInfo; phase
 			{notes ? (
 				<>
 					<p className="mb-2 text-caption font-medium text-ink-faint">{t("updateDialog.whatsNew")}</p>
-					<Markdown text={notes} className="text-label" />
+					<div className="text-label leading-relaxed text-ink/90">
+						<Markdown text={notes} className="text-label" />
+					</div>
 				</>
+			) : phase.at !== "failed" ? (
+				<p className="text-detail text-ink-faint">{t("updateDialog.available")}</p>
 			) : null}
 		</Dialog>
 	);

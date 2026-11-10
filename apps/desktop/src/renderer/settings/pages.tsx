@@ -24,6 +24,7 @@ import { setTranscriptPrefs, useTranscriptPrefs } from "../conversation/prefs.ts
 import { setHideEmptiedProjects, useHideEmptiedProjects } from "../sidebar/prefs.ts";
 import { setOpenTarget, targetLabel, useOpenTarget, useOpenTargets } from "../files/open-targets.ts";
 import { Markdown } from "../markdown/Markdown.tsx";
+import appIcon from "../../assets/app-icon.png";
 import { notesForLocale } from "../update/notes-locale.ts";
 import { check as checkUpdates, setCheckInterval, useCheckInterval, useUpdate } from "../update/store.ts";
 import { UpdateDialog } from "../update/UpdateDialog.tsx";
@@ -526,8 +527,8 @@ export function AppearanceSettings() {
 }
 
 /**
- * 关于 Plume：哪个版本、是不是最新的、改了什么：版本旁边是检查更新和「立即更新」，
- * 下面是自动检查的间隔和运行环境，最后是更新内容（按界面语言挑那一段，见 update/notes-locale.ts）。
+ * 关于 Plume：哪个版本、是不是最新的、改了什么：头图里是图标、名字、版本和状态，旁边是检查更新和「立即更新」，
+ * 下面是发布页；再往下是自动检查的间隔和运行环境，最后是更新内容（按界面语言挑那一段，见 update/notes-locale.ts）。
  */
 export function AboutSettings() {
 	const { t, resolvedLocale } = useI18n();
@@ -544,37 +545,52 @@ export function AboutSettings() {
 				? { tone: "text-ok", icon: <CircleCheck size={13} strokeWidth={2} aria-hidden />, text: t("about.latest") }
 				: { tone: "text-ink-faint", icon: <WifiOff size={13} strokeWidth={2} aria-hidden />, text: t("about.offline") };
 	return (
-		<Page title={t("about.title")} intro={t("about.intro")}>
-			<Card>
-				<Row
-					title={
-						<span className="flex items-baseline gap-2">
-							{t("about.version")}
+		<Page title={t("about.title")} intro={t("about.intro")} className="gap-6">
+			{/* 头图：应用图标、名字、版本和是不是最新，检查更新在右边，发布页在下面。 */}
+			<section data-plume-about="" className="about-hero relative overflow-hidden rounded-lg px-6 pt-6 pb-5">
+				<div className="flex flex-wrap items-center gap-5">
+					<img src={appIcon} alt="" width={68} height={68} draggable={false} className="about-hero-icon shrink-0 rounded-2xl" />
+					<div className="min-w-0 flex-1">
+						<div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+							<h2 className="text-display leading-tight font-semibold tracking-tight text-ink">Plume</h2>
 							<span className="font-mono text-label text-ink-muted tabular-nums">v{window.plume.version}</span>
-						</span>
-					}
-					detail={
-						<span data-plume-version-status="" className={`flex flex-wrap items-center gap-1.5 ${status.tone}`}>
+						</div>
+						<p className="mt-1 text-label text-ink-muted">{t("about.tagline")}</p>
+						<p data-plume-version-status="" className={`mt-2 flex flex-wrap items-center gap-1.5 text-detail ${status.tone}`}>
 							{status.icon}
 							{status.text}
 							{info?.publishedAt ? (
 								<span className="text-ink-faint">· {t("about.publishedOn", { date: publishedOn(info.publishedAt, resolvedLocale) })}</span>
 							) : null}
-						</span>
-					}
-					control={
-						<div className="flex flex-wrap items-center gap-2">
-							<Button variant="subtle" onClick={() => void checkUpdates(true)} loading={checking} icon={<RefreshCw size={13} strokeWidth={2} aria-hidden />}>
-								{checking ? t("about.checking") : t("about.checkUpdate")}
+						</p>
+					</div>
+					<div className="flex shrink-0 flex-wrap items-center gap-2">
+						<Button variant="subtle" onClick={() => void checkUpdates(true)} loading={checking} icon={<RefreshCw size={13} strokeWidth={2} aria-hidden />}>
+							{checking ? t("about.checking") : t("about.checkUpdate")}
+						</Button>
+						{available ? (
+							<Button variant="primary" onClick={() => setDialog(true)} icon={<CloudDownload size={13} strokeWidth={2} aria-hidden />}>
+								{t("about.updateNow", { version: info?.latest ?? "" })}
 							</Button>
-							{available ? (
-								<Button variant="primary" onClick={() => setDialog(true)} icon={<CloudDownload size={13} strokeWidth={2} aria-hidden />}>
-									{t("about.updateNow", { version: info?.latest ?? "" })}
-								</Button>
-							) : null}
-						</div>
-					}
-				/>
+						) : null}
+					</div>
+				</div>
+				{info?.url ? (
+					<div className="mt-5">
+						<Button
+							variant="subtle"
+							size="sm"
+							data-plume-open-releases=""
+							className="bg-card/80"
+							onClick={() => void window.plume.updates.open(info.url)}
+							icon={<Tag size={13} strokeWidth={2} aria-hidden />}
+						>
+							{t("about.releases")}
+						</Button>
+					</div>
+				) : null}
+			</section>
+			<Card>
 				<Row
 					title={t("about.checkInterval")}
 					control={
@@ -593,16 +609,6 @@ export function AboutSettings() {
 					}
 				/>
 				<Row title={t("about.environment")} control={<span className="font-mono text-label text-ink-muted">{window.plume.platform}</span>} />
-				{info?.url ? (
-					<Row
-						title={t("about.releases")}
-						control={
-							<Button variant="subtle" onClick={() => void window.plume.updates.open(info.url)} icon={<Tag size={13} strokeWidth={2} aria-hidden />}>
-								{t("about.openReleases")}
-							</Button>
-						}
-					/>
-				) : null}
 			</Card>
 			{notes ? (
 				<section>
@@ -615,6 +621,8 @@ export function AboutSettings() {
 						</div>
 					</Card>
 				</section>
+			) : info?.checked === false ? (
+				<p className="text-center text-detail text-ink-faint">{t("about.checkPrompt")}</p>
 			) : null}
 			{dialog && info ? <UpdateDialog info={info} phase={phase} onClose={() => setDialog(false)} /> : null}
 		</Page>

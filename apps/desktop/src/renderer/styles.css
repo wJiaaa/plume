@@ -497,4 +497,29 @@
 	[data-plume-sidebar-foot]:has(.update-dot:is(:hover, :focus-visible)) .sidebar-foot-label {
 		opacity: 0.25;
 	}
+	/* 准备中没有百分比可画：四分之一段弧绕着图标转。 */
+	.update-dot [data-ring][data-spinning] {
+		animation: plume-spin 900ms linear infinite;
+	}
+}
+
+/*
+ * 关于页的头图：应用的图标、名字和版本，垫在一层很淡的强调色光晕上（见 settings/pages.tsx 的 AboutSettings）。
+ *
+ * 光晕从左上角图标的位置漫出来，不是一块平涂的底色：平涂读起来是「又一张卡片」，从图标那里散开的光读起来是这一块属于它。
+ * 两层渐变都混进卡片色里再用，深浅主题各自落在正确的一侧。图标一道极细的描边和一点带强调色的下沉，浅色底上也有轮廓。
+ */
+@layer components {
+	.about-hero {
+		background:
+			radial-gradient(90% 140% at 0% 0%, color-mix(in srgb, var(--plume-accent) 16%, transparent), transparent 62%),
+			radial-gradient(70% 120% at 100% 100%, color-mix(in srgb, var(--plume-accent) 7%, transparent), transparent 70%),
+			color-mix(in srgb, var(--plume-card) 70%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--plume-ink) 6%, transparent);
+	}
+	.about-hero-icon {
+		box-shadow:
+			0 0 0 0.5px color-mix(in srgb, var(--plume-shade) 8%, transparent),
+			0 6px 16px -6px color-mix(in srgb, var(--plume-accent) 45%, transparent);
+	}
 }
