@@ -73,6 +73,10 @@ mac:
   # 当成「已损坏」，连「仍要打开」都没有。ad-hoc 签的版本 macOS 按可执行文件的哈希认人，每次更新都是新应用、权限重置；
   # 用证书签（自签的也行）按证书认人，更新后还是同一个应用。
   identity: "-"
+  # 签名不带安全时间戳（codesign --timestamp=none）。@electron/osx-sign 把包里每个它认作二进制的文件（一个架构约 275 个，
+  # 大半是 Electron 的 .pak）逐个签，带时间戳时每次都要连一次 Apple 的时间戳服务器，一个架构签 3 分多钟。时间戳只有公证
+  # 和 Developer ID 证书用得上；自签证书、不公证时它不影响 macOS 按证书认出同一个应用。以后换 Developer ID 并公证时去掉这行。
+  timestamp: none
   # plume://open-session?id=… 由系统交给应用（main/deep-link.ts）；不在这里声明，系统就不会把地址送过来。
   protocols:
     - name: Plume
