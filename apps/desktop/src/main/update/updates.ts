@@ -219,7 +219,7 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 		const reached = await found.start();
 		if (reached.at === "preparing") {
 			const asset = cached?.info.asset;
-			if (asset) await installDownloaded(version, join(downloadDir(updateRoot, version), asset.name));
+			if (asset) await found.install(() => installDownloaded(version, join(downloadDir(updateRoot, version), asset.name)));
 		}
 		return phase;
 	});

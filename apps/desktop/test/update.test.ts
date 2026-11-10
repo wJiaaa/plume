@@ -269,6 +269,28 @@ test("取消停下并删掉半截文件，回到 idle", async () => {
 	}
 });
 
+test("同时来的几次安装只做一次，做完了再来的照常再做", async () => {
+	const download = new UpdateDownload({ url: "http://127.0.0.1/unused", file: "/unused", size: 0, agent: "Plume/test", checksums: null });
+	let runs = 0;
+	let release = () => {};
+	const job = () => {
+		runs += 1;
+		return new Promise<void>((resolve) => {
+			release = resolve;
+		});
+	};
+	const first = download.install(job);
+	const second = download.install(job);
+	assert.equal(runs, 1);
+	release();
+	await Promise.all([first, second]);
+
+	const third = download.install(job);
+	assert.equal(runs, 2);
+	release();
+	await third;
+});
+
 // ── 收尾 ──
 
 function effects(overrides: Partial<FinishEffects> = {}) {

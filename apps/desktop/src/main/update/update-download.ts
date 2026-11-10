@@ -70,6 +70,8 @@ export class UpdateDownload {
 	private target: DownloadTarget;
 	/** 正在跑的那一轮，`pause` 等它真的停下（阶段在它的 catch 里才变成 paused）。 */
 	private running: Promise<UpdatePhase> | null = null;
+	/** 正在做的下载之后那一步，见 `install`。 */
+	private installing: Promise<void> | null = null;
 
 	constructor(target: DownloadTarget) {
 		this.target = target;
@@ -251,6 +253,17 @@ export class UpdateDownload {
 		// 等那一轮停了再删，不然它还开着的写入会把文件再建出来。
 		await rm(this.partial, { force: true }).catch(() => {});
 		this.set({ at: "idle" });
+	}
+
+	/**
+	 * 下完之后的那一步（macOS 先删掉再解开应用包）。同时来的几次等同一次：双击「下载」、两个窗口各点一次，都会让两次解包
+	 * 往同一个目录里写，一边删一边写，得到 ENOTEMPTY 或缺文件的应用包。做完了再来的照常再做一次。
+	 */
+	install(job: () => Promise<void>): Promise<void> {
+		this.installing ??= job().finally(() => {
+			this.installing = null;
+		});
+		return this.installing;
 	}
 
 	/** 安装那一步知道是哪种收尾后调。 */
