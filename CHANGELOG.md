@@ -2,6 +2,20 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.3] - 2026-11-10
+
+<!-- plume:notes en -->
+### Changes
+
+- **Updating on macOS no longer fails with "ENOTEMPTY".** If you clicked Download twice, or clicked it in two windows, the update could fail right after downloading with "ENOTEMPTY: directory not empty, rmdir". Now it unpacks once and gets ready to restart. This fix takes effect for updates after this version; if you hit the error while updating to this version, click Retry once.
+- **The app is much smaller.** The installer no longer carries the app's source code, tests and a second copy of libraries it had already built in, so it downloads faster and takes less disk space.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **macOS 上更新不再失败在「ENOTEMPTY」。** 以前点了两次「下载」，或在两个窗口里各点一次，下载完之后可能报「ENOTEMPTY: directory not empty, rmdir」，更新装不上。现在只解一次包，正常走到可以重启更新。这个修复从下一次更新起生效；更新到这个版本时如果碰到这个错误，点一次「重试」就行。
+- **应用小了很多。** 安装包里不再带应用的源码、测试，以及已经打进应用里的那些库的另一份副本，下载更快，占的磁盘也更少。
+
 ## [0.1.2] - 2026-11-10
 
 <!-- plume:notes en -->
