@@ -4,9 +4,6 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import type { Plugin } from "vite";
 
-// workspace 里的 @plume/* 是 TS 源码，运行时的 Node 读不了，必须打进产物而不是留成外部依赖。
-const bundleWorkspace = { exclude: ["@plume/agent", "@plume/contract", "@plume/llm", "@plume/rpc", "@plume/styles", "@plume/ui"] };
-
 /**
  * 去掉 KaTeX 的 `woff` 和 `ttf` 字体。
  *
@@ -47,7 +44,6 @@ function katexWoff2Only(): Plugin {
 export default defineConfig({
 	main: {
 		build: {
-			externalizeDeps: bundleWorkspace,
 			rolldownOptions: {
 				input: {
 					index: resolve(import.meta.dirname, "src/main/index.ts"),
@@ -59,7 +55,6 @@ export default defineConfig({
 	},
 	preload: {
 		build: {
-			externalizeDeps: bundleWorkspace,
 			rolldownOptions: {
 				input: { index: resolve(import.meta.dirname, "src/preload/index.ts") },
 				// 沙箱里的预加载脚本只能是 CommonJS。

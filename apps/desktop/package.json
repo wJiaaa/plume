@@ -13,12 +13,10 @@
     "test": "node --test --experimental-strip-types test/*.test.ts"
   },
   "dependencies": {
-    "@plume/agent": "workspace:*",
-    "@plume/contract": "workspace:*",
-    "@plume/llm": "workspace:*",
-    "@plume/rpc": "workspace:*",
-    "@plume/styles": "workspace:*",
-    "@plume/ui": "workspace:*",
+    "fflate": "^0.8.3",
+    "unpdf": "^1.9.1"
+  },
+  "devDependencies": {
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -44,15 +42,12 @@
     "@codemirror/view": "^6.43.15",
     "@lezer/common": "^1.5.5",
     "@lezer/highlight": "^1.2.5",
-    "fflate": "^0.8.3",
-    "katex": "0.19.0",
-    "mermaid": "^12.3.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "thinking-orbs": "^0.3.2",
-    "unpdf": "^1.9.1"
-  },
-  "devDependencies": {
+    "@plume/agent": "workspace:*",
+    "@plume/contract": "workspace:*",
+    "@plume/llm": "workspace:*",
+    "@plume/rpc": "workspace:*",
+    "@plume/styles": "workspace:*",
+    "@plume/ui": "workspace:*",
     "@plumeai/plugin-sdk": "workspace:*",
     "@tailwindcss/vite": "^4.3.4",
     "@types/react": "^19.2.0",
@@ -61,7 +56,12 @@
     "electron": "^45.2.2",
     "electron-builder": "26.15.3",
     "electron-vite": "^6.0.0",
+    "katex": "0.19.0",
+    "mermaid": "^12.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.4",
+    "thinking-orbs": "^0.3.2",
     "vite": "^8.3.5"
   }
 }

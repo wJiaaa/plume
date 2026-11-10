@@ -14,8 +14,9 @@ directories:
 # Electron。不写就按每个目标下载对应的那份（同一个版本，缓存在 electron 的下载缓存里，第二次起不再下载）。yml 里的
 # electronDist 只能是一个路径，按目标选的函数写法要 JS 配置文件，不值得为省一次下载换掉配置格式。
 
-# out/ 是 electron-vite 的产物。workspace 里的 @plume/* 已经打进产物，不带；别的生产依赖照常带上，
-# 主进程以后要用（electron-vite 把它们留成外部依赖）时不用再改这里。
+# out/ 是 electron-vite 的产物；node_modules 里带的是 package.json 的 dependencies 和它们的依赖。electron-vite 只把
+# dependencies 留成主进程运行时再加载的外部依赖，别的（界面用的包、workspace 里的 @plume/*）都打进 out/，所以
+# dependencies 里只放主进程运行时要加载的包，其余的写进 devDependencies，免得 app.asar 里多一份用不上的 node_modules。
 #
 # 按平台、架构分的原生模块每个包只带自己那份。现在 app.asar 里没有这样的依赖（node-pty、koffi 在插件里，走
 # extraResources，由下面的 beforePack 裁），最后两条管的是以后进了 apps/desktop 生产依赖的那种：koffi 一个平台、
@@ -28,7 +29,6 @@ files:
   - out/**/*
   - package.json
   - "!**/*.map"
-  - "!**/node_modules/@plume/**"
   - "!**/node_modules/@koromix/koffi-!(${platform}-${arch})/**"
   - "!**/node_modules/node-pty/prebuilds/!(${platform}-${arch})/**"
 
