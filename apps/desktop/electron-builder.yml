@@ -16,11 +16,21 @@ directories:
 
 # out/ 是 electron-vite 的产物。workspace 里的 @plume/* 已经打进产物，不带；别的生产依赖照常带上，
 # 主进程以后要用（electron-vite 把它们留成外部依赖）时不用再改这里。
+#
+# 按平台、架构分的原生模块每个包只带自己那份。现在 app.asar 里没有这样的依赖（node-pty、koffi 在插件里，走
+# extraResources，由下面的 beforePack 裁），最后两条管的是以后进了 apps/desktop 生产依赖的那种：koffi 一个平台、
+# 架构一个包，supportedArchitectures 让每份都装上了；node-pty 一个包里放着各平台的 prebuilds。写成 `!` 规则：
+# node_modules 里的生产依赖默认全带，正向规则不起作用。`${platform}` 是打包这台机器的 process.platform（mac 包在
+# mac 上打、Windows 包在 Windows 上打），`${arch}` 按每次打的架构展开。
+# 所有规则都写在这一处，不写 mac.files、win.files：electron-builder 把这里的规则收成一组、平台下的另成一组，只有
+# `!` 规则的那组会被补上 `**/*`，整个 apps/desktop（源码、测试、.stage、vendor）就进了 app.asar。
 files:
   - out/**/*
   - package.json
   - "!**/*.map"
   - "!**/node_modules/@plume/**"
+  - "!**/node_modules/@koromix/koffi-!(${platform}-${arch})/**"
+  - "!**/node_modules/node-pty/prebuilds/!(${platform}-${arch})/**"
 
 # 主进程按路径读的东西（beforePack 按正在打的平台、架构先放进 .stage/）：
 # - builtin：内置插件，每个插件只有发出去的那几样（市场插件不随应用发，装的时候下载）；
@@ -39,16 +49,7 @@ extraResources:
 # - 插件 SDK：整理进 .stage/plugin-sdk/，只带这个架构的 esbuild、tsc。
 beforePack: ./scripts/before-pack.mjs
 
-# 每个包只带自己平台、架构的那份按平台分的原生模块。现在 app.asar 里没有这样的依赖（node-pty、koffi 在插件里，
-# 走 extraResources，由上面的 beforePack 裁），这两条管的是以后进了 apps/desktop 生产依赖的那种：
-# koffi 一个平台、架构一个包，supportedArchitectures 让每份都装上了；node-pty 一个包里放着各平台的 prebuilds。
-# 写成 `!` 规则：node_modules 里的生产依赖默认全带，正向规则不起作用。koffi 按 Node 的 process.platform 起名，没有宏可用，
-# 所以每个平台写一遍；`${arch}` 按每次打的架构展开。
-
 mac:
-  files:
-    - "!**/node_modules/@koromix/koffi-!(darwin-${arch})/**"
-    - "!**/node_modules/node-pty/prebuilds/!(darwin-${arch})/**"
   category: public.app-category.developer-tools
   # Icon Composer 的文档：头像是透明的抠图，底色（浅色时淡蓝、深色图标风格时亮蓝的渐变）写在 icon.json 里。
   # macOS 26 起，自己不带圆角底的旧式图标会被垫上一块灰底；electron-builder 用 actool（要 Xcode 26 以上）编成
@@ -78,10 +79,6 @@ mac:
       schemes: [plume]
 
 win:
-  # 见 mac 上面的说明。
-  files:
-    - "!**/node_modules/@koromix/koffi-!(win32-${arch})/**"
-    - "!**/node_modules/node-pty/prebuilds/!(win32-${arch})/**"
   # 带圆角底的那张 PNG；electron-builder 把它转成 .ico 放进 exe。窗口、通知、通知区域的图标是主进程按路径读的
   # （src/main/index.ts 的 icon.png?asset、tray.ts 的 assets/tray/），已经打进 app.asar，不用另放。
   icon: ../src/assets/icon.png
