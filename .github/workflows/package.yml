@@ -2,8 +2,8 @@ name: 安装包
 
 # 手动运行或推 `v*` tag：Windows 打 nsis（x64 + arm64），macOS 打 dmg 和 zip（arm64 + x64），再按全部安装包生成 SHA256SUMS，
 # 都上传到这次运行的 Artifacts。macOS 有证书（secret MAC_CERTIFICATE_P12）就用证书签，没有就 ad-hoc；Windows 不签。
-# 还不发布：发布仓库是 wJiaaa/plume（应用里检查更新读的也是它，见 apps/desktop/src/main/update/updates.ts 的 RELEASE_REPO），
-# 还差一个 publish job：把 Artifacts 收齐、连同 SHA256SUMS 一起 `gh release create`。
+# 推 tag 时最后由 publish 把安装包和 SHA256SUMS 发成这个仓库的 Release（应用里检查更新读的就是它，见
+# apps/desktop/src/main/update/updates.ts 的 RELEASE_REPO）；手动运行只打包、不发布。
 on:
   push:
     tags: ["v*"]
@@ -154,3 +154,30 @@ jobs:
           path: dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 7
+
+  # 只在推 tag、两个平台都打成了才发：缺一个平台的 Release 会让那边的人查到新版本却没有安装包可装。
+  # 正文取 CHANGELOG.md 里这一版手写的那一节（scripts/changelog-section.mjs），关于页和更新对话框显示的就是它。
+  publish:
+    needs: [windows, macos, checksums]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: 收齐安装包和 SHA256SUMS
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/changelog-section.mjs "$TAG" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
