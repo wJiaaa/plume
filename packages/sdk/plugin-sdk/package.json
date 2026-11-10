@@ -1,6 +1,6 @@
 {
   "name": "@plume/plugin-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "写 Plume 插件用的类型、命令（新建、检查、构建、安装）、插件模板和给 agent 的 skill。随 Plume 应用一起发，不经 npm。",
   "private": true,
   "type": "module",
