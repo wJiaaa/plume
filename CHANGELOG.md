@@ -7,13 +7,15 @@
 <!-- plume:notes en -->
 ### Changes
 
-- **Updating on macOS no longer fails with "ENOTEMPTY".** If you clicked Download twice, or clicked it in two windows, the update could fail right after downloading with "ENOTEMPTY: directory not empty, rmdir". Now it unpacks once and gets ready to restart. This fix takes effect for updates after this version; if you hit the error while updating to this version, click Retry once.
+- **In-app updates on macOS work.** Updating from inside the app always failed on macOS: right after downloading it said the downloaded update had no app in it, or, if you had clicked Download twice, "ENOTEMPTY: directory not empty, rmdir". Both are fixed, starting with the update after this one. To get this version, download the installer from this page and drag Plume into Applications.
+- **Menus say Plume.** The app menu's About, Hide and Quit items carried an internal name instead of Plume. Because the app now uses its real name, a few interface preferences (sidebar folding and sorting, panel layout) go back to their defaults once, and pages you signed in to in the built-in browser need signing in again; conversations, settings and plugins stay as they were.
 - **The app is much smaller.** The installer no longer carries the app's source code, tests and a second copy of libraries it had already built in, so it downloads faster and takes less disk space.
 
 <!-- plume:notes zh-CN -->
 ### 改动
 
-- **macOS 上更新不再失败在「ENOTEMPTY」。** 以前点了两次「下载」，或在两个窗口里各点一次，下载完之后可能报「ENOTEMPTY: directory not empty, rmdir」，更新装不上。现在只解一次包，正常走到可以重启更新。这个修复从下一次更新起生效；更新到这个版本时如果碰到这个错误，点一次「重试」就行。
+- **macOS 上能在应用里更新了。** 以前在应用里更新总是失败：下载完说「下载的更新包里没有找到应用」，点过两次「下载」时则是「ENOTEMPTY: directory not empty, rmdir」。两处都修好了，从这个版本之后的更新起生效；要装上这个版本，请在本页下载安装包，把 Plume 拖进「应用程序」。
+- **菜单里写的是 Plume 了。** 应用菜单的「关于」「隐藏」「退出」以前跟着一个内部名字，不是 Plume。应用改用自己的名字后，界面上的一些偏好（侧栏的折叠和排序、面板布局）会回到默认一次，内置浏览器里登录过的网页要重新登录；对话、设置和插件都不变。
 - **应用小了很多。** 安装包里不再带应用的源码、测试，以及已经打进应用里的那些库的另一份副本，下载更快，占的磁盘也更少。
 
 ## [0.1.2] - 2026-11-10
