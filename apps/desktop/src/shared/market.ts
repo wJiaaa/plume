@@ -29,6 +29,8 @@ export interface MarketInfo {
 	license?: string;
 	/** 详情页「试试这样问」的几句话，`plume.defaultPrompt`：装上并开着时列出，点一句开新对话、写进输入框。 */
 	prompts?: string[];
+	/** 技能合集带几个技能：市场目录里写的，本机装的那份没有。 */
+	skills?: number;
 }
 
 /** 目录里的一个条目。 */

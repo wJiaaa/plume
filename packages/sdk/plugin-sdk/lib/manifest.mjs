@@ -58,6 +58,7 @@ export function readCatalogInfo(raw) {
 			homepage: text(entry.homepage),
 			license: text(entry.license),
 			prompts: texts(entry.prompts),
+			skills: Number.isSafeInteger(entry.skills) && entry.skills >= 0 ? entry.skills : undefined,
 		}),
 	};
 }

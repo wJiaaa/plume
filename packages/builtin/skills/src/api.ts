@@ -26,8 +26,13 @@ export interface SkillsView {
 	/** 选中项目的技能（选了时）、个人的技能（`~/.plume/skills` 和 `~/.agents/skills` 里的）和别的插件带来的，项目的在前。 */
 	skills: SkillRow[];
 	diagnostics: SkillDiagnostic[];
-	/** 个人技能目录（`~/.plume/skills`），「打开个人技能目录」开的是它。 */
+	/** 个人技能目录（`~/.plume/skills`，家目录写成 `~`）：和 `SkillRow.root` 一样写法，界面按它认出「个人」那一组。 */
 	dir: string;
+	/**
+	 * 加载着的插件给人看的名字、说明和目录名：带技能的那几个在「来自插件」里画成一张合集卡片，名字对得上 `SkillRow.plugin`，
+	 * 点了按目录名（`key`）打开那个插件的详情。
+	 */
+	bundles: { name: string; description: string; key: string }[];
 }
 
 export interface SkillsApi {
@@ -36,8 +41,8 @@ export interface SkillsApi {
 	setEnabled(paths: string[], enabled: boolean, cwd: string | null): Promise<void>;
 	/** 用系统默认的编辑器打开一个已经读到的 `SKILL.md`。 */
 	open(path: string, cwd: string | null): Promise<void>;
-	/** 在访达里打开个人技能目录，没有就先建。 */
-	reveal(): Promise<void>;
+	/** 在访达里打开一个已经读到的技能所在的那一组目录；`path` 是 null 时打开个人技能目录，没有就先建。 */
+	reveal(path: string | null, cwd: string | null): Promise<void>;
 	/** 把一个已经读到的技能的整个目录移到废纸篓。插件带来的不删，报错。 */
 	remove(path: string, cwd: string | null): Promise<void>;
 	/** 两个同名技能的 `SKILL.md` 差在哪：赢的在前，「+」是改用输的那个会多出来的。 */

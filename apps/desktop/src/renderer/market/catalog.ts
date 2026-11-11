@@ -49,6 +49,8 @@ export interface CatalogItem {
 	license?: string;
 	/** 「试试这样问」：本机那份说的，装上才用得到。 */
 	prompts?: string[];
+	/** 技能合集带几个技能，只有目录里写了才有。 */
+	skills?: number;
 	/** 目录里有，能装、能更新。 */
 	entry: MarketEntry | null;
 	/** 本机有。 */
@@ -95,6 +97,7 @@ export function merge(entries: MarketEntry[], installed: InstalledPlugin[], stat
 		...(info.homepage ? { homepage: info.homepage } : {}),
 		...(info.license ? { license: info.license } : {}),
 		...(info.prompts ? { prompts: info.prompts } : {}),
+		...(info.skills === undefined ? {} : { skills: info.skills }),
 	});
 	for (const plugin of installed) {
 		byKey.set(plugin.id, { ...from(plugin), entry: null, installed: plugin, status: statusOf(plugin.id), outdated: false });
@@ -113,6 +116,7 @@ export function merge(entries: MarketEntry[], installed: InstalledPlugin[], stat
 		existing.homepage ??= entry.homepage;
 		existing.license ??= entry.license;
 		existing.keywords ??= entry.keywords;
+		existing.skills ??= entry.skills;
 		existing.outdated = existing.installed?.source === "market" && outdated.includes(entry.id);
 	}
 	return [...byKey.values()];

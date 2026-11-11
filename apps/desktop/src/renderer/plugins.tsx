@@ -29,6 +29,7 @@ import type {
 	EnvironmentAttentionProps,
 	EnvironmentSectionEntry,
 	EnvironmentSectionProps,
+	ExtensionsSectionProps,
 	ConversationDraft,
 	ConversationProps,
 	LinkOpener,
@@ -49,6 +50,7 @@ import type {
 	Remote,
 	ScreenCapture,
 	ScreenOverlayProps,
+	SectionAction,
 	SessionDraft,
 	SessionMarkProps,
 	SettingsSectionOptions,
@@ -1150,7 +1152,9 @@ export interface SettingsSectionEntry {
 	group?: NonNullable<SettingsSectionOptions["group"]>;
 	/** 画在哪：`nav` 单独占导航的一行，其余是产品的哪一页；没有时画进插件详情。 */
 	page?: NonNullable<SettingsSectionOptions["page"]>;
-	component: ComponentType;
+	/** 放进「插件市场」那一类页顶「添加」菜单的条目，见 `SettingsSectionOptions.actions`。 */
+	actions?: SectionAction[];
+	component: ComponentType<ExtensionsSectionProps>;
 }
 
 let settingsSections: SettingsSectionEntry[] = [];
@@ -1166,11 +1170,17 @@ const SETTINGS_PAGES: ReadonlySet<string> = new Set([
 
 const SECTION_GROUPS = new Set<string>(["agent", "data", "vcs"] satisfies NonNullable<SettingsSectionOptions["group"]>[]);
 
+function validAction(action: unknown): boolean {
+	if (typeof action !== "object" || action === null) return false;
+	const { label, detail, run } = action as Record<string, unknown>;
+	return validTitle(label) && (detail === undefined || validTitle(detail)) && typeof run === "function";
+}
+
 function registerSettingsSection(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof id !== "string" || id === "") throw new Error("设置分区需要 id");
 	if (typeof component !== "function") throw new Error(`设置分区 ${id} 需要一个组件`);
-	const { title, detail, icon, order = 0, page, group } = (options ?? {}) as Record<string, unknown>;
+	const { title, detail, icon, order = 0, page, group, actions } = (options ?? {}) as Record<string, unknown>;
 	if (!validTitle(title)) throw new Error(`设置分区 ${id} 需要标题`);
 	if (detail !== undefined && !validTitle(detail)) throw new Error(`设置分区 ${id} 的说明需要是文字`);
 	if (icon !== undefined && typeof icon !== "function" && (typeof icon !== "object" || icon === null)) throw new Error(`设置分区 ${id} 的图标需要是组件`);
@@ -1178,6 +1188,9 @@ function registerSettingsSection(plugin: string, id: unknown, component: unknown
 	if (page !== undefined && !SETTINGS_PAGES.has(page as string)) throw new Error(`设置分区 ${id} 的 page 只能是 ${[...SETTINGS_PAGES].join("、")}`);
 	if (group !== undefined && !SECTION_GROUPS.has(group as string)) throw new Error(`设置分区 ${id} 的 group 只能是 ${[...SECTION_GROUPS].join("、")}`);
 	if (group !== undefined && page !== "nav") throw new Error(`设置分区 ${id} 的 group 只在 page 是 nav 时有用`);
+	if (actions !== undefined && page !== "extensions-skills") throw new Error(`设置分区 ${id} 的 actions 只在 page 是 extensions-skills 时有用`);
+	if (actions !== undefined && (!Array.isArray(actions) || !actions.every((action: unknown) => validAction(action))))
+		throw new Error(`设置分区 ${id} 的 actions 每一项要有名字和 run`);
 	const key = `${plugin}/${id}`;
 	if (settingsSections.some((section) => section.key === key)) console.info(`[${plugin}] 设置分区 ${id} 重新注册，替换上一次的`);
 	const entry: SettingsSectionEntry = {
@@ -1189,7 +1202,8 @@ function registerSettingsSection(plugin: string, id: unknown, component: unknown
 		order,
 		...(page === undefined ? {} : { page: page as SettingsSectionEntry["page"] }),
 		...(group === undefined ? {} : { group: group as SettingsSectionEntry["group"] }),
-		component: component as ComponentType,
+		...(actions === undefined ? {} : { actions: actions as SectionAction[] }),
+		component: component as ComponentType<ExtensionsSectionProps>,
 	};
 	settingsSections = [...settingsSections.filter((section) => section.key !== key), entry].sort((a, b) => a.order - b.order);
 }

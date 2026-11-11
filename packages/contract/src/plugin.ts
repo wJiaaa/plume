@@ -1149,6 +1149,8 @@ export interface PluginManifest {
 	license?: string;
 	/** 详情页「试试这样问」，`plume.defaultPrompt`。 */
 	prompts?: string[];
+	/** 技能合集带几个技能：不在 `package.json` 里，发市场时数 `skills/` 下的目录写进市场目录，只有 `readCatalogInfo` 读得到。 */
+	skills?: number;
 }
 
 /** 一个启用着的插件。 */

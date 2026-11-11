@@ -447,10 +447,18 @@ ui.settingsSection("usage", UsagePage, { title: (locale) => MESSAGES[locale].tit
 ui.settingsSection("memory", MemorySettings, { title: (locale) => MESSAGES[locale].title, page: "personalization" });
 ```
 
-管技能、MCP 连接器的插件给 `page: "extensions-skills"`、`"extensions-connectors"`：画进「插件市场」页的「技能」「连接器」两类，在分类标签下面、宽度和设置页一样，整节（介绍、列表、添加按钮）由组件自己画；插件详情里是「去 插件市场 › 技能」这样的入口。内置的 `plume.skills`、`plume.mcp` 就是这样放的：
+管技能、MCP 连接器的插件给 `page: "extensions-skills"`、`"extensions-connectors"`：画进「插件市场」页的「技能」「连接器」两类，宽度和设置页一样；插件详情里是「去 插件市场 › 技能」这样的入口。内置的 `plume.skills`、`plume.mcp` 就是这样放的。
+
+- `"extensions-connectors"`：画在分类标签下面，整节（介绍、列表、添加按钮）由组件自己画。
+- `"extensions-skills"`：画在「技能」那一类筛选条的「已安装」里（「全部」和各个货架是市场里的技能合集，由宿主画）。看哪个项目、刷新由宿主画在页头，组件经参数（`ExtensionsSectionProps`）拿到 `project`（选中的项目目录，null 是只看个人的）、`refreshKey`（人点了刷新就变）和 `openPlugin(key)`（打开一个插件的详情，`key` 是插件目录名），照着读、照着画列表。只有这个插件做得到的添加方式经 `actions`（`SectionAction`：`label`、`detail`、`icon`、`run`）放进页顶「添加技能」菜单，排在宿主自己那一项（让 agent 写一个）后面。
 
 ```tsx
-ui.settingsSection("skills", SkillsSettings, { title: (locale) => MESSAGES[locale].settingsTitle, icon: WandSparkles, page: "extensions-skills" });
+ui.settingsSection("skills", (props) => <SkillsSettings {...props} />, {
+	title: (locale) => MESSAGES[locale].settingsTitle,
+	icon: WandSparkles,
+	page: "extensions-skills",
+	actions: [{ label: (locale) => MESSAGES[locale].openPersonalDir, icon: FolderOpen, run: () => api.reveal(null, null) }],
+});
 ```
 
 画进产品页的 `page` 有四种，宿主都不画这一节的页头，`title` 只当无障碍名（`general`、`session-models` 例外，见下）；同一页的几节按 `order` 排：

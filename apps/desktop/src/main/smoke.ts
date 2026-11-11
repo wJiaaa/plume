@@ -1120,14 +1120,53 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await until(`document.querySelectorAll('[data-shelf="installed"] [data-card]').length === 2`, "「已安装」只列出市场装的两个插件");
 			await delay(300);
 			await capture(window, join(outDir, "smoke-market-installed.png"));
-			// 「技能」「连接器」两类由内置插件画：原来设置里的两页搬到了这里，技能那一节上方能选看哪个项目。
+			// 「技能」「连接器」两类由内置插件画：原来设置里的两页搬到了这里。
+			// 技能一类和插件一样用筛选条分开本机的和市场里的：默认是市场里的全部，「已安装」才是技能插件的那一节。
 			await click('[data-market-kind="skills"]');
 			await until(
-				`document.querySelector('[data-market-tab="skills"] [data-skills-settings] [data-project-scope]') !== null`,
+				`document.querySelector('[data-market-tab="skills"] [role=group] button[aria-pressed="true"]') !== null && document.querySelector('[data-skills-settings]') === null`,
+				"「技能」一类默认列市场里的，不混着本机的技能",
+			);
+			// 页顶「添加技能」：产品的「让 agent 写一个」，后面接技能插件登记的「打开个人技能目录」。
+			await click("[data-market-add-skill]");
+			await until(
+				`[...document.querySelectorAll('[role=menu] [role=menuitem]')].map((item) => item.textContent).join('|').includes('打开个人技能目录')`,
+				"「添加技能」菜单里有技能插件登记的一项",
+			);
+			await delay(200);
+			await capture(window, join(outDir, "smoke-market-skills-offered.png"));
+			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+			await until(`document.querySelector('[role=menu]') === null`, "Escape 关掉「添加技能」菜单");
+			// 技能卡片右上角的「＋」直接装上，「已安装」里看它。
+			const skillCard = `[data-market-tab="skills"] [data-card]:has(button[aria-label="安装"])`;
+			const skillKey = String(await page(`document.querySelector(${JSON.stringify(skillCard)})?.dataset.card ?? ""`));
+			if (!skillKey) throw new Error("市场里没有能装的技能合集");
+			const skillPack = String(await page(`document.querySelector('[data-card="${skillKey}"] [data-card-name]').textContent`));
+			await click(`[data-card="${skillKey}"] button[aria-label="安装"]`);
+			await until(`document.querySelector('[data-card="${skillKey}"] button[aria-label^="安装"]') === null`, `装上技能合集 ${skillKey}`);
+			// 从技能这一类点开一张合集的详情，经面包屑返回时还在技能这一类。
+			await click('[data-market-tab="skills"] [data-card] > button');
+			await until(`document.querySelector('[data-plugin-detail]') !== null`, "技能合集的详情页");
+			await click(marketCrumb);
+			await until(`document.querySelector('[data-market-tab="skills"]') !== null`, "从详情返回时回到技能这一类");
+			// 「已安装」是技能插件的那一节；看哪个项目、刷新由市场画在页头「添加技能」左边。
+			await click('[data-market-tab="skills"] button[aria-pressed]', "已安装");
+			await until(
+				`document.querySelector('[data-market-tab="skills"] [data-skills-settings]') !== null && document.querySelector('[data-screen=market] [data-project-scope]') !== null`,
 				"「技能」一类画出技能插件的那一节和项目选择",
 			);
+			// 市场装的技能合集一个插件一张合集卡片；内置插件带的（技能插件自己带着 plume-plugin）不列。
+			const pack = JSON.stringify(`[data-skill-pack="${skillPack}"]`);
+			await until(`document.querySelector(${pack}) !== null`, "「来自插件」里有刚装的技能合集");
+			if (await page(`document.querySelector('[data-skill-pack="技能"]') !== null`)) throw new Error("「来自插件」列出了内置插件带的技能");
 			await delay(300);
 			await capture(window, join(outDir, "smoke-market-skills.png"));
+			// 点合集卡片打开那个插件的详情，返回时还在「已安装」。
+			await click(`[data-skill-pack="${skillPack}"] .skl-bundle-hit`);
+			await until(`document.querySelector('[data-plugin-detail]') !== null`, "点合集卡片打开插件详情");
+			await click(marketCrumb);
+			await until(`document.querySelector('[data-market-tab="skills"] [data-skills-settings]') !== null`, "从详情返回时回到技能 › 已安装");
 			await click('[data-market-kind="connectors"]');
 			await until(`document.querySelector('[data-market-tab="connectors"] [data-mcp-settings]') !== null`, "「连接器」一类画出 MCP 插件的那一节");
 			await delay(300);

@@ -513,6 +513,28 @@ export type NotifyLevel = "info" | "warn" | "error";
  */
 export type SessionActivity = "waiting" | "done" | "failed";
 
+/**
+ * `page: "extensions-skills"` 的组件收到的：页头的项目选择和刷新由「插件市场」画，组件照着读、照着画列表。
+ * 别的位置的组件什么也不收。
+ */
+export interface ExtensionsSectionProps {
+	/** 选中的项目目录，null 是只看个人的（和插件带来的）。 */
+	project?: string | null;
+	/** 人点了刷新就变一次，组件跟着重读。 */
+	refreshKey?: number;
+	/** 打开一个插件的详情（「插件市场」里点开它看到的那一页）。`key` 是插件的目录名（`InstalledPlugin.dir` 的最后一段）。 */
+	openPlugin?(key: string): void;
+}
+
+/** 「插件市场」那一类页顶「添加」菜单里的一项，见 `SettingsSectionOptions.actions`。 */
+export interface SectionAction {
+	label: LocalizedText;
+	/** 名字下面的一句小字。 */
+	detail?: LocalizedText;
+	icon?: ComponentType<{ size?: number; strokeWidth?: number }>;
+	run(): void | Promise<void>;
+}
+
 export interface SettingsSectionOptions {
 	/**
 	 * 这一节的标题：插件详情里「设置」下面的小标题；单独占导航一行时是那一行的字和页头标题。放进产品的页面里时只当无障碍名，
@@ -536,7 +558,8 @@ export interface SettingsSectionOptions {
 	 * 画在哪。不给时画进这个插件的详情（「插件市场」里点开它看到的那一页）的「设置」一节：只和这个插件有关的
 	 * 选项放这里，不占设置导航。用户不管装了哪个插件、都会到设置里直接找的功能才另给位置：
 	 * - `nav` 单独占设置导航的一行（使用统计这类），页头由产品按 `title`、`detail` 画；
-	 * - `extensions-skills`、`extensions-connectors` 是「插件市场」页的「技能」「连接器」两类，画在分类标签下面，整节由组件自己画。
+	 * - `extensions-skills`、`extensions-connectors` 是「插件市场」页的「技能」「连接器」两类。连接器画在分类标签下面，整节由组件
+	 *   自己画；技能画在筛选条的「已安装」里，看哪个项目、刷新由市场画在页头，经 `ExtensionsSectionProps` 交给组件。
 	 *   给的是管技能、MCP 连接器的插件：装了哪些、开着没有、配好没有，和还能装什么放在一处看。
 	 * - `general` 是「常规」页「常规」那张卡里的一行，排在「显示思考过程」后面：名字和说明由产品按 `title`、`detail` 画，
 	 *   组件只画右边的控件（通常是一个 `Toggle`）。给的是随应用发、不能停用的插件自己的开关（智能标题总结）。
@@ -547,6 +570,11 @@ export interface SettingsSectionOptions {
 	 * 「智能体」页只在有插件往里画东西时出现在导航里。给了位置的，插件详情里有一个去那里的入口。
 	 */
 	page?: "nav" | "general" | "personalization" | "agents" | "session-models" | "extensions-skills" | "extensions-connectors";
+	/**
+	 * `page: "extensions-skills"` 时放进页顶「添加技能」菜单的条目，排在产品自己那一项（让 agent 写一个）后面。
+	 * 给的是只有这个插件做得到的添加方式（打开个人技能目录）。
+	 */
+	actions?: SectionAction[];
 }
 
 /**
@@ -1022,7 +1050,7 @@ export interface UiContext {
 	 */
 	openLink(url: string, sessionId: string | undefined): Promise<void>;
 	/** 加一节设置，默认画进本插件的详情，`options.page` 改放到设置导航或产品的某一页；同一处按 order 从小到大。id 在插件内唯一。 */
-	settingsSection(id: string, component: ComponentType, options: SettingsSectionOptions): void;
+	settingsSection(id: string, component: ComponentType<ExtensionsSectionProps>, options: SettingsSectionOptions): void;
 	/** 截屏用的宿主能力，见 `ScreenCapture`。 */
 	readonly screen: ScreenCapture;
 	/** 截屏浮层里画的组件。同一时间只有一个，后注册的生效，它撤下后前一个恢复。 */

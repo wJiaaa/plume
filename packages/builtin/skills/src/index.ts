@@ -9,7 +9,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import type { Plugin, SlashCommand } from "@plume/contract";
 import type { SkillRow, SkillsApi, SkillsView } from "./api.ts";
 import { computeDiff } from "./line-diff.ts";
@@ -44,14 +44,16 @@ function openWith(path: string): Promise<void> {
 	);
 }
 
-/** 插件给人看的名字：`package.json` 里的 `plume.displayName`。 */
-async function displayName(dir: string): Promise<string | undefined> {
+/** 插件给人看的名字和说明：`package.json` 里的 `plume.displayName`、`description`。 */
+async function manifestOf(dir: string): Promise<{ name?: string; description?: string }> {
+	const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
 	try {
-		const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { plume?: { displayName?: unknown } };
-		const name = manifest.plume?.displayName;
-		return typeof name === "string" && name.trim() ? name.trim() : undefined;
+		const manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { description?: unknown; plume?: { displayName?: unknown } };
+		const name = text(manifest.plume?.displayName);
+		const description = text(manifest.description);
+		return { ...(name ? { name } : {}), ...(description ? { description } : {}) };
 	} catch {
-		return undefined;
+		return {};
 	}
 }
 
@@ -98,16 +100,24 @@ export default {
 		 * 加载着的插件，连自己：自己随包带着写插件的技能 plume-plugin（插件市场的「新建插件」点名它）。
 		 * 每次现问：装上、停用一个插件，下一轮就对。
 		 */
-		const bundles = (): Promise<PluginBundle[]> =>
-			Promise.all(ctx.plugins.list().map(async (plugin) => ({ label: (await displayName(plugin.dir)) ?? plugin.name, root: plugin.dir })));
+		const bundles = (): Promise<(PluginBundle & { description: string; builtin: boolean })[]> =>
+			Promise.all(
+				ctx.plugins.list().map(async (plugin) => {
+					const manifest = await manifestOf(plugin.dir);
+					return { label: manifest.name ?? plugin.name, root: plugin.dir, description: manifest.description ?? "", builtin: plugin.builtin };
+				}),
+			);
+		/** 内置插件带的技能是应用的一部分：「已安装」里不列，也就没有开关，总是生效。 */
+		const builtinSkill = (skill: Skill, builtins: ReadonlySet<string>) => skill.plugin !== undefined && builtins.has(skill.plugin.root);
 		const load = async (cwd: string | undefined) => {
 			const settings = await readSettings();
-			const loaded = await loadSkills(skillSources(cwd || undefined, await bundles()), { tools: ctx.tools.names(), preferred: settings.preferred });
-			return { ...loaded, settings };
+			const plugins = await bundles();
+			const loaded = await loadSkills(skillSources(cwd || undefined, plugins), { tools: ctx.tools.names(), preferred: settings.preferred });
+			return { ...loaded, settings, builtins: new Set(plugins.filter((plugin) => plugin.builtin).map((plugin) => plugin.root)) };
 		};
 		const enabledSkills = async (cwd: string | undefined): Promise<Skill[]> => {
-			const { skills, settings } = await load(cwd);
-			return skills.filter((skill) => !settings.disabled.has(skill.path));
+			const { skills, settings, builtins } = await load(cwd);
+			return skills.filter((skill) => builtinSkill(skill, builtins) || !settings.disabled.has(skill.path));
 		};
 
 		/**
@@ -230,11 +240,12 @@ export default {
 		});
 
 		/**
-		 * 「插件市场 › 技能」列的：选了项目时连那个项目的，加上个人的和插件带来的。`files` 是读到的全部 `SKILL.md`，被同名遮住的也在。
+		 * 「插件市场 › 技能」列的：选了项目时连那个项目的，加上个人的和市场装的插件带来的（内置插件带的不列）。`files` 是读到的全部 `SKILL.md`，被同名遮住的也在。
 		 * 界面传来的 `cwd` 只用来拼出那几个技能目录去读，不是字符串就当没选项目。
 		 */
 		const listed = async (cwd: unknown): Promise<{ view: SkillsView; files: Set<string> }> => {
-			const { skills, diagnostics, settings } = await load(typeof cwd === "string" && cwd ? cwd : undefined);
+			const { skills: loaded, diagnostics, settings, builtins } = await load(typeof cwd === "string" && cwd ? cwd : undefined);
+			const skills = loaded.filter((skill) => !builtinSkill(skill, builtins));
 			const rows = skills.map((skill): SkillRow => ({
 				name: skill.name,
 				description: skill.description,
@@ -246,7 +257,10 @@ export default {
 				enabled: !settings.disabled.has(skill.path),
 			}));
 			const files = new Set([...skills.map((skill) => skill.path), ...diagnostics.filter((item) => item.problem === "shadowed").map((item) => item.path)]);
-			return { view: { skills: rows, diagnostics, dir: personalDir() }, files };
+			const plugins = (await bundles())
+				.filter((bundle) => !bundle.builtin)
+				.map((bundle) => ({ name: bundle.label, description: bundle.description, key: basename(bundle.root) }));
+			return { view: { skills: rows, diagnostics, dir: tilde(personalDir()), bundles: plugins }, files };
 		};
 		/** 只认读到过的技能：界面传来的路径不能指到别处去。 */
 		const known = async (path: unknown, cwd: unknown) => {
@@ -267,7 +281,9 @@ export default {
 				await writeSettings(settings);
 			},
 			open: async (path, cwd) => openWith(await known(path, cwd)),
-			async reveal() {
+			async reveal(path, cwd) {
+				// 一组的目录就是它里面一个技能的上上级（`<目录>/<技能>/SKILL.md`），按读到过的技能认，指不到别处。
+				if (path !== null) return openWith(dirname(dirname(await known(path, cwd))));
 				const dir = personalDir();
 				await mkdir(dir, { recursive: true });
 				await openWith(dir);

@@ -37,7 +37,7 @@ import type { PluginKind } from "@plume/contract";
 import { type CatalogItem, isBuiltin, isEnabled, isInstalled, UNFILED } from "./catalog.ts";
 import { PluginIcon } from "./plugin-icon.tsx";
 import { Readme } from "./readme.tsx";
-import { type MarketTab, setMarketTab, setPluginEnabled } from "./store.ts";
+import { INSTALLED, type MarketTab, setMarketTab, setPluginEnabled, setSkillsFilter } from "./store.ts";
 import { useInstall } from "./use-install.ts";
 
 export function PluginDetail({
@@ -132,7 +132,7 @@ function DetailBody({
 				) : (
 					<>
 						{switchable && (
-							<label className="flex h-[32px] items-center gap-2.5 rounded-lg bg-card-hover/70 pr-2 pl-3 text-label text-ink">
+							<label className="flex h-[32px] items-center gap-2.5 pr-1 text-label text-ink">
 								{enabled ? t("market.enabled") : t("market.disabled")}
 								<Toggle
 									checked={enabled}
@@ -335,7 +335,17 @@ function PluginSettings({
 						</Button>
 					))}
 					{[...tabs].map(([tab, place]) => (
-						<Button key={tab} variant="subtle" size="sm" icon={<Settings2 size={13} strokeWidth={1.8} aria-hidden />} onClick={() => setMarketTab(tab)}>
+						<Button
+							key={tab}
+							variant="subtle"
+							size="sm"
+							icon={<Settings2 size={13} strokeWidth={1.8} aria-hidden />}
+							onClick={() => {
+								// 去管它带来的技能：落在「已安装」，不是市场里的那一列。
+								if (tab === "skills") setSkillsFilter(INSTALLED);
+								setMarketTab(tab);
+							}}
+						>
 							{t("pluginDetail.extensionsAt", { place })}
 						</Button>
 					))}

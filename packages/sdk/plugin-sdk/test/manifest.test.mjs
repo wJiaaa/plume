@@ -32,6 +32,10 @@ test("市场目录里的一条和打包时写的那份对得上；目录名不�
 	assert.equal(readCatalogInfo({ name: "Bad Name", description: "x" }), null);
 	assert.equal(readCatalogInfo({ description: "x" }), null);
 	assert.equal(readCatalogInfo({ name: "old", version: "1.0.0" })?.kind, "plugin");
+	// 技能合集带几个技能是打包时数好写进去的：不是非负整数的当没写。
+	assert.equal(readCatalogInfo({ ...written, skills: 4 })?.skills, 4);
+	assert.equal(readCatalogInfo({ ...written, skills: "4" })?.skills, undefined);
+	assert.equal(readCatalogInfo({ ...written, skills: -1 })?.skills, undefined);
 });
 
 test("发到市场前缺了哪些说明，一样一句", () => {

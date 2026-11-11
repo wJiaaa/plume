@@ -9,13 +9,15 @@
  *   - 装了、好好的：一个安静的 ✓；停用了写「已停用」，没加载起来写「加载失败」。
  *
  * 开关、卸载、打开目录都在详情页里。卡片是用来找东西的，管理在那一处。
+ *
+ * 技能合集的卡片多说两样——带几个技能、在哪个货架（技能那一类的网格不分架）——安装是一颗「+」：一格里要放下三样小字。
  */
 
 import { useI18n } from "@plume/ui";
-import { ArrowUp, Check } from "@plume/ui/icons";
-import { ActionSpinner, Button } from "@plume/ui";
+import { ArrowUp, Check, Layers, Plus, User } from "@plume/ui/icons";
+import { ActionSpinner, Button, IconButton } from "@plume/ui";
 import type { CSSProperties } from "react";
-import { type CatalogItem, isEnabled, isInstalled } from "./catalog.ts";
+import { type CatalogItem, isEnabled, isInstalled, UNFILED } from "./catalog.ts";
 import { PluginIcon } from "./plugin-icon.tsx";
 import { type Install, useInstall } from "./use-install.ts";
 
@@ -30,6 +32,7 @@ export function CatalogCard({
 }) {
 	const { t } = useI18n();
 	const act = useInstall(item);
+	const pack = item.kind === "skill";
 
 	return (
 		/*
@@ -59,10 +62,28 @@ export function CatalogCard({
 
 					<p className="line-clamp-2 text-detail text-ink-muted">{item.description || t("market.noTagline")}</p>
 
-					{item.author && (
-						<div className="mt-auto flex min-w-0 items-center gap-1.5 pt-1.5 text-caption text-ink-faint">
-							<span className="truncate">{item.author}</span>
+					{pack ? (
+						<div className="mt-auto flex min-w-0 items-center gap-3 pt-1.5 text-caption text-ink-faint">
+							{item.skills !== undefined && (
+								<span className="flex shrink-0 items-center gap-1 tabular-nums">
+									<Layers size={11} strokeWidth={2} aria-hidden />
+									{t("market.skillsN", { n: item.skills })}
+								</span>
+							)}
+							{item.author && (
+								<span className="flex min-w-0 items-center gap-1">
+									<User size={11} strokeWidth={2} aria-hidden className="shrink-0" />
+									<span className="truncate">{item.author}</span>
+								</span>
+							)}
+							{item.category !== UNFILED && <span className="shrink-0">{item.category}</span>}
 						</div>
+					) : (
+						item.author && (
+							<div className="mt-auto flex min-w-0 items-center gap-1.5 pt-1.5 text-caption text-ink-faint">
+								<span className="truncate">{item.author}</span>
+							</div>
+						)
 					)}
 				</div>
 			</div>
@@ -76,6 +97,18 @@ function Action({ item, act }: { item: CatalogItem; act: Install }) {
 
 	if (!isInstalled(item)) {
 		if (!item.entry) return null;
+		if (item.kind === "skill") {
+			return (
+				<IconButton
+					size="sm"
+					label={act.busy === "install" ? t("market.installing") : t("common.install")}
+					disabled={act.busy !== null}
+					onClick={() => void act.install()}
+					icon={act.busy === "install" ? <ActionSpinner size={11} /> : <Plus size={14} strokeWidth={2} />}
+					className="pointer-events-auto border border-line"
+				/>
+			);
+		}
 		return (
 			<Button
 				size="sm"

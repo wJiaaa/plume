@@ -2389,7 +2389,7 @@ function pageProps(view: SessionView | undefined, target: SessionTarget): PagePr
 
 /** 工作区以外的页面：设置、市场、插件的页面。对话由 `ChatScreen` 画。 */
 function Main() {
-	const { screen, view, target } = useApp();
+	const { screen, view, target, projects } = useApp();
 	usePluginUis();
 	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
 	// 插件在它的页面上被停用、卸下：页面跟着没了，回到工作区，不留一块空白。
@@ -2398,7 +2398,7 @@ function Main() {
 		if (pageGone) update({ screen: "chat" });
 	}, [pageGone]);
 	if (screen === "settings") return <SettingsScreen />;
-	if (screen === "market") return <MarketScreen onOpenSettings={openSettingsSection} onTry={tryPrompt} />;
+	if (screen === "market") return <MarketScreen onOpenSettings={openSettingsSection} onTry={tryPrompt} projects={projects} />;
 	if (page) return <PageSlot key={page.key} page={page} props={pageProps(view, target)} />;
 	return null;
 }

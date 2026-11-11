@@ -3,7 +3,8 @@
  *
  * 技能和连接器（MCP）由管它们的内置插件画（`page: "extensions-skills"`、`"extensions-connectors"`）：装了哪些、开着
  * 没有、配好没有，人到这里找，设置里不另设一页。市场里这两类的条目（`plume.kind` 是 skill、connector 的插件）按货架
- * 接在那一节下面，装法、详情页和插件一样。下面说的都是「插件」那一类，由这里画。
+ * 排，装法、详情页和插件一样：技能那一类和插件一样用筛选条把本机的和市场里的分开（`SkillsTab`），连接器那一类接在
+ * 那一节下面。下面说的都是「插件」那一类，由这里画。
  *
  * 按货架排开的标记和一句话，为了扫着看而排，每张一个动作；开关、更新、卸载、插件自己的设置都在它的详情页
  * （detail.tsx）。「我装了什么」也在这里回答：筛选条最前面是「已安装」，筛出装着的那几张卡片——设置里不另设一页。
@@ -22,8 +23,11 @@ import {
 	Button,
 	ErrorBoundary,
 	IconButton,
+	MENU_MAX_HEIGHT,
 	MenuBody,
 	MenuItem,
+	MenuLabel,
+	MenuSeparator,
 	Popover,
 	Scroller,
 	SkeletonGrid,
@@ -36,6 +40,8 @@ import {
 	Blocks,
 	Briefcase,
 	Cable,
+	Check,
+	ChevronDown,
 	ChevronRight,
 	CircleAlert,
 	Cloud,
@@ -43,6 +49,7 @@ import {
 	Database,
 	FileText,
 	FlaskConical,
+	Folder,
 	FolderUp,
 	Gamepad2,
 	Globe,
@@ -67,9 +74,10 @@ import {
 	X,
 } from "@plume/ui/icons";
 import { ActionSpinner } from "@plume/ui";
-import { type ComponentType, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ComponentType, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { NavItem } from "../nav-item.tsx";
-import { listPageSettingsSections, usePluginUis } from "../plugins.tsx";
+import type { ProjectInfo } from "@plume/contract/ui";
+import { listPageSettingsSections, localized, usePluginUis } from "../plugins.tsx";
 import type { SettingsSection } from "../settings/pages.tsx";
 import { CatalogCard } from "./card.tsx";
 import { byName, type CatalogItem, isBuiltin, isInstalled, shelves, UNFILED } from "./catalog.ts";
@@ -79,10 +87,14 @@ import {
 	installFromFolder,
 	type MarketNotice,
 	type MarketTab,
+	refreshSkills,
 	reloadMarket,
 	setAutoUpdate,
+	INSTALLED,
 	setMarketNotice,
 	setMarketTab,
+	setSkillsFilter,
+	setSkillsProject,
 	updatePlugins,
 	useCatalog,
 	useMarketStore,
@@ -91,15 +103,14 @@ import {
 /** 开着的市场多久自己重读一次目录。 */
 const REVALIDATE_MS = 10 * 60 * 1000;
 
-/** 筛选条上「已安装」那一颗。和 UNFILED 一样前面带空格，不会撞上哪个货架的名字。 */
-const INSTALLED = " installed";
-
 export function MarketScreen({
 	onOpenSettings,
 	onTry,
+	projects,
 }: {
 	/** 去设置里的某一节：插件详情里「设置」一节的入口。 */ onOpenSettings: (section: SettingsSection) => void;
-	/** 详情里「试试这样问」：开新对话，输入框里放好这句话。 */ onTry: (prompt: string) => void;
+	/** 详情里「试试这样问」、技能的「让 agent 写一个」：开新对话，输入框里放好这句话。 */ onTry: (prompt: string) => void;
+	/** 侧栏登记的项目：「技能 › 已安装」看哪个项目的技能。 */ projects: readonly ProjectInfo[];
 }) {
 	const { t } = useI18n();
 	const items = useCatalog();
@@ -125,7 +136,7 @@ export function MarketScreen({
 	const installed = items.filter((item) => item.kind === "plugin" && isInstalled(item) && (!isBuiltin(item) || item.status?.state === "failed"));
 	const published = listed.filter((item) => item.entry !== null);
 	const localOnly = listed.filter((item) => item.entry === null);
-	const categories = useMemo(() => shelves(published).map((shelf) => ({ name: shelf.category, count: shelf.items.length })), [published]);
+	const categories = useMemo(() => shelves(published).map((shelf) => shelf.category), [published]);
 	const narrowed = category !== null;
 	const flat = useMemo(
 		() => (narrowed ? (category === INSTALLED ? installed : listed.filter((item) => item.category === category)).sort(byName) : []),
@@ -158,31 +169,15 @@ export function MarketScreen({
 				<div className="px-6 pb-16">
 					{/* @container：网格跟着这一列的宽度走，不跟窗口。 */}
 					<div className="@container mx-auto w-full max-w-[1040px]">
-						<KindTabs value={tab} onChange={setMarketTab} />
+						<KindTabs value={tab} onChange={setMarketTab} trailing={tab === "skills" ? <SkillsActions projects={projects} onTry={onTry} /> : undefined} />
 
-						{tab !== "plugins" ? (
-							<ExtensionSections tab={tab} items={items} />
+						{tab === "skills" ? (
+							<SkillsTab items={items} projects={projects} />
+						) : tab === "connectors" ? (
+							<ConnectorsTab items={items} />
 						) : (
 							<>
-								<div className="flex flex-wrap gap-1" role="group" aria-label={t("pluginDetail.category")}>
-									<Chip active={category === INSTALLED} icon={Blocks} onClick={() => setCategory(category === INSTALLED ? null : INSTALLED)}>
-										{t("common.installed")}
-									</Chip>
-									<Chip active={category === null} icon={LayoutGrid} onClick={() => setCategory(null)}>
-										{t("market.allCategories")}
-									</Chip>
-									{categories.length > 1 &&
-										categories.map((entry) => (
-											<Chip
-												key={entry.name}
-												active={category === entry.name}
-												icon={SHELF_ICONS[entry.name] ?? Shapes}
-												onClick={() => setCategory(category === entry.name ? null : entry.name)}
-											>
-												{entry.name === UNFILED ? t("common.other") : entry.name}
-											</Chip>
-										))}
-								</div>
+								<Filters value={category} onChange={setCategory} shelves={categories} />
 
 								{notice && <NoticeLine notice={notice} onDismiss={() => setMarketNotice(undefined)} />}
 
@@ -272,7 +267,15 @@ export function MarketScreen({
  * 三类的切换，就是页头：三个大字，选中的是正文色，别的淡下去，像几个并排的标题而不是一条控件。
  * 页上不再另写「插件市场」几个字——侧栏那一行和顶行已经说了这是哪儿。
  */
-function KindTabs({ value, onChange }: { value: MarketTab; onChange: (tab: MarketTab) => void }) {
+function KindTabs({
+	value,
+	onChange,
+	trailing,
+}: {
+	value: MarketTab;
+	onChange: (tab: MarketTab) => void;
+	/** 这一类自己的按钮，靠右。 */ trailing?: ReactNode;
+}) {
 	const { t } = useI18n();
 	const tabs: { id: MarketTab; label: string }[] = [
 		{ id: "plugins", label: t("common.plugins") },
@@ -280,46 +283,244 @@ function KindTabs({ value, onChange }: { value: MarketTab; onChange: (tab: Marke
 		{ id: "connectors", label: t("market.connectors") },
 	];
 	return (
-		<div className="flex items-baseline gap-8 pt-2 pb-5" role="tablist" aria-label={t("market.title")}>
-			{tabs.map((entry) => (
-				<button
-					key={entry.id}
-					type="button"
-					role="tab"
-					aria-selected={entry.id === value}
-					data-market-kind={entry.id}
-					onClick={() => onChange(entry.id)}
-					className={`text-display font-semibold transition-colors duration-[var(--plume-t-quick)] ${
-						entry.id === value ? "text-ink" : "text-ink-faint hover:text-ink-muted"
-					}`}
-				>
-					{entry.label}
-				</button>
-			))}
+		<div className="flex items-center gap-4 pt-2 pb-5">
+			<div className="flex items-baseline gap-8" role="tablist" aria-label={t("market.title")}>
+				{tabs.map((entry) => (
+					<button
+						key={entry.id}
+						type="button"
+						role="tab"
+						aria-selected={entry.id === value}
+						data-market-kind={entry.id}
+						onClick={() => onChange(entry.id)}
+						className={`text-display font-semibold transition-colors duration-[var(--plume-t-quick)] ${
+							entry.id === value ? "text-ink" : "text-ink-faint hover:text-ink-muted"
+						}`}
+					>
+						{entry.label}
+					</button>
+				))}
+			</div>
+			{trailing && <div className="ml-auto flex items-center gap-2">{trailing}</div>}
 		</div>
 	);
 }
 
 /**
- * 技能、连接器两类的内容：管它们的插件画的那一节（一般各只有一个插件），和插件那一类同宽，卡片网格由它们自己画；
- * 下面接着市场里这一类的条目，按货架排，卡片和详情页同插件那一类。装上的技能、连接器也出现在上面那一节里。
+ * 「技能」那一类：和插件那一类一样，筛选条把本机有的和市场里能装的分开，两样不在一页上混着。
+ *
+ *   - 「已安装」是管技能的插件画的那一节（`page: "extensions-skills"`）：按来源分组的开关。看哪个项目、刷新在页头「添加技能」
+ *     左边（`SkillsActions`），由这里画，选的值经组件参数交给它（`ExtensionsSectionProps`）；点合集卡片打开那个插件的详情。
+ *   - 全部、各个货架是市场里的技能合集，一张网格不分架，卡片和详情页同插件那一类；装上的照样留在这里，卡片上写着已安装。
  */
-function ExtensionSections({ tab, items }: { tab: Exclude<MarketTab, "plugins">; items: CatalogItem[] }) {
+function SkillsTab({ items, projects }: { items: CatalogItem[]; projects: readonly ProjectInfo[] }) {
+	const { t } = useI18n();
+	const { market, loading, notice, skillsFilter: filter, skillsRefresh } = useMarketStore();
+	usePluginUis();
+	const sections = listPageSettingsSections("extensions-skills");
+	const offered = shelves(items.filter((item) => item.kind === "skill" && !isBuiltin(item)));
+	const shown = (filter === null ? offered : offered.filter((shelf) => shelf.category === filter)).flatMap((shelf) => shelf.items);
+	const { project } = useSkillsProject(projects);
+	const slow = useSlowLoad(loading && !market);
+	const installed = filter === INSTALLED;
+	return (
+		<div className="market-swap-in" data-market-tab="skills">
+			<Filters value={filter} onChange={setSkillsFilter} shelves={offered.map((shelf) => shelf.category)} />
+			{!installed && notice && <NoticeLine notice={notice} onDismiss={() => setMarketNotice(undefined)} />}
+			{/* 按选中的那颗取 key：换一颗重放一次到达，同插件那一类。 */}
+			<div key={filter ?? ""} className="market-swap-in">
+				{installed ? (
+					<div className="pt-5">
+						{sections.map((entry) => (
+							<ErrorBoundary key={entry.key}>
+								<entry.component project={project?.path ?? null} refreshKey={skillsRefresh} openPlugin={focusPlugin} />
+							</ErrorBoundary>
+						))}
+					</div>
+				) : !market ? (
+					slow ? (
+						<div className="pt-8">
+							<SkeletonGrid count={6} label={t("market.readingPlugins")} />
+						</div>
+					) : null
+				) : shown.length === 0 ? (
+					<Empty text={filter === null ? t("market.empty") : t("market.emptyCategory")} />
+				) : (
+					<div className="grid grid-cols-1 gap-3 pt-5 @2xl:grid-cols-2 @5xl:grid-cols-3">
+						{shown.map((item, index) => (
+							<CatalogCard key={item.key} index={index} item={item} onOpen={() => focusPlugin(item.key)} />
+						))}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/** 选中的项目：选过的被移除了，回到个人的，不接着读一个已经不在列表里的目录。 */
+function useSkillsProject(projects: readonly ProjectInfo[]) {
+	const { skillsProject } = useMarketStore();
+	const choices = useMemo(() => folders(projects), [projects]);
+	return { choices, project: choices.find((entry) => entry.path === skillsProject) ?? null };
+}
+
+/**
+ * 「技能」那一类的页头右端：看「已安装」时先是看哪个项目、刷新（放这里不占筛选条的地方），再是「添加技能」。
+ */
+function SkillsActions({ projects, onTry }: { projects: readonly ProjectInfo[]; onTry: (prompt: string) => void }) {
+	const { t } = useI18n();
+	const { skillsFilter } = useMarketStore();
+	const { choices, project } = useSkillsProject(projects);
+	return (
+		<>
+			{skillsFilter === INSTALLED && (
+				<>
+					<ProjectScope value={project} choices={choices} onChange={setSkillsProject} />
+					<IconButton label={t("market.refreshSkills")} onClick={refreshSkills} icon={<RefreshCw size={14} strokeWidth={1.8} />} />
+				</>
+			)}
+			<AddSkill onTry={onTry} />
+		</>
+	);
+}
+
+/**
+ * 「技能」那一类页顶的「添加技能」：产品自己的一项是开新对话让 agent 照人说的写；管技能的插件再接上只有它做得到的
+ * （`SettingsSectionOptions.actions`，比如打开个人技能目录）。
+ */
+function AddSkill({ onTry }: { onTry: (prompt: string) => void }) {
+	const { t, resolvedLocale } = useI18n();
+	const menu = usePopover();
+	usePluginUis();
+	const actions = listPageSettingsSections("extensions-skills").flatMap((entry) => entry.actions ?? []);
+	return (
+		<>
+			<Button variant="primary" menu={menu.open} onClick={menu.toggle} icon={<Plus size={14} strokeWidth={2} />} data-market-add-skill="">
+				{t("market.addSkill")}
+			</Button>
+			{menu.open && (
+				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width="default" role="menu" label={t("market.addSkill")}>
+					<MenuBody>
+						<MenuItem
+							icon={<Sparkles size={14} strokeWidth={1.8} />}
+							detail={t("market.writeSkillDetail")}
+							onClick={() => {
+								menu.close();
+								onTry(t("market.writeSkillPrompt"));
+							}}
+						>
+							{t("market.writeSkill")}
+						</MenuItem>
+						{actions.map((action) => {
+							const Icon = action.icon;
+							return (
+								<MenuItem
+									key={localized(action.label, resolvedLocale)}
+									icon={Icon ? <Icon size={14} strokeWidth={1.8} /> : undefined}
+									{...(action.detail ? { detail: localized(action.detail, resolvedLocale) } : {})}
+									onClick={() => {
+										menu.close();
+										void (async () => action.run())().catch((error: unknown) => console.error(error));
+									}}
+								>
+									{localized(action.label, resolvedLocale)}
+								</MenuItem>
+							);
+						})}
+					</MenuBody>
+				</Popover>
+			)}
+		</>
+	);
+}
+
+/** 同一个目录登记成几个项目时只算一项：技能按目录读，名字连在一起。 */
+function folders(projects: readonly ProjectInfo[]): { path: string; name: string }[] {
+	const byPath = new Map<string, string[]>();
+	for (const project of projects) byPath.set(project.path, [...(byPath.get(project.path) ?? []), project.name]);
+	return [...byPath].map(([path, names]) => ({ path, name: names.join(" / ") }));
+}
+
+/** 看哪个项目的技能：个人的，或某一个项目的（连个人的、插件带来的一起列）。 */
+function ProjectScope({
+	value,
+	choices,
+	onChange,
+}: {
+	value: { path: string; name: string } | null;
+	choices: { path: string; name: string }[];
+	onChange: (path: string | null) => void;
+}) {
+	const { t } = useI18n();
+	const menu = usePopover();
+	const option = (choice: { path: string; name: string } | null) => {
+		const chosen = (choice?.path ?? null) === (value?.path ?? null);
+		return (
+			<MenuItem
+				key={choice?.path ?? ""}
+				selected={chosen}
+				icon={choice ? <Folder size={14} strokeWidth={1.8} /> : <Monitor size={14} strokeWidth={1.8} />}
+				trailing={chosen ? <Check size={13} strokeWidth={2.2} /> : undefined}
+				onClick={() => {
+					onChange(choice?.path ?? null);
+					menu.close();
+				}}
+			>
+				{choice?.name ?? t("market.personalSkills")}
+			</MenuItem>
+		);
+	};
+	return (
+		<>
+			<Button
+				variant="ghost"
+				menu={menu.open}
+				onClick={menu.toggle}
+				ariaLabel={t("market.projectShown")}
+				icon={value ? <Folder size={14} strokeWidth={1.8} /> : <Monitor size={14} strokeWidth={1.8} />}
+				data-project-scope=""
+				className="max-w-[240px] border border-line"
+			>
+				<span className="truncate">{value?.name ?? t("market.personalSkills")}</span>
+				<ChevronDown size={13} strokeWidth={1.9} className="shrink-0 text-ink-faint" />
+			</Button>
+			{menu.open && (
+				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width="default" maxHeight={MENU_MAX_HEIGHT}>
+					<MenuBody insetIcons>
+						{option(null)}
+						{choices.length > 0 && (
+							<>
+								<MenuSeparator />
+								<MenuLabel>{t("market.projects")}</MenuLabel>
+								{choices.map(option)}
+							</>
+						)}
+					</MenuBody>
+				</Popover>
+			)}
+		</>
+	);
+}
+
+/**
+ * 「连接器」那一类：管 MCP 的插件画的那一节，卡片网格由它自己画；下面接着市场里的连接器，按货架排，卡片和详情页同
+ * 插件那一类。装上的连接器也出现在上面那一节里。
+ */
+function ConnectorsTab({ items }: { items: CatalogItem[] }) {
 	const { t } = useI18n();
 	usePluginUis();
-	const sections = listPageSettingsSections(tab === "skills" ? "extensions-skills" : "extensions-connectors");
-	const kind = tab === "skills" ? "skill" : "connector";
-	const offered = items.filter((item) => item.kind === kind && !isBuiltin(item));
+	const sections = listPageSettingsSections("extensions-connectors");
+	const offered = items.filter((item) => item.kind === "connector" && !isBuiltin(item));
 	let arrival = 0;
 	return (
-		<div key={tab} className="market-swap-in" data-market-tab={tab}>
+		<div className="market-swap-in" data-market-tab="connectors">
 			{sections.map((entry) => (
 				<ErrorBoundary key={entry.key}>
 					<entry.component />
 				</ErrorBoundary>
 			))}
 			{offered.length > 0 && (
-				<section className="pt-10" data-market-offered={kind}>
+				<section className="pt-10" data-market-offered="connector">
 					<h2 className="text-heading font-semibold text-ink">{t("market.fromMarket")}</h2>
 					{shelves(offered).map((shelf) => (
 						<Shelf key={shelf.category} id={shelf.category} title={shelf.category === UNFILED ? t("common.other") : shelf.category} count={shelf.items.length}>
@@ -439,6 +640,123 @@ function Shelf({ id, title, note, count, children }: { id?: string; title: strin
 }
 
 /**
+ * 筛选条：「已安装」在最前，隔一道线是全部和各个货架（只有一架时不列货架）。再点一下选中的那颗回到全部。
+ *
+ * 只排一行：折成两行时右端的控件对不上任何一行，第二行的几颗像掉下来的。放不下的货架收进最后的「更多」，选中的货架在
+ * 里面时「更多」写它的名字、按下去的样子。放得下几颗靠量：一排看不见的同样的签按真实字宽排开，量出每颗的右缘。
+ */
+function Filters({ value, onChange, shelves: names }: { value: string | null; onChange: (value: string | null) => void; shelves: string[] }) {
+	const { t } = useI18n();
+	const row = useRef<HTMLDivElement>(null);
+	const ruler = useRef<HTMLDivElement>(null);
+	const shown = names.length > 1 ? names : [];
+	const [fit, setFit] = useState(shown.length);
+	const more = usePopover();
+	const nameOf = (name: string) => (name === UNFILED ? t("common.other") : name);
+	const pick = (next: string) => onChange(value === next ? null : next);
+	const shelfKey = shown.join("\n");
+
+	useLayoutEffect(() => {
+		const box = row.current;
+		const marks = ruler.current;
+		if (!box || !marks) return;
+		const measure = () => {
+			// 量尺上的顺序：已安装、竖线、全部、各个货架、「更多」。
+			const chips = [...marks.children] as HTMLElement[];
+			const shelves = chips.slice(3, -1);
+			const edge = (chip: HTMLElement | undefined) => (chip ? chip.offsetLeft + chip.offsetWidth : 0);
+			const room = box.clientWidth;
+			if (edge(shelves.at(-1) ?? chips[2]) <= room) {
+				setFit(shelves.length);
+				return;
+			}
+			// 收起一部分时留出「更多」的宽度；量尺上它写着最长的货架名，选中的收在里面时它就这么宽。
+			const tail = (chips.at(-1)?.offsetWidth ?? 0) + 4;
+			let count = 0;
+			while (count < shelves.length && edge(shelves[count]) + tail <= room) count++;
+			setFit(count);
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(box);
+		return () => observer.disconnect();
+	}, [shelfKey, value]);
+
+	const visible = shown.slice(0, fit);
+	const hidden = shown.slice(fit);
+	const hiddenPicked = value !== null && hidden.includes(value) ? value : null;
+	const longest = shown.reduce((widest, name) => (nameOf(name).length > widest.length ? nameOf(name) : widest), t("market.moreShelves"));
+	const lead = (
+		<>
+			<Chip active={value === INSTALLED} icon={Blocks} onClick={() => pick(INSTALLED)}>
+				{t("common.installed")}
+			</Chip>
+			{/* 本机的和市场里的是两件事，中间隔一道。 */}
+			<span className="mx-1.5 h-4 w-px shrink-0 self-center bg-line" aria-hidden />
+			<Chip active={value === null} icon={LayoutGrid} onClick={() => onChange(null)}>
+				{t("market.allCategories")}
+			</Chip>
+		</>
+	);
+	const shelfChip = (name: string) => (
+		<Chip key={name} active={value === name} icon={SHELF_ICONS[name] ?? Shapes} onClick={() => pick(name)}>
+			{nameOf(name)}
+		</Chip>
+	);
+
+	return (
+		<div className="relative flex min-w-0 flex-1">
+			<div ref={row} className="flex min-w-0 flex-1 gap-1 overflow-hidden" role="group" aria-label={t("pluginDetail.category")}>
+				{lead}
+				{visible.map(shelfChip)}
+				{hidden.length > 0 && (
+					<Chip
+						active={hiddenPicked !== null}
+						icon={hiddenPicked ? (SHELF_ICONS[hiddenPicked] ?? Shapes) : MoreHorizontal}
+						onClick={more.toggle}
+						menu={more.open}
+					>
+						{hiddenPicked ? nameOf(hiddenPicked) : t("market.moreShelves")}
+						<ChevronDown size={13} strokeWidth={1.9} className="text-ink-faint" />
+					</Chip>
+				)}
+			</div>
+			{more.open && hidden.length > 0 && (
+				<Popover anchor={more.anchor} onClose={more.close} placement="bottom" align="start" width="default" role="menu" label={t("market.moreShelves")}>
+					<MenuBody>
+						{hidden.map((name) => {
+							const Icon = SHELF_ICONS[name] ?? Shapes;
+							return (
+								<MenuItem
+									key={name}
+									selected={value === name}
+									icon={<Icon size={14} strokeWidth={1.8} />}
+									trailing={value === name ? <Check size={13} strokeWidth={2.2} /> : undefined}
+									onClick={() => {
+										more.close();
+										pick(name);
+									}}
+								>
+									{nameOf(name)}
+								</MenuItem>
+							);
+						})}
+					</MenuBody>
+				</Popover>
+			)}
+			<div ref={ruler} className="invisible absolute top-0 left-0 flex w-max gap-1" aria-hidden inert>
+				{lead}
+				{shown.map(shelfChip)}
+				<Chip active icon={MoreHorizontal} onClick={() => undefined} menu={false}>
+					{longest}
+					<ChevronDown size={13} strokeWidth={1.9} />
+				</Chip>
+			</div>
+		</div>
+	);
+}
+
+/**
  * 筛选条上的一颗：图标加字。没选的只是一行灰字、没有底，选中的垫一层浅灰、字变成正文色——一排里只有它是个
  * 「东西」，一眼就是它，又不至于像一颗实心胶囊那样成为页上最响的。
  */
@@ -446,19 +764,24 @@ function Chip({
 	active,
 	icon: Icon,
 	onClick,
+	menu,
 	children,
 }: {
 	active: boolean;
 	icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-	onClick: () => void;
+	onClick: (event: MouseEvent<HTMLElement>) => void;
+	/** 会打开一个菜单（「更多」）；值是它开没开。 */
+	menu?: boolean;
 	children: ReactNode;
 }) {
 	return (
 		<button
 			type="button"
-			aria-pressed={active}
+			aria-pressed={menu === undefined ? active : undefined}
+			aria-haspopup={menu === undefined ? undefined : "menu"}
+			aria-expanded={menu}
 			onClick={onClick}
-			className={`flex h-[32px] items-center gap-1.5 rounded-full px-3.5 text-label whitespace-nowrap transition-colors active:bg-elevated ${
+			className={`flex h-[32px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-label whitespace-nowrap transition-colors active:bg-elevated ${
 				active ? "bg-card-hover font-medium text-ink" : "text-ink-muted hover:bg-card-hover/60 hover:text-ink"
 			}`}
 		>
