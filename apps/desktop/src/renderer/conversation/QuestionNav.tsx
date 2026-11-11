@@ -52,27 +52,45 @@ export function QuestionNav({
 		if (!engaged.current) setCenter(position);
 	}, [position]);
 
-	// 读到了第几问：视口顶上 60px 以上最后一个露过头的问题。滚动、内容变了、尺寸变了都重新认一次，一帧最多一次。
+	/*
+	 * 读到了第几问：视口顶上 60px 以上最后一个露过头的问题。滚动、问题行挂上卸下、尺寸变了都重新认一次，一帧最多一次。
+	 *
+	 * 输出时转录每一拍都在增删淡入的字，跟着视口贴底每一帧也在滚：每次都从整棵树里重新查一遍问题行、挨个量，就是每帧一遍。
+	 * 所以问题行的列表只在有问题行挂上、卸下时重查；量的时候二分，行按文档顺序排，顶边只增不减。
+	 */
 	useLayoutEffect(() => {
 		const element = viewport.current;
 		if (!element) return;
 		let frame = 0;
+		let rows: HTMLElement[] | null = null;
 		const measure = () => {
 			frame = 0;
+			rows ??= [...element.querySelectorAll<HTMLElement>(QUESTION_ROW)];
 			const top = element.getBoundingClientRect().top + 60;
-			let current: number | null = null;
-			for (const row of element.querySelectorAll<HTMLElement>("[data-question-index]")) {
-				if (row.getBoundingClientRect().top > top && current !== null) break;
-				current = Number(row.dataset.questionIndex);
+			// 最后一个顶边在那条线以上的；一个都没有时是第一个。
+			let low = 0;
+			let high = rows.length - 1;
+			let found = 0;
+			while (low <= high) {
+				const middle = (low + high) >> 1;
+				if (rows[middle]!.getBoundingClientRect().top <= top) {
+					found = middle;
+					low = middle + 1;
+				} else high = middle - 1;
 			}
-			setActive(current);
+			const row = rows[found];
+			setActive(row ? Number(row.dataset.questionIndex) : null);
 		};
 		const schedule = () => {
 			if (!frame) frame = requestAnimationFrame(measure);
 		};
 		measure();
 		element.addEventListener("scroll", schedule, { passive: true });
-		const mutations = new MutationObserver(schedule);
+		const mutations = new MutationObserver((records) => {
+			if (!records.some(touchesQuestionRows)) return;
+			rows = null;
+			schedule();
+		});
 		mutations.observe(element, { childList: true, subtree: true });
 		const resize = new ResizeObserver(schedule);
 		if (element.firstElementChild) resize.observe(element.firstElementChild);
@@ -222,4 +240,13 @@ export function QuestionNav({
 			</div>
 		</nav>
 	);
+}
+
+/** 转录里人问的那一句，问题导航按它认读到了第几问（见 `Transcript`）。 */
+const QUESTION_ROW = "[data-question-index]";
+
+/** 这一批变动里有没有问题行挂上或卸下：淡入的字、展开的卡片这些增删不用重查问题行。 */
+function touchesQuestionRows(record: MutationRecord): boolean {
+	const touched = (node: Node) => node instanceof Element && (node.matches(QUESTION_ROW) || node.querySelector(QUESTION_ROW) !== null);
+	return [...record.addedNodes].some(touched) || [...record.removedNodes].some(touched);
 }
