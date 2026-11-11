@@ -111,6 +111,8 @@ export function guardWebviews(contents: WebContents): void {
 		preferences.nodeIntegrationInSubFrames = false;
 		preferences.contextIsolation = true;
 		preferences.sandbox = true;
+		// 两处都要写：只改 params，Electron 照旧把页面放进默认会话，上面那套权限规则和单独的浏览数据都落空。
+		preferences.partition = WEB_PARTITION;
 		params.partition = WEB_PARTITION;
 		if (!webAddress(String(params.src ?? ""))) event.preventDefault();
 	});
