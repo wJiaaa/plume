@@ -31,7 +31,8 @@ export function nativeEnter(window: BrowserWindow): void {
 /**
  * 消息底下那排的分叉、编辑重发、撤回，经真界面走一遍：从最后那条回复分叉出一个新会话（原会话不动），在分叉里问一句，
  * 改掉它重发（转录里换成新问的和新答的），再撤回它（转录空回到分叉时的样子，那句话回到输入框）。再把它发出去、写到一半按停，
- * 经「已暂停」那一行的「重试」确认后原样重问；最后发一句请求被放弃的，那一行不出现。最后回到原会话。
+ * 经「已暂停」那一行的「重试」确认后原样重问；再发一句请求被放弃的，那一行不出现。重试时那个气泡一直在。再新开一个对话编辑重发它的第一句，屏上不回欢迎页。
+ * 最后回到原会话。
  */
 export async function checkMessageEdits(options: {
 	window: BrowserWindow;
@@ -122,6 +123,15 @@ export async function checkMessageEdits(options: {
 		await click(`${chat} [data-resume-retry]`);
 		await until(`document.querySelector('[role=dialog]')?.textContent.includes('重新生成这次回答')`, "重试先确认");
 		await capture(window, join(outDir, "smoke-message-retry.png"));
+		// 重问的那个气泡一直在：截掉旧的和那句重新落进会话一起换，中间不空一下。
+		await page(`(() => {
+			window.__plumeReaskDip = false;
+			const observer = new MutationObserver(() => {
+				if (${userCount} < ${before + 1}) window.__plumeReaskDip = true;
+				if (document.querySelector('${chat}')?.textContent.includes('重答的回答')) observer.disconnect();
+			});
+			observer.observe(document.body, { childList: true, subtree: true });
+		})()`);
 		await click("[role=dialog] button", "重新生成");
 		// 只看「已暂停」那一行撤下：跟在前面各段后面跑时，分叉带着一份没做完的清单，底下照常留着「计划还有 1 项未完成」。
 		await until(
@@ -129,6 +139,7 @@ export async function checkMessageEdits(options: {
 			"重试换掉了写到一半的回复",
 		);
 		if ((await page(userCount)) !== before + 1) throw new Error("重试是原样重问，不应该多出一条问题");
+		if ((await page(`window.__plumeReaskDip`)) !== false) throw new Error("重试时被重问的气泡先没了再回来");
 
 		// 放弃了的请求：失败已经由连接记录讲完，「已暂停 · 继续 · 重试」那一行不出现。
 		setModel(() => ({ status: 401 }));
@@ -139,6 +150,33 @@ export async function checkMessageEdits(options: {
 		await until(`document.querySelector('${chat} [data-hiccup=gave_up]') !== null && document.querySelector('[data-composer-send=send]') !== null`, "请求放弃");
 		await new Promise((resolve) => setTimeout(resolve, 300));
 		if (await page(`document.querySelector('${chat} [data-resume-retry]') !== null`)) throw new Error("已有放弃记录时不应该出现重试");
+
+		// 重问会话的第一句：截掉以后、改过的那句落进会话以前转录是空的，这时不回欢迎页再回来。
+		setModel((request) => ({ text: JSON.stringify(request.messages).includes("改过的第一句") ? "第一句改过以后的回答" : "第一句的回答" }));
+		window.webContents.send("plume:command", "new-session");
+		await until(`document.querySelector('[data-screen=empty]') !== null`, "新建对话");
+		await page(`document.querySelector('.cm-content').focus()`);
+		await window.webContents.insertText("第一句");
+		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "第一句可以发送");
+		await click("[data-composer-send=send]");
+		await until(`document.querySelector('${chat}')?.textContent.includes('第一句的回答')`, "第一句有了回答");
+		await nativeClick(window, page, `${chat} [data-message-edit]`);
+		await until(`document.querySelector('${box}') !== null`, "第一句的编辑框出现");
+		await page(`(() => {
+			const box = document.querySelector('${box}');
+			Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, '改过的第一句');
+			box.dispatchEvent(new Event('input', { bubbles: true }));
+			window.__plumeReaskWelcome = false;
+			const observer = new MutationObserver(() => {
+				if (document.querySelector('[data-screen=empty]')) window.__plumeReaskWelcome = true;
+				if (document.querySelector('${chat}')?.textContent.includes('第一句改过以后的回答')) observer.disconnect();
+			});
+			observer.observe(document.body, { childList: true, subtree: true });
+		})()`);
+		await page(`document.querySelector('${box}').focus()`);
+		nativeEnter(window);
+		await until(`document.querySelector('${chat}')?.textContent.includes('第一句改过以后的回答')`, "第一句编辑重发有了回答");
+		if ((await page(`window.__plumeReaskWelcome`)) !== false) throw new Error("编辑重发第一句时屏上回到了欢迎页");
 	} finally {
 		setModel(undefined);
 	}

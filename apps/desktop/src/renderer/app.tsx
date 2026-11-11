@@ -363,8 +363,25 @@ function updateView(sessionId: string, change: (view: SessionView) => Partial<Se
 	update((current) => (current.view?.summary.id === sessionId ? { view: { ...current.view, ...change(current.view) } } : {}));
 }
 
+/**
+ * 正在重问（编辑重发、重试）的会话；`keep` 是截断到了、还没画的那一刀（留几条）。
+ *
+ * 截掉旧的那几轮和新问的那句落进会话是两次事件，中间隔着插件的 prompt.submit 钩子。照收到的先截，被重问的那个气泡先没了再回来，
+ * 重问的是第一句时整屏还回一下欢迎页。所以这期间截断先不画，旧的留在屏上，新问的那句到了一起换：`message` 按位置放回，
+ * 本身就截掉了它后面的。这一轮没收下那句就收了场（钩子拦下、出错），或者重问没发出去，再补上这一刀，见 `settleReask`。
+ */
+let reasking: { sessionId: string; keep?: number } | undefined;
+
 function apply(event: AgentEvent): void {
 	applyLive(event);
+	if (event.type === "message" && reasking?.sessionId === event.sessionId) reasking = undefined;
+	else if (event.type === "sessions" && reasking) {
+		// 跑过又停下了。截断时那次 `sessions` 还没开始跑，不算。
+		const id = reasking.sessionId;
+		const before = state.sessions.find((session) => session.id === id);
+		const after = event.sessions.find((session) => session.id === id);
+		if (before?.running && !after?.running) settleReask(id);
+	}
 	publishSessionChanges(event, state.sessions);
 	noteSessionDoing(event);
 	if (event.type === "approval") approvalChanged(event.sessionId, event.approval);
@@ -413,8 +430,16 @@ function apply(event: AgentEvent): void {
 				...(current.target.project && !event.projects.some((project) => project.id === current.target.project) ? { target: {} } : {}),
 			}));
 			return;
-		case "message":
 		case "rewound":
+			if (reasking?.sessionId === event.sessionId) {
+				reasking.keep = event.count;
+				const change = viewChange(event)!;
+				updateView(event.sessionId, (view) => ({ ...change(view), messages: view.messages }));
+				return;
+			}
+			updateView(event.sessionId, viewChange(event)!);
+			return;
+		case "message":
 		case "draft":
 		case "toolStart":
 		case "progress":
@@ -444,6 +469,8 @@ async function refresh(): Promise<void> {
 	// 流断过，停着的会话错过了这期间的事件，都不能再用；屏上这个重读一遍。先作废再等别的：等的期间别处也可能来要。
 	resyncing = true;
 	parked.clear();
+	// 重读回来的视图已经是截过的，没有要补的那一刀。
+	reasking = undefined;
 	reloadLive();
 	try {
 		const [sessions, projects] = await Promise.all([agent.listSessions(), agent.listProjects(), refreshModels()]);
@@ -2691,6 +2718,7 @@ function carryOn(sessionId: string, prompt: string): void {
  * 退回的文件不是一轮写的，改动统计和 Git 面板闲着时不轮询，得叫它们重读。
  */
 async function editMessage(sessionId: string, index: number, message: UserMessage, text: string, files = false): Promise<void> {
+	reasking = { sessionId };
 	try {
 		await agent.editMessage(
 			sessionId,
@@ -2703,6 +2731,7 @@ async function editMessage(sessionId: string, index: number, message: UserMessag
 			{ files, timestamp: message.timestamp },
 		);
 	} catch (error) {
+		settleReask(sessionId);
 		notify(translate("turn.resendFailed", { reason: errorText(error) }), "error");
 		return;
 	}
@@ -2711,6 +2740,7 @@ async function editMessage(sessionId: string, index: number, message: UserMessag
 
 /** 重试：这条原样再发一遍，正文（含附件正文、会话引用那段）、气泡里的字、附件签都照旧。 */
 async function retryMessage(sessionId: string, index: number, message: UserMessage): Promise<void> {
+	reasking = { sessionId };
 	try {
 		await agent.editMessage(
 			sessionId,
@@ -2724,8 +2754,17 @@ async function retryMessage(sessionId: string, index: number, message: UserMessa
 			{ timestamp: message.timestamp },
 		);
 	} catch (error) {
+		settleReask(sessionId);
 		notify(translate("turn.resendFailed", { reason: errorText(error) }), "error");
 	}
+}
+
+/** 重问收了场、那句没落进会话：补上压着的那一刀。 */
+function settleReask(sessionId: string): void {
+	if (reasking?.sessionId !== sessionId) return;
+	const { keep } = reasking;
+	reasking = undefined;
+	if (keep !== undefined) updateView(sessionId, (view) => ({ messages: view.messages.slice(0, keep) }));
 }
 
 /** 撤回：截掉这条和之后的，这条连同附件放回输入框。`files` 同编辑重发。 */
