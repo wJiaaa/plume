@@ -66,19 +66,29 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 let agent: Remote<AgentService> | undefined;
+/** 应用手上已有的那份视图（屏上的、停着的、正在读的），见 `connectLiveSessions`。 */
+let held: ((sessionId: string) => SessionView | Promise<SessionView> | undefined) | undefined;
 
-export function connectLiveSessions(service: Remote<AgentService>): void {
+/**
+ * `local`：应用手上已有、并且一直跟着事件流的那份视图。有就直接拿来，不再整份读一遍：屏上那个会话也常被订阅（输入框旁的上下文用量、
+ * 会话的面板），每次换会话都多读一遍整个会话，大会话就是几 MB 的来回。
+ */
+export function connectLiveSessions(service: Remote<AgentService>, local: (sessionId: string) => SessionView | Promise<SessionView> | undefined): void {
 	agent = service;
+	held = local;
 }
 
 function changed(entry: Entry): void {
 	for (const listener of entry.listeners) listener();
 }
 
-function load(sessionId: string, entry: Entry): void {
+/**
+ * `reuse`：可以拿应用手上的那份。重读时不行——事件流断过，那份也错过了事件；读的时候来了事件，正在读的那份也没含着它们。
+ */
+function load(sessionId: string, entry: Entry, reuse = false): void {
 	if (!agent) return;
 	entry.stale = false;
-	void agent.getSession(sessionId).then(
+	void Promise.resolve((reuse ? held?.(sessionId) : undefined) ?? agent.getSession(sessionId)).then(
 		(view) => {
 			if (entries.get(sessionId) !== entry) return;
 			if (entry.stale) return load(sessionId, entry);
@@ -127,7 +137,7 @@ function subscribe(sessionId: string, listener: () => void): () => void {
 	if (!entry) {
 		entry = { listeners: new Set() };
 		entries.set(sessionId, entry);
-		load(sessionId, entry);
+		load(sessionId, entry, true);
 	}
 	entry.listeners.add(listener);
 	const held = entry;

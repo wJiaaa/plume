@@ -479,6 +479,21 @@ function readSession(sessionId: string, again: boolean): Promise<SessionRead> {
 	return read;
 }
 
+/**
+ * 手上已有的一个会话的视图：屏上读完了的、停在缓存里的（两者都跟着事件流走），或者正在读的那一份。订阅会话的插件、面板
+ * 从这里拿，不再整份读一遍，见 `connectLiveSessions`。
+ */
+function heldView(sessionId: string): SessionView | Promise<SessionView> | undefined {
+	if (state.view?.summary.id === sessionId && !state.loading) return state.view;
+	const parkedView = parked.get(sessionId);
+	if (parkedView) return parkedView;
+	if (reading?.id !== sessionId) return undefined;
+	return reading.read.then((result) => {
+		if ("view" in result) return result.view;
+		throw result.error;
+	});
+}
+
 /** 屏上的会话要被换下去了：有内容、已经读完的停进缓存。 */
 function park(): void {
 	const view = state.view;
@@ -783,7 +798,7 @@ function quoteInPanel(key: string, sessionId: string, quote: DraftQuote): void {
 export function start(service: Remote<AgentService>): void {
 	agent = service;
 	connectModels(service);
-	connectLiveSessions(service);
+	connectLiveSessions(service, heldView);
 	connectFiles(service);
 	setFileOpener(openFileTab);
 	setFileMovedHandler((from, to) => {
