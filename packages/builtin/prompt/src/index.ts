@@ -14,7 +14,7 @@ import type { PermissionMode, Plugin, SandboxMode } from "@plume/contract";
 import { commandShell } from "@plume/platform";
 import { withEnvironment } from "./environment.ts";
 import { FrozenPrompts } from "./frozen.ts";
-import { isGitRepo, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "./instructions.ts";
+import { findRepoRoot, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "./instructions.ts";
 import { withSteeringNote } from "./steering.ts";
 import { buildPromptSections } from "./system.ts";
 
@@ -42,7 +42,8 @@ export default {
 			async (input, next) => {
 				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions] = await Promise.all([
 					loadProjectInstructions(input.cwd),
-					isGitRepo(input.cwd),
+					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
+					findRepoRoot(input.cwd).then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
 					loadMagpieInstructions(ctx.log),
 				]);

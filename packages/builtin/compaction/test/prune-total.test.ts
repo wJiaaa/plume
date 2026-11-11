@@ -74,6 +74,8 @@ it("发送路径上的剪法只看结果本身：同一条每次剪出同一份�
 	expect(freshView([first!], sink)[0]).toBe(first);
 	const skill: Message = { ...huge, toolName: "skill" };
 	expect(freshView([skill], sink)[0]).toBe(skill);
+	// 压缩时剪得更狠的那条线也不剪它。
+	expect(pruneToolResults([skill], undefined, sink)[0]).toBe(skill);
 	// 没到线的整条照发。
 	const normal = result("n".repeat(30_000));
 	expect(freshView([normal], sink)[0]).toBe(normal);

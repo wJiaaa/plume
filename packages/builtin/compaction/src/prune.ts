@@ -91,11 +91,14 @@ export interface ArtifactSink {
 	keep(tool: string, content: string): string;
 }
 
+/** 技能正文是要照着做的说明，剪了就是在改规矩。 */
+const UNCUT_TOOLS = new Set(["skill"]);
+
 /**
  * 一条消息，过大的文字剪短。什么都没变时返回同一个对象：调用方靠身份判断有没有动过。
  */
 function pruneMessage(message: Message, threshold: number, artifacts?: ArtifactSink): Message {
-	if (message.role !== "toolResult") return message;
+	if (message.role !== "toolResult" || UNCUT_TOOLS.has(message.toolName)) return message;
 	/*
 	 * 几块文字合在一起量、合在一起剪回这条线以内。一块一块单独量，十块八千字的就全放过去了；每块剪成一样多，挨着大块的小块又被剪坏。
 	 * 所以线按 `allowance` 分：小块全留，大块分剩下的。
@@ -176,9 +179,6 @@ export function dropUneventful(messages: Message[]): Message[] {
 	});
 	return changed ? next : messages;
 }
-
-/** 技能正文是要照着做的说明，剪了就是在改规矩。 */
-const UNCUT_TOOLS = new Set(["skill"]);
 
 /**
  * 每条工具结果第一次发出去时的样子：清空无结果的，超过 `FRESH_RESULT_MAX_CHARS` 的剪成头尾。只看这条结果本身、`artifact://` 地址按内容取，

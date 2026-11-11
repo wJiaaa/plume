@@ -73,7 +73,7 @@ function budgetInstructions(content: string, path: string): string {
 }
 
 /** 含 `.git` 的最近祖先，没有就是 null。worktree 里 `.git` 是文件不是目录，所以只看在不在。 */
-async function findRepoRoot(cwd: string): Promise<string | null> {
+export async function findRepoRoot(cwd: string): Promise<string | null> {
 	let dir = cwd;
 	for (let depth = 0; depth < MAX_DEPTH; depth++) {
 		if (await isGitRepo(dir)) return dir;
@@ -85,7 +85,7 @@ async function findRepoRoot(cwd: string): Promise<string | null> {
 }
 
 /** 这个目录本身是不是一个 git 仓库（或 worktree）的根。 */
-export function isGitRepo(dir: string): Promise<boolean> {
+function isGitRepo(dir: string): Promise<boolean> {
 	return access(join(dir, ".git")).then(
 		() => true,
 		() => false,
