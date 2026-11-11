@@ -10,7 +10,7 @@ import type { ContextBreakdown, ContextSegmentKey } from "@plume/contract";
 import type { ComposerItemProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Disclosure, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
 import { FileText } from "@plume/ui/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type ContextReading, contextReading, formatTokens } from "./format.ts";
 import { fill, MESSAGES } from "./messages.ts";
 import css from "./status.css";
@@ -214,10 +214,12 @@ function makeMeter(ui: UiContext) {
 		const text = MESSAGES[useI18n().resolvedLocale];
 		const popover = usePopover();
 		const session = ui.useSession(sessionId);
-		if (!sessionId || !session || !model) return null;
+		// 按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再数一遍。
+		const messages = session?.messages;
+		const contextWindow = model?.contextWindow;
+		const reading = useMemo(() => (messages && contextWindow !== undefined ? contextReading(messages, contextWindow) : null), [messages, contextWindow]);
 		// 还没有一条写完的回复时没什么可报的：空转录旁边的「已用 1%」是一段还没开始的路的读数。
-		const reading = contextReading(session.messages, model.contextWindow);
-		if (!reading) return null;
+		if (!sessionId || !session || !model || !reading) return null;
 		const tip = fill(text.usedPercent, { percent: reading.percent });
 		return (
 			<>

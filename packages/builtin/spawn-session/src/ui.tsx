@@ -20,7 +20,7 @@ import type { ThinkingLevel } from "@plume/contract";
 import type { EnvironmentSectionProps, Remote, SessionView, ToolCardProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Button, ComposerToggle, FlowRow, IconButton, Text, useI18n, WorktreeToggle } from "@plume/ui";
 import { Archive, ChevronRight, Reply, SquarePen, X } from "@plume/ui/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SpawnSessionApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { connect, dismiss, refreshStarted, useDismissed, useStarted } from "./state.ts";
@@ -293,11 +293,17 @@ function SuggestionCard({ sessionId, call, argumentsText, streaming, status, res
 	return <>{fallback}</>;
 }
 
+/** 这个会话里的全部建议，按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再翻一遍。 */
+function useSuggestions(session: SessionView): Suggestion[] {
+	return useMemo(() => suggestionsIn(session.messages), [session.messages]);
+}
+
 /** 还在等人决定的几条：没开始、也没收起。 */
 function usePending(session: SessionView): Suggestion[] {
 	const started = useStarted(session.summary.id);
 	const dismissed = useDismissed();
-	return suggestionsIn(session.messages).filter((one) => !dismissed.includes(one.callId) && !started.some((done) => done.callId === one.callId));
+	const suggestions = useSuggestions(session);
+	return suggestions.filter((one) => !dismissed.includes(one.callId) && !started.some((done) => done.callId === one.callId));
 }
 
 /** 环境开关上的那句话：有等人决定的建议才说。 */
@@ -316,7 +322,7 @@ function SuggestionsSection({ session }: EnvironmentSectionProps) {
 	const parentId = session.summary.id;
 	const started = useStarted(parentId);
 	const dismissed = useDismissed();
-	const all = suggestionsIn(session.messages).filter((one) => !dismissed.includes(one.callId));
+	const all = useSuggestions(session).filter((one) => !dismissed.includes(one.callId));
 	if (all.length === 0) return null;
 	const pending = all.filter((one) => !started.some((done) => done.callId === one.callId));
 	const begun = all.flatMap((one) => {

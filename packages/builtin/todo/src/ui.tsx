@@ -13,7 +13,7 @@ import type { Message, SessionView } from "@plume/contract";
 import type { ConversationCardProps, UiPlugin } from "@plume/contract/ui";
 import { ActionSpinner, Caret, IconButton, Scroller, ScrollText, Text, Tooltip, useI18n } from "@plume/ui";
 import { Check, ListTodo, Pause, Play, RotateCw } from "@plume/ui/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fill, MESSAGES } from "./messages.ts";
 import todoCss from "./todo.css";
 import { latestTodos, type TodoItem } from "./types.ts";
@@ -110,7 +110,8 @@ function TodoCard({ session, placement, stop, carryOn }: ConversationCardProps) 
 	const text = MESSAGES[useI18n().resolvedLocale];
 	// 默认展开：只看得见当前一步时，「还剩多少、接下来是什么」还得再点一下才知道。
 	const [open, setOpen] = useState(true);
-	const todos = latestTodos(session.messages);
+	// 按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再翻一遍。
+	const todos = useMemo(() => latestTodos(session.messages), [session.messages]);
 	const done = todos.filter((todo) => todo.status === "completed").length;
 	if (todos.length === 0 || done === todos.length) return null;
 
