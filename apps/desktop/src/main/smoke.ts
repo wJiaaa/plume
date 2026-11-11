@@ -710,9 +710,9 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (!(await page(`document.querySelector('.cm-content')?.textContent === '/clear extra' && !document.querySelector('.plume-composer-dock [role=alert]')`)))
 			throw new Error("命令警告丢失草稿或重复画在输入框上方");
 		// 提示条按整个窗口居中，侧栏开着也不往右偏。
-		const toastOffset = await page<number>(
+		const toastOffset = (await page(
 			`(() => { const r = document.querySelector('[data-plume-toaster] > div').getBoundingClientRect(); return Math.abs(r.left + r.width / 2 - innerWidth / 2); })()`,
-		);
+		)) as number;
 		if (toastOffset > 1) throw new Error(`提示条没在窗口里居中，偏了 ${toastOffset}px`);
 		for (const theme of ["dark", "light"]) {
 			await page(`window.plume.saveAppearance({ theme: ${JSON.stringify(theme)} })`);
