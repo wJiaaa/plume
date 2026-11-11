@@ -312,22 +312,41 @@ let state: AppState = {
 const listeners = new Set<() => void>();
 let agent: Remote<AgentService>;
 
+/**
+ * 除了屏上那个会话的视图以外的状态。流式输出时草稿每 50ms、命令输出每 100ms 换一次 `view`，别的都没变；侧栏、标题栏、面板区这些
+ * 不读视图的地方订阅它，就不跟着每一拍重画。就是 `state` 本身，只在 `view` 以外有字段变了时才换成新的那份；类型上拿掉 `view`，
+ * 读不到可能过时的那份视图。
+ */
+type Chrome = Omit<AppState, "view">;
+let chrome: Chrome = state;
+
+function sameChrome(before: AppState, after: AppState): boolean {
+	for (const key of Object.keys(after) as (keyof AppState)[]) if (key !== "view" && !Object.is(before[key], after[key])) return false;
+	return true;
+}
+
 function update(patch: Partial<AppState> | ((current: AppState) => Partial<AppState>)): void {
 	const previous = state;
 	state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
 	// 换了界面或会话就记一笔，不靠每个调用方报告：会话从侧栏、新建、事件流里都会打开，漏报一处历史就缺一块。
 	if (!arriving && (state.screen !== previous.screen || state.currentId !== previous.currentId)) state = { ...state, nav: record(state.nav, here(state)) };
+	if (!sameChrome(previous, state)) chrome = state;
 	for (const listener of listeners) listener();
 }
 
-function useApp(): AppState {
-	return useSyncExternalStore(
-		(listener) => {
-			listeners.add(listener);
-			return () => listeners.delete(listener);
-		},
-		() => state,
-	);
+function subscribeApp(listener: () => void): () => void {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
+}
+
+/** 视图以外的状态。要屏上会话的视图的，单独用 `useAppPick` 取：流式输出时只有取了它的地方每一拍重画。 */
+function useChrome(): Chrome {
+	return useSyncExternalStore(subscribeApp, () => chrome);
+}
+
+/** 状态里的一样东西，它变了才重画。`pick` 只能交回状态里原有的引用或原始值，不能每次新造一个对象。 */
+function useAppPick<T>(pick: (current: AppState) => T): T {
+	return useSyncExternalStore(subscribeApp, () => pick(state));
 }
 
 function errorText(error: unknown): string {
@@ -851,9 +870,9 @@ export function start(service: Remote<AgentService>): void {
 		openSettings: (key) => update({ screen: "settings", settingsSection: `plugin:${key}`, drawerOpen: false }),
 		openPage: (key) => update({ screen: `page:${key}`, drawerOpen: false }),
 		Conversation: PluginConversation,
-		useProjects: () => useApp().projects,
+		useProjects: () => useAppPick((current) => current.projects),
 		useSessionModel: () => {
-			const { currentId, sessions } = useApp();
+			const { currentId, sessions } = useChrome();
 			return sessions.find((summary) => summary.id === currentId)?.model;
 		},
 		openModelSettings: () => update({ screen: "settings", settingsSection: "models" }),
@@ -982,18 +1001,18 @@ function togglePanel(open: boolean, scope = scopeOf(state)): void {
 	setPanel({ open });
 }
 
-const scopeOf = (current: AppState): string => current.currentId ?? "";
+const scopeOf = (current: Chrome): string => current.currentId ?? "";
 const panelScope = (sessionId: string): string => state.sessions.find((session) => session.id === sessionId)?.parentId ?? sessionId;
 
 /** 下一轮在哪个目录跑：会话保留自己的工作目录，新对话取选中项目的目录。插件的格子、面板都按它画。 */
-function nextTurnCwd(current: AppState, view = current.view): string | undefined {
-	if (view) return view.summary.cwd ?? current.projects.find((entry) => entry.id === view.summary.project)?.path;
+function nextTurnCwd(current: Chrome, session: SessionSummary | undefined): string | undefined {
+	if (session) return session.cwd ?? current.projects.find((entry) => entry.id === session.project)?.path;
 	const target = current.target;
 	return current.projects.find((entry) => entry.id === target.project)?.path ?? target.cwd;
 }
 
 /** 某个会话的标签：插件停用了的面板不算；一个都没有时是一个开始页。 */
-function tabsOf(current: AppState, scope = scopeOf(current), panels = listPanels()): PanelTabs {
+function tabsOf(current: Chrome, scope = scopeOf(current), panels = listPanels()): PanelTabs {
 	const saved = current.panelTabs[scope];
 	const tabs = saved?.tabs.filter((tab) => !tab.panel || panels.some((panel) => panel.key === tab.panel)) ?? [];
 	if (!saved || tabs.length === 0) return { tabs: [{ id: `start:${scope}` }], active: `start:${scope}` };
@@ -1260,7 +1279,7 @@ export function App() {
 function Shell() {
 	const { t } = useI18n();
 	const managedSkin = useManagedSkin();
-	const app = useApp();
+	const app = useChrome();
 	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen, panelWidth } = app;
 	const [verticalShares, setVerticalShares] = useState<Record<string, number>>({});
 	const compact = layoutMode(windowWidth) === "compact";
@@ -1369,7 +1388,9 @@ function Shell() {
 		if (panelWindow || !panelInWorkspace) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.repeat || composingKey(event)) return;
-			const panel = listPanels(nextTurnCwd(state), state.currentId !== undefined).find((entry) => entry.shortcut && matchesShortcut(event, entry.shortcut));
+			const panel = listPanels(nextTurnCwd(state, state.view?.summary), state.currentId !== undefined).find(
+				(entry) => entry.shortcut && matchesShortcut(event, entry.shortcut),
+			);
 			if (!panel) return;
 			event.preventDefault();
 			event.stopPropagation();
@@ -1495,13 +1516,13 @@ function Shell() {
 }
 
 /** 弹出去的标签不占这一屏的位置，当前标签移交给仍留在屏内的一个。 */
-function panelGroup(app: AppState, scope: string): PanelTabs {
+function panelGroup(app: Chrome, scope: string): PanelTabs {
 	const group = tabsOf(app, scope);
 	const tabs = group.tabs.filter((tab) => !app.panelWindows.some((entry) => entry.tab === tab.id));
 	return { tabs, active: tabs.some((tab) => tab.id === group.active) ? group.active : (tabs.at(-1)?.id ?? "") };
 }
 
-function panelLayout(app: AppState, size: { width: number; height: number }, share: number) {
+function panelLayout(app: Chrome, size: { width: number; height: number }, share: number) {
 	const scope = scopeOf(app);
 	const group = panelGroup(app, scope);
 	const shown = listPanels().length > 0 && group.tabs.length > 0 && app.panelOpen;
@@ -1522,7 +1543,7 @@ const PANEL_MOTION = "transition-[right,bottom,width,height,translate] duration-
 
 /** 对话和面板共用工作区尺寸；常驻标签不随会话切换搬动 DOM。 */
 function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; fatal?: string; share: number; onShare(share: number): void }) {
-	const app = useApp();
+	const app = useChrome();
 	const { t } = useI18n();
 	usePluginUis();
 	const scope = scopeOf(app);
@@ -1557,7 +1578,7 @@ function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; fatal?: 
 				className={`absolute left-0 top-0 flex min-h-0 min-w-0 flex-col ${motion} ${layout.single && layout.shown ? "invisible" : ""}`}
 			>
 				<ScreenCard header={<TitleBar inset={inset} />} fatal={fatal}>
-					<ChatBody view={app.view} loading={app.loading} />
+					<CurrentChat />
 				</ScreenCard>
 			</main>
 			{listPanels().length > 0 && (
@@ -1643,9 +1664,11 @@ function ScreenCard({ header, fatal, topInset, children }: { header?: ReactNode;
 function SessionWindowShell() {
 	const { t } = useI18n();
 	const managedSkin = useManagedSkin();
-	const { view, loading, fatal, fullScreen, sessions } = useApp();
+	const { fatal, fullScreen, sessions } = useChrome();
+	// 视图只交给对话和会话的工具栏；窗口外壳只要摘要，草稿每一拍换视图时它不跟着重画。
+	const current = useAppPick((app) => app.view?.summary);
 	const titlebar = useTitlebar(window.plume.platform, fullScreen);
-	const title = view?.summary.title || t("sessionOps.newSession");
+	const title = current?.title || t("sessionOps.newSession");
 	useEffect(() => {
 		document.title = title;
 	}, [title]);
@@ -1663,7 +1686,7 @@ function SessionWindowShell() {
 				{title}
 			</span>
 			<div className={`ml-auto flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
-				{view && <SessionToolbar session={view} />}
+				<CurrentSessionToolbar />
 				<KeepOnTopButton keepOnTop={window.plume.sessionWindows.keepOnTop} />
 				<ToolbarButton label={t("sessionMenu.openInMainWindow")} onClick={() => void window.plume.sessionWindows.openInMain()}>
 					<span data-open-in-main="" className="flex items-center justify-center">
@@ -1703,7 +1726,7 @@ function SessionWindowShell() {
 					</p>
 				)}
 				<div className="flex min-h-0 flex-1 flex-col" style={{ "--plume-top-row-height": `${HEADER_BAR ? 0 : TOP_ROW_HEIGHT}px` } as CSSProperties}>
-					{view ? <ChatBody view={view} loading={loading} /> : <ChatLoading />}
+					<CurrentChat />
 				</div>
 			</main>
 			<ImageViewerHost />
@@ -1782,7 +1805,7 @@ function PanelResizer({ width, windowWidth, max }: { width: number; windowWidth:
 
 /** 内容按首次挂载的顺序追加，切换会话不能让 React 移动 webview 的 DOM。 */
 function PanelLayer({ layout }: { layout: ReturnType<typeof panelLayout> }) {
-	const app = useApp();
+	const app = useChrome();
 	usePluginUis();
 	const found: { tab: PanelTab; scope: string; panel: PanelEntry }[] = [];
 	for (const [scope, group] of Object.entries(app.panelTabs)) {
@@ -1806,7 +1829,7 @@ function PanelLayer({ layout }: { layout: ReturnType<typeof panelLayout> }) {
 }
 
 function PanelLayerTab({ tab, scope, panel, layout }: { tab: PanelTab; scope: string; panel: PanelEntry; layout: ReturnType<typeof panelLayout> }) {
-	const app = useApp();
+	const app = useChrome();
 	const current = scopeOf(app) === scope;
 	// 后台标签保留最后的尺寸，切换会话不改变其内部布局。
 	const last = useRef(layout);
@@ -1860,7 +1883,7 @@ function PanelArea({
 	arrangement?: string;
 }) {
 	const { t, resolvedLocale } = useI18n();
-	const app = useApp();
+	const app = useChrome();
 	const managedSkin = useManagedSkin();
 	usePluginUis();
 	const panels = detached && panelWindow ? [panelEntry(panelWindow.panel)].filter((entry): entry is PanelEntry => Boolean(entry)) : listPanels();
@@ -2015,12 +2038,13 @@ function PanelArea({
 
 /** 后台标签也订阅自己的会话，不能借用窗口当前会话的视图。 */
 function usePanelSession(scope: string): SessionView | undefined {
-	const app = useApp();
-	const live = useLiveSession(scope && scope !== app.currentId ? scope : undefined);
-	return scope === app.currentId ? app.view : scope ? (live ?? parked.get(scope)) : undefined;
+	const current = useAppPick((app) => (scope === app.currentId ? app.view : undefined));
+	const currentId = useAppPick((app) => app.currentId);
+	const live = useLiveSession(scope && scope !== currentId ? scope : undefined);
+	return scope === currentId ? current : scope ? (live ?? parked.get(scope)) : undefined;
 }
 
-function panelCwd(app: AppState, scope: string, view?: SessionView): string | undefined {
+function panelCwd(app: Chrome, scope: string, view?: SessionView): string | undefined {
 	const summary = view?.summary ?? app.sessions.find((entry) => entry.id === scope);
 	if (summary) return summary.cwd ?? app.projects.find((entry) => entry.id === summary.project)?.path;
 	if (scope) return undefined;
@@ -2030,8 +2054,9 @@ function panelCwd(app: AppState, scope: string, view?: SessionView): string | un
 
 /** 恢复文件时只保存路径，仍由 agent 按原会话的工作目录校验并读内容。 */
 function PanelContents({ panel, tab, scope, shown }: { panel: PanelEntry; tab: PanelTab; scope: string; shown: boolean }) {
-	const app = useApp();
+	const app = useChrome();
 	const view = usePanelSession(scope);
+	const hasView = useAppPick((current) => current.view !== undefined);
 	const cwd = panelCwd(app, scope, view);
 	const [restoring, setRestoring] = useState(Boolean(tab.file && !fileOf(tab.id).path));
 	const [failed, setFailed] = useState(false);
@@ -2048,7 +2073,7 @@ function PanelContents({ panel, tab, scope, shown }: { panel: PanelEntry; tab: P
 			gone = true;
 		};
 	}, [tab.id, tab.file]);
-	if (panelWindow && !app.view) return <p className="p-6 text-detail text-ink-muted">{translate("common.loadingShort")}</p>;
+	if (panelWindow && !hasView) return <p className="p-6 text-detail text-ink-muted">{translate("common.loadingShort")}</p>;
 	if (restoring) return <p className="p-6 text-detail text-ink-muted">{translate("common.loadingShort")}</p>;
 	if (failed) return <p className="p-6 text-detail text-danger">{translate("filePanel.unreadable")}</p>;
 	return (
@@ -2125,7 +2150,7 @@ function PanelStart({ panels, onLaunch }: { panels: readonly PanelEntry[]; onLau
 
 /** 侧栏里放什么：工作区是会话列表，设置页是章节列表。开关、拖宽度、抽屉两边共用。 */
 function SidebarContent() {
-	const { screen } = useApp();
+	const { screen } = useChrome();
 	return screen === "settings" ? <SettingsSidebar /> : <Sidebar />;
 }
 
@@ -2142,7 +2167,7 @@ function SidebarTopRow() {
 
 function SettingsSidebar() {
 	const { t } = useI18n();
-	const { settingsSection, windowWidth } = useApp();
+	const { settingsSection, windowWidth } = useChrome();
 	const compact = layoutMode(windowWidth) === "compact";
 	return (
 		<>
@@ -2198,7 +2223,8 @@ function DestinationNav({ compact, active }: { compact: boolean; active: Screen 
 /** 产品名一行右边的按钮。比 IconButton 的 26px 大一档、字色深一档：它们是整栏的入口，不是工具栏里的一个小操作。 */
 function Sidebar() {
 	const { t } = useI18n();
-	const { sessions, projects, currentId, pendingId, windowWidth, screen } = useApp();
+	const { sessions, projects, currentId, pendingId, windowWidth, screen } = useChrome();
+	const currentSummary = useAppPick((current) => current.view?.summary);
 	const compact = layoutMode(windowWidth) === "compact";
 	const pad = compact ? "px-3" : "px-2.5";
 	const detached = sessionWindows.use();
@@ -2219,7 +2245,7 @@ function Sidebar() {
 						sessions={sessions}
 						projects={projects}
 						currentId={screen === "chat" ? currentId : undefined}
-						cwd={nextTurnCwd(state)}
+						cwd={nextTurnCwd(state, currentSummary)}
 						actions={sidebarActions}
 						openPage={(key) => update({ screen: key === "market" ? "market" : `page:${key}`, drawerOpen: false })}
 						openSettings={(settingsSection) => update({ screen: "settings", settingsSection, drawerOpen: false })}
@@ -2266,16 +2292,17 @@ function Sidebar() {
  */
 function TitleBar({ inset }: { inset?: number }) {
 	const { t } = useI18n();
-	const app = useApp();
-	const { screen, view, panelOpen, panelMoving } = app;
+	const app = useChrome();
+	const { screen, panelOpen, panelMoving } = app;
 	usePluginUis();
-	const session = view?.summary;
+	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
+	const session = useAppPick((current) => current.view?.summary);
 	const chat = screen === "chat" && session;
 	// 开始页上有东西可开，或者这个会话已经开着面板标签（本体的文件标签不在开始页上）。
 	const panelToggle =
 		screen === "chat" &&
 		!panelOpen &&
-		(listPanels(nextTurnCwd(app), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel));
+		(listPanels(nextTurnCwd(app, session), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel));
 	return (
 		<header
 			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-2.5" : "gap-3 pl-6"} ${panelToggle ? "pr-3" : "pr-6"} ${CARD_DRAG}`}
@@ -2284,7 +2311,7 @@ function TitleBar({ inset }: { inset?: number }) {
 			{chat && <SessionTitle key={session.id} session={session} />}
 			{chat && (
 				<div className={`ml-auto flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
-					<SessionToolbar session={view} />
+					<CurrentSessionToolbar />
 				</div>
 			)}
 			{screen === "market" && (
@@ -2307,7 +2334,7 @@ function TitleBar({ inset }: { inset?: number }) {
 /** 按会话挂载，切换时不把上一段会话的菜单或未保存标题带过去。 */
 function SessionTitle({ session }: { session: SessionSummary }) {
 	const { t, resolvedLocale } = useI18n();
-	const { projects, sessions } = useApp();
+	const { projects, sessions } = useChrome();
 	const menu = usePopover();
 	const confirm = useConfirmer();
 	const remove = (sessionIds: string[]) =>
@@ -2404,9 +2431,11 @@ function pageProps(view: SessionView | undefined, target: SessionTarget): PagePr
 
 /** 工作区以外的页面：设置、市场、插件的页面。对话由 `ChatScreen` 画。 */
 function Main() {
-	const { screen, view, target, projects } = useApp();
+	const { screen, target, projects } = useChrome();
 	usePluginUis();
 	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
+	// 只有插件的页面要会话视图：停在设置、市场时，后台那个会话每输出一拍，这里不跟着重画。
+	const view = useAppPick((current) => (current.screen.startsWith("page:") ? current.view : undefined));
 	// 插件在它的页面上被停用、卸下：页面跟着没了，回到工作区，不留一块空白。
 	const pageGone = screen.startsWith("page:") && !page;
 	useEffect(() => {
@@ -2420,7 +2449,7 @@ function Main() {
 
 /** 一屏的正文：没有会话、或者会话里还没说过话时是欢迎页，否则是转录和输入框。 */
 function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
-	const app = useApp();
+	const app = useChrome();
 	const { projects, windowWidth } = app;
 	const [column, setColumn] = useState<HTMLElement | null>(null);
 	const room = useCardRoom(column);
@@ -2491,6 +2520,20 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 			</div>
 		</section>
 	);
+}
+
+/** 屏上那个会话的对话。单独订阅视图：草稿每一拍换视图时，重画从这里往下，不从窗口的外壳开始。 */
+function CurrentChat() {
+	const view = useAppPick((current) => current.view);
+	const loading = useAppPick((current) => current.loading);
+	if (!view && sessionWindow) return <ChatLoading />;
+	return <ChatBody view={view} loading={loading} />;
+}
+
+/** 顶行上插件给会话加的按钮：它们拿的是整份视图，跟着视图重画，标题栏的其余部分不用。 */
+function CurrentSessionToolbar() {
+	const view = useAppPick((current) => current.view);
+	return view ? <SessionToolbar session={view} /> : null;
 }
 
 /** 只在读得比 select 肯等的久时出现；延迟淡入，刚过那条线就读完的不闪一下转圈。 */
@@ -2758,13 +2801,13 @@ const COMPOSER_ARRIVAL_WINDOW = 1000;
 /** `cards`：跟着会话的卡片放不下浮在转录上，画在输入框正上方。 */
 function Composer({ view, centered = false, cards = false }: { view?: SessionView; centered?: boolean; cards?: boolean }) {
 	const { t } = useI18n();
-	const app = useApp();
+	const app = useChrome();
 	const { drafts, target, projects, settings, sending, blankModel, blankThinking, windowWidth } = app;
 	const scope = draftScope(view);
 	const value = drafts[scope] ?? "";
 	const running = view?.summary.running ?? false;
 	const project = projects.find((entry) => entry.id === (view?.summary.project ?? app.target.project));
-	const cwd = nextTurnCwd(app, view);
+	const cwd = nextTurnCwd(app, view?.summary);
 	// 格子里写明了要发什么的按钮（工作树的「交给这个对话解决」）：以人的身份发，和人打字发的一样排队。
 	const sendFromChip = (said: string) => {
 		const typed = String(said).trim();
@@ -3227,7 +3270,7 @@ function PluginConversation(props: ConversationProps) {
 
 /** 输入框右下角、发送按钮左边：这个会话用哪个模型、想多久。选择记在会话上，下一轮生效；显示的是实际会用的那个。 */
 function ComposerModels({ view, disabled }: { view?: SessionView; disabled?: boolean }) {
-	const { blankModel, blankThinking } = useApp();
+	const { blankModel, blankThinking } = useChrome();
 	const session: ComposerSession = view
 		? { ...view.summary, said: view.messages.length > 0 }
 		: {
@@ -3256,7 +3299,7 @@ function ComposerModels({ view, disabled }: { view?: SessionView; disabled?: boo
  * 所以它占满高度、自己滚。
  */
 function SettingsScreen() {
-	const { settingsSection, windowWidth, sidebarOpen, sidebarWidth, sessions, projects } = useApp();
+	const { settingsSection, windowWidth, sidebarOpen, sidebarWidth, sessions, projects } = useChrome();
 	const compact = layoutMode(windowWidth) === "compact";
 	const selfScrolling = settingsSection === "models";
 	/*
@@ -3358,10 +3401,10 @@ function tryPrompt(prompt: string): void {
 }
 
 function ProjectFiles(props: PanelProps) {
-	const { projects } = useApp();
+	const { projects } = useChrome();
 	return <FileBrowser {...props} projects={projects} />;
 }
 
 function ProjectFilePanel(props: PanelProps) {
-	return <FilePanel {...props} projects={useApp().projects} />;
+	return <FilePanel {...props} projects={useAppPick((current) => current.projects)} />;
 }
