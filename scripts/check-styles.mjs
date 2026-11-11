@@ -9,7 +9,7 @@
  * 5. 插件单独构建，产品扫不到插件自己写的类名：插件的 className 里不能有 Tailwind 类，用 @plume/styles 导出的组合。
  *    插件自己的 CSS 只管布局：字号、行高、字距、字体、字重、圆角、阴影只能是单个 var(--plume-*) 或 inherit 这类关键字。
  *    文字用 @plume/ui 的 Text，档位改了插件跟着变；在 CSS 里照着 calc 抄一份档位，theme.css 一改就漂开。
- * 6. 过渡时长只用 --plume-t-* 三档（`duration-150`、`transition: 200ms` 不行）：减少动态效果靠统一压时长，手写的数跟着不变。
+ * 6. 过渡时长只用 --plume-t-* 四档（`duration-150`、`transition: 200ms` 不行）：减少动态效果靠统一压时长，手写的数跟着不变。
  * 7. 行内 style 里的颜色、圆角、字号、字体、阴影、过渡只能取 var(--plume-*)，不写字面量。
  * 8. 次要文字（ink-muted、ink-faint）在每一种实色的面上对比度够：muted ≥ 4.5:1，faint ≥ 3:1，浅色深色都算。
  *    直接按 theme.css 里的声明算 color-mix，不另抄一份公式。
@@ -38,7 +38,7 @@ const skinFile = join(root, "packages/contract/src/ui.ts");
 /** 产品的 Tailwind 扫描的目录（见 apps/desktop/src/renderer/styles.css 的 @source），规则 1–3 都查。 */
 const SCANNED = ["apps/desktop/src/renderer", "packages/client"];
 /** 不经 Tailwind 的代码：只查规则 3。 */
-const OTHER = ["apps/desktop/src/main", "apps/desktop/src/preload"];
+const OTHER = ["apps/desktop/src/main", "apps/desktop/src/preload", "apps/desktop/src/shared"];
 /**
  * 插件：查规则 3、5、6、7，规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/styles.mjs），色值的例外写在文件里
  * （`color-exempt`），不在下面的表里。插件 SDK 的模板就是仓库外插件的起点，和插件按同一套规则查。市场插件在插件仓库里，由它自己的检查管。
@@ -47,11 +47,13 @@ const PLUGINS = ["packages/builtin", "packages/sdk/plugin-sdk/template"];
 
 /** 允许出现的色值：文件 → 值 → 原因。 */
 const ALLOWED_COLORS = {
+	"apps/desktop/src/shared/appearance.ts": {
+		"*": "行内代码选「自定义」时取色器的初始值，存成设置值由用户改，不是界面的固定颜色；跟主题走的是「跟界面」「跟代码主题」两档",
+	},
 	"apps/desktop/src/main/smoke-preview.ts": { "*": "冒烟页面的设计旋钮初值，用来验证用户选色，不是宿主界面的固定颜色" },
 	"packages/client/ui/src/inputs/ColorField.tsx": { "*": "色块底色来自用户输入，字色按亮度选择黑白，不跟随主题" },
 	"packages/client/styles/src/theme.css": { "*": "token 就定义在这里" },
 	"packages/client/ui/src/lib/code/themes.ts": { "*": "代码主题是独立配色表，用户选中后写进代码 token；预览需要同时画出深浅两套原色" },
-	"apps/desktop/src/renderer/settings/readable-ink.ts": { "*": "从用户的行内代码底色计算同色相且满足对比度的字色，结果作为设置值而非固定界面颜色" },
 	"apps/desktop/src/renderer/settings/appearance-controls.tsx": {
 		"*": "外观页的主题缩略图画的是“浅色”“深色”各自的样子、配色预设是种子色值本身、色块上的字只在黑白里选，都和此刻的主题无关，不能用跟着主题变的 token",
 	},
@@ -143,9 +145,11 @@ const DURATION_CLASS = /^(?:[^\s:]+:)*duration-(?:\d|\[(?!var\(--plume-t-))/;
 const PRESS_MOTION = /^(?:[^\s:]+:)*active:-?(?:scale|translate)-/;
 
 const problems = [];
+/** 仓库里的相对路径，分隔符统一成 `/`：下面的表都按 `/` 写，Windows 上 `relative` 给的是 `\\`。 */
+const repoPath = (file) => relative(root, file).replaceAll("\\", "/");
 const report = (file, index, text, rule, message) => {
 	const line = text.slice(0, index).split("\n").length;
-	problems.push(`${relative(root, file)}:${line}  [${rule}] ${message}`);
+	problems.push(`${repoPath(file)}:${line}  [${rule}] ${message}`);
 };
 
 async function filesUnder(dir, extensions) {
@@ -166,7 +170,7 @@ async function tailwind() {
 }
 
 function checkColors(file, text) {
-	const allowed = ALLOWED_COLORS[relative(root, file)] ?? {};
+	const allowed = ALLOWED_COLORS[repoPath(file)] ?? {};
 	if (allowed["*"]) return;
 	for (const { index, value } of colorLiterals(text, extname(file) === ".css")) {
 		if (allowed[value]) continue;
@@ -177,7 +181,7 @@ function checkColors(file, text) {
 /** 行内 style 和 CSS 里的过渡时长（规则 6、7）。 */
 function checkInline(file, text) {
 	// 主题表的 background 是待选的配色数据，不是 JSX 行内样式；色值许可仍由上面的表单独管理。
-	if (relative(root, file) === "packages/client/ui/src/lib/code/themes.ts") return;
+	if (repoPath(file) === "packages/client/ui/src/lib/code/themes.ts") return;
 	for (const { index, rule, message } of inlineProblems(text, extname(file) === ".css")) report(file, index, text, rule, message);
 }
 
@@ -304,7 +308,7 @@ async function main() {
 		}
 	}
 
-	// 规则 3：主进程、预加载脚本。
+	// 规则 3：主进程、预加载脚本、两边共用的 shared。
 	for (const dir of OTHER) {
 		for (const file of await filesUnder(join(root, dir), [".ts", ".tsx"])) checkColors(file, await readFile(file, "utf8"));
 	}

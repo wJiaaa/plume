@@ -45,7 +45,7 @@
 2. 颜色、字号、圆角、阴影、字体不用任意值。
 3. 代码里不写色值（例外见 `ALLOWED_COLORS`）。
 4. `SkinToken` 和 theme.css 一致。
-5. 插件仓库的 `plugins/`、`packages/builtin/` 和插件 SDK 的模板（`packages/sdk/plugin-sdk/template`）的 `className` 不写 Tailwind 类；插件 CSS 里的字号、行高、字距、字体、字重、圆角、阴影只取单个 `var(--plume-*)` 或关键字。
+5. `packages/builtin/` 和插件 SDK 的模板（`packages/sdk/plugin-sdk/template`）的 `className` 不写 Tailwind 类；插件 CSS 里的字号、行高、字距、字体、字重、圆角、阴影只取单个 `var(--plume-*)` 或关键字。市场插件由插件仓库自己的检查按同一份规则（插件 SDK 的 `lib/lint/styles.mjs`）查。
 6. 不写数字时长。
 7. 行内 style 的颜色、圆角、字号、字体、阴影、过渡只用 `var(--plume-*)` 和几个关键字。
 8. ink-muted ≥ 4.5、ink-faint ≥ 3，在 shell、sidebar、card、input、float 上，浅深两种主题。

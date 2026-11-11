@@ -37,7 +37,6 @@ const SCANNED = ["apps/desktop/src", "packages/client", "packages/core/agent/src
  * - 文案目录：本来就该写成多种语言。
  * - locales.ts：语言选项用它自己的文字写自己的名字（「中」「简体中文」），翻译了反而读不懂。
  * - smoke.ts：冒烟按默认的中文界面找按钮、读文字，它的断言信息是写给开发者的。
- * - 内置插件 plume.tools 的工具表（tools.ts）：工具的说明和结果都是发给模型的，是提示词的一部分，不随界面语言变。
  * - 插件自带的文案：插件拿不到产品的目录，两种语言写在自己的 src/messages.ts 里（例子见 packages/builtin/todo）。
  */
 const EXEMPT = [
@@ -107,7 +106,6 @@ const EXEMPT = [
 	// 点开文件的冒烟按中文界面找右键菜单项、同名候选和出口条按钮，断言是写给开发者的。
 	"apps/desktop/src/main/smoke-open-file.ts",
 	"apps/desktop/src/main/smoke-kit.ts",
-	"packages/builtin/tools/src/tools.ts",
 ];
 
 const PLUGIN_MESSAGES = /^packages\/builtin\/[^/]+\/src\/messages\.ts$/;

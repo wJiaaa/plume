@@ -1,5 +1,5 @@
 /**
- * 提交信息的格式（commit-msg 钩子，见 .githooks/commit-msg）：把 spec/tech/commits.md 的格式变成能失败的检查。
+ * 提交信息的格式（commit-msg 钩子，见 lefthook.yml）：把 spec/tech/commits.md 的格式变成能失败的检查。
  *
  *   <type>(<scope>): <中文主题>
  *

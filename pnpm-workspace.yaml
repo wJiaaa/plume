@@ -10,11 +10,8 @@ onlyBuiltDependencies:
   - esbuild
 
 # koffi 的安装脚本是在没有预编译包时现编，它自带各平台的预编译包，用不上。
-# ssh2（SSH 插件）的安装脚本现编可选的加密加速和 cpu-features，不编时用自带的纯 JS 实现，打包机不需要 C++ 工具链。
 ignoredBuiltDependencies:
   - koffi
-  - ssh2
-  - cpu-features
 
 # 可选依赖装哪些平台的，而不只是本机的。
 #

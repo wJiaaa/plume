@@ -54,7 +54,6 @@
     "no-underscore-dangle": "off",
     "unicorn/consistent-function-scoping": "off",
     "unicorn/prefer-add-event-listener": "off",
-    "react/style-prop-object": "off",
     "react/no-unstable-nested-components": [
       "warn",
       {
