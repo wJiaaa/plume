@@ -1,10 +1,5 @@
 /* plume.web 设置分区的布局。文字交给 Text，这里只管排版和颜色。 */
 
-.web-intro {
-	max-width: 600px;
-	margin: 0 0 28px;
-}
-
 .web-card {
 	margin-bottom: 36px;
 }

@@ -42,26 +42,6 @@ const CHOICES: Choice[] = [
 const nameOf = (choice: Choice, text: Messages) => (choice.nameKey ? text[choice.nameKey] : choice.name);
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/**
- * 一句话里嵌两段有样式的片段，位置由译文定：`{tool}` 是等宽的工具名，`{strong}` 是要强调的那句。
- * 拆成前中后三个词条会把中文的语序写死进结构，英文里那句强调落在句子另一头。
- */
-function intro(sentence: string, strong: string): React.ReactNode {
-	return sentence.split(/(\{tool\}|\{strong\})/).map((part, at) =>
-		part === "{tool}" ? (
-			<Text key={at} size="detail" mono>
-				web_search
-			</Text>
-		) : part === "{strong}" ? (
-			<Text key={at} size="label" weight="medium">
-				{strong}
-			</Text>
-		) : (
-			part
-		),
-	);
-}
-
 /** `**…**` 之间的画成加粗，星号本身不显示。 */
 function emphasize(sentence: string): React.ReactNode {
 	return sentence.split(/\*\*(.+?)\*\*/).map((part, at) =>
@@ -118,10 +98,6 @@ export function SearchSettings({ api, notify }: { api: Remote<WebApi>; notify: N
 
 	return (
 		<div data-search-settings="">
-			<Text as="p" size="label" tone="muted" className="web-intro">
-				{intro(text.intro, text.introStrong)}
-			</Text>
-
 			<SettingsSectionTitle>{text.which}</SettingsSectionTitle>
 			<SettingsCard className="web-card">
 				{CHOICES.map((choice) => {

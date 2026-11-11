@@ -64,6 +64,7 @@ export default {
 		const useProjects = ui.useProjects.bind(ui);
 		ui.settingsSection("worktrees", () => <WorktreesSettings useProjects={useProjects} />, {
 			title: (locale) => WORKTREE_MESSAGES[locale].title,
+			detail: (locale) => WORKTREE_MESSAGES[locale].intro,
 			icon: FolderGit2,
 			group: "vcs",
 			page: "nav",

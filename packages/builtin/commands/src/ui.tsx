@@ -102,7 +102,6 @@ function CommandsSettings({
 	const scope: CommandScope = project ? "workspace" : "user";
 	const [view, setView] = useState<CommandsView | null>(null);
 	const [builtins, setBuiltins] = useState<ListedCommand[]>([]);
-	const [query, setQuery] = useState("");
 	const [creating, setCreating] = useState(false);
 	const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
 	const confirmer = useConfirmer();
@@ -136,11 +135,6 @@ function CommandsSettings({
 
 	// 列表只列这一层的；读的时候四个目录一起读，同名谁盖了谁才说得清。
 	const commands = (view?.commands ?? []).filter((command) => command.scope === scope);
-	const needle = query.trim().toLowerCase();
-	const matches = (command: { name: string; description: string; argumentHint?: string }) =>
-		!needle || [command.name, command.description, command.argumentHint].some((value) => value?.toLowerCase().includes(needle));
-	const visible = commands.filter(matches);
-	const visibleBuiltins = builtins.filter(matches);
 	// 文件读到了、只是有问题的算「需要留意」；没读成命令的算「没能加载」。都按文件数。
 	const loaded = new Set((view?.commands ?? []).map((command) => command.path));
 	const failed = (view?.diagnostics ?? []).filter((item) => !loaded.has(item.path));
@@ -169,9 +163,6 @@ function CommandsSettings({
 
 	return (
 		<div data-commands-settings="">
-			<Text as="p" size="detail" tone="muted" className="cmd-intro">
-				{text.intro}
-			</Text>
 			<ProjectScope value={project} choices={choices} onChange={choose} text={text} />
 			<Problems title={text.failedToLoad(new Set(failed.map((item) => item.path)).size)} items={failed} text={text} />
 			<Problems title={text.warnings(new Set(warned.map((item) => item.path)).size)} items={warned} text={text} />
@@ -200,19 +191,6 @@ function CommandsSettings({
 				</div>
 			</div>
 
-			{(commands.length > 0 || builtins.length > 0) && (
-				<Text size="label">
-					<input
-						className="cmd-search"
-						type="search"
-						value={query}
-						placeholder={text.searchPlaceholder}
-						aria-label={text.searchPlaceholder}
-						onChange={(event) => setQuery(event.target.value)}
-					/>
-				</Text>
-			)}
-
 			{view && commands.length === 0 ? (
 				<SettingsCard>
 					<div className="cmd-empty">
@@ -227,18 +205,10 @@ function CommandsSettings({
 						</Button>
 					</div>
 				</SettingsCard>
-			) : view && visible.length === 0 ? (
-				<SettingsCard>
-					<div className="cmd-empty">
-						<Text size="label" tone="faint">
-							{text.searchEmpty}
-						</Text>
-					</div>
-				</SettingsCard>
 			) : (
-				visible.length > 0 && (
+				commands.length > 0 && (
 					<SettingsCard>
-						{visible.map((command) => (
+						{commands.map((command) => (
 							<div
 								key={command.path}
 								className="cmd-row"
@@ -295,7 +265,7 @@ function CommandsSettings({
 			 * 内置的单列一段、不能编辑：这一页回答的是「敲 / 能用什么」，漏掉最常用的那几条就答错了。不混进「已安装」：
 			 * 它们没有文件可打开，也不分个人和项目。
 			 */}
-			{visibleBuiltins.length > 0 && (
+			{builtins.length > 0 && (
 				<>
 					<div className="cmd-head">
 						<div className="cmd-head-title">
@@ -303,12 +273,12 @@ function CommandsSettings({
 								{text.builtin}
 							</Text>
 							<Text size="detail" tone="faint" numeric>
-								{visibleBuiltins.length}
+								{builtins.length}
 							</Text>
 						</div>
 					</div>
 					<SettingsCard>
-						{visibleBuiltins.map((command) => (
+						{builtins.map((command) => (
 							<div key={command.name} className="cmd-row cmd-row-static" data-builtin-command={command.name}>
 								<span className="cmd-row-mark" aria-hidden>
 									<SquareTerminal size={16} strokeWidth={1.8} />
@@ -562,6 +532,7 @@ export default {
 		const listAll: ListAll = (context) => ui.listCommands(context);
 		ui.settingsSection("commands", () => <CommandsSettings api={api} listAll={listAll} notify={notify} projects={ui.useProjects()} />, {
 			title: (locale) => MESSAGES[locale].settingsTitle,
+			detail: (locale) => MESSAGES[locale].intro,
 			icon: SquareTerminal,
 			// 「Agent 能力」组里依次是命令、钩子、网页搜索。
 			order: 1,

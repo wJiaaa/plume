@@ -102,10 +102,6 @@ export function WorktreesSettings({ useProjects }: { useProjects: UiContext["use
 
 	return (
 		<div data-worktree-settings="">
-			<Text as="p" size="label" tone="muted" className="worktree-intro">
-				{text.intro}
-			</Text>
-
 			<SettingsSectionTitle>{text.config}</SettingsSectionTitle>
 			<SettingsCard className="worktree-card">
 				<SettingsRow

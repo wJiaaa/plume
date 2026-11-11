@@ -9,9 +9,7 @@ const zhCN = {
 	title: "网页搜索",
 	toolFetch: "抓取网页",
 	toolSearch: "搜索网络",
-	/** `{tool}` 画成等宽的工具名，`{strong}` 画成加粗的 `introStrong`；位置由译文定。 */
-	intro: "给 agent 一个 {tool} 工具。说实话：{strong} —— 免配置那两个要么被限流，要么只认英文词条。下面四家里三家有免费额度，日常用量够；DeepSeek 按次计费。",
-	introStrong: "中文搜索想好用，得填一个 key",
+	intro: "让 Agent 能联网搜索。中文搜索想好用，得填一个 key。",
 	which: "用哪一个",
 	apiKey: "API key",
 	needsKey1000: "需要 API key · 每月 1000 次免费",
@@ -48,9 +46,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		title: "Web search",
 		toolFetch: "Fetched pages",
 		toolSearch: "Searched the web",
-		intro:
-			"Gives the agent a {tool} tool. Honestly: {strong} — the two that need no setup are either rate-limited or English-only. Three of the four below have a free tier that covers ordinary use; DeepSeek charges per search.",
-		introStrong: "good non-English search needs a key",
+		intro: "Lets the agent search the web. Good non-English search needs a key.",
 		which: "Which one",
 		apiKey: "API key",
 		needsKey1000: "Needs an API key · 1,000 free a month",

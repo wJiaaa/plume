@@ -415,7 +415,7 @@ const worktreeZhCN = {
 
 	// 设置页。
 	title: "工作树",
-	intro: "管理与配置 Git 工作树（Worktrees），使主会话与子任务可以在完全独立的代码分支和目录中并行工作。",
+	intro: "让会话和子任务各在自己的工作树里并行工作，互不干扰。",
 	config: "工作树配置",
 	root: "工作树根目录",
 	rootDetail: (fallback: string) => `托管工作树建在这个目录下。留空则放在 ${fallback}`,
@@ -495,7 +495,7 @@ const worktreeEn: typeof worktreeZhCN = {
 	archive: "Archive this chat",
 
 	title: "Worktrees",
-	intro: "Set up git worktrees, so the main conversation and its sub-tasks can work in parallel on entirely separate branches and folders.",
+	intro: "Lets conversations and sub-tasks work in parallel, each in its own worktree.",
 	config: "Worktree settings",
 	root: "Worktree root",
 	rootDetail: (fallback) => `Where managed worktrees are created. Left empty, they go in ${fallback}.`,

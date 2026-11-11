@@ -1,9 +1,5 @@
 /* 设置页「命令」那一节的布局。字交给 Text，颜色只取 var(--plume-*)。 */
 
-.cmd-intro {
-	margin: 0 0 16px;
-}
-
 .cmd-head {
 	display: flex;
 	align-items: center;
@@ -22,18 +18,6 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-}
-
-.cmd-search {
-	width: 100%;
-	height: 32px;
-	padding: 0 10px;
-	margin-bottom: 12px;
-	border: 1px solid var(--plume-line);
-	border-radius: var(--plume-radius-field);
-	background: var(--plume-input);
-	color: var(--plume-ink);
-	outline: none;
 }
 
 .cmd-empty {

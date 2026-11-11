@@ -46,6 +46,7 @@ export default {
 		ui.toolLine("web_search", { verb: (locale) => MESSAGES[locale].toolSearch, group: "web" });
 		ui.settingsSection("search", () => <SearchSettings api={api} notify={notify} />, {
 			title: (locale) => MESSAGES[locale].title,
+			detail: (locale) => MESSAGES[locale].intro,
 			icon: Search,
 			order: 3,
 			group: "agent",
