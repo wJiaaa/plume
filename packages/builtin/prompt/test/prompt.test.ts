@@ -293,6 +293,38 @@ describe("日期", () => {
 		expect(out).toHaveLength(3);
 		expect(envOf(out)[1]).toContain("2026-11-04");
 	});
+
+	it("压缩后人再说一句（同一天），摘要后面那条 <env> 留在原处，前缀不变", () => {
+		const summary = user("<summary>", "2026-11-04T10:00:00", true);
+		const before = withEnvironment([summary, reply]);
+		const after = withEnvironment([summary, reply, user("b", "2026-11-04T12:00:00")]);
+		expect(JSON.stringify(after.slice(0, before.length))).toBe(JSON.stringify(before));
+		expect(after).toHaveLength(before.length + 1);
+	});
+
+	it("压缩后人隔天再说一句，它后面多一条 <env>，前面的不动", () => {
+		const summary = user("<summary>", "2026-11-04T10:00:00", true);
+		const before = withEnvironment([summary, reply]);
+		const after = withEnvironment([summary, reply, user("b", "2026-11-05T09:00:00")]);
+		expect(JSON.stringify(after.slice(0, before.length))).toBe(JSON.stringify(before));
+		expect(after.slice(before.length).map((message) => (message.content[0] as { text: string }).text)).toEqual([
+			"b",
+			"<env>\n今天是 2026-11-05。这是环境信息，不是用户的请求。\n</env>",
+		]);
+	});
+
+	it("没压缩过的普通历史：第一条真人消息后面一条，之后只在换日期时再接", () => {
+		const out = withEnvironment([user("a", "2026-11-04T10:00:00"), reply, user("b", "2026-11-04T12:00:00"), reply, user("c", "2026-11-05T09:00:00")]);
+		expect(out.map((message) => (message.role === "user" ? (message.content[0] as { text: string }).text.slice(0, 5) : message.role))).toEqual([
+			"a",
+			"<env>",
+			"assistant",
+			"b",
+			"assistant",
+			"c",
+			"<env>",
+		]);
+	});
 });
 
 describe("按哪一档点名 shell", () => {

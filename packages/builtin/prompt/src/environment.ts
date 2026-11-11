@@ -5,7 +5,7 @@
  * 不接在最末尾：那样它永远是「最后一条用户消息」，交错思考的模型会丢掉最后一条用户消息之前所有助手轮的推理，
  * 上一轮写出的正文和工具参数全按未缓存重付。
  *
- * 所以日期取那条用户消息自己的时间戳：第一条真人消息后面一定有，之后只在日期变了的那条后面再出现。同一份历史每次
+ * 所以日期取那条用户消息自己的时间戳：第一条用户消息（压缩后是摘要）后面一定有，之后只在日期变了的那条真人消息后面再出现。同一份历史每次
  * 渲染出一模一样的字节，跨天也不改动已有的前缀。它在组请求时产生，不存进会话：渲染是确定的，不用存。
  */
 
@@ -17,14 +17,17 @@ function today(now = new Date()): string {
 }
 
 /**
- * 在每个新日期的第一条真人消息后面接上环境信息。
+ * 在第一条用户消息和每个新日期的第一条真人消息后面接上环境信息。
  *
  * 用 `<env>` 包起来并说明它是什么：它在结构上是一条用户消息，不说清楚，模型会把它当成刚收到的指令。标 `synthetic`：
- * 它不是人说的。没有一条真人消息的历史（压缩后只剩摘要）接在第一条用户消息后面，模型照样知道今天几号。
+ * 它不是人说的。第一条用户消息不管是不是真人的都算锚点：压缩后历史以摘要开头，`<env>` 接在摘要后面；人再说一句时
+ * 它还留在原处，同一天的不再重复接。要是只在没有真人消息时才认摘要，人一开口 `<env>` 就挪到那句话后面，摘要之后的
+ * 前缀整段对不上，缓存全部重读。
  */
 export function withEnvironment(messages: Message[]): Message[] {
-	const humans = messages.filter((m) => m.role === "user" && !m.synthetic);
-	const anchors = new Set<Message>(humans.length > 0 ? humans : messages.filter((m) => m.role === "user").slice(0, 1));
+	const anchors = new Set<Message>(messages.filter((m) => m.role === "user" && !m.synthetic));
+	const first = messages.find((m) => m.role === "user");
+	if (first) anchors.add(first);
 	const out: Message[] = [];
 	let shown: string | undefined;
 	for (const message of messages) {
