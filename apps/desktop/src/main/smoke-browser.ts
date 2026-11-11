@@ -12,7 +12,7 @@ import type { AgentProcessApi } from "../shared/protocol.ts";
 export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
 
 /**
- * 浏览器插件走一遍真窗口：从开始页开一个浏览器标签、地址栏打开本机的一页（`<webview>` 挂上、交给逻辑入口），
+ * 内置的浏览器插件走一遍真窗口：从开始页开一个浏览器标签、地址栏打开本机的一页（`<webview>` 挂上、交给逻辑入口），
  * 再让假模型经 `browser_act` 读页面、点一个会弹 confirm 的按钮（宿主替它取消、写进结果）、点链接换页、`browser_screenshot`
  * 截图（图片跟在工具结果里），面板上画出光标；地址栏打开磁盘上的 `.html`；标签弹到独立窗口再收回，页面跟着换窗口；
  * 右键回复里的网址在内置浏览器里开出新标签；最后经菜单关掉标签，页面跟着没了。
@@ -20,11 +20,10 @@ export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
 export async function checkBrowser(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ModelOverride | undefined): void;
 }): Promise<void> {
-	const { window, agent, plugin, outDir } = options;
+	const { window, agent, outDir } = options;
 	const page = <T>(expression: string, target = window): Promise<T> => target.webContents.executeJavaScript(expression) as Promise<T>;
 	const until = async (expression: string, label: string, timeout = 15_000, target = window) => {
 		const end = Date.now() + timeout;
@@ -63,9 +62,8 @@ export async function checkBrowser(options: {
 	const local = join(outDir, "smoke-local.html");
 	await writeFile(local, "<title>Local smoke</title><p>read from disk</p>");
 	try {
-		if (!plugin.cli) throw new Error("没有 plume-plugin 启动脚本，装不了浏览器插件");
-		await plugin.install("browser");
-		await waitMain(async () => (await agent.plugins()).some((status) => status.key === "browser" && status.state === "active"), "装上浏览器插件");
+		// 浏览器是内置插件，随应用加载。
+		await waitMain(async () => (await agent.plugins()).some((status) => status.key === "browser" && status.state === "active"), "浏览器插件已加载");
 
 		// 从开始页开一个浏览器标签：空白页，地址栏打开本机那一页。
 		const panel = '[data-panel="plume.browser/browser"]:not([inert])';

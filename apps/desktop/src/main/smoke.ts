@@ -1473,8 +1473,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-panel-area]')?.inert === false && document.querySelector('${shown("start")}') !== null`, "打开面板区的开始页");
 		if (await page(`document.querySelector('[data-panel-toggle]') !== null`)) throw new Error("面板打开后正文标题栏不应显示面板开关");
 		const launchers = (await page(`[...document.querySelectorAll('[data-panel-launch]')].map((card) => card.dataset.panelLaunch)`)) as string[];
-		if (launchers.join() !== "plume.diagnostics/tasks,plume.diagnostics/trajectory,plume.git/git,plume/files,plume.terminal/terminal")
-			throw new Error(`开始页应有任务、调用轨迹、Git、项目文件和终端，实际是 ${launchers.join()}`);
+		if (launchers.join() !== "plume.diagnostics/tasks,plume.diagnostics/trajectory,plume.browser/browser,plume.git/git,plume/files,plume.terminal/terminal")
+			throw new Error(`开始页应有任务、调用轨迹、浏览器、Git、项目文件和终端，实际是 ${launchers.join()}`);
 		// 面板区占了一半，对话列放不下浮着的卡片：清单回到输入框正上方。
 		await until(todoCard("inline"), "面板区打开后 todo 清单回到输入框上方");
 		await delay(300);
@@ -1503,7 +1503,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await capture(window, join(outDir, "smoke-terminal.png"));
 		await checkPanelsFramework(window, outDir);
 		await checkFileTerminal(window, workspace, outDir);
-		await checkBrowser({ window, agent, plugin, outDir, setModel: (next) => (override = next) });
+		await checkBrowser({ window, agent, outDir, setModel: (next) => (override = next) });
 		const checkSessionPanels = async () => {
 			window.webContents.send("plume:command", `open-session:${recent.id}`);
 			await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(FINAL_TEXT)})`, "会话窗口验证回到原会话");
@@ -2171,6 +2171,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"plume.skills",
 			"plume.commands",
 			"plume.web",
+			"plume.browser",
 			"plume.status",
 			"plume.title",
 		])

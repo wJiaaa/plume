@@ -1,0 +1,372 @@
+/* plume.browser 的布局。颜色、圆角、阴影、时长只取 token；字交给 Text。 */
+
+.plume-browser-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.plume-browser-toolbar {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	height: 40px;
+	padding: 0 8px;
+}
+
+.plume-browser-status {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 12px;
+}
+
+.plume-browser-stage {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--plume-shell);
+}
+
+.plume-browser-page {
+	position: absolute;
+	inset: 0;
+}
+
+.plume-browser-webview {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.plume-browser-cover {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--plume-shell);
+}
+
+/* 正在加载：页面区还空着时正中转圈；已有一页时顶上浮一个小的，不挡页面。 */
+.plume-browser-loading {
+	align-items: center;
+	justify-content: center;
+	color: var(--plume-ink-muted);
+}
+
+.plume-browser-loading-chip {
+	position: absolute;
+	top: 10px;
+	left: 50%;
+	z-index: 5;
+	display: flex;
+	padding: 6px;
+	border: 1px solid var(--plume-line-float);
+	border-radius: var(--plume-radius-menu);
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-menu);
+	color: var(--plume-ink-muted);
+	pointer-events: none;
+	transform: translateX(-50%);
+}
+
+.plume-browser-block {
+	display: block;
+}
+
+.plume-browser-break {
+	margin-top: 4px;
+	word-break: break-all;
+}
+
+.plume-browser-action {
+	display: flex;
+	justify-content: center;
+	margin-top: 16px;
+}
+
+.plume-browser-grow {
+	flex: 1;
+	min-width: 0;
+}
+
+.plume-browser-wide {
+	width: 100%;
+}
+
+.plume-browser-truncate {
+	display: block;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* agent 的光标和点下去的那一圈。 */
+.plume-browser-cursor,
+.plume-browser-ring {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 10;
+	pointer-events: none;
+}
+
+.plume-browser-cursor {
+	width: 0;
+	height: 0;
+	transition: transform var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-browser-cursor svg {
+	position: absolute;
+	top: -4px;
+	left: -4px;
+	overflow: visible;
+	transform-origin: 4px 4px;
+	filter: drop-shadow(0 0 3px var(--plume-accent));
+}
+
+.plume-browser-cursor path {
+	fill: var(--plume-ink);
+	stroke: var(--plume-shell);
+}
+
+.plume-browser-ring svg {
+	position: absolute;
+	top: -12px;
+	left: -12px;
+	overflow: visible;
+	opacity: 0;
+	animation: plume-browser-ring var(--plume-t-base) var(--plume-e-out);
+}
+
+.plume-browser-ring circle {
+	fill: none;
+	stroke: var(--plume-accent);
+}
+
+@keyframes plume-browser-ring {
+	from {
+		opacity: 0.6;
+		transform: scale(0.4);
+	}
+	to {
+		opacity: 0;
+		transform: scale(1.5);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plume-browser-ring svg {
+		animation: none;
+	}
+
+	.plume-browser-cursor {
+		transition: none;
+	}
+}
+
+/* 地址栏：一块 card 底，左边是网址或搜索的图标，右边是交给系统浏览器的按钮。 */
+.plume-browser-omnibox {
+	position: relative;
+	display: flex;
+	flex: 1;
+	align-items: center;
+	min-width: 0;
+	height: 26px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	color: var(--plume-ink);
+}
+
+.plume-browser-omnibox:hover,
+.plume-browser-omnibox:focus-within {
+	background: var(--plume-card-hover);
+}
+
+.plume-browser-omnibox-icon {
+	position: absolute;
+	top: 50%;
+	left: 8px;
+	display: flex;
+	color: var(--plume-ink-faint);
+	pointer-events: none;
+	transform: translateY(-50%);
+}
+
+.plume-browser-omnibox-input {
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	padding: 0 26px;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.plume-browser-omnibox-input::placeholder {
+	color: var(--plume-ink-faint);
+}
+
+.plume-browser-omnibox-outside {
+	position: absolute;
+	top: 50%;
+	right: 3px;
+	transform: translateY(-50%);
+}
+
+.plume-browser-omnibox-list {
+	position: absolute;
+	top: 30px;
+	right: 0;
+	left: 0;
+	z-index: 50;
+	overflow: hidden;
+	padding: 4px 0;
+	border: 1px solid var(--plume-line-float);
+	border-radius: var(--plume-radius-menu);
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-menu);
+}
+
+.plume-browser-omnibox-choice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	cursor: default;
+}
+
+.plume-browser-omnibox-choice[data-active] {
+	background: var(--plume-card-hover);
+}
+
+.plume-browser-omnibox-choice-icon {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.plume-browser-omnibox-choice-text {
+	flex: 1;
+	min-width: 0;
+}
+
+/* 菜单里的几样：子菜单的返回行、缩放那一行、视口尺寸的表单。 */
+.plume-browser-menu-back {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: 36px;
+	padding: 0 12px;
+	color: var(--plume-ink-muted);
+}
+
+.plume-browser-menu-back:hover {
+	color: var(--plume-ink);
+}
+
+.plume-browser-zoom {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 32px;
+	padding: 0 8px;
+}
+
+.plume-browser-zoom-value {
+	justify-content: center;
+	width: 44px;
+}
+
+.plume-browser-menu-empty {
+	padding: 16px 8px;
+	text-align: center;
+}
+
+.plume-browser-viewport-form {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px;
+}
+
+.plume-browser-viewport-field {
+	flex: 1;
+	min-width: 0;
+}
+
+.plume-browser-viewport-field input {
+	width: 100%;
+	height: 26px;
+	border: none;
+	border-radius: var(--plume-radius-field);
+	outline: none;
+	background: var(--plume-card);
+	color: var(--plume-ink);
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+
+/* 选取卡：截图、选择器，下面是给 agent 的一句话。 */
+.plume-browser-selection {
+	display: flex;
+	flex-shrink: 0;
+	flex-direction: column;
+	gap: 8px;
+	margin: 8px;
+	padding: 12px;
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-card);
+}
+
+.plume-browser-selection-head,
+.plume-browser-selection-ask {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.plume-browser-selection-shot {
+	width: 64px;
+	height: 48px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-shell);
+	object-fit: contain;
+}
+
+/* 设置页。 */
+.plume-browser-search-custom {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+/* 两张卡之间空 36px：产品和截图插件都这么分节（`gap-9`），少了这一节标题会贴在上一张卡上。 */
+.plume-browser-settings-card {
+	margin-bottom: 36px;
+}
+
+/* 两个图标按钮是同一行里的两种动作，留一点缝，别叠成一颗。 */
+.plume-browser-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* 空书签：内边距和卡片里的行一样（`px-4 py-3.5`），句子才不像从卡片边里漏出来的。 */
+.plume-browser-bookmarks-empty {
+	padding: 14px 16px;
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@plume/browser",
+  "version": "0.1.2",
+  "description": "在面板区开网页：地址栏能搜索，书签、缩放、视口尺寸、选取元素交给 Agent；Agent 在同一页上点、输、读，人看得见它的光标。",
+  "author": "Plume",
+  "keywords": [
+    "browser",
+    "web",
+    "浏览器",
+    "网页",
+    "面板"
+  ],
+  "plume": {
+    "displayName": "浏览器",
+    "category": "工具",
+    "defaultPrompt": [
+      "打开 example.com，告诉我页面上写了什么",
+      "在内置浏览器里搜一下今天的天气"
+    ]
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0"
+  }
+}
