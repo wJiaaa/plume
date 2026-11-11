@@ -39,6 +39,13 @@ it("直引号找得到弯引号，替换后保留文件里的弯引号", async (
 	expect(text).toBe("She said “goodbye” and left.\n");
 });
 
+it("别的读法找到的一段里有弯引号，new_string 里的直引号原样写进去", async () => {
+	// 缩进不同走 line_trimmed；那段里中文注释的弯引号不能把代码里的直引号也改了。
+	const { result, text } = await edited('\t\t// 读“配置”\n\t\treturn "a";\n', '// 读“配置”\nreturn "a";', '\t\t// 读“配置”\n\t\treturn "b";');
+	expect(result.isError, textOf(result)).toBeUndefined();
+	expect(text).toBe('\t\t// 读“配置”\n\t\treturn "b";\n');
+});
+
 it("old_string 里写出来的转义匹配真实字符", async () => {
 	const { result, text } = await edited("a\tb\n", "a\\tb", "a\\tc");
 	expect(result.isError, textOf(result)).toBeUndefined();

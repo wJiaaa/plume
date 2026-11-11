@@ -25,6 +25,11 @@ it("字符类匹配其中一个成员、一个范围，或除它们以外的任�
 		// 没有收尾的 `[` 只是一个字符。
 		["a[b.ts", "a[b.ts", true],
 		["{a,b}[12].ts", "b2.ts", true],
+		// 花括号里的每一项也是 glob。
+		["**/{*.test.ts,*.spec.ts}", "a/b.test.ts", true],
+		["**/{*.test.ts,*.spec.ts}", "a/b.ts", false],
+		["{src,lib}/v1.2/*.ts", "lib/v1.2/x.ts", true],
+		["{src,lib}/v1.2/*.ts", "lib/v1x2/x.ts", false],
 	];
 	for (const [pattern, path, matches] of cases) {
 		expect(globToRegExp(pattern).test(path), `${pattern} against ${path}`).toBe(matches);

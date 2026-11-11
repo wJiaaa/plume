@@ -56,7 +56,8 @@ export function replacementFor(strategy: MatchStrategy, search: string, actual: 
 	if (strategy === "escape_normalized") result = unescapeVisible(result);
 	// 把行号前缀抄进 `old_string` 的模型，`new_string` 里多半也写了；不去掉就会写进文件。
 	if (strategy === "line_number_prefix_stripped") result = stripLineNumberPrefixes(result) ?? result;
-	if (search === actual) return result;
+	// 只有引号本身对不上时才换：别的读法下模型抄对了引号，文件里别处（比如中文注释）的弯引号不该改写代码里的直引号。
+	if (strategy !== "quote_normalized" || search === actual) return result;
 	if (actual.includes(LEFT_DOUBLE) || actual.includes(RIGHT_DOUBLE)) result = curlyDouble(result);
 	if (actual.includes(LEFT_SINGLE) || actual.includes(RIGHT_SINGLE)) result = curlySingle(result);
 	return result;

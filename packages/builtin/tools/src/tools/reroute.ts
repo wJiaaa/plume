@@ -18,10 +18,13 @@ export interface Reroute {
 	message: string;
 }
 
+/** 按空白切词，引号里的算一个词（连引号）。 */
+const WORDS = /\x22[^\x22]*\x22|\x27[^\x27]*\x27|[^\s\x22\x27]+/g;
+
 /** 只翻译没有歧义的参数；shell 组合和不支持的旗标留给 bash。 */
 export function translatedShellCommand(command: string): { name: string; args: Record<string, unknown> } | null {
 	if (/[\n|<>;&\x60$*?{}[\]~\\]/.test(command)) return null;
-	const words = command.trim().match(/\x22[^\x22]*\x22|\x27[^\x27]*\x27|[^\s\x22\x27]+/g);
+	const words = command.trim().match(WORDS);
 	if (!words || words.join(" ") !== command.trim().replace(/\s+/g, " ")) return null;
 	const [name, ...args] = words.map((word) => (/^[\x22\x27]/.test(word) ? word.slice(1, -1) : word));
 	if (name === "cat" && args.length === 1 && !args[0]!.startsWith("-")) return { name: "read", args: { path: args[0] } };
@@ -40,11 +43,42 @@ export function translatedShellCommand(command: string): { name: string; args: R
 }
 
 /**
+ * find、fd 里 glob 也做得到的只有「在哪些目录下、按名字模式找文件」：起点目录、`-name`、`-type f`（fd 的模式、目录、
+ * `-e`、`-t f`、`-g`）。别的条件和动作（`-delete`、`-exec`、`-size +1M`、`-mtime -1`、`-newer`、`-type d`、fd 的 `-x`、
+ * `--changed-within`……）glob 给不了，叫模型去用 glob 是让它丢掉这些，放行。按白名单认，不按黑名单：find 的谓词太多。
+ */
+function globEquivalent(line: string): boolean {
+	const [name, ...args] = (line.trim().match(WORDS) ?? []).map((word) => (/^[\x22\x27]/.test(word) ? word.slice(1, -1) : word));
+	if (name === "find") {
+		// 起点目录在前，第一个以 `-`、`(`、`!`、`\` 开头的词起是表达式。
+		let at = 0;
+		while (at < args.length && !/^[-(!\\]/.test(args[at]!)) at++;
+		for (; at < args.length; at += 2) {
+			const [flag, value] = [args[at], args[at + 1]];
+			if (value === undefined) return false;
+			if (flag === "-name" || (flag === "-type" && value === "f")) continue;
+			return false;
+		}
+		return true;
+	}
+	let positional = 0;
+	for (let at = 0; at < args.length; at++) {
+		const word = args[at]!;
+		if (!word.startsWith("-")) positional++;
+		else if (word === "-g" || word === "--glob") continue;
+		else if ((word === "-e" || word === "--extension") && args[at + 1] !== undefined) at++;
+		else if ((word === "-t" || word === "--type") && (args[at + 1] === "f" || args[at + 1] === "file")) at++;
+		else return false;
+	}
+	return positional <= 2;
+}
+
+/**
  * 命中一条就是等价调用；`[^|<>;&$]*$` 是「后面没有任何组合」。按命令名匹配行首，不试图解析 shell：
  * 这里要挡的只是最常见的那四五个字。
  */
 // i18n-exempt：工具结果是发给模型的，不随界面语言变。
-const REROUTES: { pattern: RegExp; tool: string; message: string }[] = [
+const REROUTES: { pattern: RegExp; only?: (line: string) => boolean; tool: string; message: string }[] = [
 	{
 		pattern: /^\s*(?:cat|head|tail)\s+[^|<>;&\x60$]+$/,
 		tool: "read",
@@ -57,6 +91,7 @@ const REROUTES: { pattern: RegExp; tool: string; message: string }[] = [
 	},
 	{
 		pattern: /^\s*(?:find|fd)\s+[^|<>;&\x60$]+$/,
+		only: globEquivalent,
 		tool: "glob",
 		message: "用 `glob` 找文件——按模式匹配，结果是干净的路径列表。",
 	},
@@ -84,8 +119,8 @@ export function rerouteShellCommand(command: string, available: ReadonlySet<stri
 			.filter((line) => line.trim()).length > 1
 	)
 		return null;
-	for (const { pattern, tool, message } of REROUTES) {
-		if (!pattern.test(first)) continue;
+	for (const { pattern, only, tool, message } of REROUTES) {
+		if (!pattern.test(first) || (only && !only(first))) continue;
 		if (!available.has(tool)) return null;
 		return { tool, message };
 	}

@@ -153,6 +153,10 @@ export function byDirectory(paths: readonly string[]): string {
  * `--glob` 一样读。其余都转义，`src/v1.2/*.ts` 这样的模式混不进正则语法。
  */
 export function globToRegExp(pattern: string): RegExp {
+	return new RegExp(`^${globSource(pattern)}$`);
+}
+
+function globSource(pattern: string): string {
 	let out = "";
 	let i = 0;
 	while (i < pattern.length) {
@@ -190,7 +194,8 @@ export function globToRegExp(pattern: string): RegExp {
 			const close = pattern.indexOf("}", i);
 			if (close !== -1) {
 				const options = pattern.slice(i + 1, close).split(",");
-				out += `(?:${options.map(escapeRegex).join("|")})`;
+				// 每一项照样是 glob：`{*.test.ts,*.spec.ts}` 里的 `*` 是通配符。
+				out += `(?:${options.map(globSource).join("|")})`;
 				i = close + 1;
 				continue;
 			}
@@ -198,7 +203,7 @@ export function globToRegExp(pattern: string): RegExp {
 		out += escapeRegex(char);
 		i += 1;
 	}
-	return new RegExp(`^${out}$`);
+	return out;
 }
 
 /** 在 `open` 处开始的字符类在哪里结束；没有结束时是 -1，`[` 就只是个字符。紧跟在 `[` 或 `[!` 后面的 `]` 是成员。 */

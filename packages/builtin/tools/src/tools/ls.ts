@@ -52,16 +52,18 @@ export const lsTool: Tool<LsArgs> = {
 			return errorResult(`Not a directory or not found: ${args.path ?? "."}`);
 		}
 
-		const rows: { name: string; dir: boolean; size: number }[] = [];
-		for (const entry of entries) {
-			if (!args.all && entry.name.startsWith(".")) continue;
-			const dir = entry.isDirectory();
-			const size = dir ? 0 : ((await stat(join(absolute, entry.name)).catch(() => null))?.size ?? 0);
-			rows.push({ name: entry.name, dir, size });
+		// 排序只看是不是目录和名字，readdir 的 dirent 就有；先排好截到 400 条，大小只给显示出来的文件取：
+		// `node_modules/.pnpm` 这种几千项的目录，挨个 stat 完再丢掉大半是白等。
+		const rows = entries
+			.filter((entry) => args.all || !entry.name.startsWith("."))
+			.map((entry) => ({ name: entry.name, dir: entry.isDirectory() }))
+			.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+		const shown: { name: string; dir: boolean; size: number }[] = [];
+		for (let at = 0; at < Math.min(rows.length, MAX_ENTRIES); at += 64) {
+			const batch = rows.slice(at, Math.min(at + 64, MAX_ENTRIES));
+			const sizes = await Promise.all(batch.map(async (row) => (row.dir ? 0 : ((await stat(join(absolute, row.name)).catch(() => null))?.size ?? 0))));
+			batch.forEach((row, index) => shown.push({ ...row, size: sizes[index]! }));
 		}
-
-		rows.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
-		const shown = rows.slice(0, MAX_ENTRIES);
 
 		const body = shown.map((r) => (r.dir ? `${r.name}/` : `${r.name}  (${formatSize(r.size)})`)).join("\n");
 		const footer = rows.length > shown.length ? `\n\n[${rows.length - shown.length} more entries]` : "";

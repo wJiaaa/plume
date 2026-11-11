@@ -43,6 +43,32 @@ it("有管道、重定向、串联就放行——那是真的在组合", () => {
 	}
 });
 
+it("find/fd 只在 glob 做得到时改道：带删除、执行、大小、时间这类条件的放行", () => {
+	// glob 只会按名字模式找文件；叫模型去用 glob，它就得丢掉 `-delete`、`-size` 这些。
+	for (const same of ["find src", "find . -name '*.ts'", "find src lib -type f -name x", "fd foo src", "fd -e ts", "fd -t f -g '*.md' docs"]) {
+		expect(rerouteShellCommand(same, ALL)?.tool, same).toBe("glob");
+	}
+	for (const more of [
+		"find . -name '*.pyc' -delete",
+		"find . -name '*.log' -exec rm {} +",
+		"find . -size +1M",
+		"find . -mtime -1",
+		"find . -newer package.json",
+		"find . -type d -name node_modules",
+		"find . -maxdepth 1 -name x",
+		"find . \\( -name a -o -name b \\)",
+		"find . ! -name x",
+		"find . -name",
+		"fd -x rm",
+		"fd -H foo",
+		"fd --changed-within 1d",
+		"fd -t d foo",
+		"fd a b c",
+	]) {
+		expect(rerouteShellCommand(more, ALL), more).toBeNull();
+	}
+});
+
 it("不在表里的命令不管", () => {
 	for (const other of ["echo hi", "pnpm test", "git status", "node x.js", "cat"]) {
 		expect(rerouteShellCommand(other, ALL), other).toBeNull();
