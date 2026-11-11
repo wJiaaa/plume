@@ -33,6 +33,7 @@ import type {
 	ConversationProps,
 	LinkOpener,
 	LocalizedText,
+	ModelControlsProps,
 	ModelDefaults,
 	ModelSelectProps,
 	NotifyLevel,
@@ -61,6 +62,7 @@ import type {
 import { text } from "@plume/styles";
 import { MenuItem, MenuSeparator, translate, useI18n } from "@plume/ui";
 import { Component, type ComponentType, type ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { EffortTrigger, ModelTrigger } from "./models/index.ts";
 import { ModelSelect } from "./models/ModelSelect.tsx";
 import { modelsAgent, refreshModels, settingsView, subscribeModels, useModels } from "./models/store.ts";
 import { useLiveSession } from "./session-live.ts";
@@ -1087,6 +1089,28 @@ function PluginModelSelect(props: ModelSelectProps) {
 	return <ModelSelect {...props} onOpenSettings={() => host?.openModelSettings()} />;
 }
 
+/**
+ * `ui.ModelControls`：输入框右下角那两枚，接在一个还没发第一句的草稿会话上——没选时显示的默认模型、默认档位，
+ * 选了以后的菜单和就近落档，都和新会话的输入框是同一套。选择只交给插件，不写到哪个会话上。
+ */
+function PluginModelControls({ model, thinking, onModelChange, onThinkingChange, disabled }: ModelControlsProps) {
+	const session = {
+		id: null,
+		said: false,
+		...(model ? { model } : {}),
+		...(thinking ? { thinking } : {}),
+		setModel: onModelChange,
+		setThinking: onThinkingChange,
+	};
+	const onError = (message: string) => notify(message, "error");
+	return (
+		<div className="flex min-w-0 items-center gap-0.5">
+			<ModelTrigger session={session} {...(disabled ? { disabled } : {})} onError={onError} onOpenSettings={() => host?.openModelSettings()} />
+			<EffortTrigger session={session} {...(disabled ? { disabled } : {})} onError={onError} />
+		</div>
+	);
+}
+
 /** `ui.useModelDefaults`：跟随会落到的模型。会话没选过模型时跟着默认模型走，和输入框里显示的是同一个。 */
 function useModelDefaults(): ModelDefaults {
 	const models = useModels();
@@ -1481,6 +1505,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		ChatBackgroundSettings: PluginChatBackgroundSettings,
 		Markdown: PluginMarkdown,
 		ModelSelect: PluginModelSelect,
+		ModelControls: PluginModelControls,
 		useModelDefaults,
 		useProjects: () => (host ? host.useProjects() : NO_PROJECTS),
 		remote: () => pluginRemote(agent, name),

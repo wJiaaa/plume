@@ -342,6 +342,7 @@ export function ComposerToggle({
 	label,
 	tip,
 	size = "composer",
+	iconOnly = false,
 	...data
 }: {
 	on: boolean;
@@ -354,6 +355,11 @@ export function ComposerToggle({
 	tip: string;
 	/** `sm` 放在 `Button size="sm"` 旁边：26px；主输入框的控件跟着 `--plume-composer-control`。 */
 	size?: "composer" | "sm";
+	/**
+	 * 开着时也只有图标，开没开只看颜色，名字和点了会怎样都在悬停提示里。给卡片上挨着一颗「开始」的开关：那里开着时带上的字
+	 * 读起来像又一颗要按的按钮。主输入框里不用它，那一排的字说的是下一轮在什么模式里。
+	 */
+	iconOnly?: boolean;
 } & { [key: `data-${string}`]: string | undefined })
 ```
 
@@ -366,11 +372,14 @@ export function WorktreeToggle({
 	on,
 	onChange,
 	size = "composer",
+	iconOnly = false,
 }: {
 	on: boolean;
 	onChange: (on: boolean) => void;
 	/** `sm` 放在 `Button size="sm"` 旁边，比如建议卡片上：26px，主输入框的控件是 28px。 */
 	size?: "composer" | "sm";
+	/** 开着时也只有图标，见 `ComposerToggle` 的 `iconOnly`。 */
+	iconOnly?: boolean;
 })
 ```
 

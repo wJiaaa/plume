@@ -777,6 +777,8 @@ export interface SessionLaunch {
 	message: string;
 	/** 用哪个模型（`SessionModel.id`）；不给用默认模型。不在目录里时抛错，不悄悄换成别的。 */
 	model?: string;
+	/** 思考档位；不给用设置里的默认推理强度。不认识的档位抛错；模型没有这一档时，跑的时候就近落到它有的那一档（和输入框里选的一样）。 */
+	thinking?: ThinkingLevel;
 	/**
 	 * 从哪个会话开出来的，记进新会话摘要的 `spawnedFrom`；那个会话要在、不能是子会话。不给就不记。
 	 * 要经 `reportBack` 交回时，`toolCallId` 得是本插件注册的工具在那个会话里的一次调用（提出开新会话的那次）。
@@ -893,7 +895,7 @@ export interface SessionAccess {
 	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，它经 `ToolRun.letter`
 	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求有了答复：经回执的 `answer` 回了信，或对方读到以后
 	 * 寄回一封带 `answer` 的信（答掉它读到的全部）；对方删掉、寄信的插件停用了也不再等。
-	 * 项目、目录、模型、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
+	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
 	 */
 	launch(options: SessionLaunch): Promise<LaunchedSession>;
 	/** 可用模型目录，只含名称、窗口和思考档位。 */

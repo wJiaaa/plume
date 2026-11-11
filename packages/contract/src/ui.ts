@@ -562,6 +562,20 @@ export interface ModelSelectProps {
 	compact?: boolean;
 }
 
+/**
+ * 主输入框右下角那两枚：模型和思考档位，样子、菜单都和输入框里的一样。给开新会话之前先选好它怎么跑的地方用（建议新会话的卡片）。
+ * 不改哪个会话，只把选择交出来。没选时显示默认模型和设置里的默认推理强度，和新会话发第一句之前的输入框一样。
+ */
+export interface ModelControlsProps {
+	/** 选中的模型 id（`SessionModel.id`）；空串是默认模型。 */
+	model: string;
+	/** 选中的思考档位；不给是默认推理强度。模型没有这一档时显示的是就近落到的那一档，和跑的时候一致。 */
+	thinking?: ThinkingLevel;
+	onModelChange(modelId: string): void;
+	onThinkingChange(thinking: ThinkingLevel): void;
+	disabled?: boolean;
+}
+
 /** 「跟随」时会落到哪个模型上，给设置页的下拉算继承的那一项。 */
 export interface ModelDefaults {
 	/** 新会话的默认模型；一个可用的都没有时为空。 */
@@ -1031,6 +1045,8 @@ export interface UiContext {
 	readonly Markdown: ComponentType<MarkdownProps>;
 	/** 产品的模型下拉，见 `ModelSelectProps`。 */
 	readonly ModelSelect: ComponentType<ModelSelectProps>;
+	/** 输入框里的模型和思考档位那两枚，见 `ModelControlsProps`。 */
+	readonly ModelControls: ComponentType<ModelControlsProps>;
 	/** React hook：「跟随」会落到的模型和默认思考档位，见 `ModelDefaults`；设置改了跟着变。只在组件里调。 */
 	useModelDefaults(): ModelDefaults;
 	/** React hook：登记过的项目，按侧栏的顺序；增删改跟着变。只在组件里调。 */

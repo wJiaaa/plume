@@ -79,6 +79,7 @@ export default {
 | `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开：有插件接手点击（`takesClicks`，内置浏览器）时开在它那里，否则系统浏览器；限制同 `ui.openExternal` |
 | `ui.settingsSection(id, Component, options)` | 加一节设置：默认画进本插件详情的「设置」一节；`page: "nav"` 时单独占设置导航一行（`group` 选「Agent 能力」「数据」「代码与版本控制」组），给别的 `page` 时画进产品的那一页（「个性化」「智能体」，或「智能体」里「会话」那张卡的一行，或「插件市场」的「技能」「连接器」两类），见下文 |
 | `ui.ModelSelect` | 产品的模型下拉：`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说 |
+| `ui.ModelControls` | 输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片），选的再交给 `ctx.sessions.launch` |
 | `ui.useModelDefaults()` | React hook：`{ defaultModel?, sessionModel?, thinking }`——新会话的默认模型、当前会话的模型、默认思考档位，「跟随」时写哪个模型名用它 |
 | `ui.useProjects()` | React hook：侧栏里的项目 `{ id, name, path }[]`，随增删更新；几个项目可能登记在同一个目录上 |
 | `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、选文件夹 |

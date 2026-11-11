@@ -106,12 +106,40 @@ export async function checkSpawnSession(options: {
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "环境开关上挂着圆点");
 		if (!(await page<string>(`document.querySelector('[data-environment-toggle]').getAttribute('aria-label')`)).includes("等你决定"))
 			throw new Error("环境开关的说明里没有待决定的建议");
+		// 环境卡片里那一条只列出来，没有开始、选模型；点了滚回对话里那张卡片、闪一下。
+		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		const pendingEntry = "[data-spawn-environment][data-state=suggested]";
+		await until(`document.querySelector(${JSON.stringify(pendingEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "环境卡片里列出这条建议");
+		if (await page<boolean>(`document.querySelector('[data-spawn-section] [data-spawn-action=start], [data-spawn-section] [data-model-trigger]') !== null`))
+			throw new Error("环境卡片里那一节不该能开始、选模型");
+		await capture("smoke-spawn-session-environment.png");
+		await page(`document.querySelector(${JSON.stringify(pendingEntry)}).click()`);
+		await until(
+			`document.querySelector(${JSON.stringify("[data-screen=chat] [data-plume-flash] [data-spawn-suggestion=suggested]")}) !== null`,
+			"点了滚回对话里那张卡片、闪一下",
+		);
+		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await until(`document.querySelector('[data-spawn-section]') === null`, "收起环境卡片");
 		const worktreeToggle = `${card} [data-plume-worktree-toggle]`;
 		await until(`document.querySelector(${JSON.stringify(worktreeToggle)}) !== null`, "项目是仓库，卡片上有工作树开关");
 		if ((await page<string>(`document.querySelector(${JSON.stringify(worktreeToggle)}).getAttribute('aria-pressed')`)) === "true")
 			throw new Error("模型没说要并行改，卡片上的工作树开关却开着");
 		await page(`document.querySelector(${JSON.stringify(worktreeToggle)}).click()`);
 		await until(`document.querySelector(${JSON.stringify(worktreeToggle)}).getAttribute('aria-pressed') === 'true'`, "打开卡片上的工作树开关");
+		// 卡片上是输入框那两枚：档位拖到最高一档（假模型是默认的四档，最高是「高」），开出来的会话用它，不用默认的「中」。
+		const effort = `${card} [data-effort-trigger]`;
+		await until(
+			`document.querySelector(${JSON.stringify(`${card} [data-model-trigger]`)}) !== null && document.querySelector(${JSON.stringify(effort)}) !== null`,
+			"卡片上有和输入框一样的模型、思考档位",
+		);
+		await page(`document.querySelector(${JSON.stringify(effort)}).click()`);
+		await until(`document.querySelector('[data-effort-menu] input[type=range]') !== null`, "点开卡片上的思考档位");
+		await page(
+			`(() => { const input = document.querySelector('[data-effort-menu] input[type=range]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, input.max); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
+		);
+		await until(`document.querySelector(${JSON.stringify(effort)}).textContent.includes('高')`, "卡片上的档位换成「高」");
+		await page(`document.querySelector(${JSON.stringify(effort)}).click()`);
+		await until(`document.querySelector('[data-effort-menu]') === null`, "收起档位菜单");
 		await capture("smoke-spawn-session-card.png");
 
 		await page(`document.querySelector('${card} [data-spawn-action=start]').click()`);
@@ -122,6 +150,7 @@ export async function checkSpawnSession(options: {
 		}, "开出新会话、记着来处");
 		const started = (await agent.sessions()).find((item) => item.id === startedId);
 		if (started?.title !== TITLE) throw new Error(`新会话的标题不是建议的标题：${started?.title}`);
+		if (started?.thinking !== "high") throw new Error(`新会话没用卡片上选的思考档位：${started?.thinking}`);
 		let startedCwd = "";
 		await wait(async () => {
 			startedCwd = (await agent.sessions()).find((item) => item.id === startedId)?.cwd ?? "";

@@ -83,7 +83,7 @@ it("开一个顶层会话：进侧栏、不记在插件名下，第一句经 pro
 	expect(() => service.send(session.id, { content: [{ type: "text", text: "人接着问" }] })).not.toThrow();
 });
 
-it("项目、模型、标题、来处都能带上；第一轮出错时 done 交回原因", async () => {
+it("项目、模型、思考档位、标题、来处都能带上；第一轮出错时 done 交回原因", async () => {
 	const { service, sessions } = await open([{ status: 401 }]);
 	const project = await service.createProject("仓库", dir);
 	const source = await service.createSession({ cwd: dir });
@@ -91,11 +91,13 @@ it("项目、模型、标题、来处都能带上；第一轮出错时 done 交�
 		project: project.id,
 		message: "按计划做",
 		model: (await sessions().models()).find((entry) => entry.name === "other")!.id,
+		thinking: "high",
 		title: "  执行 计划  ",
 		spawnedFrom: { sessionId: source.id, toolCallId: "call_plan" },
 	});
 	expect(session).toMatchObject({ project: project.id, cwd: dir, title: "执行 计划", spawnedFrom: { sessionId: source.id, toolCallId: "call_plan" } });
 	expect(session.model).toMatch(/\/other$/);
+	expect(session.thinking).toBe("high");
 	const stop = await done;
 	expect(stop.reason).toBe("error");
 	expect(stop.error).toBeTruthy();
@@ -112,7 +114,7 @@ it("第一句被 prompt.submit 拦下时这一轮按完成收场，会话照样�
 	expect(model?.requests).toHaveLength(0);
 });
 
-it("只开新的：目录、项目、模型、来处不对都抛错，不开出半个会话", async () => {
+it("只开新的：目录、项目、模型、思考档位、来处不对都抛错，不开出半个会话", async () => {
 	const { service, sessions } = await open([{ text: "x" }]);
 	const before = service.listSessions().length;
 	await expect(sessions().launch({ cwd: dir, message: "  " })).rejects.toThrow("消息不能为空");
@@ -120,6 +122,7 @@ it("只开新的：目录、项目、模型、来处不对都抛错，不开出�
 	await expect(sessions().launch({ cwd: join(dir, "missing"), message: "做" })).rejects.toThrow("不是已有目录的绝对路径");
 	await expect(sessions().launch({ project: "nope", message: "做" })).rejects.toThrow();
 	await expect(sessions().launch({ cwd: dir, message: "做", model: "nope/none" })).rejects.toThrow();
+	await expect(sessions().launch({ cwd: dir, message: "做", thinking: "loud" as never })).rejects.toThrow("loud");
 	await expect(sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: "nope" } })).rejects.toThrow("没有会话 nope");
 	const parent = await service.createSession({ cwd: dir });
 	const child = await sessions().create({ parentId: parent.id });

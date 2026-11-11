@@ -164,11 +164,11 @@ function startable(options: { project?: string; cwd?: string; launch: (launch: S
 it("开始：工作树开关开着时先登记再开，开不成撤销，开成了不撤；不在项目里的对话不给开关、也不登记", async () => {
 	const ok = startable({ project: "proj", launch: async () => launched("s2").session });
 	expect(await ok.api.offersWorktree("p1")).toBe(true);
-	expect(await ok.api.start("p1", "c1", false, true)).toBe("s2");
+	expect(await ok.api.start("p1", "c1", { reportBack: false, worktree: true })).toBe("s2");
 	expect(ok.events).toEqual(["request p1/c1", "launch p1/c1"]);
 
 	const off = startable({ project: "proj", launch: async () => launched("s3").session });
-	await off.api.start("p1", "c1", false, false);
+	await off.api.start("p1", "c1", { reportBack: false, worktree: false });
 	expect(off.events).toEqual(["launch p1/c1"]);
 
 	const broken = startable({
@@ -177,18 +177,28 @@ it("开始：工作树开关开着时先登记再开，开不成撤销，开成�
 			throw new Error("开不了");
 		},
 	});
-	await expect(broken.api.start("p1", "c1", false, true)).rejects.toThrow("开不了");
+	await expect(broken.api.start("p1", "c1", { reportBack: false, worktree: true })).rejects.toThrow("开不了");
 	expect(broken.events).toEqual(["request p1/c1", "launch p1/c1", "undo p1/c1"]);
 
 	const chat = startable({ launch: async () => launched("s4").session });
 	expect(await chat.api.offersWorktree("p1")).toBe(false);
-	await chat.api.start("p1", "c1", false, true);
+	await chat.api.start("p1", "c1", { reportBack: false, worktree: true });
 	expect(chat.events).toEqual(["launch p1/c1"]);
 
 	// 界面还没问到能不能开就点了「开始」，交来的是开关的起始值：能不能开由这边现问，不是仓库的项目不登记。
 	const plain = startable({ project: "proj", cwd: "/plain", launch: async () => launched("s5").session });
-	await plain.api.start("p1", "c1", false, true);
+	await plain.api.start("p1", "c1", { reportBack: false, worktree: true });
 	expect(plain.events).toEqual(["launch p1/c1"]);
+});
+
+it("开始：卡片上选了模型和思考档位才交给 launch，没动过就不给、用默认的", async () => {
+	const given: SessionLaunch[] = [];
+	const record = async (launch: SessionLaunch) => (given.push(launch), launched(`s${given.length}`).session);
+	await startable({ launch: record }).api.start("p1", "c1", { reportBack: false, worktree: false });
+	await startable({ launch: record }).api.start("p1", "c1", { reportBack: false, worktree: false, model: "p/strong", thinking: "high" });
+	expect(given[0]).not.toHaveProperty("model");
+	expect(given[0]).not.toHaveProperty("thinking");
+	expect(given[1]).toMatchObject({ model: "p/strong", thinking: "high", message: "去做", title: "拆出去" });
 });
 
 /** 注册下来的 `archive_session`，和它所在会话的摘要。 */

@@ -1301,7 +1301,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (quitting) throw new Error(text("session.quitting"));
 		const words = typeof options?.message === "string" ? options.message : "";
 		if (!words.trim()) throw new Error(text("session.emptyMessage"));
-		if (options?.model !== undefined && !lookup(await readSettings(), options.model)) throw new Error(text("model.unavailable", { model: options.model }));
+		await checkChoice(options);
 		const from = options?.spawnedFrom;
 		if (from !== undefined) {
 			const source = find(String(from?.sessionId));
@@ -1314,6 +1314,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			{
 				...(title ? { title } : {}),
 				...(options?.model !== undefined ? { model: options.model } : {}),
+				...(options?.thinking !== undefined ? { thinking: options.thinking } : {}),
 				...(from
 					? { spawnedFrom: { sessionId: String(from.sessionId), ...(typeof from.toolCallId === "string" ? { toolCallId: from.toolCallId } : {}) } }
 					: {}),

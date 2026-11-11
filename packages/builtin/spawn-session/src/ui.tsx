@@ -10,12 +10,13 @@
  * 只有没跑完要说，它改变人接下来做什么。第一轮还在跑时行尾挂着「交回这里」，开始以后也能改主意。交回那一刻在这个对话里另有
  * 一行「来自新会话」（本体画）。
  *
- * 环境卡片那一节是第二个入口：提完建议模型接着干活，卡片被顶到几屏之上时，还没处理的由开关上的圆点提醒，在那里也能开始。
- * 两处读同一份状态（`state.ts`），「开始」那一排也是同一个组件。
+ * 环境卡片那一节只列出来：提完建议模型接着干活，卡片被顶到几屏之上时，还没处理的由开关上的圆点提醒，点一条滚回对话里那张卡片。
+ * 选模型、开始只在卡片上——300px 那一列挤不下一排控件，两处都能开始也要多想一下该在哪点。两处读同一份状态（`state.ts`）。
  *
  * 开出来的会话「没跑完」「已完成」一直这么说，人看过以后也不清掉：插件读不到侧栏的已读状态。工作树开关从模型说的起步，没有「新会话默认开」的设置可跟。
  */
 
+import type { ThinkingLevel } from "@plume/contract";
 import type { EnvironmentSectionProps, Remote, SessionView, ToolCardProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Button, ComposerToggle, FlowRow, IconButton, Text, useI18n, WorktreeToggle } from "@plume/ui";
 import { Archive, ChevronRight, Reply, SquarePen, X } from "@plume/ui/icons";
@@ -85,12 +86,16 @@ function useStatus(sessionId: string): Status {
 	return activity === "done" || activity === "failed" ? activity : "started";
 }
 
-/** 「交回这里」：和输入框上的模式开关同一个样子，只有图标是「不」，图标加名字、染强调色是「要」。 */
+/**
+ * 「交回这里」：和输入框上的模式开关同一个样子，淡色图标是「不」，染强调色是「要」。开着也不带字（工作树开关同样）：
+ * 挨着「开始」的一块浅蓝底写着「交回这里」，读起来像又一颗要按的按钮。说法在悬停提示里。
+ */
 function ReportBackToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
 	const text = useText();
 	return (
 		<ComposerToggle
 			size="sm"
+			iconOnly
 			on={on}
 			onChange={onChange}
 			icon={<Reply size={16} strokeWidth={1.8} />}
@@ -118,20 +123,23 @@ function useOffersWorktree(parentId: string): boolean {
 }
 
 /**
- * 「开始」那一排：按钮、工作树开关、交回开关。对话里的卡片和环境卡片那一节共用一份，两处问的是同一个问题。
- * 两个开关各从模型说的起步：交回跟 `report_back`，工作树跟 `edits_in_parallel`。
+ * 「开始」那一排，照主输入框那一排排：开关在左；模型、思考档位和「开始」在右，「开始」在最后，像发送键——先定新会话怎么跑，最后再开始。
+ * 放不下时右边那组整组换到下一行，「开始」跟着模型走，不和它们分开。
+ * 两个开关各从模型说的起步：交回跟 `report_back`，工作树跟 `edits_in_parallel`。模型和档位从默认的起步，没动过就不交，开出来的会话用默认的。
  */
 function Start({ parentId, suggestion }: { parentId: string; suggestion: Suggestion }) {
 	const text = useText();
 	const offersWorktree = useOffersWorktree(parentId);
 	const [worktree, setWorktree] = useState(suggestion.details.worktree === true);
 	const [reportBack, setReportBack] = useState(suggestion.details.reportBack === true);
+	const [model, setModel] = useState("");
+	const [thinking, setThinking] = useState<ThinkingLevel>();
 	const [starting, setStarting] = useState(false);
 	const start = async () => {
 		if (starting) return;
 		setStarting(true);
 		try {
-			await api.start(parentId, suggestion.callId, reportBack, worktree);
+			await api.start(parentId, suggestion.callId, { reportBack, worktree, ...(model ? { model } : {}), ...(thinking ? { thinking } : {}) });
 			await refreshStarted(parentId);
 		} catch (error) {
 			ui.notify(text.startFailed(error instanceof Error ? error.message : String(error)), "error");
@@ -141,11 +149,14 @@ function Start({ parentId, suggestion }: { parentId: string; suggestion: Suggest
 	};
 	return (
 		<div className="plume-spawn-actions">
-			<Button size="sm" variant="primary" loading={starting} label={text.startTip} onClick={() => void start()} data-spawn-action="start">
-				{text.start}
-			</Button>
-			{offersWorktree && <WorktreeToggle size="sm" on={worktree} onChange={setWorktree} />}
+			{offersWorktree && <WorktreeToggle size="sm" iconOnly on={worktree} onChange={setWorktree} />}
 			<ReportBackToggle on={reportBack} onChange={setReportBack} />
+			<div className="plume-spawn-run">
+				<ui.ModelControls model={model} {...(thinking ? { thinking } : {})} onModelChange={setModel} onThinkingChange={setThinking} disabled={starting} />
+				<Button size="sm" variant="primary" loading={starting} label={text.startTip} onClick={() => void start()} data-spawn-action="start">
+					{text.start}
+				</Button>
+			</div>
 		</div>
 	);
 }
@@ -257,7 +268,7 @@ function Suggested({ parentId, suggestion }: { parentId: string; suggestion: Sug
 		<section data-spawn-suggestion="suggested" data-spawn-call={callId} aria-label={details.title} className="plume-spawn-card">
 			<SquarePen size={15} strokeWidth={1.7} aria-hidden className="plume-spawn-card-icon" />
 			<div className="plume-spawn-card-body">
-				<Text as="p" size="label" weight="medium" data-spawn-title>
+				<Text as="p" size="label" weight="medium" className="plume-spawn-title" data-spawn-title>
 					{details.title}
 				</Text>
 				{details.summary && (
@@ -267,7 +278,9 @@ function Suggested({ parentId, suggestion }: { parentId: string; suggestion: Sug
 				)}
 				<Start parentId={parentId} suggestion={suggestion} />
 			</div>
-			<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(callId)} data-spawn-dismiss />
+			<span className="plume-spawn-dismiss">
+				<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(callId)} data-spawn-dismiss />
+			</span>
 		</section>
 	);
 }
@@ -295,7 +308,8 @@ function useAttention(session: SessionView): string | undefined {
 }
 
 /**
- * 环境卡片里「建议的新会话」：等人决定的排在前面；开始以后缩成一行，说那个会话在做什么，点了过去。收起的不再列出。
+ * 环境卡片里「建议的新会话」：等人决定的排在前面，只有标题和理由，点了滚回对话里那张卡片去选模型、开始；
+ * 开始以后缩成一行，说那个会话在做什么，点了过去。收起的不再列出。
  */
 function SuggestionsSection({ session }: EnvironmentSectionProps) {
 	const text = useText();
@@ -317,24 +331,32 @@ function SuggestionsSection({ session }: EnvironmentSectionProps) {
 				</Text>
 			</div>
 			{pending.map((one) => (
-				<div key={one.callId} data-spawn-environment={one.callId} data-state="suggested" className="plume-spawn-pending">
-					<SquarePen size={14} strokeWidth={1.8} aria-hidden className="plume-spawn-card-icon" />
-					<div className="plume-spawn-card-body">
-						<Text as="p" size="label" data-spawn-title>
-							{one.details.title}
-						</Text>
-						<Text as="p" size="caption" tone="muted" className="plume-spawn-summary">
-							{one.details.summary}
-						</Text>
-						<Start parentId={parentId} suggestion={one} />
-					</div>
-					<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(one.callId)} data-spawn-dismiss />
-				</div>
+				<PendingEntry key={one.callId} parentId={parentId} suggestion={one} />
 			))}
 			{begun.map((one) => (
 				<StartedEntry key={one.callId} callId={one.callId} title={one.details.title} startedId={one.startedId} />
 			))}
 		</div>
+	);
+}
+
+function PendingEntry({ parentId, suggestion }: { parentId: string; suggestion: Suggestion }) {
+	const reveal = () => void ui.revealToolCall(parentId, suggestion.callId).catch((error: unknown) => ui.notify(String(error), "error"));
+	return (
+		<button type="button" data-spawn-environment={suggestion.callId} data-state="suggested" className="plume-spawn-row plume-spawn-pending" onClick={reveal}>
+			<SquarePen size={14} strokeWidth={1.8} aria-hidden className="plume-spawn-card-icon" />
+			<span className="plume-spawn-card-body">
+				<Text size="label" className="plume-spawn-line" data-spawn-title>
+					{suggestion.details.title}
+				</Text>
+				{suggestion.details.summary && (
+					<Text size="caption" tone="muted" className="plume-spawn-summary">
+						{suggestion.details.summary}
+					</Text>
+				)}
+			</span>
+			<ChevronRight size={12} strokeWidth={2} aria-hidden className="plume-spawn-card-icon" />
+		</button>
 	);
 }
 

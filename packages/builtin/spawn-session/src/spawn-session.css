@@ -1,11 +1,12 @@
 /* 对话里那张建议卡片：标题、一两句理由、「开始」那一排，右上角收起。 */
 .plume-spawn-card {
+	position: relative;
 	display: flex;
 	align-items: flex-start;
 	gap: 10px;
 	width: 100%;
 	max-width: 420px;
-	padding: 10px 6px 10px 12px;
+	padding: 10px 12px;
 	border: 1px solid var(--plume-line);
 	border-radius: var(--plume-radius-panel);
 	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
@@ -26,6 +27,20 @@
 	margin: 0;
 }
 
+/*
+ * 收起钉在右上角，只让开标题那一行：它单占右边一列的话，下面「开始」那一排右边白空着 30px，
+ * 420px 的卡片里两个开关、「Claude Sonnet 5.5」和「开始」就差这几个像素放不下。
+ */
+.plume-spawn-dismiss {
+	position: absolute;
+	top: 10px;
+	right: 8px;
+}
+
+.plume-spawn-card-body > .plume-spawn-title {
+	padding-right: 24px;
+}
+
 .plume-spawn-card-body > .plume-spawn-summary {
 	margin-top: 2px;
 	display: -webkit-box;
@@ -34,11 +49,25 @@
 	overflow: hidden;
 }
 
+/*
+ * 开关在左，模型、档位和「开始」在右（`.plume-spawn-run`）。差一点放不下时先截短模型名，不为几个像素换行；
+ * 剩下的地方不到 200px（环境卡片那一列）才整组换到下一行。间距 4px：420px 的卡片里两个开关加上「Claude Sonnet 5.5」这样的名字刚好一排。
+ */
 .plume-spawn-actions {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	margin-top: 8px;
+}
+
+.plume-spawn-run {
+	display: flex;
+	flex: 1 1 200px;
+	min-width: 0;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
 }
 
 /* 过程行的标题本是「思考」这种两三个字的词，加粗读作标签；这里后面跟着的是会话名，不加粗。 */
@@ -66,12 +95,30 @@
 	padding: 0 8px;
 }
 
-.plume-spawn-pending {
-	display: flex;
+/* 还没开始的那几条只列出来：标题一行、理由至多三行，点了滚回对话里那张卡片。按钮里只放行内元素，标题和理由用 span 各占一行。 */
+.plume-spawn-row.plume-spawn-pending {
 	align-items: flex-start;
-	gap: 8px;
 	padding: 6px 8px;
-	border-radius: var(--plume-radius-field);
+}
+
+.plume-spawn-pending > .plume-spawn-card-body > .plume-spawn-line {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 从环境卡片点过来时，`ui.revealToolCall` 给卡片外层挂上 `data-plume-flash`：边框和底色亮一下，说「是这张」。 */
+[data-plume-flash] .plume-spawn-card {
+	animation: plume-spawn-flash 1.6s ease-out;
+}
+
+@keyframes plume-spawn-flash {
+	0%,
+	30% {
+		border-color: var(--plume-accent);
+		background: color-mix(in srgb, var(--plume-accent) 8%, transparent);
+	}
 }
 
 .plume-spawn-row {

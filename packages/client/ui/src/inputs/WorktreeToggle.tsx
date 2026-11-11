@@ -20,11 +20,14 @@ export function WorktreeToggle({
 	on,
 	onChange,
 	size = "composer",
+	iconOnly = false,
 }: {
 	on: boolean;
 	onChange: (on: boolean) => void;
 	/** `sm` 放在 `Button size="sm"` 旁边，比如建议卡片上：26px，主输入框的控件是 28px。 */
 	size?: "composer" | "sm";
+	/** 开着时也只有图标，见 `ComposerToggle` 的 `iconOnly`。 */
+	iconOnly?: boolean;
 }) {
 	const { t } = useI18n();
 	return (
@@ -33,6 +36,7 @@ export function WorktreeToggle({
 			on={on}
 			onChange={onChange}
 			size={size}
+			iconOnly={iconOnly}
 			icon={<GitFork size={16} strokeWidth={1.8} />}
 			label={t("composer.worktree")}
 			tip={on ? t("composer.worktreeOn") : t("composer.worktreeOff")}

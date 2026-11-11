@@ -97,7 +97,7 @@ export default {
 				const parent = (await ctx.sessions.list()).find((summary) => summary.id === String(parentId));
 				return parent ? offersWorktree(parent) : false;
 			},
-			start(parentId, callId, reportBack, worktree) {
+			start(parentId, callId, choice) {
 				const key = `${String(parentId)}\n${String(callId)}`;
 				const pending =
 					launching.get(key) ??
@@ -114,7 +114,9 @@ export default {
 						// 登记在开之前：新会话第一轮的 prompt.submit 里取走它。开出来以后不撤，撤了会和第一轮抢。
 						// 能不能开在这里现问，不信界面交来的结论：卡片刚画出来、还没问到能不能开时点了「开始」，交来的只是开关的起始值。
 						const undo =
-							worktree === true && (await offersWorktree(parent)) ? worktrees.requestFor({ sessionId: parent.id, toolCallId: String(callId) }) : undefined;
+							choice.worktree === true && (await offersWorktree(parent))
+								? worktrees.requestFor({ sessionId: parent.id, toolCallId: String(callId) })
+								: undefined;
 						let launched: Awaited<ReturnType<typeof ctx.sessions.launch>>;
 						try {
 							launched = await ctx.sessions.launch({
@@ -122,13 +124,16 @@ export default {
 								message: details.prompt,
 								// 新会话叫建议的标题，不叫那段写给模型的提示词的开头。
 								title: details.title,
+								// 卡片上没动过就不给，用默认模型、默认推理强度。
+								...(choice.model ? { model: choice.model } : {}),
+								...(choice.thinking ? { thinking: choice.thinking } : {}),
 								spawnedFrom: { sessionId: parent.id, toolCallId: String(callId) },
 							});
 						} catch (error) {
 							undo?.();
 							throw error;
 						}
-						followers.follow(launched, { title: details.title, reportBack: reportBack === true });
+						followers.follow(launched, { title: details.title, reportBack: choice.reportBack === true });
 						return launched.session.id;
 					})().finally(() => launching.delete(key));
 				launching.set(key, pending);
