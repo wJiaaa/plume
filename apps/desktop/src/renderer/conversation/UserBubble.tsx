@@ -111,7 +111,7 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 			if (edits.aside || !plan) return send(false);
 			// 截掉的那几轮改过文件时先问要不要一起退回；取消就回到编辑框，改好的字还在。
 			void filesBack.check(
-				() => plan(index),
+				() => plan(index, message),
 				(n) => ({
 					title: t("revert.editTitle"),
 					detail: t("revert.editDetail", { n }),
@@ -192,7 +192,7 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 							<RevertAction
 								running={running}
 								last={last}
-								plan={() => edits.revertPlan!(index)}
+								plan={() => edits.revertPlan!(index, message)}
 								onRevert={(files) => void edits.revert!(index, message, files)}
 							/>
 						)}

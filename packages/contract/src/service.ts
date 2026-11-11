@@ -647,12 +647,13 @@ export interface AgentService {
 	 * 正在跑时报错。图片块可以只带 `media`（会话里存着的那张），不用把像素再传一遍。
 	 * `files` 为真时先把截掉的那段改过的文件退回去（钩子 session.rewind），退不回去就报错，对话不截、也不重发。
 	 * 插件的子会话也能编辑重发（插件经 `ConversationProps.reask` 同意了），但不带 `files`；撤回、演算、分叉仍然只给人自己的会话。
+	 * `timestamp` 是界面上那一条的时间戳：序号对不上时按它认回那一条，认不出就报错，不截错地方。
 	 */
-	editMessage(sessionId: string, index: number, message: OutgoingMessage, options?: { files?: boolean }): Promise<void>;
-	/** 撤回：第 `index` 条（人发的消息）连同它之后的全部截掉。正在跑时报错。`files` 同 `editMessage`。 */
-	revertMessage(sessionId: string, index: number, options?: { files?: boolean }): Promise<void>;
-	/** 撤回、编辑重发第 `index` 条会截掉的那段改过哪些文件、能不能一起退回，只演算，不写（钩子 session.rewind）。 */
-	revertPlan(sessionId: string, index: number): Promise<RevertPlan>;
+	editMessage(sessionId: string, index: number, message: OutgoingMessage, options?: { files?: boolean; timestamp?: number }): Promise<void>;
+	/** 撤回：第 `index` 条（人发的消息）连同它之后的全部截掉。正在跑时报错。`files`、`timestamp` 同 `editMessage`。 */
+	revertMessage(sessionId: string, index: number, options?: { files?: boolean; timestamp?: number }): Promise<void>;
+	/** 撤回、编辑重发第 `index` 条会截掉的那段改过哪些文件、能不能一起退回，只演算，不写（钩子 session.rewind）。`timestamp` 同 `editMessage`。 */
+	revertPlan(sessionId: string, index: number, options?: { timestamp?: number }): Promise<RevertPlan>;
 	/**
 	 * 从第 `index` 条分叉出一个新会话，原会话不动。人发的消息：新会话停在它之前；落定的回复：新会话带着它。
 	 * `timestamp` 用来核对是不是那一条，对不上时按时间戳重找。正在跑也可以分叉。

@@ -2154,6 +2154,21 @@ it("撤回：这条和之后的全部截掉，库里跟着删；之后发给模�
 	expect(storedRows<{ seq: number }>("SELECT seq FROM records WHERE session_id = ? ORDER BY seq", session.id).map((row) => row.seq)).toEqual([1, 2, 3, 4]);
 });
 
+it("消息事件带着写进后的条数；撤回按界面给的时间戳认回那一条，序号差了也不截错，认不出就不截", async () => {
+	const { service, session, events, until, idle } = await start([{ text: "第一个回答" }, { text: "第二个回答" }]);
+	for (const words of ["第一问", "第二问"]) {
+		const done = idle();
+		service.send(session.id, { content: [{ type: "text", text: words }] });
+		await done;
+	}
+	expect(events.flatMap((event) => (event.type === "message" ? [event.count] : []))).toEqual([1, 2, 3, 4]);
+	const second = (await service.getSession(session.id)).messages[2]!;
+	// 界面多收了一条，以为第二问是第 3 条：按时间戳认回第 2 条。
+	await expect(service.revertMessage(session.id, 3, { timestamp: second.timestamp + 1 })).rejects.toThrow("找不到这条消息");
+	await service.revertMessage(session.id, 3, { timestamp: second.timestamp });
+	expect(await until((event): event is AgentEvent => event.type === "rewound")).toMatchObject({ count: 2 });
+});
+
 it("编辑重发：截掉这条和之后的，拿新的话重新跑一轮；跑着的时候不让改", async () => {
 	const { service, session, events, until, idle } = await start([{ text: "旧回答" }, { text: "一半", hang: true }]);
 	let done = idle();

@@ -860,12 +860,20 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
 	 * 插件在界面上开了 `ConversationProps.reask`（侧边聊天）就是同意宿主替它重跑这一问；撤回、退文件仍然不行。
 	 */
-	async function sentAt(session: Session, index: number, reask = false): Promise<UserMessage> {
-		if (session.summary.owner && !reask) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
+	/**
+	 * 第 `index` 条人发的消息在会话里实际是第几条。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
+	 * 按时间戳认回那一条，同 `forkSession`；认不出就报错，不截错地方。
+	 */
+	async function sentAt(session: Session, index: number, options: { reask?: boolean; timestamp?: unknown } = {}): Promise<number> {
+		if (session.summary.owner && !options.reask) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
 		if (session.controller) throw new Error(text("session.running"));
-		const message = Number.isInteger(index) ? (await messagesOf(session))[index] : undefined;
+		const messages = await messagesOf(session);
+		const { timestamp } = options;
+		const at =
+			typeof timestamp !== "number" || messages[index]?.timestamp === timestamp ? index : messages.findIndex((message) => message.timestamp === timestamp);
+		const message = Number.isInteger(at) ? messages[at] : undefined;
 		if (message?.role !== "user" || message.synthetic) throw new Error(text("session.badMessage"));
-		return message;
+		return at;
 	}
 
 	/**
@@ -2356,32 +2364,33 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async editMessage(sessionId, index, message, options) {
 			const session = find(sessionId);
-			await sentAt(session, index, true);
+			// 最后一个参数可能是运行时追加的 CallContext：`files` 只认明确的 true，`timestamp` 只认数字。
+			const at = await sentAt(session, index, { reask: true, timestamp: options?.timestamp });
 			const prompt = userMessage(message);
 			if (quitting) throw new Error(text("session.parentStopped"));
-			// 文件先退回去，退不回去就整件不做：对话不截、也不重发。最后一个参数可能是运行时追加的 CallContext，只认明确的 true。
-			// 插件的子会话不退文件（界面也不问），见 `sentAt`。
+			// 文件先退回去，退不回去就整件不做：对话不截、也不重发。插件的子会话不退文件（界面也不问），见 `sentAt`。
 			if (options?.files === true) {
 				if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
-				await rewindFiles(session, index, true);
+				await rewindFiles(session, at, true);
 			}
 			// 中间等过读库：再看一眼，这期间开始的一轮不能被截掉一半。
 			if (session.controller) throw new Error(text("session.running"));
-			await rewind(session, index);
+			await rewind(session, at);
 			begin(session, prompt);
 		},
 		async revertMessage(sessionId, index, options) {
 			const session = find(sessionId);
-			await sentAt(session, index);
+			const at = await sentAt(session, index, { timestamp: options?.timestamp });
 			// 先文件后对话：文件退不回去，对话也不截，人看到的还是撤回之前的样子。
-			if (options?.files === true) await rewindFiles(session, index, true);
+			if (options?.files === true) await rewindFiles(session, at, true);
 			if (session.controller) throw new Error(text("session.running"));
-			await rewind(session, index);
+			await rewind(session, at);
 		},
-		async revertPlan(sessionId, index) {
+		async revertPlan(sessionId, index, options) {
 			const session = find(sessionId);
-			await sentAt(session, index);
-			return rewindFiles(session, index, false);
+			// 不带 `options` 时这一位是运行时追加的 CallContext，`timestamp` 只认数字。
+			const at = await sentAt(session, index, { timestamp: options?.timestamp });
+			return rewindFiles(session, at, false);
 		},
 		async forkSession(sessionId, index, timestamp, title) {
 			const source = find(sessionId);

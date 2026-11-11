@@ -20,7 +20,7 @@ export interface MessageEdits {
 	/** 截掉这条和之后的，这条放回输入框。`files` 同 `edit`。 */
 	revert?(index: number, message: UserMessage, files: boolean): Promise<void>;
 	/** 截掉这条和之后的会碰到哪些文件，只演算。 */
-	revertPlan?(index: number): Promise<RevertPlan>;
+	revertPlan?(index: number, message: UserMessage): Promise<RevertPlan>;
 	/** 从这条分叉出一个新会话并打开它。 */
 	fork?(index: number, message: UserMessage | AssistantMessage): Promise<void>;
 	/** 发出去的图在看图器里标注完（`data:` URL）：作为附件挂到这个会话的输入框上，下一句照着它说。 */

@@ -2585,7 +2585,7 @@ function Conversation({ view }: { view: SessionView }) {
 			edit: (index, message, text, files) => editMessage(id, index, message, text, files),
 			retry: (index, message) => retryMessage(id, index, message),
 			revert: (index, message, files) => revertMessage(id, index, message, files),
-			revertPlan: async (index) => agent.revertPlan(id, index),
+			revertPlan: async (index, message) => agent.revertPlan(id, index, { timestamp: message.timestamp }),
 			fork: (index, message) => forkFrom(id, index, message),
 			attachImage: (dataUrl) => attachToComposer(id, dataUrl),
 		}),
@@ -2700,7 +2700,7 @@ async function editMessage(sessionId: string, index: number, message: UserMessag
 				displayText: text,
 				...(message.attachments?.length ? { attachments: message.attachments } : {}),
 			},
-			{ files },
+			{ files, timestamp: message.timestamp },
 		);
 	} catch (error) {
 		notify(translate("turn.resendFailed", { reason: errorText(error) }), "error");
@@ -2712,12 +2712,17 @@ async function editMessage(sessionId: string, index: number, message: UserMessag
 /** 重试：这条原样再发一遍，正文（含附件正文、会话引用那段）、气泡里的字、附件签都照旧。 */
 async function retryMessage(sessionId: string, index: number, message: UserMessage): Promise<void> {
 	try {
-		await agent.editMessage(sessionId, index, {
-			content: message.content,
-			...(message.displayText === undefined ? {} : { displayText: message.displayText }),
-			...(message.attachments?.length ? { attachments: message.attachments } : {}),
-			...(message.sessionRefs?.length ? { sessionRefs: message.sessionRefs } : {}),
-		});
+		await agent.editMessage(
+			sessionId,
+			index,
+			{
+				content: message.content,
+				...(message.displayText === undefined ? {} : { displayText: message.displayText }),
+				...(message.attachments?.length ? { attachments: message.attachments } : {}),
+				...(message.sessionRefs?.length ? { sessionRefs: message.sessionRefs } : {}),
+			},
+			{ timestamp: message.timestamp },
+		);
 	} catch (error) {
 		notify(translate("turn.resendFailed", { reason: errorText(error) }), "error");
 	}
@@ -2726,7 +2731,7 @@ async function retryMessage(sessionId: string, index: number, message: UserMessa
 /** 撤回：截掉这条和之后的，这条连同附件放回输入框。`files` 同编辑重发。 */
 async function revertMessage(sessionId: string, index: number, message: UserMessage, files = false): Promise<void> {
 	try {
-		await agent.revertMessage(sessionId, index, { files });
+		await agent.revertMessage(sessionId, index, { files, timestamp: message.timestamp });
 	} catch (error) {
 		notify(translate("turn.revertFailed", { reason: errorText(error) }), "error");
 		return;
