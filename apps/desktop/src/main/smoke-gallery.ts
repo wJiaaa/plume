@@ -127,6 +127,17 @@ export async function checkGallery(options: {
 		await until("!document.querySelector('.plume-composer [data-composer-send=stop]')", "首轮完成");
 		const session = (await agent.sessions()).find((item) => !before.has(item.id))!;
 		assert.ok(session, "找到图片所属会话");
+
+		// 看图器复制 `plume-media://` 的图：和页面不同源，读回像素那一步曾因画布被污染而失败。剪贴板换成记录替身，不碰系统剪贴板。
+		await click("[data-image-card=done] img");
+		await page(
+			"window.__galleryClipboardWrite = navigator.clipboard.write; navigator.clipboard.write = async items => { window.__galleryCopied = (await items[0].getType('image/png')).size; }; void 0;",
+		);
+		await click('button[aria-label="复制图片"]');
+		await until("window.__galleryCopied > 0", "看图器复制会话媒体里的图");
+		await page("navigator.clipboard.write = window.__galleryClipboardWrite; delete window.__galleryClipboardWrite; delete window.__galleryCopied;");
+		await click('button[aria-label="关闭 Esc"]');
+		await until("!document.querySelector('button[aria-label=\"复制图片\"]')", "看图器关闭");
 		await gallery();
 		await until("document.querySelectorAll('[data-image-gallery-tile]').length === 1", "首张图进入画廊");
 		await click("[data-image-gallery-tile]");

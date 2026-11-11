@@ -14,6 +14,8 @@ async function imageDataUrl(src: string): Promise<string | null> {
 	if (src.startsWith("data:")) return src;
 	try {
 		const img = new Image();
+		// `plume-media://` 和页面不同源：不按 CORS 取，画布会被污染，`toDataURL` 抛错。
+		img.crossOrigin = "anonymous";
 		img.src = src;
 		await img.decode();
 		const canvas = document.createElement("canvas");
