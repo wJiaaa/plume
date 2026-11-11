@@ -2,6 +2,34 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.5] - 2026-11-11
+
+<!-- plume:notes en -->
+### Changes
+
+- **Pick the model and thinking level before a side chat's first message.** Before, a new side chat showed no model or thinking-level picker until you had sent something, so the first message always ran on the default model. The pickers are now there from the start, and what you choose is used for that first message.
+- **Skills in the Marketplace open on the marketplace's skill packs.** The Skills tab used to mix the skills on this computer and the marketplace's packs on one page. It now opens on the marketplace's packs: press "+" on a card to install one. Your own skills are under "Installed", grouped by project, personal, from plugins and other folders, and a plugin's skills appear as one card that opens the plugin's details. "Add skill" at the top either has the agent write a new skill in a new conversation or opens your personal skills folder. Skills that come with built-in plugins are no longer listed and are always on.
+- **Connectors work the same way.** The Connectors tab now opens on the marketplace's connectors, and the ones you have set up are under "Installed". To add your own server, click "Add connector" at the top.
+- The Skills and Connectors tabs no longer have a search box. Like Plugins, they are filtered by category, and categories that don't fit on one line go under "More".
+
+### For plugin authors
+
+- `ConversationProps.composer` accepts `blank: { parentId, model }`, so a child conversation's composer shows the model and thinking-level pickers before the conversation exists. The person's choice comes back as the `choice` argument of `send` and `sendMessage`; pass it to `ctx.sessions.create`.
+- A plugin that manages skills or connectors can add entries to the "Add skill" and "Add connector" menus through `actions` in `ui.settingsSection` options. Its section shows under "Installed" and gets `refreshKey`, `openPlugin` and, for skills, `project` from the host, so it no longer draws its own toolbar.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **侧边聊天发第一句前就能选模型和思考档位。** 以前新开的侧边聊天要先发一句才出现模型和档位选择，第一句总是用默认模型跑。现在一打开就能选，第一句就按你选的来。
+- **插件市场的「技能」默认列市场里的技能合集。** 以前这一类把本机的技能和市场里的合集混在一页。现在打开先看到市场里的合集，点卡片上的「+」就能装上。本机的技能在「已安装」里，按项目、个人、来自插件、其他目录分组，插件带的技能合成一张卡片，点开是插件详情。页顶的「添加技能」可以让 agent 在新对话里写一个，也可以打开个人技能目录。内置插件带的技能不再列出，始终生效。
+- **「连接器」也改成同样的样子。** 打开先看到市场里的连接器，本机配好的在「已安装」里。要自己加，点页顶的「添加连接器」。
+- 「技能」「连接器」两类去掉了搜索框，和插件一类一样按分类筛选，一行放不下的分类收进「更多」。
+
+### 给插件作者
+
+- `ConversationProps.composer` 新增 `blank: { parentId, model }`：子会话还没建时，输入框也能画出模型和思考档位选择。人选的经 `send`、`sendMessage` 的 `choice` 参数交回，建会话时传给 `ctx.sessions.create`。
+- 管技能、连接器的插件可以经 `ui.settingsSection` 选项里的 `actions` 往「添加技能」「添加连接器」里加条目。它那一节画在「已安装」里，`refreshKey`、`openPlugin`（技能还有 `project`）由宿主给，不用再画自己的工具条。
+
 ## [0.1.4] - 2026-11-11
 
 <!-- plume:notes en -->
