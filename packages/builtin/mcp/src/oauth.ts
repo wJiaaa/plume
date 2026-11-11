@@ -8,13 +8,13 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { SecretsService } from "@plume/contract";
-import type { HttpServer, ServerConfig } from "./config.ts";
+import { type HttpServer, type ServerConfig, writePrivate } from "./config.ts";
 
 interface OAuthRecord {
 	/** 记录对应的服务地址：地址改了，旧的令牌不带过去。 */
@@ -122,7 +122,7 @@ export class OAuthStore {
 				return;
 			}
 			await mkdir(this.dir, { recursive: true, mode: 0o700 });
-			await writeFile(file, await this.secrets.seal(JSON.stringify(next)), { mode: 0o600 });
+			await writePrivate(file, await this.secrets.seal(JSON.stringify(next)));
 		});
 		this.queue.set(
 			file,

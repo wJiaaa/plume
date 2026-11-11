@@ -195,6 +195,8 @@ export default {
 				...(error ? { error } : {}),
 			};
 		};
+		/** 改配置一个接一个排队：设置页两张卡片同时保存时，后一次读到的是前一次写完的，不会各自读旧的、后写的冲掉先写的。 */
+		let writing: Promise<unknown> = Promise.resolve();
 		/**
 		 * 改配置：文件读不懂时拒绝，免得把写坏了的那份冲掉。`edit` 改的是自己的那些，`all` 连别处来的一起，查重名用；
 		 * `editState` 改插件带来的那些上人改过的。
@@ -203,18 +205,22 @@ export default {
 			edit: (own: ServerConfig[], all: readonly ServerConfig[]) => ServerConfig[],
 			editState: (states: Record<string, PluginServerState>) => Record<string, PluginServerState> = (states) => states,
 		): Promise<McpView> => {
-			const { own, states, servers, error, magpieRead } = await read();
-			if (error) throw new Error(text().fileBroken);
-			const next = edit(own, servers);
-			const nextStates = editState(states);
-			await writeServers(file, await sealServers(next, secrets), await sealStates(nextStates, secrets));
-			// 存设置时顺带清一遍：已经不在的服务（删掉的、Magpie 撤回的），登录一起忘掉。登录不经过这里写，
-			// 所以按服务在不在判断。Magpie 的文件这次读不懂时不清：它分发的服务只是暂时看不见，不是撤回了。
-			// 插件带来的、人改过的留着：插件停用、卸了再装，登录还在。
-			if (magpieRead) {
-				const kept = [...next, ...servers.filter((server) => server.managedBy !== undefined), ...Object.keys(nextStates).map((id) => ({ id }))];
-				await connections.oauth.keepOnly(kept).catch((error: unknown) => ctx.log.warn(`清理已删除服务的登录失败：${String(error)}`));
-			}
+			const done = writing.then(async () => {
+				const { own, states, servers, error, magpieRead } = await read();
+				if (error) throw new Error(text().fileBroken);
+				const next = edit(own, servers);
+				const nextStates = editState(states);
+				await writeServers(file, await sealServers(next, secrets), await sealStates(nextStates, secrets));
+				// 存设置时顺带清一遍：已经不在的服务（删掉的、Magpie 撤回的），登录一起忘掉。登录不经过这里写，
+				// 所以按服务在不在判断。Magpie 的文件这次读不懂时不清：它分发的服务只是暂时看不见，不是撤回了。
+				// 插件带来的、人改过的留着：插件停用、卸了再装，登录还在。
+				if (magpieRead) {
+					const kept = [...next, ...servers.filter((server) => server.managedBy !== undefined), ...Object.keys(nextStates).map((id) => ({ id }))];
+					await connections.oauth.keepOnly(kept).catch((error: unknown) => ctx.log.warn(`清理已删除服务的登录失败：${String(error)}`));
+				}
+			});
+			writing = done.catch(() => undefined);
+			await done;
 			return view(true);
 		};
 		/** 改插件带来的那一台上人改过的。 */

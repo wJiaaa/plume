@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
+import type { PluginContext, SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
+import type { McpApi } from "../src/api.ts";
 import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
 import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
@@ -16,6 +17,7 @@ import { mcpResult, normalizeInputSchema, qualifiedToolName, RESULT_CHARS } from
 import { openServers, openStates, sealServers, sealStates } from "../src/sealed.ts";
 import { looksSecret } from "../src/vars.ts";
 import { OAuthStore } from "../src/oauth.ts";
+import mcpPlugin from "../src/index.ts";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/echo-server.mjs", import.meta.url));
 
@@ -693,6 +695,53 @@ test("服务中途要人填表：恰好一个调用在跑时经它问人；回�
 		// 嵌套的表 SDK 在协议这层就拒了（错误码 -32603）；它认得、我们画不出的那些由 `formFields` 拒（InvalidParams）。
 		assert.match(String(bad?.output), /^elicit failed: MCP error/);
 	}));
+
+test("设置页同时存两张卡片：一个接一个写，两处改动都留下；写完不留临时文件", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-save-"));
+	const home = process.env.PLUME_HOME;
+	// Magpie 的文件按 PLUME_HOME 找，指到空目录，不读跑测试那个人的。
+	process.env.PLUME_HOME = dir;
+	let api: McpApi | undefined;
+	const ctx = {
+		dataDir: dir,
+		locale: () => "zh-CN",
+		use: (name: string) => (name === "secrets" ? fakeSecrets : { register: () => () => {} }),
+		log: { warn: () => {}, info: () => {}, error: () => {} },
+		effect: () => {},
+		sessions: { onDeleted: () => {} },
+		tools: { register: () => () => {} },
+		hook: () => {},
+		commands: { provide: () => {} },
+		plugins: { list: () => [], onChange: () => {} },
+		serve: (served: McpApi) => {
+			api = served;
+		},
+	} as unknown as PluginContext;
+	const file = join(dir, "servers.json");
+	const disabled = (id: string): ServerConfig => ({ id, name: id, transport: "stdio", command: "plume-test-no-such-command", enabled: false });
+	try {
+		await writeServers(file, [disabled("a"), disabled("b")], {});
+		await mcpPlugin.apply(ctx);
+		const draft = (name: string) => ({ name, transport: "stdio" as const, command: "plume-test-no-such-command", vars: [] });
+		await Promise.all([api!.save("a", draft("a2")), api!.save("b", draft("b2"))]);
+		const { servers } = await readServers(file);
+		assert.deepEqual(
+			servers.map((server) => [server.id, server.name, server.enabled]),
+			[
+				["a", "a2", false],
+				["b", "b2", false],
+			],
+		);
+		assert.deepEqual(
+			(await readdir(dir)).filter((name) => name.endsWith(".tmp")),
+			[],
+		);
+	} finally {
+		if (home === undefined) delete process.env.PLUME_HOME;
+		else process.env.PLUME_HOME = home;
+		await rm(dir, { recursive: true, force: true });
+	}
+});
 
 test("存配置时只留还在的服务的登录：删掉的、撤回的令牌文件一起清掉", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-oauth-"));

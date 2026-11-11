@@ -8,7 +8,7 @@
  * 读出来时解开（`sealed.ts`）。
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ENV_NAME, HEADER_NAME } from "./vars.ts";
 
@@ -245,9 +245,20 @@ function declaredServer(name: string, config: Record<string, unknown>, origin: P
 	return { ...base, transport: type === "sse" ? "sse" : "http", url, ...(headers ? { headers } : {}) };
 }
 
+/**
+ * 只有本人能读的文件，整份替换：先写同目录的临时文件再改名，后台连接同时在读时读到的是旧的或新的一整份，不是写了一半的。
+ * 同一个文件的写入由调用方排队，临时文件名固定；它可能是上次写到一半留下的，mode 只在新建时生效，再 chmod 一次。
+ */
+export async function writePrivate(file: string, text: string): Promise<void> {
+	const temp = `${file}.tmp`;
+	await writeFile(temp, text, { mode: 0o600 });
+	await chmod(temp, 0o600);
+	await rename(temp, file);
+}
+
 export async function writeServers(file: string, servers: readonly ServerConfig[], plugins: Readonly<Record<string, PluginServerState>>): Promise<void> {
 	const body = Object.keys(plugins).length > 0 ? { servers, plugins } : { servers };
-	await writeFile(file, `${JSON.stringify(body, null, "\t")}\n`, { mode: 0o600 });
+	await writePrivate(file, `${JSON.stringify(body, null, "\t")}\n`);
 }
 
 /** 按草稿生成新的配置；`previous` 是在编辑的那一条，没改的密钥从它那里拿。 */
