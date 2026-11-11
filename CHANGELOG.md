@@ -2,6 +2,52 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.7] - 2026-11-11
+
+<!-- plume:notes en -->
+### Changes
+
+- **A new welcome page.** It greets you by the time of day on your computer, and the line below asks what you want to build in a project, or what you'd like to talk about outside one. The suggestions sit under the message box. A plugin can replace that line: install 每日一句 (Daily Line) from the Marketplace to get a new line written by your default model each day.
+- **Replies survive a crash.** If Plume quits while a reply is being written, reopening the conversation offers "Continue" at the end. A reply recovered after a dropped connection no longer contains text from the failed attempt.
+- **Long conversations stream more smoothly.** While a reply streams, the sidebar, title bar and panels no longer redraw on every update, tool results redraw only their own rows, and the question navigator no longer re-measures the whole conversation.
+- When the main conversation and a side chat stream at the same time, the end of a reply no longer appears all at once.
+- Opening a conversation while it is replying no longer shows messages twice.
+- Undo and edit-and-resend always cut at the message you chose, even when the list on screen is out of step with the saved conversation.
+- When you regenerate or edit and resend, the message being asked again no longer disappears and comes back, and re-asking the first message no longer flashes the welcome page.
+- After you press Stop, "Paused" appears where the running line was instead of sliding up from below.
+- A conversation with a record that can't be read no longer shows the same error over and over, and the question navigator and tool results no longer go blank because of it.
+- New text in replies with Windows (CRLF) line endings fades in at the right place.
+- In the built-in browser, the agent can click list rows, cards and similar elements that ignored its clicks before: the cursor moves there and a real mouse click is sent.
+- Middle-click a tab in the panel area to close it.
+- In Settings › Models, hover a model name to see its full model id.
+- Settings › Commands, Web Search and Worktrees introduce themselves the same way as Agents. The Commands page no longer has a search box.
+
+### For plugin authors
+
+- `ui.welcomeLine(line)` replaces the line under the welcome page greeting. It is called with the interface locale and returns `{ text, source? }`. Only the last plugin to register it is used; returning nothing, an empty string or throwing shows the default line.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **新的欢迎页。** 按本机时间跟你打招呼，下面一行问你想在项目里开发什么，不在项目里时问想聊点什么；几个建议放到了输入框下面。这一行插件可以换掉：到插件市场装上「每日一句」，每天由默认模型写一句新的。
+- **应用意外退出，回复不会白写。** 回复写到一半 Plume 退出了，重新打开会话，末尾有「继续」。断线重试后恢复出来的回复，不再混进上一次没成功的那段字。
+- **长对话输出更顺。** 回复往外写时，侧栏、标题栏和面板不再每一拍跟着重画；工具结果回来只重画那几行；问题导航不再一遍遍量整个对话。
+- 主对话和侧边聊天同时在写时，回复最后那段字不再一下子全蹦出来。
+- 打开正在回复的会话，消息不再重复出现。
+- 撤回、编辑重发总在你选的那一条截断，屏幕上的列表和存下的会话一时对不上也不会截错。
+- 重新生成、编辑重发时，被重问的那句不再先消失再回来；重问第一句不再闪回欢迎页。
+- 按停之后，「已暂停」直接出现在原来运行那一行的位置，不再从下面滑上来。
+- 会话里有读不出的记录时，不再一遍遍弹同一条报错，问题导航和工具结果也不再因此白屏。
+- 用 Windows（CRLF）换行的回复，新字淡入的位置对了。
+- 内置浏览器里，以前 agent 点了没反应的列表行、卡片这类元素，现在能点中了：光标移过去，发的是真实的鼠标点击。
+- 面板区的标签可以用鼠标中键关掉。
+- 设置 › 模型 里，把指针停在模型名上能看到完整的模型 id。
+- 设置里「命令」「网页搜索」「工作树」几页的介绍和「智能体」页一个样式，「命令」页去掉了搜索框。
+
+### 给插件作者
+
+- 新增 `ui.welcomeLine(line)`，换掉欢迎页问候下面那一行。宿主按界面语言调用它，返回 `{ text, source? }`；只用最后注册的那一个，返回空、空串或抛错时显示默认那一句。
+
 ## [0.1.6] - 2026-11-11
 
 <!-- plume:notes en -->
