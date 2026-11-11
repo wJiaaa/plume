@@ -200,6 +200,8 @@ it("流到一半进程没了：下次打开时已经收到的文字和思考作�
 	const updatedAt = reader.summaries()[0]?.updatedAt ?? 0;
 	expect(updatedAt).toBeGreaterThan(2);
 	expect(updatedAt).toBeLessThanOrEqual(Date.now());
+	// 恢复出的回复只有文字，光看转录像说完了：这一轮记成被中断，界面才给「继续」。
+	expect(reader.summaries()[0]?.stop).toEqual({ reason: "interrupted" });
 	expect(rows("SELECT session_id FROM drafts")).toEqual([]);
 });
 

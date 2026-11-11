@@ -646,6 +646,7 @@ function prepareSchema(db: DatabaseSync): void {
 /**
  * 上次进程留下的草稿：当成「按了停止」的回复写进会话（`stopReason: "aborted"`），只留文字和思考；一个字都没有就直接删。
  * 会话的更新时间记成草稿最后一次写入的时刻，不是这次打开的时刻：周一断掉的回复周三打开，它还是周一的事。
+ * 这一轮记成被中断（`interrupted`）：恢复出的回复只有文字，光看转录像是说完了，界面就不给「继续」。
  */
 function recoverDrafts(db: DatabaseSync): void {
 	const rows = db.prepare("SELECT d.session_id, d.head, d.updated_at, s.summary FROM drafts d JOIN sessions s ON s.id = d.session_id").all() as {
@@ -665,6 +666,7 @@ function recoverDrafts(db: DatabaseSync): void {
 			if (!message) return;
 			const summary = JSON.parse(row.summary) as SessionSummary;
 			summary.updatedAt = Math.max(summary.updatedAt, row.updated_at);
+			summary.stop = { reason: "interrupted" };
 			db.prepare("UPDATE sessions SET updated_at = ?, summary = ? WHERE id = ?").run(summary.updatedAt, JSON.stringify(summary), row.session_id);
 			appendRecord(db, row.session_id, message);
 		});
