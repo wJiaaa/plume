@@ -247,7 +247,7 @@ function Jobs({ session, runtime, shown }: { session: SessionView; runtime: Runt
 export function TaskPanel({ session, runtime, shown }: { session: SessionView; runtime: Runtime; shown: boolean }) {
 	const { resolvedLocale: locale } = useI18n();
 	const words = MESSAGES[locale];
-	const data = runtime.state.useSnapshot(session.summary.id, shown);
+	const data = runtime.state.useSnapshot(session.summary.id, shown, false, true);
 	const all = useMemo(() => entriesOf(session, data.observations), [session, data.observations]);
 	const runs = useMemo(() => all.filter((entry) => entry.source === "tool-call").reverse(), [all]);
 	const todos = useMemo(() => latestTodos(session.messages), [session.messages]);

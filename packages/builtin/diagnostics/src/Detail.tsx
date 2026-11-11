@@ -39,6 +39,28 @@ function DetailText({ title, text, runtime }: { title: string; text?: string; ru
 	);
 }
 
+/** 观察到的那次请求实际发出去的消息和工具表：轨迹列表里不带，打开详情时才取。 */
+function useRequestInput(entry: Entry, runtime: Runtime, sessionId: string): string | undefined {
+	const [loaded, setLoaded] = useState<{ id: string; text: string }>();
+	const { requestId } = entry;
+	useEffect(() => {
+		if (!requestId) return;
+		let live = true;
+		runtime.api.request(sessionId, requestId).then(
+			({ messages, tools }) => {
+				if (live) setLoaded({ id: requestId, text: JSON.stringify({ messages, tools }, null, 2) });
+			},
+			(error: unknown) => {
+				if (live) runtime.ui.notify(String(error), "error");
+			},
+		);
+		return () => {
+			live = false;
+		};
+	}, [requestId, runtime, sessionId]);
+	return requestId && loaded?.id === requestId ? loaded.text : undefined;
+}
+
 export function RunDetail({ entry, runtime, sessionId }: { entry: Entry; runtime: Runtime; sessionId: string }) {
 	const { resolvedLocale: locale } = useI18n();
 	const words = MESSAGES[locale];
@@ -103,6 +125,7 @@ export function TraceDetail({
 	useEffect(() => {
 		head.current?.focus({ preventScroll: true });
 	}, []);
+	const requestInput = useRequestInput(entry, runtime, sessionId);
 	const related = entry.callId ? all.filter((other) => other.id !== entry.id && other.callId === entry.callId) : [];
 	const facts = [
 		[words.status, entry.status && STATUS_LABELS[locale][entry.status]],
@@ -163,7 +186,7 @@ export function TraceDetail({
 						{entry.callId && <RunDetail entry={entry} runtime={runtime} sessionId={sessionId} />}
 						{!entry.callId && (
 							<>
-								<DetailText title={words.input} text={entry.input} runtime={runtime} />
+								<DetailText title={words.input} text={entry.input ?? requestInput} runtime={runtime} />
 								<DetailText title={words.output} text={entry.output} runtime={runtime} />
 							</>
 						)}

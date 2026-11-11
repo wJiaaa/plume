@@ -34,13 +34,18 @@ export default {
 				const list = jobs.list(id);
 				const found = ports ? await findEndpoints(id, list) : { jobs: list.map((job) => ({ ...job, endpoints: [] })) };
 				return {
-					version: current,
-					...(current === version ? {} : { observations: store.read(id) }),
+					...(typeof version !== "string" ? {} : current === version ? { version: current } : { version: current, ...store.read(id) }),
 					jobs: found.jobs,
 					...(found.error ? { discoveryError: found.error } : {}),
 					children: all.filter((entry) => entry.parentId === id),
 					wakeups: wakeups.list(id),
 				};
+			},
+			async request(id, requestId) {
+				await session(id);
+				const input = typeof requestId === "string" ? store.request(id, requestId) : undefined;
+				if (!input) throw new Error(words().requestGone);
+				return input;
 			},
 			async output(id, jobId) {
 				await session(id);

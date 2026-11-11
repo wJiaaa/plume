@@ -266,9 +266,9 @@ function download(entries: Entry[], format: "json" | "md", title: string) {
 export function TracePanel({ session, runtime, shown }: { session: SessionView; runtime: Runtime; shown: boolean }) {
 	const { resolvedLocale: locale } = useI18n();
 	const words = MESSAGES[locale];
-	const data = runtime.state.useSnapshot(session.summary.id, shown);
+	const data = runtime.state.useSnapshot(session.summary.id, shown, false, true);
 	const selection = runtime.state.useSelection(session.summary.id);
-	const all = useMemo(() => entriesOf(session, data.observations), [session, data.observations]);
+	const all = useMemo(() => entriesOf(session, data.observations, data.prompts), [session, data.observations, data.prompts]);
 	const [query, setQuery] = useState("");
 	const search = useDeferredValue(query);
 	const [sources, setSources] = useState<Source[]>([]);

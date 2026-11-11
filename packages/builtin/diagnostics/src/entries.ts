@@ -1,4 +1,5 @@
-import type { AssistantMessage, Message, SessionObservation, SessionView, ToolResultMessage } from "@plume/contract";
+import type { AssistantMessage, Message, SessionView, ToolResultMessage } from "@plume/contract";
+import type { TraceObservation } from "./api.ts";
 
 export type Source =
 	| "system"
@@ -42,6 +43,8 @@ export interface Entry {
 	output?: string;
 	toolName?: string;
 	callId?: string;
+	/** 观察到的那次请求：输入（发出去的消息和工具表）打开详情时经 `DiagnosticsApi.request` 取。 */
+	requestId?: string;
 	status?: Status;
 	startedAt?: number;
 	finishedAt?: number;
@@ -66,8 +69,11 @@ const headline = (text: string) => text.trim().split("\n")[0]?.slice(0, 240) ?? 
 const replyStatus = (reply: AssistantMessage): Status =>
 	reply.stopReason === "aborted" ? "cancelled" : reply.stopReason === "error" ? "error" : reply.stopReason === "pending" ? "running" : "done";
 
-/** 轨迹和任务共用同一份调用；缺失的历史耗时不推算，不把等待执行误标为已经完成。 */
-export function entriesOf(view: SessionView, observations: SessionObservation[]): Entry[] {
+/**
+ * 轨迹和任务共用同一份调用；缺失的历史耗时不推算，不把等待执行误标为已经完成。
+ * `prompts` 是请求里系统提示词的指纹到正文（`DiagnosticSnapshot.prompts`）。
+ */
+export function entriesOf(view: SessionView, observations: TraceObservation[], prompts: Record<string, string> = {}): Entry[] {
 	const entries: Entry[] = [];
 	const results = new Map(view.messages.flatMap((message) => (message.role === "toolResult" ? [[message.toolCallId, message] as const] : [])));
 	const starts = new Map<string, number>();
@@ -175,6 +181,7 @@ export function entriesOf(view: SessionView, observations: SessionObservation[])
 			add({
 				...common,
 				id: `request:${event.id}`,
+				requestId: event.id,
 				source: "request",
 				summary: event.model,
 				status: reply
@@ -188,7 +195,6 @@ export function entriesOf(view: SessionView, observations: SessionObservation[])
 				provider: event.provider,
 				model: event.model,
 				usage: reply?.usage,
-				input: JSON.stringify({ messages: event.messages, tools: event.tools }, null, 2),
 				output: reply ? textOf(reply) : undefined,
 				detail: reply?.errorMessage,
 				metadata: reply && {
@@ -197,7 +203,8 @@ export function entriesOf(view: SessionView, observations: SessionObservation[])
 					firstTokenMs: reply.durationMs !== undefined && reply.sseDurationMs !== undefined ? reply.durationMs - reply.sseDurationMs : undefined,
 				},
 			});
-			if (event.systemPrompt) add({ ...common, id: `system:${event.id}`, source: "system", summary: headline(event.systemPrompt), detail: event.systemPrompt });
+			const prompt = prompts[event.systemPrompt];
+			if (prompt) add({ ...common, id: `system:${event.id}`, source: "system", summary: headline(prompt), detail: prompt });
 		} else if (event.type === "approval" && event.approval) {
 			const approval = event.approval;
 			notices.set(`approval:${approval.toolCallId}`, {
