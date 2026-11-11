@@ -12,7 +12,8 @@ import { decodeEntities } from "./entities.ts";
 const MAX_DEPTH = 64;
 
 /** 整段内容都是噪音的元素：写给浏览器的，不是给读者的。 */
-const DROP = new Set(["script", "style", "noscript", "svg", "canvas", "template", "iframe", "object", "embed"]);
+// 只放有结束标签的：`embed` 是空元素，放进来就等不到它的结束，后面整页都被丢掉。
+const DROP = new Set(["script", "style", "noscript", "svg", "canvas", "template", "iframe", "object"]);
 
 /** 换行但不空行的元素。 */
 const LINE_BREAK = new Set(["br", "tr", "li", "dt", "dd"]);
@@ -120,6 +121,15 @@ function* tokenize(html: string): Generator<Token> {
 		if (!/^[a-z][a-z0-9-]*$/.test(name)) continue;
 
 		yield closing ? { kind: "close", name } : { kind: "open", name, attrs: space === -1 ? "" : body.slice(space) };
+		/*
+		 * script、style 的内容是原文，不是标签：`if(a<b){c='x'}` 里的 `<b` 当成开标签的话，引号会一路吞过 `</script>`，
+		 * 后面整页都丢了。浏览器也是这样读的：直接跳到它的结束标签。
+		 */
+		if (!closing && (name === "script" || name === "style")) {
+			const end = new RegExp(`</${name}[\\s/>]`, "gi");
+			end.lastIndex = index;
+			index = end.exec(html)?.index ?? html.length;
+		}
 	}
 }
 

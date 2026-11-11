@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { ToolRun } from "@plume/contract";
+import type { SecretsService, ToolRun } from "@plume/contract";
 import type { SearchKeys } from "../src/api.ts";
 import { htmlToText } from "../src/html-text.ts";
 import { registerDefaultSearchProviders } from "../src/search/defaults.ts";
@@ -115,6 +115,12 @@ test("htmlToText：表格成行、列表留层次、代码留换行、脚本丢�
 	);
 });
 
+test("htmlToText：脚本里的 < 和引号不吞掉后文，空元素 embed 不丢后文", () => {
+	assert.equal(htmlToText(`<script>if(a<b){c='x'}</script><p>Hello</p>`), "Hello");
+	assert.equal(htmlToText(`<STYLE>a<b{content:"'"}</Style><p>Styled</p>`), "Styled");
+	assert.equal(htmlToText(`<p>Before</p><embed src="x.swf"><p>After</p>`), "Before\n\nAfter");
+});
+
 /** 起一个本机 HTTP 服务，跑完关掉。 */
 async function withServer(handler: Parameters<typeof createServer>[1], run: (base: string) => Promise<void>) {
 	const server: Server = createServer(handler);
@@ -210,16 +216,31 @@ test("web_search：按 <search> 格式输出，配置错误时说出 code", asyn
 	assert.match(failed.output, /SEARCH_PROVIDER_AMBIGUOUS/);
 });
 
-test("设置文件：0600 写入，界面那份只说填没填", async () => {
+/** 服务 `secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把 key 交给它加密。 */
+const SEALED = "plume-sealed:v1:";
+const fakeSecrets: SecretsService = {
+	seal: async (value) => SEALED + Buffer.from(value).toString("base64"),
+	unseal: async (sealed) =>
+		sealed.startsWith(`${SEALED}lost`) ? null : sealed.startsWith(SEALED) ? Buffer.from(sealed.slice(SEALED.length), "base64").toString() : null,
+	isSealed: (value) => value.startsWith(SEALED),
+};
+
+test("设置文件：0600 写入，key 加密落盘、读回来解开，解不开的当成没填；界面那份只说填没填", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "plume-web-"));
 	try {
 		const file = join(dir, "search.json");
-		const settings = settingsFile(file);
+		const settings = settingsFile(file, fakeSecrets);
 		const saved = await settings.update((current) => ({ ...current, provider: "brave", keys: { brave: " secret " } }));
 		assert.deepEqual(saved, { provider: "brave", keys: { brave: "secret" } });
 		assert.equal((await stat(file)).mode & 0o777, 0o600);
-		assert.deepEqual(JSON.parse(await readFile(file, "utf8")), saved);
+		const text = await readFile(file, "utf8");
+		assert.ok(!text.includes("secret"), "文件里没有明文 key");
+		assert.ok(fakeSecrets.isSealed(JSON.parse(text).keys.brave));
+		assert.deepEqual(await settings.read(), saved);
 		assert.deepEqual(viewOf(saved), { provider: "brave", keys: { tavily: false, deepseek: false, brave: true, exa: false } });
+
+		await writeFile(file, JSON.stringify({ provider: null, keys: { tavily: `${SEALED}lost`, exa: "hand-written" } }));
+		assert.deepEqual(await settings.read(), { provider: null, keys: { exa: "hand-written" } });
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

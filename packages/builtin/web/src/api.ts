@@ -14,7 +14,7 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type SearchKeys = Partial<Record<KeyId, string>>;
 
-/** 插件数据目录里 `search.json` 的内容。 */
+/** 插件数据目录里 `search.json` 的内容；文件里的 key 是加密过的，这里是解开后的。 */
 export interface SearchSettings {
 	/** 人选的那家；null 是没选，按规则自动挑。 */
 	provider: string | null;
