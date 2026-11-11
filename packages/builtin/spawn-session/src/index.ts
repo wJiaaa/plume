@@ -39,7 +39,7 @@ export default {
 		};
 
 		ctx.hook("model.context", async (input, next) => {
-			if (await isChild(input.sessionId))
+			if (input.parentId !== undefined || input.owner !== undefined)
 				return next({ ...input, tools: input.tools.filter((tool) => tool.name !== SPAWN_SESSION && tool.name !== ARCHIVE_SESSION) });
 			return next(input);
 		});

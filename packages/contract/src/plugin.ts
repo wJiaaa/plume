@@ -274,6 +274,16 @@ export interface PromptSection {
  */
 export interface ModelContext {
 	sessionId: string;
+	/**
+	 * 这个会话挂在哪个会话下面，和 `SessionSummary.parentId` 同一件事：只有插件建的子会话（侧边聊天、子 Agent）有，
+	 * 顶层会话不带这个键。按会话藏工具、改提示词时看它，不用为此去 `ctx.sessions.list()`。
+	 */
+	parentId?: string;
+	/**
+	 * 建这个会话的插件，和 `SessionSummary.owner` 同一件事：插件的子会话和独立会话（`SessionAccess.create` 不给 `parentId`）有，
+	 * 侧栏里的会话不带这个键。有 `owner` 没有 `parentId` 的是插件的独立会话。
+	 */
+	owner?: string;
 	cwd: string;
 	/** 当前项目的源文件夹；只授予读取，工作树隔离后为空。 */
 	projectRoots?: readonly string[];

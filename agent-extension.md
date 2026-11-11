@@ -305,6 +305,8 @@ interface ToolOutput {
 
 interface ModelContext {
 	sessionId: string;
+	parentId?: string;         // 插件的子会话挂在哪个会话下面，同 SessionSummary.parentId；顶层会话不带
+	owner?: string;            // 建这个会话的插件，同 SessionSummary.owner；子会话、插件的独立会话才有
 	cwd: string;
 	systemPrompt: string;      // 就是 sections 用空行连起来
 	sections: PromptSection[]; // { id, text, files? }：identity、guidelines、boundaries、environment、tone、userInstructions、projectInstructions、workspace，插件按 id 改

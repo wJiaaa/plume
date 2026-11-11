@@ -983,6 +983,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const { model } = resolveModel(settings, modelOf(session));
 		const input: ModelContext = {
 			sessionId: session.summary.id,
+			...(session.summary.parentId === undefined ? {} : { parentId: session.summary.parentId }),
+			...(session.summary.owner === undefined ? {} : { owner: session.summary.owner }),
 			cwd: session.summary.cwd,
 			projectRoots: projectRootsFor(projects, session.summary.cwd, session.summary.project),
 			scratchDir: scratchDir(session.summary.id),

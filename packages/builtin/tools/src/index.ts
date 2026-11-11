@@ -68,21 +68,13 @@ export default {
 			register: (handler) => resources.register(readOnly(handler)),
 			keepArtifact: (sessionId, tool, content) => artifacts.keep(sessionId, tool, content),
 		});
-		/*
-		 * 子会话拿不到后台送达的渠道（`ToolRun.background`），monitor 和定时唤醒在那里送不出任何东西：不列给模型，而不是等它调了再报错——
-		 * 没见过的工具模型不会要，一个错误却要白花一轮才知道此路不通。一个会话是不是子会话不会变，问一次记下。
-		 */
-		const children = new Map<string, boolean>();
-		const isChild = async (sessionId: string) => {
-			const known = children.get(sessionId);
-			if (known !== undefined) return known;
-			const summary = (await ctx.sessions.list()).find((entry) => entry.id === sessionId);
-			if (summary) children.set(sessionId, summary.parentId !== undefined);
-			return summary?.parentId !== undefined;
-		};
 		ctx.hook("model.context", async (input, next) => {
 			const text = addressesSection(resources.schemes());
-			const tools = (await isChild(input.sessionId)) ? input.tools.filter((tool) => !TOP_LEVEL_ONLY.has(tool.name)) : input.tools;
+			/*
+			 * 子会话拿不到后台送达的渠道（`ToolRun.background`），monitor 和定时唤醒在那里送不出任何东西：不列给模型，而不是等它调了再报错——
+			 * 没见过的工具模型不会要，一个错误却要白花一轮才知道此路不通。
+			 */
+			const tools = input.parentId !== undefined ? input.tools.filter((tool) => !TOP_LEVEL_ONLY.has(tool.name)) : input.tools;
 			return next({ ...input, tools, ...(text ? { sections: [...input.sections, { id: "resources", text }] } : {}) });
 		});
 		ctx.hook(
@@ -112,7 +104,6 @@ export default {
 			const found = states.get(sessionId);
 			if (found) stop(sessionId, found);
 			states.delete(sessionId);
-			children.delete(sessionId);
 			artifacts.forget(sessionId);
 			await removeFileChanges(ctx.dataDir, sessionId, found);
 		});
