@@ -682,10 +682,17 @@ function textOf(block: AssistantContent): string | null {
  * 只写新增的尾巴，总共写下的就是回复本身那么大。
  *
  * 只比长度和末尾一小段，不比整段前缀：每次都比整段，长回复是平方级的开销。重试从头写、文字被修剪这类重写会改掉旧末尾
- * 或让块变短，都认得出来，按整块换掉处理。
+ * 或让块变短，都认得出来，按整块换掉处理。重试清空了内容、块比上次少，或者原位置换成了工具调用：交出去过的那块换成空的，
+ * 不然恢复时上一次尝试写的字还在。
  */
 function takePieces(stream: DraftStream, draft: AssistantMessage): DraftPiece[] {
 	const out: DraftPiece[] = [];
+	for (const [i, known] of stream.taken) {
+		const block = draft.content[i];
+		if (block && textOf(block) !== null) continue;
+		if (known.length > 0) out.push({ i, type: known.type, text: "", reset: true });
+		stream.taken.delete(i);
+	}
 	draft.content.forEach((block, i) => {
 		const text = textOf(block);
 		if (text === null) return;

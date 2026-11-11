@@ -203,6 +203,42 @@ it("流到一半进程没了：下次打开时已经收到的文字和思考作�
 	expect(rows("SELECT session_id FROM drafts")).toEqual([]);
 });
 
+it("重试从头写、块比上一次少时进程没了：恢复的只有这一次写出的，上一次多出来的块不混进来", async () => {
+	const writer = open();
+	writer.create(summary("a", 1));
+	writer.append(summary("a", 2), user("写点东西"));
+	writer.draft(
+		"a",
+		reply([
+			{ type: "thinking", thinking: "第一次的思考" },
+			{ type: "text", text: "第一次写出的正文" },
+			{ type: "text", text: "后来换成工具调用的那段" },
+		]),
+	);
+	// 断线重试：适配器清空内容从头再来，这次第三块是工具调用。
+	writer.draft("a", reply([]));
+	writer.draft(
+		"a",
+		reply([
+			{ type: "thinking", thinking: "重" },
+			{ type: "toolCall", id: "c", name: "read", arguments: {} },
+		]),
+	);
+	writer.draft(
+		"a",
+		reply([
+			{ type: "thinking", thinking: "重来" },
+			{ type: "toolCall", id: "c", name: "read", arguments: {} },
+			{ type: "toolCall", id: "d", name: "read", arguments: {} },
+		]),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 150));
+
+	const reader = open();
+	expect(reader.messages("a")[1]).toMatchObject({ stopReason: "aborted", content: [{ type: "thinking", thinking: "重来" }] });
+	expect((reader.messages("a")[1] as AssistantMessage).content).toHaveLength(1);
+});
+
 it("整块重写的草稿按最新的恢复；写进会话、或者丢掉的草稿不再恢复", () => {
 	const writer = open();
 	for (const id of ["a", "b", "c"]) writer.create(summary(id));
