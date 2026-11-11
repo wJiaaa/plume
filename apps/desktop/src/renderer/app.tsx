@@ -1371,7 +1371,7 @@ function Shell() {
 			<div className="plume-panel flex h-full flex-col bg-shell">
 				<PanelArea detached titlebar={titlebar} />
 				<ImageViewerHost />
-				<Toaster inset={0} onInvestigate={investigate} />
+				<Toaster onInvestigate={investigate} />
 			</div>
 		);
 
@@ -1456,7 +1456,7 @@ function Shell() {
 				<div className="relative flex min-h-0 flex-1 overflow-hidden">
 					{body}
 					<ImageViewerHost />
-					<Toaster inset={pushed ? width : 0} onInvestigate={investigate} onOpenSession={openNoticeSession} />
+					<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
 				</div>
 			</div>
 		);
@@ -1474,7 +1474,7 @@ function Shell() {
 				{toolbar}
 			</div>
 			<ImageViewerHost />
-			<Toaster inset={pushed ? width : 0} onInvestigate={investigate} onOpenSession={openNoticeSession} />
+			<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
 		</div>
 	);
 }
@@ -1692,7 +1692,7 @@ function SessionWindowShell() {
 				</div>
 			</main>
 			<ImageViewerHost />
-			<Toaster inset={0} />
+			<Toaster />
 		</div>
 	);
 }

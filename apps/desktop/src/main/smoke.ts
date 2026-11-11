@@ -709,6 +709,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-plume-toaster] [role=status]')?.textContent.includes('这条命令不接收参数')`, "命令校验弹出警告提示条");
 		if (!(await page(`document.querySelector('.cm-content')?.textContent === '/clear extra' && !document.querySelector('.plume-composer-dock [role=alert]')`)))
 			throw new Error("命令警告丢失草稿或重复画在输入框上方");
+		// 提示条按整个窗口居中，侧栏开着也不往右偏。
+		const toastOffset = await page<number>(
+			`(() => { const r = document.querySelector('[data-plume-toaster] > div').getBoundingClientRect(); return Math.abs(r.left + r.width / 2 - innerWidth / 2); })()`,
+		);
+		if (toastOffset > 1) throw new Error(`提示条没在窗口里居中，偏了 ${toastOffset}px`);
 		for (const theme of ["dark", "light"]) {
 			await page(`window.plume.saveAppearance({ theme: ${JSON.stringify(theme)} })`);
 			await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${theme === "dark"}`, `提示条切到 ${theme}`);

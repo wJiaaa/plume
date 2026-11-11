@@ -3,7 +3,8 @@
  *
  * portal 到 `<body>`、钉在窗口上、盖在所有层上面，居中贴着顶。报错的可能是对话、面板、插件，正文卡片只是三栏里的一栏，
  * 画在它里面的话，面板报的错会被裁在面板边上、被面板盖住。顶上那一条在侧栏开合、面板并排或盖住、窄窗口这几种布局里
- * 都空着，输入框、文件树、编辑器都在它下面；居中是因为谁报的都是同一种东西，不该出现在两个地方。
+ * 都空着，输入框、文件树、编辑器都在它下面；居中是因为谁报的都是同一种东西，不该出现在两个地方。按整个窗口居中，
+ * 不随侧栏开合挪位置。
  *
  * 哪些卡片存在全在 `stack.ts`；这里只管画、计时和指针。
  */
@@ -31,12 +32,9 @@ const TONE = {
 } as const;
 
 export function Toaster({
-	inset,
 	onInvestigate,
 	onOpenSession,
 }: {
-	/** 左边让出多少：侧栏推开正文时，提示条居中在侧栏右边那一块上。 */
-	inset: number;
 	/** 把一条错误写成一段草稿，交给一个新对话去查；不发出去，发不发由人定。 */
 	onInvestigate?: (message: string) => void;
 	/** 跳到卡片说的那个会话；打开了才收起卡片。没给的窗口（会话窗、面板窗）不画这个按钮。 */
@@ -117,8 +115,8 @@ export function Toaster({
 		/* 这一列不接指针，只有卡片本身接；`no-drag` 防着它长进标题栏那一条时点不到。 */
 		<div
 			data-plume-toaster=""
-			style={{ zIndex: TOAST_Z, left: inset, right: 0 }}
-			className="[app-region:no-drag] pointer-events-none fixed top-[52px] flex flex-col items-center gap-2 px-4 transition-[left] duration-[var(--plume-t-base)] ease-out"
+			style={{ zIndex: TOAST_Z }}
+			className="[app-region:no-drag] pointer-events-none fixed inset-x-0 top-[52px] flex flex-col items-center gap-2 px-4"
 		>
 			{shown.map((group) => {
 				const tone = TONE[group.level];
