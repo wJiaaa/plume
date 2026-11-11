@@ -234,7 +234,11 @@ export async function checkDesktopCompat(options: {
 			await until(`${panelShown} && Boolean(${visible(FILES_LAUNCH)} ?? ${visible(FILES_TAB)})`, `${label}：面板区打开`);
 			await settle();
 			// 第一组从开始页点开项目文件；之后各组打开面板区就回到存下的那个标签。
-			if (await page<boolean>(`!${visible(FILES_TAB)}`)) await press(FILES_LAUNCH);
+			// 窗口矮时开始页放不下所有面板，贴顶往下滚：先把「项目文件」滚进来再按，和人一样。
+			if (await page<boolean>(`!${visible(FILES_TAB)}`)) {
+				await page(`${visible(FILES_LAUNCH)}.scrollIntoView({ block: "nearest" })`);
+				await press(FILES_LAUNCH);
+			}
 			await until(`Boolean(${visible(FILES_TAB)})`, `${label}：开出项目文件标签`);
 			await settle();
 			await headerAlignment(`${label} 面板区`);

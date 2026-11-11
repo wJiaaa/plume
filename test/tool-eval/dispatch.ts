@@ -15,7 +15,7 @@ import type { Message } from "../../packages/core/llm/src/types.ts";
 import { fakeAnthropic } from "../../packages/core/agent/src/testing.ts";
 import type { EvalAgent, EvalTurn } from "./agent.ts";
 
-/** 子智能体插件 `list` 给的一条任务（插件仓库 subagents/src/types.ts 的 TaskRecord），这里只用到这几样。 */
+/** 子智能体插件 `list` 给的一条任务（`packages/builtin/subagents/src/types.ts` 的 TaskRecord），这里只用到这几样。 */
 type TaskRecord = { answer?: string; output?: unknown; warnings?: string[] };
 
 const SUBAGENTS = "plume.subagents";

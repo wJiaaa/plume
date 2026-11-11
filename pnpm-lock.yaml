@@ -458,6 +458,24 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/builtin/subagents:
+    devDependencies:
+      '@plumeai/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../sdk/plugin-sdk
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.19.2
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.1
+        version: 19.3.1
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+
   packages/builtin/title:
     devDependencies:
       '@plumeai/plugin-sdk':

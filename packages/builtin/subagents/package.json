@@ -1,0 +1,29 @@
+{
+  "name": "@plume/subagents",
+  "version": "0.1.0",
+  "description": "让 agent 把一件事派给子智能体：它在自己的上下文里查、改、跑，只把结论交回主对话；对话里一张卡片看进度，子 Agent 面板看全过程。",
+  "author": "Plume",
+  "keywords": [
+    "子智能体",
+    "subagent",
+    "task",
+    "面板"
+  ],
+  "plume": {
+    "displayName": "子智能体",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1",
+    "yaml": "2.9.1"
+  }
+}

@@ -1509,8 +1509,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-panel-area]')?.inert === false && document.querySelector('${shown("start")}') !== null`, "打开面板区的开始页");
 		if (await page(`document.querySelector('[data-panel-toggle]') !== null`)) throw new Error("面板打开后正文标题栏不应显示面板开关");
 		const launchers = (await page(`[...document.querySelectorAll('[data-panel-launch]')].map((card) => card.dataset.panelLaunch)`)) as string[];
-		if (launchers.join() !== "plume.diagnostics/tasks,plume.diagnostics/trajectory,plume.browser/browser,plume.git/git,plume/files,plume.terminal/terminal")
-			throw new Error(`开始页应有任务、调用轨迹、浏览器、Git、项目文件和终端，实际是 ${launchers.join()}`);
+		if (
+			launchers.join() !==
+			"plume.diagnostics/tasks,plume.diagnostics/trajectory,plume.browser/browser,plume.git/git,plume.side-chat/chat,plume.subagents/agents,plume/files,plume.terminal/terminal"
+		)
+			throw new Error(`开始页应有任务、调用轨迹、浏览器、Git、侧边聊天、子 Agent、项目文件和终端，实际是 ${launchers.join()}`);
 		// 面板区占了一半，对话列放不下浮着的卡片：清单回到输入框正上方。
 		await until(todoCard("inline"), "面板区打开后 todo 清单回到输入框上方");
 		await delay(300);
@@ -1678,13 +1681,9 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 6. 插件作者的路子：应用生成的 plume-plugin 用应用自己的二进制跑，装进去的插件不重启就加载。
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
 
-		// 子 Agent 是市场里的插件，经 plume-plugin 装上、当场加载；侧边聊天是内置插件，随应用加载。两者都跑在子会话里。
+		// 子 Agent、侧边聊天：都是内置插件，随应用加载，跑在子会话里（市场插件不重启当场加载，由下面的下一步建议验证）。
 		// 主 Agent 派活给子 Agent，子 Agent 的 write 要确认，审批卡压在主输入框上方、标明是哪个子 Agent 问的；
 		// 跑完点工具卡片上的 ↗，子 Agent 面板画出它的全过程。再敲 `/btw 问题`：这句话不进主对话，新开一格侧边聊天，回答画在那里。
-		for (const name of ["subagents"]) {
-			await plugin.install(name);
-			await waitFor(async () => (await agent.plugins()).some((status) => status.key === name && status.state === "active"), `装上 ${name} 插件`);
-		}
 		await click("[data-plume-row] button");
 		await until(`document.querySelector('[data-screen=chat] .cm-content') !== null`, "回到会话");
 		const sentBefore = model.requests.length;

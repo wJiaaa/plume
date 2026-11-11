@@ -1,0 +1,828 @@
+.subagents-panel {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+}
+.subagents-header {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 6px 4px 4px;
+	border-bottom: 1px solid var(--plume-line);
+}
+.subagents-switch {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: 1;
+	min-width: 0;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	text-align: left;
+	transition: background var(--plume-t-quick) var(--plume-e-soft);
+}
+button.subagents-switch:hover,
+button.subagents-switch[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+button.subagents-switch:active {
+	background: var(--plume-elevated);
+}
+.subagents-title {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	gap: 2px;
+}
+.subagents-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.subagents-truncate {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.subagents-meta {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+/* 输入框上方那一行：底色只在外框上，平时淡一档、悬停整条到 card；里面那颗按钮不另铺底色，悬停只把字提到 ink，
+   两层底色叠着就成了卡片里套卡片。 */
+.subagents-bar {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	margin-bottom: 6px;
+	padding: 2px 8px 2px 4px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-card) 60%, transparent);
+	transition: background var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-bar:hover {
+	background: var(--plume-card);
+}
+.subagents-bar .subagents-switch {
+	gap: 8px;
+	padding: 4px;
+}
+.subagents-bar button.subagents-switch:hover,
+.subagents-bar button.subagents-switch[aria-expanded="true"],
+.subagents-bar button.subagents-switch:active {
+	background: transparent;
+}
+.subagents-bar-headline {
+	transition: color var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-bar .subagents-switch:hover .subagents-bar-headline,
+.subagents-bar .subagents-switch[aria-expanded="true"] .subagents-bar-headline {
+	color: var(--plume-ink);
+}
+.subagents-bar[data-enter="true"],
+.subagents-brief,
+.subagents-report {
+	animation: plume-fade-up var(--plume-t-quick) var(--plume-e-out);
+}
+.subagents-spacer {
+	flex: 1;
+}
+.subagents-conversation {
+	flex: 1;
+	min-height: 0;
+}
+.subagents-brief,
+.subagents-report {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-card);
+}
+.subagents-brief {
+	padding: 6px 14px 10px;
+}
+.subagents-brief-head {
+	display: flex;
+	height: 24px;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+.subagents-brief-body {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.subagents-brief-body[data-collapsed="true"] {
+	max-height: 10em;
+	overflow: hidden;
+	mask-image: linear-gradient(to bottom, var(--plume-ink) 60%, transparent);
+}
+.subagents-report {
+	padding: 8px 14px 14px;
+	margin-top: 12px;
+}
+.subagents-report[data-partial="true"] {
+	border-color: var(--plume-danger);
+}
+.subagents-report-head {
+	display: flex;
+	height: 28px;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+.subagents-report-copy {
+	opacity: 0;
+	transition: opacity var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-report:hover .subagents-report-copy,
+.subagents-report-copy:focus-visible {
+	opacity: 1;
+}
+.subagents-report-body {
+	overflow-wrap: anywhere;
+}
+.subagents-report-note {
+	margin-bottom: 12px;
+}
+
+/* ---- 结构化回报 ---- */
+.subagents-out {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+.subagents-out-prose {
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: break-word;
+	color: var(--plume-ink);
+}
+.subagents-out-flags {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.subagents-out-flag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-card-hover);
+}
+.subagents-out-flag[data-passed="true"] {
+	color: var(--plume-ok);
+	background: color-mix(in srgb, var(--plume-ok) 12%, transparent);
+}
+.subagents-out-flag[data-passed="false"] {
+	color: var(--plume-danger);
+	background: color-mix(in srgb, var(--plume-danger) 12%, transparent);
+}
+.subagents-out-warnings {
+	padding: 8px 10px;
+	border-radius: var(--plume-radius-field);
+	background: color-mix(in srgb, var(--plume-card-hover) 60%, transparent);
+}
+.subagents-out-warning-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 4px 0 0;
+	padding-left: 18px;
+	overflow-wrap: break-word;
+}
+.subagents-out-row {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 10px;
+}
+.subagents-out-key {
+	flex-shrink: 0;
+}
+.subagents-out-wrap {
+	min-width: 0;
+	flex: 1;
+	overflow-wrap: break-word;
+}
+.subagents-out-path {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.subagents-out-section {
+	min-width: 0;
+}
+.subagents-out-heading {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.subagents-out-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.subagents-out-bullet {
+	display: flex;
+	gap: 8px;
+}
+.subagents-out-dot {
+	flex-shrink: 0;
+	width: 4px;
+	height: 4px;
+	margin-top: 0.7em;
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-ink-faint);
+}
+.subagents-out-nested {
+	padding-left: 12px;
+	border-left: 2px solid var(--plume-line-soft);
+}
+.subagents-out-records {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.subagents-out-item {
+	display: flex;
+	min-width: 0;
+	gap: 10px;
+	padding: 10px 0;
+	border-top: 1px solid var(--plume-line-soft);
+}
+.subagents-out-item:first-child {
+	padding-top: 2px;
+	border-top: 0;
+}
+.subagents-out-item:last-child {
+	padding-bottom: 0;
+}
+.subagents-out-index {
+	flex-shrink: 0;
+	width: 16px;
+	padding-top: 1px;
+	text-align: right;
+}
+.subagents-out-item-body {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 4px;
+}
+.subagents-out-where {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+}
+.subagents-out-text {
+	overflow-wrap: break-word;
+	white-space: pre-wrap;
+}
+.subagents-out-chips {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+}
+.subagents-out-chip {
+	max-width: 100%;
+	padding: 1px 6px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card-hover);
+	overflow-wrap: anywhere;
+}
+.subagents-out-severity {
+	display: inline-flex;
+	flex-shrink: 0;
+	height: 18px;
+	align-items: center;
+	padding: 0 6px;
+	border-radius: var(--plume-radius-item);
+	color: var(--plume-ink-muted);
+	background: color-mix(in srgb, var(--plume-ink) 6%, transparent);
+}
+.subagents-out-severity[data-level="high"] {
+	color: var(--plume-danger);
+	background: color-mix(in srgb, var(--plume-danger) 12%, transparent);
+}
+.subagents-out-severity[data-level="medium"] {
+	color: var(--plume-ink);
+	background: color-mix(in srgb, var(--plume-ink) 10%, transparent);
+}
+.subagents-way-back {
+	margin-top: 8px;
+	width: fit-content;
+}
+.subagents-error {
+	padding: 12px;
+}
+
+/* ---- 设置 › 智能体。线和悬停底用 ink 混出来的两档。 ---- */
+.subagents-settings {
+	--subagents-line: color-mix(in srgb, var(--plume-ink) 10%, transparent);
+	--subagents-hover: color-mix(in srgb, var(--plume-ink) 5%, transparent);
+	container-type: inline-size;
+}
+.subagents-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+.subagents-toolbar-rule {
+	width: 1px;
+	height: 16px;
+	background: var(--plume-line);
+}
+.subagents-toolbar-title {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+}
+.subagents-toolbar-search {
+	display: flex;
+	flex: 1 1 120px;
+	max-width: 220px;
+	margin-left: auto;
+}
+.subagents-toolbar-search > * {
+	flex: 1;
+	min-width: 0;
+}
+.subagents-scope {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	max-width: 180px;
+	padding: 0 14px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-scope:hover,
+.subagents-scope[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+.subagents-scope-caret {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+	transition: transform var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-scope-caret[data-open] {
+	transform: rotate(180deg);
+}
+/* 框、底色、字色由 `SettingsNotice` 给；这里只排一行：文字在左，重试按钮在右。 */
+.subagents-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 20px;
+}
+.subagents-banner-text {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.subagents-notice {
+	margin-top: 20px;
+}
+.subagents-group {
+	margin-top: 24px;
+}
+.subagents-group[hidden] {
+	display: none;
+}
+.subagents-group-next {
+	margin-top: 32px;
+}
+.subagents-group-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+.subagents-group-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+}
+.subagents-group-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.subagents-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 48px 24px;
+	text-align: center;
+}
+.subagents-empty-detail {
+	max-width: 360px;
+	margin-bottom: 8px;
+}
+.subagents-empty-search {
+	padding: 40px 24px;
+	text-align: center;
+}
+.subagents-list > * + * {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+/* 一行：脸、名字和用途、右边的控件。窄的时候控件换到下一行靠右。 */
+.subagents-agent {
+	position: relative;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-agent[data-editable]:hover {
+	background: var(--plume-card-hover);
+}
+.subagents-agent[data-agent-saved] {
+	background: color-mix(in srgb, var(--plume-accent) 5%, transparent);
+}
+.subagents-agent-open {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.subagents-agent-face {
+	position: relative;
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	pointer-events: none;
+}
+.subagents-agent-body {
+	position: relative;
+	min-width: 0;
+	pointer-events: none;
+}
+.subagents-agent-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.subagents-meta-tag {
+	flex-shrink: 0;
+}
+.subagents-agent-description {
+	margin-top: 4px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.subagents-agent-controls {
+	position: relative;
+	grid-column: span 2;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	min-width: 0;
+	pointer-events: none;
+}
+.subagents-agent-controls > * {
+	pointer-events: auto;
+}
+@container (min-width: 42rem) {
+	.subagents-agent {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+	}
+	.subagents-agent-controls {
+		grid-column: auto;
+	}
+}
+.subagents-agent-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.subagents-row-action {
+	display: flex;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+@media (hover: hover) and (pointer: fine) {
+	.subagents-row-action {
+		opacity: 0;
+		pointer-events: none;
+	}
+	.subagents-agent:hover .subagents-row-action,
+	.subagents-agent:focus-within .subagents-row-action {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+.subagents-run-config {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	min-width: 0;
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.subagents-run-config:disabled {
+	opacity: 0.6;
+}
+.subagents-run-config > button {
+	max-width: 100%;
+}
+.subagents-run-alert {
+	display: inline-flex;
+}
+
+/* ---- 编辑器 ---- */
+.subagents-editor-body {
+	max-height: min(620px, 66dvh);
+}
+.subagents-editor {
+	container-type: inline-size;
+}
+.subagents-editor-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.subagents-editor-fields:disabled {
+	opacity: 0.6;
+}
+.subagents-editor-error {
+	margin-bottom: 4px;
+}
+.subagents-editor-leaving {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.subagents-editor-head {
+	display: flex;
+	align-items: flex-end;
+	gap: 12px;
+}
+.subagents-editor-face {
+	position: relative;
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 56px;
+	height: 56px;
+	border-radius: var(--plume-radius-panel);
+	background: var(--subagents-hover);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-editor-face:hover {
+	background: var(--subagents-line);
+}
+.subagents-editor-face-button {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--plume-radius-panel);
+	background: transparent;
+}
+.subagents-editor-face-art {
+	pointer-events: none;
+}
+/* 骰子是贴在角上的一枚圆章：22px 的按钮配 12px 的圆角正好是圆，自带一圈线和一点影子。 */
+.subagents-editor-dice {
+	position: absolute;
+	right: -4px;
+	bottom: -4px;
+	display: grid;
+	overflow: hidden;
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-float);
+	box-shadow: var(--plume-shadow-knob);
+	outline: 1px solid var(--subagents-line);
+}
+.subagents-editor-name {
+	flex: 1;
+	min-width: 0;
+}
+.subagents-editor-scope {
+	flex-shrink: 0;
+	min-width: 0;
+}
+.subagents-input {
+	width: 100%;
+}
+.subagents-mono {
+	font-family: var(--plume-font-mono);
+}
+.subagents-scope-fixed {
+	white-space: nowrap;
+}
+.subagents-field-label {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.subagents-field-hint {
+	margin-top: 6px;
+}
+.subagents-fit {
+	display: block;
+	width: fit-content;
+}
+.subagents-tools {
+	margin-top: 8px;
+	padding: 4px;
+	border: 1px solid var(--subagents-line);
+	border-radius: var(--plume-radius-field);
+}
+.subagents-tools-grid {
+	display: grid;
+	gap: 4px;
+	max-height: 224px;
+	overflow-y: auto;
+}
+@container (min-width: 28rem) {
+	.subagents-tools-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@container (min-width: 36rem) {
+	.subagents-tools-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+.subagents-tool {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	padding: 8px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	text-align: left;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-tool:hover {
+	background: var(--subagents-line);
+}
+.subagents-tool-box {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border: 1px solid var(--subagents-line);
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-float);
+	color: transparent;
+	transition:
+		background-color var(--plume-t-quick),
+		border-color var(--plume-t-quick);
+}
+.subagents-tool-box[data-checked] {
+	border-color: var(--plume-ink);
+	background: var(--plume-ink);
+	color: var(--plume-shell);
+}
+.subagents-tool-name {
+	flex: 1;
+}
+.subagents-tool-risk {
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-danger);
+}
+.subagents-advanced-note {
+	margin-bottom: 8px;
+}
+.subagents-advanced-json {
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ---- 选脸 ---- */
+.subagents-picker {
+	width: 316px;
+	padding: 12px;
+}
+.subagents-picker-label {
+	margin-bottom: 6px;
+	padding: 0 2px;
+}
+.subagents-picker-label-next {
+	margin-top: 12px;
+}
+.subagents-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(8, minmax(0, 1fr));
+	gap: 4px;
+}
+.subagents-picker-shape,
+.subagents-picker-color {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	transition:
+		background-color var(--plume-t-quick),
+		opacity var(--plume-t-quick);
+}
+.subagents-picker-shape:hover,
+.subagents-picker-shape[aria-checked="true"] {
+	background: var(--plume-card-hover);
+}
+.subagents-picker-shape[data-taken],
+.subagents-picker-color[data-taken] {
+	cursor: not-allowed;
+	opacity: 0.3;
+}
+.subagents-picker-shape[data-taken]:hover {
+	background: transparent;
+}
+/* 22px 的色块配 12px 的圆角就是圆；选中那一圈用 outline，跟着圆角走。 */
+.subagents-picker-swatch {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: var(--plume-radius-panel);
+	color: var(--plume-on-accent);
+	transition: transform var(--plume-t-quick) var(--plume-e-soft);
+}
+.subagents-picker-color[aria-checked="true"] .subagents-picker-swatch {
+	outline: 2px solid color-mix(in srgb, var(--plume-ink) 70%, transparent);
+	outline-offset: 2px;
+}
+.subagents-picker-color:not([aria-checked="true"]):not([data-taken]):hover .subagents-picker-swatch {
+	transform: scale(1.1);
+}
+/* 送达那一行的标题装的是名字：不加粗。 */
+.subagents-plain {
+	font-weight: normal;
+}
