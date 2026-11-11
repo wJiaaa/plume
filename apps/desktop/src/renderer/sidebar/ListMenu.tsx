@@ -9,7 +9,7 @@ import type { SessionSort } from "./grouping.ts";
 
 const SORTS = [
 	{ value: "manual", label: "sidebar.manual", Icon: GripVertical },
-	{ value: "updatedAt", label: "sidebar.updated", Icon: Clock, GripVertical },
+	{ value: "updatedAt", label: "sidebar.updated", Icon: Clock },
 	{ value: "createdAt", label: "sidebar.created", Icon: CalendarPlus },
 ] as const;
 

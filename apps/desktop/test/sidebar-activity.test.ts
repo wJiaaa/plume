@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionSummary } from "@plume/contract";
-import { activityOf, approvalChanged, outcome, sessionsChanged, settle } from "../src/renderer/sidebar/activity.ts";
+import { activityOf, approvalChanged, outcome, sessionsChanged, settle, sortNotices } from "../src/renderer/sidebar/activity.ts";
 
 const base: SessionSummary = { id: "s", title: "s", cwd: "/work", createdAt: 0, updatedAt: 0, running: false };
 const running = { ...base, running: true };
@@ -39,4 +39,17 @@ test("子会话在等批准时父会话也是等批准；子会话答完了父�
 	approvalChanged("c", false);
 	assert.equal(activityOf("p"), undefined);
 	sessionsChanged([parent, child], [], undefined);
+});
+
+test("通知合起来排：页面的失败排在会话的完成前面，同类里新的在前、没时间的在后", () => {
+	const notices = sortNotices([
+		{ id: "done", state: "done", updatedAt: 5 },
+		{ id: "page", state: "failed" },
+		{ id: "failed", state: "failed", updatedAt: 3 },
+		{ id: "waiting", state: "waiting", updatedAt: 1 },
+	] as const);
+	assert.deepEqual(
+		notices.map((notice) => notice.id),
+		["waiting", "failed", "page", "done"],
+	);
 });

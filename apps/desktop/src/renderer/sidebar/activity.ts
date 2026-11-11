@@ -123,3 +123,10 @@ export function useSessionActivity(sessionId: string): SessionActivity | undefin
 export function useActivityVersion(): number {
 	return useSyncExternalStore(subscribe, () => version);
 }
+
+const NOTICE_ORDER: readonly SessionActivity[] = ["waiting", "failed", "done"];
+
+/** 铃铛里的条目和圆点颜色共用一个顺序：先等批准、再失败、最后完成，同类里新的在前；没有时间的（页面的提醒）排在同类最后。 */
+export function sortNotices<T extends { state: SessionActivity; updatedAt?: number }>(notices: readonly T[]): T[] {
+	return [...notices].sort((a, b) => NOTICE_ORDER.indexOf(a.state) - NOTICE_ORDER.indexOf(b.state) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}

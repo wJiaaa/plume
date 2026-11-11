@@ -9,7 +9,7 @@ import { SETTINGS_GROUPS, type SettingsSection } from "../settings/pages.tsx";
 import { notify } from "../toast/index.ts";
 import type { SidebarActions } from "./actions.ts";
 import { CommandPalette, type PaletteCommand, type PaletteGroup } from "./CommandPalette.tsx";
-import { useActivityVersion, activityOf } from "./activity.ts";
+import { useActivityVersion, activityOf, sortNotices } from "./activity.ts";
 import { NotificationsMenu, NoticeDot, type Notice } from "./NotificationsMenu.tsx";
 import { ProjectDialog } from "./ProjectDialog.tsx";
 
@@ -161,21 +161,21 @@ export function SidebarTools({
 			],
 		},
 	];
-	const order = ["waiting", "failed", "done"];
-	const notices: Notice[] = sessions
+	const sessionNotices: Notice[] = sessions
 		.filter((s) => !s.parentId && !s.owner && !s.archived && s.id !== currentId)
 		.flatMap((s) => {
 			const state = activityOf(s.id);
 			return state
 				? [{ id: s.id, state, title: s.title || t("sessionOps.newSession"), project: projectName(s), updatedAt: s.updatedAt, run: () => actions.open(s.id) }]
 				: [];
-		})
-		.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state) || b.updatedAt - a.updatedAt);
+		});
 	const pageNotices = listPages().flatMap((page): Notice[] => {
 		const badge = pageBadge(page.key);
 		return badge?.attention ? [{ id: page.key, state: "failed", title: localized(badge.label, resolvedLocale), run: () => openPage(page.key) }] : [];
 	});
-	const top = notices[0]?.state ?? (pageNotices.length ? "failed" : undefined);
+	// 合起来再排：页面的失败要排在会话的完成前面，圆点的颜色取排在第一的那条。
+	const notices = sortNotices([...sessionNotices, ...pageNotices]);
+	const top = notices[0]?.state;
 	return (
 		<>
 			<IconButton
@@ -189,7 +189,7 @@ export function SidebarTools({
 				<IconButton size="composer" label={t("sidebar.notifications")} expanded={bell.open} onClick={bell.toggle} icon={<Bell size={15} strokeWidth={1.9} />} />
 				<NoticeDot top={top} />
 			</span>
-			{bell.open && <NotificationsMenu anchor={bell.anchor} notices={[...notices, ...pageNotices]} onClose={bell.close} />}
+			{bell.open && <NotificationsMenu anchor={bell.anchor} notices={notices} onClose={bell.close} />}
 			{searching && (
 				<CommandPalette
 					sessions={{ key: "sessions", label: t("palette.sessions"), commands: sessionCommands }}

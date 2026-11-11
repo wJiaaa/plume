@@ -10,6 +10,7 @@ import { ActionSpinner, Collapse, HoverRow, HoverRowReveal, hoverSlot, IconButto
 import { ChevronDown, ChevronRight, ChevronUp, Folder, FolderOpen, ListFilter, MoreHorizontal, Plus, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { type Group, groupSessions, nestSpawned, withSpawned, projectSessions, type SessionSort } from "./grouping.ts";
+import { projectSort } from "./order.ts";
 import { ListMenu } from "./ListMenu.tsx";
 import { useHideEmptiedProjects } from "./prefs.ts";
 import { ProjectDialog, ProjectMenu } from "./ProjectDialog.tsx";
@@ -24,6 +25,8 @@ import type { SidebarActions } from "./actions.ts";
 const COLLAPSED_KEY = "plume.sidebar.collapsed";
 /** 项目里的会话怎么排：是偏好，记下来，下次打开还是这样排。 */
 const SORT_KEY = "plume.sidebar.sort";
+/** 拖过、单独切成手动排序的项目 id；在列表设置里换排法时清空，所有项目跟着新选的排。 */
+const DRAGGED_KEY = "plume.sidebar.manualProjects";
 /**
  * 三个分区的折叠键。项目的键是它的 id（UUID），不会以 `§` 开头，两种键放在一处不会撞。
  */
@@ -36,10 +39,10 @@ const RECENT = "§recent";
  */
 const SESSION_PAGE = 5;
 
-function readCollapsed(): string[] {
+function readList(key: string): string[] {
 	try {
-		const stored = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as unknown;
-		return Array.isArray(stored) ? stored.filter((key): key is string => typeof key === "string") : [];
+		const stored = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
+		return Array.isArray(stored) ? stored.filter((each): each is string => typeof each === "string") : [];
 	} catch {
 		return [];
 	}
@@ -69,15 +72,26 @@ export function ProjectList({
 	actions: SidebarActions;
 }) {
 	const { t } = useI18n();
-	const [collapsed, setCollapsed] = useState(readCollapsed);
+	const [collapsed, setCollapsed] = useState(() => readList(COLLAPSED_KEY));
 	/** 每个项目现在露几段，没有就是 SESSION_PAGE。不落盘：下次打开从头看起。 */
 	const [shown, setShown] = useState<Record<string, number>>({});
 	const [creating, setCreating] = useState(false);
 	const [sort, setSort] = useState(readSort);
+	const [dragged, setDragged] = useState(() => readList(DRAGGED_KEY));
 	const listMenu = usePopover();
 	const hideEmptied = useHideEmptiedProjects();
-	const groups = useMemo(() => nestSpawned(groupSessions(sessions, projects, hideEmptied, sort)), [sessions, projects, hideEmptied, sort]);
-	const reorder = useSidebarReorder(groups, sort, actions, () => setSort("manual"));
+	const groups = useMemo(() => nestSpawned(groupSessions(sessions, projects, hideEmptied, sort, dragged)), [sessions, projects, hideEmptied, sort, dragged]);
+	// 拖动只把这一个项目切成手动，别的项目照旧按列表设置排。
+	const reorder = useSidebarReorder(
+		groups,
+		(projectId) => projectSort(projectId, sort, dragged),
+		actions,
+		(projectId) => setDragged((current) => (current.includes(projectId) ? current : [...current, projectId])),
+	);
+	const chooseSort = (next: SessionSort) => {
+		setSort(next);
+		setDragged([]);
+	};
 	/** 有子会话在跑的会话。 */
 	const busyParents = useMemo(() => new Set(sessions.flatMap((session) => (session.parentId && session.running ? [session.parentId] : []))), [sessions]);
 
@@ -86,10 +100,11 @@ export function ProjectList({
 		try {
 			localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
 			localStorage.setItem(SORT_KEY, sort);
+			localStorage.setItem(DRAGGED_KEY, JSON.stringify(dragged));
 		} catch {
 			// 存不下只是下次不记得，这一次的折叠和排序照样生效。
 		}
-	}, [collapsed, sort]);
+	}, [collapsed, sort, dragged]);
 
 	const isCollapsed = (key: string) => collapsed.includes(key);
 	const toggle = (key: string) => setCollapsed((current) => (current.includes(key) ? current.filter((each) => each !== key) : [...current, key]));
@@ -108,7 +123,7 @@ export function ProjectList({
 				<ListMenu
 					anchor={listMenu.anchor}
 					sort={sort}
-					onSort={setSort}
+					onSort={chooseSort}
 					canFold={foldable.length > 0}
 					allFolded={allFolded}
 					onFoldAll={foldAll}

@@ -253,3 +253,19 @@ test("手动顺序与拖动一致，新会话排在已排序会话前面", async
 	assert.equal(moveBeforeOrAfter(ids, "a", "b", "after"), null);
 	assert.equal(moveBeforeOrAfter(ids, "missing", "a", "before"), null);
 });
+
+test("拖过的项目单独按手动排，别的项目照旧按选的排法", () => {
+	const projects = [
+		{ id: "p", name: "拖过的", path: "/work", sessionOrder: ["p1", "p2"] },
+		{ id: "q", name: "没拖过的", path: "/work", sessionOrder: ["q1", "q2"] },
+	];
+	const sessions = [session("p1", 1, "p"), session("p2", 2, "p"), session("q1", 1, "q"), session("q2", 2, "q")];
+	const grouped = groupSessions(sessions, projects, false, "createdAt", ["p"]);
+	assert.deepEqual(
+		grouped.projects.map((group) => group.sessions.map((each) => each.id)),
+		[
+			["p1", "p2"],
+			["q2", "q1"],
+		],
+	);
+});

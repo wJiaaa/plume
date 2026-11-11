@@ -1,6 +1,6 @@
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
 import { Collapse } from "@plume/ui";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SidebarActions } from "./actions.ts";
 import { withSpawned } from "./grouping.ts";
 import { SessionRow } from "./SessionRow.tsx";
@@ -34,17 +34,23 @@ function Thread({ session, spawned, busyParents, lit, compact, projects, actions
 		.filter((child) => lit.has(child.id))
 		.map((child) => child.id)
 		.join(",");
+	// 只在收起、展开时写：展开是缺省，删掉键，不给每一行都留一条记录。
+	const fold = useCallback(
+		(next: boolean) => {
+			setFolded(next);
+			try {
+				if (next) localStorage.setItem(key, "true");
+				else localStorage.removeItem(key);
+			} catch {
+				/* 存不下时只影响下次打开。 */
+			}
+		},
+		[key],
+	);
 	// 只在切换到后续会话时展开；用户主动收起当前行时不抢着打开。
 	useEffect(() => {
-		if (active) setFolded(false);
-	}, [active]);
-	useEffect(() => {
-		try {
-			localStorage.setItem(key, String(folded));
-		} catch {
-			/* 存不下时只影响下次打开。 */
-		}
-	}, [key, folded]);
+		if (active) fold(false);
+	}, [active, fold]);
 	const row = (entry: SessionSummary, nested = false) => (
 		<SessionRow
 			key={entry.id}
@@ -57,7 +63,7 @@ function Thread({ session, spawned, busyParents, lit, compact, projects, actions
 			loadStats={actions.stats}
 			childRunning={busyParents.has(entry.id)}
 			nested={nested}
-			{...(!nested && children.length ? { followUps: children, folded, onFold: () => setFolded((value) => !value) } : {})}
+			{...(!nested && children.length ? { followUps: children, folded, onFold: () => fold(!folded) } : {})}
 		/>
 	);
 	return children.length ? (

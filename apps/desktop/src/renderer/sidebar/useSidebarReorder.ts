@@ -11,9 +11,10 @@ const DRAG_THRESHOLD = 5;
 
 export function useSidebarReorder(
 	groups: ReturnType<typeof nestSpawned>,
-	sort: SessionSort,
+	/** 各项目实际的排法：拖动前的顺序要和画出来的一样。 */
+	sortOf: (projectId: string) => SessionSort,
 	actions: SidebarActions,
-	onReordered: () => void,
+	onReordered: (projectId: string) => void,
 ): {
 	contextValue: SidebarReorderContextValue;
 	dragging: DraggingItem | null;
@@ -32,8 +33,8 @@ export function useSidebarReorder(
 	const suppressClick = useRef(false);
 	const saving = useRef(false);
 
-	const sorting = useRef(sort);
-	sorting.current = sort;
+	const sorting = useRef(sortOf);
+	sorting.current = sortOf;
 	const reordered = useRef(onReordered);
 	reordered.current = onReordered;
 	const callbacks = useRef(actions);
@@ -113,7 +114,7 @@ export function useSidebarReorder(
 				else if (active.project) {
 					const group = grouping.current.projects.find((group) => group.id === active.project);
 					// 隐藏的后续会话也保留原来的排序位置，归档来源以后不会突然跳到列表最前面。
-					const all = group ? orderedSessions(withSpawned(group.sessions, grouping.current.spawned), sorting.current, group.sessionOrder) : [];
+					const all = group ? orderedSessions(withSpawned(group.sessions, grouping.current.spawned), sorting.current(group.id), group.sessionOrder) : [];
 					const ids = moveBeforeOrAfter(
 						all.map((session) => session.id),
 						active.id,
@@ -122,7 +123,7 @@ export function useSidebarReorder(
 					);
 					if (ids) {
 						await callbacks.current.reorderSessions(active.project, ids);
-						reordered.current();
+						reordered.current(active.project);
 					}
 				}
 			} catch (cause) {

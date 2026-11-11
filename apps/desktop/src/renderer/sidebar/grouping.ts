@@ -11,7 +11,7 @@
 
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
 
-import { orderedSessions } from "./order.ts";
+import { orderedSessions, projectSort } from "./order.ts";
 import type { SessionSort } from "./order.ts";
 export type { SessionSort } from "./order.ts";
 
@@ -38,6 +38,8 @@ export function groupSessions(
 	projects: readonly ProjectEntry[],
 	hideEmptied = false,
 	sort: SessionSort = "createdAt",
+	/** 拖过、单独切成手动排序的项目。 */
+	dragged: readonly string[] = [],
 ): Grouped {
 	const byId = new Map<string, Group>(projects.map((project) => [project.id, { ...project, sessions: [] }]));
 	const loose: SessionSummary[] = [];
@@ -62,7 +64,7 @@ export function groupSessions(
 		else loose.push(session);
 	}
 	// 默认按新建的先后排：一组只露前几条，排序跟着活动跳的话，点开一条、发一句，它就挪了位置。想按活动排的在列表设置里换。
-	for (const group of byId.values()) group.sessions = orderedSessions(group.sessions, sort, group.sessionOrder);
+	for (const group of byId.values()) group.sessions = orderedSessions(group.sessions, projectSort(group.id, sort, dragged), group.sessionOrder);
 	const listed = [...byId.values()].filter((group) => !(hideEmptied && !activeIn.has(group.id) && archivedIn.has(group.id)));
 	return { pinned: pinned.sort((a, b) => b.updatedAt - a.updatedAt), projects: listed, loose: loose.sort((a, b) => b.updatedAt - a.updatedAt) };
 }
