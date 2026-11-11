@@ -1,5 +1,5 @@
 /**
- * 每个会话冻结的那份系统提示词，和之后接进历史的增量（见 `update.ts`）。
+ * 每个会话冻结的那份系统提示词和工具表，和之后接进历史的增量（见 `update.ts`）。
  *
  * 增量消息不写进会话：会话存的是人和模型说过的话，这份是拼请求的方式。它们记在这里，按「跟在第几条消息后面」每次请求原样
  * 插回去，模型看到的历史和上一次发的逐字节一致。落盘是为了重开应用以后还是同一份：换成按磁盘现状新生成的，前缀从系统提示词
@@ -9,11 +9,16 @@
  * - 开头那条消息换了：压缩把前面换成了摘要（反正要重写前缀），或撤回到了第一条。重新生成一份，之前的增量随之作废。
  * - 一条增量跟着的那条消息不在原处了：撤回、编辑重发截掉了它。从这一条起的增量都作废，模型看不到它们了，下一轮按模型此刻
  *   以为的各段重新比一次，该补的会自己补回来。
+ *
+ * 工具表同样冻结：装、卸、更新、重载带工具的插件时，宿主给的工具表当场就变（插件重载后它的工具还会排到末尾），每次请求都照实发的话，
+ * 正在跑的会话的工具段立刻对不上，缓存从头作废。所以一轮里照冻结的那份原样发，只在一轮的开头（和比段同一时机）换成合并后的一份：
+ * 原有的保持原来的顺序，新的接在后面。工具表变了缓存总要作废一次，目标是一轮里不变、顺序不无故变。一轮中间被卸下的工具还留在表里，
+ * 模型调它会拿到宿主「没有这个工具」的结果，和「隐藏不等于禁用」一致。
  */
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Message, PromptSection } from "@plume/contract";
+import type { Message, PromptSection, ToolSpec } from "@plume/contract";
 import { currentSections, diffSections, promptSections, promptUpdateMessage, type SectionChange } from "./update.ts";
 
 interface PromptUpdate {
@@ -29,6 +34,8 @@ interface FrozenPrompt {
 	head: number;
 	sections: PromptSection[];
 	updates: PromptUpdate[];
+	/** 模型此刻以为的工具表：一轮里原样发，一轮的开头按 `mergeTools` 换。 */
+	tools: ToolSpec[];
 }
 
 /** 会话 id 当文件名用：只认这几种字符，别的不落盘。 */
@@ -45,15 +52,18 @@ export class FrozenPrompts {
 	) {}
 
 	/**
-	 * 这一次请求怎么拼：`messages` 里插回还作数的增量，交给里层；里层交回的段经 `settle` 换回冻结的那份。
+	 * 这一次请求怎么拼：`messages` 里插回还作数的增量，交给里层；里层交回的段和工具表经 `settle` 换回冻结的那份。
 	 * 历史为空（还没有一条消息）时不冻结：那不是一次真的请求。
 	 */
 	async prepare(
 		sessionId: string,
 		messages: Message[],
-	): Promise<{ messages: Message[]; settle(sections: PromptSection[], out: Message[]): { sections: PromptSection[]; messages: Message[] } }> {
+	): Promise<{
+		messages: Message[];
+		settle(sections: PromptSection[], out: Message[], tools: ToolSpec[]): { sections: PromptSection[]; messages: Message[]; tools: ToolSpec[] };
+	}> {
 		const first = messages[0];
-		if (!first) return { messages, settle: (sections, out) => ({ sections, messages: out }) };
+		if (!first) return { messages, settle: (sections, out, tools) => ({ sections, messages: out, tools }) };
 		let frozen = await this.read(sessionId);
 		if (frozen && frozen.head !== first.timestamp) frozen = undefined;
 		if (frozen) {
@@ -66,12 +76,18 @@ export class FrozenPrompts {
 		const base = frozen;
 		return {
 			messages: base ? withUpdates(messages, base.updates) : messages,
-			settle: (sections, out) => {
+			settle: (sections, out, tools) => {
 				if (!base) {
-					this.save(sessionId, { head: first.timestamp, sections: sections.map((section) => ({ ...section })), updates: [] });
-					return { sections, messages: out };
+					this.save(sessionId, {
+						head: first.timestamp,
+						sections: sections.map((section) => ({ ...section })),
+						updates: [],
+						tools: tools.map((tool) => ({ ...tool })),
+					});
+					return { sections, messages: out, tools };
 				}
 				let updates = base.updates;
+				let frozenTools = base.tools;
 				const last = messages.at(-1)!;
 				/*
 				 * 只在一轮的开头（历史末尾是一条用户消息：人的话、插话、送达）比：一轮里的每一步都比的话，模型改了 AGENTS.md
@@ -87,11 +103,13 @@ export class FrozenPrompts {
 					);
 					if (changes.length > 0) {
 						updates = [...updates, { at: messages.length - 1, timestamp: last.timestamp, changes }];
-						this.save(sessionId, { ...base, updates });
 						out = [...out, promptUpdateMessage(changes, last.timestamp)];
 					}
+					const merged = mergeTools(base.tools, tools);
+					if (JSON.stringify(merged) !== JSON.stringify(base.tools)) frozenTools = merged;
+					if (updates !== base.updates || frozenTools !== base.tools) this.save(sessionId, { ...base, updates, tools: frozenTools });
 				}
-				return { sections: base.sections.map((section) => ({ ...section })), messages: out };
+				return { sections: base.sections.map((section) => ({ ...section })), messages: out, tools: frozenTools.map((tool) => ({ ...tool })) };
 			},
 		};
 	}
@@ -148,6 +166,20 @@ export class FrozenPrompts {
 	}
 }
 
+/**
+ * 一轮开头换上的工具表：按冻结的那份的顺序保留现在还在的（内容取现在的），现在有、冻结的那份没有的按现在的顺序接在后面，
+ * 现在没有的去掉。只按名字认，不看对象是不是同一个。
+ */
+export function mergeTools(frozen: readonly ToolSpec[], current: readonly ToolSpec[]): ToolSpec[] {
+	const now = new Map(current.map((tool) => [tool.name, tool]));
+	const kept = frozen.flatMap((tool) => {
+		const latest = now.get(tool.name);
+		return latest ? [latest] : [];
+	});
+	const known = new Set(frozen.map((tool) => tool.name));
+	return [...kept, ...current.filter((tool) => !known.has(tool.name))];
+}
+
 /** 还跟在原处的那几条增量：从第一条对不上的起，后面的都不作数了。 */
 function stillThere(updates: readonly PromptUpdate[], messages: readonly Message[]): PromptUpdate[] {
 	let kept = 0;
@@ -178,7 +210,8 @@ function withUpdates(messages: readonly Message[], updates: readonly PromptUpdat
 function parse(raw: string): FrozenPrompt | undefined {
 	try {
 		const value = JSON.parse(raw) as Partial<FrozenPrompt>;
-		if (typeof value?.head !== "number" || !Array.isArray(value.sections) || !Array.isArray(value.updates)) return undefined;
+		if (typeof value?.head !== "number" || !Array.isArray(value.sections) || !Array.isArray(value.updates) || !Array.isArray(value.tools)) return undefined;
+		if (!value.tools.every((tool) => typeof tool?.name === "string")) return undefined;
 		if (!value.sections.every((section) => typeof section?.id === "string" && typeof section.text === "string")) return undefined;
 		const updates = value.updates.every(
 			(update) =>

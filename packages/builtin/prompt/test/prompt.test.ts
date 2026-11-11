@@ -2,10 +2,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { HookLayer, Message, ModelContext, PluginContext } from "@plume/contract";
+import type { HookLayer, Message, ModelContext, PluginContext, ToolSpec } from "@plume/contract";
 import { resetSystemShell } from "@plume/platform";
 import plugin from "../src/index.ts";
 import { withEnvironment } from "../src/environment.ts";
+import { mergeTools } from "../src/frozen.ts";
 import { withSteeringNote } from "../src/steering.ts";
 import { INSTRUCTION_BYTE_LIMIT, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "../src/instructions.ts";
 import { buildPromptSections, type SystemPromptInput } from "../src/system.ts";
@@ -424,7 +425,7 @@ describe("会话内冻结的系统提示词", () => {
 			sessions: { onDeleted: (fn: (sessionId: string) => void) => void (deleted = fn) },
 		} as unknown as PluginContext);
 		const inner: { skills: string | undefined } = { skills: "技能 v1" };
-		const run = (messages: Message[]) =>
+		const run = (messages: Message[], tools: ToolSpec[] = []) =>
 			layer!(
 				{
 					sessionId: "s1",
@@ -436,7 +437,7 @@ describe("会话内冻结的系统提示词", () => {
 					systemPrompt: "",
 					sections: [],
 					messages,
-					tools: [],
+					tools,
 				} as ModelContext,
 				async (input) => ({ ...input, sections: inner.skills === undefined ? input.sections : [...input.sections, { id: "skills", text: inner.skills }] }),
 			);
@@ -538,5 +539,52 @@ describe("会话内冻结的系统提示词", () => {
 		for (let tries = 0; tries < 100 && (await readFile(file(), "utf8").catch(() => null)) !== null; tries++)
 			await new Promise((resolve) => setTimeout(resolve, 5));
 		await expect(readFile(file(), "utf8")).rejects.toThrow();
+	});
+
+	const tool = (name: string, description = name): ToolSpec => ({ name, description, parameters: { type: "object", properties: {} } });
+
+	it("合并工具表：保持冻结的顺序，新的接在后面，去掉的去掉，内容变了取新的", () => {
+		const frozen = [tool("read"), tool("edit"), tool("bash")];
+		expect(mergeTools(frozen, [tool("bash"), tool("read"), tool("edit")])).toEqual(frozen);
+		expect(mergeTools(frozen, [tool("extra"), tool("bash"), tool("read"), tool("more"), tool("edit")]).map((spec) => spec.name)).toEqual([
+			"read",
+			"edit",
+			"bash",
+			"extra",
+			"more",
+		]);
+		expect(mergeTools(frozen, [tool("bash"), tool("read")]).map((spec) => spec.name)).toEqual(["read", "bash"]);
+		expect(mergeTools(frozen, [tool("read"), tool("edit", "新说明"), tool("bash")])[1]).toEqual(tool("edit", "新说明"));
+		// 没有变化：内容一样的新对象，合出来和原来的深相等。
+		expect(mergeTools(frozen, structuredClone(frozen))).toEqual(frozen);
+	});
+
+	it("工具表一轮里不变：中途装上、改掉、换了顺序都照冻结的那份发；下一轮开头换成合并后的", async () => {
+		const { run } = harness();
+		const first = await run([user("a", 1)], [tool("read"), tool("bash")]);
+		expect(first.tools.map((spec) => spec.name)).toEqual(["read", "bash"]);
+
+		// 一轮中间：插件重载把 read 排到了后面、改了 bash 的说明、又装上一个新工具。
+		const midway = [user("a", 1), assistant(2, "toolUse"), result(3)];
+		const middle = await run(midway, [tool("bash", "新说明"), tool("extra"), tool("read")]);
+		expect(JSON.stringify(middle.tools)).toBe(JSON.stringify(first.tools));
+
+		// 下一轮开头：按冻结的顺序保留还在的（内容取现在的），新的接在后面。
+		const next = await run([...midway, assistant(4), user("b", 5)], [tool("bash", "新说明"), tool("extra"), tool("read")]);
+		expect(next.tools).toEqual([tool("read"), tool("bash", "新说明"), tool("extra")]);
+		// 这一轮后面几步照新冻结的那份。
+		const after = await run([...midway, assistant(4), user("b", 5), assistant(6, "toolUse"), result(7)], [tool("extra")]);
+		expect(JSON.stringify(after.tools)).toBe(JSON.stringify(next.tools));
+	});
+
+	it("没带工具表的旧冻结文件按无效处理，重新生成一份", async () => {
+		await mkdir(join(dir, "data", "frozen"), { recursive: true });
+		await writeFile(file(), JSON.stringify({ head: at(1), sections: [{ id: "identity", text: "旧的那份" }], updates: [] }));
+		const { run } = harness();
+		const out = await run([user("a", 1), assistant(2), user("b", 3)], [tool("read")]);
+		expect(out.sections.map((section) => section.text)).not.toContain("旧的那份");
+		expect(out.tools).toEqual([tool("read")]);
+		for (let tries = 0; tries < 100 && !(await written()).includes('"tools"'); tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(JSON.parse(await written()).tools).toEqual([tool("read")]);
 	});
 });

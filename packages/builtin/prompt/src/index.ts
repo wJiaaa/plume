@@ -6,7 +6,8 @@
  * 在更里面的层里把 `sections` 换掉就行。
  *
  * 每次请求都按磁盘现状组一份，但发出去的是这个会话冻结的那份：里层交回来的段和模型此刻以为的不一样时，改动作为一条增量消息
- * 接在这一轮的开头（见 `update.ts`、`frozen.ts`），系统提示词这段前缀一直不变，服务商的缓存才接得上。
+ * 接在这一轮的开头（见 `update.ts`、`frozen.ts`），系统提示词这段前缀一直不变，服务商的缓存才接得上。工具表也一样：一轮里照冻结的
+ * 那份发，插件装卸、重载带来的变化在下一轮开头才换上（见 `frozen.ts`）。
  */
 
 import { join } from "node:path";
@@ -65,7 +66,7 @@ export default {
 				});
 				const request = await frozen.prepare(input.sessionId, input.messages);
 				const output = await next({ ...input, sections: [...sections, ...input.sections], messages: withEnvironment(withSteeringNote(request.messages)) });
-				return { ...output, ...request.settle(output.sections, output.messages) };
+				return { ...output, ...request.settle(output.sections, output.messages, output.tools) };
 			},
 			{ order: ORDER },
 		);
