@@ -36,7 +36,24 @@ import { useSmoothText } from "./useSmoothText.ts";
  * 重画，一路传到这里，一次拖动就把几百 KB 的 Markdown 重新解析几十遍。窗格变宽不改变消息的任何东西，
  * 一层浅比较就说清了。
  */
-export const Markdown = memo(function Markdown({
+export const Markdown = memo(MarkdownView, sameProps);
+
+type MarkdownProps = Parameters<typeof MarkdownView>[0];
+
+/** 浅比较，只是 `reply` 按字段比：回复的那一行每次重画都给一个新对象，按引用比的话这层 memo 一次也拦不住。 */
+function sameProps(a: MarkdownProps, b: MarkdownProps): boolean {
+	const keys = Object.keys(a) as (keyof MarkdownProps)[];
+	if (keys.length !== Object.keys(b).length) return false;
+	for (const key of keys) {
+		if (key === "reply") continue;
+		if (!Object.is(a[key], b[key])) return false;
+	}
+	const x = a.reply;
+	const y = b.reply;
+	return x === y || (!!x && !!y && x.messageId === y.messageId && x.part === y.part && x.complete === y.complete && x.streaming === y.streaming);
+}
+
+function MarkdownView({
 	text,
 	className = "",
 	streaming = false,
@@ -118,7 +135,7 @@ export const Markdown = memo(function Markdown({
 			</ImageDocument.Provider>
 		</ReplyCodeScope.Provider>
 	);
-});
+}
 
 /**
  * 一个顶层块，原文没变就不重画。

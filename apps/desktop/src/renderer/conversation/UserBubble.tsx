@@ -33,13 +33,13 @@ import { useMessageEdits } from "./message-edits.ts";
 import { MessageEditor } from "./MessageEditor.tsx";
 import { RevertAction } from "./RevertAction.tsx";
 import { type SentFile, sentAttachments, spokenText } from "./sent-attachments.ts";
-import { useTranscript } from "./view-state.ts";
+import { useCalls } from "./view-state.ts";
 
 /** `index` 是它在会话里的位置，`last` 说它是不是最后一条人说的话：撤回、编辑、分叉按它们认是哪一条。 */
 export function UserBubble({ message, index, last = false }: { message: UserMessage; index?: number; last?: boolean }) {
 	const { t } = useI18n();
 	const edits = useMessageEdits();
-	const { running } = useTranscript();
+	const running = useCalls((calls) => calls.running);
 	const scope = useFileScope();
 	/** 这条消息自己的元素：看图器的起点在这里面找，别的消息里同一序号的格子不算。 */
 	const root = useRef<HTMLDivElement>(null);

@@ -9,7 +9,7 @@ import type { ImageContent, ToolOutput, ToolResultMessage } from "@plume/contrac
 import type { ToolCardProps } from "@plume/contract/ui";
 import { Collapse, FlowRow, RollWords, Scroller, translate, useI18n, useNow } from "@plume/ui";
 import { Ban, CircleX } from "@plume/ui/icons";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { openFromEvent } from "../image/index.ts";
 import { hasToolCard, queueTask, ToolCardSlot, usePluginRegistrations } from "../plugins.tsx";
 import { describeOne, describePolls, diffOf } from "./call-words.ts";
@@ -23,7 +23,17 @@ import { formatElapsed } from "./running-line.ts";
 import { streamedLines, streamedString } from "./streamed-arguments.ts";
 import { ToolIcon } from "./tool-icons.tsx";
 import { polledJob, pollOutput } from "./turn-blocks.ts";
-import { type CallStatus, callStatus, stoppedByUser, useCallLive, useTranscript, useTranscriptDisclosure } from "./view-state.ts";
+import {
+	type BackgroundJobInfo,
+	type CallStatus,
+	callStatus,
+	sameItems,
+	stoppedByUser,
+	useCallLive,
+	useCalls,
+	useTranscript,
+	useTranscriptDisclosure,
+} from "./view-state.ts";
 
 /** 「刚跑完」那一下：记号从半大弹到原样。 */
 const POP = "animate-[plume-settle_var(--plume-t-base)_var(--plume-e-out)_both]";
@@ -67,8 +77,8 @@ export function StepCall({ call, thinking, polls }: { call: Call; thinking?: Rea
 export function PluginToolCard({ call, thinking }: { call: Call; thinking?: ReactNode }) {
 	const state = useTranscript();
 	const { block } = call;
-	const status = callStatus(state, block.id, call.stopReason);
-	const result = state.results.get(block.id);
+	const status = useCalls((calls) => callStatus(calls, block.id, call.stopReason));
+	const result = useCalls((calls) => calls.results.get(block.id));
 	const { progress } = useCallLive(block.id);
 	const root = useRef<HTMLDivElement>(null);
 	const identity = `${state.sessionId}:${block.id}`;
@@ -112,12 +122,23 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 		await current.current.send(text, displayText);
 	};
 
-	// 还带着像素的小图照原样放进 `result.images`；挪进媒体目录的大图不给插件卡片，由通用卡片画。
-	const inline = (result?.content ?? []).flatMap((part) =>
-		part.type === "image" && part.data && MODEL_IMAGE.test(part.mimeType) ? [{ data: part.data, mimeType: part.mimeType as ModelImage["mimeType"] }] : [],
-	);
+	// 交给插件的调用和结果只在它们自己变了时才换对象：插件拿它们当 effect 的依赖时，别的调用来了结果不该让它重跑。
+	const slotCall = useMemo(() => ({ id: block.id, name: block.name, args: block.arguments }), [block.id, block.name, block.arguments]);
+	const slotResult = useMemo(() => {
+		if (!result) return undefined;
+		// 还带着像素的小图照原样放进 `result.images`；挪进媒体目录的大图不给插件卡片，由通用卡片画。
+		const inline = result.content.flatMap((part) =>
+			part.type === "image" && part.data && MODEL_IMAGE.test(part.mimeType) ? [{ data: part.data, mimeType: part.mimeType as ModelImage["mimeType"] }] : [],
+		);
+		return {
+			output: resultText(result.content),
+			...(inline.length > 0 ? { images: inline } : {}),
+			isError: result.isError,
+			details: result.details,
+		};
+	}, [result]);
 	const props: ToolCardProps = {
-		call: { id: block.id, name: block.name, args: block.arguments },
+		call: slotCall,
 		sessionId: state.sessionId,
 		argumentsText: block.argumentsText,
 		streaming: status === "pending",
@@ -125,16 +146,7 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 		...(state.child ? { handToParent: (instruction: string) => queueTask(state.sessionId, instruction) } : {}),
 		status: SLOT_STATUS[status],
 		...(progress === undefined ? {} : { progress }),
-		...(result
-			? {
-					result: {
-						output: resultText(result.content),
-						...(inline.length > 0 ? { images: inline } : {}),
-						isError: result.isError,
-						details: result.details,
-					},
-				}
-			: {}),
+		...(slotResult ? { result: slotResult } : {}),
 		fallback: <ToolCard call={call} {...(thinking ? { thinking } : {})} />,
 	};
 	return (
@@ -143,6 +155,13 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 		</div>
 	);
 }
+
+/** 后台任务的说明和命令按内容比：每来一条消息这张表都重建一遍，里面的对象也是新的。 */
+function sameJob(a: BackgroundJobInfo | undefined, b: BackgroundJobInfo | undefined): boolean {
+	return a === b || (a?.description === b?.description && a?.command === b?.command);
+}
+
+const NO_READS: readonly (ToolResultMessage | undefined)[] = [];
 
 export function ToolCard({
 	call,
@@ -166,16 +185,17 @@ export function ToolCard({
 	 */
 	const job = polledJob(call.block);
 	const latest = job && polls ? polls[polls.length - 1]! : call;
-	const status = callStatus(state, latest.block.id, latest.stopReason);
+	const status = useCalls((calls) => callStatus(calls, latest.block.id, latest.stopReason));
 	const [open, setOpen] = useTranscriptDisclosure(`tool-${call.block.id}`);
 	const draft = writeDraft(call.block, status);
 	const { block } = draft;
-	const result = state.results.get(latest.block.id);
-	const started = job ? state.jobs.get(job) : undefined;
-	const details = result?.details as { hunks?: unknown; path?: unknown } | undefined;
-	const hunks = Array.isArray(details?.hunks) && details.hunks.length > 0 ? (details.hunks as DiffHunk[]) : undefined;
+	const result = useCalls((calls) => calls.results.get(latest.block.id));
+	const started = useCalls((calls) => (job ? calls.jobs.get(job) : undefined), sameJob);
+	// 这几次查输出各自读到的：展开时拼成一段输出。
+	const reads = useCalls((calls) => (job ? (polls ?? [call]).map((one) => calls.results.get(one.block.id)) : NO_READS), sameItems);
+	const hunks = hunksOf(result);
 	const running = status === "running" || status === "approval";
-	// 参数还在写的也在「跑」：字上照样扫光，只是还没开始、不计时。
+	// 参数还在写的也在「跑」：字上扫光，只是还没开始、不计时。
 	const live = running || status === "pending";
 	/*
 	 * 跑着的命令有个在走的秒数，才看得出它还在跑。从执行记录上的开始时刻算，不从这一行挂上的时候算：滚走再回来、
@@ -187,16 +207,6 @@ export function ToolCard({
 	// 停下不是失败：中性的说法，不用红色。
 	const stopped = status === "error" && stoppedByUser(result);
 	const failed = status === "error" && !stopped;
-	const output = job
-		? pollOutput(
-				(polls ?? [call]).flatMap((one) => {
-					const read = state.results.get(one.block.id);
-					return read ? [resultText(read.content)] : [];
-				}),
-			)
-		: result
-			? resultText(result.content)
-			: (progress ?? "");
 	const summary = job ? describePolls(started?.description, polls?.length ?? 1) : describeOne(block, state.cwd, started?.description);
 	/*
 	 * 还没开跑的调用没有可看的：不能展开。参数还在写的、写完了排在前面的调用后面等着的，都没有开始时刻；从前点开是
@@ -205,49 +215,6 @@ export function ToolCard({
 	const expandable = startedAt !== undefined || !live;
 	// 「刚跑完」才弹一下：挂上时就已经结束的（历史、第一次展开的一段）不弹，否则每次展开 +N -M 都跳一下。
 	const pop = useRef(live).current ? `${POP} ` : "";
-	// 任务 id 是一串 uuid，人读不出东西：查输出那一行展开时摆那条命令本身。
-	const jobCommand = started?.command ?? (result?.details as { command?: unknown } | undefined)?.command;
-	const { command, ...rest } = job ? { command: jobCommand } : (block.arguments as Record<string, unknown>);
-
-	const body = hunks ? (
-		<DiffView hunks={hunks} path={typeof details?.path === "string" ? details.path : undefined} showPath />
-	) : (
-		<>
-			{/* 命令照命令的样子摆：出了问题最先要查的就是跑了什么，夹在一串 JSON 里得绕着语法找。 */}
-			{typeof command === "string" && (
-				<Section title={t("commands.title")} mono tone="ink">
-					<span className="mr-2 select-none text-ink-faint">$</span>
-					<CodeText text={command} kind="shell" />
-				</Section>
-			)}
-			{Object.keys(rest).length > 0 && (
-				<Section title={t("toolCard.args")} mono>
-					<CodeText text={JSON.stringify(rest, null, 2)} kind="json" />
-				</Section>
-			)}
-			{/* 没输出也是一种状态：装依赖时几分钟一个字不打，没有输出那一节的卡片看上去像把输出弄丢了。 */}
-			{!result && !output && running && (
-				<Section title={t("toolCard.outputRunning")} mono>
-					<span className="text-ink-faint">{t("toolCard.waiting")}</span>
-				</Section>
-			)}
-			{/* 有结果就有这一节，哪怕没有一个字：只回了图、或者什么都没回，也要说出它跑完了、结果是什么样。 */}
-			{(result || output !== "") && (
-				<Section
-					title={stopped ? t("toolCard.stopped") : failed ? t("common.error") : running ? t("toolCard.outputRunning") : t("common.result")}
-					mono={output !== ""}
-					tone={failed ? "danger" : "muted"}
-				>
-					{output !== "" && (
-						<Scroller className="max-h-[420px]" overscroll="auto">
-							{output}
-						</Scroller>
-					)}
-					{result && <ResultImages result={result} summary={summary} spaced={output !== ""} />}
-				</Section>
-			)}
-		</>
-	);
 
 	const notes = [
 		thinking ? <span key="thinking">{thinking}</span> : null,
@@ -290,11 +257,105 @@ export function ToolCard({
 			/>
 			{expandable && (
 				<Collapse open={open} bodyClassName="flex flex-col gap-2.5 pt-1.5 pl-[22px]">
-					<div className="overflow-hidden rounded-lg border border-line-soft bg-card/45">{body}</div>
+					<div className="overflow-hidden rounded-lg border border-line-soft bg-card/45">
+						{/* 只在点开时才挂上：参数的 JSON、拼起来的输出都在这里面算，收着的卡每次重画都不白算一遍。 */}
+						<ToolCardBody
+							block={block}
+							job={job}
+							command={job ? (started?.command ?? (result?.details as { command?: unknown } | undefined)?.command) : undefined}
+							result={result}
+							reads={reads}
+							progress={progress}
+							hunks={hunks}
+							running={running}
+							stopped={stopped}
+							failed={failed}
+							summary={summary}
+						/>
+					</div>
 					{extra}
 				</Collapse>
 			)}
 		</div>
+	);
+}
+
+function hunksOf(result: ToolResultMessage | undefined): DiffHunk[] | undefined {
+	const hunks = (result?.details as { hunks?: unknown } | undefined)?.hunks;
+	return Array.isArray(hunks) && hunks.length > 0 ? (hunks as DiffHunk[]) : undefined;
+}
+
+/** 点开以后的内容：diff，或者命令、参数、输出。 */
+function ToolCardBody({
+	block,
+	job,
+	command: jobCommand,
+	result,
+	reads,
+	progress,
+	hunks,
+	running,
+	stopped,
+	failed,
+	summary,
+}: {
+	block: ToolCallBlock;
+	/** 查的是哪个后台任务；不是查输出的调用没有。 */
+	job: string | undefined;
+	/** 查输出时摆的那条命令：任务 id 是一串 uuid，人读不出东西。 */
+	command: unknown;
+	result: ToolResultMessage | undefined;
+	reads: readonly (ToolResultMessage | undefined)[];
+	progress: string | undefined;
+	hunks: DiffHunk[] | undefined;
+	running: boolean;
+	stopped: boolean;
+	failed: boolean;
+	summary: string;
+}) {
+	const { t } = useI18n();
+	if (hunks) {
+		const path = (result?.details as { path?: unknown } | undefined)?.path;
+		return <DiffView hunks={hunks} path={typeof path === "string" ? path : undefined} showPath />;
+	}
+	const output = job ? pollOutput(reads.flatMap((read) => (read ? [resultText(read.content)] : []))) : result ? resultText(result.content) : (progress ?? "");
+	const { command, ...rest } = job ? { command: jobCommand } : (block.arguments as Record<string, unknown>);
+	return (
+		<>
+			{/* 命令照命令的样子摆：出了问题最先要查的就是跑了什么，夹在一串 JSON 里得绕着语法找。 */}
+			{typeof command === "string" && (
+				<Section title={t("commands.title")} mono tone="ink">
+					<span className="mr-2 select-none text-ink-faint">$</span>
+					<CodeText text={command} kind="shell" />
+				</Section>
+			)}
+			{Object.keys(rest).length > 0 && (
+				<Section title={t("toolCard.args")} mono>
+					<CodeText text={JSON.stringify(rest, null, 2)} kind="json" />
+				</Section>
+			)}
+			{/* 没输出也是一种状态：装依赖时几分钟一个字不打，没有输出那一节的卡片看上去像把输出弄丢了。 */}
+			{!result && !output && running && (
+				<Section title={t("toolCard.outputRunning")} mono>
+					<span className="text-ink-faint">{t("toolCard.waiting")}</span>
+				</Section>
+			)}
+			{/* 有结果就有这一节，哪怕没有一个字：只回了图、或者什么都没回，也要说出它跑完了、结果是什么样。 */}
+			{(result || output !== "") && (
+				<Section
+					title={stopped ? t("toolCard.stopped") : failed ? t("common.error") : running ? t("toolCard.outputRunning") : t("common.result")}
+					mono={output !== ""}
+					tone={failed ? "danger" : "muted"}
+				>
+					{output !== "" && (
+						<Scroller className="max-h-[420px]" overscroll="auto">
+							{output}
+						</Scroller>
+					)}
+					{result && <ResultImages result={result} summary={summary} spaced={output !== ""} />}
+				</Section>
+			)}
+		</>
 	);
 }
 

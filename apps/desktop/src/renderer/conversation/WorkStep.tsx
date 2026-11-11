@@ -17,12 +17,12 @@ import { CircleX, Layers } from "@plume/ui/icons";
 import { Fragment, memo, type ReactNode, useRef } from "react";
 import { describeCalls, describeOne, diffOf } from "./call-words.ts";
 import { DiffCount } from "./DiffCount.tsx";
-import type { Run } from "./grouping.ts";
+import type { Call, Run } from "./grouping.ts";
 import { LiveThought } from "./LiveThought.tsx";
 import { StepCall, writeDraft } from "./ToolCard.tsx";
 import { ToolIcon } from "./tool-icons.tsx";
 import { foldPolls, polledJob, sameStep, type Step, thinkingLive } from "./turn-blocks.ts";
-import { callStatus, useTranscript, useTranscriptDisclosure } from "./view-state.ts";
+import { type CallState, callStatus, sameItems, useCalls, useTranscript, useTranscriptDisclosure } from "./view-state.ts";
 
 type MessageRun = Extract<Run, { kind: "message" }>;
 
@@ -99,12 +99,15 @@ function StepGroup({
 	from: { words: number; trail: number } | null;
 	draw: (run: Run) => ReactNode;
 }) {
-	const state = useTranscript();
+	const { cwd } = useTranscript();
 	const [open, setOpen] = useTranscriptDisclosure(step.key);
 	const { calls } = step;
-	const statuses = calls.map((call) => callStatus(state, call.block.id, call.stopReason));
-	const added = calls.reduce((sum, { block }) => sum + diffOf(state.results.get(block.id), "added"), 0);
-	const removed = calls.reduce((sum, { block }) => sum + diffOf(state.results.get(block.id), "removed"), 0);
+	// 只订阅这一段自己的几次调用：别处来了结果，这一行不重画。
+	const statuses = useCalls((all) => calls.map((call) => callStatus(all, call.block.id, call.stopReason)), sameItems);
+	const added = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "added"), 0));
+	const removed = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "removed"), 0));
+	// 查后台任务输出的那几次说的是哪个任务：按说明比，每来一条消息任务表都重建一遍。
+	const jobs = useCalls((all) => calls.map(({ block }) => jobDescription(all, block)), sameItems);
 	// 后台命令回来时失败了也算：启动它的那次 bash 早就以「已放到后台」跑完了，记录上不会是错。
 	const failed =
 		statuses.includes("error") ||
@@ -123,14 +126,13 @@ function StepGroup({
 	// 挂着的那一次不在这一段里了（段被重新切过）就说最后那一次，和跑着时没有在跑的调用说的是同一个。
 	const current = held === STEP ? undefined : (calls.find(({ block }) => block.id === held) ?? calls[calls.length - 1]);
 	// 这一段默认收着：还在写的文件，路径和写了几行要在这一行上就看得到。
-	const draft = current ? writeDraft(current.block, callStatus(state, current.block.id, current.stopReason)) : undefined;
+	const draft = current ? writeDraft(current.block, statuses[calls.indexOf(current)] ?? "pending") : undefined;
 	const said = draft?.block;
 
 	// 哪样先来哪样在前：先有的那半句不能被后来的「思考 N 次」从前面挤开。
 	const parts = [describeCalls(calls)];
 	if (thought > 0) parts[step.members[0]?.kind === "thinking" ? "unshift" : "push"](translate("step.thinking", { n: thought }));
-	const job = said ? polledJob(said) : undefined;
-	const words = said ? describeOne(said, state.cwd, job ? state.jobs.get(job)?.description : undefined) : parts.join(translate("step.separator"));
+	const words = said && current ? describeOne(said, cwd, jobs[calls.indexOf(current)]) : parts.join(translate("step.separator"));
 	// 换一次调用、或者从跑着换成总的，就是换了一句话，滚一下；同一次调用的参数还在流进来，只缓宽度。
 	const rollKey = said ? `call-${said.id}` : STEP;
 	// 一次调用的那一行后面只接上了推理：句子还是原地那一句，从旧宽度缓过来就够，不滚。
@@ -182,6 +184,11 @@ function StepGroup({
 			</Collapse>
 		</div>
 	);
+}
+
+function jobDescription(calls: CallState, block: Call["block"]): string | undefined {
+	const job = polledJob(block);
+	return job ? calls.jobs.get(job)?.description : undefined;
 }
 
 function startedAt(run: MessageRun): number | undefined {
