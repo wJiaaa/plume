@@ -83,7 +83,14 @@ function MarkdownView({
 	// 写完之后还要演完：没放出来的字放完、最后一个字淡完，`active` 才落下。见 `useSmoothText`。
 	const { text: shown, active, recent } = useSmoothText(text, streaming);
 	// 围栏里的原文是插件的数据，不能清理字符；系统表情只在下面画普通文字时拿掉。
-	const { text: clean, heldImage } = useMemo(() => (active ? completeTailHeld(shown) : { text: shown, heldImage: false }), [shown, active]);
+	/*
+	 * 换行统一成 `\n`：分块时也是这么换的（`parseMarkdownChunks`），下面按块的原文在这里找它的位置，带着 `\r` 就找不到，
+	 * 之后每一块的位置都差几个字，新放出来的字认错，有的旧字重新淡一遍。
+	 */
+	const { text: clean, heldImage } = useMemo(() => {
+		const held = active ? completeTailHeld(shown) : { text: shown, heldImage: false };
+		return held.text.includes("\r\n") ? { ...held, text: held.text.replace(/\r\n/g, "\n") } : held;
+	}, [shown, active]);
 	const doc = useMemo(
 		() => ({ baseDir, sessionId, localImages, remoteImages, streaming: streaming || active }),
 		[baseDir, sessionId, localImages, remoteImages, streaming, active],
