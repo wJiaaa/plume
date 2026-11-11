@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CallContext, type Port, RpcChannel, remote, serve } from "../src/index.ts";
+import { type CallContext, type Port, RpcChannel, RpcError, remote, serve } from "../src/index.ts";
 
 /** 内存里的一对端口：消息经结构化克隆、异步投递，和跨进程时一样。 */
 function portPair(): [Port, Port] {
@@ -78,24 +78,31 @@ describe("RPC", () => {
 		expect(events).toEqual(["收到中止", "收尾"]);
 	});
 
-	it("超时的请求以 E_TIMEOUT 失败，并通知对端停下", async () => {
+	it("参数无法结构化克隆时以 RpcError 失败，不留挂起的请求和中止监听", async () => {
 		const [a, b] = portPair();
-		let aborted = false;
-		// 只要它在 b 上挂好处理器，不需要它的引用。
-		// oxlint-disable-next-line no-new
-		new RpcChannel(b, {
-			request: (_payload, call) =>
-				new Promise((resolve) => {
-					call.signal.addEventListener("abort", () => {
-						aborted = true;
-						resolve(null);
-					});
-				}),
-		});
+		const server = new RpcChannel(b, { request: (payload) => payload });
 		const client = new RpcChannel(a);
-		await expect(client.request("x", { timeoutMs: 20 })).rejects.toMatchObject({ code: "E_TIMEOUT" });
-		await new Promise((resolve) => setTimeout(resolve, 10));
-		expect(aborted).toBe(true);
+		const controller = new AbortController();
+		let listeners = 0;
+		const signal = controller.signal;
+		const add = signal.addEventListener.bind(signal);
+		const remove = signal.removeEventListener.bind(signal);
+		signal.addEventListener = (...args: Parameters<AbortSignal["addEventListener"]>) => {
+			listeners++;
+			add(...args);
+		};
+		signal.removeEventListener = (...args: Parameters<AbortSignal["removeEventListener"]>) => {
+			listeners--;
+			remove(...args);
+		};
+		const failed = client.request({ run: () => undefined }, { signal });
+		await expect(failed).rejects.toBeInstanceOf(RpcError);
+		await expect(failed).rejects.toMatchObject({ code: "E_HANDLER" });
+		expect(listeners).toBe(0);
+		// 挂起的登记已撤下：关闭通道不会再去拒绝它，之后的请求照常。
+		expect(await client.request("ok")).toBe("ok");
+		client.close();
+		server.close();
 	});
 
 	it("通道关闭时挂起的请求以 E_CLOSED 失败，对端正在处理的请求被中止", async () => {

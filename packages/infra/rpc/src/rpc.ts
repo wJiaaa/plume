@@ -4,7 +4,7 @@
  * 不依赖任何第三方库：它会被打进渲染进程。
  */
 
-export type ErrorCode = "E_NOT_FOUND" | "E_TIMEOUT" | "E_CANCELLED" | "E_CLOSED" | "E_HANDLER";
+export type ErrorCode = "E_NOT_FOUND" | "E_CANCELLED" | "E_CLOSED" | "E_HANDLER";
 
 export interface Port {
 	post(message: unknown): void;
@@ -33,13 +33,10 @@ type Wire =
 	| { k: "chunk"; id: number; v: unknown }
 	| { k: "res"; id: number; ok: true; v: unknown }
 	| { k: "res"; id: number; ok: false; e: { code: ErrorCode; message: string } }
-	/** 发起方不要结果了：取消、超时。处理方据此停下手上的活。 */
-	| { k: "cancel"; id: number }
-	| { k: "note"; p: unknown };
+	/** 发起方不要结果了。处理方据此停下手上的活。 */
+	| { k: "cancel"; id: number };
 
 export interface RequestOptions {
-	/** 不填表示不限时。 */
-	timeoutMs?: number;
 	/** 中止时向对端发取消，本地以 E_CANCELLED 失败。 */
 	signal?: AbortSignal;
 	/** 收到中间值时调用。 */
@@ -48,7 +45,7 @@ export interface RequestOptions {
 
 /** 处理方看到的这次调用。 */
 export interface IncomingCall {
-	/** 发起方取消、超时或通道关闭时中止。 */
+	/** 发起方取消或通道关闭时中止。 */
 	signal: AbortSignal;
 	/** 推送一个中间值给发起方。 */
 	emit(value: unknown): void;
@@ -63,7 +60,6 @@ interface Pending {
 
 export interface RpcHandlers {
 	request?(payload: unknown, call: IncomingCall): unknown;
-	note?(payload: unknown): void;
 }
 
 export class RpcChannel {
@@ -84,41 +80,28 @@ export class RpcChannel {
 		this.handlers = handlers;
 	}
 
-	get closed(): boolean {
-		return this.closedWith !== undefined;
-	}
-
 	request(payload: unknown, options: RequestOptions = {}): Promise<unknown> {
 		if (this.closedWith) return Promise.reject(this.closedWith);
-		const { timeoutMs, signal, onChunk } = options;
+		const { signal, onChunk } = options;
 		if (signal?.aborted) return Promise.reject(cancelled(signal));
 		const id = ++this.seq;
 		return new Promise((resolve, reject) => {
-			const giveUp = (error: RpcError) => {
+			const onAbort = () => {
 				if (!this.pending.has(id)) return;
 				this.settle(id)?.dispose();
 				this.port.post({ k: "cancel", id } satisfies Wire);
-				reject(error);
+				reject(cancelled(signal as AbortSignal));
 			};
-			const timer = timeoutMs === undefined ? undefined : setTimeout(() => giveUp(new RpcError("E_TIMEOUT", `请求超过 ${timeoutMs}ms 没有回应`)), timeoutMs);
-			const onAbort = () => giveUp(cancelled(signal as AbortSignal));
 			signal?.addEventListener("abort", onAbort, { once: true });
-			this.pending.set(id, {
-				resolve,
-				reject,
-				onChunk,
-				dispose: () => {
-					if (timer) clearTimeout(timer);
-					signal?.removeEventListener("abort", onAbort);
-				},
-			});
-			this.port.post({ k: "req", id, p: payload } satisfies Wire);
+			this.pending.set(id, { resolve, reject, onChunk, dispose: () => signal?.removeEventListener("abort", onAbort) });
+			try {
+				this.port.post({ k: "req", id, p: payload } satisfies Wire);
+			} catch (error) {
+				// 参数无法结构化克隆（界面入口经 `ui.remote()` 传了函数、DOM 节点）时请求根本没发出去：撤下登记，不留到通道关闭。
+				this.settle(id)?.dispose();
+				reject(new RpcError("E_HANDLER", `参数无法传输：${toRpcError(error).message}`));
+			}
 		});
-	}
-
-	notify(payload: unknown): void {
-		if (this.closedWith) return;
-		this.port.post({ k: "note", p: payload } satisfies Wire);
 	}
 
 	/** 关闭通道：挂起的请求全部以 E_CLOSED 失败，正在处理的请求被中止，之后的收发都被忽略。 */
@@ -144,9 +127,6 @@ export class RpcChannel {
 	private receive(message: Wire): void {
 		if (this.closedWith || typeof message !== "object" || message === null) return;
 		switch (message.k) {
-			case "note":
-				this.handlers.note?.(message.p);
-				return;
 			case "req":
 				void this.answer(message.id, message.p);
 				return;
@@ -185,7 +165,7 @@ export class RpcChannel {
 		} finally {
 			this.incoming.delete(id);
 		}
-		// 发起方已经不等了（取消、超时），结果没人收。
+		// 发起方已经不等了（取消了），结果没人收。
 		if (this.closedWith || controller.signal.aborted) return;
 		try {
 			this.port.post(reply);

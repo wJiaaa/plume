@@ -10,7 +10,7 @@ import { type IncomingCall, RpcError, type RequestOptions, type RpcChannel } fro
 
 /** 被调方法收到的最后一个参数。 */
 export interface CallContext {
-	/** 调用方取消、超时或通道关闭时中止。 */
+	/** 调用方取消或通道关闭时中止。 */
 	signal: AbortSignal;
 }
 
