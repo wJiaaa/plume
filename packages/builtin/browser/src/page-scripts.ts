@@ -30,6 +30,11 @@ export async function evaluate(pages: WebPages, id: string, code: string, isolat
  * 点下去的是别的东西。
  */
 const REFS = "const refs = globalThis.plumeRefs ??= { of: new WeakMap(), at: new Map() };";
+/*
+ * 读页面时先列这些语义元素，再补语义上不可点、实际靠脚本响应点击的元素（列表行、卡片这类带 onClick 的 div）：没有 ref，
+ * 模型只能在 eval 里调 click()，那不是真的点击，面板上的光标也不动。补的排在语义元素后面，不挤掉它们。cursor: pointer
+ * 会被子孙继承，只取最外层那个；已列出的元素和取到的元素里面不再往下找。label 点的是它的控件，控件已经列着。
+ */
 const INTERACTIVE =
 	"a,button,input:not([type=hidden]),textarea,select,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=switch],[role=tab],[role=menuitem],[role=option],[role=combobox],[role=textbox],[contenteditable=''],[contenteditable=true]";
 
@@ -140,13 +145,28 @@ export async function snapshotPage(pages: WebPages, id: string, next: number, op
 		if (spec.offset === 0) {
 			const elements = [];
 			let more = 0;
-			for (const el of (scope ?? document).querySelectorAll(${JSON.stringify(INTERACTIVE)})) {
-				if (!el.getClientRects().length) continue;
-				if (elements.length >= ${MAX_ELEMENTS}) { more++; continue; }
+			const listed = new Set();
+			const add = (el) => {
+				if (elements.length >= ${MAX_ELEMENTS}) { more++; return; }
 				let ref = refs.of.get(el);
 				if (!ref) { ref = 'e' + next++; refs.of.set(el, ref); refs.at.set(ref, new WeakRef(el)); }
 				elements.push(line(el, ref));
+			};
+			for (const el of (scope ?? document).querySelectorAll(${JSON.stringify(INTERACTIVE)})) {
+				if (!el.getClientRects().length) continue;
+				listed.add(el);
+				add(el);
 			}
+			const visit = (el, inherited) => {
+				if (listed.has(el)) return;
+				const style = getComputedStyle(el);
+				if (style.display === 'none') return;
+				const pointer = style.cursor === 'pointer';
+				if (((pointer && !inherited) || el.hasAttribute('onclick')) && el.tagName !== 'LABEL' && el.getClientRects().length) return add(el);
+				for (const child of el.children) visit(child, pointer);
+			};
+			const start = scope ?? document.body;
+			if (start) visit(start, !!start.parentElement && getComputedStyle(start.parentElement).cursor === 'pointer');
 			page.elements = elements;
 			if (more) page.moreElements = more;
 		}

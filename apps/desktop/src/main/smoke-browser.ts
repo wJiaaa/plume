@@ -13,7 +13,7 @@ export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
 
 /**
  * 内置的浏览器插件走一遍真窗口：从开始页开一个浏览器标签、地址栏打开本机的一页（`<webview>` 挂上、交给逻辑入口），
- * 再让假模型经 `browser_act` 读页面、点一个会弹 confirm 的按钮（宿主替它取消、写进结果）、点「登录」开出按尺寸开的小窗口
+ * 再让假模型经 `browser_act` 读页面、按 ref 点一行只靠脚本响应点击的 div、点一个会弹 confirm 的按钮（宿主替它取消、写进结果）、点「登录」开出按尺寸开的小窗口
  * （开成真窗口、经 `window.opener` 把结果交回原页面后自己关掉，结果里叫 agent 找人）、点 `target=_blank` 的链接开出后台标签、
  * 点链接换到一张带密码框的页（`read: true` 交回的页面标着要登录）、`browser_screenshot`
  * 截图（图片跟在工具结果里），面板上画出光标；地址栏打开磁盘上的 `.html`；标签弹到独立窗口再收回，页面跟着换窗口；
@@ -63,6 +63,8 @@ export async function checkBrowser(options: {
 			response.end(
 				`<title>Plume Smoke</title><h1>Plume browser smoke</h1><button id="go" onclick="document.querySelector('h1').textContent = confirm('Really?') ? 'confirmed' : 'dismissed'">Press me</button><p><a href="/next">Next page</a></p>` +
 					`<button id="login" onclick="window.open('/auth', 'plume-auth', 'width=420,height=520')">Sign in</button><p><a id="tab" href="/tab" target="_blank">Tab page</a></p><p id="account"></p>` +
+					// 列表行那样只靠 cursor: pointer 和脚本响应点击的 div：read 要给它一个 ref，里面继承了 pointer 的 span 不单列。
+					`<div id="row" style="cursor: pointer"><span>Open row</span></div><script>document.querySelector('#row').addEventListener('click', (event) => { event.currentTarget.textContent = 'row opened'; });</script>` +
 					`<script>addEventListener('message', (event) => { if (event.data === 'token') { document.querySelector('#account').textContent = 'signed in'; fetch('/signed-in'); } });</script>`,
 			);
 	});
@@ -113,6 +115,10 @@ export async function checkBrowser(options: {
 			seen.push(messages);
 			if (!messages.includes("toolu_browser_read"))
 				return { text: "先读一下。", toolCalls: [{ id: "toolu_browser_read", name: "browser_act", args: { action: "read" } }] };
+			// 按 read 给的 ref 点那一行，不用选择器：验证 ref 指得到它。
+			const row = /(e\d+) div #row Open row/.exec(messages)?.[1];
+			if (row && !messages.includes("toolu_browser_row"))
+				return { toolCalls: [{ id: "toolu_browser_row", name: "browser_act", args: { action: "click", ref: row, read: true } }] };
 			if (!messages.includes("toolu_browser_press"))
 				return { toolCalls: [{ id: "toolu_browser_press", name: "browser_act", args: { action: "click", selector: "#go" } }] };
 			if (!messages.includes("toolu_browser_login"))
@@ -135,6 +141,8 @@ export async function checkBrowser(options: {
 		options.setModel(undefined);
 		const last = seen.at(-1) ?? "";
 		assert.ok(last.includes("Press me") && /e\d+ button #go Press me/.test(last), "read 交回了按钮那一行");
+		assert.ok(/e\d+ div #row Open row/.test(last) && !/e\d+ span Open row/.test(last), "read 列出了靠脚本响应点击的那一行，没把里面的 span 单列");
+		assert.ok(last.includes("row opened"), "按 ref 点到了那一行");
 		assert.ok(last.includes("dismissed"), "confirm 由宿主取消，写进了结果");
 		assert.ok(last.includes('\\"navigated\\": true'), "点链接以后等到了新的一页");
 		assert.ok(last.includes("opened a separate window for 127.0.0.1") && last.includes("ask_user"), "登录小窗口写进结果、叫 agent 找人");
