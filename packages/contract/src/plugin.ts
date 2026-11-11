@@ -957,8 +957,12 @@ export type WebPageEvent = { page: string; state: WebPageState } &
 		 * `redirect` 是服务器重定向过去的，不是页面自己跳的。
 		 */
 		| { type: "blocked"; url: string; redirect: boolean }
-		/** 页面要开新窗口（`window.open`、`target=_blank`）：宿主不开，交给插件决定。 */
-		| { type: "popup"; url: string }
+		/**
+		 * 页面要开新窗口（`window.open`、`target=_blank`）：宿主不开，交给插件决定。`window` 是脚本按尺寸开的小窗（第三方登录、
+		 * 支付）：宿主已经把它开成挂在 Plume 窗口上的小窗口，和开它的页面连着（登录完经 `window.opener` 交回结果、自己关掉），
+		 * 插件不用再开；它给人用，插件驱动不了。
+		 */
+		| { type: "popup"; url: string; window?: true }
 		/**
 		 * 宿主照 `answerDialogs` 替人答了页面的一个对话框。`beforeunload` 是离开页面的提示，没有文字；答 false 时留在原页，
 		 * 等着换页的那一方等不到新文档。

@@ -8,7 +8,7 @@
 import { basename } from "node:path";
 import type { Locale, ToolDefinition, ToolOutput, ToolRun, WebInputEvent, WebPages } from "@plume/contract";
 import { validViewport, validZoom, webUrl } from "./address.ts";
-import { describeDialogs, type Dialogs } from "./dialogs.ts";
+import { describeNotices, type Dialogs } from "./dialogs.ts";
 import { localPath, type LocalPages } from "./local.ts";
 import { MESSAGES } from "./messages.ts";
 import { evaluate, locate, READ_DEFAULT_CHARS, READ_MAX_CHARS, snapshotPage, waitForContent, waitPage, type ReadOptions, type Target } from "./page-scripts.ts";
@@ -330,7 +330,7 @@ export function browserTools(web: WebPages, workspace: Workspace, dialogs: Dialo
 	 */
 	const failedSteps = new Map<string, { step: string; tool: string }>();
 
-	// 页面在调用期间弹出的对话框由宿主替它答，答了什么写进结果，见 dialogs.ts。
+	// 页面在调用期间弹出的对话框由宿主替它答，答了什么、开了什么新窗口写进结果，见 dialogs.ts。
 	return tools.map((tool): ToolDefinition => ({
 		...tool,
 		async execute(args: Record<string, unknown>, run: ToolRun) {
@@ -345,7 +345,7 @@ export function browserTools(web: WebPages, workspace: Workspace, dialogs: Dialo
 			workspace.engage(run.sessionId);
 			const { value, met } = await dialogs.answering(run.sessionId, args.dialog === "accept", () => tool.execute(args, run).catch(fail));
 			if (value.isError) failedSteps.set(run.sessionId, { step, tool: tool.name });
-			return met.length === 0 ? value : { ...value, output: `${value.output}\n${describeDialogs(met)}` };
+			return met.length === 0 ? value : { ...value, output: `${value.output}\n${describeNotices(met)}` };
 		},
 	}));
 }

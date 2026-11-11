@@ -13,7 +13,9 @@ export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
 
 /**
  * 内置的浏览器插件走一遍真窗口：从开始页开一个浏览器标签、地址栏打开本机的一页（`<webview>` 挂上、交给逻辑入口），
- * 再让假模型经 `browser_act` 读页面、点一个会弹 confirm 的按钮（宿主替它取消、写进结果）、点链接换页、`browser_screenshot`
+ * 再让假模型经 `browser_act` 读页面、点一个会弹 confirm 的按钮（宿主替它取消、写进结果）、点「登录」开出按尺寸开的小窗口
+ * （开成真窗口、经 `window.opener` 把结果交回原页面后自己关掉，结果里叫 agent 找人）、点 `target=_blank` 的链接开出后台标签、
+ * 点链接换到一张带密码框的页（`read: true` 交回的页面标着要登录）、`browser_screenshot`
  * 截图（图片跟在工具结果里），面板上画出光标；地址栏打开磁盘上的 `.html`；标签弹到独立窗口再收回，页面跟着换窗口；
  * 右键回复里的网址在内置浏览器里开出新标签；最后经菜单关掉标签，页面跟着没了。
  */
@@ -46,12 +48,22 @@ export async function checkBrowser(options: {
 		window.webContents.sendInputEvent({ type: "keyUp", keyCode });
 	};
 
+	let signedIn = false;
 	const server = createServer((request, response) => {
 		response.setHeader("content-type", "text/html; charset=utf-8");
-		if (request.url === "/next") response.end("<title>Next page</title><p>arrived</p>");
-		else
+		if (request.url === "/next") response.end('<title>Next page</title><p>arrived</p><label>Password <input type="password"></label>');
+		else if (request.url === "/tab") response.end("<title>Tab page</title><p>opened from a link</p>");
+		// 第三方登录那样的小窗口：把结果交回开它的页面，然后自己关掉。
+		else if (request.url === "/auth")
+			response.end("<title>Sign in</title><p>signing in</p><script>window.opener.postMessage('token', '*'); setTimeout(() => window.close(), 300);</script>");
+		else if (request.url === "/signed-in") {
+			signedIn = true;
+			response.end("ok");
+		} else
 			response.end(
-				`<title>Plume Smoke</title><h1>Plume browser smoke</h1><button id="go" onclick="document.querySelector('h1').textContent = confirm('Really?') ? 'confirmed' : 'dismissed'">Press me</button><p><a href="/next">Next page</a></p>`,
+				`<title>Plume Smoke</title><h1>Plume browser smoke</h1><button id="go" onclick="document.querySelector('h1').textContent = confirm('Really?') ? 'confirmed' : 'dismissed'">Press me</button><p><a href="/next">Next page</a></p>` +
+					`<button id="login" onclick="window.open('/auth', 'plume-auth', 'width=420,height=520')">Sign in</button><p><a id="tab" href="/tab" target="_blank">Tab page</a></p><p id="account"></p>` +
+					`<script>addEventListener('message', (event) => { if (event.data === 'token') { document.querySelector('#account').textContent = 'signed in'; fetch('/signed-in'); } });</script>`,
 			);
 	});
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -103,8 +115,15 @@ export async function checkBrowser(options: {
 				return { text: "先读一下。", toolCalls: [{ id: "toolu_browser_read", name: "browser_act", args: { action: "read" } }] };
 			if (!messages.includes("toolu_browser_press"))
 				return { toolCalls: [{ id: "toolu_browser_press", name: "browser_act", args: { action: "click", selector: "#go" } }] };
+			if (!messages.includes("toolu_browser_login"))
+				return { toolCalls: [{ id: "toolu_browser_login", name: "browser_act", args: { action: "click", selector: "#login" } }] };
+			// 像真的那样等人在小窗口里登完：原页面拿到结果后写着 signed in。
+			if (!messages.includes("toolu_browser_signed"))
+				return { toolCalls: [{ id: "toolu_browser_signed", name: "browser_act", args: { action: "wait", text: "signed in" } }] };
+			if (!messages.includes("toolu_browser_tab"))
+				return { toolCalls: [{ id: "toolu_browser_tab", name: "browser_act", args: { action: "click", selector: "#tab" } }] };
 			if (!messages.includes("toolu_browser_next"))
-				return { toolCalls: [{ id: "toolu_browser_next", name: "browser_act", args: { action: "click", selector: "a" } }] };
+				return { toolCalls: [{ id: "toolu_browser_next", name: "browser_act", args: { action: "click", selector: "a", read: true } }] };
 			if (!messages.includes("toolu_browser_shot")) return { toolCalls: [{ id: "toolu_browser_shot", name: "browser_screenshot", args: {} }] };
 			return { text: `浏览器验证完成。[另一页](${url}other)` };
 		});
@@ -118,9 +137,15 @@ export async function checkBrowser(options: {
 		assert.ok(last.includes("Press me") && /e\d+ button #go Press me/.test(last), "read 交回了按钮那一行");
 		assert.ok(last.includes("dismissed"), "confirm 由宿主取消，写进了结果");
 		assert.ok(last.includes('\\"navigated\\": true'), "点链接以后等到了新的一页");
+		assert.ok(last.includes("opened a separate window for 127.0.0.1") && last.includes("ask_user"), "登录小窗口写进结果、叫 agent 找人");
+		assert.ok(last.includes("opened http://127.0.0.1") && last.includes("new background tab"), "target=_blank 开出后台标签、写进结果");
+		assert.ok(/\\"wall\\": \\"sign-in\\"/.test(last), "带密码框的页标着要登录");
+		await waitMain(() => signedIn, "小窗口经 window.opener 把结果交回了原页面");
+		await waitMain(() => !BrowserWindow.getAllWindows().some((candidate) => candidate.webContents.getURL().endsWith("/auth")), "小窗口自己关掉了");
+		await waitMain(() => titled("Tab page") !== undefined, "target=_blank 的链接开成了后台标签");
 		// 测试用的模型不一定看图：看图的发出去是图片块，不看的由请求那一层换成一句说明；两样都说明工具结果里带着图。
 		assert.ok(last.includes("Screenshot of Next page") && /"type":"image"|image omitted/.test(last), "截图跟在工具结果里");
-		await waitMain(() => guest()?.getTitle() === "Next page", "页面换到了下一页");
+		await waitMain(() => titled("Next page") !== undefined, "页面换到了下一页");
 		await until(`document.querySelector('${panel} [data-browser-cursor]') !== null`, "面板上画出 agent 的光标");
 		await capture("smoke-browser-agent.png");
 
@@ -156,10 +181,11 @@ export async function checkBrowser(options: {
 		assert.match(first, /^在 .+ 中打开$|^在系统浏览器中打开$/, "网址右键菜单的第一行是系统浏览器");
 		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim() === '在内置浏览器打开').click()`);
 		await waitMain(() => guests().some((contents) => contents.getURL() === `${url}other`), "内置浏览器开出回复里的网址");
-		await until(`document.querySelectorAll('[data-panel-tab="plume.browser/browser"]').length === 2`, "开成一个新标签");
+		// 原来那页、target=_blank 开出的后台标签，加上这一个。
+		await until(`document.querySelectorAll('[data-panel-tab="plume.browser/browser"]').length === 3`, "开成一个新标签");
 
 		// 经菜单逐个关掉标签，页面跟着没了。
-		for (let left = 2; left > 0; left--) {
+		for (let left = 3; left > 0; left--) {
 			await page(`document.querySelector('${panel} button[aria-label="浏览器菜单"]').click()`);
 			await until(`[...document.querySelectorAll('[role=menuitem]')].some((item) => item.textContent.trim() === '关闭标签页')`, "浏览器菜单打开");
 			await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim() === '关闭标签页').click()`);
@@ -174,6 +200,9 @@ export async function checkBrowser(options: {
 				agent: true,
 				dialog: true,
 				navigated: true,
+				popupWindow: true,
+				backgroundTab: true,
+				signInWall: true,
 				screenshot: true,
 				local: true,
 				detached: true,

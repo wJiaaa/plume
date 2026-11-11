@@ -3,7 +3,8 @@
  * 由这里替插件驱动它。浏览器的标签、地址栏、给模型的工具都在插件里；这里只做只有主进程做得到的事：
  *
  * - 加固：不管标签上写了什么，页面都在沙箱里、没有 Node 和预加载脚本，分区固定；只有主窗口和面板窗口里的能挂上。
- * - 只开网页：主框架去别的协议（`lark://` 这类唤起客户端的）一律拦下，告诉插件；新窗口不开，交给插件。
+ * - 只开网页：主框架去别的协议（`lark://` 这类唤起客户端的）一律拦下，告诉插件；新窗口不开，交给插件，脚本按尺寸开的
+ *   小窗（第三方登录）开成挂在主窗口上的小窗口，和开它的页面连着。
  * - 对话框：插件要求时由这里答 alert、confirm、离开提示，不弹系统对话框——agent 操作网页时没人去点它，
  *   页面的主线程就一直停在那一句上。
  * - 加载、执行脚本（可在插件自己的隔离 world 里）、原生输入、截图、缩放、视口仿真、开发者工具。
@@ -119,6 +120,12 @@ export function guardWebviews(contents: WebContents): void {
 		// 两处都要写：只改 params，Electron 照旧把页面放进默认会话，上面那套权限规则和单独的浏览数据都落空。
 		preferences.partition = WEB_PARTITION;
 		params.partition = WEB_PARTITION;
+		/*
+		 * 新窗口要能到 `watch` 里的 setWindowOpenHandler，怎么开由它定。Electron 在这个事件之前已经按标签上的 `allowpopups`
+		 * 算好了 `disablePopups`，只改 params 不管用：`window.open` 直接交回 null，`target=_blank` 点了没反应。
+		 */
+		(preferences as WebPreferences & { disablePopups?: boolean }).disablePopups = false;
+		params.allowpopups = "true";
 		if (!webAddress(String(params.src ?? ""))) event.preventDefault();
 	});
 }
@@ -158,11 +165,29 @@ function watch(contents: WebContents): void {
 		// 子框架的跳转拦下就是了：页面还立着，没什么要告诉插件的。
 		if (event.isMainFrame) report(guest, { type: "blocked", url: event.url, redirect: true });
 	});
-	// 页面要开新窗口不等于有人要看：不开，交给插件（浏览器插件开成一个后台标签）。
-	contents.setWindowOpenHandler(({ url }) => {
-		if (webAddress(url)) report(guest, { type: "popup", url });
-		return { action: "deny" };
+	/*
+	 * 页面要开新窗口不等于有人要看：链接、不带尺寸的 `window.open` 不开，交给插件（浏览器插件开成一个后台标签）。
+	 * 脚本按尺寸开的小窗（第三方登录、支付）开成真的小窗口：它要经 `window.opener` 把结果交回原页面、自己关掉，开成标签就断了。
+	 */
+	contents.setWindowOpenHandler(({ url, disposition }) => {
+		if (!webAddress(url)) return { action: "deny" };
+		if (disposition !== "new-window") {
+			report(guest, { type: "popup", url });
+			return { action: "deny" };
+		}
+		report(guest, { type: "popup", url, window: true });
+		const host = contents.hostWebContents && BrowserWindow.fromWebContents(contents.hostWebContents);
+		return {
+			action: "allow",
+			overrideBrowserWindowOptions: {
+				...(host ? { parent: host } : {}),
+				autoHideMenuBar: true,
+				// 分区不写：和开它的页面同一个会话（登录状态、权限规则都一样），写了反倒和 opener 断开。
+				webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false, webviewTag: false },
+			},
+		};
 	});
+	contents.on("did-create-window", (window) => guardPopup(window.webContents));
 	// 离开页面提示：Electron 不弹窗，默认留在原页；`preventDefault` 是离开。
 	contents.on("will-prevent-unload", (event) => {
 		if (guest.answer === null) return;
@@ -176,6 +201,19 @@ function watch(contents: WebContents): void {
 		if (pages.get(key) === guest) pages.delete(key);
 		report(guest, { type: "detached" });
 	});
+}
+
+/**
+ * 页面开出的小窗口：给人用的（登录、付款），插件和 agent 不驱动它。规矩和页面一样：只去网页地址；它自己再开的窗口不开——
+ * 登录窗口里很少需要，开了也没有标签可放。
+ */
+function guardPopup(page: WebContents): void {
+	const stay = (event: Electron.Event & { url: string }) => {
+		if (!webAddress(event.url)) event.preventDefault();
+	};
+	page.on("will-navigate", stay);
+	page.on("will-redirect", stay);
+	page.setWindowOpenHandler(() => ({ action: "deny" }));
 }
 
 /**

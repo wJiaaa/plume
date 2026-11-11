@@ -57,8 +57,39 @@ export interface PageSnapshot {
 	nextOffset?: number;
 	/** 看得见的可操作元素超过上限、没列出来的个数。 */
 	moreElements?: number;
+	/** 这一页拦着要人来：`sign-in` 要密码或一次性验证码，`verification` 是人机验证（验证码、滑块、Cloudflare 的检查页）。 */
+	wall?: "sign-in" | "verification";
 	hint?: string;
 }
+
+/*
+ * 人机验证的样子：各家的挂件和整页的检查页。只认看得见的（下面的 `shown`），reCAPTCHA v3 右下角那枚徽章不算——
+ * 很多普通页面都挂着它。按 iframe 的地址认，挂件本身在跨域的框里，读不到里面。
+ */
+const VERIFICATION = [
+	'iframe[src*="recaptcha/api2/anchor"]:not([src*="size=invisible"])',
+	'iframe[src*="recaptcha/enterprise/anchor"]:not([src*="size=invisible"])',
+	'iframe[src*="recaptcha/api2/bframe"]',
+	'iframe[src*="recaptcha/enterprise/bframe"]',
+	'iframe[src*="hcaptcha.com"]',
+	'iframe[src*="challenges.cloudflare.com"]',
+	"#challenge-form,#challenge-running,#challenge-stage,#cf-challenge-running",
+	".geetest_panel,.geetest_holder,.geetest_box,.geetest_captcha",
+	"#nc_1_wrapper,.nc-container,#aliyunCaptcha-window-popup,#aliyunCaptcha-sliding-wrapper",
+	'#tcaptcha_iframe,#tcaptcha_iframe_dy,iframe[src*="turing.captcha.qcloud.com"],iframe[src*="captcha.qq.com"]',
+].join(",");
+const SIGN_IN = 'input[type=password],input[autocomplete="one-time-code"]';
+
+/** 页面（连同同源的框）里拦着要人来的东西，没有是 null。 */
+// i18n-exempt：认 Cloudflare 检查页中文版的标题，不是给人看的文案。
+const WALL = `(() => {
+	const docs = [document];
+	for (const frame of document.querySelectorAll('iframe')) { try { if (frame.contentDocument) docs.push(frame.contentDocument); } catch {} }
+	const shown = (el, min) => { const r = el.getBoundingClientRect(); return r.width >= min && r.height >= min && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && !el.closest('.grecaptcha-badge'); };
+	const any = (selector, min) => docs.some((doc) => Array.from(doc.querySelectorAll(selector)).some((el) => shown(el, min)));
+	if (/^(just a moment|attention required|请稍候)/i.test(document.title) || any(${JSON.stringify(VERIFICATION)}, 30)) return 'verification';
+	return any(${JSON.stringify(SIGN_IN)}, 8) ? 'sign-in' : null;
+})()`;
 
 /** 正文里的空白：行尾空格去掉，连着的空行并成一行，省下的都是 token。 */
 const TIDY = "(value) => value.replace(/[ \\t\\u00a0]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim()";
@@ -120,6 +151,10 @@ export async function snapshotPage(pages: WebPages, id: string, next: number, op
 			if (more) page.moreElements = more;
 		}
 		const hints = [];
+		const wall = ${WALL};
+		if (wall) page.wall = wall;
+		if (wall === 'verification') hints.push('This page shows a CAPTCHA or bot check, which is for the user to pass: ask them (ask_user) to complete it in the browser panel, then read the page again. Do not try to solve it or keep reloading.');
+		if (wall === 'sign-in') hints.push('This page asks for a password or a one-time code. Unless the user gave you credentials for this site, do not type any: ask them (ask_user) to sign in in the browser panel, then read the page again.');
 		if (unmatched) hints.push('selector ' + JSON.stringify(spec.selector) + ' matched nothing; this is the whole page.');
 		if (page.moreElements) hints.push('Only the first ${MAX_ELEMENTS} interactive elements are listed; read with a selector to list the ones in one region.');
 		if (page.truncated) hints.push('The text is cut at ' + end + ' of ' + whole.length + ' characters; read with offset ' + end + ' for the rest.');

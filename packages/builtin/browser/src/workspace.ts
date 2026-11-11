@@ -61,6 +61,9 @@ interface Entry {
 	listeners: Set<(event: WebPageEvent | { type: "closed" }) => void>;
 }
 
+/** 工具调用期间页面上发生、要写进结果的事：宿主替它答的对话框，它开的新窗口。 */
+export type PageNotice = Extract<WebPageEvent, { type: "dialog" | "popup" }>;
+
 export interface Workspace {
 	pages(): BrowserPage[];
 	page(id: string): BrowserPage | undefined;
@@ -96,8 +99,8 @@ export interface Workspace {
 	closeSession(sessionId: string): void;
 	/** 页面上的事件，`ctx.pages.onEvent` 交来的。 */
 	event(event: WebPageEvent): void;
-	/** 某一页的对话框被宿主答了，交给正在跑的工具调用。 */
-	onDialog(listener: (sessionId: string | null, event: Extract<WebPageEvent, { type: "dialog" }>) => void): void;
+	/** 某一页的对话框被宿主答了、开了新窗口，交给正在跑的工具调用写进结果。 */
+	onNotice(listener: (sessionId: string | null, event: PageNotice) => void): void;
 	/** 新挂上的一页：正在跑的调用要接管它的对话框。 */
 	onAttached(listener: (page: BrowserPage) => void): void;
 	/** 这个会话的 agent 这一轮在用浏览器：它的页一直挂着，不睡。 */
@@ -115,7 +118,7 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 	/** 每个会话现在在哪一页，按会话（新对话是 `""`）。 */
 	const activeBySession = new Map<string, string>();
 	const watchers = new Set<(update: BrowserUpdate) => void>();
-	const dialogListeners = new Set<(sessionId: string | null, event: Extract<WebPageEvent, { type: "dialog" }>) => void>();
+	const noticeListeners = new Set<(sessionId: string | null, event: PageNotice) => void>();
 	const attachedListeners = new Set<(page: BrowserPage) => void>();
 	const busy = new Set<string>();
 	const key = (sessionId: string | null) => sessionId ?? "";
@@ -185,7 +188,8 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 		entry.view.failure = undefined;
 		entry.view.url = url;
 		entry.requested = url;
-		selectEntry(entry);
+		// 后台开的（页面自己开的新标签）不抢这个会话的当前页：agent 接着操作的还是它原来那一页。
+		if (reveal) selectEntry(entry);
 		publish({ open: { page: entry.view.id, sessionId: entry.view.sessionId, reveal } });
 		await ready(entry);
 		// 不等加载完：站点不回应时那可以一直不了结。失败由 `failed` 事件记下，等文档的是 `loaded`，它有时限。
@@ -349,13 +353,14 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 				break;
 			}
 			case "popup":
-				// 页面开窗口不是人要看：开成同一会话的一个后台标签。
-				void open(event.url, entry.view.sessionId, { newTab: true, reveal: false }).catch(() => {});
+				// 页面开窗口不是人要看：开成同一会话的一个后台标签。登录这类小窗口宿主已经开好了，给人用。
+				if (!event.window) void open(event.url, entry.view.sessionId, { newTab: true, reveal: false }).catch(() => {});
+				for (const listener of noticeListeners) listener(entry.view.sessionId, event);
 				break;
 			case "dialog":
 				// 离开页面的提示被取消时留在这一页：旧文档照旧能读，等着换页的那一方不必等满时限。
 				if (event.dialog === "beforeunload" && !event.accepted) entry.ready = true;
-				for (const listener of dialogListeners) listener(entry.view.sessionId, event);
+				for (const listener of noticeListeners) listener(entry.view.sessionId, event);
 				break;
 		}
 		for (const listener of [...entry.listeners]) listener(event);
@@ -378,7 +383,7 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 		if (entries.size >= MAX_PAGES) throw new Error(`At most ${MAX_PAGES} tabs can be open; close some first`);
 		const entry = newEntry(randomUUID(), sessionId, location, await defaultZoom());
 		if (location !== "about:blank") entry.requested = location;
-		selectEntry(entry);
+		if (reveal) selectEntry(entry);
 		publish({ open: { page: entry.view.id, sessionId, reveal } });
 		await ready(entry);
 		return entry.view.id;
@@ -514,7 +519,7 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 			for (const entry of [...entries.values()]) if (entry.view.sessionId === sessionId) close(entry.view.id);
 		},
 		event,
-		onDialog: (listener) => void dialogListeners.add(listener),
+		onNotice: (listener) => void noticeListeners.add(listener),
 		onAttached: (listener) => void attachedListeners.add(listener),
 		engage(sessionId) {
 			if (busy.has(sessionId)) return;

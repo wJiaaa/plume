@@ -468,7 +468,7 @@ const content = await readFile(access.absolute, "utf8");
 浏览器这类插件自己画网页：界面入口在面板里放一个 `<webview>`，页面怎么走、读什么、点哪里都由逻辑入口经 `ctx.pages` 驱动。宿主只管主进程才做得到的事，不认识地址栏、标签、书签这些。
 
 - **认下一页**：`<webview>` 挂上（`did-attach`）以后，界面入口读 `getWebContentsId()`，经 `ui.remote()` 交给逻辑入口，逻辑入口调 `ctx.pages.attach(id, contentsId)`；`id` 是插件自己起的页面名（浏览器用面板标签的 id）。之后的方法都按这个 `id` 找页面，只找得到自己认下的。一个 `<webview>` 只能认作一页；它被卸掉（标签关了、组件卸了）就收到 `detached`，页面没了。同一个 `id` 再认另一个 `<webview>` 时换成新的（标签弹到独立窗口、接回来时就是这样），旧的不再算、卸掉时不报 `detached`。
-- **宿主管着的**：主窗口和弹出去的面板窗口能挂 `<webview>`（面板 `detachable` 时弹出去的那边画一个新的，按地址重新加载、重新 `attach`）；页面一律沙箱、不开 Node、不带 preload，存在单独的一份浏览数据（`persist:plume-web`）里；只放 http、https 和 `about:blank`，跳去别的协议的被拦下，报 `blocked`；页面要开新窗口不开，报 `popup`（插件自己决定开成一个标签还是不管）；页面要的权限（摄像头、通知……）一律拒。
+- **宿主管着的**：主窗口和弹出去的面板窗口能挂 `<webview>`（面板 `detachable` 时弹出去的那边画一个新的，按地址重新加载、重新 `attach`）；页面一律沙箱、不开 Node、不带 preload，存在单独的一份浏览数据（`persist:plume-web`）里；只放 http、https 和 `about:blank`，跳去别的协议的被拦下，报 `blocked`；页面要开新窗口不开，报 `popup`（插件自己决定开成一个标签还是不管），脚本按尺寸开的小窗（第三方登录、支付）例外：宿主开成挂在 Plume 窗口上的小窗口、和开它的页面连着，报 `popup` 时带 `window: true`，插件不用再开、也驱动不了它；页面要的权限（摄像头、通知……）一律拒。
 - **事件**：`ctx.pages.onEvent(listener)` 收自己全部页面的事件，每条带着页面此刻的 `state`（地址、标题、加载中、能不能前进后退、缩放）：`attached`、`detached`、`navigation`（主框架开始换文档）、`dom-ready`、`loading`、`navigated`、`title`、`failed`、`gone`（页面进程没了）、`blocked`、`popup`、`dialog`。认下之前就发生的（第一跳）在认下时补发。停用时自动撤下。
 - **读页面、找元素**：`evaluate(id, code, { isolated: true })` 在插件自己的隔离 world 里跑——和页面共用 DOM，页面的脚本看不到它记下的东西，换文档时一起丢掉；不给 `isolated` 是在页面自己的 world 里跑（要读页面的全局变量时）。页面卡住时 `evaluate` 不会自己超时，自己加时限。
 - **点按、输入**：`input(id, event)` 发原生的指针、滚轮、按键事件，坐标是页面视口里的像素（CSS 像素乘上缩放）；`insertText` 往有焦点的输入框里打字；之前先 `focus`。

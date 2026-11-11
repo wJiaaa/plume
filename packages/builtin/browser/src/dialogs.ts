@@ -4,16 +4,18 @@
  * 不接管时页面弹一个系统对话框等人去点，页面的主线程就停在那一句上：agent 接下来每一次读页面、点按钮都等满时限报
  * 「页面没有响应」，直到有人碰巧看到那个对话框。所以工具调用进行时，这个会话的每一页都叫宿主替它答
  * （`answerDialogs`，连同调用开始前就开着、没人答的那一个）；调用结束交回系统对话框，人自己浏览时照旧。
+ *
+ * 调用期间页面开的新窗口也一并写进结果：开成后台标签的，agent 要知道去哪找；登录、支付这类小窗口是给人的，agent 该停下来叫人。
  */
 
-import type { WebPageEvent, WebPages } from "@plume/contract";
-import type { Workspace } from "./workspace.ts";
+import type { WebPages } from "@plume/contract";
+import type { PageNotice, Workspace } from "./workspace.ts";
 
 // i18n-exempt：这一页的话都写进给模型的工具结果。
 
 interface Call {
 	accept: boolean;
-	met: Extract<WebPageEvent, { type: "dialog" }>[];
+	met: PageNotice[];
 }
 
 export interface Dialogs {
@@ -26,7 +28,7 @@ export function createDialogs(web: WebPages, workspace: Workspace): Dialogs {
 	const calls = new Map<string, Call>();
 	const answer = (id: string, accept: boolean | null) => web.answerDialogs(id, accept).catch(() => {});
 
-	workspace.onDialog((sessionId, event) => {
+	workspace.onNotice((sessionId, event) => {
 		const call = sessionId === null ? undefined : calls.get(sessionId);
 		call?.met.push(event);
 	});
@@ -52,9 +54,13 @@ export function createDialogs(web: WebPages, workspace: Workspace): Dialogs {
 	};
 }
 
-export function describeDialogs(met: Call["met"]): string {
+export function describeNotices(met: Call["met"]): string {
 	return met
 		.map((dialog) => {
+			if (dialog.type === "popup")
+				return dialog.window
+					? `The page opened a separate window for ${new URL(dialog.url).host || dialog.url}, most likely to sign in or pay. It is for the user and cannot be operated from here: ask the user (ask_user) to finish it there, then read this page again.`
+					: `The page opened ${dialog.url} in a new background tab; find it with browser_tabs.`;
 			if (dialog.dialog === "alert") return `The page raised an alert "${dialog.message}"; acknowledged.`;
 			// 离开页面的提示网页写不了字，所以照它的意思说。
 			if (dialog.dialog === "beforeunload")
