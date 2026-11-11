@@ -13,7 +13,7 @@ import { flattenGroups, groupModels } from "../models/model-grouping.ts";
 import { ModelSelect } from "../models/ModelSelect.tsx";
 import { setImageModel, useModels } from "../models/store.ts";
 import { listPageSettingsSections, localized, usePluginUis } from "../plugins.tsx";
-import { Card, PageHeader } from "./controls.tsx";
+import { Card, PageHeader, saveFailed } from "./controls.tsx";
 
 export function AgentsSettings({ onOpenModelSettings }: { onOpenModelSettings: () => void }) {
 	const { t, resolvedLocale } = useI18n();
@@ -60,7 +60,7 @@ export function AgentsSettings({ onOpenModelSettings }: { onOpenModelSettings: (
 								inheritedSource={t("agents.imageModelAutoShort")}
 								inheritDetail={t("agents.imageModelDetail")}
 								disabled={!imageModels[0]}
-								onChange={(modelId) => void setImageModel(modelId || null)}
+								onChange={(modelId) => void setImageModel(modelId || null).catch(saveFailed)}
 								onOpenSettings={onOpenModelSettings}
 							/>
 						</SessionModelRow>

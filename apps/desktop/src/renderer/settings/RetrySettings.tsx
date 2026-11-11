@@ -12,7 +12,7 @@ import { Disclosure, Input, isLegalDraft, type MessageKey, translate, useI18n } 
 import { normalizeRetryPolicy, type RetryFailure, type RetryRule } from "@plume/llm/retry-policy";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { modelsAgent, refreshModels, settingsView } from "../models/store.ts";
-import { Card, InlineSelect, SectionTitle, Toggle } from "./controls.tsx";
+import { Card, InlineSelect, saveFailed, SectionTitle, Toggle } from "./controls.tsx";
 
 /* 存 key 不存译好的字：这张表在模块加载时就成型了，之后换语言它不会重算。 */
 const FAULTS: { kind: RetryFailure; titleKey: MessageKey; detailKey: MessageKey }[] = [
@@ -47,7 +47,8 @@ export function RetrySettings({ policy: stored }: { policy: unknown }) {
 		const base = normalizeRetryPolicy(settingsView()?.retryPolicy);
 		void modelsAgent()
 			.setRetryPolicy({ ...base, [kind]: { ...base[kind], ...patch } })
-			.then(refreshModels);
+			.then(refreshModels)
+			.catch(saveFailed);
 	};
 
 	return (

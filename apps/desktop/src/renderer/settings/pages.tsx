@@ -17,7 +17,7 @@ import { setLocaleSetting, useLocaleSetting } from "../locale.ts";
 import { tokenValue, updateAppearance, useAppearance, useDark, useManagedSkin } from "../appearance-settings.ts";
 import { ColorRow, PixelField, PRESETS, Slider, ThemePreview } from "./appearance-controls.tsx";
 import { RetrySettings } from "./RetrySettings.tsx";
-import { Card, PageHeader, Row, Segmented, SectionTitle, Toggle } from "./controls.tsx";
+import { Card, PageHeader, Row, saveFailed, Segmented, SectionTitle, Toggle } from "./controls.tsx";
 import { listPageSettingsSections, listSettingsSections, localized, type SettingsSectionEntry, usePluginUis } from "../plugins.tsx";
 import { modelsAgent, refreshModels, settingsView, subscribeModels } from "../models/store.ts";
 import { setTranscriptPrefs, useTranscriptPrefs } from "../conversation/prefs.ts";
@@ -46,7 +46,7 @@ export const SETTINGS_GROUPS: { label: MessageKey; items: { id: SettingsSection;
 	{
 		label: "settings.group.agent",
 		items: [
-			// 只在有插件往这一页里画东西时列出来，见 SettingsNav。
+			// 始终列出：本体的默认生图模型那一行在这一页，插件（子智能体、各后台功能的模型）再往里画。
 			{ id: "agents", label: "settings.agents", icon: Bot },
 		],
 	},
@@ -181,6 +181,7 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 									void modelsAgent()
 										.setPermissionMode(on ? "auto" : "ask")
 										.then(refreshModels)
+										.catch(saveFailed)
 								}
 								ariaLabel={t("general.autoReview")}
 							/>
@@ -196,6 +197,7 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 									void modelsAgent()
 										.setPermissionMode(on ? "full" : "auto")
 										.then(refreshModels)
+										.catch(saveFailed)
 								}
 								ariaLabel={t("general.fullAccess")}
 							/>
@@ -236,7 +238,7 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 							control={
 								<Segmented
 									value={settings.thinking}
-									onChange={(thinking) => void modelsAgent().setDefaultThinking(thinking).then(refreshModels)}
+									onChange={(thinking) => void modelsAgent().setDefaultThinking(thinking).then(refreshModels).catch(saveFailed)}
 									options={[
 										{ value: "off", label: t("thinking.off") },
 										{ value: "low", label: t("thinking.low") },
@@ -314,6 +316,8 @@ export function AppearanceSettings() {
 	const contrast = (managedSkin ? undefined : appearance.contrast) ?? Math.round(Number(tokenValue("contrast")) * 100);
 	// 字体栈当草稿编辑：清空的那一刻不能把默认值塞回框里，否则没法从头打一个。
 	const [uiFont, setUiFont] = useState<string | null>(null);
+	/** 恢复默认时换一次：代码外观那一节的「自定义」和字体草稿是它自己的状态，重新挂一遍才跟着回到默认。 */
+	const [resets, setResets] = useState(0);
 
 	return (
 		<Page title={t("settings.appearance")}>
@@ -418,7 +422,7 @@ export function AppearanceSettings() {
 					/>
 				</Card>
 			</section>
-			<CodeAppearanceSettings appearance={appearance} patch={updateAppearance} />
+			<CodeAppearanceSettings key={resets} appearance={appearance} patch={updateAppearance} />
 			<section>
 				<SectionTitle>{t("appearance.preferences")}</SectionTitle>
 				<Card data-appearance-preferences="" className="[&_[data-settings-row]>div:first-child>.text-ink-muted]:text-caption">
@@ -514,6 +518,7 @@ export function AppearanceSettings() {
 									setFontSmoothing(false);
 									setSmoothing(false);
 									setUiFont(null);
+									setResets((count) => count + 1);
 								}}
 							>
 								{t("common.restore")}

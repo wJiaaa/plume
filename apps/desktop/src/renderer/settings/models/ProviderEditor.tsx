@@ -33,7 +33,7 @@ export function ProviderEditor({
 	defaultModelId,
 	testResult,
 	testing,
-	testingModelId,
+	testingModelIds,
 	modelTestResults,
 	fetchingModels,
 	fetchModelsError,
@@ -54,7 +54,7 @@ export function ProviderEditor({
 	defaultModelId: string | null;
 	testResult: ProviderTestResult | null;
 	testing: boolean;
-	testingModelId?: string | null;
+	testingModelIds?: ReadonlySet<string>;
 	modelTestResults?: Record<string, ProviderTestResult>;
 	fetchingModels?: boolean;
 	fetchModelsError?: string | null;
@@ -154,7 +154,7 @@ export function ProviderEditor({
 					managed={managed}
 					defaultModelId={defaultModelId}
 					testing={testing}
-					testingModelId={testingModelId}
+					testingModelIds={testingModelIds}
 					modelTestResults={modelTestResults}
 					fetchingModels={fetchingModels}
 					fetchModelsError={fetchModelsError}

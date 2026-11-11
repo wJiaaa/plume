@@ -35,16 +35,28 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+function withItem(set: ReadonlySet<string>, item: string, present: boolean): ReadonlySet<string> {
+	if (set.has(item) === present) return set;
+	const next = new Set(set);
+	if (present) next.add(item);
+	else next.delete(item);
+	return next;
+}
+
 export function useProviders() {
 	const settings = useModels();
 	const providers = useMemo(() => settings?.providers ?? [], [settings]);
 
 	const [selectedId, setSelectedId] = useState<string | null>(providers[0]?.id ?? null);
-	const [testing, setTesting] = useState(false);
-	const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
-	const [testingModelId, setTestingModelId] = useState<string | null>(null);
+	/*
+	 * 测连接、拉列表要等好几秒，这期间可以换到别的供应商：在忙的、测出来的都按供应商记，屏幕上只取选中那一个的。
+	 * 行上的模型 id 是 `供应商/模型`，本来就分得开；可以同时测几个模型，所以在测的是一组。
+	 */
+	const [testingProviders, setTestingProviders] = useState<ReadonlySet<string>>(new Set());
+	const [testResults, setTestResults] = useState<Record<string, ProviderTestResult>>({});
+	const [testingModelIds, setTestingModelIds] = useState<ReadonlySet<string>>(new Set());
 	const [modelTestResults, setModelTestResults] = useState<Record<string, ProviderTestResult>>({});
-	const [fetchingModels, setFetchingModels] = useState(false);
+	const [fetchingProviders, setFetchingProviders] = useState<ReadonlySet<string>>(new Set());
 	const [fetchModelsError, setFetchModelsError] = useState<string | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -87,7 +99,7 @@ export function useProviders() {
 		// 不等下一次渲染：紧接着拉取的结果要认得出这是屏幕上那一个。
 		shown.current = id;
 		// 旧结果说的是另一个端点，留着就是说错话。
-		setTestResult(null);
+		setTestResults({});
 		setModelTestResults({});
 		setFetchModelsError(null);
 		setSaveError(null);
@@ -132,16 +144,23 @@ export function useProviders() {
 
 	async function remove(id: string) {
 		await attempt(() => deleteProvider(id));
-		setSelectedId(modelsState()?.providers[0]?.id ?? null);
+		// 经 select：删掉的那个的测试结果、拉取报错不能留在新选中的上面。
+		const next = modelsState()?.providers[0]?.id;
+		if (next) select(next);
+		else setSelectedId(null);
 	}
 
-	async function saveModel(providerId: string, model: ModelConfig, original: ModelConfig | null) {
-		await attempt(() =>
-			updateProvider(providerId, (provider) => ({
+	/** 答没存成的原因，由编辑弹窗自己显示：弹窗开着，原因写在页面上会被它挡住。 */
+	async function saveModel(providerId: string, model: ModelConfig, original: ModelConfig | null): Promise<string | null> {
+		try {
+			await updateProvider(providerId, (provider) => ({
 				...provider,
 				models: original ? provider.models.map((one) => (one.id === original.id ? model : one)) : [...provider.models, model],
-			})),
-		);
+			}));
+			return null;
+		} catch (error) {
+			return errorText(error);
+		}
 	}
 
 	/** 删一个和删一批是同一件事，走拉取弹窗「取消勾选就移除」的同一条规则。 */
@@ -180,35 +199,38 @@ export function useProviders() {
 
 	async function test(modelId?: string) {
 		if (!selected) return;
+		const providerId = selected.id;
 		if (modelId) {
-			setTestingModelId(modelId);
+			setTestingModelIds((current) => withItem(current, modelId, true));
 			try {
 				// 行上的 id 是 `供应商/模型`，测的是发给供应商的那个。
 				const model = selected.models.find((one) => one.id === modelId);
-				const result = await modelsAgent().testProvider(selected.id, model?.modelId ?? modelId);
+				const result = await modelsAgent().testProvider(providerId, model?.modelId ?? modelId);
 				setModelTestResults((previous) => ({ ...previous, [modelId]: result }));
 			} catch (error) {
 				setModelTestResults((previous) => ({ ...previous, [modelId]: { ok: false, latencyMs: 0, message: errorText(error) } }));
 			} finally {
-				setTestingModelId(null);
+				setTestingModelIds((current) => withItem(current, modelId, false));
 			}
 		} else {
-			setTesting(true);
-			setTestResult(null);
+			setTestingProviders((current) => withItem(current, providerId, true));
+			setTestResults(({ [providerId]: _old, ...rest }) => rest);
+			let result: ProviderTestResult;
 			try {
-				setTestResult(await modelsAgent().testProvider(selected.id, undefined));
+				result = await modelsAgent().testProvider(providerId, undefined);
 			} catch (error) {
-				setTestResult({ ok: false, latencyMs: 0, message: errorText(error) });
+				result = { ok: false, latencyMs: 0, message: errorText(error) };
 			} finally {
-				setTesting(false);
+				setTestingProviders((current) => withItem(current, providerId, false));
 			}
+			setTestResults((previous) => ({ ...previous, [providerId]: result }));
 		}
 	}
 
 	/** 默认拉当前选中的；刚加好的那个还没进这一次渲染的 `selected`，由 `add` 直接点名。 */
 	async function fetchModelsFromEndpoint(providerId = selected?.id) {
 		if (!providerId) return;
-		setFetchingModels(true);
+		setFetchingProviders((current) => withItem(current, providerId, true));
 		setFetchModelsError(null);
 		try {
 			const result = await modelsAgent().fetchModels(providerId);
@@ -222,7 +244,7 @@ export function useProviders() {
 		} catch (error) {
 			if (shown.current === providerId) setFetchModelsError(errorText(error));
 		} finally {
-			setFetchingModels(false);
+			setFetchingProviders((current) => withItem(current, providerId, false));
 		}
 	}
 
@@ -236,11 +258,11 @@ export function useProviders() {
 		providers,
 		selected,
 		defaultModelId: settings?.defaultModelId ?? null,
-		testing,
-		testResult,
-		testingModelId,
+		testing: selected ? testingProviders.has(selected.id) : false,
+		testResult: (selected && testResults[selected.id]) ?? null,
+		testingModelIds,
 		modelTestResults,
-		fetchingModels,
+		fetchingModels: selected ? fetchingProviders.has(selected.id) : false,
 		fetchModelsError,
 		saveError,
 		discoveredModels: discovered && discovered.providerId === selected?.id ? discovered.models : null,

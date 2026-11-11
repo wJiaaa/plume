@@ -20,7 +20,8 @@ export function StorageSettings() {
 	const [use, setUse] = useState<StorageUse | null>(null);
 	const [range, setRange] = useState<ClearRange>({ from: null, to: null });
 	const [busy, setBusy] = useState(false);
-	const [done, setDone] = useState<ClearResult | null>(null);
+	/** 清完说的那句话：删了多少，或者为什么没删成。 */
+	const [done, setDone] = useState<ClearResult | { error: string } | null>(null);
 	const confirm = useConfirmer();
 	const [exporting, setExporting] = useState(false);
 	/** 导出完说的那句话：写到了哪，或者为什么没写成。 */
@@ -59,6 +60,8 @@ export function StorageSettings() {
 		try {
 			setDone(await modelsAgent().clearSessions(range));
 			await load();
+		} catch (error) {
+			setDone({ error: error instanceof Error ? error.message : String(error) });
 		} finally {
 			setBusy(false);
 		}
@@ -159,7 +162,12 @@ export function StorageSettings() {
 										part
 									),
 								)}
-							{done && (
+							{done && "error" in done && (
+								<span data-usage-clear-error="true" className="ml-1 break-all text-danger">
+									{t("cleanup.failed", { reason: done.error })}
+								</span>
+							)}
+							{done && !("error" in done) && (
 								<span key={`${done.removed}:${done.freed}`} className="ml-1 animate-[plume-fade-up_var(--plume-t-base)_ease-out] text-ink-muted">
 									{done.removed > 0 ? t("cleanup.doneRemoved", { n: done.removed, size: formatBytes(done.freed) }) : t("cleanup.nothing")}
 									{done.skipped > 0 && ` · ${t("cleanup.doneSkipped", { n: done.skipped })}`}

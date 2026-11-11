@@ -6,11 +6,11 @@ import { isImageModel, isImageModelId } from "@plume/llm/image-models";
 import { type CatalogModel, catalogFill, catalogModelFor, DEFAULT_MODEL_LIMITS } from "@plume/llm/model-catalog";
 import { DEFAULT_THINKING_OPTIONS, THINKING_LEVELS, thinkingOptionsFor } from "@plume/llm/thinking-options";
 import type { ModelPricing, ThinkingLevel, ThinkingOption } from "@plume/llm/types";
-import { DialogAction, DialogFrame, isLegalDraft, type MessageKey, Overlay, useI18n } from "@plume/ui";
-import { Box } from "@plume/ui/icons";
+import { type Dismiss, DialogAction, DialogFrame, isLegalDraft, type MessageKey, Overlay, useI18n } from "@plume/ui";
+import { Box, CircleAlert } from "@plume/ui/icons";
 import { useState } from "react";
 import type { ModelConfig, ProviderEntry } from "../../models/store.ts";
-import { Field, TextInput, Toggle } from "../controls.tsx";
+import { Field, Notice, TextInput, Toggle } from "../controls.tsx";
 import { ModelCatalog } from "./ModelCatalog.tsx";
 
 const CONTEXT = { min: 1, max: 100_000_000, step: 1 };
@@ -33,7 +33,8 @@ export function ModelEditor({
 }: {
 	provider: Pick<ProviderEntry, "id" | "baseUrl">;
 	model: ModelConfig | null;
-	onSave: (model: ModelConfig) => void;
+	/** 存成了答 null，没存成答原因：存成了才关，没存成留着表单、把原因写在弹窗里。 */
+	onSave: (model: ModelConfig) => Promise<string | null>;
 	onCancel: () => void;
 }) {
 	const { t } = useI18n();
@@ -101,8 +102,11 @@ export function ModelEditor({
 		setModelId(value);
 	}
 
-	function submit() {
-		if (!valid) return;
+	const [saving, setSaving] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
+
+	async function submit(dismiss: Dismiss) {
+		if (!valid || saving) return;
 		const [parsedIn, parsedOut, parsedCacheRead, parsedCacheWrite] = parsed;
 		// 档位以表单为准：从一个不支持思考的目录条目填过值后，原来的档位不该留下来。
 		const { thinkingOptions: _replaced, pricing: _pricing, imageOutput: _judged, ...base } = model ?? {};
@@ -133,7 +137,12 @@ export function ModelEditor({
 		};
 		// 只在和名字的判断不同时存；改回和名字一致，之前存的也就去掉了。
 		if (imageOutput !== isImageModelId(trimmedId)) next.imageOutput = imageOutput;
-		onSave(next);
+		setSaving(true);
+		setSaveError(null);
+		const failure = await onSave(next);
+		setSaving(false);
+		if (failure) setSaveError(failure);
+		else dismiss();
 	}
 
 	const priceField = (key: PriceKey, label: string) => (
@@ -158,11 +167,18 @@ export function ModelEditor({
 					title={model ? t("modelEditor.edit") : t("modelEditor.add")}
 					// 这是一张表单，不是一个问题——默认那档高度一次只露三个字段。
 					bodyClassName="max-h-[min(560px,58dvh)]"
+					status={
+						saveError ? (
+							<Notice tone="danger" icon={CircleAlert} className="mb-1" data-model-editor-error="">
+								{saveError}
+							</Notice>
+						) : undefined
+					}
 					actions={
 						<>
 							<div className="flex-1" />
 							<DialogAction onClick={() => dismiss()}>{t("common.cancel")}</DialogAction>
-							<DialogAction tone="primary" disabled={!valid} onClick={() => dismiss(submit)} data-model-editor-save="">
+							<DialogAction tone="primary" disabled={!valid || saving} aria-busy={saving} onClick={() => void submit(dismiss)} data-model-editor-save="">
 								{t("common.save")}
 							</DialogAction>
 						</>

@@ -173,7 +173,7 @@ export function ModelSettings() {
 								defaultModelId={p.defaultModelId}
 								testResult={p.testResult}
 								testing={p.testing}
-								testingModelId={p.testingModelId}
+								testingModelIds={p.testingModelIds}
 								modelTestResults={p.modelTestResults}
 								fetchingModels={p.fetchingModels}
 								fetchModelsError={p.fetchModelsError}
@@ -198,10 +198,7 @@ export function ModelSettings() {
 					provider={p.providers.find((provider) => provider.id === editingModel.providerId) ?? { id: editingModel.providerId, baseUrl: "" }}
 					model={editingModel.model}
 					onCancel={() => setEditingModel(null)}
-					onSave={(model) => {
-						void p.saveModel(editingModel.providerId, model, editingModel.model);
-						setEditingModel(null);
-					}}
+					onSave={(model) => p.saveModel(editingModel.providerId, model, editingModel.model)}
 				/>
 			)}
 

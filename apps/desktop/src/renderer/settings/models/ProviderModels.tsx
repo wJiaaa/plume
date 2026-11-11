@@ -36,7 +36,7 @@ export function ProviderModels({
 	managed,
 	defaultModelId,
 	testing,
-	testingModelId,
+	testingModelIds,
 	modelTestResults,
 	fetchingModels,
 	fetchModelsError,
@@ -53,7 +53,7 @@ export function ProviderModels({
 	defaultModelId: string | null;
 	/** 供应商自己的连接测试；拉取不该和它抢。 */
 	testing: boolean;
-	testingModelId?: string | null;
+	testingModelIds?: ReadonlySet<string>;
 	modelTestResults?: Record<string, ProviderTestResult>;
 	fetchingModels?: boolean;
 	fetchModelsError?: string | null;
@@ -194,7 +194,7 @@ export function ProviderModels({
 								model={model}
 								isDefault={isImageModel(model) ? imageModelId === model.id : defaultModelId === model.id}
 								managed={managed}
-								testing={testingModelId === model.id}
+								testing={testingModelIds?.has(model.id) ?? false}
 								testResult={modelTestResults?.[model.id]}
 								onTest={() => onTestModel?.(model.id)}
 								onEdit={() => onEdit(model)}

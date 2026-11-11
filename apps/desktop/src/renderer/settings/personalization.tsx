@@ -4,13 +4,13 @@
  * 全局指令和语气存在 agent 进程的设置里，每个会话的系统提示词各占一段；这一页只读写它们。
  */
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Tone } from "@plume/contract";
 import { DialogAction, ErrorBoundary, TextArea, useI18n } from "@plume/ui";
-import { Check, Info, Save } from "@plume/ui/icons";
+import { Check, CircleAlert, Info, Save } from "@plume/ui/icons";
 import { listPageSettingsSections, usePluginUis } from "../plugins.tsx";
 import { modelsAgent, refreshModels, settingsView, subscribeModels } from "../models/store.ts";
-import { Card, InlineSelect, PageHeader, Row, SectionTitle } from "./controls.tsx";
+import { Card, InlineSelect, Notice, PageHeader, Row, saveFailed, SectionTitle } from "./controls.tsx";
 
 export function PersonalizationSettings() {
 	const { t } = useI18n();
@@ -20,17 +20,45 @@ export function PersonalizationSettings() {
 	const [draft, setDraft] = useState<string | null>(null);
 	const customInstructions = draft ?? personalization.customInstructions;
 	const [savedNotice, setSavedNotice] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	/** 最新敲下的那份：存的时候还在打字，存完只在框里还是交上去那份时才清掉草稿。 */
+	const typed = useRef<string | null>(null);
+	const savedTimer = useRef<number | undefined>(undefined);
+	useEffect(() => () => window.clearTimeout(savedTimer.current), []);
 
 	const save = async (change: Partial<typeof personalization>) => {
 		await modelsAgent().setPersonalization(change);
 		await refreshModels();
 	};
 
+	const edit = (value: string) => {
+		typed.current = value;
+		setDraft(value);
+		// 改了字，「已保存」说的就不是框里这份了。
+		window.clearTimeout(savedTimer.current);
+		setSavedNotice(false);
+	};
+
 	const handleSaveInstructions = async () => {
-		await save({ customInstructions });
-		setDraft(null);
-		setSavedNotice(true);
-		setTimeout(() => setSavedNotice(false), 2000);
+		if (saving) return;
+		const submitted = customInstructions;
+		setSaving(true);
+		setError(null);
+		try {
+			await save({ customInstructions: submitted });
+			if (typed.current === null || typed.current === submitted) {
+				typed.current = null;
+				setDraft(null);
+				setSavedNotice(true);
+				window.clearTimeout(savedTimer.current);
+				savedTimer.current = window.setTimeout(() => setSavedNotice(false), 2000);
+			}
+		} catch (cause) {
+			setError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			setSaving(false);
+		}
 	};
 
 	return (
@@ -46,15 +74,21 @@ export function PersonalizationSettings() {
 						{/* 存完那一下变成勾加「已保存」，过两秒变回去。 */}
 						<DialogAction
 							onClick={() => void handleSaveInstructions()}
-							disabled={customInstructions === personalization.customInstructions}
+							disabled={saving || customInstructions === personalization.customInstructions}
+							aria-busy={saving}
 							label={savedNotice ? t("common.saved") : t("common.save")}
 						>
 							{savedNotice ? <Check size={13} className="text-ok" strokeWidth={2.2} aria-hidden /> : <Save size={13} strokeWidth={1.9} aria-hidden />}
 							{savedNotice ? t("common.saved") : t("common.save")}
 						</DialogAction>
 					</div>
+					{error && (
+						<Notice tone="danger" icon={CircleAlert} className="mb-3" data-personalization-save-error="">
+							{error}
+						</Notice>
+					)}
 					<Card className="flex flex-col gap-2 p-3.5">
-						<TextArea value={customInstructions} onChange={setDraft} placeholder={t("tone.sampleRules")} rows={7} className="plume-textarea-mono" />
+						<TextArea value={customInstructions} onChange={edit} placeholder={t("tone.sampleRules")} rows={7} className="plume-textarea-mono" />
 						<div className="flex items-center gap-1.5 px-1 text-caption text-ink-faint">
 							<Info size={12} strokeWidth={1.8} />
 							<span>{t("tone.customDetail")}</span>
@@ -83,7 +117,7 @@ export function PersonalizationSettings() {
 							control={
 								<InlineSelect
 									value={personalization.tone}
-									onChange={(tone: Tone) => void save({ tone })}
+									onChange={(tone: Tone) => void save({ tone }).catch(saveFailed)}
 									ariaLabel={t("tone.title")}
 									options={[
 										{ value: "friendly", label: t("tone.warm") },
