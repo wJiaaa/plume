@@ -31,7 +31,7 @@ export default {
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；name 与 mode 都提供时管理配色和深浅模式 |
-| `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`；管理全局的图片、显示位置、铺满／平铺、效果和浓淡（外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径 |
+| `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`；管理全局的图片、显示位置、铺满／平铺、效果、浓淡，以及整个窗口的磨砂质感（外圈、停靠侧栏和对话区一起，不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径 |
 | `ui.onSessionsChanged(listener)` | 订阅所有会话的已保存消息、摘要和删除变化，包含当前未打开的会话；返回取消订阅函数，组件 effect 结束时调用，插件停用时也会撤下。事件 `SessionChange` 的字段见下文 |
 | `ui.effect(dispose)` | 界面入口的生命周期清理，停用、重载或 apply 失败时逆序执行 |
 | `ui.composerItem(id, Component, { side, order })` | 输入框底下那排控件加一格：左边，或右边模型选择前面（右边的也画进 `ui.Conversation` 的输入框） |
@@ -505,6 +505,8 @@ function ModelSetting() {
 背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
 
 `root` 是窗口最外层与透明停靠侧栏共用的底色，默认跟随 `shell`；`sidebar` 只给 compact 浮出侧栏铺底，不给停靠侧栏另铺一层；`accent-dim` 是强调弱底，默认是强调色的 10% 透明底。数据皮肤可直接给出完整的面、线、字 token；若一份配色只适用于一个模式，给 `light`、`dark` 同一组 token，并用 `mode` 指定深浅模式。
+
+`root-image` 是盖在 `root` 上的底纹，值是 CSS 图像，可以逗号分隔叠几层（例如 `linear-gradient(160deg, #…, #…)`，先写的在上面），默认 `none`。颗粒、噪点这类质感不写进皮肤：磨砂是用户在背景设置里开关的，宿主叠在底纹上面，哪套皮肤都一样。只在管理配色的数据皮肤下铺在窗口外圈和透明的停靠侧栏上，正文卡片仍是 `shell` 的实底。宿主把它固定在视口上（`background-attachment: fixed`），外圈、侧栏吸顶标题和 Windows 顶带画的是同一片；平铺的小图按自身尺寸重复，渐变铺满整个窗口。侧栏的字直接压在它上面，渐变两端的颜色都要和 `root` 一样满足文字对比度。
 
 在界面入口的 `apply` 中开启远端 watch 时，用 `ui.effect(() => call.cancel())` 登记取消。清理按后登记先执行，一项抛错不妨碍其余清理；宿主先让旧入口失效再清理，因此停用、重载或 apply 失败后，旧异步回调的 `ui.skin` 不会复活皮肤。组件内的订阅仍用 React effect 清理。
 

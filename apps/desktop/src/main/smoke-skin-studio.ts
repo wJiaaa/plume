@@ -90,20 +90,20 @@ export async function checkSkinStudio(options: {
 	await plugin.install("skin-studio");
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊安装");
 	await button("换肤工坊");
-	for (const [base, bg, ink, accent] of [
-		["light", "#FFF8F1", "#17243D", "#C03959"],
-		["dark", "#1D1B38", "#F4EFFF", "#69E6C2"],
+	// 浅色、深色各挑一套：会话窗底色、字色、强调色和深浅模式都换过来。侧栏底色（root）新旧两版插件不同，冒烟装的是线上那版，不断言。
+	for (const [id, base, bg, ink, accent] of [
+		["light-peach", "light", "#FFF8F6", "#3A1F1D", "#E0527A"],
+		["dark-teal", "dark", "#0F2124", "#EAF5F4", "#0D9488"],
 	] as const) {
-		const selector = `[data-skin-id="${base}-youthful"] .skin-studio-choice`;
+		const selector = `[data-skin-id="${id}"] .skin-studio-choice`;
 		await click(selector);
-		await until(`getComputedStyle(document.documentElement).getPropertyValue('--plume-ink').trim().toUpperCase() === '${ink}'`, "青春清爽字色应用");
-		await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${base === "dark"}`, "青春清爽深浅模式应用");
+		await until(`getComputedStyle(document.documentElement).getPropertyValue('--plume-ink').trim().toUpperCase() === '${ink}'`, "皮肤字色应用");
+		await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${base === "dark"}`, "皮肤深浅模式应用");
 		assert.equal((await token("bg")).toUpperCase(), bg);
-		assert.equal((await token("root")).toUpperCase(), bg);
 		assert.equal((await token("accent")).toUpperCase(), accent);
-		assert.equal((await library()).activeId, `${base}-youthful`);
+		assert.equal((await library()).activeId, id);
 		await page(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`);
-		await capture(`smoke-skin-youthful-${base}.png`);
+		await capture(`smoke-skin-preset-${base}.png`);
 	}
 	await page(`document.querySelector('[data-skin-default]').scrollIntoView({ block: 'center' })`);
 	for (const [mode, label] of [
@@ -253,6 +253,25 @@ export async function checkSkinStudio(options: {
 	await capture("smoke-skin-background-empty.png");
 	// 原生选图的冒烟替身读取 smoke.png；专项入口尚未生成这张完整截图。
 	await capture("smoke.png");
+	// 磨砂是整个窗口的质感，不要图、不看皮肤：打开后外圈和新对话底下、预览里都铺上颗粒，设置落盘；看完关掉，后面选图的步骤照旧。
+	await button("磨砂", background);
+	await wait(async () => (await appearance()).grain === true, "磨砂设置落盘");
+	await until(
+		`document.querySelector('[data-screen=empty] > .chat-grain') !== null && document.querySelector('${background} [data-chat-background-drop] > .chat-grain') !== null`,
+		"不选图也铺上磨砂",
+	);
+	for (const selector of ["[data-screen=empty] > .chat-grain", "[data-plume-head-fill]"])
+		assert.ok(
+			await page<boolean>(`getComputedStyle(document.querySelector('${selector}')).backgroundImage.startsWith('url("data:image/svg+xml')`),
+			`${selector} 铺的是噪点图`,
+		);
+	await capture("smoke-skin-background-grain.png");
+	await button("无", background);
+	await wait(async () => (await appearance()).grain === false, "关掉磨砂");
+	await until(
+		`document.querySelector('.chat-grain') === null && getComputedStyle(document.querySelector('[data-plume-head-fill]')).backgroundImage === 'none'`,
+		"关掉后外圈和对话区都不再铺颗粒",
+	);
 	const formatResults = await page<Array<{ name?: string; error?: string }>>(`(async () => {
 		const canvas = document.createElement('canvas'); canvas.width = 2; canvas.height = 2;
 		const results = [];

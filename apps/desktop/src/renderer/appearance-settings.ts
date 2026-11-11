@@ -91,6 +91,8 @@ export function applyAppearance(): void {
 	document.documentElement.dataset.reduceMotion = current.reduceMotion ?? "system";
 	// 插件画的改动（git 面板）照这个属性换标记，见 skill plume-plugin 的 style-i18n。
 	document.documentElement.dataset.diffMarkers = current.diffMarkers ?? "color";
+	// 磨砂那一层颗粒挂在这个属性上，外圈、侧栏和对话区都看它，见 styles.css 的 `--grain-layer`。
+	document.documentElement.toggleAttribute("data-grain", current.grain === true);
 	if (window.plume.vibrancy) document.documentElement.dataset.vibrancy = current.vibrancy === false ? "off" : "on";
 }
 

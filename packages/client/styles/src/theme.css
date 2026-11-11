@@ -42,6 +42,8 @@
 	--plume-shell: var(--plume-bg);
 	/* 窗口最外层，数据皮肤可将它与正文区分开。 */
 	--plume-root: var(--plume-shell);
+	/* 盖在 root 上的底纹（CSS 图像，可以是逗号分隔的几层，如渐变），只在数据皮肤接管配色时铺；缺省没有。 */
+	--plume-root-image: none;
 	/* 强调色弱底；数据皮肤可直接指定，不再从强调色透明度推导。 */
 	--plume-accent-dim: color-mix(in srgb, var(--plume-accent) 10%, transparent);
 	--plume-sidebar: color-mix(in srgb, var(--plume-fg) calc(4.2% * var(--plume-k) * var(--plume-k-surface)), var(--plume-bg));

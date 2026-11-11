@@ -105,17 +105,27 @@ export function ChatBackdrop({ empty, headerHeight = 0 }: { empty: boolean; head
 	const enabled = empty
 		? (appearance.chatBackgroundOnNewChat ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundOnNewChat)
 		: (appearance.chatBackgroundInChat ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundInChat);
-	if (!appearance.chatBackground || !enabled || !url) return null;
 	return (
-		<BackdropLayer
-			url={url}
-			effect={appearance.chatBackgroundEffect ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundEffect}
-			opacity={appearance.chatBackgroundOpacity ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundOpacity}
-			reading={!empty}
-			fit={appearance.chatBackgroundFit ?? "cover"}
-			headerHeight={headerHeight}
-		/>
+		<>
+			{enabled && appearance.chatBackground && url && (
+				<BackdropLayer
+					url={url}
+					effect={appearance.chatBackgroundEffect ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundEffect}
+					opacity={appearance.chatBackgroundOpacity ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundOpacity}
+					reading={!empty}
+					fit={appearance.chatBackgroundFit ?? "cover"}
+					headerHeight={headerHeight}
+				/>
+			)}
+			{/* 磨砂是整个窗口的质感，不看背景图的显示位置。 */}
+			{appearance.grain && <GrainLayer headerHeight={headerHeight} />}
+		</>
 	);
+}
+
+/** 对话区的磨砂：排在图后面，叠在图上；不跟图的浓度走。颗粒本身是 styles.css 的 `--grain-layer`，和外圈同一块。 */
+export function GrainLayer({ headerHeight = 0 }: { headerHeight?: number }) {
+	return <div aria-hidden className="chat-grain" style={{ "--plume-pane-header": `${headerHeight}px` } as CSSProperties} />;
 }
 
 /** 那一层本身。设置页的预览也画它，所以效果和遮罩只写一处。 */

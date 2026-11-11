@@ -226,6 +226,8 @@ test("数据皮肤仅暂停界面种子，字体、代码和背景偏好继续�
 	assert.equal(effectiveAppearance(saved, false), saved);
 	assert.equal(patchAppearance(saved, { chatBackgroundFit: "tile" }).chatBackgroundFit, "tile");
 	assert.equal(cleanAppearance({ chatBackgroundFit: "stretch" }).chatBackgroundFit, undefined);
+	assert.equal(patchAppearance(saved, { grain: true }).grain, true);
+	assert.equal(cleanAppearance({ grain: "yes" }).grain, undefined);
 	assert.deepEqual(patchAppearance(saved, editableAppearancePatch({ accent: null, theme: "light", codeFontSize: 17 }, true)), { ...saved, codeFontSize: 17 });
 	const reset = patchAppearance(saved, editableAppearancePatch(resetAppearancePatch(saved), true));
 	assert.deepEqual(reset, {

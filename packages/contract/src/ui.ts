@@ -168,6 +168,7 @@ export type SkinToken =
 	| "contrast"
 	| "shell"
 	| "root"
+	| "root-image"
 	| "accent-dim"
 	| "sidebar"
 	| "card"
@@ -1080,7 +1081,7 @@ export interface UiContext {
 	listCommands(context?: { cwd?: string }): Promise<ListedCommand[]>;
 	/** 产品的对话视图，见 `ConversationProps`。 */
 	readonly Conversation: ComponentType<ConversationProps>;
-	/** 产品的会话背景设置：选图、拖入图片、预览、铺放、效果、浓淡和显示位置；外观页不再有这一节，背景只经它设置。 */
+	/** 产品的会话背景设置：选图、拖入图片、预览、铺放、效果、浓淡、显示位置，以及整个窗口的磨砂质感（不看皮肤、不要图）；外观页不再有这一节，背景只经它设置。 */
 	readonly ChatBackgroundSettings: ComponentType<{ title?: string }>;
 	/** 产品的正文渲染器，插件的任务和回报卡不另带一套 Markdown。 */
 	readonly Markdown: ComponentType<MarkdownProps>;

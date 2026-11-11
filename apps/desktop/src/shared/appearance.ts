@@ -44,6 +44,8 @@ export interface Appearance {
 	chatBackgroundEffect?: ChatBackgroundEffect;
 	chatBackgroundOpacity?: number;
 	chatBackgroundFit?: ChatBackgroundFit;
+	/** 磨砂：整个窗口（外圈、停靠侧栏、对话区）叠一层细噪点，和皮肤、背景图都无关；有图时叠在图上。 */
+	grain?: boolean;
 }
 
 /** 改外观时传的补丁：值为 null 表示删掉这一项，回到默认。 */
@@ -172,6 +174,7 @@ export function cleanAppearance(input: unknown): Appearance {
 	}
 	if (typeof raw.chatBackgroundFit === "string" && CHAT_BACKGROUND_FITS.has(raw.chatBackgroundFit))
 		out.chatBackgroundFit = raw.chatBackgroundFit as ChatBackgroundFit;
+	if (typeof raw.grain === "boolean") out.grain = raw.grain;
 	return out;
 }
 

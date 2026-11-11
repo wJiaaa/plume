@@ -14,7 +14,7 @@ import {
 	type ChatBackgroundFit,
 } from "../shared/appearance.ts";
 import { updateAppearance, useAppearance } from "./appearance-settings.ts";
-import { BackdropLayer, useChatBackdropImage } from "./chat-backdrop.tsx";
+import { BackdropLayer, GrainLayer, useChatBackdropImage } from "./chat-backdrop.tsx";
 
 const EFFECTS: Record<ChatBackgroundEffect, MessageKey> = {
 	none: "appearance.chatBackgroundEffectNone",
@@ -78,6 +78,7 @@ export function PluginChatBackgroundSettings({ title }: { title?: string }) {
 		chatBackgroundOpacity: opacity,
 		chatBackgroundFit: fit,
 	} = { ...CHAT_BACKGROUND_DEFAULTS, ...appearance };
+	const grain = appearance.grain === true;
 	const hasImage = Boolean(appearance.chatBackground);
 	const step = nearestStep(opacity);
 
@@ -97,6 +98,7 @@ export function PluginChatBackgroundSettings({ title }: { title?: string }) {
 			setBusy(false);
 		}
 	};
+	const setGrain = (on: boolean) => patch({ grain: on });
 	const choose = () => work(async () => accept(await window.plume.chatBackground.pick(t("appearance.chatBackgroundPick"))));
 	const drop = (file: File) => {
 		if (busy) return;
@@ -144,6 +146,7 @@ export function PluginChatBackgroundSettings({ title }: { title?: string }) {
 						<span className="text-caption">{t("appearance.chatBackgroundDrop")}</span>
 					</div>
 				)}
+				{grain && <GrainLayer />}
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
 				<button
@@ -196,6 +199,14 @@ export function PluginChatBackgroundSettings({ title }: { title?: string }) {
 						{t(EFFECTS[value])}
 					</SegButton>
 				))}
+			</Seg>
+			<Seg label={t("appearance.chatBackgroundTexture")}>
+				<SegButton pressed={!grain} onClick={() => setGrain(false)}>
+					{t("appearance.chatBackgroundTextureNone")}
+				</SegButton>
+				<SegButton pressed={grain} onClick={() => setGrain(true)}>
+					{t("appearance.chatBackgroundTextureGrain")}
+				</SegButton>
 			</Seg>
 			<Seg label={t("appearance.chatBackgroundShow")}>
 				<SegButton pressed={onNewChat} onClick={() => patch({ chatBackgroundOnNewChat: !onNewChat })}>
