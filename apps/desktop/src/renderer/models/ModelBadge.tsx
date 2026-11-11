@@ -25,7 +25,7 @@ export function ModelBadge({ model, thinking, tip }: { model?: string; thinking?
 	const tooltip = [modelTooltip(identity, formatWindow), t("composer.thinking", { level }), tip].filter(Boolean).join("\n");
 	return (
 		<span data-model-badge="" data-plume-tip={tooltip} className="plume-composer-control flex min-w-0 items-center gap-1 px-1.5 text-label text-ink-muted">
-			<ModelIcon model={identity.model.modelId} name={name} />
+			<ModelIcon model={identity.model.modelId} name={identity.model.name} />
 			<span className="min-w-0 truncate">{name}</span>
 			<Brain size={16} className="ml-1.5 shrink-0" aria-hidden />
 			<span className="shrink-0 whitespace-nowrap">{level}</span>

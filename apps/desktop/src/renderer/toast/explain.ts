@@ -61,6 +61,12 @@ const RULES: Rule[] = [
 	{ match: /HTTP 401|HTTP 403|invalid.?api.?key|unauthorized/i, message: "toastHelp.badKey", hint: "toastHelp.badKeyFix" },
 ];
 
+/** 不说的那几种（见 `Explained.silent`）：`notify` 据此不收进提示列表，免得一条永远画不出来、也永远不到期的提示一直留在列表里。 */
+export function silenced(message: string): boolean {
+	const text = message.trim();
+	return RULES.find((rule) => rule.match.test(text))?.silent === true;
+}
+
 /** 换个说法，或者原样交回。第一条匹配的规则生效，所以上面从具体排到宽泛。 */
 export function explain(message: string, translate: (key: MessageKey) => string): Explained {
 	const text = message.trim();

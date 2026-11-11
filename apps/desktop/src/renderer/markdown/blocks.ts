@@ -74,13 +74,12 @@ function parseBlocks(lines: string[], starts?: number[]): Block[] {
 		 *
 		 * 没收口的围栏一直算到结尾，而不是什么都不吞：代码块还在流式进来的整段时间里，它就是这个状态。
 		 */
-		const fence = /^\s*(\x60{3,}|~{3,})(\S*)\s*$/.exec(line);
+		const fence = openFence(line);
 		if (fence) {
-			const marker = fence[1]![0];
-			const lang = fence[2] ?? "";
+			const { lang, closer } = fence;
 			const code: string[] = [];
 			i++;
-			while (i < lines.length && !new RegExp(`^\\s*${marker}{${fence[1]!.length},}\\s*$`).test(lines[i]!)) code.push(lines[i++]!);
+			while (i < lines.length && !closer.test(lines[i]!)) code.push(lines[i++]!);
 			const open = i >= lines.length;
 			i++;
 			push(open ? { kind: "code", lang, code: code.join("\n"), open } : { kind: "code", lang, code: code.join("\n") });
@@ -185,6 +184,25 @@ function parseBlocks(lines: string[], starts?: number[]): Block[] {
 	}
 
 	return blocks;
+}
+
+const FENCE_OPEN = /^\s*(?:(\x60{3,})([^\x60]*)|(~{3,})(.*))$/;
+
+/**
+ * 围栏代码的开头一行：语言和认收口那一行的正则。
+ *
+ * 围栏后面的信息串（「 bash」「ts title=x」）取第一个词作语言。按 CommonMark，反引号围栏的信息串里不能有反引号，
+ * 否则那一行是行内代码。收口的正则每个围栏建一次：流式时每一帧都要把整篇重新解析一遍，在循环里按行建的话，
+ * 一个长代码块每帧要建几百个。`stream-tail.ts` 认围栏也用它，两边不会对不上。
+ */
+export function openFence(line: string): { lang: string; closer: RegExp } | null {
+	const fence = FENCE_OPEN.exec(line);
+	if (!fence) return null;
+	const run = fence[1] ?? fence[3]!;
+	return {
+		lang: (fence[2] ?? fence[4] ?? "").trim().split(/\s+/)[0] ?? "",
+		closer: new RegExp(`^\\s*${run[0] === "~" ? "~" : "\\x60"}{${run.length},}\\s*$`),
+	};
 }
 
 function isBlockStart(line: string): boolean {

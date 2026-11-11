@@ -38,7 +38,7 @@ export function FileTree({
 		[sessionId, afterOpen],
 	);
 	const tree = useFileTree(sessionId, roots, running);
-	const actions = useFileActions({ sessionId, root: roots[0] ?? root, refresh: tree.refresh });
+	const actions = useFileActions({ sessionId, roots, refresh: tree.refresh });
 
 	const [selection, setSelection] = useState<string[]>([]);
 	const [focus, setFocus] = useState<string | null>(null);

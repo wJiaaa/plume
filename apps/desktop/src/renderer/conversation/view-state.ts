@@ -154,23 +154,41 @@ export function useTranscriptWindow(id: string, step: number, total: number) {
 	};
 }
 
-/** 一处可以点开的东西开着没有，按会话记住：切走再切回来，点开过的还开着。 */
+/** 点开过的东西变了就叫各处重读：转录自己也会替人点开（`expandInTranscript`），各处不能只信自己记的那份。 */
+const disclosureListeners = new Set<() => void>();
+const subscribeDisclosure = (listener: () => void) => {
+	disclosureListeners.add(listener);
+	return () => {
+		disclosureListeners.delete(listener);
+	};
+};
+
+function setExpanded(id: string, key: string, open: boolean): void {
+	const view = viewFor(id);
+	if (view.expanded.has(key) === open) return;
+	if (open) view.expanded.add(key);
+	else view.expanded.delete(key);
+	for (const listener of disclosureListeners) listener();
+}
+
+/** 替人点开这个会话里的一处：要摆到人面前的调用收在一段活里时（`ui.revealToolCall`），先把那一段点开。 */
+export function expandInTranscript(sessionId: string, key: string): void {
+	setExpanded(sessionId, key, true);
+}
+
+/** 一处可以点开的东西开着没有，按会话记住：切走再切回来，点开过的还开着。不在转录里（没有会话）的只记在自己身上。 */
 export function useTranscriptDisclosure(key?: string): [boolean, (update: (open: boolean) => boolean) => void] {
 	const id = useContext(Transcript)?.sessionId ?? null;
 	const scoped = key && id ? id : null;
-	const remembered = () => Boolean(scoped && key && views.get(scoped)?.expanded.has(key));
-	const [local, setLocal] = useState({ id: scoped, key, open: remembered() });
-	const open = local.id === scoped && local.key === key ? local.open : remembered();
+	const remembered = useSyncExternalStore(subscribeDisclosure, () => Boolean(scoped && key && views.get(scoped)?.expanded.has(key)));
+	const [local, setLocal] = useState(false);
+	const open = scoped ? remembered : local;
 	return [
 		open,
 		(update) => {
 			const next = update(open);
-			if (scoped && key) {
-				const view = viewFor(scoped);
-				if (next) view.expanded.add(key);
-				else view.expanded.delete(key);
-			}
-			setLocal({ id: scoped, key, open: next });
+			if (scoped && key) setExpanded(scoped, key, next);
+			else setLocal(next);
 		},
 	];
 }

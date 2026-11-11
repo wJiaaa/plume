@@ -9,7 +9,7 @@ import { BackToLatest, Button, motionReduced, Scroller, tailSignature, translate
 import { ChevronDown, ChevronUp } from "@plume/ui/icons";
 import { Fragment, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Superseded } from "../markdown/useSmoothText.ts";
-import { hasToolCard, ownsToolRow, TurnFooters, usePluginUis, useQuoteActions } from "../plugins.tsx";
+import { hasToolCard, ownsToolRow, TurnFooters, usePluginRegistrations, useQuoteActions } from "../plugins.tsx";
 import { CompactionRow } from "./CompactionRows.tsx";
 import { type Run, runKey } from "./grouping.ts";
 import { HiccupRow } from "./HiccupRow.tsx";
@@ -34,6 +34,7 @@ import { type TurnEntry, TurnWork } from "./TurnWork.tsx";
 import {
 	type BackgroundJobInfo,
 	createCallLive,
+	expandInTranscript,
 	Transcript as TranscriptContext,
 	TranscriptLive,
 	type TranscriptState,
@@ -72,7 +73,7 @@ export function Transcript({
 	const footerTimestamp = latestFooterTimestamp(view.messages, running || view.summary.background === true);
 	const { showThinking } = useTranscriptPrefs();
 	// 插件登记的卡片变了，哪些调用单独成行跟着变：修订号进分组的依赖。
-	const plugins = usePluginUis();
+	const plugins = usePluginRegistrations();
 	// 正在写的那条回复接在落了盘的后面：它的位置就是它写完后的位置，换过来时行不卸掉重挂。
 	// 读不出来的记录换成一行说明，放在原位：一条坏记录不该让整个转录白掉，见 `intact`。
 	const messages = useMemo<readonly Message[]>(() => intact(view.draft ? [...view.messages, view.draft] : view.messages), [view.messages, view.draft]);
@@ -211,7 +212,9 @@ export function Transcript({
 	 * 挂上以后的那次布局里滚过去、闪一下。会话还没读完时找不到那一块，等读完了再取。
 	 */
 	const reveal = useRevealRequest(id);
-	const [revealing, setRevealing] = useState<RevealRequest | null>(null);
+	const [revealing, setRevealing] = useState<(RevealRequest & { block: number }) | null>(null);
+	// 转录换了会话而不重挂：上一个会话没找完的那次作废。
+	if (revealing && revealing.sessionId !== id) setRevealing(null);
 	useLayoutEffect(() => {
 		if (!reveal) return;
 		const block = allBlocks.findIndex((candidate) =>
@@ -219,9 +222,14 @@ export function Transcript({
 		);
 		if (block < 0) return;
 		settleReveal(reveal.nonce);
+		// 合成一段活的几次调用收在点开以后（`Collapse` 收着时不挂里面的行），先替人点开那一段。
+		const step = allBlocks[block]!.items.find(
+			(item) => item.kind === "step" && item.step.members.length > 1 && item.step.calls.some((call) => call.block.id === reveal.toolCallId),
+		);
+		if (step) expandInTranscript(id, step.key);
 		detach();
 		range.reveal(block);
-		setRevealing(reveal);
+		setRevealing({ ...reveal, block });
 		// `range` 每次渲染都是新的；这里只认请求和分好的块。
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
 	}, [reveal, allBlocks, detach]);
@@ -229,7 +237,11 @@ export function Transcript({
 		const element = follow.scrollRef.current;
 		if (!revealing || !element) return;
 		const target = element.querySelector<HTMLElement>(`[data-tool-call="${CSS.escape(revealing.toolCallId)}"]`);
-		if (!target) return;
+		if (!target) {
+			// 那一块已经挂上了还找不到（这次调用没画成一张卡，比如并进同一行的再查一次）：放下这次，不一直等着。
+			if (revealing.block >= range.start && revealing.block < range.end) setRevealing(null);
+			return;
+		}
 		const box = target.getBoundingClientRect();
 		const top = element.scrollTop + box.top - element.getBoundingClientRect().top - Math.max(40, (element.clientHeight - box.height) / 2);
 		scrollTo(Math.max(0, top));

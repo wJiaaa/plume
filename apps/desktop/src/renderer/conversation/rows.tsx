@@ -112,8 +112,9 @@ function AssistantRow({
 							return ownCard(block.name) ? <PluginToolCard key={block.id} call={call} /> : <ToolCard key={block.id} call={call} />;
 						});
 					}
-					const { block, index, last } = segment;
-					const at = from + index;
+					// 段在这一行里的位置；`index` 留给消息在会话里的位置（插件的 `messageId` 用它）。
+					const { block, index: local, last } = segment;
+					const at = from + local;
 					if (block.type === "thinking") {
 						// 只有推理的行在分组时就拿掉了（`withoutThinking`）；这里是夹在一条回复的话中间的那几段。
 						if (!showThinking) return null;
@@ -133,7 +134,7 @@ function AssistantRow({
 					// 最终答复会把同一条回复里先播报过的话再说一遍，播报就不再画了。
 					if (block.type !== "text" || restated(block, message.content)) return null;
 					// 插件让模型顺带写的标记（`ui.replyText`）不画；只剩标记的一段整段不画。
-					const text = texts[index];
+					const text = texts[local];
 					if (!text) return null;
 					return (
 						<div key={`prose-${position}`}>

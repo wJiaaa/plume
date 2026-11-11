@@ -165,7 +165,7 @@ function renderBlock(block: Block, fade = false, path = ""): ReactNode {
 			);
 		case "paragraph":
 			// 大到会把浏览器按住不放的那种，切开画；正常的一段走原路，一行代码都不多跑。
-			if (block.text.length > HUGE_BLOCK) return <HugeParagraph text={stripEmoji(block.text)} />;
+			if (block.text.length > HUGE_BLOCK) return <HugeParagraph text={block.text} />;
 			return <p>{inline(block.text, fade)}</p>;
 		case "code": {
 			const code = <MarkdownCode lang={block.lang} code={block.code} fade={fade} />;
@@ -290,7 +290,7 @@ function InlineMath({ tex, fade }: { tex: string; fade: boolean }) {
 }
 
 function inline(text: string, fade = false): ReactNode[] {
-	return renderTokens(parseInline(stripEmoji(text)), fade);
+	return renderTokens(parseInline(text), fade);
 }
 
 /** 表格拿到的是一个函数；给它一个固定的，免得每次重画都是新的身份。 */
@@ -302,8 +302,11 @@ function renderTokens(tokens: Inline[], fade = false): ReactNode[] {
 
 function renderToken(token: Inline, fade: boolean): ReactNode {
 	switch (token.kind) {
-		case "text":
-			return fade ? <FadeText text={token.text} /> : token.text;
+		case "text": {
+			// 系统表情只从普通文字里拿掉：行内代码、链接地址是原样的数据。
+			const text = stripEmoji(token.text);
+			return fade ? <FadeText text={text} /> : text;
+		}
 		case "code": {
 			// 行内代码写完才出现（见 `completeTail`），整枚一起淡入。
 			const code = fade ? <FadeIn as="code">{token.text}</FadeIn> : <code>{token.text}</code>;

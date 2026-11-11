@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { FileEntry } from "@plume/contract";
-import { DRAGGED_PATHS as PATHS, isDescendantPath, parentOf } from "./paths.ts";
+import { DRAGGED_PATHS as PATHS, droppedPaths, isDescendantPath, parentOf } from "./paths.ts";
 
 import { macKeyboard } from "@plume/ui";
 
@@ -14,7 +14,6 @@ const SPRING_MS = 550;
 interface TreeDrag {
 	dropTarget: string | null;
 
-	dragging: string[];
 	rowProps(entry: FileEntry): {
 		onDragStart(event: React.DragEvent): void;
 		onDragEnd(): void;
@@ -103,21 +102,13 @@ export function useTreeDrag({
 			cancelSpring();
 			setDropTarget(null);
 
-			const carried = event.dataTransfer.getData(PATHS);
-			if (carried) {
-				let paths: unknown;
-				try {
-					paths = JSON.parse(carried);
-				} catch {
-					return;
-				}
-				if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === "string")) return;
-				if (allows(dir, false)) onTransfer(paths, dir, copiesOnDrop(event) ? "copy" : "cut");
+			const paths = droppedPaths(event.dataTransfer, (file) => window.plume.files.pathFor(file)) ?? [];
+			if (event.dataTransfer.types.includes(PATHS)) {
+				if (paths.length > 0 && allows(dir, false)) onTransfer(paths, dir, copiesOnDrop(event) ? "copy" : "cut");
 				setDragging([]);
 				return;
 			}
-			const sources = [...event.dataTransfer.files].map((file) => window.plume.files.pathFor(file)).filter(Boolean);
-			if (sources.length > 0) onImport(sources, dir);
+			if (paths.length > 0) onImport(paths, dir);
 		},
 		[allows, cancelSpring, onImport, onTransfer],
 	);
@@ -156,5 +147,5 @@ export function useTreeDrag({
 		[accept, finish, root],
 	);
 
-	return { dropTarget, dragging, rowProps, backgroundProps };
+	return { dropTarget, rowProps, backgroundProps };
 }

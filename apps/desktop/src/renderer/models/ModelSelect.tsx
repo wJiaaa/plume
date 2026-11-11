@@ -28,7 +28,7 @@ export function ModelSelect({
 	const { t } = useI18n();
 	const settings = useModels();
 	const menu = usePopover();
-	const selected = modelIdentity(settings, value || inheritedModelId);
+	const selected = modelIdentity(settings, value || inheritedModelId, kind);
 	const label = selected
 		? selected.ambiguous
 			? `${selected.model.name} · ${selected.provider.name}`

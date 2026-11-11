@@ -142,19 +142,20 @@ export function ambiguousNames(groups: ModelGroup[]): Set<string> {
  *
  * provider 总是知道的；ambiguous 决定要不要显示它。每个按钮都写上供应商是诚实但读不下去的——输入框那一行只放得下
  * 一个短标签——所以只在只写模型名会造成误解时才写。
+ *
+ * 和下拉里列的是同一批：启用的供应商里这一类（对话或生图）的模型。停用的供应商上的模型用不了，答 null；
+ * 同名与否也只在同一类里比，生图的下拉里两个同名的生图模型才分得开。
  */
 export function modelIdentity(
 	settings: ModelsState | undefined,
 	modelId: string | null | undefined,
+	kind: "chat" | "image" = "chat",
 ): { model: ModelConfig; provider: ProviderEntry; ambiguous: boolean } | null {
 	if (!settings || !modelId) return null;
-	for (const provider of settings.providers) {
-		const model = provider.models.find((each) => each.id === modelId);
-		if (!model) continue;
-		const clashes = ambiguousNames(groupModels(settings.providers));
-		return { model, provider, ambiguous: clashes.has(model.name.trim().toLowerCase()) };
-	}
-	return null;
+	const groups = groupModels(settings.providers, kind);
+	const row = flattenGroups(groups).find((each) => each.model.id === modelId);
+	if (!row) return null;
+	return { ...row, ambiguous: ambiguousNames(groups).has(row.model.name.trim().toLowerCase()) };
 }
 
 /** 「BigModel · GLM-5.3 · 128K 上下文」——完整的答案，给放得下的悬停提示。 */

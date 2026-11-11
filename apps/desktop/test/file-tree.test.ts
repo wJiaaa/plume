@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { treeRows } from "../src/renderer/files/useFileTree.ts";
-import { DRAGGED_PATHS, droppedPaths, isDescendantPath, joinPath, parentOf, relativeTo, splitExtension } from "../src/renderer/files/paths.ts";
+import { DRAGGED_PATHS, droppedPaths, isDescendantPath, joinPath, parentOf, relativeTo, rootOf, splitExtension } from "../src/renderer/files/paths.ts";
 import { connectFiles, findFile, openFileIn, fileOf, isFolder, moveFiles, removeFiles, setFileRemovedHandler } from "../src/renderer/files/open-file.ts";
 import type { AgentService } from "@plume/contract";
 import type { Remote } from "@plume/rpc";
@@ -107,4 +107,13 @@ test("拖放带的路径：文件树的行先读，访达的文件现问，纯�
 	assert.deepEqual(droppedPaths(transfer(["Files"], {}, [{ name: "a.txt" }, { name: "b c.txt" }]), pathFor), ["/Users/me/a.txt", "/Users/me/b c.txt"]);
 	assert.deepEqual(droppedPaths(transfer([DRAGGED_PATHS]), pathFor), [], "dragover 时读不到内容");
 	assert.equal(droppedPaths(transfer(["text/plain"]), pathFor), null);
+});
+
+test("几个源文件夹时，路径归装着它的最深那个；都不装着时没有", () => {
+	const roots = ["/work", "/notes", "/work/sub"];
+	assert.equal(rootOf(roots, "/notes/a.md"), "/notes");
+	assert.equal(rootOf(roots, "/work/sub/b.ts"), "/work/sub");
+	assert.equal(rootOf(roots, "/work/c.ts"), "/work");
+	assert.equal(rootOf(roots, "/notes"), "/notes");
+	assert.equal(rootOf(roots, "/home/.plume/AGENTS.md"), undefined);
 });

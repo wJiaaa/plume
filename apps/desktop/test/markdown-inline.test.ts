@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Inline, parseInline } from "../src/renderer/markdown/inline.ts";
+import { stripEmoji } from "../src/renderer/markdown/strip-emoji.ts";
 
 /** 把 token 写成紧凑的形状，断言读起来就像它说的那句话。 */
 function shape(tokens: Inline[]): string {
@@ -147,4 +148,14 @@ test("写明的宽度会带过来，只在它是像素数时", () => {
 		const token = parseInline(`<img src="a.png" ${attrs}>`)[0];
 		assert.equal(token.kind === "image" && token.width, undefined, attrs);
 	}
+});
+
+test("表情只从普通文字里拿掉：行内代码、链接地址原样，文字末尾接着行内代码的空格留着", () => {
+	const tokens = parseInline("🤖 跑 `echo 🎉` 看 [文档](https://example.com/🎉)");
+	assert.deepEqual(
+		tokens.flatMap((token) => (token.kind === "text" ? [stripEmoji(token.text)] : [])),
+		["跑 ", " 看 "],
+	);
+	assert.ok(tokens.some((token) => token.kind === "code" && token.text === "echo 🎉"));
+	assert.equal(stripEmoji("完成 🎉\n下一步"), "完成\n下一步");
 });

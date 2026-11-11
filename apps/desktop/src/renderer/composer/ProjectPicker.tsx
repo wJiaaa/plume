@@ -25,7 +25,7 @@ export function ProjectPicker({
 	const menu = usePopover();
 	const [query, setQuery] = useState("");
 	const [creating, setCreating] = useState(false);
-	const label = project?.name ?? "Chat";
+	const label = project?.name ?? t("projectList.recent");
 	const rolls = useRolled(label);
 	const listed = projects.filter(
 		(entry) =>

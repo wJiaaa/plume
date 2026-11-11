@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { translateIn } from "../../../packages/client/ui/src/i18n/translate.ts";
 import { explain } from "../src/renderer/toast/explain.ts";
+import { currentNotices, notify } from "../src/renderer/toast/store.ts";
 
 const zh = (key: Parameters<typeof translateIn>[1]) => translateIn("zh-CN", key);
 
@@ -13,6 +14,12 @@ test("屏幕录制被拒留给 macOS 自己的对话框", () => {
 	const result = explain("Failed to get sources.", zh);
 	assert.equal(result.silent, true);
 	assert.match(result.hint ?? "", /屏幕录制/);
+});
+
+test("不说的那种不收进提示列表，免得永远留在里面", () => {
+	const before = currentNotices();
+	notify("Failed to get sources.", "error");
+	assert.equal(currentNotices(), before);
 });
 
 test("供应商的 5xx 是一句话，不是一大段 JSON", () => {

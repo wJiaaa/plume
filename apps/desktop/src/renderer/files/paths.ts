@@ -87,6 +87,11 @@ export function isDescendantPath(parent: string, child: string): boolean {
 	return at.fold(at.path).startsWith(at.fold(at.prefix));
 }
 
+/** 几个源文件夹里装着这个路径的那一个：嵌套时取最深的，本身就是源文件夹的取它自己；都不装着时没有。 */
+export function rootOf(roots: readonly string[], path: string): string | undefined {
+	return [...roots].sort((a, b) => b.length - a.length).find((root) => samePath(root, path) || isDescendantPath(root, path));
+}
+
 export function parentOf(path: string): string {
 	const trimmed = path.replace(TRAILING, "");
 	const at = lastCut(trimmed);

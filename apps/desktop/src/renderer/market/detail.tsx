@@ -258,7 +258,10 @@ function DetailBody({
 											title: t("plugins.uninstallConfirm", { name: item.name }),
 											detail: t("market.uninstallDetail"),
 											confirmLabel: t("mcp.uninstall"),
-											onConfirm: () => void act.uninstall().then(onUninstalled),
+											onConfirm: () =>
+												void act.uninstall().then((ok) => {
+													if (ok) onUninstalled();
+												}),
 										});
 									}}
 								>

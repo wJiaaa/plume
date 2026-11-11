@@ -4,7 +4,7 @@ import { AgentAvatar, assignAvatars, ScrollText, useI18n } from "@plume/ui";
 import { FileCode, FolderArchive, MessageSquare, Minimize2, Paperclip, Puzzle } from "@plume/ui/icons";
 import type { EditorView } from "@codemirror/view";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { listMentions, usePluginUis } from "../plugins.tsx";
+import { listMentions, usePluginRegistrations } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
 import type { CommandHandlers } from "./command-marks.ts";
 import { type ComboboxState, CompletionPopup } from "./CompletionPopup.tsx";
@@ -32,7 +32,7 @@ export function useMentions({
 }) {
 	const { t, resolvedLocale } = useI18n();
 	const id = useId();
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	const [completion, setCompletion] = useState<MentionCompletion | null>(null);
 	const [focused, setFocused] = useState(false);
 	const [dismissed, setDismissed] = useState(false);
@@ -111,29 +111,34 @@ export function useMentions({
 		setActive(0);
 		setKeyboardSelection(true);
 	}, [term, cwd, sessionId]);
-	const items: MentionItem[] = [
-		{ id: "action:pick-file", title: t("mention.pickFile"), kind: "action" },
-		{ id: "action:pick-directory", title: t("mention.pickFolder"), kind: "action" },
-		{ id: "action:compact", title: "compact", description: t("mention.compact"), kind: "action", token: "@compact" },
-		...provided,
-		...(sessions ?? pastSessions)
-			.filter((session) => !session.parentId && !session.owner && session.id !== sessionId)
-			.map((session): MentionItem => ({
-				id: `session:${session.id}`,
-				title: session.title || t("mention.untitled"),
-				kind: "session",
-				sessionId: session.id,
-				origin: t("mention.pastSessions"),
-				description: [
-					(projects ?? knownProjects).find((entry) => entry.id === session.project)?.name,
-					new Date(session.updatedAt).toLocaleDateString(resolvedLocale),
-				]
-					.filter(Boolean)
-					.join(" · "),
-			})),
-		...files,
-	];
-	const matches = opened && focused && !dismissed ? rankMentions(term, items) : [];
+	const listing = opened && focused && !dismissed;
+	const sessionList = sessions ?? pastSessions;
+	const projectList = projects ?? knownProjects;
+	// 菜单收着时不拼：主输入框的会话名单随会话活动常变，每个会话都要格式化日期、查项目名，打一个字算一遍不值。
+	const items = useMemo<MentionItem[]>(() => {
+		if (!listing) return [];
+		const projectNames = new Map(projectList.map((entry) => [entry.id, entry.name]));
+		return [
+			{ id: "action:pick-file", title: t("mention.pickFile"), kind: "action" },
+			{ id: "action:pick-directory", title: t("mention.pickFolder"), kind: "action" },
+			{ id: "action:compact", title: "compact", description: t("mention.compact"), kind: "action", token: "@compact" },
+			...provided,
+			...sessionList
+				.filter((session) => !session.parentId && !session.owner && session.id !== sessionId)
+				.map((session): MentionItem => ({
+					id: `session:${session.id}`,
+					title: session.title || t("mention.untitled"),
+					kind: "session",
+					sessionId: session.id,
+					origin: t("mention.pastSessions"),
+					description: [session.project ? projectNames.get(session.project) : undefined, new Date(session.updatedAt).toLocaleDateString(resolvedLocale)]
+						.filter(Boolean)
+						.join(" · "),
+				})),
+			...files,
+		];
+	}, [listing, provided, sessionList, projectList, sessionId, files, t, resolvedLocale]);
+	const matches = useMemo(() => (listing ? rankMentions(term, items) : []), [listing, term, items]);
 	const current = Math.min(active, Math.max(0, matches.length - 1));
 	const avatars = useMemo(
 		() => assignAvatars(provided.filter((item) => item.kind === "subagent").map((item) => ({ name: item.title, avatar: item.avatar }))),

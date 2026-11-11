@@ -4,6 +4,7 @@
  * 放在模块里而不是 app.tsx 的状态里：报的人有的在组件里、有的在组件外（插件的回调），提示条只有一处画。
  */
 
+import { silenced } from "./explain.ts";
 import type { Notice, ToastLevel } from "./stack.ts";
 
 /** 卡片上带的去处：跳到那个会话、在文件夹里指出刚写的文件。 */
@@ -19,7 +20,7 @@ function emit(): void {
 
 /** 报一声。同样的话连着报会并成一张卡片，见 `groupNotices`。 */
 export function notify(message: string, level: ToastLevel = "info", target: NoticeTarget = {}): void {
-	if (!message.trim()) return;
+	if (!message.trim() || silenced(message)) return;
 	counter += 1;
 	notices = [...notices, { ...target, id: String(counter), level, message }];
 	emit();

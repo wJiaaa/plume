@@ -16,7 +16,8 @@ export interface Install {
 	busy: Busy;
 	install: () => Promise<void>;
 	update: () => Promise<void>;
-	uninstall: () => Promise<void>;
+	/** 答卸没卸掉：没卸掉时留在详情页，失败已经报过了。 */
+	uninstall: () => Promise<boolean>;
 }
 
 /**
@@ -60,8 +61,9 @@ export function useInstall(item: CatalogItem): Install {
 		},
 		uninstall: async () => {
 			setBusy("uninstall");
-			await uninstallPlugin(item);
+			const ok = await uninstallPlugin(item);
 			setBusy(null);
+			return ok;
 		},
 	};
 }

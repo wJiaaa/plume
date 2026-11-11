@@ -9,11 +9,12 @@ interface TreeState {
 	children: Record<string, FileEntry[]>;
 	expanded: Set<string>;
 }
-const sessions = new Map<string, { state: TreeState; listeners: Set<() => void> }>();
+/** `requests` 是每个目录最近一次读取的序号：同一目录的几次读取先后回来时，只认最后发出的那次。 */
+const sessions = new Map<string, { state: TreeState; listeners: Set<() => void>; requests: Map<string, number> }>();
 function storeFor(sessionId: string) {
 	let store = sessions.get(sessionId);
 	if (!store) {
-		store = { state: { children: {}, expanded: new Set() }, listeners: new Set() };
+		store = { state: { children: {}, expanded: new Set() }, listeners: new Set(), requests: new Map() };
 		sessions.set(sessionId, store);
 	}
 	return store;
@@ -65,6 +66,11 @@ export function useFileTree(sessionId: string, roots: string[], running = false)
 		};
 		const refresh = async (dirs: Iterable<string>) => {
 			const unique = [...new Set(dirs)];
+			const sent = unique.map((dir) => {
+				const sequence = (store.requests.get(dir) ?? 0) + 1;
+				store.requests.set(dir, sequence);
+				return sequence;
+			});
 			const read = await Promise.allSettled(unique.map((dir) => listDirectory(sessionId, dir)));
 			const children = { ...store.state.children };
 			const expanded = new Set(store.state.expanded);
@@ -78,6 +84,8 @@ export function useFileTree(sessionId: string, roots: string[], running = false)
 			for (let index = 0; index < read.length; index++) {
 				const result = read[index]!;
 				const dir = unique[index]!;
+				// 之后又发过一次读这个目录的：这份已经旧了，留给那次去写。
+				if (store.requests.get(dir) !== sent[index]) continue;
 				if (result.status === "fulfilled") {
 					for (const previous of children[dir] ?? []) {
 						if (previous.isDirectory && !result.value.some((entry) => entry.path === previous.path && entry.isDirectory)) forget(previous.path);
@@ -124,6 +132,8 @@ export function useFileTree(sessionId: string, roots: string[], running = false)
 	useEffect(() => {
 		if (scope && !(scope in state.children)) setScope(null);
 	}, [scope, state.children]);
+	// 每次画都新算一份的话，下游按 rows 记的 memo 全白记。
+	const rows = useMemo(() => treeRows({ ...state, roots, scope, filter }), [state, roots, scope, filter]);
 	return {
 		...state,
 		...methods,
@@ -132,7 +142,7 @@ export function useFileTree(sessionId: string, roots: string[], running = false)
 		scope,
 		setScope,
 		refreshOpen,
-		rows: treeRows({ ...state, roots, scope, filter }),
+		rows,
 		collapseAll: () =>
 			methods.set({ expanded: new Set([...store.state.expanded].filter((path) => !roots.some((root) => path === root || isDescendantPath(root, path)))) }),
 	};

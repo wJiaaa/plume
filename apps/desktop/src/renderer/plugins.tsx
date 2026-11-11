@@ -414,7 +414,7 @@ export async function checkPanels(cwd?: string, session?: boolean): Promise<void
 			});
 		}),
 	);
-	if (dirty) notifyPluginUis();
+	if (dirty) notifyPluginSignals();
 }
 
 export interface PageEntry {
@@ -468,13 +468,18 @@ function setPageBadge(plugin: string, id: unknown, badge: unknown): void {
 	// i18n-exempt：给插件作者的报错，界面上不显示。
 	if (!pages.some((page) => page.key === key)) throw new Error(`页面 ${String(id)} 没有注册`);
 	const { count, label, attention } = (badge ?? {}) as Record<string, unknown>;
-	if (badge === null || count === 0) pageBadges.delete(key);
-	else {
+	const previous = pageBadges.get(key);
+	if (badge === null || count === 0) {
+		if (!previous) return;
+		pageBadges.delete(key);
+	} else {
 		if (typeof count !== "number" || !Number.isInteger(count) || count < 0) throw new Error("页面角标的 count 要是非负整数");
 		if (!validTitle(label)) throw new Error("页面角标需要 label");
+		// 插件常按轮询原样再推一遍：没变就不叫人重画。
+		if (previous && previous.count === count && previous.attention === (attention === true) && previous.label === label) return;
 		pageBadges.set(key, { count, label, attention: attention === true });
 	}
-	notifyPluginUis();
+	notifyPluginSignals();
 }
 
 /** 页面那一行右端的数；没有时为空。变化经 usePluginUis 通知。 */
@@ -659,7 +664,7 @@ export function useDeliveryAction(kind: "job") {
  * 那个插件没登记（停用了）时不画。插件的组件出错时也不画，不拖垮整段转录。
  */
 export function AgentDeliverySlot({ sessionId, reports }: AgentDeliveryProps) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	const plugins = [...new Set(reports.flatMap((report) => (report.plugin ? [report.plugin] : [])))];
 	return plugins.map((plugin) => {
 		const entry = agentDeliveries.find((each) => each.plugin === plugin);
@@ -772,7 +777,7 @@ function registerTurnFooter(plugin: string, id: unknown, component: unknown, opt
 
 /** 跟着最新回复滚动；空组件不留槽位，错误只影响该插件。 */
 export function TurnFooters(props: TurnFooterProps) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	return (
 		<>
 			{turnFooters.map((entry) => (
@@ -800,7 +805,7 @@ function registerReplyAction(plugin: string, id: unknown, component: unknown, op
 
 /** 回复底下那一排里插件的按钮；返回 null 的不占位，错误只影响该插件。 */
 export function ReplyActions(props: ReplyActionProps) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	return (
 		<>
 			{replyActions.map((entry) => (
@@ -1275,18 +1280,26 @@ class Isolated extends Component<{ plugin: string; children: ReactNode; fallback
 	}
 }
 
-/** 插件登记的界面每变一次加一；画卡片、面板的组件订阅它，变了就重画。 */
+/** 插件登记的界面每变一次加一；工具卡片、页脚这些拿它当 key 重挂，所以只在登记变了时加。 */
 let revision = 0;
+/** 不改登记的变化（页面角标、面板的 `available` 答案）每次加一：只叫画它们的组件重画，不动 revision，免得画着的卡片跟着重挂。 */
+let signals = 0;
 const subscribers = new Set<() => void>();
+const subscribe = (listener: () => void) => {
+	subscribers.add(listener);
+	return () => {
+		subscribers.delete(listener);
+	};
+};
 
+/** 插件界面有任何变化（登记、页面角标、面板可用性）都重画。返回值只表示「变了」，要当 key、缓存依赖的用 `usePluginRegistrations`。 */
 export function usePluginUis(): number {
-	return useSyncExternalStore(
-		(listener) => {
-			subscribers.add(listener);
-			return () => subscribers.delete(listener);
-		},
-		() => revision,
-	);
+	return useSyncExternalStore(subscribe, () => revision + signals);
+}
+
+/** 登记的修订号：只在插件登记的界面变了时变。卡片、页脚拿它当 key 重挂，转录拿它重新分组。 */
+export function usePluginRegistrations(): number {
+	return useSyncExternalStore(subscribe, () => revision);
 }
 
 const skins = skinRegistry(setManagedSkin);
@@ -1616,6 +1629,11 @@ function notifyPluginUis(): void {
 	for (const listener of subscribers) listener();
 }
 
+function notifyPluginSignals(): void {
+	signals += 1;
+	for (const listener of subscribers) listener();
+}
+
 /** 有插件给这个工具登记了卡片：画它的那一行时交给卡片（`ToolCardSlot`）。登记变了用 `usePluginUis` 的修订号重问。 */
 export function hasToolCard(tool: string): boolean {
 	return matchingToolCards(tool, toolCards, toolPrefixes).length > 0;
@@ -1628,7 +1646,7 @@ export function ownsToolRow(tool: string): boolean {
 
 // 登记变了就从头再试一遍注册者：key 换成新的修订号，Chain 里记的「试到第几个」跟着清掉。
 export function ToolCardSlot(props: ToolCardProps) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	const entries = matchingToolCards(props.call.name, toolCards, toolPrefixes);
 	const send: ToolCardProps["send"] = props.send
 		? async (text, event, displayText) => {
@@ -1642,7 +1660,7 @@ export function ToolCardSlot(props: ToolCardProps) {
 
 /** 正文代码块只用最优先的注册者；解析或渲染失败直接回到源码。 */
 export function CodeBlockSlot({ unregistered, ...props }: CodeBlockProps & { unregistered: ReactNode }) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	const entry = codeBlocks.get(props.language.toLowerCase())?.[0];
 	if (!entry) return <>{unregistered}</>;
 	const Render = entry.component;
@@ -1672,7 +1690,7 @@ async function allowAuto(): Promise<void> {
  * （产品的通用卡）。
  */
 export function ApprovalCardSlot(props: Omit<ApprovalCardProps, "permission" | "allowAuto">) {
-	const version = usePluginUis();
+	const version = usePluginRegistrations();
 	const permission = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
 	const entries = [...(approvalCards.get(props.request.tool) ?? []), ...(approvalKinds.get(props.request.kind) ?? [])];
 	return <Chain key={`${version}:${props.request.toolCallId}`} entries={entries} props={{ ...props, permission, allowAuto }} />;

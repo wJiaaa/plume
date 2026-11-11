@@ -5,7 +5,7 @@
  * 字体画，粗细不同，颜色不来自任何配色，在 macOS 上还是亮面的。回复里一个 `🤖` 就是屏幕上最吵的东西，而且
  * 是无意中吵的。
  *
- * 所以在进来的路上拿掉。只处理别处写来的文字（模型的回复），界面自己从不写 emoji。
+ * 所以画出来时拿掉。只处理别处写来的文字（模型的回复）里的普通文字，界面自己从不写 emoji。
  *
  * `Extended_Pictographic` 这个属性的意思就是「画成一张图」，正是这里要问的。它有意不匹配界面特意用的排版
  * 符号——`→`、`✓`、`✕`、`↵` 是正文字体里的箭头和记号，不是图，它们留着。
@@ -20,8 +20,8 @@ const EMOJI_WITH_TRAILING_SPACE =
 /**
  * 拿掉图形字符之后的同一段文字。
  *
- * 行的结构始终保留：这一步在 Markdown 之前跑，收掉一个换行会把列表变成一句话，吃掉缩进会把代码块变成正文。
- * 只有一个 emoji 的一行留成空行而不是删掉，理由相同——删掉会把它两边的段落接在一起。
+ * 在 Markdown 解析之后、只对普通文字跑（`Markdown.tsx` 画 `text` 那一种时）：行内代码、链接地址、围栏里的原文
+ * 都是原样的数据，不清理。换行原样保留。
  */
 export function stripEmoji(text: string): string {
 	if (!text) return text;
@@ -31,12 +31,13 @@ export function stripEmoji(text: string): string {
 			/*
 			 * 图带着它后面的空格一起走。
 			 *
-			 * `🤖 Generated with…` 应该变成 `Generated with…`，而不是 ` Generated with…`。顺手带走空格，
-			 * 就不用再扫一遍这一行——而第二遍正是容易出错的地方：到处去掉开头的空白，会把缩进代码块赖以成立的
-			 * 缩进也吃掉。
+			 * `🤖 Generated with…` 应该变成 `Generated with…`，而不是 ` Generated with…`。
 			 */
 			.replace(EMOJI_WITH_TRAILING_SPACE, "")
-			// emoji 原来在行尾时剩下的空白。不碰缩进，缩进在另一头。
-			.replace(/[^\S\n]+$/gm, "")
+			/*
+			 * emoji 原来在行尾时剩下的空白。只收换行前的：这段字的末尾后面可能紧跟着行内代码或链接，
+			 * 收掉那里的空格会把两边粘在一起。
+			 */
+			.replace(/[^\S\n]+(?=\n)/g, "")
 	);
 }

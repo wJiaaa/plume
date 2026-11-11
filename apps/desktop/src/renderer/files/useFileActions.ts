@@ -5,17 +5,18 @@ import type { FileOpResult } from "@plume/contract";
 import { notify } from "../toast/store.ts";
 import { fileOperation } from "./open-file.ts";
 
-import { baseName, joinPath, parentOf, relativeTo } from "./paths.ts";
+import { baseName, joinPath, parentOf, relativeTo, rootOf } from "./paths.ts";
 
 type ClipMode = "copy" | "cut";
 
 interface FileActionDeps {
-	root: string | null;
+	/** 会话的几个源文件夹：复制相对路径时相对装着它的那一个。 */
+	roots: readonly string[];
 	sessionId: string;
 	refresh(dirs: Iterable<string>): Promise<void>;
 }
 
-export function useFileActions({ sessionId, root, refresh }: FileActionDeps) {
+export function useFileActions({ sessionId, roots, refresh }: FileActionDeps) {
 	const { t } = useI18n();
 
 	const [clipboard, setClipboard] = useState<{ paths: string[]; mode: ClipMode } | null>(null);
@@ -166,11 +167,16 @@ export function useFileActions({ sessionId, root, refresh }: FileActionDeps) {
 
 	const copyPath = useCallback(
 		async (paths: string[], relative: boolean): Promise<void> => {
-			const text = paths.map((path) => (relative && root ? relativeTo(root, path) : path)).join("\n");
+			const text = paths
+				.map((path) => {
+					const root = relative ? rootOf(roots, path) : undefined;
+					return root ? relativeTo(root, path) : path;
+				})
+				.join("\n");
 			await window.plume.files.copyText(text);
 			notify(t(relative ? "fileAction.relativePathCopied" : "fileAction.pathCopied"));
 		},
-		[root, t],
+		[roots, t],
 	);
 
 	return {

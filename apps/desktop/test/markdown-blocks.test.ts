@@ -326,3 +326,31 @@ test("行内标签不是容器", () => {
 		);
 	}
 });
+
+test("围栏后面的信息串取第一个词作语言：空格隔开、带属性都认", () => {
+	for (const [opening, lang] of [
+		["``` bash", "bash"],
+		["```ts title=x", "ts"],
+		["~~~ py {.line-numbers}", "py"],
+	] as const) {
+		const code = only(parseMarkdown([opening, "x", opening.slice(0, 3)].join("\n")), "code");
+		assert.equal(code.kind, "code");
+		assert.equal(code.lang, lang);
+		assert.equal(code.code, "x");
+		assert.equal("open" in code, false);
+	}
+});
+
+test("反引号围栏的信息串里有反引号时不是围栏，是行内代码", () => {
+	const blocks = parseMarkdown("```a`b\nx");
+	assert.equal(
+		blocks.some((block) => block.kind === "code"),
+		false,
+	);
+});
+
+test("收口要和开头同一种字符、至少一样长", () => {
+	const code = only(parseMarkdown(["````md", "```", "~~~", "````"].join("\n")), "code");
+	assert.equal(code.kind, "code");
+	assert.equal(code.code, "```\n~~~");
+});

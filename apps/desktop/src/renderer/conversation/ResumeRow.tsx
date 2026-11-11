@@ -15,11 +15,12 @@ export function ResumeRow({ view, onCarryOn }: { view: SessionView; onCarryOn: (
 	const { t } = useI18n();
 	const edits = useMessageEdits();
 	const confirm = useConfirmer();
+	// 派出去的后台运行还没回来，活就没停：它们回来，主会话接着干。先判这条，跑着时每一拍都不用扫整份转录。
+	if (view.summary.running || view.summary.background || view.messages.length === 0) return null;
 	const stop = howItStopped(view.summary, view.messages);
 	const unfinished = unfinishedTodos(view.messages);
 	const prompt = carryOnPrompt(stop, unfinished);
-	// 派出去的后台运行还没回来，活就没停：它们回来，主会话接着干。
-	if (view.summary.running || view.summary.background || !prompt || view.messages.length === 0) return null;
+	if (!prompt) return null;
 	// 失败那件事，上面的连接记录已经讲完了，还带着它自己的「继续」，这里不再讲一遍。
 	if (stop === "error" && view.hiccups.some((hiccup) => hiccup.outcome === "gave_up")) return null;
 	const note =

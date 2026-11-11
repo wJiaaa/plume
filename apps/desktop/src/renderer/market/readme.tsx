@@ -21,7 +21,7 @@ const PREFIX = "user-content-";
 const PluginOf = createContext("");
 
 export function Readme({ plugin, markdown }: { plugin: string; markdown: string }) {
-	const blocks = useMemo(() => parseMarkdown(markdown, { base: { dir: "" } }), [markdown]);
+	const blocks = useMemo(() => parseMarkdown(markdown), [markdown]);
 	const root = useRef<HTMLDivElement>(null);
 
 	// 文档里的链接都在这里接住：`#小节` 把本页滚到那个标题，别的在默认浏览器里打开，不让应用自己的窗口跳走。

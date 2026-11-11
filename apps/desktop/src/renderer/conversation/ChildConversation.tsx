@@ -8,7 +8,7 @@
 import type { ApprovalDecision, Message } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
 import { ActionSpinner } from "@plume/ui";
-import { Activity, useEffect, useMemo, useRef, useState } from "react";
+import { Activity, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileScope, touchedPaths } from "../files/scope.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { useLiveSession } from "../session-live.ts";
@@ -51,6 +51,7 @@ export function ChildConversation({
 	);
 	const running = view?.summary.running ?? false;
 	// 每份会话独占附件 hook 和草稿。隐藏时停止编辑器、拖放监听等副作用，状态仍在。
+	// scope 只用来分草稿：侧边聊天的 `draftKey` 是面板标签的 id，不是会话 id；@ 提及、命令、历史要的会话、目录和项目只给露着的那一份，用真的。
 	const currentScope = composer?.draftKey ?? sessionId;
 	const [scopes, setScopes] = useState<(string | undefined)[]>([currentScope]);
 	if (!scopes.includes(currentScope)) setScopes([...scopes, currentScope]);
@@ -70,6 +71,15 @@ export function ChildConversation({
 	const loading = sessionId !== undefined && view === undefined;
 	const blank = !loading && (view === undefined || (view.messages.length === 0 && !view.draft));
 	const approval = view && !view.summary.parentId ? view.approval : undefined;
+	// 插件每次渲染都给一份新的 `composer`；转录的 state 依赖 onSend，函数一变所有 `useTranscript()` 都跟着重画，所以经 ref 读最新的、函数本身不变。
+	const latestComposer = useRef(composer);
+	latestComposer.current = composer;
+	const onSend = useCallback(async (text: string, displayText?: string) => {
+		const current = latestComposer.current;
+		if (!current) return;
+		if (displayText !== undefined && current.sendMessage) await current.sendMessage({ content: [{ type: "text", text }], displayText });
+		else await current.send(text);
+	}, []);
 	return (
 		<section ref={section} data-screen="" data-child-conversation={sessionId ?? ""} className="relative isolate flex h-full min-h-0 flex-col">
 			{loading ? (
@@ -84,14 +94,7 @@ export function ChildConversation({
 						<FileScope.Provider value={files}>
 							<Transcript
 								view={view}
-								{...(composer && !composer.disabled && (!running || composer.mode === "steer")
-									? {
-											onSend: async (text: string, displayText?: string) => {
-												if (displayText !== undefined && composer.sendMessage) await composer.sendMessage({ content: [{ type: "text", text }], displayText });
-												else await composer.send(text);
-											},
-										}
-									: {})}
+								{...(composer && !composer.disabled && (!running || composer.mode === "steer") ? { onSend } : {})}
 								onOpenSettings={onOpenSettings}
 								onQuote={onQuote}
 								{...(edits ? { edits } : {})}
@@ -125,9 +128,9 @@ export function ChildConversation({
 					<Activity key={scope ?? ""} mode={scope === currentScope ? "visible" : "hidden"}>
 						<ChildComposer
 							composer={composer}
-							sessionId={scope}
-							cwd={scope === sessionId ? view?.summary.cwd : undefined}
-							project={scope === sessionId ? view?.summary.project : undefined}
+							sessionId={scope === currentScope ? sessionId : undefined}
+							cwd={scope === currentScope ? view?.summary.cwd : undefined}
+							project={scope === currentScope ? view?.summary.project : undefined}
 							active={scope === currentScope}
 							running={running}
 							loading={loading}

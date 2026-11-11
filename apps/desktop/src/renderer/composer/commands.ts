@@ -84,12 +84,12 @@ export function resolveCommand<T extends { name: string }>(commands: T[], name: 
 	return byTail.length === 1 ? byTail[0] : undefined;
 }
 
-/** 菜单的全部条目：产品自己的在前，插件的在后；同名的留前面那条。 */
 /** 产品自己的命令：`/` 菜单和插件的 `ui.listCommands` 都从这里取，名单只有一份。 */
 export function productCommands(t: (key: "command.clear") => string): MenuCommand[] {
 	return [{ name: "clear", description: t("command.clear"), action: "clear" }];
 }
 
+/** 菜单的全部条目：产品自己的在前，插件的在后；同名的留前面那条。 */
 export function menuCommands(builtins: MenuCommand[], provided: CommandEntry[]): MenuCommand[] {
 	const seen = new Set<string>();
 	return [...builtins, ...provided].filter((entry) => {

@@ -11,7 +11,7 @@ import { Collapse, FlowRow, RollWords, Scroller, translate, useI18n, useNow } fr
 import { Ban, CircleX } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useRef } from "react";
 import { openFromEvent } from "../image/index.ts";
-import { hasToolCard, queueTask, ToolCardSlot, usePluginUis } from "../plugins.tsx";
+import { hasToolCard, queueTask, ToolCardSlot, usePluginRegistrations } from "../plugins.tsx";
 import { describeOne, describePolls, diffOf } from "./call-words.ts";
 import { CodeText } from "./detail/CodeText.tsx";
 import type { DiffHunk } from "./detail/diff-highlight.ts";
@@ -58,7 +58,7 @@ const usedCardEvents = new WeakSet<Event>();
  * 否则是通用卡片。单独成行的那种卡片不会走到这里，见 `grouping.ts` 的 `own`。
  */
 export function StepCall({ call, thinking, polls }: { call: Call; thinking?: ReactNode; polls?: Call[] }) {
-	usePluginUis();
+	usePluginRegistrations();
 	if (!polls && hasToolCard(call.block.name)) return <PluginToolCard call={call} {...(thinking ? { thinking } : {})} />;
 	return <ToolCard call={call} {...(thinking ? { thinking } : {})} {...(polls ? { polls } : {})} />;
 }
@@ -275,7 +275,7 @@ export function ToolCard({
 	].filter(Boolean);
 
 	return (
-		<div data-tool={block.name} data-status={SLOT_STATUS[status]}>
+		<div data-tool={block.name} data-tool-call={call.block.id} data-status={SLOT_STATUS[status]}>
 			<FlowRow
 				icon={<ToolIcon name={block.name} />}
 				// 参数流进来时字往后长（「修改文件」→「修改文件 one.ts」），宽度缓过去，行尾的箭头不跳。

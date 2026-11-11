@@ -19,7 +19,8 @@
  * 半截公式先原样露着，等它自己收口。
  */
 
-const FENCE_OPEN = /^\s*(\x60{3,}|~{3,})(\S*)\s*$/;
+import { openFence } from "./blocks.ts";
+
 const TABLE_SEPARATOR = /^\s*\|?[\s:|-]+\|[\s:|-]*$/;
 /** 只写出了块标记、还没有内容的一行：`#`、`-`、`1.`、`>`。 */
 const BARE_MARKER = /^\s*(#{1,6}|[-*+]|\d+[.)]|>)\s*$/;
@@ -75,9 +76,9 @@ export function completeTailHeld(source: string): { text: string; heldImage: boo
 			}
 			continue;
 		}
-		const open = FENCE_OPEN.exec(line);
+		const open = openFence(line);
 		if (open) {
-			fence = new RegExp(`^\\s*${open[1]![0]}{${open[1]!.length},}\\s*$`);
+			fence = open.closer;
 			fenceAt = i;
 			continue;
 		}

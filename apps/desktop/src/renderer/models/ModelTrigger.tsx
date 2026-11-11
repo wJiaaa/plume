@@ -56,7 +56,8 @@ export function ModelTrigger({
 				}`}
 			>
 				{/* 以模型为 key：换了一家，标和旁边的名字一起翻过去，而不是在它下面直接换掉。 */}
-				<ModelIcon key={modelId} model={identity?.model.modelId} name={name} className={rolls ? "plume-roll" : ""} />
+				{/* 只拿模型名认厂商：带上供应商名的话，叫「Anthropic 中转」的供应商上的 gpt 也会画成 Claude 的标。 */}
+				<ModelIcon key={modelId} model={identity?.model.modelId} name={identity?.model.name} className={rolls ? "plume-roll" : ""} />
 				{/* 这一行里唯一会让位的东西，所以名字被截断就是这一行放不下了的时候；`fit.ts` 量的就是它。 */}
 				<RollingText className={`${FIT_PROBE} min-w-0 truncate`}>{name ?? t("composer.selectModel")}</RollingText>
 				<ChevronDown size={14} className="shrink-0 text-ink-muted" aria-hidden />

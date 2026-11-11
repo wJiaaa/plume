@@ -211,10 +211,15 @@ export function ImageViewerHost() {
 	 * 东西可缩而留着的副本：只有 `dismiss` 会清它，于是从别处关闭，浮层就留在屏幕上，显示一张 store 已经没有
 	 * 的图。这还让标注器的源图不变，连带上一次的每一个标记——重新打开同一张图，把已经放弃的标注又带了回来。
 	 *
-	 * `leaving` 时不做：那是 `dismiss` 有意地、慢慢地在做这件事。
+	 * 三是起飞的那张缩略图和它的位置：留着的话，下一次不带起点打开（插件的 `ui.openImage`）会把一张不相干的旧缩略图藏起来，
+	 * 关的时候还飞回它那里。回程在 `dismiss` 开始时就量好了，这里清掉不影响它。
+	 *
+	 * `leaving` 时不清 `held`：那是 `dismiss` 有意地、慢慢地在做这件事。
 	 */
 	useEffect(() => {
 		if (state) return;
+		origin.current = null;
+		source.current = null;
 		setEditing(false);
 		// 飞到一半的翻页另有一张图在它自己的层上；关闭得把它一起带走，否则它被留在应用上方，没人持有它。
 		window.clearTimeout(sliding.current);
@@ -312,6 +317,7 @@ export function ImageViewerHost() {
 			setLeaving(false);
 			setEditing(false);
 			origin.current = null;
+			source.current = null;
 			closeViewer();
 		};
 

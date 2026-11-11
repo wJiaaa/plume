@@ -261,7 +261,8 @@ export function ModelMenu({
 	// 数字键选前几行，和行上画的数字对应。
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.metaKey || event.ctrlKey || event.altKey) return;
+			// 可搜索的列表把数字让给了搜索框，行上也不画数字：焦点在折叠按钮、星标上时按数字也不该选中看不见编号的一行。
+			if (searchable || event.metaKey || event.ctrlKey || event.altKey) return;
 			// 正在输入的地方拥有输入的内容：可搜索的列表已经把数字让给了搜索框（见 searchable），这条兜住以后菜单里长出的别的输入框。
 			const target = event.target;
 			if (target instanceof HTMLElement && (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;

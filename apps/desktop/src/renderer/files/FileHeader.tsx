@@ -12,7 +12,7 @@ import { attachmentActions } from "../composer/attachments/actions.ts";
 import { FileTree } from "./FileTree.tsx";
 import { fileKind } from "./FileViewer.tsx";
 import { openLabel, revealKey, useOpenTarget } from "./open-targets.ts";
-import { isDescendantPath } from "./paths.ts";
+import { rootOf } from "./paths.ts";
 import { setShowSource, setWrap, useReading } from "./open-file.ts";
 
 const ICON = { size: 12, strokeWidth: 1.9 } as const;
@@ -41,16 +41,18 @@ export function FileHeader({
 	const target = { name, path };
 	const opener = useOpenTarget();
 	const tree = usePopover();
-	const displayRoot = [...(roots ?? (cwd ? [cwd] : []))].sort((a, b) => b.length - a.length).find((root) => isDescendantPath(root, path)) ?? cwd;
-	// 会话目录外的文件（「记忆文件」里只读打开的那些）没有相对位置可写，写它所在的文件夹，不借工作目录的名字。
-	const crumb =
-		displayRoot && isDescendantPath(displayRoot, path)
-			? path
-					.slice(displayRoot.length + 1)
-					.split(/[/\\]/)
-					.slice(0, -1)
-					.join(" / ") || displayRoot.split(/[/\\]/).pop()
-			: path.split(/[/\\]/).at(-2);
+	const bases = roots ?? (cwd ? [cwd] : []);
+	const inside = rootOf(bases, path);
+	// 会话目录外的文件（「记忆文件」里只读打开的那些）不能在外部打开或在访达里显示，按钮也不给。不知道会话目录时（插件的预览）照常给。
+	const external = bases.length === 0 || inside !== undefined;
+	// 会话目录外的文件没有相对位置可写，写它所在的文件夹，不借工作目录的名字。
+	const crumb = inside
+		? path
+				.slice(inside.length + 1)
+				.split(/[/\\]/)
+				.slice(0, -1)
+				.join(" / ") || inside.split(/[/\\]/).pop()
+		: path.split(/[/\\]/).at(-2);
 
 	return (
 		<div className="flex h-9 shrink-0 items-center gap-1 border-b border-line-soft pr-2 pl-3">
@@ -100,8 +102,12 @@ export function FileHeader({
 			{(kind === "json" || kind === "text" || (kind === "markdown" && showSource)) && (
 				<IconButton size="xs" label={t("fileActions.wrap")} active={wrap} icon={<WrapText {...ICON} />} onClick={() => setWrap(!wrap)} />
 			)}
-			<IconButton size="xs" label={openLabel(opener)} icon={<ExternalLink {...ICON} />} onClick={() => attachmentActions.openIn(target, opener.id)} />
-			<IconButton size="xs" label={t(revealKey())} icon={<FolderOpen {...ICON} />} onClick={() => attachmentActions.reveal(target)} />
+			{external && (
+				<>
+					<IconButton size="xs" label={openLabel(opener)} icon={<ExternalLink {...ICON} />} onClick={() => attachmentActions.openIn(target, opener.id)} />
+					<IconButton size="xs" label={t(revealKey())} icon={<FolderOpen {...ICON} />} onClick={() => attachmentActions.reveal(target)} />
+				</>
+			)}
 		</div>
 	);
 }

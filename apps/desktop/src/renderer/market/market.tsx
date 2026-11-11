@@ -131,16 +131,22 @@ export function MarketScreen({
 		};
 	}, []);
 
-	// 市场回答「还能装什么」：随应用发的插件不在这里；技能合集、连接器在另两类里。
-	const listed = items.filter((item) => item.kind === "plugin" && !isBuiltin(item));
-	// 已安装：市场装的、本机添加的，加上没加载起来的内置插件。
-	const installed = items.filter((item) => item.kind === "plugin" && isInstalled(item) && (!isBuiltin(item) || item.status?.state === "failed"));
-	const published = listed.filter((item) => item.entry !== null);
+	// 跟着目录记：下面按它们记的货架和平铺列表才不会每次画都重算。
+	const { listed, installed, published } = useMemo(() => {
+		// 市场回答「还能装什么」：随应用发的插件不在这里；技能合集、连接器在另两类里。
+		const listed = items.filter((item) => item.kind === "plugin" && !isBuiltin(item));
+		return {
+			listed,
+			// 已安装：市场装的、本机添加的，加上没加载起来的内置插件。
+			installed: items.filter((item) => item.kind === "plugin" && isInstalled(item) && (!isBuiltin(item) || item.status?.state === "failed")),
+			published: listed.filter((item) => item.entry !== null),
+		};
+	}, [items]);
 	const localOnly = listed.filter((item) => item.entry === null);
 	const categories = useMemo(() => shelves(published).map((shelf) => shelf.category), [published]);
 	const narrowed = category !== null;
 	const flat = useMemo(
-		() => (narrowed ? (category === INSTALLED ? installed : listed.filter((item) => item.category === category)).sort(byName) : []),
+		() => (narrowed ? (category === INSTALLED ? [...installed] : listed.filter((item) => item.category === category)).sort(byName) : []),
 		[narrowed, listed, installed, category],
 	);
 	const outdated = items.filter((item) => item.outdated && item.entry);

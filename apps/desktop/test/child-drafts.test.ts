@@ -33,6 +33,9 @@ test("可搬窗草稿按标签保存，发送和关闭清理，存储失败不�
 		setChildDraft("a", { ...EMPTY_CHILD_DRAFT, text: "尚未发送" });
 		setChildDraft("b", { ...EMPTY_CHILD_DRAFT, text: "另一段" });
 		assert.equal(childDraft("a").text, "尚未发送");
+		// 落盘攒着写：敲字时只改内存，交接前 flush 当场写齐。
+		assert.equal(entries.has("plume.child-draft:a"), false);
+		flushChildDrafts();
 		assert.deepEqual(JSON.parse(entries.get("plume.child-draft:a")!), childDraft("a"));
 		assert.equal(childDraft("b").text, "另一段");
 		blocked = true;
@@ -43,6 +46,7 @@ test("可搬窗草稿按标签保存，发送和关闭清理，存储失败不�
 		flushChildDrafts();
 		assert.equal(JSON.parse(entries.get("plume.child-draft:a")!).text, "继续保留");
 		setChildDraft("a", EMPTY_CHILD_DRAFT);
+		flushChildDrafts();
 		assert.equal(entries.has("plume.child-draft:a"), false);
 		dropChildDraft("b");
 		assert.equal(childDraft("b"), EMPTY_CHILD_DRAFT);
@@ -81,6 +85,7 @@ test("划词追加到原草稿，保存来源、附件和已有引用，跨窗�
 		assert.equal(before.quotes.length, 1);
 		assert.equal(takeChildQuoteFocus("quoted"), true);
 		assert.equal(takeChildQuoteFocus("quoted"), false);
+		flushChildDrafts();
 		entries.set("plume.child-draft:restored", entries.get("plume.child-draft:quoted")!);
 		assert.deepEqual(childDraft("restored"), expected);
 		assert.equal(takeChildQuoteFocus("restored"), false);

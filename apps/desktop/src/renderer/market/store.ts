@@ -167,8 +167,8 @@ export async function installPlugin(item: CatalogItem): Promise<boolean> {
 export async function installFromFolder(): Promise<void> {
 	const dir = await window.plume.pickFolder(translate("market.pickPluginFolder"));
 	if (!dir) return;
-	// 和主进程一样，文件夹名就是插件的目录名。
-	const id = dir.slice(dir.lastIndexOf("/") + 1);
+	// 和主进程一样，文件夹名就是插件的目录名；Windows 的路径用反斜杠分隔。
+	const id = dir.split(/[/\\]/).pop() ?? dir;
 	if (await report(id, await window.plume.market.installFolder(dir))) focusPlugin(id);
 }
 

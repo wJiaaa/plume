@@ -19,6 +19,7 @@ import { DURATION, IconButton, MenuBody, MenuItem, motionReduced, Popover, useI1
 import { CornerDownLeft, GripVertical, MoreHorizontal, PencilLine, Trash2 } from "@plume/ui/icons";
 import { type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { QueueChoice } from "../plugins.tsx";
+import { queueMove } from "./queue-move.ts";
 
 export interface QueuedMessage {
 	id: string;
@@ -172,12 +173,14 @@ function Rows<T extends QueuedMessage>({
 	/** 一行到下一行的距离，拖动开始时量一次：行高固定，拖动中再量会读到让位后的位置。 */
 	const step = useRef(0);
 	const origin = useRef({ y: 0, index: 0 });
-	const sortable = rows.filter((row) => !row.leaving).length > 1;
+	// 拖动、↑↓ 的位置都按还排着的那几条数，正在收起的不算：见 `queueMove`。
+	const staying = rows.filter((row) => !row.leaving);
+	const sortable = staying.length > 1;
 
 	const startDrag = (index: number, id: string, event: PointerEvent) => {
 		// 触摸留给页面自己滚；只有主键起拖。
 		if (!sortable || event.button !== 0 || event.pointerType === "touch") return;
-		const elements = [...(list.current?.querySelectorAll("[data-queue-row]") ?? [])];
+		const elements = [...(list.current?.querySelectorAll("[data-queue-row]:not([data-leaving])") ?? [])];
 		const first = elements[0]?.getBoundingClientRect();
 		const second = elements[1]?.getBoundingClientRect();
 		step.current = first && second ? second.top - first.top : 0;
@@ -194,7 +197,7 @@ function Rows<T extends QueuedMessage>({
 
 	const moveDrag = (event: PointerEvent) => {
 		if (!drag) return;
-		const span = rows.length - 1;
+		const span = staying.length - 1;
 		const at = origin.current.index;
 		// 只在队伍自己的长度里走：卡片裁掉溢出，甩到外面那行会像被拖没了。夹住之后它顶在松手会落到的那一格。
 		const delta = Math.min(Math.max(event.clientY - origin.current.y, -at * step.current), (span - at) * step.current);
@@ -204,11 +207,11 @@ function Rows<T extends QueuedMessage>({
 
 	const endDrag = () => {
 		if (!drag) return;
-		const target = rows[drag.to]?.entry;
-		if (target && drag.to !== drag.from) {
+		const move = queueMove(rows, drag.from, drag.to);
+		if (move) {
 			// 新顺序和 transform 归零同一帧生效，这一帧关掉过渡，不然行会从新位置再偏出去一截、滑回来。
 			setSettling(true);
-			onMove(drag.id, target.id, drag.to > drag.from ? "after" : "before");
+			onMove(move.id, move.targetId, move.placement);
 			requestAnimationFrame(() => setSettling(false));
 		}
 		setDrag(null);
@@ -223,9 +226,9 @@ function Rows<T extends QueuedMessage>({
 		return 0;
 	};
 
-	const nudge = (index: number, id: string, by: -1 | 1) => {
-		const target = rows[index + by]?.entry;
-		if (target) onMove(id, target.id, by > 0 ? "after" : "before");
+	const nudge = (index: number, by: -1 | 1) => {
+		const move = queueMove(rows, index, index + by);
+		if (move) onMove(move.id, move.targetId, move.placement);
 	};
 
 	return (
@@ -238,17 +241,17 @@ function Rows<T extends QueuedMessage>({
 			data-empty={rows.every((row) => row.leaving) || undefined}
 			className="plume-composer-queue overflow-hidden rounded-xl bg-card/40"
 		>
-			{rows.map((row, index) => (
+			{rows.map((row) => (
 				<Row
 					key={row.entry.id}
 					entry={row.entry}
 					leaving={row.leaving}
 					recalled={recalled.has(row.entry.id)}
-					index={index}
+					index={staying.indexOf(row)}
 					sortable={sortable}
 					dragging={drag?.id === row.entry.id}
 					settling={settling}
-					offset={offsetOf(index)}
+					offset={row.leaving ? 0 : offsetOf(staying.indexOf(row))}
 					status={status}
 					nowLabel={nowLabel}
 					onSendNow={onSendNow}
@@ -308,7 +311,7 @@ function Row({
 	onDragStart: (index: number, id: string, event: PointerEvent) => void;
 	onDragMove: (event: PointerEvent) => void;
 	onDragEnd: () => void;
-	onNudge: (index: number, id: string, by: -1 | 1) => void;
+	onNudge: (index: number, by: -1 | 1) => void;
 }) {
 	const { t, resolvedLocale } = useI18n();
 	const more = usePopover();
@@ -353,7 +356,7 @@ function Row({
 						onKeyDown={(event) => {
 							if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
 							event.preventDefault();
-							onNudge(index, entry.id, event.key === "ArrowDown" ? 1 : -1);
+							onNudge(index, event.key === "ArrowDown" ? 1 : -1);
 						}}
 						// 一个安静的记号，不是一颗按钮：它说的是「这一行能拖」。
 						className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center text-ink-faint transition-colors hover:text-ink-muted disabled:cursor-default"

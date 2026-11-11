@@ -2577,15 +2577,36 @@ function moveQueued(sessionId: string, id: string, targetId: string, placement: 
 
 /**
  * 排进这个会话的队尾。队在 agent 进程里、落盘（`AgentService.queue`）：这一轮以完成结束时由它发下一条，会话空着时排进去
- * 就推起队伍；排上的那一行经 `queue` 事件画出来。排不上时说一声，不悄悄丢掉。
+ * 就推起队伍；排上的那一行经 `queue` 事件画出来。排不上时说一声，不悄悄丢掉；返回排没排上，排不上的草稿由调用方放回去。
  */
-async function enqueue(sessionId: string, outgoing: OutgoingMessage, preview: string, draft?: QueuedDraft): Promise<void> {
+async function enqueue(sessionId: string, outgoing: OutgoingMessage, preview: string, draft?: QueuedDraft): Promise<boolean> {
 	try {
 		const entry = await agent.queue(sessionId, outgoing, preview);
 		if (draft) queuedDrafts.set(entry.id, { sessionId, draft });
+		return true;
 	} catch (error) {
 		notify(errorText(error), "error");
+		return false;
 	}
+}
+
+/**
+ * 没排上的那句整份放回它那个输入框：字、附件、引文、会话引用。只在那个输入框还空着时放——人已经接着打了新的，
+ * 不拿旧的盖掉（排不上已经说过一声）。附件的标记和清单出自同一份草稿，原样放回就对得上，不用重新编号。
+ */
+function restoreUnqueued(scope: string, draft: QueuedDraft): void {
+	const empty =
+		!(state.drafts[scope] ?? "").trim() &&
+		!(state.draftAttachments[scope]?.length ?? 0) &&
+		!(state.quotes[scope]?.length ?? 0) &&
+		sessionReferences(scope).length === 0;
+	if (!empty) return;
+	update((current) => ({
+		drafts: { ...current.drafts, [scope]: draft.text },
+		draftAttachments: { ...current.draftAttachments, [scope]: draft.attachments },
+		quotes: { ...current.quotes, [scope]: draft.quotes },
+	}));
+	setSessionReferences(scope, draft.sessionRefs ?? []);
 }
 
 /** 「继续」：以界面的名义发那句话，不画成人的气泡。 */
@@ -2924,17 +2945,16 @@ function Composer({ view, centered = false, cards = false }: { view?: SessionVie
 		 */
 		const steering = command?.deliver === "steer";
 		if (view && !steering && (running || queued.length > 0)) {
+			// 先清空再等排队的结果：连按两下回车不会把同一句排两遍；排不上再放回来。
+			const draft: QueuedDraft = { text: value, attachments: attachments.attachments, quotes: quoted, sessionRefs: references };
 			void enqueue(
 				view.summary.id,
 				outgoing,
 				typed || formatList([...attachments.attachments.map((item) => item.name), ...references.map((ref) => ref.title)]),
-				{
-					text: value,
-					attachments: attachments.attachments,
-					quotes: quoted,
-					sessionRefs: references,
-				},
-			);
+				draft,
+			).then((queuedOk) => {
+				if (!queuedOk) restoreUnqueued(scope, draft);
+			});
 			setDraft(scope, "");
 			setQuotes(scope, () => []);
 			setSessionReferences(scope, []);

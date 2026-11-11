@@ -12,19 +12,9 @@
  * 没有意义的标签会被丢弃、文字保留。README 绝不能露出自己的源码：页面上出现 `<details>` 或 `**`
  * 是渲染 bug，不是作者的本意。
  *
- * 纯 TypeScript、不依赖 DOM，所以测试跑的就是实际发布的代码。
+ * 纯 TypeScript、不依赖 DOM。README 就在插件目录里：相对的图片留成目录里的相对路径，由主进程从插件目录读出；
+ * 相对的链接没有网页可去，不跟。
  */
-
-/** README 里相对链接的指向：所在仓库，以及它所在的目录。 */
-interface Base {
-	/**
-	 * GitHub 上的 `owner/name`。没有时 README 就在插件目录里：相对的图片留成目录里的相对路径，由主进程从插件目录读出；
-	 * 相对的链接没有网页可去，不跟。
-	 */
-	repo?: string;
-	/** README 所在目录（相对仓库），首尾不带斜杠。 */
-	dir: string;
-}
 
 type Align = "left" | "center" | "right";
 
@@ -83,12 +73,7 @@ export type Block =
 	| { type: "group"; align: Align; children: Block[] }
 	| { type: "rule" };
 
-export interface ParseOptions {
-	base?: Base;
-}
-
 interface Context {
-	base?: Base;
 	defs: Map<string, { href: string; title?: string }>;
 	slugs: Map<string, number>;
 	/** 为找到能闭合的强调而扫描过的字符数；见 `WORK_LIMIT`。 */
@@ -106,8 +91,8 @@ const WORK_LIMIT = 2_000_000;
 
 // ── 入口 ──────────────
 
-export function parseMarkdown(source: string, options: ParseOptions = {}): Block[] {
-	const context: Context = { base: options.base, defs: new Map(), slugs: new Map(), work: 0 };
+export function parseMarkdown(source: string): Block[] {
+	const context: Context = { defs: new Map(), slugs: new Map(), work: 0 };
 	const lines = collectDefinitions(prepare(source), context);
 	return parseBlocks(lines, context, 0);
 }
@@ -141,11 +126,11 @@ function textOf(nodes: readonly Inline[]): string {
 /**
  * 返回可以放上页面的 URL，否则返回 null。
  *
- * 绝对的 http(s) 和 mail 链接放行；`#anchor` 作为页内链接放行。相对于 README 的路径按其仓库解析：
- * 链接指向页面，图片指向原始字节，与 GitHub 一致。其他任何协议（`javascript:`、`data:`、`file:`）
- * 一律拒绝，这正是本函数存在的原因；越出仓库根目录的相对路径同样拒绝。
+ * 绝对的 http(s) 和 mail 链接放行；`#anchor` 作为页内链接放行。相对路径的图片留成插件目录里的相对路径，
+ * 相对路径的链接不跟。其他任何协议（`javascript:`、`data:`、`file:`）一律拒绝，这正是本函数存在的原因；
+ * 越出插件目录的相对路径同样拒绝。
  */
-function resolveUrl(raw: string, base: Base | undefined, kind: "link" | "image"): { href: string; internal: boolean } | null {
+function resolveUrl(raw: string, kind: "link" | "image"): { href: string; internal: boolean } | null {
 	let url = raw.trim().replace(/^<|>$/g, "");
 	// URL 中的控制字符（`java\nscript:`）是绕过协议检查的常见手法。
 	if (!url || hasControl(url)) return null;
@@ -158,18 +143,11 @@ function resolveUrl(raw: string, base: Base | undefined, kind: "link" | "image")
 	}
 	if (/^mailto:/i.test(url)) return kind === "link" ? { href: url, internal: false } : null;
 	// 其他任何协议。先于相对路径判断，这样 `javascript:x` 永远不会被当成文件名。
-	if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return null;
-	if (!base) return null;
+	if (/^[a-z][a-z0-9+.-]*:/i.test(url) || kind === "link") return null;
 
 	const hashAt = url.indexOf("#");
-	const hash = hashAt >= 0 ? url.slice(hashAt) : "";
-	const path = (hashAt >= 0 ? url.slice(0, hashAt) : url).replace(/\?.*$/, "");
-	const resolved = joinPath(url.startsWith("/") ? "" : base.dir, path);
-	if (resolved === null) return null;
-	if (!base.repo) return kind === "image" ? { href: resolved, internal: false } : null;
-	return kind === "image"
-		? { href: `https://raw.githubusercontent.com/${base.repo}/HEAD/${resolved}`, internal: false }
-		: { href: `https://github.com/${base.repo}/blob/HEAD/${resolved}${hash}`, internal: false };
+	const resolved = normalizePath((hashAt >= 0 ? url.slice(0, hashAt) : url).replace(/\?.*$/, ""));
+	return resolved === null ? null : { href: resolved, internal: false };
 }
 
 function hasControl(text: string): boolean {
@@ -179,10 +157,10 @@ function hasControl(text: string): boolean {
 	return false;
 }
 
-/** `dir` 与 `path` 拼接并处理 `.`、`..`；结果会越出仓库则返回 null。 */
-function joinPath(dir: string, path: string): string | null {
+/** 处理 `.`、`..`，去掉开头的 `/`（插件目录就是根）；结果会越出插件目录则返回 null。 */
+function normalizePath(path: string): string | null {
 	const parts: string[] = [];
-	for (const segment of `${dir}/${path}`.split("/")) {
+	for (const segment of path.split("/")) {
 		if (!segment || segment === ".") continue;
 		if (segment === "..") {
 			if (!parts.length) return null;
@@ -996,7 +974,7 @@ function parseInline(source: string, context: Context, depth: number, inLink: bo
 			const auto = /^<((?:https?|ftp):\/\/[^\s<>]+|mailto:[^\s<>]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+)>/i.exec(source.slice(index, index + 2048));
 			if (auto) {
 				const target = auto[1] ?? "";
-				const url = resolveUrl(target.includes("@") && !/^[a-z]+:/i.test(target) ? `mailto:${target}` : target, context.base, "link");
+				const url = resolveUrl(target.includes("@") && !/^[a-z]+:/i.test(target) ? `mailto:${target}` : target, "link");
 				flush();
 				if (url && !inLink) out.push({ type: "link", href: url.href, internal: false, children: [{ type: "text", value: target }] });
 				else appendText(out, target);
@@ -1304,14 +1282,14 @@ function linkAt(source: string, start: number, context: Context, depth: number, 
 
 	if (image) {
 		const alt = textOf(parseInline(label, context, depth + 1, true));
-		const url = resolveUrl(href, context.base, "image");
+		const url = resolveUrl(href, "image");
 		// 显示不了的图片什么都不显示；单独留下 alt 文字夹在句中像是故障。
 		if (!url) return { nodes: [], end };
 		return { nodes: [imageNode(url.href, alt, title ? { title } : {})], end };
 	}
 
 	const children = parseInline(label, context, depth + 1, true);
-	const url = resolveUrl(href, context.base, "link");
+	const url = resolveUrl(href, "link");
 	// 我们不跟随的链接保留其文字。链接内部不能再嵌套链接。
 	if (!url || inLink) return { nodes: children, end };
 	return {
@@ -1403,7 +1381,7 @@ function sizeOf(value: string | undefined): string | undefined {
 
 function htmlImage(attrs: string, context: Context, sources?: ImageSource[]): Inline | null {
 	const raw = attribute(attrs, "src") ?? attribute(attrs, "data-src");
-	const url = raw ? resolveUrl(raw, context.base, "image") : null;
+	const url = raw ? resolveUrl(raw, "image") : null;
 	if (!url) return null;
 	const width = sizeOf(attribute(attrs, "width"));
 	const height = sizeOf(attribute(attrs, "height"));
@@ -1418,7 +1396,7 @@ function htmlImage(attrs: string, context: Context, sources?: ImageSource[]): In
 }
 
 /** 可以保留的 `<source>`：配色方案媒体查询，以及能通过 `resolveUrl` 的地址。 */
-function pictureSource(attrs: string, context: Context): ImageSource | null {
+function pictureSource(attrs: string): ImageSource | null {
 	const media = attribute(attrs, "media")?.trim() ?? "";
 	if (!/^\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)$/i.test(media)) return null;
 	const candidates = (attribute(attrs, "srcset") ?? "")
@@ -1428,7 +1406,7 @@ function pictureSource(attrs: string, context: Context): ImageSource | null {
 	const resolved: string[] = [];
 	for (const candidate of candidates) {
 		const [address, descriptor] = candidate.split(/\s+/, 2);
-		const url = address ? resolveUrl(address, context.base, "image") : null;
+		const url = address ? resolveUrl(address, "image") : null;
 		if (!url || (descriptor && !/^\d+(?:\.\d+)?[wx]$/.test(descriptor))) return null;
 		resolved.push(descriptor ? `${url.href} ${descriptor}` : url.href);
 	}
@@ -1479,7 +1457,7 @@ function inlineHtml(source: string, at: number, context: Context, depth: number,
 		const close = matchClose(source, end, "picture");
 		const inner = source.slice(end, close ? close.start : source.length);
 		const sources = [...inner.matchAll(/<source\b([^>]*)>/gi)]
-			.map((found) => pictureSource(found[1] ?? "", context))
+			.map((found) => pictureSource(found[1] ?? ""))
 			.filter((found): found is ImageSource => found !== null);
 		const img = /<img\b([^>]*)>/i.exec(inner);
 		const image = img ? htmlImage(img[1] ?? "", context, sources) : null;
@@ -1497,7 +1475,7 @@ function inlineHtml(source: string, at: number, context: Context, depth: number,
 		const children = parseInline(inner, context, depth + 1, inLink || name === "a");
 		if (name === "a") {
 			const href = attribute(attrs, "href");
-			const url = href ? resolveUrl(href, context.base, "link") : null;
+			const url = href ? resolveUrl(href, "link") : null;
 			return { nodes: url && !inLink ? [{ type: "link", href: url.href, internal: url.internal, children }] : children, end: close.end };
 		}
 		return { nodes: wrapper ? [{ type: wrapper, children }] : children, end: close.end };

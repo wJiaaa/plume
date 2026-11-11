@@ -6,8 +6,12 @@ import { completionKeys, type CommandHandlers } from "./command-marks.ts";
 import { findMentionRanges } from "./mentions.ts";
 
 export const setMentionAvatars = StateEffect.define<Map<string, Avatar>>();
+/**
+ * 头像的 React 根按 DOM 记，不记在挂件上：`eq` 为真时 CodeMirror 沿用旧 DOM、换上新的挂件实例，销毁时调的是新实例，
+ * 记在实例上的根就找不到了、永远卸不掉。
+ */
+const roots = new WeakMap<HTMLElement, Root>();
 class Face extends WidgetType {
-	private root?: Root;
 	constructor(
 		readonly name: string,
 		readonly avatar: Avatar,
@@ -21,12 +25,14 @@ class Face extends WidgetType {
 		const element = document.createElement("span");
 		element.className = "plume-mention-face";
 		element.setAttribute("aria-hidden", "true");
-		this.root = createRoot(element);
-		this.root.render(<AgentAvatar avatar={this.avatar} seed={this.name} size={14} interactive={false} />);
+		const root = createRoot(element);
+		roots.set(element, root);
+		root.render(<AgentAvatar avatar={this.avatar} seed={this.name} size={14} interactive={false} />);
 		return element;
 	}
-	destroy(): void {
-		const root = this.root;
+	destroy(dom: HTMLElement): void {
+		const root = roots.get(dom);
+		roots.delete(dom);
 		// 编辑器可能在 React 提交阶段销毁，等该阶段结束再卸载头像。
 		queueMicrotask(() => root?.unmount());
 	}
