@@ -13,6 +13,7 @@
 | 命令 | 作用 |
 | --- | --- |
 | `pnpm check` | 类型检查 + lint + 格式 + 测试（各包的，加上 `pnpm test:root`：`scripts/test/` 和工具评测的单测） + 样式、文案、插件、链接检查 + 依赖方向（提交前必须通过；pre-push 钩子会跑） |
+| `pnpm --filter <包名> test` | 只跑一个包的测试，开发中途用，交付前仍跑 `pnpm check`。只跑一个文件：用 vitest 的包在后面加文件名（`pnpm --filter <包名> test <文件名>`）；用 `node --test` 的包（看该包 `package.json` 的 `test`）跑 `pnpm --filter <包名> exec node --test --experimental-strip-types test/<文件名>` |
 | `pnpm check:styles` | 只跑样式检查（`scripts/check-styles.mjs`），九条规则见 [spec/tech/styling.md](spec/tech/styling.md) |
 | `pnpm check:plugins` | 只跑插件检查（`scripts/check-plugins.mjs`）：插件只引用公开接口；skill 跟得上插件接口 |
 | `pnpm check:links` | 只查 Markdown 里的相对链接都指向存在的文件（`scripts/check-links.mjs`） |
