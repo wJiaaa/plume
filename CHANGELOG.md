@@ -2,6 +2,30 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.4] - 2026-11-11
+
+<!-- plume:notes en -->
+### Changes
+
+- **Choose the model and thinking level for a suggested chat.** When Plume suggests running something as a separate chat, the card now has the same model and thinking-level pickers as the message box, right next to Start. Before, the new chat always started on the default model and default thinking level.
+- **The file delivery card no longer has a Report button.** The report only repeated what the card and the review panel already show, and it sometimes included markers that the conversation hides. The card keeps Undo and Review.
+
+### For plugin authors
+
+- **Plugins you install yourself no longer get replaced by marketplace updates.** Plugins added with "Upload from this computer", `plume-plugin install` or `plume-plugin dev` now go into `~/.plume/local-plugins/`, apart from marketplace plugins. If one has the same name as a marketplace plugin, yours is the one that loads and automatic updates leave it alone; uninstall it to go back to the marketplace version. Before, it shared a folder with marketplace plugins and was overwritten as soon as the marketplace had a newer version.
+- A plugin in a `PLUME_PLUGIN_PATHS` folder now takes precedence over an installed plugin with the same name. Before, the installed copy loaded and your changes didn't show up.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **建议的新会话能选模型和思考档位了。** Plume 建议另开一个会话去做某件事时，卡片上「开始」旁边多了和输入框里一样的模型、思考档位选择。以前开出来的新会话总是默认模型、默认档位。
+- **文件交付卡上去掉了「报告」。** 报告里的内容卡片和审核面板里本来就有，还会带上对话里隐藏掉的标记。卡片上保留「撤销」和「审核」。
+
+### 给插件作者
+
+- **自己装的插件不会再被市场的更新换掉。** 经「从本地上传」、`plume-plugin install`、`plume-plugin dev` 装的插件，现在放在单独的 `~/.plume/local-plugins/`，不和市场装的混在一起。和市场里的插件同名时用你装的这份，自动更新也不碰它；卸掉就回到市场版。以前它和市场装的放在一处，市场一出新版就被盖掉。
+- `PLUME_PLUGIN_PATHS` 下的插件现在优先于已装的同名插件。以前加载的是已装的那份，你改的不生效。
+
 ## [0.1.3] - 2026-11-10
 
 <!-- plume:notes en -->
