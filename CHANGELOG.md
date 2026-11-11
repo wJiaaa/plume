@@ -2,6 +2,66 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.6] - 2026-11-11
+
+<!-- plume:notes en -->
+### Changes
+
+- **The browser is built in.** You no longer install it from the Marketplace: it comes with Plume and is always there. When the agent opens a page it now waits for the content to appear before reading, so it no longer reads a half-loaded page, and it reads long pages in parts instead of stopping at the first screen. Pressing Enter in the address bar no longer flashes a blank page first, and a spinner shows while a page loads.
+- **Use your Chrome sign-ins in Plume (macOS).** Turn on Settings › Browser › "Sync sign-ins from Chrome" and pages in Plume, including the ones the agent opens, are signed in as you are in Chrome, and stay in sync with it. It is off by default. macOS will then ask to read the keychain: choose "Allow". If it says Plume can't read Chrome's data, give Plume Full Disk Access in System Settings › Privacy & Security.
+- **Sign-in windows work.** "Sign in with …" and payment windows that a site opens now open next to Plume and finish signing you in on the page that opened them. Before, they didn't open at all. Links that open in a new tab now open in a background tab.
+- **The agent asks you to sign in or solve a captcha.** When a page needs a password or a human check (reCAPTCHA, Cloudflare and the like), the agent stops and asks you to do it, instead of trying to get past it on its own.
+- Pages you signed in to in the built-in browser need signing in again once: pages were being stored together with Plume's own data instead of in the browser's own storage. Sites also can no longer use your camera or location.
+- **Grain texture.** Appearance › Chat background › Texture can add a fine grain to the whole window, with or without a background image.
+- **Copy and Save As work again in the image viewer.** For almost every screenshot in a conversation, Copy did nothing and Save As said the export failed.
+- **Notifications** sit in the middle of the window even when the sidebar is open, and their close button is always shown on the right instead of appearing only on hover.
+- Saving settings no longer fails silently: you're told when a setting couldn't be saved, and closing the model editor waits for it to save. The code font can be reset to default.
+- Dragging a conversation in the sidebar switches only that project to manual order, not all of them.
+- A queued message that fails to send goes back into the message box instead of disappearing.
+- Approval treats command names regardless of case, so `Rscript` is judged as risky as `rscript`.
+- The Git panel no longer runs programs a repository brings along (hooks, filters, fsmonitor) when it reads the repository's status.
+- The web search API key is stored encrypted.
+- Call traces recorded before this version still list, but their request details no longer open.
+- If Plume doesn't open after updating to this version, download the installer from this page and drag Plume into Applications. Restart Now is fixed in this version, so later updates won't leave Plume broken.
+
+### For plugin authors
+
+- `plume.browser` is a built-in plugin and has left the Marketplace. A `popup` page event carries `window: true` when the host has opened a sign-in window itself; the plugin doesn't need to open it and can't drive it. `ctx.pages.chromeLogins("status" | "on" | "off")` reads and switches the Chrome sign-in sync; turning it on always asks the person in a system dialog.
+- Skins can set `root-image` (a CSS image, `none` by default) to paint a gradient around the window.
+- `PLUME_PLUGIN_PATHS` is gone. Load your own plugins with `plume-plugin dev` or `plume-plugin install`.
+- `ModelContext.systemPrompt` is read-only; change the prompt through `sections`. `CompactSummary.head` is required. A `step.end` hook that returns a verdict the host doesn't know is now an error instead of "continue".
+- A skill's `allowed-tools` no longer narrows the tools. `web_fetch` takes `format: "text" | "raw"`.
+- Unused props and exports were removed from `@plume/ui`: `AgentAvatar.badge`, `RetainedViews.slide` and `pageClassName`, `ActionSpinner.onFill`, `Overlay.align`, `CountUp.bidirectional` and `ms`, `TextArea.fieldRef`, `ClosableTab.labelClassName`, `DiffView`, `diffLines`, `TypedText`, `AvatarStack`, `GitHubMark`, `RowDeleteButton`.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **浏览器内置了。** 不用再去插件市场装，随 Plume 一起装好、一直都在。agent 打开网页后等内容出来再读，不再读到加载了一半的页面；长页面能接着往下读，不再只看第一屏。地址栏回车后不再先闪一下空白，加载时有转圈。
+- **在 Plume 里用 Chrome 的登录状态（macOS）。** 打开 设置 › 浏览器 › 「从 Chrome 同步登录状态」，Plume 里的网页（包括 agent 打开的）就以你在 Chrome 里的身份访问，并随 Chrome 保持同步。默认关着。之后 macOS 会请求读取钥匙串，选「允许」。如果提示读不了 Chrome 的数据，到 系统设置 › 隐私与安全性 › 完全磁盘访问权限 里打开 Plume。
+- **网站弹出的登录窗口能用了。** 「用 … 登录」、支付这类网站弹出的窗口，现在开在 Plume 旁边，登完回到原来的页面。以前它根本打不开。要在新标签打开的链接，现在开成后台标签。
+- **碰到登录和验证码，agent 会叫你。** 页面要输密码或做人机验证（reCAPTCHA、Cloudflare、滑块这些）时，agent 停下来请你处理，不自己硬闯。
+- 内置浏览器里登录过的网站要重新登录一次：以前网页的数据混在 Plume 自己的数据里，没存进浏览器单独的那一份。网站也不能再用摄像头、定位了。
+- **磨砂质感。** 外观 › 会话背景 › 质感 可以给整个窗口加一层细颗粒，有没有背景图都行。
+- **看图器里又能复制、另存为了。** 以前对话里几乎所有截图，点「复制」没反应，「另存为」提示导出失败。
+- **提示条** 侧栏开着时也在窗口正中，关闭按钮一直显示在最右边，不用把指针停上去才出现。
+- 设置保存失败时会告诉你，不再悄悄丢掉；关掉模型编辑器前会等它存好。代码字体可以恢复默认。
+- 在侧栏拖动会话只把那一个项目改成手动排序，不再连带别的项目。
+- 排队的消息发送失败时回到输入框，不会凭空消失。
+- 审批判断风险时命令名不分大小写，`Rscript` 和 `rscript` 一样算高风险。
+- Git 面板读仓库状态时，不再运行仓库自带的程序（钩子、过滤器、fsmonitor）。
+- 网页搜索的 API key 加密存放。
+- 这个版本之前记下的调用轨迹还能列出来，但点开看不到请求详情了。
+- 如果更新到这个版本后 Plume 打不开，请在本页下载安装包，把 Plume 拖进「应用程序」。「立即重启」在这个版本里修好了，之后的更新不会再把 Plume 弄坏。
+
+### 给插件作者
+
+- `plume.browser` 改为内置插件，插件市场里不再有它。宿主自己开出登录小窗口时，`popup` 事件带 `window: true`，插件不用再开，也驱动不了它。`ctx.pages.chromeLogins("status" | "on" | "off")` 查看和开关 Chrome 登录状态同步，开启时一定由系统对话框请人确认。
+- 皮肤可以设 `root-image`（CSS 图像，缺省 `none`），给窗口外圈铺渐变。
+- 去掉了 `PLUME_PLUGIN_PATHS`。自己的插件用 `plume-plugin dev` 或 `plume-plugin install` 装。
+- `ModelContext.systemPrompt` 改为只读，改提示词经 `sections`。`CompactSummary.head` 必填。`step.end` 钩子返回宿主不认识的判定时报错，不再当作继续。
+- 技能的 `allowed-tools` 不再收窄可用工具。`web_fetch` 的 `format` 只剩 `"text"`、`"raw"`。
+- `@plume/ui` 删掉了没人用的 props 和导出：`AgentAvatar.badge`、`RetainedViews.slide` 和 `pageClassName`、`ActionSpinner.onFill`、`Overlay.align`、`CountUp.bidirectional` 和 `ms`、`TextArea.fieldRef`、`ClosableTab.labelClassName`、`DiffView`、`diffLines`、`TypedText`、`AvatarStack`、`GitHubMark`、`RowDeleteButton`。
+
 ## [0.1.5] - 2026-11-11
 
 <!-- plume:notes en -->
