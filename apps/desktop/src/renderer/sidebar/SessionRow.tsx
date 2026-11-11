@@ -112,7 +112,10 @@ export const SessionRow = memo(function SessionRow({
 				{followUps && folded && (
 					<span
 						data-plume-row-folded={followUps.length}
-						className="flex h-4 min-w-[18px] shrink-0 items-center justify-center rounded-full bg-ink/10 px-1.5 text-caption text-ink-muted tabular-nums transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0"
+						// 有在跑的就只剩转圈、不带底，和项目折起来时标题上的转圈一个样子；灰底胶囊只给条数用。
+						className={`flex h-4 shrink-0 items-center justify-center text-caption text-ink-muted tabular-nums transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0 ${
+							followUps.some((child) => child.running) ? "w-3.5" : "min-w-[18px] rounded-full bg-ink/10 px-1.5"
+						}`}
 					>
 						{followUps.some((child) => child.running) ? <ActionSpinner size={14} className="text-accent" /> : followUps.length}
 					</span>
