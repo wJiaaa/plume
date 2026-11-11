@@ -126,7 +126,6 @@ export function Toaster({
 				 * 就成了没人按的按钮；错误才是人下一步想要一个解释的时候。
 				 */
 				const investigate = group.level === "error" && !group.sessionId ? onInvestigate : undefined;
-				const hasAction = Boolean(openSession || group.reveal || investigate);
 				return (
 					<div
 						key={group.key}
@@ -138,11 +137,11 @@ export function Toaster({
 						onBlurCapture={release}
 						/*
 						 * 不透明的浮层底，浅色深色都由主题自己的 token 算出来，不是叠在背后东西上的一层色。行高定在 18px：
-						 * 图标和按钮都按这一行对齐，换行时也对第一行。带操作时右边收窄，图标按钮自带的留白补上那一截。
+						 * 图标和按钮都按这一行对齐，换行时也对第一行。右边总有关闭按钮，右内边距收窄，按钮自带的留白补上那一截。
 						 */
-						className={`group relative pointer-events-auto flex max-w-[min(560px,calc(100vw-3rem))] items-start gap-2.5 rounded-xl border bg-float py-2 pl-3 text-detail leading-4.5 text-ink shadow-toast ${
-							hasAction ? "pr-1.75" : "pr-3"
-						} ${leaving.includes(group.key) ? "plume-toast-out" : "plume-toast-in"} ${tone.edge}`}
+						className={`pointer-events-auto flex max-w-[min(560px,calc(100vw-3rem))] items-start gap-2.5 rounded-xl border bg-float py-2 pr-1.75 pl-3 text-detail leading-4.5 text-ink shadow-toast ${
+							leaving.includes(group.key) ? "plume-toast-out" : "plume-toast-in"
+						} ${tone.edge}`}
 					>
 						{/* 颜色在记号上，不在字上：一段红字压在粉底上是说「出错了」最难读的写法。 */}
 						<tone.Icon size={14} strokeWidth={2} className={`mt-0.5 shrink-0 ${tone.mark}`} />
@@ -156,7 +155,7 @@ export function Toaster({
 							<span className="mt-px shrink-0 rounded-full bg-card-hover px-1.5 text-caption leading-4 text-ink-muted tabular-nums">×{group.ids.length}</span>
 						)}
 						{/*
-						 * 操作只画图标、统一用强调色：× 平时不在，右边这一个就是这张卡片能做的事，一眼认得出来。
+						 * 操作只画图标、统一用强调色，和最右边淡色的 × 分得开，一眼认得出这张卡片能做的事。
 						 * `-my-0.5` 让 22px 的按钮不撑高 18px 的那一行。
 						 */}
 						{openSession && (
@@ -204,18 +203,15 @@ export function Toaster({
 								<MessageCirclePlus size={14} strokeWidth={2} aria-hidden />
 							</button>
 						)}
-						{/*
-						 * 关闭平时不占位置：提示条会自己走，常驻的 × 只是右边又一个小记号。指针停上来或键盘进到卡片里时
-						 * 浮在左上角，键盘和读屏一直够得着。
-						 */}
+						{/* 关闭常驻在最右端、对着第一行，用淡色，和强调色的操作分开。 */}
 						<button
 							type="button"
 							onClick={() => dismiss(group)}
-							className="absolute -top-[7px] -left-[7px] grid size-4.5 scale-85 place-items-center rounded-full border border-line bg-float text-ink-muted opacity-0 shadow-knob transition-[opacity,scale,color] ease-out group-focus-within:scale-100 group-focus-within:opacity-100 group-hover:scale-100 group-hover:opacity-100 hover:text-ink"
+							className="-my-0.5 grid size-5.5 shrink-0 place-items-center rounded-md text-ink-faint transition-colors hover:bg-card-hover hover:text-ink"
 							data-plume-tip={t("common.close")}
 							aria-label={t("common.close")}
 						>
-							<X size={10} strokeWidth={2} aria-hidden />
+							<X size={12} strokeWidth={2} aria-hidden />
 						</button>
 					</div>
 				);
