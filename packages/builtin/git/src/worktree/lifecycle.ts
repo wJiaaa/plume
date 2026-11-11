@@ -9,10 +9,11 @@ import { existsSync } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type { OpResult } from "../api.ts";
-import { END_OF_OPTIONS, git, output, run, runRemote, succeeds } from "../git/exec.ts";
+import { END_OF_OPTIONS, output, run, runRemote, succeeds } from "../git/exec.ts";
 import { parseStatusZ, type WorktreeRecord } from "../git/parse.ts";
 import { canonicalPath, samePath } from "../git/paths.ts";
 import { worktreeRecords } from "../git/probe.ts";
+import { withView } from "../git/view.ts";
 import { SESSION_BRANCH_PREFIX, type SessionWorktree, type WorktreeState } from "./api.ts";
 import { say } from "./say.ts";
 
@@ -47,12 +48,19 @@ export async function baseOf(repo: string, recorded?: string): Promise<string | 
  * 刚合完的显示「落后 1」，刚同步完的两个提交显示「领先 3」，招人去做一次什么都没有的同步或合并。
  */
 export async function countCommits(repo: string, range: string): Promise<number> {
-	return Number((await output(repo, ["rev-list", "--count", "--no-merges", END_OF_OPTIONS, range])) ?? 0) || 0;
+	const out = await withView(repo, (view) => view.git(["rev-list", "--count", "--no-merges", END_OF_OPTIONS, range])).catch(() => null);
+	return Number(out?.trim() ?? 0) || 0;
 }
 
-/** 改过的和没跟踪的文件。忽略的不是谁做的改动，不算。 */
+/**
+ * 改过的和没跟踪的文件。忽略的不是谁做的改动，不算。
+ * 它和 `countCommits`、`conflictedFiles` 的读在视图里跑（见 `git/view.ts`）：工作树的卡片自动刷新时也问它们，不能替仓库配置执行程序。
+ */
 export async function uncommittedFiles(dir: string): Promise<string[]> {
-	return parseStatusZ(await git(dir, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]).catch(() => "")).entries.map((entry) => entry.path);
+	const out = await withView(dir, (view) => view.git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=dirty"])).catch(
+		() => null,
+	);
+	return parseStatusZ(out ?? "").entries.map((entry) => entry.path);
 }
 
 export async function isMerging(dir: string): Promise<boolean> {
@@ -60,7 +68,8 @@ export async function isMerging(dir: string): Promise<boolean> {
 }
 
 export async function conflictedFiles(dir: string): Promise<string[]> {
-	return (await git(dir, ["diff", "--name-only", "--diff-filter=U", "-z"]).catch(() => "")).split("\0").filter(Boolean);
+	const out = await withView(dir, (view) => view.git(["diff", "--name-only", "--diff-filter=U", "-z", "--ignore-submodules=dirty"])).catch(() => null);
+	return (out ?? "").split("\0").filter(Boolean);
 }
 
 /**
@@ -72,7 +81,7 @@ export async function conflictedFiles(dir: string): Promise<string[]> {
 export async function createSessionWorktree(
 	project: string,
 	sessionId: string,
-	options: { root: string; fetchFirst: boolean },
+	options: { root: string; fetchFirst: boolean; signal?: AbortSignal },
 ): Promise<{ worktree: SessionWorktree } | { error: string }> {
 	const repo = await repoRoot(project);
 	if (!repo) return { error: say().notARepo };
@@ -81,8 +90,11 @@ export async function createSessionWorktree(
 	const target = join(options.root, `${basename(repo) || "repo"}-${id}`);
 	// 从哪切出来的，合回去才有去处；游离 HEAD 时没有。
 	const base = (await currentBranch(project)) ?? undefined;
-	// 获取失败（离线、没凭据）不挡着建工作树。
-	if (options.fetchFirst) await runRemote(project, ["fetch", "--all", "--prune"], { timeoutMs: FETCH_TIMEOUT_MS });
+	/*
+	 * 获取失败（离线、没凭据）不挡着建工作树。人按了停（`signal`）就立刻不等它：网络卡住时不该再等满超时。
+	 * 工作树照样建（本地的事，很快）：这一轮停了，下一轮还是第一轮，会挪进这棵里（见 `serve.ts` 的 `keep`）。
+	 */
+	if (options.fetchFirst) await runRemote(project, ["fetch", "--all", "--prune"], { timeoutMs: FETCH_TIMEOUT_MS, signal: options.signal });
 	try {
 		await mkdir(dirname(target), { recursive: true });
 	} catch (error) {

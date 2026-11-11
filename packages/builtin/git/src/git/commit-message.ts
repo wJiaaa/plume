@@ -3,7 +3,7 @@
  * 提示词发给模型，写英文，不翻译。
  */
 
-import { git } from "./exec.ts";
+import { withView, type RepoView } from "./view.ts";
 
 const PATCH_LIMIT = 16_000;
 
@@ -53,13 +53,20 @@ export function cleanCommitMessage(raw: string): string {
 	return text;
 }
 
-/** 要描述的补丁：有暂存就是暂存的，否则是工作区的改动加上没跟踪的文件名；都没有为空。 */
+/**
+ * 要描述的补丁：有暂存就是暂存的，否则是工作区的改动加上没跟踪的文件名；都没有为空。
+ * 在视图里读：仓库配置里的 `diff.external`、textconv 不会被执行，补丁也就是 git 自己排的那份。
+ */
 export async function collectCommitPatch(cwd: string): Promise<{ patch: string; source: "staged" | "unstaged" } | null> {
-	const staged = await git(cwd, ["diff", "--cached", "--no-color"]).catch(() => "");
+	return (await withView(cwd, patchIn).catch(() => null)) ?? null;
+}
+
+async function patchIn(view: RepoView): Promise<{ patch: string; source: "staged" | "unstaged" } | null> {
+	const staged = await view.git(["diff", "--cached", "--no-color"]).catch(() => "");
 	if (staged.trim()) return { patch: cap(staged), source: "staged" };
 
-	const unstaged = await git(cwd, ["diff", "--no-color"]).catch(() => "");
-	const untracked = await git(cwd, ["ls-files", "--others", "--exclude-standard"]).catch(() => "");
+	const unstaged = await view.git(["diff", "--no-color", "--ignore-submodules=dirty"]).catch(() => "");
+	const untracked = await view.git(["ls-files", "--others", "--exclude-standard"]).catch(() => "");
 	const parts: string[] = [];
 	if (unstaged.trim()) parts.push(unstaged.trim());
 	if (untracked.trim()) {

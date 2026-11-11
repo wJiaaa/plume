@@ -12,27 +12,34 @@ import { END_OF_OPTIONS, git, mapLimit, MAX_BLOB_BYTES, MAX_FILES, run } from ".
 import { parseNumstat, parseStatusZ, statusBranch } from "./parse.ts";
 import { gitBranch, isGitRepo } from "./probe.ts";
 import { classifyRemote } from "./remote-state.ts";
+import { withView, type RepoView } from "./view.ts";
 
 /**
  * 有多少没提交，不建 diff。
  *
  * 输入框上方一直显示这个数，所以要便宜。和面板数法一样：同样从 `status -uall` 开始、同样截在 `MAX_FILES`、
  * 同样跳过超过 `MAX_BLOB_BYTES` 的文件——计数说 34k、点开的面板说 10k，就有一个在撒谎。
- * 只起一个进程：`--branch` 已经回答了「是不是仓库、哪个分支、有没有第一个提交」。
+ * status 只跑一次：`--branch` 已经回答了「是不是仓库、哪个分支、有没有第一个提交」。
  */
 export async function workspaceStat(cwd: string): Promise<WorkspaceStat> {
+	const none: WorkspaceStat = { branch: null, added: 0, removed: 0, files: 0 };
+	return (await withView(cwd, (view) => workspaceStatIn(view, none)).catch(() => null)) ?? none;
+}
+
+async function workspaceStatIn(view: RepoView, none: WorkspaceStat): Promise<WorkspaceStat> {
+	const { cwd } = view;
 	let status: string;
 	try {
-		status = await git(cwd, ["status", "--porcelain=v1", "-uall", "-z", "--branch"]);
+		status = await view.git(["status", "--porcelain=v1", "-uall", "-z", "--branch", "--ignore-submodules=dirty"]);
 	} catch {
-		return { branch: null, added: 0, removed: 0, files: 0 };
+		return none;
 	}
 	const parsed = parseStatusZ(status);
 	const { branch, born: hasHead } = statusBranch(parsed.header);
 	const entries = parsed.entries.slice(0, MAX_FILES);
 
 	// 跟踪的改动一次 `--numstat` 全拿到；二进制按 0 行算。
-	const tracked = hasHead ? await numstat(cwd, ["diff", "--numstat", "-z", "HEAD"]) : new Map<string, never>();
+	const tracked = hasHead ? await numstat(view, ["diff", "--numstat", "-z", "--ignore-submodules=dirty", "HEAD"]) : new Map<string, never>();
 
 	let added = 0;
 	let removed = 0;
@@ -57,12 +64,16 @@ export async function workspaceStat(cwd: string): Promise<WorkspaceStat> {
  * 结束都读。按上次获取时的远端分支算，这里不获取。没有上游（从没推过、游离）为空：没有距离可说。
  */
 export async function upstreamDistance(cwd: string): Promise<UpstreamDistance | null> {
+	return (await withView(cwd, upstreamDistanceIn).catch(() => null)) ?? null;
+}
+
+async function upstreamDistanceIn(view: RepoView): Promise<UpstreamDistance | null> {
 	const [upstream, counts] = await Promise.all([
-		git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).then(
+		view.git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).then(
 			(out) => out.trim(),
 			() => "",
 		),
-		git(cwd, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]).catch(() => ""),
+		view.git(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]).catch(() => ""),
 	]);
 	const [ahead, behind] = counts
 		.trim()
@@ -109,8 +120,8 @@ async function operationInProgress(cwd: string): Promise<GitOperation | null> {
 }
 
 /** `rev-list --count`；范围解析不了时为空。 */
-async function countCommits(cwd: string, range: string): Promise<number | null> {
-	const out = await git(cwd, ["rev-list", "--count", END_OF_OPTIONS, range]).catch(() => null);
+async function countCommits(view: RepoView, range: string): Promise<number | null> {
+	const out = await view.git(["rev-list", "--count", END_OF_OPTIONS, range]).catch(() => null);
 	if (out === null) return null;
 	const count = Number.parseInt(out.trim(), 10);
 	return Number.isFinite(count) ? count : null;
@@ -120,12 +131,13 @@ async function countCommits(cwd: string, range: string): Promise<number | null> 
  * 没有上游的分支有几个提交没推。只有远端已经有同名分支时才有得数（自己克隆后手建的分支、丢了跟踪配置）；
  * 没有就没有基准，答案是空而不是一个数。
  */
-async function unpushedWithoutUpstream(cwd: string, remote: string, branch: string): Promise<number | null> {
-	const exists = await git(cwd, ["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`])
+async function unpushedWithoutUpstream(view: RepoView, remote: string, branch: string): Promise<number | null> {
+	const exists = await view
+		.git(["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`])
 		.then(() => true)
 		.catch(() => false);
 	if (!exists) return null;
-	return countCommits(cwd, `${remote}/${branch}..HEAD`);
+	return countCommits(view, `${remote}/${branch}..HEAD`);
 }
 
 /**
@@ -147,11 +159,16 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		head: null,
 	};
 	if (!(await isGitRepo(cwd))) return empty;
+	return (await withView(cwd, (view) => gitStatusIn(view)).catch(() => null)) ?? empty;
+}
 
+async function gitStatusIn(view: RepoView): Promise<GitStatus> {
+	const { cwd } = view;
 	// 四个互不相关的问题一起问：一轮进行时每 1.5 秒跑一次，慢的是 status，另外三个和它重叠，不加延迟。
+	// 分支、未完成的操作、远端列表只读引用、标记文件和配置，在真实仓库上问；status 在视图里。
 	const [branch, porcelain, operation, remoteList] = await Promise.all([
 		gitBranch(cwd),
-		git(cwd, ["status", "--porcelain=v1", "-uall", "-z", "--branch"]).catch(() => ""),
+		view.git(["status", "--porcelain=v1", "-uall", "-z", "--branch", "--ignore-submodules=dirty"]).catch(() => ""),
 		operationInProgress(cwd),
 		git(cwd, ["remote"]).catch(() => ""),
 	]);
@@ -165,7 +182,10 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 	const aheadMatch = header.match(/ahead (\d+)/);
 	const behindMatch = header.match(/behind (\d+)/);
 
-	const [stagedStat, unstagedStat] = await Promise.all([numstat(cwd, ["diff", "--numstat", "-z", "--cached"]), numstat(cwd, ["diff", "--numstat", "-z"])]);
+	const [stagedStat, unstagedStat] = await Promise.all([
+		numstat(view, ["diff", "--numstat", "-z", "--cached"]),
+		numstat(view, ["diff", "--numstat", "-z", "--ignore-submodules=dirty"]),
+	]);
 
 	const staged: GitStatusFile[] = [];
 	const unstaged: GitStatusFile[] = [];
@@ -204,12 +224,13 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 	// 只有 no-upstream 且挑得出远端时要多问一次，常见的两种情况不多花。
 	let unpushed: number | null = null;
 	if (standing.state === "tracking") unpushed = ahead;
-	else if (standing.state === "no-upstream" && standing.remote && branch) unpushed = await unpushedWithoutUpstream(cwd, standing.remote, branch);
+	else if (standing.state === "no-upstream" && standing.remote && branch) unpushed = await unpushedWithoutUpstream(view, standing.remote, branch);
 
 	// 游离时 HEAD 指着哪，面板好说点比「不在分支上」更有用的话。只在没有分支名时读。
 	const head =
 		standing.state === "detached"
-			? await git(cwd, ["rev-parse", "--short", "HEAD"])
+			? await view
+					.git(["rev-parse", "--short", "HEAD"])
 					.then((out) => out.trim() || null)
 					.catch(() => null)
 			: null;
@@ -233,8 +254,8 @@ function counts(stat: { added: number; removed: number } | undefined): { added: 
 	return { added: stat?.added ?? 0, removed: stat?.removed ?? 0 };
 }
 
-async function numstat(cwd: string, args: string[]): Promise<Map<string, { added: number; removed: number }>> {
-	return parseNumstat(await git(cwd, args).catch(() => ""));
+async function numstat(view: RepoView, args: string[]): Promise<Map<string, { added: number; removed: number }>> {
+	return parseNumstat(await view.git(args).catch(() => ""));
 }
 
 /** 没跟踪的文件没有另一边可比，每一行都算新增。 */

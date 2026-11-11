@@ -9,24 +9,30 @@ import { open } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { DiffBlob, DiffFile, DiffHunk, FileStatus, WorkspaceDiff } from "../api.ts";
 import { readBlobs, type BlobRead } from "./blobs.ts";
-import { git, gitBuffer, mapLimit, MAX_BLOB_BYTES, MAX_FILES } from "./exec.ts";
+import { mapLimit, MAX_BLOB_BYTES, MAX_FILES } from "./exec.ts";
 import { computeDiff } from "./line-diff.ts";
 import { parseStatusZ } from "./parse.ts";
 import { gitBranch, isGitRepo } from "./probe.ts";
+import { withView, type RepoView } from "./view.ts";
 
 /**
  * 没提交的改动，按面板显示的样子。`status` 给文件列表，两边内容一边来自 `cat-file`、一边来自工作区，
  * hunk 在这里算。`base` 为 `index` 时只看没暂存的部分（暂存区对工作区）。
  */
 export async function collectWorkspaceDiff(cwd: string, base: "head" | "index" = "head"): Promise<WorkspaceDiff> {
-	if (!(await isGitRepo(cwd))) return { files: [], added: 0, removed: 0, branch: null };
-
+	const empty: WorkspaceDiff = { files: [], added: 0, removed: 0, branch: null };
+	if (!(await isGitRepo(cwd))) return empty;
 	const branch = await gitBranch(cwd);
+	return (await withView(cwd, (view) => workspaceDiffIn(view, base, branch)).catch(() => null)) ?? empty;
+}
+
+async function workspaceDiffIn(view: RepoView, base: "head" | "index", branch: string | null): Promise<WorkspaceDiff> {
+	const { cwd } = view;
 	/*
 	 * `-uall`：默认情况下整个没跟踪的目录会被折成一行 `src/`，面板只能说「这个目录没跟踪」——而一个新功能的
 	 * 一堆新文件正是最该看的；改动计数也会和面板对不上，因为计数走的是真实的文件列表。
 	 */
-	const status = await git(cwd, ["status", "--porcelain=v1", "-uall", "-z"]).catch(() => "");
+	const status = await view.git(["status", "--porcelain=v1", "-uall", "-z", "--ignore-submodules=dirty"]).catch(() => "");
 
 	const changed: { path: string; beforePath: string; kind: FileStatus }[] = [];
 	for (const { code, path, source } of parseStatusZ(status).entries) {
@@ -37,7 +43,7 @@ export async function collectWorkspaceDiff(cwd: string, base: "head" | "index" =
 
 	// 两边各一批，而不是每个文件两次读：提交的一边走一次 `cat-file --batch`，工作区一边是读文件，重叠着读。
 	const heads = await readBlobs(
-		cwd,
+		view,
 		changed.map((entry) => (entry.kind === "added" || entry.kind === "untracked" ? "" : `${base === "head" ? "HEAD" : ""}:${entry.beforePath}`)),
 	);
 	const working = await mapLimit(changed, (entry) => (entry.kind === "deleted" ? Promise.resolve(blank) : readWorking(cwd, entry.path)));
@@ -182,7 +188,9 @@ export async function readDiffBlob(cwd: string, path: string, side: "head" | "wo
 	const inside = resolveInside(cwd, path);
 	if (!inside) return null;
 	const buffer =
-		side === "head" ? await gitBuffer(cwd, ["show", `HEAD:${path}`]).catch(() => null) : ((await readCapped(inside, MAX_PREVIEW_BYTES))?.buffer ?? null);
+		side === "head"
+			? await withView(cwd, (view) => view.gitBuffer(["show", `HEAD:${path}`])).catch(() => null)
+			: ((await readCapped(inside, MAX_PREVIEW_BYTES))?.buffer ?? null);
 	if (!buffer || buffer.length === 0 || buffer.length > MAX_PREVIEW_BYTES) return null;
 	return { dataUrl: `data:${type};base64,${buffer.toString("base64")}`, bytes: buffer.length };
 }

@@ -199,6 +199,6 @@ export interface GitApi {
 	setCommitLanguage(id: string, call: CallContext): Promise<void>;
 	push(cwd: string, call: CallContext): Promise<RemoteResult>;
 	pull(cwd: string, call: CallContext): Promise<RemoteResult>;
-	/** `fetch --prune`，让 ahead / behind 说的是远端现在的样子；`quiet` 是面板自己在后台取，超时更短。 */
+	/** `fetch --prune`，让 ahead / behind 说的是远端现在的样子；`quiet` 是面板自己在后台取，超时更短，在视图里取、不执行仓库配置里的程序。 */
 	fetch(cwd: string, quiet: boolean, call: CallContext): Promise<RemoteResult>;
 }

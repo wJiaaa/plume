@@ -6,7 +6,8 @@
  * 根本不读——否则几个大的生成文件会先被整个读进内存再因为太大扔掉。
  */
 
-import { MAX_BLOB_BYTES, spawnGit } from "./exec.ts";
+import { MAX_BLOB_BYTES } from "./exec.ts";
+import type { RepoView } from "./view.ts";
 
 /**
  * 一个 blob，值得要的那部分。整条为空：那个提交里没有这个路径；`content` 为空：有，但太大不比。
@@ -21,9 +22,9 @@ export interface BlobRead {
 const MAX_BATCH_BYTES = 64 * 1024 * 1024;
 
 /** 修订一行一个从 stdin 进去，所以用 `spawnGit`；路径里带换行会破坏分帧，调用方要先滤掉。 */
-function catFile(cwd: string, revs: string[], args: string[]): Promise<Buffer> {
+function catFile(view: RepoView, revs: string[], args: string[]): Promise<Buffer> {
 	return new Promise((resolve, reject) => {
-		const child = spawnGit(cwd, ["cat-file", ...args, "--buffer"]);
+		const child = view.spawnGit(["cat-file", ...args, "--buffer"]);
 		const chunks: Buffer[] = [];
 		let size = 0;
 		let done = false;
@@ -91,7 +92,7 @@ function parseBlobs(out: Buffer, count: number): (Buffer | null)[] {
  * 按顺序读出每个修订（`HEAD:src/main.ts`、`:staged.ts`、`abc123:old.ts`，`git show` 认的都行）。
  * 空字符串表示调用方已知没有这一边，不发；带换行的路径没法分帧，回空，不为它放弃整批。
  */
-export async function readBlobs(cwd: string, revs: string[]): Promise<(BlobRead | null)[]> {
+export async function readBlobs(view: RepoView, revs: string[]): Promise<(BlobRead | null)[]> {
 	const out: (BlobRead | null)[] = revs.map(() => null);
 	const asked: number[] = [];
 	for (const [i, rev] of revs.entries()) if (rev && !rev.includes("\n")) asked.push(i);
@@ -99,7 +100,7 @@ export async function readBlobs(cwd: string, revs: string[]): Promise<(BlobRead 
 
 	const sizes = parseSizes(
 		await catFile(
-			cwd,
+			view,
 			asked.map((i) => revs[i] as string),
 			["--batch-check"],
 		),
@@ -119,7 +120,7 @@ export async function readBlobs(cwd: string, revs: string[]): Promise<(BlobRead 
 
 	const blobs = parseBlobs(
 		await catFile(
-			cwd,
+			view,
 			wanted.map((i) => revs[i] as string),
 			["--batch"],
 		),

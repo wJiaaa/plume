@@ -14,16 +14,14 @@ import { gitBranch, isGitRepo } from "./probe.ts";
 import { defaultRemote } from "./remote-state.ts";
 import { say } from "./say.ts";
 import { EMPTY_TREE, LOG_FORMAT } from "./status.ts";
+import { fetchInView, withView, type RepoView } from "./view.ts";
 
 export async function gitLog(cwd: string, limit = 60, ref?: string): Promise<GitCommit[]> {
 	if (!(await isGitRepo(cwd))) return [];
-	const out = await git(cwd, [
-		"log",
-		"--topo-order",
-		`--max-count=${Math.min(limit, 300)}`,
-		`--format=${LOG_FORMAT}`,
-		...(ref ? [END_OF_OPTIONS, ref] : []),
-	]).catch(() => "");
+	const out =
+		(await withView(cwd, (view) =>
+			view.git(["log", "--topo-order", `--max-count=${Math.min(limit, 300)}`, `--format=${LOG_FORMAT}`, ...(ref ? [END_OF_OPTIONS, ref] : [])]),
+		).catch(() => null)) ?? "";
 	return out
 		.split("\x1e")
 		.map((record) => record.replace(/^\n/, ""))
@@ -45,18 +43,29 @@ export async function gitLog(cwd: string, limit = 60, ref?: string): Promise<Git
 		});
 }
 
-/** `--name-status -z` 里改了哪些文件。得边走边读：重命名占三个记号，别的占两个。 */
-function parseNameStatus(names: string): { path: string; status: FileStatus }[] {
-	const wanted: { path: string; status: FileStatus }[] = [];
+interface NamedChange {
+	path: string;
+	/** 「之前」那一边在哪个路径：重命名、复制是来处，别的和 `path` 相同。 */
+	source: string;
+	status: FileStatus;
+}
+
+/**
+ * `--name-status -z` 里改了哪些文件。得边走边读：重命名（`R`）和复制（`C`，`diff.renames=copies` 时出现）占三个记号——
+ * 来处、去处，别的占两个。复制出来的是一个新路径，按新增列；内容的「之前」仍是来处，和 `--numstat` 数的一致。
+ */
+function parseNameStatus(names: string): NamedChange[] {
+	const wanted: NamedChange[] = [];
 	const tokens = names.split("\0").filter(Boolean);
 	for (let i = 0; i < tokens.length && wanted.length < MAX_FILES; i++) {
 		const code = tokens[i] as string;
 		if (!/^[A-Z]/.test(code)) continue;
-		const isRename = code.startsWith("R");
-		const path = tokens[isRename ? i + 2 : i + 1];
-		i += isRename ? 2 : 1;
-		if (!path) continue;
-		wanted.push({ path, status: classify(code[0] ?? "") });
+		const twoPaths = /^[RC]/.test(code);
+		const source = tokens[i + 1];
+		const path = tokens[twoPaths ? i + 2 : i + 1];
+		i += twoPaths ? 2 : 1;
+		if (!path || !source) continue;
+		wanted.push({ path, source, status: code.startsWith("C") ? "added" : classify(code[0] ?? "") });
 	}
 	return wanted;
 }
@@ -66,11 +75,10 @@ function parseNameStatus(names: string): { path: string; status: FileStatus }[] 
  * 面板先拿这个列出来，内容随后到，不会先显示占位再从它的高度跳到真实高度。行数来自 `--numstat`，git 报二进制
  * 的文件标出来，不硬写一个数。
  */
-async function diffSummary(cwd: string, base: string, head: string): Promise<{ files: DiffFile[] }> {
-	if (!(await isGitRepo(cwd))) return { files: [] };
+async function diffSummary(view: RepoView, base: string, head: string): Promise<{ files: DiffFile[] }> {
 	const [names, stats] = await Promise.all([
-		git(cwd, ["diff", "--name-status", "-z", END_OF_OPTIONS, base, head]).catch(() => ""),
-		git(cwd, ["diff", "--numstat", "-z", END_OF_OPTIONS, base, head]).catch(() => ""),
+		view.git(["diff", "--name-status", "-z", END_OF_OPTIONS, base, head]).catch(() => ""),
+		view.git(["diff", "--numstat", "-z", END_OF_OPTIONS, base, head]).catch(() => ""),
 	]);
 	const numbers = parseNumstat(stats);
 	const files = parseNameStatus(names).map(({ path, status }): DiffFile => {
@@ -80,15 +88,17 @@ async function diffSummary(cwd: string, base: string, head: string): Promise<{ f
 	return { files };
 }
 
-async function parentOf(cwd: string, sha: string): Promise<string> {
-	return git(cwd, ["rev-parse", "--verify", `${sha}^`])
+async function parentOf(view: RepoView, sha: string): Promise<string> {
+	return view
+		.git(["rev-parse", "--verify", `${sha}^`])
 		.then((out) => out.trim())
 		.catch(() => EMPTY_TREE);
 }
 
 /** 一个提交的文件列表，不带内容。和 `commitDiff` 配对。 */
 export async function commitDiffSummary(cwd: string, sha: string): Promise<{ files: DiffFile[] }> {
-	return diffSummary(cwd, await parentOf(cwd, sha), sha);
+	if (!(await isGitRepo(cwd))) return { files: [] };
+	return (await withView(cwd, async (view) => diffSummary(view, await parentOf(view, sha), sha)).catch(() => null)) ?? { files: [] };
 }
 
 /**
@@ -96,31 +106,41 @@ export async function commitDiffSummary(cwd: string, sha: string): Promise<{ fil
  * `head` 为空表示暂存区，暂存视图的内容就这么来。
  */
 export async function diffRefs(cwd: string, base: string, head: string | null): Promise<RefDiff> {
-	if (!(await isGitRepo(cwd))) return { files: [], added: 0, removed: 0 };
+	const empty: RefDiff = { files: [], added: 0, removed: 0 };
+	if (!(await isGitRepo(cwd))) return empty;
+	return (await withView(cwd, (view) => diffRefsIn(view, base, head)).catch(() => null)) ?? empty;
+}
+
+async function diffRefsIn(view: RepoView, base: string, head: string | null): Promise<RefDiff> {
 	const range = head ? [END_OF_OPTIONS, base, head] : ["--cached", END_OF_OPTIONS, base];
-	const names = await git(cwd, ["diff", "--name-status", "-z", ...range]).catch(() => "");
+	const names = await view.git(["diff", "--name-status", "-z", ...range]).catch(() => "");
 	const wanted = parseNameStatus(names);
 
-	// 两边各一批：「之前」是比较的起点，「之后」是另一个引用，没有就是暂存区（`:path`）。空串表示没有这一边。
+	// 两边各一批：「之前」是比较的起点（改了名的读来处），「之后」是另一个引用，没有就是暂存区（`:path`）。空串表示没有这一边。
 	const befores = await readBlobs(
-		cwd,
-		wanted.map(({ path, status }) => (status === "added" ? "" : `${head ? base : "HEAD"}:${path}`)),
+		view,
+		wanted.map(({ path, source, status }) => (status === "added" && source === path ? "" : `${head ? base : "HEAD"}:${source}`)),
 	);
 	const afters = await readBlobs(
-		cwd,
+		view,
 		wanted.map(({ path, status }) => (status === "deleted" ? "" : head ? `${head}:${path}` : `:${path}`)),
 	);
 
 	const files: DiffFile[] = [];
 	let added = 0;
 	let removed = 0;
-	wanted.forEach(({ path, status }, i) => {
-		const before = textOf(befores[i] ?? null, status === "added");
-		const after = textOf(afters[i] ?? null, status === "deleted");
+	wanted.forEach(({ path, source, status }, i) => {
+		const before = sideOf(befores[i] ?? null, status === "added" && source === path);
+		const after = sideOf(afters[i] ?? null, status === "deleted");
 		// 太大不比的整个丢掉，不报一半。
 		if (before === null || after === null) return;
+		// 和工作区的 diff 一样：二进制照样列出来、标上，没有 hunk，不把 PNG 头当几行文字比。
+		if (before.binary || after.binary) {
+			files.push({ path, status, added: 0, removed: 0, hunks: [], binary: true, bytes: after.bytes || before.bytes });
+			return;
+		}
 		// 行数从 diff 本身数，总数和画出来的 hunk 永远对得上。
-		const diff = computeDiff(before, after);
+		const diff = computeDiff(before.text, after.text);
 		added += diff.added;
 		removed += diff.removed;
 		files.push({ path, status, added: diff.added, removed: diff.removed, hunks: capHunks(diff.hunks) });
@@ -128,15 +148,22 @@ export async function diffRefs(cwd: string, base: string, head: string | null): 
 	return { files, added, removed };
 }
 
-/** 比较的一边当文字：不存在是空串，太大是 null——前者是 diff 的一边，后者让文件从列表里拿掉。 */
-function textOf(read: BlobRead | null, absent: boolean): string | null {
-	if (absent || !read) return "";
-	return read.content ? read.content.toString("utf8") : null;
+/**
+ * 比较的一边：不存在是空的文字，太大是 null——前者是 diff 的一边，后者让文件从列表里拿掉。有 NUL 字节就是二进制，
+ * 和 `diff.ts` 的 `sideOf`、git 自己的判断一样。
+ */
+function sideOf(read: BlobRead | null, absent: boolean): { text: string; binary: boolean; bytes: number } | null {
+	if (absent || !read) return { text: "", binary: false, bytes: 0 };
+	if (!read.content) return null;
+	const binary = read.content.includes(0);
+	return { text: binary ? "" : read.content.toString("utf8"), binary, bytes: read.content.length };
 }
 
 /** 一个提交自己的 diff：对父提交，第一个提交对空树。 */
 export async function commitDiff(cwd: string, sha: string): Promise<RefDiff> {
-	return diffRefs(cwd, await parentOf(cwd, sha), sha);
+	const empty: RefDiff = { files: [], added: 0, removed: 0 };
+	if (!(await isGitRepo(cwd))) return empty;
+	return (await withView(cwd, async (view) => diffRefsIn(view, await parentOf(view, sha), sha)).catch(() => null)) ?? empty;
 }
 
 export async function createBranch(cwd: string, name: string, from?: string): Promise<OpResult> {
@@ -153,8 +180,8 @@ export async function deleteBranch(cwd: string, name: string, force = false): Pr
  * 每种远端调用最多等多久。后台悄悄的获取绝不能被感觉到，很快放弃；人按了按钮的获取可以慢，他看着、能取消；
  * 推送、拉取在大仓库上可能要几分钟，上限只是不让一个永不回答的主机把面板一直占着。
  */
-export const QUIET_FETCH_TIMEOUT_MS = 8_000;
-export const FETCH_TIMEOUT_MS = 20_000;
+const QUIET_FETCH_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS = 20_000;
 const PUSH_PULL_TIMEOUT_MS = 120_000;
 
 async function remoteNames(cwd: string): Promise<string[]> {
@@ -191,14 +218,13 @@ export async function pullBranch(cwd: string, { signal }: { signal?: AbortSignal
 /**
  * 问远端现在有什么，让 ahead / behind 说的是现在。没有远端时直接说成功、什么都不跑：`git fetch` 在那里什么都不做
  * 也返回 0，报成「刷新成功」会让人以为屏幕上的数刚被确认过。
+ * `quiet` 是面板自己发起的那种（没人点）：在视图里获取，不执行仓库配置里的程序，见 `view.ts`。
  */
-export async function fetchRemotes(
-	cwd: string,
-	{ signal, timeoutMs = FETCH_TIMEOUT_MS }: { signal?: AbortSignal; timeoutMs?: number } = {},
-): Promise<RemoteResult> {
+export async function fetchRemotes(cwd: string, { signal, quiet = false }: { signal?: AbortSignal; quiet?: boolean } = {}): Promise<RemoteResult> {
 	const remotes = await remoteNames(cwd);
 	if (remotes.length === 0) return { ok: true };
-	return runRemote(cwd, ["fetch", "--prune"], { timeoutMs, signal });
+	if (quiet) return fetchInView(cwd, { signal, timeoutMs: QUIET_FETCH_TIMEOUT_MS });
+	return runRemote(cwd, ["fetch", "--prune"], { timeoutMs: FETCH_TIMEOUT_MS, signal });
 }
 
 /** 提交暂存了的：正是面板显示为已暂存的那些。 */

@@ -19,17 +19,16 @@ import {
 	createBranch,
 	deleteBranch,
 	diffRefs,
-	FETCH_TIMEOUT_MS,
 	fetchRemotes,
 	gitLog,
 	pullBranch,
 	pushBranch,
-	QUIET_FETCH_TIMEOUT_MS,
 } from "./git/history.ts";
 import { gitBranch, probeRepo } from "./git/probe.ts";
 import { initRepo, listRepos, listWorktrees } from "./git/repos.ts";
 import { say, setLocaleSource } from "./git/say.ts";
 import { discardPaths, gitStatus, stagePaths, unstagePaths, upstreamDistance, workspaceStat } from "./git/status.ts";
+import { setViewsDir } from "./git/view.ts";
 import { serveWorktrees } from "./worktree/serve.ts";
 
 const COMMIT_LANGUAGE_IDS = new Set(["zh", "en", "ja", "ko", "es", "fr", "de", "pt", "ru"]);
@@ -42,6 +41,8 @@ export default {
 	name: "plume.git",
 	apply(ctx) {
 		setLocaleSource(() => ctx.locale());
+		// 读仓库用的视图放在插件自己的数据目录：沙箱里的命令写不到这里（见 `git/view.ts`）。
+		setViewsDir(ctx.dataDir);
 		const settingsFile = join(ctx.dataDir, "settings.json");
 
 		const readSettings = async (): Promise<{ commitLanguage?: unknown }> => {
@@ -106,7 +107,7 @@ export default {
 			},
 			push: (cwd, call) => pushBranch(cwd, { signal: call.signal }),
 			pull: (cwd, call) => pullBranch(cwd, { signal: call.signal }),
-			fetch: (cwd, quiet, call) => fetchRemotes(cwd, { signal: call.signal, timeoutMs: quiet ? QUIET_FETCH_TIMEOUT_MS : FETCH_TIMEOUT_MS }),
+			fetch: (cwd, quiet, call) => fetchRemotes(cwd, { signal: call.signal, quiet }),
 		};
 		ctx.serve({ ...api, ...serveWorktrees(ctx) });
 	},

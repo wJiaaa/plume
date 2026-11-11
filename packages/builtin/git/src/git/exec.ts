@@ -5,7 +5,7 @@
  * 写的把成没成当值返回。git 在 stderr 上说很多不是错误的话，所以只看退出码。
  */
 
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, win32 } from "node:path";
 import { promisify } from "node:util";
@@ -51,6 +51,8 @@ function gitEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	env.LANGUAGE = "en";
 	// 工作树的合并、同步不开编辑器等人关：这里没有人能去关它。
 	env.GIT_EDITOR = "true";
+	// 面板每隔一会儿跑一次 status：不顺手刷新 index，免得拿着 index.lock 和 agent 正在跑的 `git commit` 撞上。
+	env.GIT_OPTIONAL_LOCKS = "0";
 
 	// Windows 的环境变量不分大小写，通常叫 `Path`；展开成普通对象后得自己找是哪个键。
 	const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
@@ -76,6 +78,21 @@ function remoteGitEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 /** 只建一次：`process.env` 不会变，每次重建会落在两百个文件的 diff 里每一次 `git show` 上。 */
 const GIT_ENV = gitEnvironment(process.env);
 const REMOTE_GIT_ENV = remoteGitEnvironment(process.env);
+
+/**
+ * 在真实仓库上自动跑的只有这几种：只读引用、目录位置，不读 index、不读对象内容（别的读在视图里跑，见 `view.ts`）。
+ * 它们仍可能因为一个引用指着的对象不在而去连 promisor 远端（`show-ref --verify` 会查对象在不在），远端的地址和
+ * 传输方式写在沙箱改得到的配置里，所以对它们关掉惰性拉取：缺对象就是失败，不替谁去连网。
+ */
+const METADATA_COMMANDS = new Set(["rev-parse", "symbolic-ref", "for-each-ref", "show-ref"]);
+const METADATA_GIT_ENV = { ...GIT_ENV, GIT_NO_LAZY_FETCH: "1" };
+
+/** 视图里跑 git 的环境：继承来的 `GIT_*` 一个不留，只有调用方明确设的那些；语言、PATH 和别处一样。 */
+export function isolatedEnvironment(vars: Record<string, string>): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = {};
+	for (const [key, value] of Object.entries(GIT_ENV)) if (!/^GIT_/i.test(key)) env[key] = value;
+	return { ...env, ...vars };
+}
 
 /**
  * 放在每个作为位置参数交给 git 的引用、分支、标签前面。
@@ -147,7 +164,7 @@ export function gitProgram(
 /** 找到就留着；没找到下次再找，装上 git 不用重启。 */
 let resolvedGit: string | null = null;
 
-function gitFile(): string {
+export function gitFile(): string {
 	resolvedGit ??= gitProgram();
 	if (resolvedGit) return resolvedGit;
 	// 照启动器的说法写，`probeRepo` 据此认出「根本没有 git」。
@@ -156,18 +173,8 @@ function gitFile(): string {
 
 /** 每处起 git 都带 `windowsHide`：agent 进程没有控制台，Windows 上不带它，面板每刷新一次就闪一串黑窗口。 */
 export async function git(cwd: string, args: string[], { timeoutMs }: { timeoutMs?: number } = {}): Promise<string> {
-	const { stdout } = await execFileAsync(gitFile(), args, { cwd, maxBuffer: 32 * 1024 * 1024, env: GIT_ENV, timeout: timeoutMs, windowsHide: true });
-	return stdout;
-}
-
-/** 要往 stdin 写的那一个调用（`cat-file --batch`）用；环境和别处一样，不然继承来的 `GIT_DIR` 会让它读别的仓库。 */
-export function spawnGit(cwd: string, args: string[]): ChildProcessWithoutNullStreams {
-	return spawn(gitFile(), args, { cwd, env: GIT_ENV, windowsHide: true });
-}
-
-/** 不替调用方决定回答是不是文字：`git show HEAD:logo.png` 回的是 PNG，按 UTF-8 解码就成了乱码。 */
-export async function gitBuffer(cwd: string, args: string[]): Promise<Buffer> {
-	const { stdout } = await execFileAsync(gitFile(), args, { cwd, maxBuffer: 32 * 1024 * 1024, encoding: "buffer", env: GIT_ENV, windowsHide: true });
+	const env = METADATA_COMMANDS.has(args[0] ?? "") ? METADATA_GIT_ENV : GIT_ENV;
+	const { stdout } = await execFileAsync(gitFile(), args, { cwd, maxBuffer: 32 * 1024 * 1024, env, timeout: timeoutMs, windowsHide: true });
 	return stdout;
 }
 
@@ -204,13 +211,18 @@ export const succeeds = (cwd: string, args: string[]) =>
  * - **要能停**：不答也不拒的主机会把 `fetch` 卡到 TCP 放弃为止，面板在它跑的时候禁着别的按钮。所以有超时，也接 `signal`。
  * - **不能等人**：见 `remoteGitEnvironment`，另加 `credential.interactive=false`。
  * 不设 `GIT_ASKPASS`：指向一个什么都不答的程序会让 git 拿空用户名去认证，失败原因就从「没地方问你」变成「凭据被拒」，说错了原因。
+ * `env` 给视图里的获取用（`view.ts`），它自己带着不等人的那几个变量。
  */
-export async function runRemote(cwd: string, args: string[], { timeoutMs, signal }: { timeoutMs: number; signal?: AbortSignal }): Promise<RemoteResult> {
+export async function runRemote(
+	cwd: string,
+	args: string[],
+	{ timeoutMs, signal, env = REMOTE_GIT_ENV }: { timeoutMs: number; signal?: AbortSignal; env?: NodeJS.ProcessEnv },
+): Promise<RemoteResult> {
 	try {
 		await execFileAsync(gitFile(), ["-c", "credential.interactive=false", ...args], {
 			cwd,
 			maxBuffer: 32 * 1024 * 1024,
-			env: REMOTE_GIT_ENV,
+			env,
 			timeout: timeoutMs,
 			signal,
 			windowsHide: true,

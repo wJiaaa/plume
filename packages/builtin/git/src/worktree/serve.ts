@@ -121,6 +121,7 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 		const made = await createSessionWorktree(input.cwd, input.sessionId, {
 			root: resolveRoot(settings.rootDir, defaultRoot),
 			fetchFirst: settings.fetchFirst,
+			signal: input.signal,
 		});
 		if ("error" in made) {
 			// i18n-exempt：日志
