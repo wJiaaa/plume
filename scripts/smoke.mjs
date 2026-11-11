@@ -19,7 +19,7 @@
  * 快照按仓库的目录结构摆，宿主从 apps/desktop 往上找内置插件的路子不用改；macOS 上是 APFS 的克隆，几乎不占时间和空间。跑完删掉。
  *
  * 各段要用的市场插件从市场装：缺省是线上的市场（要联网），设了 PLUME_MARKET_URL 就用它（比如插件仓库在本机起的市场，
- * 联调还没发布的插件）。`ssh` 段要用插件仓库里的假 SSH 服务，设了 PLUME_PLUGINS_DIR=<插件仓库>/plugins 才跑。
+ * 联调还没发布的插件）。
  */
 
 import { spawn } from "node:child_process";
@@ -39,8 +39,6 @@ import { changedSuites } from "./smoke-changed.mjs";
 const SMOKE_ENTRY = "apps/desktop/src/main/smoke.ts";
 /** 主流程里已经走过同样的检查，单独跑只用来复现。 */
 const REPRO_ONLY = new Set(["files"]);
-/** 要设 PLUME_PLUGINS_DIR 才能跑的段：没设时跑全部也跳过它们。 */
-const NEEDS_PLUGINS_DIR = new Set(["ssh"]);
 /** 用时长的先起，整轮结束得早；没列的排在后面。 */
 const LONG_FIRST = ["main", "environment", "environment-summary", "market", "desktop-compat", "native-ui", "conversations", "session-menu"];
 /** 大半时间在等定时器（定时唤醒、摘要的一分钟），几乎不占算力：不占 PLUME_SMOKE_JOBS 的名额。 */
@@ -95,12 +93,8 @@ async function declaredSuites() {
 
 function pickSuites(only, known) {
 	const suite = (name) => ({ name, clipboard: CLIPBOARD.has(name), idle: IDLE.has(name) });
-	const all = known.filter((name) => !REPRO_ONLY.has(name) && (process.env.PLUME_PLUGINS_DIR || !NEEDS_PLUGINS_DIR.has(name)));
-	if (!only) {
-		const skipped = known.filter((name) => NEEDS_PLUGINS_DIR.has(name) && !all.includes(name));
-		if (skipped.length > 0) console.log(`没设 PLUME_PLUGINS_DIR，跳过 ${skipped.join("、")}`);
-		return all.map(suite);
-	}
+	const all = known.filter((name) => !REPRO_ONLY.has(name));
+	if (!only) return all.map(suite);
 	if (only === "changed") {
 		const { suites, reasons, base, count } = changedSuites(repo, SMOKE_ENTRY, all);
 		console.log(`相对 ${base} 改了 ${count} 个文件，挑出 ${suites.length} 段：`);

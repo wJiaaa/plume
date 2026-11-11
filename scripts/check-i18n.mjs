@@ -72,8 +72,6 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-skin-studio.ts",
 	// 拉取请求冒烟只访问本机假服务，中文选择器和断言不属于产品文案。
 	"apps/desktop/src/main/smoke-pull-requests.ts",
-	// SSH 冒烟只连本机假服务，中文选择器、假模型回答和断言不属于产品文案。
-	"apps/desktop/src/main/smoke-ssh.ts",
 	// 应用更新冒烟按中文界面找按钮、读状态，断言是写给开发者的。
 	"apps/desktop/src/main/smoke-update.ts",
 	// 分叉、编辑重发、撤回的冒烟按中文界面找按钮，断言是写给开发者的。

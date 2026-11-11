@@ -58,7 +58,6 @@ import { checkUpdate } from "./smoke-update.ts";
 import { checkBackgroundJob } from "./smoke-background-job.ts";
 import { checkEnvironment } from "./smoke-environment.ts";
 import { checkPeers } from "./smoke-peers.ts";
-import { checkSsh } from "./smoke-ssh.ts";
 import { checkSpawnSession } from "./smoke-spawn-session.ts";
 import { checkHooks } from "./smoke-hooks.ts";
 import { checkBrowser, type ModelOverride } from "./smoke-browser.ts";
@@ -913,16 +912,6 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "peers") {
 			await checkPeers({ window, agent, plugin, outDir, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "peers" }));
-			window.webContents.debugger.detach();
-			await shutdown();
-			await model.close();
-			app.exit(0);
-			return;
-		}
-
-		if (process.env.PLUME_SMOKE_ONLY === "ssh") {
-			await checkSsh({ window, agent, plugin, outDir, setModel: (next) => (override = next) });
-			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "ssh" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();
