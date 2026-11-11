@@ -1006,7 +1006,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		if (process.env.PLUME_SMOKE_ONLY === "quote-side-chat") {
 			const options = { window, outDir, page, until, click, capture, setModel: (next: ModelOverride | undefined) => (override = next) };
-			await prepareQuoteSideChat({ ...options, agent, plugin });
+			await prepareQuoteSideChat(options);
 			await checkQuoteSideChat(options);
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "quote-side-chat" }));
 			window.webContents.debugger.detach();
@@ -1018,7 +1018,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		if (process.env.PLUME_SMOKE_ONLY === "queue") {
 			const options = { window, outDir, page, until, click, capture, setModel: (next: ModelOverride | undefined) => (override = next) };
-			await prepareQuoteSideChat({ ...options, agent, plugin });
+			await prepareQuoteSideChat(options);
 			await checkQueueActions(options);
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "queue" }));
 			window.webContents.debugger.detach();
@@ -1678,10 +1678,10 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 6. 插件作者的路子：应用生成的 plume-plugin 用应用自己的二进制跑，装进去的插件不重启就加载。
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
 
-		// 子 Agent、侧边聊天：都是市场里的插件，经 plume-plugin 装上、当场加载，跑在子会话里。主 Agent 派活给子 Agent，子 Agent 的 write 要确认，
-		// 审批卡压在主输入框上方、标明是哪个子 Agent 问的；跑完点工具卡片上的 ↗，子 Agent 面板画出它的全过程。
-		// 再敲 `/btw 问题`：这句话不进主对话，新开一格侧边聊天，回答画在那里。
-		for (const name of ["subagents", "side-chat"]) {
+		// 子 Agent 是市场里的插件，经 plume-plugin 装上、当场加载；侧边聊天是内置插件，随应用加载。两者都跑在子会话里。
+		// 主 Agent 派活给子 Agent，子 Agent 的 write 要确认，审批卡压在主输入框上方、标明是哪个子 Agent 问的；
+		// 跑完点工具卡片上的 ↗，子 Agent 面板画出它的全过程。再敲 `/btw 问题`：这句话不进主对话，新开一格侧边聊天，回答画在那里。
+		for (const name of ["subagents"]) {
 			await plugin.install(name);
 			await waitFor(async () => (await agent.plugins()).some((status) => status.key === name && status.state === "active"), `装上 ${name} 插件`);
 		}

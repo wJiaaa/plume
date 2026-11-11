@@ -45,11 +45,11 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 
 ## 内置插件
 
-随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、用量与状态（`plume.status`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、密钥加密（`plume.secrets`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、文档预览（`plume.documents`）。
+随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、用量与状态（`plume.status`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、密钥加密（`plume.secrets`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）。
 
 ## 市场插件
 
-终端、浏览器、网页预览、原生界面块、定时任务、计划模式、子智能体、侧边聊天、会话互通、代码审阅、钩子、记忆、语言服务、索引库、下一步建议、生图与画廊、屏幕截图、使用统计、会话摘要、拉取请求、SSH、换肤工坊、IM 机器人。各自的行为见对应模块文件。
+终端、浏览器、网页预览、原生界面块、定时任务、计划模式、子智能体、会话互通、代码审阅、钩子、记忆、语言服务、索引库、下一步建议、生图与画廊、屏幕截图、使用统计、会话摘要、拉取请求、SSH、换肤工坊、IM 机器人。各自的行为见对应模块文件。
 
 ### IM 机器人
 

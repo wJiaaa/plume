@@ -1,26 +1,12 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import type { Remote } from "@plume/rpc";
 import { BrowserWindow } from "electron";
-import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
 import { windowClosed } from "./smoke-panels.ts";
 
-/** 专项入口只准备主会话、一个其他面板和侧聊，复用完整冒烟的同一组断言。 */
-export async function prepareQuoteSideChat(
-	options: Parameters<typeof checkQuoteSideChat>[0] & {
-		agent: Remote<AgentProcessApi>;
-		plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
-	},
-): Promise<void> {
-	const { window, agent, plugin, page, until, click, setModel } = options;
-	if (!plugin.cli) throw new Error("没有插件安装命令");
-	await plugin.install("side-chat");
-	const end = Date.now() + 15_000;
-	while (!(await agent.plugins()).some((item) => item.name === "plume.side-chat" && item.state === "active")) {
-		if (Date.now() > end) throw new Error("侧边聊天插件未加载");
-		await new Promise((resolve) => setTimeout(resolve, 100));
-	}
+/** 专项入口只准备主会话、一个其他面板和侧聊（内置插件，随应用加载），复用完整冒烟的同一组断言。 */
+export async function prepareQuoteSideChat(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
+	const { window, page, until, click, setModel } = options;
 	setModel((request) => ({
 		text: (request.tools as Array<{ name: string }> | undefined)?.some((tool) => tool.name === "read_main_chat")
 			? "划词侧边聊天准备好了。"

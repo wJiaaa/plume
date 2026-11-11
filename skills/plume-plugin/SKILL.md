@@ -125,7 +125,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 ## 可以照着写的插件
 
-都在 Plume 插件仓库（plume-plugins）的 `plugins/` 下，`todo`、`commands`、`web`、`skills`、`git` 随应用发、在本体仓库的 `packages/builtin/` 下（拿不到仓库时，以模板和本 skill 里的代码片段为准）：
+都在 Plume 插件仓库（plume-plugins）的 `plugins/` 下，`todo`、`commands`、`web`、`skills`、`git`、`side-chat` 随应用发、在本体仓库的 `packages/builtin/` 下（拿不到仓库时，以模板和本 skill 里的代码片段为准）：
 
 | 插件 | 看它的什么 |
 | --- | --- |

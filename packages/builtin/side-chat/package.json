@@ -1,0 +1,27 @@
+{
+  "name": "@plume/side-chat",
+  "version": "0.1.0",
+  "description": "在对话旁边另开一个侧边聊天：问问主会话在做什么、为什么这样做，或者顺手做件小事，主对话里什么都不留。",
+  "author": "Plume",
+  "keywords": [
+    "侧边聊天",
+    "btw",
+    "面板"
+  ],
+  "plume": {
+    "displayName": "侧边聊天",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1"
+  }
+}
