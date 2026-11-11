@@ -816,19 +816,20 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			...(session.summary.parentId ? { turns: 0 } : {}),
 			...(session.cacheBoundary ? { boundary: session.cacheBoundary } : {}),
 		};
+		const changes: Partial<SessionSummary> = { updatedAt: Date.now(), messageCount: messages.length + 1 };
+		if (message.role === "user" && !message.synthetic && session.summary.title === "") {
+			// 带附件时第一块字是给模型的附件说明，标题取人打的那句。
+			const first = message.displayText ?? message.content.find((block) => block.type === "text")?.text ?? "";
+			changes.title = first.trim().slice(0, 40);
+		}
+		// 先落盘再进内存：写不进去（磁盘出错、存不成 JSON）时内存、界面和会话库都还是原样，撤回、编辑重发按条数截断才对得上。
+		store.append({ ...session.summary, ...changes }, message, note);
+		Object.assign(session.summary, changes);
 		if (note) session.cacheBoundary = undefined;
 		messages.push(message);
 		// 回复落进会话就顶替了它的草稿：界面收到这条 message 时一并换下草稿，不另发一次清空，见 `StreamTurn.draft`。
 		if (message.role === "assistant") session.draft = undefined;
 		emit({ type: "message", sessionId: session.summary.id, message });
-		session.summary.updatedAt = Date.now();
-		session.summary.messageCount = messages.length;
-		if (message.role === "user" && !message.synthetic && session.summary.title === "") {
-			// 带附件时第一块字是给模型的附件说明，标题取人打的那句。
-			const first = message.displayText ?? message.content.find((block) => block.type === "text")?.text ?? "";
-			session.summary.title = first.trim().slice(0, 40);
-		}
-		store.append(session.summary, message, note);
 		emit({ type: "sessions", sessions: summaries() });
 		return true;
 	}
@@ -2162,7 +2163,18 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				})
 			)
 				throw new Error("Invalid session order");
-			await saveProjects(projects.map((entry) => (entry.id === projectId ? { ...entry, sessionOrder: sessionIds } : entry)));
+			/*
+			 * 置顶、归档的会话不在拖动的那份名单里，名次照旧留着：插回旧顺序里它前面那一个之后。不留的话取消置顶、取消归档后
+			 * 它没有名次，跳到最前面。已经不在这个项目里的（删了、挪走了）顺手丢掉。
+			 */
+			const previous = projects.find((entry) => entry.id === projectId)?.sessionOrder ?? [];
+			const order = [...sessionIds];
+			previous.forEach((id, index) => {
+				if (order.includes(id) || sessions.get(id)?.summary.project !== projectId) return;
+				const before = previous.slice(0, index).findLast((other) => order.includes(other));
+				order.splice(before === undefined ? 0 : order.indexOf(before) + 1, 0, id);
+			});
+			await saveProjects(projects.map((entry) => (entry.id === projectId ? { ...entry, sessionOrder: order } : entry)));
 		},
 		async sessionStats(sessionId) {
 			find(sessionId);

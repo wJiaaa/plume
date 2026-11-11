@@ -183,12 +183,28 @@ async function stepEnd(
 	// 给副本：写进会话的那几条不该被插件改掉。
 	const input: StepEnd = { sessionId: scope.sessionId, cwd: scope.cwd, ...structuredClone(step), signal: scope.signal };
 	try {
-		return await scope.host.run("step.end", input, async (current) => natural(current));
+		const verdict = verdictOf(await scope.host.run("step.end", input, async (current) => natural(current)));
+		// 层调了 `next` 却忘了把结论交回（返回 undefined）、给了不认得的原因：和抛错一样按自然结论走，不让整轮以出错收场。
+		if (!verdict) throw new Error(text("loop.badStepVerdict"));
+		return verdict;
 	} catch (error) {
 		scope.log("agent", "error", `会话 ${scope.sessionId} 的 step.end 出错：${errorText(error)}`);
 		scope.notice(errorText(error));
 		return natural(input);
 	}
+}
+
+/** 认得的结论才放行：`say` 只能是一句话，结束的原因只有出错和卡住两种。认不得返回 undefined。 */
+function verdictOf(value: unknown): StepVerdict | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	const { continue: going, say, reason, error } = value as Record<string, unknown>;
+	if (going === true) {
+		if (say === undefined) return { continue: true };
+		return typeof say === "string" && say.trim() ? { continue: true, say } : undefined;
+	}
+	if (going !== false || (reason !== undefined && reason !== "error" && reason !== "stalled") || (error !== undefined && typeof error !== "string"))
+		return undefined;
+	return { continue: false, ...(reason === undefined ? {} : { reason }), ...(error ? { error } : {}) };
 }
 
 /** 插件给的「还在等后台」时的催促；不是一句话就当没给。 */

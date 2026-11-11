@@ -80,7 +80,9 @@ function validImage(image: unknown): boolean {
 	return typeof data === "string" && data.length > 0 && !data.startsWith("data:") && typeof mimeType === "string" && IMAGE_TYPES.has(mimeType);
 }
 
-function toolResult(call: ToolCallContent, result: ToolOutput): ToolResultMessage {
+/** `startedAt`：真跑了的调用开始的时刻，记下耗时给使用统计（`tailActivity` 的 `toolMs`）；没跑就被拦下的不带。 */
+function toolResult(call: ToolCallContent, result: ToolOutput, startedAt?: number): ToolResultMessage {
+	const now = Date.now();
 	return {
 		role: "toolResult",
 		toolCallId: call.id,
@@ -95,8 +97,23 @@ function toolResult(call: ToolCallContent, result: ToolOutput): ToolResultMessag
 			: {}),
 		...(result.details === undefined ? {} : { details: result.details }),
 		...(result.uneventful === true ? { uneventful: true } : {}),
-		timestamp: Date.now(),
+		...(startedAt === undefined ? {} : { startedAt, durationMs: now - startedAt }),
+		timestamp: now,
 	};
+}
+
+/**
+ * `details` 跟着结果存进会话库（JSON）、经端口发给界面，内存里留的就是落盘的那份。存不成 JSON 的（BigInt、循环引用）丢掉并记日志：
+ * 工具已经跑过了，输出照样交给模型，不能因为给界面的附带数据让这条结果写不进会话。
+ */
+function storable(details: unknown, call: ToolCallContent, scope: ToolScope): unknown {
+	try {
+		const text = JSON.stringify(details);
+		return text === undefined ? undefined : (JSON.parse(text) as unknown);
+	} catch (error) {
+		scope.log("agent", "error", `工具 ${call.name} 的结果 details 存不成 JSON，已丢掉：${errorText(error)}`);
+		return undefined;
+	}
 }
 
 /**
@@ -315,27 +332,30 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	};
 
 	// i18n-exempt：工具结果是发给模型的，不随界面语言变。
+	const startedAt = Date.now();
 	try {
 		scope.started(call.id);
-		const result = await scope.host.run("tool.execute", execution, execute);
+		let result = await scope.host.run("tool.execute", execution, execute);
 		if (typeof result?.output !== "string") throw new Error("tool.execute 返回的结果没有 output");
 		if (result.images !== undefined && !(Array.isArray(result.images) && result.images.every(validImage)))
 			throw new Error("tool.execute 返回的 images 不是 { data, mimeType } 的数组");
 		if (result.shownImages !== undefined && !(Array.isArray(result.shownImages) && result.shownImages.every(validImage)))
 			throw new Error("tool.execute 返回的 shownImages 不是 { data, mimeType } 的数组");
+		if (result.details !== undefined) result = { ...result, details: storable(result.details, call, scope) };
 		// 人按了停才失败的，照实说是停下的；审批层在停下时只会说「拒绝」，那不是人的意思。
 		if (signal.aborted && result.isError === true) {
 			return [
 				toolResult(
 					call,
 					asking ? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } } : { ...result, details: result.details ?? { cancelled: true } },
+					startedAt,
 				),
 			];
 		}
-		return [toolResult(call, result), result.terminate === "done" || result.terminate === "stalled" ? result.terminate : undefined];
+		return [toolResult(call, result, startedAt), result.terminate === "done" || result.terminate === "stalled" ? result.terminate : undefined];
 	} catch (error) {
 		scope.log("agent", "error", errorText(error));
-		return [toolResult(call, { output: `没有执行：${errorText(error)}`, isError: true })];
+		return [toolResult(call, { output: `没有执行：${errorText(error)}`, isError: true }, startedAt)];
 	} finally {
 		scope.progress(call.id, undefined, false);
 	}

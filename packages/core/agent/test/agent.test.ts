@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentEvent, Message, Plugin, PluginContext } from "@plume/contract";
 import { type Agent, type AgentOptions, createAgent } from "../src/index.ts";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
@@ -305,6 +305,8 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 	const view = await service.getSession(session.id);
 	const note = view.messages.find((message) => message.role === "toolResult" && message.toolCallId === "call_note");
 	expect(note).toMatchObject({ details: { text: "买菜", marker: "ONLY_IN_DETAILS" }, isError: false });
+	// 跑过的调用记下开始时刻和耗时，使用统计按它算工具耗时。
+	expect(note).toMatchObject({ startedAt: expect.any(Number), durationMs: expect.any(Number) });
 	// 会话落盘了。
 	const stored = storedRows("SELECT body FROM records WHERE session_id = ?", session.id);
 	expect(stored).toHaveLength(view.messages.length);
@@ -1056,6 +1058,75 @@ it("step.end 出错时按自然结论走并提示", async () => {
 	expect(model?.requests).toHaveLength(2);
 	expect((await service.getSession(session.id)).summary.stop).toEqual({ reason: "done" });
 	expect(events.some((event) => event.type === "notice" && event.text.includes("test.broken") && event.level === undefined)).toBe(true);
+});
+
+it("step.end 给的结论认不得（忘了交回 next 的结论、原因不认得）时按自然结论走并提示", async () => {
+	const sloppy: Plugin = {
+		name: "test.sloppy",
+		apply: (ctx) =>
+			ctx.hook("step.end", async (input, next) => {
+				if (input.step === 1) {
+					await next(input);
+					return undefined as never;
+				}
+				return { continue: false, reason: "bogus" } as never;
+			}),
+	};
+	const { service, session, events, idle } = await start([{ toolCalls: [read] }, { text: "读完了" }], [sloppy]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await done;
+	expect(model?.requests).toHaveLength(2);
+	expect((await service.getSession(session.id)).summary.stop).toEqual({ reason: "done" });
+	expect(events.filter((event) => event.type === "notice" && event.text.includes("step.end") && event.level === undefined)).toHaveLength(2);
+});
+
+it("工具结果的 details 存不成 JSON 时丢掉 details，输出照常交给模型，内存和会话库一致", async () => {
+	const odd: Plugin = {
+		name: "test.odd-details",
+		apply: (ctx) =>
+			void ctx.tools.register({
+				name: "odd",
+				description: "details 里带 BigInt",
+				parameters: { type: "object", properties: {} },
+				async execute() {
+					return { output: "odd done", details: { count: 1n } };
+				},
+			}),
+	};
+	const { service, session, idle } = await start([{ toolCalls: [{ id: "call_odd", name: "odd", args: {} }] }, { text: "好了" }], [odd]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "跑一下" }] });
+	await done;
+	const view = await service.getSession(session.id);
+	expect(view.summary.stop).toEqual({ reason: "done" });
+	const result = view.messages.find((message) => message.role === "toolResult");
+	expect(result).toMatchObject({ toolCallId: "call_odd", isError: false, content: [{ type: "text", text: "odd done" }] });
+	expect(result && "details" in result).toBe(false);
+	expect(storedRows("SELECT seq FROM records WHERE session_id = ?", session.id)).toHaveLength(view.messages.length);
+});
+
+it("一条消息写不进会话库时内存里也没有它，条数和会话库一致（撤回、编辑重发按条数截断）", async () => {
+	const { service, session, idle } = await start([{ toolCalls: [read] }, { text: "不该到这里" }]);
+	// 模拟磁盘出错：工具结果那一条插入会话库时抛错。
+	const prepare = DatabaseSync.prototype.prepare;
+	const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (this: DatabaseSync, sql: string) {
+		if (sql.startsWith("INSERT INTO records") && spy.mock.calls.filter(([text]) => text.startsWith("INSERT INTO records")).length === 3)
+			throw new Error("disk I/O error");
+		return prepare.call(this, sql);
+	});
+	try {
+		const done = idle();
+		service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+		await done;
+	} finally {
+		spy.mockRestore();
+	}
+	const view = await service.getSession(session.id);
+	expect(view.summary.stop?.reason).toBe("error");
+	expect(view.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+	expect(storedRows("SELECT seq FROM records WHERE session_id = ?", session.id)).toHaveLength(2);
+	expect(view.summary.messageCount).toBe(2);
 });
 
 it("工具结果带 terminate 时，这一步的结果写完就以它的原因结束，不再请求模型", async () => {
@@ -2237,13 +2308,19 @@ it("多源项目和手动顺序落盘；主文件夹变更不搬动已有会话�
 	await expect(service.reorderProjectSessions(project.id, [b.id])).rejects.toThrow();
 	const alien = await service.createSession({ project: other.id });
 	await expect(service.reorderProjectSessions(project.id, [alien.id])).rejects.toThrow();
+	// 置顶的 b 不在拖动的名单里，名次照旧留在 a 后面：取消置顶后回到原处，不跳到最前。
+	const c = await service.createSession({ project: project.id });
+	await service.reorderProjectSessions(project.id, [c.id, a.id]);
+	expect(service.listProjects().find((entry) => entry.id === project.id)?.sessionOrder).toEqual([c.id, a.id, b.id]);
+	await service.setSessionPinned(b.id, false);
+	await service.reorderProjectSessions(project.id, [c.id, a.id, b.id]);
 	await service.updateProject(project.id, "多源", extra, [extra, workspace]);
 	expect((await service.getSession(a.id)).summary.cwd).toBe(workspace);
 	expect((await service.createSession({ project: project.id })).cwd).toBe(extra);
 	await agent?.shutdown();
 	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "model.json"), plugins: [], log: () => undefined });
 	expect(agent.service.listProjects().map((entry) => entry.id)).toEqual([project.id, other.id]);
-	expect(agent.service.listProjects()[0]).toMatchObject({ path: extra, folders: [extra, workspace], sessionOrder: [a.id, b.id] });
+	expect(agent.service.listProjects()[0]).toMatchObject({ path: extra, folders: [extra, workspace], sessionOrder: [c.id, a.id, b.id] });
 });
 
 it("项目源目录到达提示词和工具，目录移除后下一轮不再授予", async () => {
