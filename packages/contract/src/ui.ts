@@ -50,7 +50,7 @@ export interface ToolCardProps {
 	/** 发送到卡片所属会话。只在真实点击/提交，或聚焦的卡片 iframe 发来的用户操作消息中同步调用；只读视图没有此入口。displayText 可提供气泡中显示的简短说明，text 仍是完整模型输入。 */
 	send?: (text: string, event: import("react").SyntheticEvent | MessageEvent, displayText?: string) => Promise<void>;
 	/**
-	 * 卡片画在插件的子会话（侧边聊天）里时才有：把一件事排进它父会话的队列，标着来自侧边聊天，和
+	 * 卡片画在插件的子会话（侧边聊天）里时才有：把一件事排进它父会话的队列，标着来自哪个插件，和
 	 * `ToolRun.parent.enqueue` 同一条路。只在人点了卡片上写明要交出去什么的按钮时调（「交给主会话」），不拿来替人做决定。
 	 */
 	handToParent?(instruction: string): Promise<void>;

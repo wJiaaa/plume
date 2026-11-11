@@ -24,6 +24,7 @@ import { AttachmentStrip } from "../composer/attachments/AttachmentStrip.tsx";
 import { KIND_LABEL } from "../composer/attachments/file-kind.ts";
 import { MarkGlyph } from "../composer/attachments/FileKindIcon.tsx";
 import { useFileScope } from "../files/scope.ts";
+import { usePluginDisplayName } from "../market/store.ts";
 import { openFromEvent, openViewer } from "../image/index.ts";
 import { BubbleText } from "./BubbleText.tsx";
 import { useFilesBack } from "./files-back.tsx";
@@ -149,13 +150,8 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 					onOpen={(id) => void openReferencedSession(id).catch((error: unknown) => notify(String(error), "error"))}
 				/>
 			)}
-			{/* 侧边聊天写下、交过来的话：用的是人的气泡，不说清楚的话，人回头看到的是一句自己不记得说过的话。一直显示，不藏到悬停里。 */}
-			{message.origin === "side-chat" && (
-				<span className="mb-1 flex items-center gap-1 pr-1 text-caption text-ink-faint" data-from-side-chat="">
-					<MessageSquarePlus size={11} strokeWidth={1.9} aria-hidden />
-					{t("userMessage.fromSideChat")}
-				</span>
-			)}
+			{/* 子会话（比如侧边聊天）写下、交过来的话：用的是人的气泡，不说清楚的话，人回头看到的是一句自己不记得说过的话。一直显示，不藏到悬停里。 */}
+			{message.origin === "child" && <FromChild plugin={message.fromPlugin} />}
 			{pictures.length > 0 && (
 				<AttachmentStrip
 					files={pictures}
@@ -221,5 +217,17 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 				)}
 			</MessageActions>
 		</div>
+	);
+}
+
+/** 气泡上方「来自 …」那一行：标出交来这件事的子会话所属插件的显示名，查不到（插件停用、卸载了，或消息没记插件）时用通用的「来自子会话」。 */
+function FromChild({ plugin }: { plugin: string | undefined }) {
+	const { t } = useI18n();
+	const name = usePluginDisplayName()(plugin ?? "");
+	return (
+		<span className="mb-1 flex items-center gap-1 pr-1 text-caption text-ink-faint" data-from-child="">
+			<MessageSquarePlus size={11} strokeWidth={1.9} aria-hidden />
+			{name ? t("userMessage.fromPlugin", { name }) : t("userMessage.fromChild")}
+		</span>
 	);
 }

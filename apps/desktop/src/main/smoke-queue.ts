@@ -116,6 +116,10 @@ export async function checkQueueActions(options: {
 		if (!(await page(row("queued")))) throw new Error("主会话停下，排着的应该照旧排着");
 		await click(`${side} [data-task-run-now]`);
 		await until(row("running"), "立即执行：主会话为它跑起来");
+		await until(
+			`[...document.querySelectorAll('${chat} [data-from-child]')].some((node) => node.textContent.includes("来自侧边聊天"))`,
+			"主会话里交来的那句标着插件的显示名",
+		);
 		await click(`${chat} [data-composer-send=stop]`);
 		await until(row("cancelled") + ` && document.querySelector('${side} [data-task-retry]') !== null`, "主会话停下，这件记成随它停下、能继续");
 		await capture(window, join(outDir, "smoke-task-strip-stopped.png"));

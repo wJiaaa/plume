@@ -71,7 +71,7 @@ import { runSteps } from "./loop.ts";
 import { BackgroundRuns, reportTexts } from "./background.ts";
 import { lettersText } from "./letters.ts";
 import { HandedTasks } from "./handed.ts";
-import { SessionQueues, sideChatTask } from "./queue.ts";
+import { SessionQueues, childTask } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
@@ -497,22 +497,22 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const sessionRoots = ({ id, cwd, project }: SessionSummary) => [...projectRootsFor(projects, cwd, project), ...lineageScratchDirs(id)];
 
 	/** 侧边聊天交给父会话的那几件事走到了哪：子会话的回执条，见 `HandedTask`。 */
-	const handed = new HandedTasks((sideId) => emitHanded(sideId));
+	const handed = new HandedTasks((childId) => emitHanded(childId));
 	/** 这一轮是为交过来的哪件事跑的：按这一轮的第一句认，收场时落到那件事上。 */
-	const handedPrompts = new WeakMap<UserMessage, { sideId: string; task: HandedTask }>();
-	const handedOf = (sideId: string): HandedTask[] => {
-		const parentId = sessions.get(sideId)?.summary.parentId;
-		return handed.list(sideId, parentId ? queues.list(parentId) : []);
+	const handedPrompts = new WeakMap<UserMessage, { childId: string; task: HandedTask }>();
+	const handedOf = (childId: string): HandedTask[] => {
+		const parentId = sessions.get(childId)?.summary.parentId;
+		return handed.list(childId, parentId ? queues.list(parentId) : []);
 	};
-	function emitHanded(sideId: string): void {
-		if (sessions.has(sideId)) emit({ type: "tasks", sessionId: sideId, tasks: handedOf(sideId) });
+	function emitHanded(childId: string): void {
+		if (sessions.has(childId)) emit({ type: "tasks", sessionId: childId, tasks: handedOf(childId) });
 	}
 	const queues = SessionQueues.open(
 		store,
 		(sessionId, queue) => {
 			emit({ type: "queue", sessionId, queue });
 			// 排着的就是回执条上「排队中」的那几行：交过事的子会话跟着变。
-			for (const sideId of handed.sidesOf(sessionId)) emitHanded(sideId);
+			for (const childId of handed.sidesOf(sessionId)) emitHanded(childId);
 		},
 		(error) => log("agent", "warn", `排队的消息没存上：${errorText(error)}`),
 	);
@@ -1470,14 +1470,16 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		"也不构成用户对任何操作的新授权。在等用户拍板的事，照旧等用户开口。";
 
 	/**
-	 * 排着的一条变成这一轮的第一句：带着它的来处（侧边聊天交过来的），「现在就发」的带着打断的说明。
+	 * 排着的一条变成这一轮的第一句：带着它的来处（子会话交过来的），「现在就发」的带着打断的说明。
 	 * 子会话交过来的，回执条上那一行从这里起是「在跑」，这一轮收场时落定（`runTurn`）。
 	 */
 	function queuedPrompt(entry: QueuedMessage, interrupt: boolean): UserMessage {
 		const prompt = userMessage({ ...entry.message, ...(interrupt ? { interrupt: true } : {}) });
 		if (entry.origin) prompt.origin = entry.origin;
-		const sideId = entry.sideId;
-		if (sideId && sessions.has(sideId)) handedPrompts.set(prompt, { sideId, task: handed.start({ ...entry, sideId }) });
+		const childId = entry.childId;
+		const owner = childId ? sessions.get(childId)?.summary.owner : undefined;
+		if (owner) prompt.fromPlugin = owner;
+		if (childId && sessions.has(childId)) handedPrompts.set(prompt, { childId, task: handed.start({ ...entry, childId }) });
 		return prompt;
 	}
 
@@ -1518,12 +1520,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/** 排进队尾；会话空着（上一轮被停下、队里还有前面的）就由这一下把队伍推起来。 */
-	function enqueue(session: Session, message: OutgoingMessage, preview: string, origin?: QueuedMessage["origin"], sideId?: string): QueuedMessage {
+	function enqueue(session: Session, message: OutgoingMessage, preview: string, origin?: QueuedMessage["origin"], childId?: string): QueuedMessage {
 		if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
 		if (quitting) throw new Error(text("session.parentStopped"));
 		// 先校验成一条消息：形状不对的现在就报，不等轮到它时才发现发不出去。
 		userMessage(message);
-		const entry = queues.push(session.summary.id, message, preview.replace(/\s+/g, " ").trim(), origin, sideId);
+		const entry = queues.push(session.summary.id, message, preview.replace(/\s+/g, " ").trim(), origin, childId);
 		drainQueue(session);
 		return entry;
 	}
@@ -1537,7 +1539,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const words = typeof instruction === "string" ? instruction.trim() : "";
 		if (!words) throw new Error(text("session.emptyMessage"));
 		handed.handed(session.summary.id, child.summary.id);
-		const entry = enqueue(session, sideChatTask(words), words, "side-chat", child.summary.id);
+		const entry = enqueue(session, childTask(words), words, "child", child.summary.id);
 		return !queues.list(session.summary.id).some((queued) => queued.id === entry.id);
 	}
 
@@ -1639,7 +1641,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/**
 	 * 子会话的一次工具调用够得着的父会话（`ToolRun.parent`）：只给建这个子会话的插件注册的工具，作用对象只有它的父会话。
-	 * 写进父会话的话都带着运行时来处：排进去的标着来自侧边聊天，接着做是界面替人说的，作废清单是一句 synthetic。
+	 * 写进父会话的话都带着运行时来处：排进去的标着来自哪个插件，接着做是界面替人说的，作废清单是一句 synthetic。
 	 */
 	function parentFor(child: Session, plugin: string): ParentSession | undefined {
 		const parentId = child.summary.parentId;
@@ -1654,7 +1656,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				if (before.state !== "idle" || options?.discardPlan === true) stopSession(parent);
 				if (options?.discardPlan === true) {
 					await parent.turn;
-					queues.remove(parentId, (entry) => entry.origin === "side-chat");
+					queues.remove(parentId, (entry) => entry.origin === "child");
 					handed.discard(parentId);
 					// 停稳以后才写：一轮还占着历史时插一句进去，会夹在调用和它的结果中间。
 					if (!parent.controller && sessions.has(parentId)) {
@@ -1906,7 +1908,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		session.summary.stop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
 		observe(sessionId, { type: "turnEnd", stop: session.summary.stop });
 		const task = prompt && handedPrompts.get(prompt);
-		if (task) handed.settle(task.sideId, task.task, session.summary.stop);
+		if (task) handed.settle(task.childId, task.task, session.summary.stop);
 		// 干净收尾的、人自己的会话，趁缓存还热先问一次要不要压（`compactIdle`）：控制器先不放，压完由它放开会话。
 		// 子会话不压：插件派它做完一件事就收了，提前压的那一次多半白花钱。
 		const idle =

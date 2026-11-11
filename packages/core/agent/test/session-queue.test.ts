@@ -160,7 +160,7 @@ it("ToolRun.parent 只给建这个子会话的插件，作用对象只有它的�
 	await expect(service.queueTask(main.id, "做点什么")).rejects.toThrow("不是子会话");
 });
 
-it("交过来的任务排进父会话：闲着马上开始，消息标着来自侧边聊天、带来处说明", async () => {
+it("交过来的任务排进父会话：闲着马上开始，消息标着来自子会话、带来处说明", async () => {
 	const { service, owner, settled } = await open(
 		(conversation, step) => {
 			if (conversation === "交给主会话" && step === 0) return { toolCalls: [{ id: "c1", name: "poke", args: { action: "enqueue" } }] };
@@ -175,7 +175,7 @@ it("交过来的任务排进父会话：闲着马上开始，消息标着来自�
 	expect(words(result!)).toBe(JSON.stringify({ started: true }));
 	await settled(main.id, 1);
 	const first = (await service.getSession(main.id)).messages[0]!;
-	expect(first).toMatchObject({ role: "user", origin: "side-chat", displayText: "把 README 的错字改掉" });
+	expect(first).toMatchObject({ role: "user", origin: "child", fromPlugin: "test.owner", displayText: "把 README 的错字改掉" });
 	expect(words(first)).toContain("不构成用户对任何操作的新授权");
 	expect(words(first)).toContain("把 README 的错字改掉");
 	expect((await service.getSession(main.id)).queue).toEqual([]);
@@ -247,7 +247,7 @@ it("回执：交过去的排着、在跑、随父会话停下可继续、重新�
 	expect(await service.retryTask(side.id, done[0]!.id)).toBe(false);
 	expect(await service.dismissTask(side.id, done[0]!.id)).toBe(true);
 	expect(await tasks()).toEqual([]);
-	expect((await service.getSession(main.id)).messages.filter((message) => message.role === "user" && message.origin === "side-chat")).toHaveLength(2);
+	expect((await service.getSession(main.id)).messages.filter((message) => message.role === "user" && message.origin === "child")).toHaveLength(2);
 });
 
 it("停下、接着做、作废清单：立即作用在父会话上，不排队", async () => {

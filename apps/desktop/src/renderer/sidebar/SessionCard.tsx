@@ -1,7 +1,8 @@
 import { translate, hoverLayersSuppressed, onHoverLayersDismissed, chromeTop, portal, useI18n, type ResolvedUiLocale } from "@plume/ui";
-import { ArrowDownToLine, ArrowUpFromLine, Bot, FolderOpen, MessageCircle, MessageSquare, MessagesSquare } from "@plume/ui/icons";
+import { ArrowDownToLine, ArrowUpFromLine, Bot, FolderOpen, MessageSquare, MessagesSquare } from "@plume/ui/icons";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SessionStats, SessionSummary, SessionUsage } from "@plume/contract";
+import { usePluginDisplayName } from "../market/store.ts";
 
 function formatTokens(count: number): string {
 	for (const [size, suffix] of [
@@ -79,9 +80,9 @@ function folderName(path: string): string {
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
 	return (
 		<div className="flex min-w-0 flex-col items-center gap-0.5">
-			<span className="flex items-center gap-1 text-caption text-ink-faint">
+			<span className="flex max-w-full items-center gap-1 text-caption text-ink-faint">
 				<span className="shrink-0">{icon}</span>
-				{label}
+				<span className="truncate">{label}</span>
 			</span>
 			<span className="max-w-full truncate text-detail text-ink tabular-nums">{value}</span>
 		</div>
@@ -150,11 +151,11 @@ export function SessionCard({
 	const spent = children.reduce((usage, child) => plus(usage, child.usage), main);
 	const cost = costText(spent);
 	const hit = cacheHitRate(stats?.replyUsage ?? EMPTY);
-	const from = {
-		main: freshTokens(main),
-		side: children.filter((child) => child.owner === "plume.side-chat").reduce((sum, child) => sum + freshTokens(child.usage), 0),
-		subagents: children.filter((child) => child.owner !== "plume.side-chat").reduce((sum, child) => sum + freshTokens(child.usage), 0),
-	};
+	// 子会话的用量按建它的插件分开，一个插件一格，名字用插件市场里的显示名；停用、卸载了查不到时用插件名。
+	const displayName = usePluginDisplayName();
+	const byOwner = new Map<string, number>();
+	for (const child of children) if (child.owner) byOwner.set(child.owner, (byOwner.get(child.owner) ?? 0) + freshTokens(child.usage));
+	const owners = [...byOwner].map(([owner, tokens]) => ({ owner, tokens, label: displayName(owner) ?? owner }));
 
 	return portal(
 		<div
@@ -191,9 +192,10 @@ export function SessionCard({
 					value={formatTokens(spent.input + spent.cacheWrite)}
 				/>
 				<Stat icon={<ArrowUpFromLine size={11} strokeWidth={2} />} label={translate("sessionCard.output")} value={formatTokens(spent.output)} />
-				<Stat icon={<MessageSquare size={11} strokeWidth={2} />} label={translate("sessionCard.partMain")} value={tokensOrDash(from.main)} />
-				<Stat icon={<MessageCircle size={11} strokeWidth={2} />} label={translate("sessionCard.partSide")} value={tokensOrDash(from.side)} />
-				<Stat icon={<Bot size={11} strokeWidth={2} />} label={translate("sessionCard.partSubagents")} value={tokensOrDash(from.subagents)} />
+				<Stat icon={<MessageSquare size={11} strokeWidth={2} />} label={translate("sessionCard.partMain")} value={tokensOrDash(freshTokens(main))} />
+				{owners.map(({ owner, tokens, label }) => (
+					<Stat key={owner} icon={<Bot size={11} strokeWidth={2} />} label={label} value={tokensOrDash(tokens)} />
+				))}
 			</div>
 
 			<p data-plume-session-foot="" className="truncate px-3 pb-2.5 text-caption text-ink-faint tabular-nums">

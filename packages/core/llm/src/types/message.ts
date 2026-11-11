@@ -293,14 +293,19 @@ export interface UserMessage {
 	/**
 	 * Who sent this, when it was not the person looking at the transcript.
 	 *
-	 * A task dispatched from the side chat lands in the main conversation as an ordinary user
-	 * message. Without this you would scroll back and find an instruction you have no memory
+	 * `child`: a task one of this session's child sessions (the side chat, say) handed over lands
+	 * here as an ordinary user message. Without this you would scroll back and find an instruction you have no memory
 	 * of writing, in your own voice, with no way to tell where it came from.
 	 *
 	 * `parent` 是子智能体转录里「派它出去的那个 Agent 说的话」——开头那份任务、续跑时补的那一句。
 	 * 面板上它不该画成人发的气泡：那不是看着面板的人说的。
 	 */
-	origin?: "side-chat" | "parent";
+	origin?: "child" | "parent";
+	/**
+	 * `origin` 是 `child` 时，交来这件事的子会话是哪个插件建的（子会话的 `owner`，比如 `plume.side-chat`），界面按它标出插件的显示名。
+	 * 宿主在这件事从队列里发出去时照子会话填上；那时子会话已经删掉了就不带，界面改用通用的说法。
+	 */
+	fromPlugin?: string;
 	/**
 	 * 侧边聊天每次提问前附上的主会话进展，读到了哪里。
 	 *

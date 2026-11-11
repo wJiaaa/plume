@@ -6,7 +6,7 @@
 import type { AgentService, PluginStatus } from "@plume/contract";
 import type { Remote } from "@plume/rpc";
 import { translate } from "@plume/ui";
-import { useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { MarketResult, MarketState, PluginUpdateState } from "../../shared/market.ts";
 import { loadPluginUis } from "../plugins.tsx";
 import { type CatalogItem, merge } from "./catalog.ts";
@@ -66,6 +66,12 @@ export function useMarketStore(): MarketStore {
 		},
 		() => store,
 	);
+}
+
+/** 插件名（`plume.side-chat`）→ 插件市场里的显示名；停用、卸载了或还没读到时没有。 */
+export function usePluginDisplayName(): (plugin: string) => string | undefined {
+	const catalog = useCatalog();
+	return useCallback((plugin: string) => catalog.find((item) => item.status?.name === plugin)?.name, [catalog]);
 }
 
 /** 合好的目录，见 catalog.ts。 */

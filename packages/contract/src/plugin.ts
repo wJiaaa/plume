@@ -194,8 +194,8 @@ export interface ParentStatus {
 export interface ParentSession {
 	id: string;
 	/**
-	 * 把一件事排进父会话的队列（和人在输入框里排的同一条，落盘），父会话真闲着就马上开始。发出去的消息标着来自侧边聊天
-	 * （`UserMessage.origin`），前面带一句给模型的来处说明。`started` 是排上那一刻它就开始了。指令为空时抛错。
+	 * 把一件事排进父会话的队列（和人在输入框里排的同一条，落盘），父会话真闲着就马上开始。发出去的消息标着来自哪个插件
+	 * （`UserMessage.origin` 是 `child`，`fromPlugin` 是建这个子会话的插件），前面带一句给模型的来处说明。`started` 是排上那一刻它就开始了。指令为空时抛错。
 	 */
 	enqueue(instruction: string): Promise<{ started: boolean }>;
 	/**

@@ -369,7 +369,7 @@ async execute(args, run) {
 }
 ```
 
-  排进去的话标着 `origin: "side-chat"`、前面带一句来处说明，不算人的授权，审批照常。人在卡片上点的「交给主会话」用 `ToolCardProps.handToParent`（见 ui.md）。
+  排进去的话标着 `origin: "child"`、`fromPlugin` 是你的插件名（界面上是「来自<你的显示名>」）、前面带一句来处说明，不算人的授权，审批照常。人在卡片上点的「交给主会话」用 `ToolCardProps.handToParent`（见 ui.md）。
 
 ## 独立会话
 

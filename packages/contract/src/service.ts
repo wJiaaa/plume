@@ -329,10 +329,10 @@ export interface QueuedMessage {
 	preview: string;
 	/** 轮到它时整份发出去的东西。 */
 	message: OutgoingMessage;
-	/** 不是人在这个会话的输入框里排的：`side-chat` 是侧边聊天交过来的任务，发出去的消息带着同样的来处（`UserMessage.origin`）。 */
-	origin?: "side-chat";
-	/** 侧边聊天交过来的：是哪一个子会话交的，它的回执条（`HandedTask`）据此列出这一条。 */
-	sideId?: string;
+	/** 不是人在这个会话的输入框里排的：`child` 是它的一个子会话（比如侧边聊天）交过来的任务，发出去的消息带着同样的来处（`UserMessage.origin`）。 */
+	origin?: "child";
+	/** 子会话交过来的：是哪一个子会话交的，它的回执条（`HandedTask`）据此列出这一条。 */
+	childId?: string;
 	createdAt: number;
 }
 
@@ -632,7 +632,7 @@ export interface AgentService {
 	moveQueued(sessionId: string, id: string, targetId: string, placement: "before" | "after"): Promise<void>;
 	/**
 	 * 人在子会话（侧边聊天）的卡片上点了「交给主会话」：把这件事排进 `sessionId` 这个子会话的父会话，和插件的
-	 * `ParentSession.enqueue` 同一条路（标着来自侧边聊天）。只认父会话，不是子会话时报错。
+	 * `ParentSession.enqueue` 同一条路（标着来自建这个子会话的插件）。只认父会话，不是子会话时报错。
 	 */
 	queueTask(sessionId: string, instruction: string): Promise<void>;
 	/**
