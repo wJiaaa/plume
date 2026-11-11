@@ -266,9 +266,9 @@ export class UpdateDownload {
 		return this.installing;
 	}
 
-	/** 安装那一步知道是哪种收尾后调。 */
-	finish(relaunch: boolean): void {
-		this.set({ at: "ready", relaunch });
+	/** 安装那一步备好了能换上的东西后调。 */
+	finish(): void {
+		this.set({ at: "ready" });
 	}
 
 	/** 下载之后的那一步失败了。 */

@@ -36,7 +36,6 @@ const zhCN = {
 	"update.devMode": "开发模式下不做就地更新",
 	"update.notInApplications": "这个副本不是从「应用程序」运行的，无法就地更新",
 	"update.noAppInPackage": "下载的更新包里没有找到应用",
-	"update.cannotOpenInstaller": "无法打开安装包：{reason}",
 	"update.installFailed": "安装没有完成：{reason}",
 	"update.installFailedPlain": "安装失败",
 	// 装、更新、卸载插件时它目录里有文件正被占用（Windows），什么都没改。Plume 自己不占着：插件的原生模块是复制一份再加载的（native-cache.ts）。
@@ -84,7 +83,6 @@ const en: Record<NativeKey, string> = {
 	"update.devMode": "Updates are not installed in place in development mode",
 	"update.notInApplications": "This copy is not running from Applications, so it cannot be updated in place",
 	"update.noAppInPackage": "The downloaded update has no app in it",
-	"update.cannotOpenInstaller": "Could not open the installer: {reason}",
 	"update.installFailed": "The installation did not finish: {reason}",
 	"update.installFailedPlain": "The installation failed",
 	"market.filesInUse":

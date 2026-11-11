@@ -10,11 +10,11 @@ import type { UpdateInfo, UpdatePhase } from "../../shared/update.ts";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { notify } from "../toast/index.ts";
 import { notesForLocale } from "./notes-locale.ts";
-import { confirmLabel, controlsFor, failureDetail, fractionOf, mb, publishedOn, readyNote } from "./view.ts";
+import { confirmLabel, controlsFor, failureDetail, fractionOf, mb, publishedOn } from "./view.ts";
 
 function ProgressStatus({ phase, fraction }: { phase: UpdatePhase; fraction: number | null }) {
 	const { t } = useI18n();
-	if (phase.at === "ready") return <p className="text-detail text-ok">{readyNote(phase.relaunch, t)}</p>;
+	if (phase.at === "ready") return <p className="text-detail text-ok">{t("update.readyRestart")}</p>;
 	if (phase.at !== "downloading" && phase.at !== "paused" && phase.at !== "preparing") return null;
 	const percent = Math.round((fraction ?? 0) * 100);
 	const bytes = phase.at === "preparing" ? null : `${mb(phase.received)} / ${mb(phase.total)}`;
@@ -58,8 +58,7 @@ export function UpdateDialog({ info, phase, onClose }: { info: UpdateInfo; phase
 			return;
 		}
 		if (phase.at === "ready") {
-			const done = phase.relaunch ? await window.plume.updates.relaunch() : await window.plume.updates.reopen();
-			if (!done) notify(t(phase.relaunch ? "updateDialog.notReady" : "updateDialog.installerMissing"), "warn");
+			if (!(await window.plume.updates.relaunch())) notify(t("updateDialog.notReady"), "warn");
 			return;
 		}
 		// 结果经 onProgress 到，和别的阶段一样。

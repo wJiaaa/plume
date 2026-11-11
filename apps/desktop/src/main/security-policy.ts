@@ -101,8 +101,3 @@ export function opensAsProgram(path: string, facts: { isDirectory: boolean; exec
 	if (facts.isDirectory) return platform === "darwin" && RUNS_ON.darwin!.has(ext);
 	return RUNS_EVERYWHERE.has(ext) || (RUNS_ON[platform]?.has(ext) ?? false);
 }
-
-/** 网络共享和设备路径：`\\server\…`、`//server/…`。 */
-export function isRemoteOrDevicePath(path: string): boolean {
-	return /^[\\/]{2}/.test(path);
-}

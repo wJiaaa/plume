@@ -81,7 +81,7 @@ export function fetchRipgrep(key) {
 /**
  * electron-builder 的 `beforePack`：在复制 `extraResources` 之前，备好正在打的那一份。
  *
- * 按正在打的架构取，不拿本机那份充数：以后一次打两个架构时，每个架构各调一次，各放各的目录。
+ * 按正在打的架构取，不拿本机那份充数：一次打两个架构时，每个架构各调一次，各放各的目录。
  * 失败就让打包失败：缺了 ripgrep 的安装包能装能用，只是搜索悄悄慢下来，没人会发现。
  */
 export function beforePack(context) {

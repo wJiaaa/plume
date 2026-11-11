@@ -396,8 +396,7 @@ test("每个阶段都有标签和按钮字，进度不出 NaN，取消只在有�
 	assert.equal(fractionOf({ at: "downloading", received: 10, total: 0 }), 0);
 	assert.equal(fractionOf({ at: "idle" }), null);
 	assert.equal(labelFor({ at: "downloading", received: 45, total: 100 }, "1.0.0", t), "下载中 45%");
-	assert.equal(confirmLabel({ at: "ready", relaunch: true }, t), "立即重启");
-	assert.equal(confirmLabel({ at: "ready", relaunch: false }, t), "重新打开安装包");
+	assert.equal(confirmLabel({ at: "ready" }, t), "立即重启");
 	assert.equal(controlsFor({ at: "idle" }).cancel, false);
 	assert.equal(controlsFor({ at: "paused", received: 1, total: 2 }).cancel, true);
 	assert.equal(controlsFor({ at: "failed", error: "x", received: 0, total: 2 }).cancel, false);

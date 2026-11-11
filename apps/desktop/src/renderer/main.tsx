@@ -114,7 +114,6 @@ declare global {
 				download(version: string): Promise<import("../shared/update.ts").UpdatePhase>;
 				pause(): Promise<import("../shared/update.ts").UpdatePhase>;
 				cancel(): Promise<import("../shared/update.ts").UpdatePhase>;
-				reopen(): Promise<boolean>;
 				relaunch(): Promise<boolean>;
 				open(url: string): Promise<boolean>;
 				onProgress(listener: (phase: import("../shared/update.ts").UpdatePhase) => void): () => void;

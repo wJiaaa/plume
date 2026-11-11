@@ -7,7 +7,8 @@
 import { realpath, stat, access } from "node:fs/promises";
 import { BrowserWindow, dialog, clipboard, ClipboardItem, ipcMain, nativeImage, net, shell } from "electron";
 import { createDocumentImageLoader } from "./document-image.ts";
-import { isRemoteOrDevicePath, opensAsProgram } from "./security-policy.ts";
+import { isRemoteOrDevicePath } from "../shared/remote-path.ts";
+import { opensAsProgram } from "./security-policy.ts";
 
 /** 打开的结果：打开了、改成在文件夹里指出来了（直接打开会运行它）、没打开。 */
 export type OpenPathOutcome = "opened" | "revealed" | "failed";

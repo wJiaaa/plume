@@ -39,9 +39,6 @@ let cached: { at: number; info: UpdateInfo } | null = null;
 /** 准备好、等人说什么时候换上的更新；用过就清掉。 */
 let pending: PendingUpdate | null = null;
 
-/** 交给系统打开过的安装程序（.msi），「重新打开安装包」用：那个窗口不归这里管，容易被误关。 */
-let opened: string | null = null;
-
 const releasesPage = (repo: string) => `https://github.com/${repo}/releases`;
 
 async function fetchLatest(repo: string, current: string): Promise<UpdateInfo> {
@@ -128,8 +125,10 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 		try {
 			const info = await fetchLatest(RELEASE_REPO, current);
 			cached = { at: Date.now(), info };
-			// 知道哪个是最新的了，清掉旧版本留下的下载（安装包和解开的副本各一百多兆）。正在下的那个版本也留着。
-			void sweepDownloads(updateRoot, active ? [info.latest, active.version] : info.latest);
+			// 知道哪个是最新的了，清掉旧版本留下的下载（安装包和解开的副本各一百多兆）。只留还没装上的最新版和正在下的那个；
+			// 已经装上的这一版的下载也是旧的。
+			const keep = [...(info.available ? [info.latest] : []), ...(active ? [active.version] : [])];
+			void sweepDownloads(updateRoot, keep);
 			return info;
 		} catch {
 			// 没网、被限流、仓库还没有 release：对窗口都是「没什么可给的」。检查是应用自己做的，失败是应用的事，不打扰人。
@@ -162,7 +161,7 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 	};
 
 	/**
-	 * 把下好的文件准备到能换上：macOS 解开应用包，Windows 的安装程序排给「立即重启」，别的（.msi）交给系统打开。
+	 * 把下好的文件准备到能换上：macOS 解开应用包，Windows 的安装程序排给「立即重启」。
 	 * 和取字节分开：两者失败的原因不相干，只有一个值得续。下载报 preparing 后就做，等人按「立即重启」时能出错的越少越好。
 	 */
 	const installDownloaded = async (version: string, file: string): Promise<void> => {
@@ -183,20 +182,17 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 				if (!(await stat(bundle).catch(() => null))?.isDirectory()) return download?.fail(say("update.noAppInPackage"));
 
 				pending = { kind: "bundle", staged: bundle, target };
-				return download?.finish(true);
+				return download?.finish();
 			}
 
 			// Windows：安装程序在人按「立即重启」时才跑，不在字节下完的那一刻。它会杀掉跑着的 Plume，不能在谁的一轮中途发生。
 			if (process.platform === "win32" && file.toLowerCase().endsWith(".exe")) {
 				pending = { kind: "installer", file };
-				return download?.finish(true);
+				return download?.finish();
 			}
 
-			// 其余交给系统：.msi。
-			const failure = await shell.openPath(file);
-			if (failure) return download?.fail(say("update.cannotOpenInstaller", { reason: failure }));
-			opened = file;
-			download?.finish(false);
+			// 只会下这两种（见 `update-asset.ts`），走到这里是挑安装包的规则和这里对不上了。
+			download?.fail(say("update.installFailedPlain"));
 		} catch (error) {
 			download?.fail(error instanceof Error ? error.message : say("update.installFailedPlain"));
 		}
@@ -236,12 +232,6 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 		return phase;
 	});
 
-	/** 再打开一次交给系统的安装程序。 */
-	ipcMain.handle("plume:updates:reopen", async (): Promise<boolean> => {
-		if (!opened) return false;
-		return (await shell.openPath(opened)) === "";
-	});
-
 	/** 换上更新并从新版本起来。和下载分开，让人决定什么时候：一轮中途重启会把对话一起带走。 */
 	ipcMain.handle("plume:updates:relaunch", async (): Promise<boolean> => {
 		const job = pending;
@@ -253,10 +243,7 @@ export function registerUpdateIpc(options: { offline?: boolean } = {}): void {
 			// 经 before-quit 退出，会话和终端照常收尾。
 			quit: () => app.quit(),
 		});
-		if (result.ok) {
-			if (job.kind === "installer") opened = job.file;
-			return true;
-		}
+		if (result.ok) return true;
 		const message = say("update.installFailed", { reason: result.detail });
 		if (active) active.download.fail(message);
 		else broadcast({ at: "failed", error: message, received: 0, total: 0 });

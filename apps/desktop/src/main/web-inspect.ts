@@ -1,11 +1,34 @@
-import { randomUUID } from "node:crypto";
-import { BrowserWindow, session, type NativeImage } from "electron";
+import { BrowserWindow, session, type NativeImage, type Session } from "electron";
 import type { WebInspection, WebPages } from "@plume/contract";
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * 检查用的会话，只建一个：Electron 按分区名缓存会话、到退出才放，每次检查一个新分区就是每次漏一个。
+ * 隔离靠排队加清空：一次只检查一页，用完清掉存储和缓存，下一页看不到上一页留下的 cookie。
+ */
+let isolatedSession: Session | undefined;
+function inspectionSession(): Session {
+	if (isolatedSession) return isolatedSession;
+	const isolated = session.fromPartition("plume-inspect");
+	isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+	isolated.setPermissionCheckHandler(() => false);
+	isolated.on("will-download", (event) => event.preventDefault());
+	isolatedSession = isolated;
+	return isolated;
+}
+
+let inspecting: Promise<unknown> = Promise.resolve();
+
+/** 一次检查一页，后来的排在前一个后面（每个最多 12 秒）。 */
+export function inspectPage(url: string, raw: unknown): Promise<WebInspection> {
+	const run = inspecting.then(() => inspectOnce(url, raw));
+	inspecting = run.catch(() => undefined);
+	return run;
+}
+
 /** 检查只持有一次页面；超时也销毁进程，死循环脚本不能把工具永远挂住。 */
-export async function inspectPage(url: string, raw: unknown): Promise<WebInspection> {
+async function inspectOnce(url: string, raw: unknown): Promise<WebInspection> {
 	const address = new URL(url);
 	if (!["http:", "https:"].includes(address.protocol) || address.username || address.password)
 		throw new Error("Inspection requires an http(s) URL without credentials");
@@ -14,10 +37,7 @@ export async function inspectPage(url: string, raw: unknown): Promise<WebInspect
 	const from = options.from ?? 0;
 	if (!Number.isInteger(width) || width < 320 || width > 1600 || !Number.isFinite(from) || from < 0) throw new Error("Invalid inspection dimensions");
 	if (options.measure !== undefined && (typeof options.measure !== "string" || options.measure.length > 32_000)) throw new Error("Invalid measurement script");
-	const isolated = session.fromPartition(`plume-inspect-${randomUUID()}`);
-	isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-	isolated.setPermissionCheckHandler(() => false);
-	isolated.on("will-download", (event) => event.preventDefault());
+	const isolated = inspectionSession();
 	const window = new BrowserWindow({
 		show: false,
 		width,
@@ -89,5 +109,6 @@ export async function inspectPage(url: string, raw: unknown): Promise<WebInspect
 		clearTimeout(timer);
 		window.destroy();
 		await isolated.clearStorageData();
+		await isolated.clearCache();
 	}
 }

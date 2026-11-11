@@ -14,8 +14,8 @@ export type UpdatePhase =
 	| { at: "paused"; received: number; total: number }
 	/** 下完了，在校验、解包或交给系统；还不知道是哪种收尾。 */
 	| { at: "preparing"; received: number; total: number }
-	/** 好了。`relaunch` 分开两种收尾：能自己换上新版本重启的，和安装程序已经交给系统的。 */
-	| { at: "ready"; relaunch: boolean }
+	/** 好了，等人按「立即重启」：macOS 换上新版本再起来，Windows 跑安装程序。 */
+	| { at: "ready" }
 	| { at: "failed"; error: string; received: number; total: number };
 
 export interface UpdateInfo {

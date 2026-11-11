@@ -10,17 +10,13 @@ import type { UpdatePhase } from "../../shared/update.ts";
 
 type Translate = (key: MessageKey, variables?: Record<string, string | number>) => string;
 
-/**
- * 每个阶段，测试走全集而不是记得起来的那几个。`ready` 出现两次：macOS、Windows 的安装程序能自己换上重启，
- * 交给系统打开的 .msi 要人自己在别的窗口里装完，只看 `at` 会在没东西可重启时给出「立即重启」。
- */
+/** 每个阶段，测试走全集而不是记得起来的那几个。 */
 export const PHASES: UpdatePhase[] = [
 	{ at: "idle" },
 	{ at: "downloading", received: 45, total: 100 },
 	{ at: "paused", received: 45, total: 100 },
 	{ at: "preparing", received: 100, total: 100 },
-	{ at: "ready", relaunch: true },
-	{ at: "ready", relaunch: false },
+	{ at: "ready" },
 	// 主进程抛出的原样文字，不归这里翻译。
 	{ at: "failed", error: "net::ERR_CONNECTION_RESET", received: 45, total: 100 },
 ];
@@ -47,7 +43,7 @@ export function labelFor(phase: UpdatePhase, version: string, t: Translate): str
 		case "preparing":
 			return t("update.preparing");
 		case "ready":
-			return phase.relaunch ? t("update.restartToUpdate") : t("update.goInstall");
+			return t("update.restartToUpdate");
 		case "failed":
 			return t("update.failed");
 		default:
@@ -65,17 +61,12 @@ export function confirmLabel(phase: UpdatePhase, t: Translate): string {
 		case "preparing":
 			return t("update.preparing");
 		case "ready":
-			return phase.relaunch ? t("update.restartNow") : t("update.reopenInstaller");
+			return t("update.restartNow");
 		case "failed":
 			return t("update.retry");
 		default:
 			return t("update.download");
 	}
-}
-
-/** 下完之后说的话，每种收尾一句。 */
-export function readyNote(relaunch: boolean, t: Translate): string {
-	return relaunch ? t("update.readyRestart") : t("update.readyInstaller");
 }
 
 /**

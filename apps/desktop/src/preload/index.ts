@@ -180,7 +180,6 @@ contextBridge.exposeInMainWorld("plume", {
 		download: (version: string) => ipcRenderer.invoke("plume:updates:download", version),
 		pause: () => ipcRenderer.invoke("plume:updates:pause"),
 		cancel: () => ipcRenderer.invoke("plume:updates:cancel"),
-		reopen: () => ipcRenderer.invoke("plume:updates:reopen"),
 		relaunch: () => ipcRenderer.invoke("plume:updates:relaunch"),
 		open: (url: string) => ipcRenderer.invoke("plume:updates:open", url),
 		onProgress: (listener: (phase: unknown) => void) => {

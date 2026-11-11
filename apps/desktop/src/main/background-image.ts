@@ -9,7 +9,7 @@ const NAME = /^chat-\d+(?:-\d+)*\.(?:png|jpe?g|gif|webp)$/;
 type BackgroundImportError = "too-large" | "invalid" | "failed";
 export type BackgroundImportResult = { name: string } | { error: BackgroundImportError };
 
-/** 只接受支持的真实图片签名；解码真实性由主进程的 nativeImage 再确认。 */
+/** 只接受支持的真实图片签名；能不能真的解码由 appearance.ts 用浏览器的解码器再确认（nativeImage 不支持 GIF）。 */
 export function imageExtension(name: string, bytes: Uint8Array): "png" | "jpg" | "gif" | "webp" | null {
 	const requested = extname(name).slice(1).toLowerCase();
 	if (!EXTENSIONS.has(requested) || bytes.length < 4) return null;

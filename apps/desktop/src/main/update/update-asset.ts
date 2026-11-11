@@ -45,7 +45,7 @@ export function pickAsset(assets: ReleaseAsset[], platform: string = process.pla
 	// 名字里一个架构都没有才算通用：`x86_64` 不能读成「不是 arm64」。
 	const universal = (name: string) => !mine.some((tag) => name.includes(tag)) && !others.some((tag) => name.includes(tag));
 
-	const extensions = platform === "darwin" ? [".zip"] : platform === "win32" ? [".exe", ".msi"] : [];
+	const extensions = platform === "darwin" ? [".zip"] : platform === "win32" ? [".exe"] : [];
 
 	for (const extension of extensions) {
 		const candidates = named.filter((asset) => asset.name.toLowerCase().endsWith(extension));

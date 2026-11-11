@@ -92,7 +92,7 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 		`(() => { const dialog = document.querySelector('[data-plume-update-dialog]'); return dialog.textContent.includes('这次没能写完') && !dialog.textContent.includes('download.part') && Boolean(${buttonWith("重试", "dialog")}); })()`,
 		"失败时说原因、不露路径、给重试",
 	);
-	await preview({ phase: { at: "ready", relaunch: true } });
+	await preview({ phase: { at: "ready" } });
 	await until(
 		`document.querySelector('[data-plume-update-dialog]').textContent.includes('重启 Plume 即可用上新版本') && Boolean(${buttonWith("立即重启", "document.querySelector('[data-plume-update-dialog]')")})`,
 		"下好后给立即重启",

@@ -162,11 +162,16 @@ export function createMarket(options: MarketOptions): Market {
 
 	const installed = async (): Promise<InstalledPlugin[]> => {
 		const { builtin, local, upload, market } = await found();
+		// 指纹要把发给插件的文件全读一遍（几十兆）：加载着的那份已经算过、盯着目录的 rescan 会跟着更新，直接用；没加载的才现算。
+		const info = async (key: string, dir: string) => {
+			const loaded = loadedPlugins.get(key);
+			return { ...(await readInfo(key, dir)), hash: loaded && loaded.dir === resolve(dir) ? loaded.hash : await hashOf(dir) };
+		};
 		return Promise.all([
-			...builtin.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "builtin" as const })),
-			...local.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "local" as const })),
-			...upload.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "upload" as const })),
-			...market.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "market" as const })),
+			...builtin.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "builtin" as const })),
+			...local.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "local" as const })),
+			...upload.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "upload" as const })),
+			...market.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "market" as const })),
 		]);
 	};
 
@@ -429,14 +434,14 @@ export function createMarket(options: MarketOptions): Market {
 	};
 }
 
-/** 读插件目录的 package.json 和发给插件的文件的指纹。字段类型不对的当没写，一个坏字段不拖垮整页。 */
-async function readInfo(id: string, dir: string): Promise<MarketInfo & { hash: string }> {
+/** 读插件目录的 package.json 和图标。字段类型不对的当没写，一个坏字段不拖垮整页。 */
+async function readInfo(id: string, dir: string): Promise<MarketInfo> {
 	const manifest = await readFile(join(dir, "package.json"), "utf8").then(
 		(raw) => readManifest(JSON.parse(raw)),
 		() => readManifest(null),
 	);
 	const icon = await readIcon(dir);
-	return { ...marketInfo(id, manifest), ...(icon ? { logo: `data:image/png;base64,${icon.toString("base64")}` } : {}), hash: await hashOf(dir) };
+	return { ...marketInfo(id, manifest), ...(icon ? { logo: `data:image/png;base64,${icon.toString("base64")}` } : {}) };
 }
 
 /** README 里一张图的相对路径能不能取、是什么类型：只能往下走，只认常见的图片扩展名。 */

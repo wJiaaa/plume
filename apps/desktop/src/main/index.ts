@@ -5,8 +5,7 @@
  */
 
 import { once } from "node:events";
-import { constants } from "node:fs";
-import { copyFile, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { basename, delimiter, join, resolve } from "node:path";
 import { RpcChannel, remote, serve } from "@plume/rpc";
 import {
@@ -167,21 +166,11 @@ app.whenReady().then(boot, (error: unknown) => {
  * 加密存进同目录的 credentials.json（钥匙是 vault.key），不在 settings.json 里。
  * Magpie 的 Agent 插件（integrations/magpie）按缺省路径找这个文件；~/.plume 这个目录也是 Magpie 判断 Plume
  * 装没装的依据，所以启动时就建好。
- *
- * 以前放在仓库根目录的 model.json：新位置还没有文件时复制过去一次，旧文件留着，由人自己删。
  */
 async function userSettingsFile(): Promise<string> {
 	const dir = plumeHome();
-	const file = join(dir, "settings.json");
 	await mkdir(dir, { recursive: true });
-	try {
-		await copyFile(resolve(app.getAppPath(), "../../model.json"), file, constants.COPYFILE_EXCL);
-	} catch (error) {
-		// 没有旧文件，或者新位置已经有了：都不用搬。
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code !== "ENOENT" && code !== "EEXIST") throw error;
-	}
-	return file;
+	return join(dir, "settings.json");
 }
 
 async function boot(): Promise<void> {

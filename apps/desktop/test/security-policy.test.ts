@@ -4,7 +4,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isRemoteOrDevicePath, opensAsProgram } from "../src/main/security-policy.ts";
+import { isRemoteOrDevicePath } from "../src/shared/remote-path.ts";
+import { opensAsProgram } from "../src/main/security-policy.ts";
 
 const FILE = { isDirectory: false, executable: false };
 
