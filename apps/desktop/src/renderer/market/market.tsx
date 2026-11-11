@@ -3,8 +3,8 @@
  *
  * 技能和连接器（MCP）由管它们的内置插件画（`page: "extensions-skills"`、`"extensions-connectors"`）：装了哪些、开着
  * 没有、配好没有，人到这里找，设置里不另设一页。市场里这两类的条目（`plume.kind` 是 skill、connector 的插件）按货架
- * 排，装法、详情页和插件一样：技能那一类和插件一样用筛选条把本机的和市场里的分开（`SkillsTab`），连接器那一类接在
- * 那一节下面。下面说的都是「插件」那一类，由这里画。
+ * 排，装法、详情页和插件一样：这两类和插件一样用筛选条把本机的和市场里的分开（`ExtensionsTab`）。下面说的都是「插件」
+ * 那一类，由这里画。
  *
  * 按货架排开的标记和一句话，为了扫着看而排，每张一个动作；开关、更新、卸载、插件自己的设置都在它的详情页
  * （detail.tsx）。「我装了什么」也在这里回答：筛选条最前面是「已安装」，筛出装着的那几张卡片——设置里不另设一页。
@@ -86,14 +86,15 @@ import {
 	focusPlugin,
 	installFromFolder,
 	type MarketNotice,
+	type ExtensionTab,
 	type MarketTab,
-	refreshSkills,
+	refreshInstalled,
 	reloadMarket,
 	setAutoUpdate,
 	INSTALLED,
 	setMarketNotice,
+	setExtensionFilter,
 	setMarketTab,
-	setSkillsFilter,
 	setSkillsProject,
 	updatePlugins,
 	useCatalog,
@@ -169,12 +170,14 @@ export function MarketScreen({
 				<div className="px-6 pb-16">
 					{/* @container：网格跟着这一列的宽度走，不跟窗口。 */}
 					<div className="@container mx-auto w-full max-w-[1040px]">
-						<KindTabs value={tab} onChange={setMarketTab} trailing={tab === "skills" ? <SkillsActions projects={projects} onTry={onTry} /> : undefined} />
+						<KindTabs
+							value={tab}
+							onChange={setMarketTab}
+							trailing={tab === "plugins" ? undefined : <ExtensionActions tab={tab} projects={projects} onTry={onTry} />}
+						/>
 
-						{tab === "skills" ? (
-							<SkillsTab items={items} projects={projects} />
-						) : tab === "connectors" ? (
-							<ConnectorsTab items={items} />
+						{tab !== "plugins" ? (
+							<ExtensionsTab key={tab} tab={tab} items={items} projects={projects} />
 						) : (
 							<>
 								<Filters value={category} onChange={setCategory} shelves={categories} />
@@ -306,26 +309,34 @@ function KindTabs({
 	);
 }
 
+/** 两类各自的：市场里的条目是哪一种、管它们的插件画在哪一页、页头「添加」叫什么。 */
+const EXTENSION_KINDS = {
+	skills: { kind: "skill", page: "extensions-skills", add: "market.addSkill" },
+	connectors: { kind: "connector", page: "extensions-connectors", add: "market.addConnector" },
+} as const satisfies Record<ExtensionTab, { kind: CatalogItem["kind"]; page: string; add: string }>;
+
 /**
- * 「技能」那一类：和插件那一类一样，筛选条把本机有的和市场里能装的分开，两样不在一页上混着。
+ * 「技能」「连接器」两类：和插件那一类一样，筛选条把本机有的和市场里能装的分开，两样不在一页上混着。
  *
- *   - 「已安装」是管技能的插件画的那一节（`page: "extensions-skills"`）：按来源分组的开关。看哪个项目、刷新在页头「添加技能」
- *     左边（`SkillsActions`），由这里画，选的值经组件参数交给它（`ExtensionsSectionProps`）；点合集卡片打开那个插件的详情。
- *   - 全部、各个货架是市场里的技能合集，一张网格不分架，卡片和详情页同插件那一类；装上的照样留在这里，卡片上写着已安装。
+ *   - 「已安装」是管它们的插件画的那一节（`page: "extensions-skills"`、`"extensions-connectors"`）。刷新（技能还有看哪个项目）
+ *     在页头「添加」左边（`ExtensionActions`），由这里画，选的值经组件参数交给它（`ExtensionsSectionProps`）。
+ *   - 全部、各个货架是市场里的技能合集、连接器，一张网格不分架，卡片和详情页同插件那一类；装上的照样留在这里，卡片上写着已安装。
  */
-function SkillsTab({ items, projects }: { items: CatalogItem[]; projects: readonly ProjectInfo[] }) {
+function ExtensionsTab({ tab, items, projects }: { tab: ExtensionTab; items: CatalogItem[]; projects: readonly ProjectInfo[] }) {
 	const { t } = useI18n();
-	const { market, loading, notice, skillsFilter: filter, skillsRefresh } = useMarketStore();
+	const { market, loading, notice, filters, refreshKey } = useMarketStore();
+	const filter = filters[tab];
+	const { kind, page } = EXTENSION_KINDS[tab];
 	usePluginUis();
-	const sections = listPageSettingsSections("extensions-skills");
-	const offered = shelves(items.filter((item) => item.kind === "skill" && !isBuiltin(item)));
+	const sections = listPageSettingsSections(page);
+	const offered = shelves(items.filter((item) => item.kind === kind && !isBuiltin(item)));
 	const shown = (filter === null ? offered : offered.filter((shelf) => shelf.category === filter)).flatMap((shelf) => shelf.items);
 	const { project } = useSkillsProject(projects);
 	const slow = useSlowLoad(loading && !market);
 	const installed = filter === INSTALLED;
 	return (
-		<div className="market-swap-in" data-market-tab="skills">
-			<Filters value={filter} onChange={setSkillsFilter} shelves={offered.map((shelf) => shelf.category)} />
+		<div className="market-swap-in" data-market-tab={tab}>
+			<Filters value={filter} onChange={(next) => setExtensionFilter(tab, next)} shelves={offered.map((shelf) => shelf.category)} />
 			{!installed && notice && <NoticeLine notice={notice} onDismiss={() => setMarketNotice(undefined)} />}
 			{/* 按选中的那颗取 key：换一颗重放一次到达，同插件那一类。 */}
 			<div key={filter ?? ""} className="market-swap-in">
@@ -333,7 +344,7 @@ function SkillsTab({ items, projects }: { items: CatalogItem[]; projects: readon
 					<div className="pt-5">
 						{sections.map((entry) => (
 							<ErrorBoundary key={entry.key}>
-								<entry.component project={project?.path ?? null} refreshKey={skillsRefresh} openPlugin={focusPlugin} />
+								<entry.component {...(tab === "skills" ? { project: project?.path ?? null } : {})} refreshKey={refreshKey} openPlugin={focusPlugin} />
 							</ErrorBoundary>
 						))}
 					</div>
@@ -365,68 +376,91 @@ function useSkillsProject(projects: readonly ProjectInfo[]) {
 }
 
 /**
- * 「技能」那一类的页头右端：看「已安装」时先是看哪个项目、刷新（放这里不占筛选条的地方），再是「添加技能」。
+ * 「技能」「连接器」两类的页头右端：看「已安装」时先是刷新（技能还有看哪个项目，放这里不占筛选条的地方），再是「添加」。
  */
-function SkillsActions({ projects, onTry }: { projects: readonly ProjectInfo[]; onTry: (prompt: string) => void }) {
+function ExtensionActions({ tab, projects, onTry }: { tab: ExtensionTab; projects: readonly ProjectInfo[]; onTry: (prompt: string) => void }) {
 	const { t } = useI18n();
-	const { skillsFilter } = useMarketStore();
+	const { filters } = useMarketStore();
 	const { choices, project } = useSkillsProject(projects);
 	return (
 		<>
-			{skillsFilter === INSTALLED && (
+			{filters[tab] === INSTALLED && (
 				<>
-					<ProjectScope value={project} choices={choices} onChange={setSkillsProject} />
-					<IconButton label={t("market.refreshSkills")} onClick={refreshSkills} icon={<RefreshCw size={14} strokeWidth={1.8} />} />
+					{tab === "skills" && <ProjectScope value={project} choices={choices} onChange={setSkillsProject} />}
+					<IconButton label={t("market.refreshInstalled")} onClick={refreshInstalled} icon={<RefreshCw size={14} strokeWidth={1.8} />} />
 				</>
 			)}
-			<AddSkill onTry={onTry} />
+			<AddMenu tab={tab} onTry={onTry} />
 		</>
 	);
 }
 
 /**
- * 「技能」那一类页顶的「添加技能」：产品自己的一项是开新对话让 agent 照人说的写；管技能的插件再接上只有它做得到的
- * （`SettingsSectionOptions.actions`，比如打开个人技能目录）。
+ * 「技能」「连接器」两类页顶的「添加」：技能有产品自己的一项，开新对话让 agent 照人说的写；管它们的插件再接上只有它做得到的
+ * （`SettingsSectionOptions.actions`：打开个人技能目录、手动添加一个连接器）。插件那一项跑完换到「已安装」，它那一节接着画
+ * （比如弹出添加的对话框）。只有一项时按钮直接做那一件，不弹只有一行的菜单。
  */
-function AddSkill({ onTry }: { onTry: (prompt: string) => void }) {
+function AddMenu({ tab, onTry }: { tab: ExtensionTab; onTry: (prompt: string) => void }) {
 	const { t, resolvedLocale } = useI18n();
 	const menu = usePopover();
 	usePluginUis();
-	const actions = listPageSettingsSections("extensions-skills").flatMap((entry) => entry.actions ?? []);
+	const { page, add } = EXTENSION_KINDS[tab];
+	const items: { key: string; label: string; detail?: string; icon?: ReactNode; run: () => void }[] = [
+		...(tab === "skills"
+			? [
+					{
+						key: "write",
+						label: t("market.writeSkill"),
+						detail: t("market.writeSkillDetail"),
+						icon: <Sparkles size={14} strokeWidth={1.8} />,
+						run: () => onTry(t("market.writeSkillPrompt")),
+					},
+				]
+			: []),
+		...listPageSettingsSections(page).flatMap((entry) =>
+			(entry.actions ?? []).map((action, index) => {
+				const Icon = action.icon;
+				return {
+					key: `${entry.key}/${index}`,
+					label: localized(action.label, resolvedLocale),
+					...(action.detail ? { detail: localized(action.detail, resolvedLocale) } : {}),
+					...(Icon ? { icon: <Icon size={14} strokeWidth={1.8} /> } : {}),
+					run: () => {
+						void (async () => action.run())().catch((error: unknown) => console.error(error));
+						setExtensionFilter(tab, INSTALLED);
+					},
+				};
+			}),
+		),
+	];
+	const only = items.length === 1 ? items[0] : undefined;
 	return (
 		<>
-			<Button variant="primary" menu={menu.open} onClick={menu.toggle} icon={<Plus size={14} strokeWidth={2} />} data-market-add-skill="">
-				{t("market.addSkill")}
+			<Button
+				variant="primary"
+				{...(only ? {} : { menu: menu.open })}
+				onClick={only ? only.run : menu.toggle}
+				icon={<Plus size={14} strokeWidth={2} />}
+				data-market-add={tab}
+			>
+				{t(add)}
 			</Button>
 			{menu.open && (
-				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width="default" role="menu" label={t("market.addSkill")}>
+				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width="default" role="menu" label={t(add)}>
 					<MenuBody>
-						<MenuItem
-							icon={<Sparkles size={14} strokeWidth={1.8} />}
-							detail={t("market.writeSkillDetail")}
-							onClick={() => {
-								menu.close();
-								onTry(t("market.writeSkillPrompt"));
-							}}
-						>
-							{t("market.writeSkill")}
-						</MenuItem>
-						{actions.map((action) => {
-							const Icon = action.icon;
-							return (
-								<MenuItem
-									key={localized(action.label, resolvedLocale)}
-									icon={Icon ? <Icon size={14} strokeWidth={1.8} /> : undefined}
-									{...(action.detail ? { detail: localized(action.detail, resolvedLocale) } : {})}
-									onClick={() => {
-										menu.close();
-										void (async () => action.run())().catch((error: unknown) => console.error(error));
-									}}
-								>
-									{localized(action.label, resolvedLocale)}
-								</MenuItem>
-							);
-						})}
+						{items.map((item) => (
+							<MenuItem
+								key={item.key}
+								icon={item.icon}
+								{...(item.detail ? { detail: item.detail } : {})}
+								onClick={() => {
+									menu.close();
+									item.run();
+								}}
+							>
+								{item.label}
+							</MenuItem>
+						))}
 					</MenuBody>
 				</Popover>
 			)}
@@ -499,39 +533,6 @@ function ProjectScope({
 				</Popover>
 			)}
 		</>
-	);
-}
-
-/**
- * 「连接器」那一类：管 MCP 的插件画的那一节，卡片网格由它自己画；下面接着市场里的连接器，按货架排，卡片和详情页同
- * 插件那一类。装上的连接器也出现在上面那一节里。
- */
-function ConnectorsTab({ items }: { items: CatalogItem[] }) {
-	const { t } = useI18n();
-	usePluginUis();
-	const sections = listPageSettingsSections("extensions-connectors");
-	const offered = items.filter((item) => item.kind === "connector" && !isBuiltin(item));
-	let arrival = 0;
-	return (
-		<div className="market-swap-in" data-market-tab="connectors">
-			{sections.map((entry) => (
-				<ErrorBoundary key={entry.key}>
-					<entry.component />
-				</ErrorBoundary>
-			))}
-			{offered.length > 0 && (
-				<section className="pt-10" data-market-offered="connector">
-					<h2 className="text-heading font-semibold text-ink">{t("market.fromMarket")}</h2>
-					{shelves(offered).map((shelf) => (
-						<Shelf key={shelf.category} id={shelf.category} title={shelf.category === UNFILED ? t("common.other") : shelf.category} count={shelf.items.length}>
-							{shelf.items.map((item) => (
-								<CatalogCard key={item.key} index={arrival++} item={item} onOpen={() => focusPlugin(item.key)} />
-							))}
-						</Shelf>
-					))}
-				</section>
-			)}
-		</div>
 	);
 }
 

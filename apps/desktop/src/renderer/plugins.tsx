@@ -1188,7 +1188,8 @@ function registerSettingsSection(plugin: string, id: unknown, component: unknown
 	if (page !== undefined && !SETTINGS_PAGES.has(page as string)) throw new Error(`设置分区 ${id} 的 page 只能是 ${[...SETTINGS_PAGES].join("、")}`);
 	if (group !== undefined && !SECTION_GROUPS.has(group as string)) throw new Error(`设置分区 ${id} 的 group 只能是 ${[...SECTION_GROUPS].join("、")}`);
 	if (group !== undefined && page !== "nav") throw new Error(`设置分区 ${id} 的 group 只在 page 是 nav 时有用`);
-	if (actions !== undefined && page !== "extensions-skills") throw new Error(`设置分区 ${id} 的 actions 只在 page 是 extensions-skills 时有用`);
+	if (actions !== undefined && page !== "extensions-skills" && page !== "extensions-connectors")
+		throw new Error(`设置分区 ${id} 的 actions 只在 page 是 extensions-skills、extensions-connectors 时有用`);
 	if (actions !== undefined && (!Array.isArray(actions) || !actions.every((action: unknown) => validAction(action))))
 		throw new Error(`设置分区 ${id} 的 actions 每一项要有名字和 run`);
 	const key = `${plugin}/${id}`;

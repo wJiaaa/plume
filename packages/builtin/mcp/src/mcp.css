@@ -1,21 +1,9 @@
-/* 「插件市场 › 连接器」的布局。字交给 Text，颜色只取 var(--plume-*)。 */
+/* 「插件市场 › 连接器 › 已安装」的布局。字交给 Text，颜色只取 var(--plume-*)。 */
 
-/* 分类标签下面那一行，靠右：搜索、刷新、添加。 */
-.mcp-toolbar {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 4px;
-}
-
-.mcp-search {
-	width: 240px;
-	margin-right: 4px;
-}
-
+/* 市场在这一节上面已经留了空：页顶的提示和网格不再自己往下推。 */
 .mcp-problem {
 	padding: 12px 14px;
-	margin-top: 16px;
+	margin-bottom: 16px;
 	border: 1px solid var(--plume-line-soft);
 	border-radius: var(--plume-radius-field);
 }
@@ -57,7 +45,6 @@
 	grid-template-columns: minmax(0, 1fr);
 	align-items: start;
 	gap: 12px;
-	padding-top: 20px;
 }
 
 @container (min-width: 42rem) {

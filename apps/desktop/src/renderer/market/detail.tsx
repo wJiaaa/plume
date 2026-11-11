@@ -37,7 +37,7 @@ import type { PluginKind } from "@plume/contract";
 import { type CatalogItem, isBuiltin, isEnabled, isInstalled, UNFILED } from "./catalog.ts";
 import { PluginIcon } from "./plugin-icon.tsx";
 import { Readme } from "./readme.tsx";
-import { INSTALLED, type MarketTab, setMarketTab, setPluginEnabled, setSkillsFilter } from "./store.ts";
+import { type ExtensionTab, INSTALLED, setExtensionFilter, setMarketTab, setPluginEnabled } from "./store.ts";
 import { useInstall } from "./use-install.ts";
 
 export function PluginDetail({
@@ -304,7 +304,7 @@ function PluginSettings({
 		);
 	}
 	// 画进「插件市场」另两类的，入口是换到那一类。
-	const tabs = new Map<Exclude<MarketTab, "plugins">, string>();
+	const tabs = new Map<ExtensionTab, string>();
 	for (const entry of sections) {
 		if (entry.page === "extensions-skills") tabs.set("skills", t("market.skills"));
 		if (entry.page === "extensions-connectors") tabs.set("connectors", t("market.connectors"));
@@ -341,8 +341,8 @@ function PluginSettings({
 							size="sm"
 							icon={<Settings2 size={13} strokeWidth={1.8} aria-hidden />}
 							onClick={() => {
-								// 去管它带来的技能：落在「已安装」，不是市场里的那一列。
-								if (tab === "skills") setSkillsFilter(INSTALLED);
+								// 去管它带来的技能、连接器：落在「已安装」，不是市场里的那一列。
+								setExtensionFilter(tab, INSTALLED);
 								setMarketTab(tab);
 							}}
 						>

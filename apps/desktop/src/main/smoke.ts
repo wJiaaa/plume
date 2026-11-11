@@ -1128,7 +1128,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				"「技能」一类默认列市场里的，不混着本机的技能",
 			);
 			// 页顶「添加技能」：产品的「让 agent 写一个」，后面接技能插件登记的「打开个人技能目录」。
-			await click("[data-market-add-skill]");
+			await click('[data-market-add="skills"]');
 			await until(
 				`[...document.querySelectorAll('[role=menu] [role=menuitem]')].map((item) => item.textContent).join('|').includes('打开个人技能目录')`,
 				"「添加技能」菜单里有技能插件登记的一项",
@@ -1167,10 +1167,25 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await until(`document.querySelector('[data-plugin-detail]') !== null`, "点合集卡片打开插件详情");
 			await click(marketCrumb);
 			await until(`document.querySelector('[data-market-tab="skills"] [data-skills-settings]') !== null`, "从详情返回时回到技能 › 已安装");
+			// 连接器一类和技能一样：默认列市场里的连接器，「已安装」才是 MCP 插件的那一节。
 			await click('[data-market-kind="connectors"]');
-			await until(`document.querySelector('[data-market-tab="connectors"] [data-mcp-settings]') !== null`, "「连接器」一类画出 MCP 插件的那一节");
+			await until(
+				`document.querySelector('[data-market-tab="connectors"] [data-card]') !== null && document.querySelector('[data-mcp-settings]') === null`,
+				"「连接器」一类默认列市场里的连接器",
+			);
+			await delay(300);
+			await capture(window, join(outDir, "smoke-market-connectors-offered.png"));
+			// 页头「添加连接器」只有 MCP 插件登记的「手动添加」一项：按下去直接换到「已安装」、弹出它的添加弹窗。
+			await click('[data-market-add="connectors"]');
+			await until(
+				`document.querySelector('[data-market-tab="connectors"] [data-mcp-settings]') !== null && document.querySelector('[data-mcp-dialog]') !== null`,
+				"「添加连接器」换到「已安装」并弹出添加弹窗",
+			);
 			await delay(300);
 			await capture(window, join(outDir, "smoke-market-connectors.png"));
+			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+			await until(`document.querySelector('[data-mcp-dialog]') === null`, "Escape 关掉添加弹窗");
 			await click('[data-market-kind="plugins"]');
 			await until(`document.querySelector('[data-screen=market] [data-card="scheduled"]') !== null`, "回到插件那一类");
 			// 插件能在详情页当场停用、再启用。

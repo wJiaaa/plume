@@ -1,12 +1,12 @@
 /**
- * plume.mcp 的界面入口，跑在渲染进程：「插件市场」页里「连接器」那一类。每台服务一张卡片：它在不在跑、怎么启动、带来了哪些工具；
- * 添加在弹窗里，改已有的在卡片里就地改；开关、重连、填值、登录、删除都经逻辑入口（`ui.remote()`）改插件数据目录里的
+ * plume.mcp 的界面入口，跑在渲染进程：「插件市场 › 连接器 › 已安装」。每台服务一张卡片：它在不在跑、怎么启动、带来了哪些工具；
+ * 添加在弹窗里（市场页头的「添加连接器」经 `actions` 打开），改已有的在卡片里就地改；开关、重连、填值、登录、删除都经逻辑入口（`ui.remote()`）改插件数据目录里的
  * `servers.json`。服务中途要人填的表画成一张审批卡（`FormCard.tsx`）。
  *
  * 像密钥的环境变量、请求头，界面只知道填没填，原值不出 agent 进程。
  */
 
-import type { Remote, UiPlugin } from "@plume/contract/ui";
+import type { ExtensionsSectionProps, Remote, UiPlugin } from "@plume/contract/ui";
 import {
 	Button,
 	Collapse,
@@ -18,7 +18,6 @@ import {
 	Popover,
 	Segmented,
 	Select,
-	SearchField,
 	Text,
 	Toggle,
 	useConfirmer,
@@ -50,10 +49,20 @@ function mountStyles(): void {
 	style.textContent = mcpCss;
 }
 
-function McpSettings({ api, notify }: { api: Remote<McpApi>; notify: Notify }) {
+/**
+ * 市场页头「添加连接器」要开添加弹窗。那时「已安装」不一定画着（市场跑完动作才换过去），先记下，
+ * 这一节画出来或已经画着时接着开。
+ */
+let addWanted = false;
+const addListeners = new Set<() => void>();
+function requestAdd(): void {
+	addWanted = true;
+	for (const listener of addListeners) listener();
+}
+
+function McpSettings({ api, notify, refreshKey = 0 }: { api: Remote<McpApi>; notify: Notify } & ExtensionsSectionProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const [view, setView] = useState<McpView | null>(null);
-	const [query, setQuery] = useState("");
 	const [busy, setBusy] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
 	const confirmer = useConfirmer();
@@ -61,7 +70,20 @@ function McpSettings({ api, notify }: { api: Remote<McpApi>; notify: Notify }) {
 	const refresh = useCallback(() => {
 		void (async () => setView(await api.list()))().catch((error: unknown) => notify(text.readFailed(reasonOf(error)), "error"));
 	}, [api, notify, text]);
-	useEffect(refresh, [refresh]);
+	// 人在市场上点了刷新（refreshKey 变了）也重读。
+	useEffect(refresh, [refresh, refreshKey]);
+	useEffect(() => {
+		const take = () => {
+			if (!addWanted) return;
+			addWanted = false;
+			setAdding(true);
+		};
+		take();
+		addListeners.add(take);
+		return () => {
+			addListeners.delete(take);
+		};
+	}, []);
 	// 连接在后台走：还有「连接中」「重连中」的，过一秒再问一次，直到每台都有了结果。
 	const settling = view?.servers.some((server) => server.status.state === "connecting" || server.status.state === "reconnecting") ?? false;
 	useEffect(() => {
@@ -84,8 +106,6 @@ function McpSettings({ api, notify }: { api: Remote<McpApi>; notify: Notify }) {
 	};
 
 	const servers = view?.servers ?? [];
-	const needle = query.trim().toLowerCase();
-	const visible = servers.filter((server) => !needle || `${server.name} ${server.command ?? ""} ${server.url ?? ""}`.toLowerCase().includes(needle));
 
 	const remove = (server: ServerView) =>
 		confirmer.ask({
@@ -98,16 +118,6 @@ function McpSettings({ api, notify }: { api: Remote<McpApi>; notify: Notify }) {
 
 	return (
 		<div data-mcp-settings="">
-			<div className="mcp-toolbar">
-				{servers.length > 0 && <SearchField value={query} onChange={setQuery} placeholder={text.searchPlaceholder} className="mcp-search" />}
-				<IconButton label={text.refresh} icon={<RefreshCw size={14} strokeWidth={1.8} aria-hidden />} onClick={refresh} />
-				{/* 一个连接器都没有时，「添加」只放在下面的空状态里，不重复两个。 */}
-				{(servers.length > 0 || view?.error) && (
-					<Button variant="primary" size="sm" icon={<Plus size={13} aria-hidden />} disabled={Boolean(view?.error)} onClick={() => setAdding(true)}>
-						{text.add}
-					</Button>
-				)}
-			</div>
 			{view?.error && (
 				<div className="mcp-problem" role="status">
 					<Text as="p" size="label" weight="medium" tone="danger">
@@ -127,19 +137,10 @@ function McpSettings({ api, notify }: { api: Remote<McpApi>; notify: Notify }) {
 					<Text as="p" size="detail" tone="muted">
 						{text.emptyHint}
 					</Text>
-					<Button variant="primary" icon={<Plus size={13} aria-hidden />} onClick={() => setAdding(true)}>
-						{text.add}
-					</Button>
-				</div>
-			) : servers.length > 0 && visible.length === 0 ? (
-				<div className="mcp-empty">
-					<Text size="label" tone="faint">
-						{text.noMatch}
-					</Text>
 				</div>
 			) : (
 				<div className="mcp-grid">
-					{visible.map((server) => (
+					{servers.map((server) => (
 						<ServerCard
 							key={server.id}
 							server={server}
@@ -962,10 +963,11 @@ export default {
 		ui.toolCard("mcp__", Documents, { match: "prefix", inline: true });
 		ui.toolCard("mcp_call", Documents, { inline: true });
 		const notify = ui.notify.bind(ui);
-		ui.settingsSection("mcp", () => <McpSettings api={api} notify={notify} />, {
+		ui.settingsSection("mcp", (props) => <McpSettings api={api} notify={notify} {...props} />, {
 			title: (locale) => MESSAGES[locale].settingsTitle,
 			icon: Plug,
 			page: "extensions-connectors",
+			actions: [{ label: (locale) => MESSAGES[locale].addManual, detail: (locale) => MESSAGES[locale].addManualDetail, icon: Plus, run: requestAdd }],
 		});
 		ui.approvalCard(FORM_KIND, formCard(ui, api), { match: "kind" });
 	},

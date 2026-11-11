@@ -16,6 +16,9 @@ export type MarketNotice = { tone: "error" | "note"; text: string };
 /** 「插件市场」的三类：插件由产品画，技能、连接器由管它们的插件画（`page: "extensions-skills"`、`"extensions-connectors"`）。 */
 export type MarketTab = "plugins" | "skills" | "connectors";
 
+/** 由管它们的插件画「已安装」的那两类。 */
+export type ExtensionTab = Exclude<MarketTab, "plugins">;
+
 /** 筛选条上「已安装」那一颗。和货架的 UNFILED 一样前面带空格，不会撞上哪个货架的名字。 */
 export const INSTALLED = " installed";
 
@@ -26,19 +29,27 @@ interface MarketStore {
 	loading: boolean;
 	/** 看的是哪一类。 */
 	tab: MarketTab;
-	/** 「技能」那一类的筛选：INSTALLED 是本机的技能，null 是市场里的全部，别的是某个货架。 */
-	skillsFilter: string | null;
+	/** 「技能」「连接器」两类各自的筛选：INSTALLED 是本机有的，null 是市场里的全部，别的是某个货架。 */
+	filters: Record<ExtensionTab, string | null>;
 	/** 「技能 › 已安装」看的是哪个项目的技能（目录），null 是只看个人的。活在这次运行里，离开再回来还停在上次那个。 */
 	skillsProject: string | null;
-	/** 「技能 › 已安装」页头的刷新点了几次：技能插件那一节跟着重读。 */
-	skillsRefresh: number;
+	/** 「已安装」页头的刷新点了几次：管它们的插件那一节跟着重读。 */
+	refreshKey: number;
 	/** 市场里打开的详情页，按目录名。 */
 	focus: string | null;
 	updates?: PluginUpdateState;
 	notice?: MarketNotice;
 }
 
-let store: MarketStore = { plugins: [], loading: false, tab: "plugins", skillsFilter: null, skillsProject: null, skillsRefresh: 0, focus: null };
+let store: MarketStore = {
+	plugins: [],
+	loading: false,
+	tab: "plugins",
+	filters: { skills: null, connectors: null },
+	skillsProject: null,
+	refreshKey: 0,
+	focus: null,
+};
 const listeners = new Set<() => void>();
 let agent: Remote<AgentService>;
 
@@ -114,16 +125,16 @@ export function setMarketTab(tab: MarketTab): void {
 	set({ tab, focus: null });
 }
 
-export function setSkillsFilter(skillsFilter: string | null): void {
-	set({ skillsFilter });
+export function setExtensionFilter(tab: ExtensionTab, filter: string | null): void {
+	set({ filters: { ...store.filters, [tab]: filter } });
 }
 
 export function setSkillsProject(skillsProject: string | null): void {
 	set({ skillsProject });
 }
 
-export function refreshSkills(): void {
-	set({ skillsRefresh: store.skillsRefresh + 1 });
+export function refreshInstalled(): void {
+	set({ refreshKey: store.refreshKey + 1 });
 }
 
 export function setMarketNotice(notice: MarketNotice | undefined): void {
