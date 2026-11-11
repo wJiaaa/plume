@@ -36,6 +36,13 @@ export function ClosableTab({
 		<div
 			{...data}
 			onContextMenu={onContextMenu}
+			// 中键点标签关掉它，和浏览器的标签一样。按下时拦住，Windows 上中键按下会让外面那条横滚的标签栏进入自动滚动。
+			onMouseDown={(event) => event.button === 1 && event.preventDefault()}
+			onAuxClick={(event) => {
+				if (event.button !== 1) return;
+				event.preventDefault();
+				onClose();
+			}}
 			className={`group/tab flex shrink-0 items-center gap-1 rounded-lg pr-0.5 pl-2 transition-colors duration-[var(--plume-t-quick)] ${
 				// 悬停时也亮，否则一排名字说不出指针在哪一个上。
 				current ? "bg-card-hover text-ink" : "text-ink-faint hover:bg-card-hover/60 hover:text-ink"

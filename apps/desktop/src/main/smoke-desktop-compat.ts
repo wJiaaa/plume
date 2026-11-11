@@ -59,7 +59,7 @@ export async function checkDesktopCompat(options: {
 	const visible = (selector: string) =>
 		`[...document.querySelectorAll(${JSON.stringify(selector)})].find(e => e.checkVisibility({ opacityProperty: true, visibilityProperty: true }))`;
 	/** 用真的指针按：先确认按钮中心落下去点到的就是它自己，没被别的东西盖住。 */
-	const press = async (selector: string) => {
+	const press = async (selector: string, button: "left" | "middle" = "left") => {
 		await until(`Boolean(${visible(selector)})`, `等到 ${selector}`);
 		const at = await page<{ x: number; y: number; hit: boolean }>(`(() => {
 			const el = ${visible(selector)}, r = el.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
@@ -67,7 +67,7 @@ export async function checkDesktopCompat(options: {
 		})()`);
 		assert.ok(at.hit, `${selector} 点得到：${JSON.stringify(at)}`);
 		await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
-		for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+		for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button, clickCount: 1 });
 	};
 	const shot = async (name: string) => {
 		await settle();
@@ -251,6 +251,12 @@ export async function checkDesktopCompat(options: {
 			const before = await page<number>(tabs);
 			await press("[data-panel-area] [data-panel-add]");
 			await until(`${tabs} === ${before + 1}`, `${label}：「添加面板」多开一个开始页标签`);
+			// 中键点标签关掉它，再开一个接着量两个标签。
+			await settle();
+			await press("[data-panel-area] [data-panel-tab=start] [role=tab]", "middle");
+			await until(`${tabs} === ${before}`, `${label}：中键关掉开始页标签`);
+			await press("[data-panel-area] [data-panel-add]");
+			await until(`${tabs} === ${before + 1}`, `${label}：再开一个开始页标签`);
 			await settle();
 			await headerAlignment(`${label} 两个标签`);
 			// 开合侧栏会让出或收回空间，面板区跟着挪；量落定之后的。
