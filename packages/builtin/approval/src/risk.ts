@@ -46,18 +46,22 @@ function argvOf(command: string, dialect: Dialect): string[] {
 	return words.slice(i);
 }
 
-/** `/usr/bin/open` 就是 `open`；`C:\Windows\System32\format.com`、`rm.exe` 就是 `format`、`rm`。 */
-const programName = (word = "") => word.replace(/^.*[\\/]/, "").replace(/\.(exe|cmd|bat|com)$/i, "");
+/**
+ * `/usr/bin/open` 就是 `open`；`C:\Windows\System32\format.com`、`rm.exe` 就是 `format`、`rm`。
+ *
+ * 一律小写：macOS、Windows 的文件系统默认不分大小写，`RM`、`Git` 找到的就是 `rm`、`git`，下面每条规则都按小写比。
+ */
+const programName = (word = "") =>
+	word
+		.replace(/^.*[\\/]/, "")
+		.replace(/\.(exe|cmd|bat|com)$/i, "")
+		.toLowerCase();
 
 function firstWord(command: string, dialect: Dialect = "posix"): string {
 	return programName(argvOf(command, dialect)[0]);
 }
 
-/**
- * 查表，也认大小写不同的写法。
- *
- * macOS 的文件系统默认不分大小写，`SUDO`、`Rm` 找到的就是 `/usr/bin/sudo`、`/bin/rm`：只按原样查，换个大小写就绕过了表。
- */
+/** 查表，也认大小写不同的写法（子命令：程序名已经由 `programName` 转成小写）。 */
 function lookup<T>(table: Map<string, T>, name: string): T | undefined {
 	return table.get(name) ?? table.get(name.toLowerCase());
 }
@@ -73,19 +77,18 @@ function wrappedCommand(command: string, dialect: Dialect = "posix"): string | n
 	const words = argvOf(command, dialect);
 	if (words.length < 2) return null;
 	const head = programName(words[0]);
-	const lower = head.toLowerCase();
 
 	/*
 	 * PowerShell 的命令跟在 `-Command` 后面（任何不歧义的前缀，大小写随意），或者是 `-EncodedCommand` 后面 UTF-16 的
 	 * base64：这正是一条命令躲开阅读的办法，所以解出来再判。cmd 的命令是 `/c` 或 `/k` 后面的整行。
 	 */
-	if (lower === "powershell" || lower === "pwsh") {
+	if (head === "powershell" || head === "pwsh") {
 		const encoded = words.findIndex((word, index) => index > 0 && /^-e(c|nc|ncodedcommand)?$/i.test(word));
 		if (encoded !== -1 && words[encoded + 1]) return Buffer.from(words[encoded + 1]!, "base64").toString("utf16le");
 		const at = words.findIndex((word, index) => index > 0 && /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(word));
 		return at === -1 || at + 1 >= words.length ? null : words.slice(at + 1).join(" ");
 	}
-	if (lower === "cmd") {
+	if (head === "cmd") {
 		const at = words.findIndex((word, index) => index > 0 && /^\/[ck]$/i.test(word));
 		return at === -1 || at + 1 >= words.length ? null : words.slice(at + 1).join(" ");
 	}
@@ -127,7 +130,7 @@ function judgeSingle(command: string, contained = false, cwd?: string, dialect: 
 	const never = lookup(NEVER_UNATTENDED, head);
 	if (never) return risky(never);
 
-	if (WINDOWS_DELETERS.has(head.toLowerCase())) {
+	if (WINDOWS_DELETERS.has(head)) {
 		const verdict = judgeWindowsDelete(args, contained);
 		if (verdict.risky) return verdict;
 	}
@@ -137,7 +140,7 @@ function judgeSingle(command: string, contained = false, cwd?: string, dialect: 
 		return risky("download-and-run");
 	}
 	// `Start-Process … -Verb RunAs` 就是 Windows 的 `sudo`。
-	if (head.toLowerCase() === "start-process" && /-verb\s+[\x27\x22]?runas\b/i.test(command)) return risky("run-as-admin");
+	if (head === "start-process" && /-verb\s+[\x27\x22]?runas\b/i.test(command)) return risky("run-as-admin");
 
 	if (head === "rm") {
 		const verdict = judgeRm(args, contained, cwd);
@@ -175,7 +178,7 @@ function judgeSingle(command: string, contained = false, cwd?: string, dialect: 
 	if (/>\s*[^&\s]/.test(command) && PROTECTED_PATH.test(command)) return risky("write-system-path");
 	if (/>\s*~?\/?\.(zshrc|bashrc|profile|zprofile)\b/.test(command)) return risky("shell-startup");
 	// 不经重定向到达同样的地方：`cp payload /usr/local/bin/git`。
-	if ((PLACES_FILES.has(head) || PLACES_FILES.has(head.toLowerCase())) && PROTECTED_PATH.test(command)) return risky("write-system-path");
+	if (PLACES_FILES.has(head) && PROTECTED_PATH.test(command)) return risky("write-system-path");
 
 	/*
 	 * 本机的文件经网络出去。
@@ -196,8 +199,8 @@ function judgeSingle(command: string, contained = false, cwd?: string, dialect: 
 	return SAFE;
 }
 
-const fetches = (head: string) => FETCHERS.has(head.toLowerCase());
-const interprets = (head: string) => INTERPRETERS.has(head) || INTERPRETERS.has(head.toLowerCase());
+const fetches = (head: string) => FETCHERS.has(head);
+const interprets = (head: string) => INTERPRETERS.has(head);
 /** 把给它的参数当代码跑的内建命令，和解释器一样。 */
 const SOURCES = new Set(["eval", "source", "."]);
 

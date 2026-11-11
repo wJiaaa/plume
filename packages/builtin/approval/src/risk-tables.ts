@@ -180,7 +180,7 @@ export const INTERPRETERS = new Set([
 	"bun",
 	"php",
 	"osascript",
-	"Rscript",
+	"rscript",
 	"lua",
 	"awk",
 	"tclsh",
