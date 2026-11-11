@@ -261,6 +261,8 @@ function ModelRow({
 					onClick={selection ? selection.onToggle : managed ? undefined : onEdit}
 					className="flex min-w-0 flex-1 items-center gap-3 text-left"
 					data-model-row={model.modelId}
+					// 模型 id 常被别名、徽标和右侧几列挤到只剩一截，悬停时给出完整的 id。
+					data-plume-tip={model.modelId}
 					{...(selection ? { role: "checkbox", "aria-checked": selection.checked } : {})}
 				>
 					{selection && (
