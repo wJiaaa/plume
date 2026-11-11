@@ -164,15 +164,15 @@ it("撤销只交快照标识，撤销后重新 get；拒绝原文对象，服务
 	expect(f.collect).toHaveBeenCalledTimes(2);
 });
 
-it("快照服务整体失败也给明确警告，并保留报告", async () => {
+it("快照服务整体失败也给明确警告；没有文件变更就不生成报告", async () => {
 	const f = setup([user(), result({ changeId: "missing", changeWarning: "Capture incomplete" }), answer()]);
 	f.collect.mockRejectedValueOnce(new Error("Unreadable snapshot"));
 	const value = await f.api.get("session", 10);
 	expect(value.warnings).toEqual(["Capture incomplete", "Change snapshots are unavailable: Error: Unreadable snapshot"]);
-	expect(await readFile(value.reportPath!, "utf8")).toContain("Unreadable snapshot");
+	expect(value.reportPath).toBeNull();
 });
 
-it.each(["en", "zh-CN"] as const)("%s 报告保留需求和模型原文，包含警告与完整 diff、不记命令，写在哈希目录且权限 0600", async (locale) => {
+it.each(["en", "zh-CN"] as const)("%s 报告只保留需求和模型原文，不记文件清单、警告、diff 和命令，写在哈希目录且权限 0600", async (locale) => {
 	const sessionId = "../../unsafe/session";
 	const f = setup(
 		[
@@ -201,9 +201,8 @@ it.each(["en", "zh-CN"] as const)("%s 报告保留需求和模型原文，包含
 	expect(report.contents.bytes).toBe(Buffer.byteLength(report.contents.text));
 	expect(report.contents.modifiedAt).toBeTypeOf("number");
 	expect((await stat(path)).mode & 0o777).toBe(0o600);
-	for (const text of ["原始需求，keep unchanged", "原始交付说明", "原始警告", "@@ -1 +1 @@\n same\n-before\n+after"])
-		expect(report.contents.text).toContain(text);
-	for (const text of ["原始输出", "pnpm check"]) expect(report.contents.text).not.toContain(text);
+	for (const text of ["原始需求，keep unchanged", "原始交付说明"]) expect(report.contents.text).toContain(text);
+	for (const text of ["原始输出", "pnpm check", "原始警告", "app.ts", "+after"]) expect(report.contents.text).not.toContain(text);
 	expect(report.contents.text).not.toContain("Injected request");
 	expect(report.contents.text).not.toContain("Do not include tool-use commentary");
 	if (locale === "en") expect(report.contents.text).toContain("## User request");
@@ -215,7 +214,7 @@ it.each(["en", "zh-CN"] as const)("%s 无效会话错误按界面语言返回", 
 	await expect(f.api.get("missing", 10)).rejects.toThrow(locale === "en" ? "The requested session was not found." : "找不到对应的会话。");
 });
 
-it("没有文件变更和警告不创建报告，检查命令也不例外", async () => {
+it("没有文件变更不创建报告，检查命令也不例外", async () => {
 	const f = setup([user(), result({ command: "pnpm check", exitCode: 0 }), answer()]);
 	expect((await f.api.get("session", 10)).reportPath).toBeNull();
 	await expect(f.api.report("session", 10)).rejects.toThrow(/no implementation/);

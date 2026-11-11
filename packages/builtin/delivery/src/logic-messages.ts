@@ -13,11 +13,6 @@ const zhCN = {
 	project: (cwd: string) => `项目：${cwd}`,
 	request: "用户需求",
 	answer: "Agent 交付说明",
-	files: "实际文件变更",
-	file: (path: string, added: number, removed: number) => `- ${path}：+${added} −${removed}`,
-	warnings: "未覆盖的记录",
-	diff: "文件差异",
-	noChanges: (path: string) => `${path}：没有变更`,
 	unrecorded: "有改动没有记录下来，没法完整退回。",
 };
 
@@ -33,11 +28,6 @@ const en: typeof zhCN = {
 	project: (cwd) => `Project: ${cwd}`,
 	request: "User request",
 	answer: "Agent delivery notes",
-	files: "Actual file changes",
-	file: (path, added, removed) => `- ${path}: +${added} −${removed}`,
-	warnings: "Uncovered records",
-	diff: "File differences",
-	noChanges: (path) => `${path}: no changes`,
 	unrecorded: "Some changes weren't recorded, so the files can't be fully put back.",
 };
 

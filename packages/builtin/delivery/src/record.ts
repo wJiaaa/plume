@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
-import type { ChangedFile, FileChangesService, Locale, Message, RevertPlan } from "@plume/contract";
+import { join } from "node:path";
+import type { FileChangesService, Locale, Message, RevertPlan } from "@plume/contract";
 import type { TurnDelivery } from "./api.ts";
 import { MESSAGES } from "./logic-messages.ts";
 
@@ -75,17 +75,7 @@ function text(message: Message): string {
 	return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
 }
 
-function formatDiff(file: ChangedFile, locale: Locale): string {
-	if (file.hunks.length === 0) return MESSAGES[locale].noChanges(file.path);
-	const out = [`--- ${file.path}`, `+++ ${file.path}`];
-	for (const hunk of file.hunks) {
-		out.push(`@@ -${hunk.oldStart} +${hunk.newStart} @@`);
-		for (const line of hunk.lines) out.push(`${line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}${line.text}`);
-	}
-	return out.join("\n");
-}
-
-function reportText(cwd: string, messages: readonly Message[], timestamp: number, value: TurnDelivery, locale: Locale): string {
+function reportText(cwd: string, messages: readonly Message[], timestamp: number, locale: Locale): string {
 	const words = MESSAGES[locale];
 	const request = messages
 		.filter((message) => message.role === "user" && !message.synthetic)
@@ -103,11 +93,6 @@ function reportText(cwd: string, messages: readonly Message[], timestamp: number
 		request,
 		`## ${words.answer}`,
 		answer,
-		`## ${words.files}`,
-		...value.files.map((file) => words.file(relative(cwd, file.path), file.added, file.removed)),
-		...(value.warnings.length ? [`## ${words.warnings}`, ...value.warnings] : []),
-		`## ${words.diff}`,
-		...value.files.map((file) => `~~~diff\n${formatDiff(file, locale)}\n~~~`),
 	].join("\n\n");
 }
 
@@ -130,12 +115,12 @@ export async function collectDelivery(
 	} catch (error) {
 		value.warnings.push(words.collectFailed(String(error)));
 	}
-	if (!value.files.length && !value.warnings.length) return value;
+	if (!value.files.length) return value;
 	try {
 		const dir = reportDirectory(dataDir, sessionId);
 		await mkdir(dir, { recursive: true, mode: 0o700 });
 		const path = join(dir, `delivery-${timestamp}.md`);
-		await writeFile(path, reportText(cwd, messages, timestamp, value, locale), { encoding: "utf8", mode: 0o600 });
+		await writeFile(path, reportText(cwd, messages, timestamp, locale), { encoding: "utf8", mode: 0o600 });
 		// mode 只影响新文件；重新生成报告时也收紧已经存在的文件。
 		await chmod(path, 0o600);
 		value.reportPath = path;
