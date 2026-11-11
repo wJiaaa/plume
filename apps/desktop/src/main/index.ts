@@ -57,7 +57,8 @@ import { handleProtocols, registerSchemes, sharedExports } from "./protocols.ts"
 import { useBundledRipgrep } from "./ripgrep.ts";
 import { registerScreenshot } from "./screenshot/index.ts";
 import { runSmoke, smokeOutput } from "./smoke.ts";
-import { callPage, guardWebviews, registerWebPages } from "./web-pages.ts";
+import { chromeLogins, startChromeLogins } from "./chrome-logins.ts";
+import { callPage, guardWebviews, registerWebPages, webSession } from "./web-pages.ts";
 import { createNotifications } from "./notifications.ts";
 import { createTray, hasTray } from "./tray.ts";
 import { registerUpdateIpc } from "./update/updates.ts";
@@ -230,6 +231,8 @@ async function boot(): Promise<void> {
 	registerScreenshot();
 	// 插件的网页（ctx.pages）：页面一出生就要挂上规矩，所以在开窗之前登记。事件推给 agent 进程里的插件。
 	registerWebPages({ emit: (plugin, event) => void agent.pageEvent(plugin, event).catch(() => {}) });
+	// 从 Chrome 同步登录状态：上次开着就接着同步。冒烟用自己的数据目录，不会开着。
+	void startChromeLogins({ session: webSession(), locale: resolvedLocale });
 
 	const child = utilityProcess.fork(join(import.meta.dirname, "agent-process.js"), [], {
 		serviceName: "Plume agent",
@@ -426,7 +429,7 @@ function connectAgent(child: UtilityProcess) {
 	// i18n-exempt：主进程和 agent 进程之间的控制通道，关闭原因只进日志。
 	child.once("exit", () => channel.close("agent 进程已退出"));
 	serve(channel, {
-		page: async (plugin, id, method, args) => await callPage(plugin, id, method, args),
+		page: async (plugin, id, method, args) => (method === "chromeLogins" ? await chromeLogins(id) : await callPage(plugin, id, method, args)),
 		trash: async (path) => await shell.trashItem(path),
 		/*
 		 * 会话库打不开（被别的 Plume 占着、更新版本写的）时，界面一直连不上 agent，只会停在加载中。

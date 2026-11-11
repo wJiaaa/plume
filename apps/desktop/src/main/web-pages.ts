@@ -11,12 +11,17 @@
  * 事件经 agent 进程推给对应插件的逻辑入口。
  */
 
-import { app, BrowserWindow, nativeImage, type NativeImage, screen, session, webContents, type WebContents, type WebPreferences } from "electron";
+import { app, BrowserWindow, nativeImage, type NativeImage, screen, session, type Session, webContents, type WebContents, type WebPreferences } from "electron";
 import type { WebPageEvent, WebPageState } from "@plume/contract";
 import { inspectPage } from "./web-inspect.ts";
 
 /** 网页的分区。持久化：登录状态跨重启保留。 */
 const WEB_PARTITION = "persist:plume-web";
+
+/** 网页所在的会话：cookie、缓存都在这里。 */
+export function webSession(): Session {
+	return session.fromPartition(WEB_PARTITION);
+}
 
 /** 网页都不碰机器上的东西，只给这两项：都要人刚在页面里点过才能用，拒掉的话视频全屏不了、站点的「复制」按钮静默失灵。 */
 const GRANTED = new Set(["clipboard-sanitized-write", "fullscreen"]);
@@ -91,7 +96,7 @@ function report(guest: Guest, detail: Detail): void {
  */
 export function registerWebPages(options: { emit(plugin: string, event: WebPageEvent): void }): void {
 	emit = options.emit;
-	const web = session.fromPartition(WEB_PARTITION);
+	const web = webSession();
 	web.setPermissionRequestHandler((_contents, permission, callback) => callback(GRANTED.has(permission)));
 	web.setPermissionCheckHandler((_contents, permission) => GRANTED.has(permission));
 	app.on("web-contents-created", (_event, contents) => {

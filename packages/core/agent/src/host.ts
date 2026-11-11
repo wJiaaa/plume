@@ -93,6 +93,7 @@ const PAGE_METHODS = [
 	"emulate",
 	"devtools",
 	"answerDialogs",
+	"chromeLogins",
 ] as const satisfies readonly Exclude<keyof WebPages, "onEvent">[];
 
 export interface RegisteredTool {

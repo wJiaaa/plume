@@ -202,6 +202,7 @@ export default {
 				settings = Promise.resolve(next);
 				return next;
 			},
+			chromeLogins: async (command) => await web.chromeLogins(command),
 		};
 		ctx.serve(api);
 	},

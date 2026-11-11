@@ -984,6 +984,25 @@ export interface WebInspection {
 	screenshot?: { data: string; mimeType: "image/png" };
 }
 
+/** 从本机 Chrome 同步登录状态的现状，见 `WebPages.chromeLogins`。 */
+export interface ChromeLoginSync {
+	/** 开着：应用启动时同步一次，之后 Chrome 的 cookie 一变就跟着同步。 */
+	enabled: boolean;
+	/**
+	 * 同步不了的原因：`unsupported` 这个系统还不支持（目前只有 macOS），`no-chrome` 没找到 Chrome 的数据，
+	 * `no-access` 系统不让读（macOS 要在「隐私与安全性 › 完全磁盘访问权限」里给 Plume），`keychain-denied` 钥匙串里的 Chrome 密钥没拿到，
+	 * `failed` 别的原因（`detail` 里是给人看的说明）。
+	 */
+	problem?: "unsupported" | "no-chrome" | "no-access" | "keychain-denied" | "failed";
+	detail?: string;
+	/** 从哪个 Chrome 用户同步（Chrome 里显示的名字）。 */
+	profile?: string;
+	/** 上次同步时 Chrome 里有多少条能用的 cookie。 */
+	cookies?: number;
+	/** 上次成功同步的时间（毫秒）。 */
+	syncedAt?: number;
+}
+
 /**
  * 网页：插件界面入口自己画的 `<webview>`，各自一个进程，逻辑入口经这里驱动它。页面只有主进程碰得到，所以加载、执行脚本、
  * 原生输入、截图、缩放和视口、开发者工具、对话框由宿主做；标签、地址栏、给模型的工具都是插件自己的。
@@ -1044,6 +1063,12 @@ export interface WebPages {
 	 * 设上时，已经弹着、等人点的那一个也当场按它答掉。每答一个报一条 `dialog` 事件。`prompt` 不在其中：页面调用时直接拿到 null。
 	 */
 	answerDialogs(id: string, accept: boolean | null): Promise<void>;
+	/**
+	 * 从本机 Chrome 同步登录状态（全部 cookie，单向：同一条以 Chrome 为准，Chrome 里没了这边也删）进网页的分区，各插件共用。
+	 * `status` 看现状；`on` 先由宿主弹系统对话框请人确认，人不同意就照旧关着；`off` 关掉并删掉同步进来的 cookie。
+	 * cookie 的值只在主进程里，不交给插件。
+	 */
+	chromeLogins(command: "status" | "on" | "off"): Promise<ChromeLoginSync>;
 	/** 订阅本插件全部网页的事件，返回取消订阅的函数；停用时自动撤下。 */
 	onEvent(listener: (event: WebPageEvent) => void): () => void;
 }

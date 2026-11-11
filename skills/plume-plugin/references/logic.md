@@ -47,7 +47,7 @@ export default {
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话，空闲时拒绝；明确停止会话时通知插件，清理尚未启动的排队工作，监听随插件卸载 |
 | `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title? })` | 开一个新的顶层会话并发出第一句话（`model`、`thinking` 不给用默认模型、默认推理强度；不认识的模型、档位抛错），返回 `{ session, done, idle, reportBack }`（`done` 是第一轮为什么结束，`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复），`reportBack(text, status)` 把结果作为一条运行时送达交回 `spawnedFrom` 那个会话一次，画成「来自新会话」一行，来处删了、归档了返回 false；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时抛错）；会话进侧栏、不记在插件名下，人能接着聊，插件之后不能再往里发。只能开新的，碰不到已有会话。见下文「开新会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
-| `ctx.pages` | 驱动界面入口画的网页（`<webview>`）：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`，`onEvent` 收页面的事件。见下文「网页」 |
+| `ctx.pages` | 驱动界面入口画的网页（`<webview>`）：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`、`chromeLogins`，`onEvent` 收页面的事件。见下文「网页」 |
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见下面「`/` 命令」），停用时撤下 |
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
 | `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
@@ -473,6 +473,7 @@ const content = await readFile(access.absolute, "utf8");
 - **读页面、找元素**：`evaluate(id, code, { isolated: true })` 在插件自己的隔离 world 里跑——和页面共用 DOM，页面的脚本看不到它记下的东西，换文档时一起丢掉；不给 `isolated` 是在页面自己的 world 里跑（要读页面的全局变量时）。页面卡住时 `evaluate` 不会自己超时，自己加时限。
 - **点按、输入**：`input(id, event)` 发原生的指针、滚轮、按键事件，坐标是页面视口里的像素（CSS 像素乘上缩放）；`insertText` 往有焦点的输入框里打字；之前先 `focus`。
 - **对话框**：`answerDialogs(id, true | false)` 之后，这一页的 alert、confirm、离开页面提示由宿主直接答（alert 总是确定），答了什么经 `dialog` 事件报回来，连同之前就开着、没人答的那一个；`null` 交回系统对话框。只在 agent 操作网页期间接管：人自己浏览时页面照旧弹给人。
+- **从 Chrome 同步登录状态**：`chromeLogins("status" | "on" | "off")` 把本机 Chrome 的 cookie 单向同步进网页的分区（只有 macOS），各插件共用一份。`on` 由宿主弹系统对话框请人确认，人不同意时交回的仍是关着；`off` 删掉同步进来的。交回 `ChromeLoginSync`：开没开、`problem`（`no-access` 要人到完全磁盘访问权限里打开 Plume，`keychain-denied` 再调一次 `on` 重试）、Chrome 用户名、条数、上次同步时间，没有 cookie 的值。
 - **截图**：`capture(id, { rect?, points? })` 交回 PNG 的 data URL，页面没设背景的地方垫成白的；`rect` 截视口里的一块（CSS 像素乘缩放）；`points: true` 按屏幕缩放比缩回点，给模型看的图用它（高分屏上不白占一倍的上下文）。截出来交给模型时去掉 `data:` 前缀放进工具结果的 `images`。
 - **缩放、视口**：`setZoom(id, factor)`（0.25–3），`emulate(id, { width, height, scale })` 仿真一个视口、`scale` 是缩小到面板里的比例，`null` 撤掉。页面进程停了的时候这两样不生效，等 `dom-ready` 再设一次。
 - 不在桌面应用的主窗口里（测试、命令行）时，`ctx.pages` 的方法抛错。完整的例子是 `browser` 插件。

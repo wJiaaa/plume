@@ -48,6 +48,12 @@ const zhCN = {
 	"sessions.unavailableTitle": "Plume 打不开会话记录",
 	"sessions.unavailable":
 		"会话库 {path} 打不开：{reason}\n\nPlume 没有动这个文件。它可能正被另一个 Plume 占用，或者是别的版本的 Plume 写的。先退出其他 Plume 再打开；仍然打不开，就把 sessions.db 连同旁边同名的 -wal、-shm 文件一起挪到别处，Plume 会新建一个。",
+	// 开启「从 Chrome 同步登录状态」前的确认框（chrome-logins.ts）。由主进程弹，插件代替不了这一步。
+	"chromeLogins.confirmTitle": "使用 Chrome 的登录状态？",
+	"chromeLogins.confirmDetail":
+		"Plume 的网页（包括 agent 打开的）会以你在 Chrome 里的身份访问网站，并随 Chrome 保持同步。\n\n接下来 macOS 会请求读取钥匙串，选「允许」即可。",
+	"chromeLogins.confirm": "开始同步",
+	"chromeLogins.cancel": "取消",
 };
 
 export type NativeKey = keyof typeof zhCN;
@@ -92,6 +98,11 @@ const en: Record<NativeKey, string> = {
 	"sessions.unavailableTitle": "Plume can't open your conversations",
 	"sessions.unavailable":
 		"The session database at {path} would not open: {reason}\n\nPlume has left the file as it is. Another copy of Plume may have it open, or a different version of Plume may have written it. Quit any other copy and try again. If it still won't open, move sessions.db somewhere else together with the -wal and -shm files beside it, and Plume will start a new one.",
+	"chromeLogins.confirmTitle": "Use your Chrome sign-ins?",
+	"chromeLogins.confirmDetail":
+		"Web pages in Plume, including ones the agent opens, will visit sites signed in as you in Chrome and stay in sync with it.\n\nmacOS will then ask to read your keychain. Choose Allow.",
+	"chromeLogins.confirm": "Start syncing",
+	"chromeLogins.cancel": "Cancel",
 };
 
 /** `variables` 填进文案里的 `{名字}`。 */

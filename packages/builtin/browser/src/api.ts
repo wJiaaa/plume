@@ -5,7 +5,7 @@
  * 挂上以后交给逻辑入口（`attach`），之后不管人还是 agent 都经逻辑入口驱动它。
  */
 
-import type { CallContext } from "@plume/contract";
+import type { CallContext, ChromeLoginSync } from "@plume/contract";
 
 export type SearchEngine = "bing" | "google" | "baidu" | "duckduckgo" | "custom";
 
@@ -116,4 +116,6 @@ export interface BrowserApi {
 	cancelInspect(page: string): Promise<void>;
 	settings(): Promise<BrowserSettings>;
 	saveSettings(patch: Partial<BrowserSettings>): Promise<BrowserSettings>;
+	/** 从 Chrome 同步登录状态：看现状、开（宿主先弹系统对话框请人确认）、关。 */
+	chromeLogins(command: "status" | "on" | "off"): Promise<ChromeLoginSync>;
 }
