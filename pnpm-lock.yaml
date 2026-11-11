@@ -318,6 +318,9 @@ importers:
 
   packages/builtin/git:
     devDependencies:
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
       '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
@@ -330,9 +333,6 @@ importers:
       react:
         specifier: ^19.3.1
         version: 19.3.1
-      '@plume/platform':
-        specifier: workspace:*
-        version: link:../../infra/platform
 
   packages/builtin/mcp:
     devDependencies:
@@ -394,6 +394,9 @@ importers:
 
   packages/builtin/skills:
     devDependencies:
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
       '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
@@ -406,9 +409,6 @@ importers:
       yaml:
         specifier: 2.9.1
         version: 2.9.1
-      '@plume/platform':
-        specifier: workspace:*
-        version: link:../../infra/platform
 
   packages/builtin/spawn-session:
     devDependencies:
