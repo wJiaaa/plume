@@ -1,20 +1,18 @@
+import type { FileChangesSummary } from "@plume/contract";
 import type { Remote, UiContext } from "@plume/contract/ui";
 import { useCallback, useSyncExternalStore } from "react";
-import type { DeliveryApi, TurnDelivery } from "./api.ts";
+import type { DeliveryApi } from "./api.ts";
 
 interface Target {
 	timestamp: number;
 	path?: string;
 }
-type Report = Awaited<ReturnType<DeliveryApi["report"]>>;
 interface Selection {
 	review: Target | null;
-	report: Report | null;
 }
 interface Snapshot {
-	data: TurnDelivery | null;
+	data: FileChangesSummary | null;
 	undoing: boolean;
-	reporting: boolean;
 }
 interface Entry {
 	snapshot: Snapshot;
@@ -28,21 +26,20 @@ interface Entry {
 export function createDeliveryState(api: Remote<DeliveryApi>, ui: UiContext) {
 	const entries = new Map<string, Entry>();
 	const selections = new Map<string, Selection>();
-	const reportRequests = new Map<string, number>();
 	const selectionListeners = new Set<() => void>();
-	const empty: Selection = { review: null, report: null };
+	const empty: Selection = { review: null };
 	const entryFor = (sessionId: string, timestamp: number) => {
 		const key = `${sessionId}:${timestamp}`;
 		let entry = entries.get(key);
 		if (!entry) {
 			if (entries.size >= 32) {
 				for (const [oldKey, old] of entries) {
-					if (old.listeners.size || old.snapshot.undoing || old.snapshot.reporting) continue;
+					if (old.listeners.size || old.snapshot.undoing) continue;
 					entries.delete(oldKey);
 					break;
 				}
 			}
-			entry = { snapshot: { data: null, undoing: false, reporting: false }, listeners: new Set(), revision: 0, read: null, focus: null };
+			entry = { snapshot: { data: null, undoing: false }, listeners: new Set(), revision: 0, read: null, focus: null };
 			entries.set(key, entry);
 		}
 		return entry;
@@ -129,22 +126,7 @@ export function createDeliveryState(api: Remote<DeliveryApi>, ui: UiContext) {
 			if (entry.listeners.size) void refresh(sessionId, timestamp, entry);
 		}
 	};
-	const report = async (sessionId: string, timestamp: number) => {
-		const entry = entryFor(sessionId, timestamp);
-		if (entry.snapshot.reporting) return null;
-		const request = (reportRequests.get(sessionId) ?? 0) + 1;
-		reportRequests.set(sessionId, request);
-		update(entry, { reporting: true });
-		try {
-			const value = await api.report(sessionId, timestamp);
-			if (reportRequests.get(sessionId) !== request) return null;
-			select(sessionId, { report: value });
-			return value;
-		} finally {
-			update(entry, { reporting: false });
-		}
-	};
-	return { useDelivery, useSelection, select, undo, report };
+	return { useDelivery, useSelection, select, undo };
 }
 
 export type DeliveryState = ReturnType<typeof createDeliveryState>;

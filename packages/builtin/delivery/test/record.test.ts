@@ -1,11 +1,11 @@
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ChangedFile, FileChangesSummary, HookLayer, Locale, Message, PluginContext, SessionSummary } from "@plume/contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DeliveryApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
-import { deliveryMessages, recordedChanges, reportDirectory } from "../src/record.ts";
+import { deliveryMessages, recordedChanges } from "../src/record.ts";
 import { answer, result, user } from "./fixtures.ts";
 
 let root: string;
@@ -18,16 +18,13 @@ afterEach(async () => {
 
 function setup(messages: Message[], sessionId = "session", locale: Locale = "en") {
 	const cwd = join(root, "project");
-	const dataDir = join(root, "data");
 	let summary: FileChangesSummary = { files: [], warnings: [] };
 	const collect = vi.fn(async (_id: string, _cwd: string, _ids: readonly string[]) => summary);
 	const undo = vi.fn(async (_id: string, _cwd: string, _ids: readonly string[], _path?: string) => {});
 	const sessions: SessionSummary[] = [{ id: sessionId, title: "Test", cwd, createdAt: 1, updatedAt: 10, running: false }];
 	let api!: DeliveryApi;
-	let deleted!: (id: string) => void;
 	let rewind!: HookLayer<"session.rewind">;
 	const ctx = {
-		dataDir,
 		locale: () => locale,
 		use: vi.fn(() => ({ collect, undo })),
 		serve: (value: DeliveryApi) => {
@@ -39,11 +36,7 @@ function setup(messages: Message[], sessionId = "session", locale: Locale = "en"
 		sessions: {
 			list: vi.fn(async () => sessions),
 			messages: vi.fn(async () => messages),
-			onDeleted: (listener: (id: string) => void) => {
-				deleted = listener;
-			},
 		},
-		log: { warn: vi.fn() },
 	} as unknown as PluginContext;
 	plugin.apply(ctx);
 	return {
@@ -53,8 +46,6 @@ function setup(messages: Message[], sessionId = "session", locale: Locale = "en"
 		collect,
 		undo,
 		cwd,
-		dataDir,
-		deleted: (id: string) => deleted(id),
 		rewind: (messages: Message[], restore: boolean) =>
 			rewind({ sessionId, cwd, messages, restore }, async () => ({ files: [{ path: "/inner", added: 2, removed: 0, problem: null }], unrecorded: false })),
 		setSummary: (value: FileChangesSummary) => {
@@ -102,7 +93,7 @@ it("分轮只在真实 user 处分开，synthetic 不截断，也不包含相邻
 	expect(() => deliveryMessages([user(1, "Injected", true), answer()], 10, "en")).toThrow(/final answer/);
 });
 
-it("回答后补勾清单仍能打开原回答的报告", () => {
+it("回答后补勾清单仍能找到原回答那一轮", () => {
 	const turn = [user(), result({ changeId: "one" }), answer()];
 	const tick = answer(12, "", "toolUse");
 	tick.content = [{ type: "toolCall", id: "todo", name: "todo_write", arguments: {} }];
@@ -126,7 +117,6 @@ it("严格检查会话、时间戳和最后回答，失败时不调用文件服�
 	await expect(f.api.get("session", Number.NaN)).rejects.toThrow(/final answer/);
 	await expect(f.api.get("session", Infinity)).rejects.toThrow(/final answer/);
 	await expect(f.api.get("session", 1)).rejects.toThrow(/final answer/);
-	await expect(f.api.report("session", 999)).rejects.toThrow(/final answer/);
 	await expect(f.api.undo("missing", 10, undefined)).rejects.toThrow(/session/);
 	expect(f.collect).not.toHaveBeenCalled();
 	expect(f.undo).not.toHaveBeenCalled();
@@ -164,87 +154,16 @@ it("撤销只交快照标识，撤销后重新 get；拒绝原文对象，服务
 	expect(f.collect).toHaveBeenCalledTimes(2);
 });
 
-it("快照服务整体失败也给明确警告；没有文件变更就不生成报告", async () => {
+it("快照服务整体失败也给明确警告", async () => {
 	const f = setup([user(), result({ changeId: "missing", changeWarning: "Capture incomplete" }), answer()]);
 	f.collect.mockRejectedValueOnce(new Error("Unreadable snapshot"));
 	const value = await f.api.get("session", 10);
 	expect(value.warnings).toEqual(["Capture incomplete", "Change snapshots are unavailable: Error: Unreadable snapshot"]);
-	expect(value.reportPath).toBeNull();
-});
-
-it.each(["en", "zh-CN"] as const)("%s 报告只保留需求和模型原文，不记文件清单、警告、diff 和命令，写在哈希目录且权限 0600", async (locale) => {
-	const sessionId = "../../unsafe/session";
-	const f = setup(
-		[
-			user(1, "原始需求，keep unchanged"),
-			answer(3, "Do not include tool-use commentary", "toolUse"),
-			result({ changeId: "edit", changeWarning: "原始警告" }),
-			user(4, "Injected request", true),
-			result({ command: "pnpm check", exitCode: 0 }, false, "原始输出"),
-			answer(10, "原始交付说明"),
-		],
-		sessionId,
-		locale,
-	);
-	f.setSummary({ files: [file(join(f.cwd, "app.ts"))], warnings: [] });
-	await mkdir(f.cwd, { recursive: true });
-	const value = await f.api.get(sessionId, 10);
-	const path = value.reportPath!;
-	expect(dirname(path)).toBe(reportDirectory(f.dataDir, sessionId));
-	expect(dirname(path)).toMatch(/[a-f0-9]{64}$/);
-	expect(await readdir(f.cwd)).toEqual([]);
-	expect((await stat(path)).mode & 0o777).toBe(0o600);
-	await chmod(path, 0o644);
-	const report = await f.api.report(sessionId, 10);
-	expect(report.path).toBe(path);
-	expect(report.contents.truncated).toBe(false);
-	expect(report.contents.bytes).toBe(Buffer.byteLength(report.contents.text));
-	expect(report.contents.modifiedAt).toBeTypeOf("number");
-	expect((await stat(path)).mode & 0o777).toBe(0o600);
-	for (const text of ["原始需求，keep unchanged", "原始交付说明"]) expect(report.contents.text).toContain(text);
-	for (const text of ["原始输出", "pnpm check", "原始警告", "app.ts", "+after"]) expect(report.contents.text).not.toContain(text);
-	expect(report.contents.text).not.toContain("Injected request");
-	expect(report.contents.text).not.toContain("Do not include tool-use commentary");
-	if (locale === "en") expect(report.contents.text).toContain("## User request");
-	else expect(report.contents.text).toContain("## 用户需求");
 });
 
 it.each(["en", "zh-CN"] as const)("%s 无效会话错误按界面语言返回", async (locale) => {
 	const f = setup([user(), answer()], "session", locale);
 	await expect(f.api.get("missing", 10)).rejects.toThrow(locale === "en" ? "The requested session was not found." : "找不到对应的会话。");
-});
-
-it("没有文件变更不创建报告，检查命令也不例外", async () => {
-	const f = setup([user(), result({ command: "pnpm check", exitCode: 0 }), answer()]);
-	expect((await f.api.get("session", 10)).reportPath).toBeNull();
-	await expect(f.api.report("session", 10)).rejects.toThrow(/no implementation/);
-	await expect(stat(f.dataDir)).rejects.toMatchObject({ code: "ENOENT" });
-});
-
-it("报告写入失败保留交付信息并给本地化警告", async () => {
-	const f = setup([user(), result({ changeId: "edit" }), answer()], "session", "zh-CN");
-	f.setSummary({ files: [file(join(f.cwd, "app.ts"))], warnings: [] });
-	await writeFile(f.dataDir, "Not a directory");
-	const value = await f.api.get("session", 10);
-	expect(value.reportPath).toBeNull();
-	expect(value.warnings[0]).toContain("无法保存本轮实现与验证记录");
-	expect(value.files).toHaveLength(1);
-	await expect(f.api.report("session", 10)).rejects.toThrow("这一轮没有可打开的实现与验证记录");
-});
-
-it("删除会话只移除自己的哈希目录，不碰其他会话或工程文件", async () => {
-	const f = setup([user(), result({ changeId: "edit" }), answer()], "../../session");
-	f.setSummary({ files: [file(join(f.cwd, "app.ts"))], warnings: [] });
-	const own = (await f.api.get("../../session", 10)).reportPath!;
-	const otherDir = reportDirectory(f.dataDir, "other");
-	await mkdir(otherDir, { recursive: true });
-	await writeFile(join(otherDir, "delivery-10.md"), "Other report");
-	await mkdir(f.cwd, { recursive: true });
-	await writeFile(join(f.cwd, "keep.txt"), "Project file");
-	await f.deleted("../../session");
-	await expect(stat(own)).rejects.toMatchObject({ code: "ENOENT" });
-	expect(await readFile(join(otherDir, "delivery-10.md"), "utf8")).toBe("Other report");
-	expect(await readFile(join(f.cwd, "keep.txt"), "utf8")).toBe("Project file");
 });
 
 it("撤回截掉的那段：演算标出每个文件能不能退回，并上里层的结论；退回时把全部快照标识交给服务", async () => {

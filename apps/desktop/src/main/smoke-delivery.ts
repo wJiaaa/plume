@@ -79,17 +79,14 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 	window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
 	await until(`!document.querySelector('[role=menu]')`, "关闭文件右键菜单");
 
-	// 只从卡片进入的辅助面板，不污染面板起始页。
+	// 只从卡片进入的审核面板，不污染面板起始页。
 	await click(`${card} button`, "审核");
 	await until(`document.querySelectorAll('[data-delivery-diff]').length === 4`, "审核面板显示本轮全部四个文件");
 	await capture(window, join(outDir, "smoke-delivery-review.png"));
-	await click(`${card} button`, "报告");
-	await until(`document.querySelector('[data-panel]:not([inert])')?.textContent.includes('本轮实现与验证记录')`, "报告复用文件预览显示实际记录");
-	await capture(window, join(outDir, "smoke-delivery-report.png"));
 
 	// 清掉本次打开的辅助标签，后面的终端验证仍从空面板开始。
 	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
-	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "关闭报告和审核后面板收起");
+	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "关闭审核后面板收起");
 	await page(`window.plume.saveAppearance({ theme: 'dark' })`);
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "交付卡切到深色");
 	await capture(window, join(outDir, "smoke-delivery-dark.png"));
@@ -129,5 +126,5 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		throw new Error("撤销新建文件后文件仍存在");
 	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
 	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "结束交付面板验证");
-	console.log(`PLUME_DELIVERY_SMOKE ${JSON.stringify({ ok: true, files: 4, animation, report: true, review: true, undo: true, themes: ["light", "dark"] })}`);
+	console.log(`PLUME_DELIVERY_SMOKE ${JSON.stringify({ ok: true, files: 4, animation, review: true, undo: true, themes: ["light", "dark"] })}`);
 }

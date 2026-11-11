@@ -1,11 +1,6 @@
-import type { FileChangesSummary, FileContents } from "@plume/contract";
-
-export interface TurnDelivery extends FileChangesSummary {
-	reportPath: string | null;
-}
+import type { FileChangesSummary } from "@plume/contract";
 
 export interface DeliveryApi {
-	get(sessionId: string, timestamp: number): Promise<TurnDelivery>;
-	undo(sessionId: string, timestamp: number, path: string | undefined): Promise<TurnDelivery>;
-	report(sessionId: string, timestamp: number): Promise<{ path: string; contents: FileContents }>;
+	get(sessionId: string, timestamp: number): Promise<FileChangesSummary>;
+	undo(sessionId: string, timestamp: number, path: string | undefined): Promise<FileChangesSummary>;
 }

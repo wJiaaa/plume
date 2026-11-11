@@ -129,8 +129,7 @@
 	margin-bottom: 4px;
 }
 
-.plume-delivery-scroller,
-.plume-delivery-report {
+.plume-delivery-scroller {
 	height: 100%;
 	min-height: 0;
 }

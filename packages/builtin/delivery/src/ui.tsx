@@ -1,7 +1,7 @@
 import type { ChangedFile, SessionView } from "@plume/contract";
 import type { PanelProps, TurnFooterProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Button, Caret, IconButton, PanelEmpty, Popover, Scroller, Text, useConfirmer, useI18n } from "@plume/ui";
-import { FileDiff as FileDiffIcon, Files, FileText, Undo2 } from "@plume/ui/icons";
+import { FileDiff as FileDiffIcon, Files, Undo2 } from "@plume/ui/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DeliveryApi } from "./api.ts";
 import deliveryCss from "./delivery.css";
@@ -12,7 +12,6 @@ const PREVIEW_FILES = 3;
 const HOVER_OPEN_MS = 700;
 const HOVER_CLOSE_MS = 160;
 const REVIEW_PANEL = "review";
-const REPORT_PANEL = "report";
 
 function useMounted() {
 	const mounted = useRef(true);
@@ -79,7 +78,7 @@ function useUndo(ui: UiContext, state: DeliveryState, sessionId: string, timesta
 function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiContext; state: DeliveryState }) {
 	const messages = MESSAGES[useI18n().resolvedLocale];
 	const { id: sessionId, cwd } = session.summary;
-	const { data, undoing, reporting } = state.useDelivery(sessionId, timestamp);
+	const { data, undoing } = state.useDelivery(sessionId, timestamp);
 	const pathMenu = ui.useFileMenu(cwd);
 	const [expanded, setExpanded] = useState(false);
 	const [hover, setHover] = useState<{ anchor: HTMLElement; path: string } | null>(null);
@@ -127,17 +126,6 @@ function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiC
 		hideHover();
 		state.select(sessionId, { review: { timestamp, path } });
 		ui.openPanel(REVIEW_PANEL, sessionId);
-	};
-	const report = () => {
-		hideHover();
-		void state
-			.report(sessionId, timestamp)
-			.then((value) => {
-				if (value && mounted.current) ui.openPanel(REPORT_PANEL, sessionId);
-			})
-			.catch((error: unknown) => {
-				if (mounted.current) ui.notify(String(error), "error");
-			});
 	};
 	const askUndo = (path?: string) => {
 		hideHover();
@@ -195,11 +183,6 @@ function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiC
 							<Counts added={added} removed={removed} />
 						</div>
 						<div className="plume-delivery-actions">
-							{data.reportPath && (
-								<Button size="sm" variant="subtle" icon={<FileText size={14} />} label={messages.openReport} loading={reporting} onClick={report}>
-									<Text className="plume-delivery-action-label">{messages.report}</Text>
-								</Button>
-							)}
 							{files.every((file) => file.canUndo) && (
 								<Button size="sm" variant="subtle" icon={<Undo2 size={14} />} loading={undoing} label={messages.revertThis} onClick={() => askUndo()}>
 									<Text className="plume-delivery-action-label">{messages.revert}</Text>
@@ -345,20 +328,6 @@ export default {
 			if (!session || !review) return <PanelEmpty icon={FileDiffIcon} title={messages.fileChanges} />;
 			return <Review key={`${session.summary.id}:${review.timestamp}:${review.path ?? ""}`} ui={ui} state={state} session={session} {...review} />;
 		}
-		function ReportPanel({ session, setTitle }: PanelProps) {
-			useStyles();
-			const { report } = state.useSelection(session?.summary.id);
-			const messages = MESSAGES[useI18n().resolvedLocale];
-			useLayoutEffect(() => {
-				setTitle(report?.path.split(/[\\/]/).pop());
-			}, [report?.path, setTitle]);
-			if (!session || !report) return <PanelEmpty icon={FileText} title={messages.report} />;
-			return (
-				<div className="plume-delivery-report">
-					<ui.FilePreview key={`${session.summary.id}:${report.path}`} sessionId={session.summary.id} path={report.path} contents={report.contents} />
-				</div>
-			);
-		}
 		ui.turnFooter("delivery", Footer);
 		ui.panel(REVIEW_PANEL, ReviewPanel, {
 			title: (locale) => MESSAGES[locale].fileChanges,
@@ -366,6 +335,5 @@ export default {
 			listed: false,
 			available: ({ session }) => session,
 		});
-		ui.panel(REPORT_PANEL, ReportPanel, { title: (locale) => MESSAGES[locale].report, icon: FileText, listed: false, available: ({ session }) => session });
 	},
 } satisfies UiPlugin;

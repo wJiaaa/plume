@@ -1,8 +1,7 @@
-import { readFile, rm, stat } from "node:fs/promises";
 import type { Plugin } from "@plume/contract";
 import type { DeliveryApi } from "./api.ts";
 import { MESSAGES } from "./logic-messages.ts";
-import { collectDelivery, deliveryMessages, recordedChanges, reportDirectory, rewindFiles } from "./record.ts";
+import { collectDelivery, deliveryMessages, recordedChanges, rewindFiles } from "./record.ts";
 
 export default {
 	name: "plume.delivery",
@@ -21,7 +20,7 @@ export default {
 		const api: DeliveryApi = {
 			async get(sessionId, timestamp) {
 				const { session, messages } = await turn(sessionId, timestamp);
-				return collectDelivery(service, sessionId, session.cwd, messages, timestamp, ctx.dataDir, ctx.locale());
+				return collectDelivery(service, sessionId, session.cwd, messages, ctx.locale());
 			},
 			async undo(sessionId, timestamp, path) {
 				const { session, messages } = await turn(sessionId, timestamp);
@@ -29,30 +28,12 @@ export default {
 				await service.undo(sessionId, session.cwd, recordedChanges(messages).ids, path);
 				return api.get(sessionId, timestamp);
 			},
-			async report(sessionId, timestamp) {
-				const value = await api.get(sessionId, timestamp);
-				if (!value.reportPath) throw new Error(MESSAGES[ctx.locale()].noReport);
-				try {
-					const path = value.reportPath;
-					const [text, info] = await Promise.all([readFile(path, "utf8"), stat(path)]);
-					return { path, contents: { text, truncated: false, bytes: Buffer.byteLength(text), modifiedAt: info.mtimeMs } };
-				} catch (error) {
-					throw new Error(MESSAGES[ctx.locale()].reportFailed(String(error)), { cause: error });
-				}
-			},
 		};
 		ctx.serve(api);
 		ctx.hook("session.rewind", async (input, next) => {
 			const inner = await next(input);
 			const own = await rewindFiles(service, input.sessionId, input.cwd, input.messages, input.restore, ctx.locale());
 			return { files: [...inner.files, ...own.files], unrecorded: inner.unrecorded || own.unrecorded };
-		});
-		ctx.sessions.onDeleted(async (sessionId) => {
-			try {
-				await rm(reportDirectory(ctx.dataDir, sessionId), { recursive: true, force: true });
-			} catch (error) {
-				ctx.log.warn(`Could not remove delivery reports: ${String(error)}`);
-			}
 		});
 	},
 } satisfies Plugin;

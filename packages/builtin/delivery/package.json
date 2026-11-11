@@ -1,12 +1,11 @@
 {
   "name": "@plume/delivery",
   "version": "0.1.0",
-  "description": "按轮汇总文件净变更、验证结果和交付记录，并安全撤销工具记录的改动。",
+  "description": "按轮汇总文件净变更，并安全撤销工具记录的改动。",
   "author": "Plume",
   "keywords": [
     "delivery",
     "交付",
-    "验证",
     "撤销"
   ],
   "plume": {

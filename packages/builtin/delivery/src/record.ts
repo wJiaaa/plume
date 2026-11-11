@@ -1,8 +1,4 @@
-import { createHash } from "node:crypto";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { FileChangesService, Locale, Message, RevertPlan } from "@plume/contract";
-import type { TurnDelivery } from "./api.ts";
+import type { FileChangesService, FileChangesSummary, Locale, Message, RevertPlan } from "@plume/contract";
 import { MESSAGES } from "./logic-messages.ts";
 
 /** 只认该轮最后一条回答；系统补充和继续消息不切断真实用户发起的一轮。 */
@@ -66,66 +62,21 @@ export async function rewindFiles(
 	return { files, unrecorded };
 }
 
-/** 会话标识永不直接参与路径拼接。 */
-export function reportDirectory(dataDir: string, sessionId: string): string {
-	return join(dataDir, createHash("sha256").update(sessionId).digest("hex"));
-}
-
-function text(message: Message): string {
-	return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
-}
-
-function reportText(cwd: string, messages: readonly Message[], timestamp: number, locale: Locale): string {
-	const words = MESSAGES[locale];
-	const request = messages
-		.filter((message) => message.role === "user" && !message.synthetic)
-		.map(text)
-		.join("\n\n");
-	const answer = messages
-		.filter((message) => message.role === "assistant" && message.stopReason !== "toolUse")
-		.map(text)
-		.join("\n\n");
-	return [
-		`# ${words.title}`,
-		words.time(new Date(timestamp).toISOString()),
-		words.project(cwd),
-		`## ${words.request}`,
-		request,
-		`## ${words.answer}`,
-		answer,
-	].join("\n\n");
-}
-
 export async function collectDelivery(
 	service: FileChangesService,
 	sessionId: string,
 	cwd: string,
 	messages: readonly Message[],
-	timestamp: number,
-	dataDir: string,
 	locale: Locale,
-): Promise<TurnDelivery> {
-	const words = MESSAGES[locale];
+): Promise<FileChangesSummary> {
 	const { ids, warnings } = recordedChanges(messages);
-	const value: TurnDelivery = { files: [], warnings, reportPath: null };
+	const value: FileChangesSummary = { files: [], warnings };
 	try {
 		const summary = await service.collect(sessionId, cwd, ids);
 		value.files = summary.files;
 		value.warnings.push(...summary.warnings);
 	} catch (error) {
-		value.warnings.push(words.collectFailed(String(error)));
-	}
-	if (!value.files.length) return value;
-	try {
-		const dir = reportDirectory(dataDir, sessionId);
-		await mkdir(dir, { recursive: true, mode: 0o700 });
-		const path = join(dir, `delivery-${timestamp}.md`);
-		await writeFile(path, reportText(cwd, messages, timestamp, locale), { encoding: "utf8", mode: 0o600 });
-		// mode 只影响新文件；重新生成报告时也收紧已经存在的文件。
-		await chmod(path, 0o600);
-		value.reportPath = path;
-	} catch (error) {
-		value.warnings.push(words.reportFailed(String(error)));
+		value.warnings.push(MESSAGES[locale].collectFailed(String(error)));
 	}
 	return value;
 }
