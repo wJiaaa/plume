@@ -151,6 +151,8 @@ export async function checkQuoteSideChat(options: {
 			const created = (await page(activeSideTab)) as string;
 			assert.ok(created !== tab && !existing.includes(created), `${label}不复用后台或弹出标签`);
 			const createdDraft = `JSON.parse(localStorage.getItem(${JSON.stringify(`plume.child-draft:${created}`)}))`;
+			// 草稿攒一会儿才写进 localStorage（child-drafts.ts），等它落下再读。
+			await until(`${createdDraft}?.quotes.length === 1`, `${label}的引文写进新标签的草稿`);
 			assert.deepEqual(await page(`${createdDraft}.quotes.map(({text, from}) => ({text, from}))`), [{ text, from }]);
 			assert.equal(await page(`${createdDraft}.text === '' && ${createdDraft}.attachments.length === 0`), true, "新标签不带走原草稿");
 			assert.deepEqual(await page(draft), original, `${label}保留原标签整份草稿`);

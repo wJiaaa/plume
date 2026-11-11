@@ -264,7 +264,11 @@ export async function checkConversations(options: {
 		};
 		const ordered = `(() => { const rows = [...document.querySelectorAll('[data-plume-row]:not([data-plume-row-nested])')].map((node) => node.dataset.plumeRow); return rows.indexOf('${sessionId}') < rows.indexOf('${secondId}'); })()`;
 		await drag(`[data-plume-row="${sessionId}"] > button`, `[data-plume-row="${secondId}"] > button`);
-		await until(`localStorage.getItem('plume.sidebar.sort') === 'manual' && ${ordered}`, "拖动会话切换手动排序");
+		// 拖过的那个项目单独切成手动，列表设置的排法不跟着变，别的项目照旧。
+		await until(
+			`JSON.parse(localStorage.getItem('plume.sidebar.manualProjects') ?? '[]').length === 1 && localStorage.getItem('plume.sidebar.sort') !== 'manual' && ${ordered}`,
+			"拖动会话把这个项目切成手动排序",
+		);
 		await capture("smoke-sidebar-reordered.png");
 		pickedFolder = workspace;
 		await click('[data-plume-section-action] button[aria-label="新建项目"]');

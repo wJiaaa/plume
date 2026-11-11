@@ -86,7 +86,6 @@ const SIDE_TEXT = "它让子 Agent 写了 child.txt。";
 const FOLLOWUP_HINT = "跑一遍单元测试";
 const FOLLOWUP_REPLY = `都齐了。\n:followup[${FOLLOWUP_HINT}]`;
 const SCHEDULED_TEXT = "定时任务看过了，没有问题。";
-/** 形如真实密钥的假值，用来检查脱敏插件。 */
 
 interface SmokeOptions {
 	window: BrowserWindow;
@@ -1821,6 +1820,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await plugin.install("usage");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "usage" && status.state === "active"), "装上 usage 插件");
 		await click("button", "设置");
+		// agent 进程报已装上时，界面入口还在加载：等它登记的那一页出现在导航里再点。
+		await until(
+			`[...document.querySelectorAll('[aria-label=设置章节] button')].some((button) => button.textContent.trim() === '使用统计')`,
+			"使用统计出现在设置导航",
+		);
 		await click("[aria-label=设置章节] button", "使用统计");
 		await until(
 			`document.querySelector('[data-screen=settings][data-section="plugin:plume.usage/usage"] [data-usage-request-kpis]') !== null`,
