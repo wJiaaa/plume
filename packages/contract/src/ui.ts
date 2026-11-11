@@ -303,6 +303,12 @@ export interface PanelAvailabilityContext {
 	session: boolean;
 }
 
+/** 会话建好之前人在输入框里选的模型（`SessionModel.id`）和思考档位；没有 `model` 是跟随父会话（独立会话用默认模型）。 */
+export interface SessionChoice {
+	model?: string;
+	thinking?: ThinkingLevel;
+}
+
 /**
  * 产品的对话视图画一个会话（插件自己的子会话：侧边聊天、子 Agent；或插件的独立会话：页面上的助手），和主列是同一套转录：
  * 工具卡片、思考、运行行都一样。子会话等人批准时，审批卡压在主输入框上方，标明是哪个子会话在请求；独立会话不挂在哪个对话下，
@@ -319,18 +325,24 @@ export interface ConversationProps {
 		/** 输入框跨窗口保留文字、附件和引用时传 PanelProps.tab；页面上的助手传一个自己固定的名字。 */
 		draftKey?: string;
 		placeholder?: LocalizedText;
-		send(text: string): void | Promise<void>;
-		/** 支持附件时接收完整消息；不提供时保持纯文字输入。 */
-		sendMessage?(message: OutgoingMessage): void | Promise<void>;
+		/** `choice`：会话还没建、给了 `blank` 时，人在第一句之前选的模型和档位，插件建会话时照它给。 */
+		send(text: string, choice?: SessionChoice): void | Promise<void>;
+		/** 支持附件时接收完整消息；不提供时保持纯文字输入。`choice` 同 `send`。 */
+		sendMessage?(message: OutgoingMessage, choice?: SessionChoice): void | Promise<void>;
 		/** steer 运行时也能发，发送键不变停止键。 */
 		mode?: "turn" | "steer";
 		disabled?: boolean;
 		/**
-		 * 发送按钮左边的模型和思考档位，量的是这个会话（子会话没选的跟着父会话，独立会话没选的用默认模型）；会话还没建时不画。
+		 * 发送按钮左边的模型和思考档位，量的是这个会话（子会话没选的跟着父会话，独立会话没选的用默认模型）；会话还没建时只有给了 `blank` 才画。
 		 * `choose`：和主输入框同一枚按钮，能换，子会话的模型菜单最前面多一项「跟随主会话」；`show`：只读的模型名和档位，悬停说明末尾接 `modelTip`。
 		 * 不给就不画。插件经 `ui.composerItem(…, { side: "end" })` 加的格子（上下文用量）不用声明，会话在就画。
 		 */
 		model?: "choose" | "show";
+		/**
+		 * 会话还没建（第一句还没发）时 `model: "choose"` 也画，人先选好，第一句发出去时选的经 `send`、`sendMessage` 的 `choice` 交回。
+		 * `parentId`：第一句会开在哪个会话下面，菜单最前面的「跟随主会话」跟它，不给是独立会话；`model`：人没动过时插件要用的模型，不给就跟随父会话（独立会话用默认模型）。
+		 */
+		blank?: { parentId?: string; model?: string };
 		/** `model: "show"` 时悬停说明的最后一句：模型是怎么定下的、去哪里改。 */
 		modelTip?: LocalizedText;
 		/** 发送按钮左边、用量和模型前面，插件自己的东西。 */

@@ -1,7 +1,7 @@
 /** 每个会话保留自己的输入状态；隐藏时由 Activity 卸下编辑器的副作用，不把异步结果交给下一份草稿。 */
 
 import type { DocumentText, Message, SessionView } from "@plume/contract";
-import type { ConversationProps } from "@plume/contract/ui";
+import type { ConversationProps, SessionChoice } from "@plume/contract/ui";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useI18n } from "@plume/ui";
@@ -18,7 +18,7 @@ import { modelsAgent } from "../models/store.ts";
 import { parseInvocation } from "../composer/commands.ts";
 import { useInputHistory } from "../composer/useInputHistory.ts";
 import { ModelBadge, ModelTrigger, EffortTrigger } from "../models/index.ts";
-import { effectiveModel } from "../models/session.ts";
+import { effectiveModel, type ComposerSession } from "../models/session.ts";
 import { useModels } from "../models/store.ts";
 import { ComposerItems, localized } from "../plugins.tsx";
 import { useLiveSession } from "../session-live.ts";
@@ -74,6 +74,9 @@ export function ChildComposer({
 		changeDraft((current) => ({ ...current, text: typeof change === "function" ? change(current.text) : change }));
 	};
 	const [sending, setSending] = useState(false);
+	// 会话还没建时人先选的模型、档位：`model` 为 undefined 是没动过（用 `blank.model`），空串是选了「跟随主会话」。
+	const [choice, setChoice] = useState<SessionChoice>({});
+	const blank = !view && !loading && composer.model === "choose" ? composer.blank : undefined;
 	const pending = useRef(false);
 	const editor = useRef<EditorView | null>(null);
 	const attachments = useComposerAttachments({
@@ -142,6 +145,7 @@ export function ChildComposer({
 		const kept = readDraft();
 		const text = withQuotes(kept.text.trim(), kept.quotes);
 		const message = withSessionReferences(files ? attachments.outgoing(text) : { content: [{ type: "text", text }] }, kept.sessionRefs ?? []);
+		const chosen = blank ? blankChoice(blank, choice) : undefined;
 		pending.current = true;
 		setSending(true);
 		attachments.clear();
@@ -153,9 +157,10 @@ export function ChildComposer({
 				const entries = await modelsAgent().listCommands({ cwd, sessionId });
 				const command = entries.find((entry) => entry.name === "compact");
 				if (command) await modelsAgent().expandCommand(command.plugin, command.name, invocation.rest, { cwd, sessionId });
-				else await composer.send(text);
-			} else if (composer.sendMessage) await composer.sendMessage(message);
-			else await composer.send(message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n\n"));
+				else await composer.send(text, chosen);
+			} else if (composer.sendMessage) await composer.sendMessage(message, chosen);
+			else await composer.send(message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n\n"), chosen);
+			if (chosen) setChoice({});
 		} catch (error) {
 			// 闭包属于这份会话；切换面板以后失败，也只还给原来的草稿。
 			if (files) {
@@ -226,6 +231,7 @@ export function ChildComposer({
 							<>
 								{composer.footer}
 								{view && <ChildModels view={view} composer={composer} running={running} onOpenSettings={onOpenSettings} />}
+								{blank && <BlankModels blank={blank} choice={choice} onChoice={setChoice} onOpenSettings={onOpenSettings} />}
 								<ComposerSend running={state.stop} disabled={!state.canSend} onSend={() => void send()} onStop={() => composer.stop?.()} />
 							</>
 						}
@@ -279,29 +285,111 @@ function ChildModels({
 				/>
 			)}
 			{composer.model === "choose" && (
-				<div className="flex min-w-0 items-center gap-0.5">
-					<ModelTrigger
-						session={session}
-						onError={onError}
-						onOpenSettings={onOpenSettings}
-						{...(own.parentId
-							? {
-									...(own.model ? {} : { inheriting: t("composer.followParent") }),
-									selection: {
-										value: own.model ?? "",
-										inheritLabel: t("composer.followParent"),
-										...(parentName ? { inheritDetail: parentName } : {}),
-										onChange: (next: string) =>
-											void modelsAgent()
-												.setSessionModel(own.id, next || undefined)
-												.catch((cause: unknown) => onError(t("modelMenu.switchFailed", { reason: cause instanceof Error ? cause.message : String(cause) }))),
-									},
-								}
-							: {})}
-					/>
-					<EffortTrigger session={session} onError={onError} />
-				</div>
+				<ChooseModels
+					session={session}
+					{...(own.model ? { own: own.model } : {})}
+					{...(own.parentId ? { parentId: own.parentId } : {})}
+					{...(parentName ? { parentName } : {})}
+					onFollow={(next) =>
+						void modelsAgent()
+							.setSessionModel(own.id, next || undefined)
+							.catch((cause: unknown) => onError(t("modelMenu.switchFailed", { reason: cause instanceof Error ? cause.message : String(cause) })))
+					}
+					onError={onError}
+					onOpenSettings={onOpenSettings}
+				/>
 			)}
 		</>
+	);
+}
+
+/** 会话建好后用的模型：人动过就是选的（空串是跟随父会话），没动过是插件给的 `blank.model`。 */
+function blankChoice(blank: NonNullable<NonNullable<ConversationProps["composer"]>["blank"]>, choice: SessionChoice): SessionChoice {
+	const model = choice.model === undefined ? blank.model : choice.model || undefined;
+	return { ...(model ? { model } : {}), ...(choice.thinking ? { thinking: choice.thinking } : {}) };
+}
+
+/**
+ * 会话还没建（第一句还没发）时的模型和思考档位：选的先记在输入框里（`choice`），发第一句时交给插件建会话。
+ * 没选的照会话建好后的算法（`ChildModels`）跟着 `blank.parentId` 那个会话。没有会话可量，不画用量格子。
+ */
+function BlankModels({
+	blank,
+	choice,
+	onChoice,
+	onOpenSettings,
+}: {
+	blank: NonNullable<NonNullable<ConversationProps["composer"]>["blank"]>;
+	choice: SessionChoice;
+	onChoice: (change: (current: SessionChoice) => SessionChoice) => void;
+	onOpenSettings: () => void;
+}) {
+	const parent = useLiveSession(blank.parentId)?.summary;
+	const own = blankChoice(blank, choice);
+	const chosen = own.model ?? parent?.model;
+	const thinking = own.thinking ?? parent?.thinking;
+	const parentName = effectiveModel(useModels(), parent?.model)?.name;
+	const pick = (model: string) => onChoice((current) => ({ ...current, model }));
+	const session: ComposerSession = {
+		id: null,
+		said: false,
+		...(chosen ? { model: chosen } : {}),
+		...(thinking ? { thinking } : {}),
+		setModel: pick,
+		setThinking: (next) => onChoice((current) => ({ ...current, thinking: next })),
+	};
+	return (
+		<ChooseModels
+			session={session}
+			{...(own.model ? { own: own.model } : {})}
+			{...(blank.parentId ? { parentId: blank.parentId } : {})}
+			{...(parentName ? { parentName } : {})}
+			onFollow={pick}
+			onError={(message) => notify(message, "error")}
+			onOpenSettings={onOpenSettings}
+		/>
+	);
+}
+
+/** 能换的模型和档位。子会话（有 `parentId`）的模型菜单最前面是「跟随主会话」，选中交给 `onFollow`（空串是跟随）；独立会话的菜单直接改 `session`。 */
+function ChooseModels({
+	session,
+	own,
+	parentId,
+	parentName,
+	onFollow,
+	onError,
+	onOpenSettings,
+}: {
+	session: ComposerSession;
+	/** 子会话自己选的模型；没有是跟随父会话。 */
+	own?: string;
+	parentId?: string;
+	parentName?: string;
+	onFollow: (next: string) => void;
+	onError: (message: string) => void;
+	onOpenSettings: () => void;
+}) {
+	const { t } = useI18n();
+	return (
+		<div className="flex min-w-0 items-center gap-0.5">
+			<ModelTrigger
+				session={session}
+				onError={onError}
+				onOpenSettings={onOpenSettings}
+				{...(parentId
+					? {
+							...(own ? {} : { inheriting: t("composer.followParent") }),
+							selection: {
+								value: own ?? "",
+								inheritLabel: t("composer.followParent"),
+								...(parentName ? { inheritDetail: parentName } : {}),
+								onChange: onFollow,
+							},
+						}
+					: {})}
+			/>
+			<EffortTrigger session={session} onError={onError} />
+		</div>
 	);
 }
