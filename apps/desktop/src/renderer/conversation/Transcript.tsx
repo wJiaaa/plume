@@ -73,21 +73,28 @@ export function Transcript({
 	const id = view.summary.id;
 	const quoteActions = useQuoteActions();
 	const running = view.summary.running;
-	// 派出去的后台运行没回来也不算答完：派完那一轮就收了尾，交付卡片这时挂出来，回来接着跑时又收掉。
-	const footerTimestamp = latestFooterTimestamp(view.messages, running || view.summary.background === true);
 	const { showThinking } = useTranscriptPrefs();
 	// 插件登记的卡片变了，哪些调用单独成行跟着变：修订号进分组的依赖。
 	const plugins = usePluginRegistrations();
+	/*
+	 * 读不出来的记录换成一行说明，放在原位：一条坏记录不该让整个转录白掉，见 `intact`。下面凡是读落了盘的消息的都读这一份。
+	 * 落了盘的那段单独查：草稿每一拍都换，跟着从头查的话，一条坏记录每拍都报一遍错，换上的那一行每拍又是新对象，分行接不上检查点。
+	 */
+	const settledMessages = useMemo(() => intact(view.messages), [view.messages]);
 	// 正在写的那条回复接在落了盘的后面：它的位置就是它写完后的位置，换过来时行不卸掉重挂。
-	// 读不出来的记录换成一行说明，放在原位：一条坏记录不该让整个转录白掉，见 `intact`。
-	const messages = useMemo<readonly Message[]>(() => intact(view.draft ? [...view.messages, view.draft] : view.messages), [view.messages, view.draft]);
-	const lastUser = useMemo(() => lastUserIndex(view.messages), [view.messages]);
+	const messages = useMemo<readonly Message[]>(
+		() => (view.draft ? [...settledMessages, ...intact([view.draft])] : settledMessages),
+		[settledMessages, view.draft],
+	);
+	// 派出去的后台运行没回来也不算答完：派完那一轮就收了尾，交付卡片这时挂出来，回来接着跑时又收掉。
+	const footerTimestamp = latestFooterTimestamp(settledMessages, running || view.summary.background === true);
+	const lastUser = useMemo(() => lastUserIndex(settledMessages), [settledMessages]);
 	const { results, jobs } = useMemo(() => {
 		const map = new Map<string, ToolResultMessage>();
 		// 放到后台的命令：启动它的那次调用写的说明，查它输出的那几行要说是哪个任务。
 		const described = new Map<string, string>();
 		const started = new Map<string, BackgroundJobInfo>();
-		for (const message of view.messages) {
+		for (const message of settledMessages) {
 			if (message.role === "assistant") {
 				for (const block of message.content) {
 					if (block.type !== "toolCall") continue;
@@ -107,7 +114,7 @@ export function Transcript({
 			}
 		}
 		return { results: map, jobs: started };
-	}, [view.messages]);
+	}, [settledMessages]);
 	const state = useMemo<TranscriptState>(
 		() => ({
 			sessionId: id,
@@ -179,9 +186,9 @@ export function Transcript({
 	 * 时间线和问题导航只看落了盘的消息：它们问的是人说过的话，正在写的那条回复每拍都换，跟着重算是白算。按内容记住时间线，
 	 * 不按数组：它进了 `draw` 的依赖，身份一换 `WorkStep` 的 memo 就形同虚设。
 	 */
-	const separatorKey = useMemo(() => [...timeSeparators(view.messages)].join(","), [view.messages]);
+	const separatorKey = useMemo(() => [...timeSeparators(settledMessages)].join(","), [settledMessages]);
 	const separators = useMemo(() => new Set(separatorKey ? separatorKey.split(",").map(Number) : []), [separatorKey]);
-	const questions = useMemo(() => questionsIn(view.messages, translate("questionNav.imageMessage")), [view.messages]);
+	const questions = useMemo(() => questionsIn(settledMessages, translate("questionNav.imageMessage")), [settledMessages]);
 
 	/*
 	 * 跳到第几问。窗口按块走，所以要的是「这一问在哪一块里」：先把那一块挂上，挂上以后的那次布局里再滚过去。
