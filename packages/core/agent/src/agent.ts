@@ -188,6 +188,8 @@ export interface Agent {
 	addPlugin(entry: PluginEntry): Promise<PluginStatus[]>;
 	/** 运行中卸下一个插件（插件市场卸载、更新前），并告诉界面。 */
 	removePlugin(key: string): Promise<PluginStatus[]>;
+	/** 有会话在跑一轮（顶层、子会话、插件的独立会话、一轮之外的压缩都算），或有还没送达的后台运行。插件市场的自动更新等它为假再换插件。 */
+	busy(): boolean;
 	/** 会话工作目录里这个文件的真实路径，不在目录里、不是文件时是 null。主进程按它发图片、PDF、音视频。 */
 	filePath(sessionId: string, path: string): Promise<string | null>;
 	shutdown(): Promise<void>;
@@ -2534,6 +2536,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async removePlugin(key) {
 			await host.remove(key);
 			return pluginsChanged();
+		},
+		busy() {
+			// 列表里删掉了、还没收尾的也算（`active`）。后台运行看 `pending`：没跑完的、交回了没送达的、刚跑完还在聚合窗口里的。
+			const running = [...sessions.values(), ...active].some((session) => session.turn !== undefined);
+			return running || [...sessions.keys()].some((id) => background.pending(id));
 		},
 		async filePath(sessionId, path) {
 			const session = sessions.get(sessionId);

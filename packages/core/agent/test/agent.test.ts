@@ -971,6 +971,18 @@ it("界面替人说的话（synthetic）照样发给模型，但不当标题", a
 	expect(JSON.stringify(model?.requests[0]?.messages)).toContain("继续，从暂停的地方接着做。");
 });
 
+it("busy：一轮在跑时为真，停下以后为假（插件市场的自动更新看它）", async () => {
+	const { service, session, until, idle } = await start([{ text: "写到一半", hang: true }]);
+	expect(agent!.busy()).toBe(false);
+	service.send(session.id, { content: [{ type: "text", text: "写点东西" }] });
+	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined);
+	expect(agent!.busy()).toBe(true);
+	const done = idle();
+	service.stop(session.id);
+	await done;
+	expect(agent!.busy()).toBe(false);
+});
+
 it("退出应用时还在跑的一轮记成被中断，不是人按的停", async () => {
 	const { service, session, until } = await start([{ text: "写到一半", hang: true }]);
 	service.send(session.id, { content: [{ type: "text", text: "写点东西" }] });

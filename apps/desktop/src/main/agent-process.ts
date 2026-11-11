@@ -103,6 +103,7 @@ serve(toMain, {
 	plugins: async () => (await ready).service.listPlugins(),
 	addPlugin: async (dir) => (await ready).addPlugin(entryOf(dir)),
 	removePlugin: async (key) => (await ready).removePlugin(key),
+	busy: async () => (await ready).busy(),
 	filePath: async (sessionId, path) => (await ready).filePath(sessionId, path),
 	sessions: async () => (await ready).service.listSessions(),
 	pageEvent: async (plugin, event) => (await ready).host.pageEvent(plugin, event),

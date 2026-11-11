@@ -210,7 +210,11 @@ async function boot(): Promise<void> {
 		uploadDir,
 		settingsFile: join(dataDir, "market.json"),
 		pluginDirs,
-		agent: { addPlugin: async (dir) => await agent.addPlugin(dir), removePlugin: async (key) => await agent.removePlugin(key) },
+		agent: {
+			addPlugin: async (dir) => await agent.addPlugin(dir),
+			removePlugin: async (key) => await agent.removePlugin(key),
+			busy: async () => await agent.busy(),
+		},
 		announce: announceToWindows,
 		log: (message) => console.warn(message),
 	});

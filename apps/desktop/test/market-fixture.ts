@@ -108,8 +108,8 @@ export async function serveMarket(t: TestContext) {
 	return { url: `${base}marketplace.json`, base, root, requests, publish, writeIndex };
 }
 
-/** 开一个连着 catalogUrl 的市场，自动更新关着；added、removed 是让 agent 进程加载、卸下的插件。 */
-export async function openMarket(t: TestContext, catalogUrl: string) {
+/** 开一个连着 catalogUrl 的市场，自动更新关着；added、removed 是让 agent 进程加载、卸下的插件；busy 是 agent 进程有没有会话在跑，缺省一直闲着。 */
+export async function openMarket(t: TestContext, catalogUrl: string, { busy = () => false }: { busy?: () => boolean } = {}) {
 	const work = await mkdtemp(join(tmpdir(), "plume-market-"));
 	t.after(() => rm(work, { recursive: true, force: true }));
 	const settingsFile = join(work, "market.json");
@@ -127,6 +127,7 @@ export async function openMarket(t: TestContext, catalogUrl: string) {
 		agent: {
 			addPlugin: async ({ key }) => void added.push(key),
 			removePlugin: async (key) => void removed.push(key),
+			busy: async () => busy(),
 		},
 		announce: () => undefined,
 		log: (line) => void logs.push(line),

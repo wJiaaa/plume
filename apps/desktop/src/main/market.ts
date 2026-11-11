@@ -9,7 +9,8 @@
  *
  * 更新按版本号判断：目录里的版本比装下的新就是有新版（发出去的版本不可变，插件仓库发布时查）。
  * 自动更新缺省开，启动一会儿后看一次，之后每 30 分钟、以及每次市场页读目录时再看；一次只换一个，
- * 先下载到暂存目录、换好再让 agent 进程重新加载，失败了原来那份不动。
+ * 先下载到暂存目录、换好再让 agent 进程重新加载，失败了原来那份不动。有会话在跑时不换：卸下插件会中止它的子会话、
+ * 撤掉它的钩子层，所以等 agent 进程闲下来，每分钟再看一次。人在市场页点的「更新」不等。
  *
  * 安装目录、本地上传目录和本机目录也盯着：插件作者 `plume-plugin install`/`dev` 装进来的、手动放进来或删掉的，
  * 不用重启，当场加载、按新文件重新加载或卸下。判断同样看文件指纹，市场自己装卸引起的变化不会再处理一遍。
@@ -38,6 +39,8 @@ import { isNewer } from "./update/version.ts";
 const FIRST_CHECK_MS = 40_000;
 /** 之后多久看一次。 */
 const CHECK_EVERY_MS = 30 * 60_000;
+/** 自动更新碰上有会话在跑时，隔多久再看一次闲没闲下来。 */
+const IDLE_RETRY_MS = 60_000;
 /** 目录变了等它停一会儿再看：一次安装会连着改好多文件。 */
 const SETTLE_MS = 300;
 /** 市场的目录读过以后多久内不再读：装、卸、对账都用这份；市场页每次打开和定时检查时重读。 */
@@ -68,8 +71,8 @@ export interface MarketOptions {
 	settingsFile: string;
 	/** plume-plugin:// 按它找插件目录，装卸时跟着改。 */
 	pluginDirs: Map<string, string>;
-	/** agent 进程：装上、卸下一个插件。 */
-	agent: { addPlugin(dir: PluginDir): Promise<unknown>; removePlugin(key: string): Promise<unknown> };
+	/** agent 进程：装上、卸下一个插件；有没有会话在跑一轮或在等后台运行（自动更新等它为假）。 */
+	agent: { addPlugin(dir: PluginDir): Promise<unknown>; removePlugin(key: string): Promise<unknown>; busy(): Promise<boolean> };
 	/** 更新状态变了，告诉所有窗口。 */
 	announce(state: PluginUpdateState): void;
 	log(message: string): void;
@@ -307,12 +310,26 @@ export function createMarket(options: MarketOptions): Market {
 		});
 	};
 
+	/** 等会话闲下来再自动更新的那个定时器，同一时刻只留一个。 */
+	let idleRetry: NodeJS.Timeout | undefined;
+	/** 自动更新：有落后的、但有会话在跑时先不换，一分钟后再看一次。 */
+	const autoUpdate = async (): Promise<PluginUpdateState> => {
+		const state = await tally();
+		if (state.outdated.length === 0) return state;
+		if (!(await agent.busy())) return apply(undefined);
+		idleRetry ??= setTimeout(() => {
+			idleRetry = undefined;
+			void serial(() => (auto ? autoUpdate() : tally())).catch((error: unknown) => log(errorText(error)));
+		}, IDLE_RETRY_MS);
+		return state;
+	};
+
 	/** 重读市场目录，对一遍账；自动更新开着就顺手更新。 */
 	const check = () =>
 		serial(async () => {
 			await loaded;
 			await remote(true);
-			return auto ? apply(undefined) : tally();
+			return auto ? autoUpdate() : tally();
 		});
 
 	const result = async (work: () => Promise<void>): Promise<MarketResult> => {
@@ -423,6 +440,7 @@ export function createMarket(options: MarketOptions): Market {
 		},
 		stop() {
 			for (const timer of timers) clearTimeout(timer);
+			clearTimeout(idleRetry);
 			clearTimeout(settle);
 			for (const watcher of watchers) watcher.close();
 		},

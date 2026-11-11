@@ -36,6 +36,8 @@ export interface AgentProcessApi {
 	addPlugin(dir: PluginDir): Promise<PluginStatus[]>;
 	/** 插件市场要卸载（或更新）一个插件：先停用并卸下它。 */
 	removePlugin(key: string): Promise<PluginStatus[]>;
+	/** 有没有会话在跑一轮或在等后台运行：插件市场的自动更新等它为假再换插件。 */
+	busy(): Promise<boolean>;
 	/** 会话工作目录或项目源目录里这个文件的真实路径，越界或不是文件时是 null。`plume-media://f/…` 每次请求都先问这里。 */
 	filePath(sessionId: string, path: string): Promise<string | null>;
 	/** 全部会话的摘要：菜单栏图标的「最近会话」弹出时取一次。 */
