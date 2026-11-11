@@ -71,15 +71,29 @@ export function useArrival(key: string): { fresh: boolean } {
 }
 
 /**
- * 正在演的那一段：重挂上来的同一段（原文以它为开头、还没演完）接过同一条时间线。
- * 只记一份，同时在演的另一段对不上开头。
+ * 正在演的几段，按时间线记各自演到的原文：重挂上来的同一段（原文以它为开头、还没演完）接过同一条时间线。
+ * 不只记一份：主对话和侧边聊天、子 Agent 面板可能同时在输出，只记一份的话，交接时记着的常是另一段，剩下的字一下全出来。
+ * 演完就拿掉（`settle`），卸下了没演完的只留最近的几段。
  */
-let playing: { text: string; pace: Pace } | null = null;
+const playing = new Map<Pace, string>();
+const PLAYING_LIMIT = 8;
 
+function play(pace: Pace, text: string): void {
+	playing.delete(pace);
+	playing.set(pace, text);
+	for (const oldest of playing.keys()) {
+		if (playing.size <= PLAYING_LIMIT) break;
+		playing.delete(oldest);
+	}
+}
+
+/** 原文以它为开头的那几段里取最长的：两段开头相同（同一段被挤出去又挂回来）时，接演得最远的那条。 */
 function resumable(text: string, live: boolean): Pace | null {
-	if (!playing || !text.startsWith(playing.text)) return null;
-	if (!live && playing.pace.done + FADE <= performance.now()) return null;
-	return playing.pace;
+	let found: { text: string; pace: Pace } | null = null;
+	for (const [pace, played] of playing) if (played && text.startsWith(played) && (!found || played.length > found.text.length)) found = { text: played, pace };
+	if (!found) return null;
+	if (!live && found.pace.done + FADE <= performance.now()) return null;
+	return found.pace;
 }
 
 interface State {
@@ -134,6 +148,7 @@ export function useSmoothText(
 				() => {
 					here.active = false;
 					setActive(false);
+					playing.delete(here.pace);
 				},
 				Math.max(0, here.pace.done - performance.now()) + FADE + 40,
 			);
@@ -141,7 +156,7 @@ export function useSmoothText(
 
 		// 没在演、不是往后接着写（换了一段原文）、长出来的是离开期间写的、或者已经被下一轮接上了：直接给全文。
 		if (!motion || superseded || !text.startsWith(here.target) || (arrival.fresh && text !== here.target)) {
-			if (playing?.pace === here.pace) playing = null;
+			playing.delete(here.pace);
 			here.pace = new Pace();
 			here.pace.present(text.length, now);
 			here.target = text;
@@ -149,7 +164,7 @@ export function useSmoothText(
 			setShown(text);
 			here.active = live && motion && !superseded;
 			setActive(here.active);
-			if (here.active) playing = { text, pace: here.pace };
+			if (here.active) play(here.pace, text);
 			return;
 		}
 
@@ -158,7 +173,7 @@ export function useSmoothText(
 			here.target = text;
 		}
 		if (live) {
-			playing = { text, pace: here.pace };
+			play(here.pace, text);
 			if (!here.active) {
 				here.active = true;
 				setActive(true);
