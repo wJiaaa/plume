@@ -109,7 +109,8 @@ export async function serveMarket(t: TestContext) {
 }
 
 /** 开一个连着 catalogUrl 的市场，自动更新关着；added、removed 是让 agent 进程加载、卸下的插件。 */
-export async function openMarket(t: TestContext, catalogUrl: string) {
+/** localRoots：当作 PLUME_PLUGIN_PATHS 的目录。 */
+export async function openMarket(t: TestContext, catalogUrl: string, localRoots: string[] = []) {
 	const work = await mkdtemp(join(tmpdir(), "plume-market-"));
 	t.after(() => rm(work, { recursive: true, force: true }));
 	const settingsFile = join(work, "market.json");
@@ -121,7 +122,8 @@ export async function openMarket(t: TestContext, catalogUrl: string) {
 		catalogUrl,
 		builtinDir: join(work, "builtin"),
 		installDir: join(work, "plugins"),
-		localRoots: [],
+		uploadDir: join(work, "local-plugins"),
+		localRoots,
 		settingsFile,
 		pluginDirs: new Map(),
 		agent: {
@@ -131,5 +133,5 @@ export async function openMarket(t: TestContext, catalogUrl: string) {
 		announce: () => undefined,
 		log: (line) => void logs.push(line),
 	});
-	return { market, work, installDir: join(work, "plugins"), added, removed, logs };
+	return { market, work, installDir: join(work, "plugins"), uploadDir: join(work, "local-plugins"), added, removed, logs };
 }

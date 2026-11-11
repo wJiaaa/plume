@@ -6,7 +6,7 @@
  *   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
  *   plume-plugin check [目录]              类型检查和插件规则（公开接口、样式、文案），缺省当前目录
  *   plume-plugin build [目录]
- *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/plugins，Plume 开着就当场加载
+ *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/local-plugins，Plume 开着就当场加载
  *   plume-plugin dev [目录] [--to 目录]      构建、装上，之后一改源码就重新来一遍
  *   plume-plugin link [目录]               重新链到这份 SDK（Plume 挪了位置、npm 删了链接时）
  */

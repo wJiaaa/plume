@@ -94,8 +94,8 @@ interface SmokeOptions {
 	workspace: string;
 	file: string;
 	shutdown(): Promise<void>;
-	/** 启动脚本（写不了时没有）、插件市场的目录、安装目录。 */
-	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; builtinDir: string; installDir: string };
+	/** 启动脚本（写不了时没有）、从市场装插件、内置插件的目录、市场装的和本地上传的各自的目录。 */
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; builtinDir: string; installDir: string; uploadDir: string };
 }
 
 export async function runSmoke({ window, agent, workspace, file, shutdown, plugin }: SmokeOptions): Promise<void> {

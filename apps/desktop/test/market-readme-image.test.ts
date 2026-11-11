@@ -41,7 +41,7 @@ test("README 和它的图从市场的 assets/<名字>/ 取，出不了这一层�
 test("市场里没有的插件，README 的图从装下的目录读，符号链接出不了目录", async (t) => {
 	const served = await serveMarket(t);
 	await served.publish([]);
-	const { market, work, installDir } = await openMarket(t, served.url);
+	const { market, work, uploadDir } = await openMarket(t, served.url);
 	const source = join(work, "elsewhere/mine");
 	await mkdir(join(source, "dist"), { recursive: true });
 	await mkdir(join(source, "images"), { recursive: true });
@@ -54,7 +54,7 @@ test("市场里没有的插件，README 的图从装下的目录读，符号链�
 	assert.equal(await market.readme("mine"), "本机的介绍");
 	assert.equal(await market.readmeImage("mine", "images/shot.png"), `data:image/png;base64,${PNG.toString("base64")}`);
 	await writeFile(join(work, "secret.png"), PNG);
-	await rm(join(installDir, "mine/images/shot.png"));
-	await symlink(join(work, "secret.png"), join(installDir, "mine/images/shot.png"));
+	await rm(join(uploadDir, "mine/images/shot.png"));
+	await symlink(join(work, "secret.png"), join(uploadDir, "mine/images/shot.png"));
 	assert.equal(await market.readmeImage("mine", "images/shot.png"), null);
 });

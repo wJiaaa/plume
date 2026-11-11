@@ -212,7 +212,7 @@ loading ──apply 成功──▶ active ──应用退出 / 停用──▶ 
 disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 ```
 
-- **发现**：插件目录下每个子目录一个插件。来源有三个：随应用发的**内置插件**（仓库的 `packages/builtin/`，打包时放进资源目录的 `builtin/`，直接从那里加载，市场不列），插件市场装进 `~/.plume/plugins/` 的，以及 `PLUME_PLUGIN_PATHS`。市场的目录在网上：插件仓库 plume-plugins 按平台打包、发到 GitHub Pages，装的时候下载这台机器那份、核对后解开（`apps/desktop/src/main/market-remote.ts`）；运行中装上、卸下、开关插件当场生效，不用重启。主进程还盯着这两处目录：`plume-plugin install`/`dev` 装进来的、手动放进或删掉的插件，按文件指纹当场加载、重新加载或卸下。
+- **发现**：插件目录下每个子目录一个插件。来源有三个：随应用发的**内置插件**（仓库的 `packages/builtin/`，打包时放进资源目录的 `builtin/`，直接从那里加载，市场不列），插件市场装进 `~/.plume/plugins/` 的，本地上传进 `~/.plume/local-plugins/` 的（「从本地上传」、`plume-plugin install`/`dev`），以及 `PLUME_PLUGIN_PATHS`；同名时按内置、`PLUME_PLUGIN_PATHS`、本地上传、市场装的顺序只认第一份。市场的目录在网上：插件仓库 plume-plugins 按平台打包、发到 GitHub Pages，装的时候下载这台机器那份、核对后解开（`apps/desktop/src/main/market-remote.ts`）；运行中装上、卸下、开关插件当场生效，不用重启。主进程还盯着后三处目录：`plume-plugin install`/`dev` 装进来的、手动放进或删掉的插件，按文件指纹当场加载、重新加载或卸下。
 - **顺序**：先加载内置插件，再加载市场装的，最后是 `PLUME_PLUGIN_PATHS` 下的；同名目录只认先找到的。要用的服务还没人提供的插件先等着，提供方加载后再加载。加载顺序只影响工具重名时谁生效（后登记的生效，覆盖记一条日志；它停用或卸下后前一个恢复）。钩子各层的先后只看 `order`，和加载顺序无关。
 - **关掉插件**：在 `<数据目录>/plugins.json` 里写 `{ "disabled": ["插件名"] }`。内置插件关不掉、卸不了；要换掉它，装一个提供同名服务的插件，或在它的钩子外层接管。
 - **界面入口跟着逻辑入口走**：agent 进程把已启用的插件列表告诉界面，界面只加载这些插件的 `ui.mjs`。界面入口加载失败只记日志，对应的卡片退回通用卡片。

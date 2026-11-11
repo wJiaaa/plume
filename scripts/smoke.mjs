@@ -18,8 +18,7 @@
  * 构建完趁还拿着锁把产物快照到这次运行自己的 app/ 下，各段的 Electron 都从这一份快照启动；别的会话之后再构建，动不到正在跑的这一份。
  * 快照按仓库的目录结构摆，宿主从 apps/desktop 往上找内置插件的路子不用改；macOS 上是 APFS 的克隆，几乎不占时间和空间。跑完删掉。
  *
- * 各段要用的市场插件从市场装：缺省是线上的市场（要联网），设了 PLUME_MARKET_URL 就用它（比如插件仓库在本机起的市场，
- * 联调还没发布的插件）。
+ * 各段要用的市场插件从线上市场装（要联网）。
  */
 
 import { spawn } from "node:child_process";
@@ -199,7 +198,10 @@ async function runSuite(suite, out, output) {
 	const ok = !timedOut && code === 0 && (output === "inherit" || verdict?.ok === true);
 	const error = timedOut ? `${SUITE_TIMEOUT / 1000} 秒未结束` : (verdict?.error ?? (ok ? undefined : `退出码 ${code}，日志里没有结果行`));
 	// 过了的段删掉装进去的插件和数据目录，只留截图、日志、工作目录；只跑一段时也一样，没过的留着查。
-	if (ok) await Promise.all(["plugins", "home"].map((name) => rm(join(dir, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })));
+	if (ok)
+		await Promise.all(
+			["plugins", "local-plugins", "home"].map((name) => rm(join(dir, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })),
+		);
 	return { name: suite.name, ok, error: error?.split("\n")[0], log, ms: Date.now() - begin };
 }
 

@@ -1,6 +1,6 @@
 /**
- * 把构建好的插件装进本机的 Plume：复制 package.json、README.md、images/、icon.png、dist/、随包的 skills/、.mcp.json 和 LICENSE 到 `~/.plume/plugins/<目录名>/`，
- * 和插件市场装的放在同一个地方。Plume 监视这个目录，开着的话当场加载（已经装过的就换成新的）。
+ * 把构建好的插件装进本机的 Plume：复制 package.json、README.md、images/、icon.png、dist/、随包的 skills/、.mcp.json 和 LICENSE 到 `~/.plume/local-plugins/<目录名>/`，
+ * 和 Plume 里「从本地上传」的放在同一个地方：不跟市场更新，和市场装的同名时这一份生效。Plume 监视这个目录，开着的话当场加载（已经装过的就换成新的）。
  *
  * 先复制进旁边的暂存目录再整个换上去：Plume 看到的要么是旧的一份，要么是新的一份，不会是复制到一半的。
  *
@@ -17,10 +17,10 @@ import { DIR_NAME, PLUGIN_ENTRY, SHIPPED } from "./manifest.mjs";
 
 /**
  * @param {string} source 插件目录
- * @param {string} [root] 装到哪个目录下，缺省 Plume 数据目录（`PLUME_HOME`，没设是 ~/.plume）下的 plugins
+ * @param {string} [root] 装到哪个目录下，缺省 Plume 数据目录（`PLUME_HOME`，没设是 ~/.plume）下的 local-plugins
  * @returns {string} 装到的目录
  */
-export function installPlugin(source, root = join(process.env.PLUME_HOME || join(homedir(), ".plume"), "plugins")) {
+export function installPlugin(source, root = join(process.env.PLUME_HOME || join(homedir(), ".plume"), "local-plugins")) {
 	const dir = resolve(source);
 	const key = basename(dir);
 	if (!DIR_NAME.test(key)) throw new Error(`目录名 ${key} 不行：只能用小写字母、数字和连字符`);

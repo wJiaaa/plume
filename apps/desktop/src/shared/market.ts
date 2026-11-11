@@ -40,10 +40,10 @@ export interface InstalledPlugin extends MarketInfo {
 	/** 发给插件的文件（package.json、README.md、icon.png、dist/、skills/）的指纹：文件变了（重新构建、重新装）它就变。 */
 	hash: string;
 	/**
-	 * market：从市场装进安装目录的，可以更新、卸载；local：PLUME_PLUGIN_PATHS 下直接放的，市场不管它的文件；
-	 * builtin：随应用发的，不在市场里列，不能卸载、停用。
+	 * market：从市场装进安装目录的，可以更新、卸载；upload：本地上传进本地上传目录的，可以卸载，不跟市场更新；
+	 * local：PLUME_PLUGIN_PATHS 下直接放的，市场不管它的文件；builtin：随应用发的，不在市场里列，不能卸载、停用。
 	 */
-	source: "market" | "local" | "builtin";
+	source: "market" | "upload" | "local" | "builtin";
 }
 
 /** 自动更新和「谁落后了」：主进程算好，有变化就推给窗口。 */

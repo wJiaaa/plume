@@ -100,5 +100,5 @@ Magpie 可以接管 Plume 的模型和资源：
 ## 数据目录
 
 - 数据目录是 `~/.plume`；设置 `PLUME_HOME` 后改到那里，Electron 的浏览器数据也跟着放进其中的 `chromium/`。
-- 主要内容：`settings.json`（模型和 agent 设置，0600）、`credentials.json` 和 `vault.key`、`sessions/`（会话库，含排队消息）、`session-media/`（图片等媒体及缩略图）、`scratch/<会话 id>/`（会话临时目录，随会话删除）、`projects.json`、`plugins/`（市场装的插件）、`market.json`、`plugins.json`（停用名单）、`plugin-data/<插件名>/`（插件私有数据）、`appearance.json`、`locale.json`、`keep-awake.json`、`window.json`、`backgrounds/`、`model-catalog.json`、`bin/plume-plugin`。
-- 开发版（`pnpm dev`，没打包）和装好的应用共用这个目录里的会话和设置，插件那几样单独放在 `dev/` 下：`dev/plugins/`、`dev/market.json`、`dev/plugins.json`、`dev/plugin-data/`。开发时装的插件不会被装好的应用加载，反过来也一样。
+- 主要内容：`settings.json`（模型和 agent 设置，0600）、`credentials.json` 和 `vault.key`、`sessions/`（会话库，含排队消息）、`session-media/`（图片等媒体及缩略图）、`scratch/<会话 id>/`（会话临时目录，随会话删除）、`projects.json`、`plugins/`（市场装的插件）、`local-plugins/`（本地上传的插件）、`market.json`、`plugins.json`（停用名单）、`plugin-data/<插件名>/`（插件私有数据）、`appearance.json`、`locale.json`、`keep-awake.json`、`window.json`、`backgrounds/`、`model-catalog.json`、`bin/plume-plugin`。
+- 开发版（`pnpm dev`，没打包）和装好的应用共用这个目录，会话、设置和插件都是同一份。

@@ -2,18 +2,21 @@
  * 插件市场的主进程一侧：读目录、装、卸、更新，以及「装过的自己跟上新版」。
  *
  * 目录在网上（market-remote.ts）：装上是下载这台机器的那份包、核对后解进安装目录，再让 agent 进程加载；
- * 不用重启，界面经 agent 的 plugins 事件跟着变。PLUME_PLUGIN_PATHS 下的插件是本机直接放的，照常加载，
- * 市场只列出来，不动它的文件。连不上市场时目录用上次读到的（一次都没读到就是空的），已装的插件照常用。
+ * 不用重启，界面经 agent 的 plugins 事件跟着变。连不上市场时目录用上次读到的（一次都没读到就是空的），已装的插件照常用。
+ *
+ * 本地上传的（「从本地上传」、`plume-plugin install`/`dev`）放在另一个目录（`uploadDir`），能卸，但不跟市场更新：
+ * 和市场装的同名时它生效，市场那份留着不加载，卸掉本地那份就接着用市场那份。PLUME_PLUGIN_PATHS 下的插件是本机直接放的，
+ * 照常加载，市场只列出来，不动它的文件。同名时生效的顺序见 `found`。
  *
  * 更新按版本号判断：目录里的版本比装下的新就是有新版（发出去的版本不可变，插件仓库发布时查）。
  * 自动更新缺省开，启动一会儿后看一次，之后每 30 分钟、以及每次市场页读目录时再看；一次只换一个，
  * 先下载到暂存目录、换好再让 agent 进程重新加载，失败了原来那份不动。
  *
- * 安装目录和本机目录也盯着：插件作者 `plume-plugin install`/`dev` 装进来的、手动放进来或删掉的，
+ * 安装目录、本地上传目录和本机目录也盯着：插件作者 `plume-plugin install`/`dev` 装进来的、手动放进来或删掉的，
  * 不用重启，当场加载、按新文件重新加载或卸下。判断同样看文件指纹，市场自己装卸引起的变化不会再处理一遍。
  *
  * 内置插件在另一个目录（`builtinDir`）：随应用发，直接从那里加载、排在最前，市场不列、不能卸。
- * 安装目录、本机目录里和它同名的不加载。
+ * 别的目录里和它同名的不加载。
  */
 
 import { createHash } from "node:crypto";
@@ -54,12 +57,14 @@ const README_IMAGE_TYPES: Record<string, string> = {
 };
 
 export interface MarketOptions {
-	/** 市场目录 marketplace.json 的地址：缺省是插件仓库的 GitHub Pages，PLUME_MARKET_URL 可换成别的（比如插件仓库在本机起的市场）。 */
+	/** 市场目录 marketplace.json 的地址：插件仓库的 GitHub Pages（测试换成本机起的服务）。 */
 	catalogUrl: string;
 	/** 内置插件的目录，每个一个子目录。 */
 	builtinDir: string;
 	/** 从市场装的插件放这里，每个一个子目录。 */
 	installDir: string;
+	/** 本地上传的插件放这里，每个一个子目录；和 installDir 在同一个上级目录下。 */
+	uploadDir: string;
 	/** 本机直接放插件的目录（PLUME_PLUGIN_PATHS）。 */
 	localRoots: string[];
 	/** 市场自己的设置（自动更新开关）。 */
@@ -74,12 +79,12 @@ export interface MarketOptions {
 }
 
 export interface Market {
-	/** 启动时要加载的插件：先内置的，再市场装的，再本机放的；同名目录只认先找到的。 */
+	/** 启动时要加载的插件，同名时只认一份，顺序见 `found`。 */
 	plugins(): Promise<PluginDir[]>;
 	/** 读目录和本机已有的，顺便对一遍账（自动更新开着就更新）。 */
 	read(): Promise<MarketState>;
 	install(id: string): Promise<MarketResult>;
-	/** 从本机一个构建好的插件文件夹装上（插件市场的「从文件夹安装」），装法和市场装的一样；已经装过同名的就换成这一份。 */
+	/** 从本机一个构建好的插件文件夹装进本地上传目录（插件市场的「从本地上传」）；同名的换成这一份，市场装的那份留着、不加载。 */
 	installFolder(dir: string): Promise<MarketResult>;
 	uninstall(id: string): Promise<MarketResult>;
 	/** 更新这几个（缺省：全部落后的），不看自动更新开没开——这是人点的。 */
@@ -97,7 +102,7 @@ export interface Market {
 }
 
 export function createMarket(options: MarketOptions): Market {
-	const { catalogUrl, builtinDir, installDir, localRoots, settingsFile, pluginDirs, agent, announce, log } = options;
+	const { catalogUrl, builtinDir, installDir, uploadDir, localRoots, settingsFile, pluginDirs, agent, announce, log } = options;
 	let auto = true;
 	let current: PluginUpdateState = { outdated: [], auto, updating: [], failed: [] };
 	/** 装、卸、更新排成一队：同一个目录不会被两件事同时改。 */
@@ -156,21 +161,26 @@ export function createMarket(options: MarketOptions): Market {
 	const entries = async (): Promise<MarketEntry[]> => (await remote(false)).map((entry) => entry.info);
 
 	const installed = async (): Promise<InstalledPlugin[]> => {
-		const { builtin, market, local } = await found();
+		const { builtin, local, upload, market } = await found();
 		return Promise.all([
 			...builtin.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "builtin" as const })),
-			...market.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "market" as const })),
 			...local.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "local" as const })),
+			...upload.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "upload" as const })),
+			...market.map(async ({ key, dir }) => ({ ...(await readInfo(key, dir)), dir, source: "market" as const })),
 		]);
 	};
 
-	/** 本机有的插件：先内置的，再市场装的，再本机放的；同名目录只认先找到的。 */
+	/**
+	 * 本机有的插件，同名目录只认先找到的：先内置的（不能被换掉），再本机直接放的（插件作者正在改的那份），
+	 * 再本地上传的，最后市场装的。越是人特意放的越靠前，市场装的被压住时原样留着，前面的没了它就接着生效。
+	 */
 	const found = async () => {
 		const builtin = (await discoverPlugins([builtinDir], log)).map((plugin) => ({ ...plugin, builtin: true }));
 		const taken = (key: string, ...lists: PluginDir[][]) => lists.some((list) => list.some((other) => other.key === key));
-		const market = (await discoverPlugins([installDir], log)).filter((plugin) => !taken(plugin.key, builtin));
-		const local = (await discoverPlugins(localRoots, log)).filter((plugin) => !taken(plugin.key, builtin, market));
-		return { builtin, market, local };
+		const local = (await discoverPlugins(localRoots, log)).filter((plugin) => !taken(plugin.key, builtin));
+		const upload = (await discoverPlugins([uploadDir], log)).filter((plugin) => !taken(plugin.key, builtin, local));
+		const market = (await discoverPlugins([installDir], log)).filter((plugin) => !taken(plugin.key, builtin, local, upload));
+		return { builtin, local, upload, market };
 	};
 
 	/** 市场装的、目录里有更新版本的那些。装下的没写版本号的，有版本就算新。 */
@@ -191,12 +201,12 @@ export function createMarket(options: MarketOptions): Market {
 	};
 
 	/**
-	 * 把一个插件换进安装目录：fill 先把文件放进暂存目录（下载市场的包，或复制人选的本机文件夹），放好了才动装着的那份。
-	 * replace 时先让 agent 进程卸下旧的，换好再加载新的。
+	 * 把一个插件换进 root（安装目录或本地上传目录）：fill 先把文件放进暂存目录（下载市场的包，或复制人选的本机文件夹），
+	 * 放好了才动装着的那份。replaced 是现在生效的同名那份的目录：先让 agent 进程卸下它，换好再加载新的；换不成就把它装回去。
 	 */
-	const put = async (id: string, fill: (staging: string) => Promise<void>, replace: boolean): Promise<void> => {
-		const target = join(installDir, id);
-		const staging = join(installDir, "..", ".plugins-staging", id);
+	const put = async (root: string, id: string, fill: (staging: string) => Promise<void>, replaced: string | undefined): Promise<void> => {
+		const target = join(root, id);
+		const staging = join(root, "..", ".plugins-staging", id);
 		await rm(staging, { recursive: true, force: true });
 		try {
 			await fill(staging);
@@ -204,17 +214,17 @@ export function createMarket(options: MarketOptions): Market {
 			await rm(staging, { recursive: true, force: true }).catch(() => {});
 			throw packageError(error);
 		}
-		if (replace) {
+		if (replaced) {
 			await agent.removePlugin(id);
 			pluginDirs.delete(id);
 		}
-		await mkdir(installDir, { recursive: true });
+		await mkdir(root, { recursive: true });
 		try {
 			await discard(await swapIn([{ from: staging, to: target }], retiredDir), retiredDir);
 		} catch (error) {
 			// 旧的那份原样回到了原处，把卸下的它装回去；暂存的新版本扔掉。
 			await rm(staging, { recursive: true, force: true }).catch(() => {});
-			if (replace) await restore(id, target);
+			if (replaced) await restore(id, replaced);
 			throw swapError(error);
 		}
 		pluginDirs.set(id, resolve(target));
@@ -266,8 +276,8 @@ export function createMarket(options: MarketOptions): Market {
 
 	/** 要加载的插件，顺序见 `found`。 */
 	const discoverAll = async (): Promise<PluginDir[]> => {
-		const { builtin, market, local } = await found();
-		return [...builtin, ...market, ...local];
+		const { builtin, local, upload, market } = await found();
+		return [...builtin, ...local, ...upload, ...market];
 	};
 
 	/** 逐个换上落后的；ids 为空表示全部。 */
@@ -278,7 +288,8 @@ export function createMarket(options: MarketOptions): Market {
 			const { id, name } = entry.info;
 			publish({ updating: [...current.updating, id] });
 			try {
-				await put(id, download(entry), true);
+				// 落后的只算生效着的市场那份，换下的就是它。
+				await put(installDir, id, download(entry), join(installDir, id));
 			} catch (error) {
 				log(`更新 ${id} 失败：${errorText(error)}`);
 				failed.push({ id, name, message: errorText(error) });
@@ -331,8 +342,8 @@ export function createMarket(options: MarketOptions): Market {
 				const entry = (await remote(false)).find((candidate) => candidate.info.id === id);
 				if (!entry) return { ok: false, error: "not-found" };
 				const have = (await installed()).find((plugin) => plugin.id === id);
-				if (have?.source === "local") return { ok: false, error: "local" };
-				return result(() => put(id, download(entry), have !== undefined));
+				if (have?.source === "local" || have?.source === "upload") return { ok: false, error: "local" };
+				return result(() => put(installDir, id, download(entry), have?.dir));
 			}),
 		installFolder: (dir) =>
 			serial(async () => {
@@ -340,7 +351,7 @@ export function createMarket(options: MarketOptions): Market {
 				if (!isAbsolute(dir) || !DIR_NAME.test(id) || !existsSync(join(dir, PLUGIN_ENTRY))) return { ok: false, error: "invalid" };
 				const have = (await installed()).find((plugin) => plugin.id === id);
 				if (have?.source === "local" || have?.source === "builtin") return { ok: false, error: have.source };
-				return result(() => put(id, copyFolder(dir), have !== undefined));
+				return result(() => put(uploadDir, id, copyFolder(dir), have?.dir));
 			}),
 		uninstall: (id) =>
 			serial(async () => {
@@ -357,6 +368,13 @@ export function createMarket(options: MarketOptions): Market {
 						throw swapError(error);
 					}
 					loadedPlugins.delete(id);
+					// 本地上传的压着一份市场装的：卸掉前者，后者接着生效。
+					const next = (await discoverAll()).find((plugin) => plugin.key === id);
+					if (next) {
+						pluginDirs.set(id, next.dir);
+						loadedPlugins.set(id, { dir: next.dir, hash: await hashOf(next.dir) });
+						await agent.addPlugin(next);
+					}
 				});
 			}),
 		update: (ids) => serial(() => apply(ids)),
@@ -393,11 +411,12 @@ export function createMarket(options: MarketOptions): Market {
 			timers.push(setTimeout(() => void check().catch((error: unknown) => log(errorText(error))), FIRST_CHECK_MS));
 			timers.push(setInterval(() => void check().catch((error: unknown) => log(errorText(error))), CHECK_EVERY_MS));
 			mkdirSync(installDir, { recursive: true });
-			for (const root of [installDir, ...localRoots]) {
+			mkdirSync(uploadDir, { recursive: true });
+			for (const root of [installDir, uploadDir, ...localRoots]) {
 				try {
 					watchers.push(watch(root, { recursive: true }, scheduleRescan));
 				} catch (error) {
-					// 本机目录不存在就不盯；安装目录上面建好了。
+					// 本机目录不存在就不盯；安装目录和本地上传目录上面建好了。
 					log(`盯不了插件目录 ${root}：${errorText(error)}`);
 				}
 			}

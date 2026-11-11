@@ -53,7 +53,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 ## 插件
 
-插件是 `~/.plume/plugins/`（从插件市场装的）或 `PLUME_PLUGIN_PATHS` 下的一个目录：
+插件是 `~/.plume/plugins/`（从插件市场装的）、`~/.plume/local-plugins/`（本地上传的）或 `PLUME_PLUGIN_PATHS` 下的一个目录：
 
 - `dist/index.mjs`：逻辑入口，跑在 agent 进程，默认导出 `{ name, apply(ctx) }`；注册都记在插件名下，停用或 apply 失败时整体撤销。
 - `dist/ui.mjs`（可选）：界面入口，跑在渲染进程，默认导出 `{ name, apply(ui) }`，name 必须相同；要 agent 进程里的东西，经 `ui.remote()` → `AgentService.callPlugin` 调自己逻辑入口 `ctx.serve` 开的对象。
@@ -62,7 +62,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 加载顺序：先内置的，再市场装的，再 `PLUME_PLUGIN_PATHS` 下的，同名的只认先找到的；工具重名时后登记的生效（插件能覆盖 plume.tools 的 read、write、edit、ls、glob、grep、bash），它撤下后前一个恢复。钩子各层只按 `order` 排，小的在外层。`<数据目录>/plugins.json` 里写 `{ "disabled": ["插件名"] }` 关掉插件，「插件市场」里插件详情页的开关写的就是它。界面只加载 agent 进程报告为 active 的插件的界面入口；卡片渲染出错让给下一个注册者，最后用通用卡片。
 
-插件市场（`apps/desktop/src/main/market.ts`，界面在 `renderer/market/`，侧栏那一行叫「插件市场」）：页上分插件、技能、连接器三类，技能和连接器两类由 `plume.skills`、`plume.mcp` 经 `ui.settingsSection` 的 `page: "extensions-skills"`、`"extensions-connectors"` 画；插件那一类的目录在网上（`market-remote.ts`）：插件仓库 plume-plugins 的 CI 把插件按平台打包、发到 GitHub Pages，应用读它的 `marketplace.json`（格式见插件仓库的 `docs/distribution.md`；开发和冒烟经 `PLUME_MARKET_URL` 指到本机起的服务，`scripts/market-serve.mjs`；只认 https 和本机 http），每条的说明取自插件的 `package.json`（`description`、`author`、`keywords`、`homepage`，`plume.displayName`、`plume.category`），图标和 `README.md` 放在 `assets/<名字>/` 下、安装前就能看。安装下载这台机器那份包、核对大小和 SHA-256，解进暂存目录再换进数据目录的 `plugins/<目录名>`（冒烟验证装进 `.smoke/` 里），agent 进程当场加载；卸载当场撤下，`PLUME_PLUGIN_PATHS` 下的不能卸。更新按版本号比（插件仓库发布时保证同一版本内容不变）；目录五分钟内不重读，连不上时用上次读到的、界面提示原因；自动更新默认开，启动后一会儿、此后每半小时、每次读市场时各对一遍，开关存在数据目录的 `market.json`。插件运行中装上、开关、卸下时，agent 进程推一条 `plugins` 事件，界面按它增减各插件的界面入口。
+插件市场（`apps/desktop/src/main/market.ts`，界面在 `renderer/market/`，侧栏那一行叫「插件市场」）：页上分插件、技能、连接器三类，技能和连接器两类由 `plume.skills`、`plume.mcp` 经 `ui.settingsSection` 的 `page: "extensions-skills"`、`"extensions-connectors"` 画；插件那一类的目录在网上（`market-remote.ts`）：插件仓库 plume-plugins 的 CI 把插件按平台打包、发到 GitHub Pages，应用读它的 `marketplace.json`（格式见插件仓库的 `docs/distribution.md`；开发版、装好的应用和冒烟都用这一个；只认 https，本机 http 留给测试起的服务），每条的说明取自插件的 `package.json`（`description`、`author`、`keywords`、`homepage`，`plume.displayName`、`plume.category`），图标和 `README.md` 放在 `assets/<名字>/` 下、安装前就能看。安装下载这台机器那份包、核对大小和 SHA-256，解进暂存目录再换进数据目录的 `plugins/<目录名>`（冒烟验证装进 `.smoke/` 里），agent 进程当场加载；卸载当场撤下，`PLUME_PLUGIN_PATHS` 下的不能卸。「从本地上传」和 `plume-plugin install`/`dev` 装进 `local-plugins/<目录名>`，能卸、不跟市场更新；同名时按内置、`PLUME_PLUGIN_PATHS`、本地上传、市场装的顺序只认第一份，被压住的原样留着，前面的卸掉它就接着生效。更新按版本号比（插件仓库发布时保证同一版本内容不变）；目录五分钟内不重读，连不上时用上次读到的、界面提示原因；自动更新默认开，启动后一会儿、此后每半小时、每次读市场时各对一遍，开关存在数据目录的 `market.json`。插件运行中装上、开关、卸下时，agent 进程推一条 `plugins` 事件，界面按它增减各插件的界面入口。
 
 写一个插件：用 skill [skills/plume-plugin](skills/plume-plugin/SKILL.md)，`pnpm plugin init plugins/<目录名>` 从 SDK 的模板生成；插件只引用公开接口（`pnpm check:plugins` 会查）。构建是 SDK 的 `lib/build.mjs`（`scripts/build-plugins.mjs` 逐个调它，仓库外是 `plume-plugin build`）：逻辑入口的依赖全部打进 `dist/index.mjs`，`package.json` 的 `dependencies`（打不进去的原生模块）连同实际安装的运行依赖闭包复制进 `dist/node_modules`（同名冲突嵌套隔离，只留 Plume 发包的平台、架构（darwin、win32 的 arm64、x64，加上构建机）的包与预编译文件，内置插件打安装包时由 `apps/desktop/scripts/stage-resources.mjs`、市场插件发布时由插件仓库的 `scripts/build-dist.mjs` 再按目标裁成一份；Windows 上 agent 进程把用户插件目录里的 `.node` 按内容复制到数据目录的 `native-cache/` 再加载（`apps/desktop/src/main/native-cache.ts`），插件目录不被锁住，Plume 开着也能更新、卸载）；界面入口把 `react`、`@plume/ui`、`@plume/styles` 留给 import map，`.css` 按文字打进去。
 
@@ -80,7 +80,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 模型目录（上下文、能力、价格的参考值，见 `@plume/llm/model-catalog`）缓存在 `~/.plume/model-catalog.json`：agent 进程启动时先读缓存，再每小时同步一次（`packages/core/agent/src/model-catalog-sync.ts`），界面经 `modelCatalog(版本)` 取，版本没变不传整份；冒烟验证不同步。导出、导入供应商的文件由主进程弹系统对话框选路径（`plume:providers:save-path` / `open-path`），读写文件的是 agent 进程；导出的文件带 key，权限只给本人。
 
-数据目录是 `~/.plume`，设了 `PLUME_HOME` 就换到那里（见 `apps/desktop/src/main/home.ts`），这时 Electron 的 userData 也跟着放进它的 `chromium/`：模型设置 `settings.json`、`sessions/`（会话库，各会话排着的话也在里面）、`session-media/`、各会话的临时目录 `scratch/<会话 id>/`（随会话删掉）、`projects.json`、`workspaces/`、插件市场装的 `plugins/<目录名>/` 和 `market.json`、插件私有目录 `plugin-data/<插件名>/`、`plugins.json`、外观、界面语言和窗口位置。开发版（没打包、不是冒烟）把插件那四样（`plugins/`、`market.json`、`plugins.json`、`plugin-data/`）放进 `dev/`，会话和设置照样和装好的应用共用（`apps/desktop/src/main/index.ts` 的 `pluginHome`）。
+数据目录是 `~/.plume`，设了 `PLUME_HOME` 就换到那里（见 `apps/desktop/src/main/home.ts`），这时 Electron 的 userData 也跟着放进它的 `chromium/`：模型设置 `settings.json`、`sessions/`（会话库，各会话排着的话也在里面）、`session-media/`、各会话的临时目录 `scratch/<会话 id>/`（随会话删掉）、`projects.json`、`workspaces/`、插件市场装的 `plugins/<目录名>/` 和 `market.json`、本地上传的 `local-plugins/<目录名>/`、插件私有目录 `plugin-data/<插件名>/`、`plugins.json`、外观、界面语言和窗口位置。开发版和装好的应用整个共用这个目录，插件也是同一份。
 
 外观设置（主题、配色、会话背景）由主进程存在数据目录的 `appearance.json`，只记用户改过的字段；背景图复制在 `backgrounds/`。主进程开窗前按它设好 `nativeTheme`，渲染进程启动时经预加载脚本同步取一次，把配色写成 `--plume-*` 种子（见 `apps/desktop/src/main/appearance.ts`、`renderer/appearance-settings.ts`）。
 

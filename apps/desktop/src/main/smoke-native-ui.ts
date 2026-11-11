@@ -34,7 +34,7 @@ const REPLY = [
 export async function checkNativeUi(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
+	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; uploadDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
@@ -107,7 +107,7 @@ export async function checkNativeUi(options: {
 		join(probeDir, "dist/ui.mjs"),
 		'export default { name: "example.ui-probe", apply(ui) { ui.codeBlock("broken-test", () => { throw new Error("intentional render failure"); }); } };',
 	);
-	await runPluginCli(plugin.cli, ["install", probeDir, "--to", plugin.installDir]);
+	await runPluginCli(plugin.cli, ["install", probeDir, "--to", plugin.uploadDir]);
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "example.ui-probe" && item.state === "active"), "故障渲染器启用");
 
 	const requests: Record<string, unknown>[] = [];

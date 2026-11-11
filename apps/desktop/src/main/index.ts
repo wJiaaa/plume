@@ -31,7 +31,6 @@ import {
 	CATALOG_FILE_ENV,
 	type ConnectMessage,
 	DATA_DIR_ENV,
-	PLUGIN_STATE_DIR_ENV,
 	LOCALE_ENV,
 	NATIVE_ROOTS_ENV,
 	type MainProcessApi,
@@ -201,15 +200,12 @@ async function boot(): Promise<void> {
 	const dataDir = plumeHome();
 	// 冒烟验证用自己目录里的模型设置，不碰用户的。
 	const settingsFile = smoke ? join(smoke.dir, "model.json") : await userSettingsFile();
-	// 插件：从插件市场装进 ~/.plume/plugins 的（冒烟时装在冒烟目录里），加上 PLUME_PLUGIN_PATHS 下本机直接放的。
-	// 市场的目录在网上（market-remote.ts）；设了 PLUME_MARKET_URL 就用它（比如插件仓库在本机起的市场，联调没发布的插件）。
-	const catalogUrl = process.env.PLUME_MARKET_URL || MARKET_URL;
+	// 插件：从线上市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的（冒烟时都在冒烟目录里），
+	// 加上 PLUME_PLUGIN_PATHS 下本机直接放的。开发版和装好的应用用同一份；同名时谁生效见 market.ts 的 found。
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
 	const builtinDir = app.isPackaged ? join(process.resourcesPath, "builtin") : resolve(app.getAppPath(), "../../packages/builtin");
-	// 开发版（没打包）和装好的应用共用会话和设置，插件那一份分开：市场装的插件、停用名单、自动更新开关、插件数据都在数据目录的 dev/ 下。
-	// 不分的话，开发时从本机市场装的插件会被装好的应用加载，两边还会按各自的市场把对方装的版本换掉。冒烟有自己的数据目录，不用分。
-	const pluginHome = app.isPackaged || smoke ? dataDir : join(dataDir, "dev");
-	const installDir = smoke ? join(smoke.dir, "plugins") : join(pluginHome, "plugins");
+	const installDir = smoke ? join(smoke.dir, "plugins") : join(dataDir, "plugins");
+	const uploadDir = smoke ? join(smoke.dir, "local-plugins") : join(dataDir, "local-plugins");
 	const sdkDir = app.isPackaged ? join(process.resourcesPath, "plugin-sdk") : resolve(app.getAppPath(), "../../packages/sdk/plugin-sdk");
 	// 写插件用的命令 ~/.plume/bin/plume-plugin（见 plugin-cli.ts）；写不了不耽误应用本身。
 	const cliDir = smoke ? join(smoke.dir, "bin") : join(plumeHome(), "bin");
@@ -220,11 +216,12 @@ async function boot(): Promise<void> {
 	const localRoots = (process.env.PLUME_PLUGIN_PATHS ?? "").split(delimiter).filter(Boolean);
 	const pluginDirs = new Map<string, string>();
 	const market = createMarket({
-		catalogUrl,
+		catalogUrl: MARKET_URL,
 		builtinDir,
 		installDir,
+		uploadDir,
 		localRoots,
-		settingsFile: join(pluginHome, "market.json"),
+		settingsFile: join(dataDir, "market.json"),
 		pluginDirs,
 		agent: { addPlugin: async (dir) => await agent.addPlugin(dir), removePlugin: async (key) => await agent.removePlugin(key) },
 		announce: announceToWindows,
@@ -254,11 +251,10 @@ async function boot(): Promise<void> {
 		env: {
 			...process.env,
 			[DATA_DIR_ENV]: dataDir,
-			[PLUGIN_STATE_DIR_ENV]: pluginHome,
 			[SETTINGS_FILE_ENV]: settingsFile,
 			[PLUGINS_ENV]: JSON.stringify(plugins),
 			// 会在 Plume 开着时被换掉的插件目录；内置插件不在里面。
-			[NATIVE_ROOTS_ENV]: JSON.stringify([installDir, ...localRoots]),
+			[NATIVE_ROOTS_ENV]: JSON.stringify([installDir, uploadDir, ...localRoots]),
 			[LOCALE_ENV]: resolvedLocale(),
 			// 冒烟验证不访问外网，断言的目录值也不能随上游变。
 			...(smoke ? {} : { [CATALOG_FILE_ENV]: join(plumeHome(), "model-catalog.json") }),
@@ -419,13 +415,14 @@ async function boot(): Promise<void> {
 			shutdown,
 			plugin: {
 				cli: pluginCli,
-				// 各段要用的市场插件从市场装（PLUME_MARKET_URL，缺省线上的），和人在「插件市场」里点安装走同一条路。
+				// 各段要用的市场插件从线上市场装，和人在「插件市场」里点安装走同一条路。
 				install: async (name: string) => {
 					const result = await market.install(name);
 					if (!result.ok) throw new Error(`market install ${name}: ${result.error === "failed" ? result.message : result.error}`);
 				},
 				builtinDir,
 				installDir,
+				uploadDir,
 			},
 		});
 }
