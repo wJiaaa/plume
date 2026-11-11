@@ -290,7 +290,7 @@
 	max-height: calc(100vh - 12px);
 	overflow: hidden;
 	/*
-	 * 最后的手段，给一个断行机会都没有的串。长路径和文件名在 `tooltip.ts` 里已经在 `/`、`_`、`.` 之类的后面
+	 * 最后的手段，给一个断行机会都没有的串。长路径和文件名在 `tooltip-attribute.ts` 里已经在 `/`、`_`、`.` 之类的后面
 	 * 加了断行点，那里还会把换了行的标签收窄到平衡宽度（行内的 `width`）——所以一行永远不会只剩一个字符。
 	 */
 	overflow-wrap: anywhere;

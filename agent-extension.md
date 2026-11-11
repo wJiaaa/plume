@@ -140,7 +140,7 @@ Electron
 | `packages/contract` | 只有类型 | 所有共享类型：插件 API（`@plume/contract` 给逻辑入口，`@plume/contract/ui` 给界面入口）、AgentService 及事件和视图 |
 | `packages/core/agent` | agent 进程 | 产品本体：会话、模型调用、循环、AgentService；插件宿主 |
 | `packages/core/llm` | agent 进程 | 模型调用，自成一体的包 |
-| `packages/infra/rpc` | 三个进程 | 双向 RPC：流式返回、取消、超时；不依赖第三方库 |
+| `packages/infra/rpc` | 三个进程 | 双向 RPC：流式返回、取消；不依赖第三方库 |
 | `packages/client/ui` | 渲染进程 | 基础组件：卡片外框、代码块、diff 视图；产品界面和插件卡片共用 |
 | `apps/desktop` | 主进程、渲染进程 | 桌面版：Electron 外壳、agent 进程入口、产品界面、冒烟验证 |
 | 插件仓库的 `plugins/*` | agent 进程、渲染进程 | 内置插件以外的插件；经插件市场安装 |
@@ -255,7 +255,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 - 不调 `next`、直接返回：等于拦下，里层和工具都不会执行。
 - `order` 小的在外层；`order` 相同时按注册先后。
 - 某一层抛错时，整个钩子失败，不会跳过这一层继续执行。原因是审批、脱敏这类层一旦被跳过，就等于放行或泄露，所以出错时按最严的方式处理。循环会把这次失败转成交给模型的错误结果，这一轮照常继续。
-- `step.end` 失败时循环按自然结论走（有工具结果就接着做，否则本体决定续写、催一句还是结束），界面提示出错的插件：它只能让循环多做，退回默认不会放过什么。
+- `step.end` 失败或交回认不得的结论（漏了 `return`、`say` 不是一句话、`reason` 不认得）时循环按自然结论走（有工具结果就接着做，否则本体决定续写、催一句还是结束），界面提示出错的插件：它只能让循环多做，退回默认不会放过什么。
 - `context.compact` 失败时转录里那一行写「压缩失败」，这一步照常发全文。
 
 ### 每个钩子
@@ -426,7 +426,7 @@ tool.execute(input)
 | --- | --- | --- | --- |
 | `plume.commands` | `ctx.commands` + `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.useProjects` | 从项目和个人的 `.plume/commands`、`.claude/commands` 读 Markdown 命令供给 `/` 菜单，发送时展开（`$ARGUMENTS`、`$1`）；设置里「命令」一节列出个人或所选项目的命令，新建、打开、删除 | 单测在 `packages/builtin/commands/test`（frontmatter、同名遮蔽、参数展开） |
 | `plume.hooks` | `prompt.submit` + `tool.execute` + `tool.approve` + `step.end` + `ctx.sessions.observe`（`turnEnd`）+ `ctx.sessions.onEnded` + `ctx.notice` + `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.replyAction` + `ui.composerAbove` | 按 Claude Code 的约定跑用户和项目配的命令：SessionStart、UserPromptSubmit 拦消息或补上下文，PreToolUse 拦、问、放、改参数，PermissionRequest 在要弹卡时替人答（提权的放行不算），PostToolUse(Failure) 往结果后面接上下文，Stop 让它接着干（一轮最多三次），StopFailure、SessionEnd 只通知；用户钩子存在插件数据目录的 `hooks.json`，项目钩子在 `.plume/config.json` 的 `hooks`、按内容指纹信任后才跑；每次运行记进运行记录，出岔子的那一轮回复底下有按钮看；设置里「钩子」一节切范围、增删改、开关、信任，输入框上方提示待审核 | 单测在 `plugins/hooks/test`（退出码与 JSON 决定、工具前后、SessionStart 只跑一次、Stop 上限、设置读写、PermissionRequest、StopFailure 与 SessionEnd、项目钩子信任、运行记录）；宿主的 `turnEnd`、`onEnded` 在 `packages/core/agent/test/session-end.test.ts` |
-| `plume.web` | `ctx.tools.register` + `ctx.dataDir` + `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.toolLine` | `web_search`（Tavily、DeepSeek、Brave、Exa、DuckDuckGo、DuckDuckGo 速答）和 `web_fetch`；后端和 API key 存在插件数据目录，key 不经界面 | 单测在 `packages/builtin/web/test`（选后端、解析结果、网页转文字、抓取的跳转和截断） |
+| `plume.web` | `ctx.tools.register` + `ctx.dataDir` + `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.toolLine` + 服务 `secrets`（加密 API key） | `web_search`（Tavily、DeepSeek、Brave、Exa、DuckDuckGo、DuckDuckGo 速答）和 `web_fetch`；后端和 API key 存在插件数据目录，key 经 `secrets` 加密落盘、不经界面 | 单测在 `packages/builtin/web/test`（选后端、解析结果、网页转文字、抓取的跳转和截断） |
 | `plume.mcp` | `ctx.tools.register`（返回的撤销函数）+ `model.context` + `ctx.commands` + `ctx.sessions.onDeleted` + `ctx.dataDir` + `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.approvalCard`（按 `kind`）+ 服务 `resources`（`mcp://`）、`secrets`（加密密钥和 OAuth 令牌） | 按插件数据目录的 `servers.json` 连 stdio、Streamable HTTP、SSE 的 MCP 服务，连上后把工具登记成 `mcp__名称__工具`，服务声明的资源经 `mcp://` 给 read 读，彻底连不上、关掉、改启动方式时撤下；断了退避重连，重连期间工具留着；每次调用前经 `run.ask` 问人，对信任只读声明的服务，帮我批准下只读工具不问；`${NAME}` 空位、OAuth 登录；工具多了经 `model.context` 藏起来，换成 `mcp_search` / `mcp_call` 和一段目录（常驻的服务除外）；每个会话独立的服务按会话另起连接，会话删掉时关；服务的 prompt 进 `/` 菜单；服务中途要人填表时经那次调用的 `run.ask` 弹一张 `kind` 为 `mcp-form` 的审批卡，界面入口按 kind 画成表，填的值经 `ctx.serve` 交回；太长的结果全文、200 KiB 到 5 MB 的图存进会话的临时目录（`run.scratchDir`），模型拿到路径，图记在 `shownImages` 给人看，再小的图经 `images` 交给模型；「插件市场 › 连接器」（`page: "extensions-connectors"`）添加、就地编辑、开关、重连、填值、登录、删除，像密钥的环境变量和请求头不发给界面 | 冒烟的 `document-plugins` 段连一个 stdio 服务、调它的工具，主流程看「插件市场 › 连接器」画出来；单测在 `packages/builtin/mcp/test`（密钥名、草稿、空位、prompt 参数、按需搜索、工具名、Schema、结果转换和存全文、图按大小分档，连一个真的 stdio 服务：登记、审批、改名、关掉、起不来时的 stderr、断了重连、prompt、每个会话一份、缺值、服务反问的表单） |
 | `plume.documents` | `ctx.serve` + `ui.remote` + `ui.documentViewer` | 文件面板与插件经 `ui.DocumentPreview` 共用 Excel／ODS／SQLite 网格及 Word 页式预览；调用方负责目录权限和版本校验，只传数据。表格解析隔离进程、5 秒超时；Word 隔离文档样式与脚本 | 解析与超时取消测试、文件面板真实 Electron 冒烟 |
 | `plume.skills` | `model.context` + `tool.execute` + `prompt.submit` + `ctx.tools.register` + `ctx.tools.names` + `ctx.commands` + `ctx.sessions.onDeleted` + `ctx.plugins.list` + 服务 `resources`（`register`）+ `ctx.serve` + `ui.remote` + `ui.settingsSection` + `ui.FileDiff` + `ui.toolLine` | 从项目的 `.plume/skills`、`.claude/skills`、`.agents/skills` 和个人的 `~/.plume/skills`、`~/.agents/skills`，以及别的插件随包带的 `skills/` 读 `SKILL.md`，系统提示词加 `skills` 一段列名字和描述，`skill` 工具交回正文（上下文里已有的同一份不再给），没有可用的技能时藏起工具；登记 `skill://` 地址，read、ls 能读技能的正文和目录里的文件；技能写了 `allowed-tools` 的，生效期间经 tool.execute 拒掉别的工具；技能进 `/` 菜单，话里的 `/skill:名字` 经 prompt.submit 补一句；「插件市场 › 技能」（`page: "extensions-skills"`）按目录列个人的和插件带来的技能，选了项目（`ui.useProjects`）时连那个项目的，开关、打开、删除（插件带来的不给删），同名的看差异、改用另一个 | 冒烟主流程看「插件市场 › 技能」画出来、带项目选择；单测在 `packages/builtin/skills/test`（frontmatter、校验和遮蔽、偏好、`allowed-tools`、目录段、正文包装、插件带来的技能、`skill://` 的读、列目录和越界） |
