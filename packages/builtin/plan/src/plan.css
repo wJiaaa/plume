@@ -1,0 +1,246 @@
+/*
+ * 计划卡、计划面板的布局。插件单独构建，产品的 Tailwind 扫不到这里的类名；字交给 Text，颜色只取 var(--plume-*)。
+ */
+
+/* 审批卡：和产品的审批卡同一块玻璃，压在输入框正上方。 */
+.plume-plan-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	max-height: min(560px, calc(100dvh - 14rem));
+	overflow: hidden;
+	padding: 14px 16px 12px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-float) 92%, transparent);
+	box-shadow: var(--plume-shadow-glass);
+	backdrop-filter: blur(40px) saturate(1.6);
+	outline: none;
+}
+
+.plume-plan-card-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+}
+
+.plume-plan-card-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-plan-link {
+	flex-shrink: 0;
+	cursor: pointer;
+}
+
+.plume-plan-card-body {
+	min-height: 0;
+	margin: 0 -8px;
+	padding: 0 8px;
+}
+
+.plume-plan-revise {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.plume-plan-comments {
+	min-height: 0;
+	max-height: min(240px, 30dvh);
+}
+
+.plume-plan-comment-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.plume-plan-comment {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 8px 6px 8px 10px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-shell);
+}
+
+.plume-plan-comment-mark {
+	margin-top: 3px;
+}
+
+.plume-plan-comment-main {
+	min-width: 0;
+	flex: 1;
+}
+
+.plume-plan-comment-quote {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+}
+
+.plume-plan-comment-quote > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-plan-comment-text {
+	margin-top: 2px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.plume-plan-input {
+	flex-shrink: 0;
+	padding: 8px 12px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-shell);
+}
+
+.plume-plan-textarea {
+	width: 100%;
+}
+
+.plume-plan-actions {
+	display: flex;
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 「在新会话里执行」和贴着它的模型箭头：一颗分体按钮。 */
+.plume-plan-handoff {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.plume-plan-spacer,
+.plume-plan-grow {
+	flex: 1;
+	min-width: 0;
+}
+
+.plume-plan-keys {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	margin-left: 2px;
+	opacity: 0.7;
+}
+
+/* 键帽的框取字色的三成：主按钮反色底上也看得见。 */
+.plume-plan-key {
+	display: inline-flex;
+	height: 18px;
+	min-width: 18px;
+	align-items: center;
+	justify-content: center;
+	padding: 0 4px;
+	border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+	border-radius: var(--plume-radius-item);
+}
+
+/* 面板。 */
+.plume-plan-panel {
+	height: 100%;
+}
+
+.plume-plan-body {
+	padding: 16px 20px;
+}
+
+.plume-plan-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.plume-plan-anchor {
+	position: relative;
+}
+
+.plume-plan-mark {
+	position: absolute;
+	pointer-events: none;
+	transform: translateY(-50%);
+}
+
+.plume-plan-comment-form {
+	display: flex;
+	align-items: flex-end;
+	gap: 6px;
+	padding: 8px;
+}
+
+/* 正在写评论的那段字：焦点进了评论框，原生选区没了，用它标着。 */
+::highlight(plume-plan-draft) {
+	background: color-mix(in srgb, var(--plume-accent) 35%, transparent);
+}
+
+/* 评过的那段主要靠下划线认：底色压到很淡，读正文时不像一整块被选中；线尾挂着序号。 */
+::highlight(plume-plan-comment) {
+	background: color-mix(in srgb, var(--plume-accent) 8%, transparent);
+	text-decoration: underline;
+	text-decoration-color: var(--plume-accent);
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 4px;
+}
+
+/* 环境卡片里「计划」那一节：小标题和行跟卡片自己的几节一样高、一样缩进。 */
+.plume-plan-section-label {
+	display: flex;
+	align-items: center;
+	height: 28px;
+	padding: 0 8px;
+}
+
+.plume-plan-section-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	min-height: 32px;
+	padding: 5px 8px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	text-align: left;
+	cursor: pointer;
+	transition: background var(--plume-t-quick);
+}
+
+.plume-plan-section-row:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-plan-section-row:active {
+	background: var(--plume-elevated);
+}
+
+.plume-plan-section-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+.plume-plan-section-grow {
+	min-width: 0;
+	flex: 1;
+}
