@@ -96,13 +96,13 @@ export async function checkConversations(options: {
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "打开新项目");
 		await click('button[aria-label="不在项目中工作"]');
 		await until(
-			`document.querySelector('[data-screen=empty] h1')?.textContent === '想聊点什么？' && document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`,
+			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent === '想聊点什么？' && document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`,
 			"项目切换保留项目外草稿",
 		);
 		await click("[data-project-trigger]");
 		await click("[role=menuitem]", "冒烟项目");
 		await until(
-			`document.querySelector('[data-screen=empty] h1')?.textContent.includes('冒烟项目') && document.querySelector('.cm-placeholder') !== null`,
+			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('冒烟项目') && document.querySelector('.cm-placeholder') !== null`,
 			"返回项目使用独立草稿",
 		);
 		await page(`document.querySelector('.cm-content').focus()`);

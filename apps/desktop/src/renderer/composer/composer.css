@@ -42,6 +42,52 @@
 	}
 
 	/*
+	 * 欢迎页的插图趴在输入框右上沿：外框只露出肩膀以上，下沿贴着输入框的上沿；进场时从下沿往上冒一截，像刚探出头。
+	 * 窄窗口（compact）缩小一档，让标题那一行多留些宽度。
+	 */
+	@keyframes plume-welcome-peek {
+		from {
+			transform: translateY(24%);
+		}
+		to {
+			transform: none;
+		}
+	}
+
+	.plume-welcome-peek {
+		right: 32px;
+		width: 128px;
+		height: 92px;
+	}
+
+	.plume-welcome-peek[data-compact] {
+		right: 20px;
+		width: 96px;
+		height: 70px;
+	}
+
+	.plume-welcome-peek img {
+		animation: plume-welcome-peek var(--plume-t-slow) var(--plume-e-out) both;
+	}
+
+	/* 问候下面那一行：答复回来时在先占好的那一行里淡入。 */
+	@keyframes plume-welcome-line-in {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	.plume-welcome-line {
+		display: inline-block;
+		animation: plume-welcome-line-in var(--plume-t-slow) var(--plume-e-out) both;
+	}
+
+	/*
 	 * 欢迎页的插图是黑发黑衣，深色底上轮廓会和背景糊成一片，所以深色下沿边缘补一圈很淡的亮边；浅色底本身分得开，不加。
 	 */
 	@media (prefers-color-scheme: dark) {

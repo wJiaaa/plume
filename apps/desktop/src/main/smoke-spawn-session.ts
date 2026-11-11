@@ -86,7 +86,7 @@ export async function checkSpawnSession(options: {
 		await page(`document.querySelector('[data-plume-add-folder]').click()`);
 		await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好项目目录");
 		await page(`[...document.querySelectorAll('button')].find(item => item.textContent.includes('创建项目')).click()`);
-		await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace') === true`, "进到工作区项目");
+		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') === true`, "进到工作区项目");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(ASK);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");

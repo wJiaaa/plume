@@ -60,6 +60,7 @@ import type {
 	ReplyActionProps,
 	UiContext,
 	UiPlugin,
+	WelcomeLine,
 } from "@plume/contract/ui";
 import { text } from "@plume/styles";
 import { MenuItem, MenuSeparator, translate, useI18n } from "@plume/ui";
@@ -874,6 +875,36 @@ export function composerHint(session: SessionView | undefined): string | undefin
 	return undefined;
 }
 
+/** 欢迎页问候下面的那一行（`ui.welcomeLine`），每个插件一个，按注册先后；只问最后一个。 */
+let welcomeLines: Array<{ plugin: string; line: (locale: Locale) => unknown }> = [];
+
+function registerWelcomeLine(plugin: string, line: unknown): void {
+	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
+	if (typeof line !== "function") throw new Error("welcomeLine 需要一个函数");
+	welcomeLines = [...welcomeLines.filter((entry) => entry.plugin !== plugin), { plugin, line: line as (locale: Locale) => unknown }];
+}
+
+/** 有没有插件要换欢迎页的那一行：有就等它的答复，不先显示产品默认的那一句再换掉。 */
+export function hasWelcomeLine(): boolean {
+	return welcomeLines.length > 0;
+}
+
+/** 欢迎页这次显示的那一行：最后注册的插件说了算，没给、给空、出错都是 undefined（出错进日志）。 */
+export async function welcomeLine(locale: Locale): Promise<WelcomeLine | undefined> {
+	const entry = welcomeLines.at(-1);
+	if (!entry) return undefined;
+	try {
+		const value = (await entry.line(locale)) as Partial<WelcomeLine> | undefined;
+		const text = typeof value?.text === "string" ? value.text.trim() : "";
+		if (!text) return undefined;
+		const source = typeof value?.source === "string" ? value.source.trim() : "";
+		return source ? { text, source } : { text };
+	} catch (error) {
+		console.error(`[${entry.plugin}] 欢迎页那一行出错：`, error);
+		return undefined;
+	}
+}
+
 /** 回复正文画出来、复制出去之前过一遍插件的过滤。出错的那一个跳过，字照原样往下传。 */
 export function replyText(text: string): string {
 	let out = text;
@@ -1382,6 +1413,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			mentionProviders.set(name, provider);
 		},
 		composerHint: (hint) => registerComposerHint(name, hint),
+		welcomeLine: (line) => registerWelcomeLine(name, line),
 		replyText: (transform) => registerReplyText(name, transform),
 		sessionMark: (component) => registerSessionMark(name, component),
 		deleteNote: (note) => registerDeleteNote(name, note),
@@ -1574,6 +1606,7 @@ function unloadPluginUi(name: string): void {
 	replyActions = replyActions.filter((entry) => entry.plugin !== name);
 	mentionProviders.delete(name);
 	composerHints = composerHints.filter((entry) => entry.plugin !== name);
+	welcomeLines = welcomeLines.filter((entry) => entry.plugin !== name);
 	replyTransforms = replyTransforms.filter((entry) => entry.plugin !== name);
 	sessionMarks = sessionMarks.filter((entry) => entry.plugin !== name);
 	deleteNoteEntries = deleteNoteEntries.filter((entry) => entry.plugin !== name);

@@ -41,6 +41,7 @@ export default {
 | `ui.environmentSection(id, Component, { label, order, attention? })` | 往会话的环境卡片（`plume.diagnostics` 画）里加一节，收到 `{ session }`；返回 null 不占位、不画分隔线；`label` 是卡片「显示哪些内容」菜单里的名字；`attention(session)` 是 hook，有事等人决定时返回一句话，卡片收着时开关上挂圆点 |
 | `ui.mentions(provider)` | 每次打开 `@` 时传 `{ cwd?, sessionId? }`，返回 `ComposerMention[]` 或 Promise：`id/title/kind/token` 必填，kind 是 subagent 或 plugin，可带 description/origin/avatar；只插入 token，用户自行发送，停用自动撤销 |
 | `ui.composerHint(session => text)` | 输入框空着时的灰字建议，按 Tab 填进去 |
+| `ui.welcomeLine(locale => ({ text, source }))` | 换掉欢迎页问候下面的那一行（默认问要在哪个项目里做什么），只问最后注册的那一个 |
 | `ui.replyText(text => text)` | 画回复正文、复制回复前过一遍，拿掉插件让模型顺带写的标记 |
 | `ui.sessionMark(Component)` | 侧栏会话行首空闲时的记号，收到 `{ session, fallback }`，不是自己的会话返回 `fallback` |
 | `ui.deleteNote((sessionId, locale) => text)` | 删除确认框里补一句：删掉这个会话会连带什么、会留下什么 |
@@ -313,6 +314,18 @@ ui.replyText((text) => withoutFollowups(text));
 - `ui.composerHint(hint)`：输入框空着时，宿主按注册先后问每个插件，取第一个给出字的当占位灰字；人按 Tab 整段填进去，看过再自己发。只问开着的会话，新对话不问；`session` 是这个会话的视图（含 `draft`，正在生成时自己决定给不给）。渲染时同步调，别做耗时的事。返回空串或 undefined 表示没有建议。
 - `ui.replyText(transform)`：回复正文画出来、复制出去之前过一遍，只改显示和复制，会话里存的、发给模型的都不变。正在生成的回复也会过：写了一半的标记也要拿掉。拿完只剩空白的一段整段不画。
 - 两样每个插件各只能有一个，再注册换掉上一个；停用时撤下。
+
+## 欢迎页的那一行
+
+```ts
+ui.welcomeLine((locale) => api.today(locale));
+```
+
+欢迎页问候（早上好、下午好……）下面的那一行字，默认是「要在某个项目里开发什么？」（不在项目里时「想聊点什么？」）。宿主每次画欢迎页时按界面语言问一次，可以返回 Promise：等答复时那一行先空着，回来了再淡入，不会先闪一下默认的那句；`text` 是这句话，`source` 是出处（可不给），跟在后面、小一号、更淡。
+
+- 只问最后注册的那一个；它停用后还给前一个，都没有就是默认的那句。
+- 返回 undefined、空串或抛错时显示默认的那句（抛错记日志）。每个插件只能有一个，再注册换掉上一个。
+- 要花时间的事（调模型、读网络）放在逻辑入口里做好缓存，界面入口经 `remote()` 取；欢迎页常开，别每次打开都调一次模型。
 
 ## 侧栏的记号、删除确认框
 

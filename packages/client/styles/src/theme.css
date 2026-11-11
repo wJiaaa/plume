@@ -289,7 +289,7 @@
 	--font-mono: var(--plume-font-mono);
 
 	/*
-	 * 字号七档加代码一档，都是界面字号的 calc，改一个数整套一起动。档与档至少差 1px，各自带行高和字距：
+	 * 字号八档加代码一档，都是界面字号的 calc，改一个数整套一起动。档与档至少差 1px，各自带行高和字距：
 	 * 字越大字距越紧。字重不放进档里，和字号配对写在用的地方（title 用 medium，heading、display 用 semibold）。
 	 */
 	--text-caption: calc(var(--plume-ui-size) - 2px);
@@ -311,6 +311,10 @@
 	--text-display: calc(var(--plume-ui-size) + 16px);
 	--text-display--line-height: 1.2;
 	--text-display--letter-spacing: -0.022em;
+	/* 只给欢迎页的问候：整页只有这一行字，比设置页的标题还大一档；配 font-medium，大字不再加粗。 */
+	--text-hero: calc(var(--plume-ui-size) + 22px);
+	--text-hero--line-height: 1.15;
+	--text-hero--letter-spacing: -0.025em;
 	/* 代码另起一档：另一种字体，按列读；行高 1.6 比正文紧，缩进和括号的形状不被拉散。 */
 	--text-code: var(--plume-code-size);
 	--text-code--line-height: var(--plume-code-line-height);

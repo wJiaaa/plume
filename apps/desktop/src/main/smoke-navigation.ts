@@ -59,10 +59,10 @@ export async function checkNavigation({
 		await click('[data-plume-palette-item="new-chat"]');
 		await until(`document.querySelector('[data-screen=empty]') !== null && !document.querySelector('${palette}')`, "命令执行后关闭面板");
 		// 新对话跟着上一次的去处：前面各段可能把它留在项目外，项目外没有目录可列，@ 里就没有文件。回到 workspace 项目再试 @。
-		if (!(await page(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace') === true`))) {
+		if (!(await page(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') === true`))) {
 			await click("[data-project-trigger]");
 			await click("[role=menuitem]", "workspace");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace') === true`, "新对话回到 workspace 项目");
+			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') === true`, "新对话回到 workspace 项目");
 		}
 		await page(`document.querySelector('main .cm-content').focus()`);
 		await window.webContents.insertText("@");

@@ -51,7 +51,7 @@
 - 圆角：`rounded-panel` 12（一整块内容区、设置卡片）、`rounded-field` 8（输入框、提示框、侧栏和列表里的行）、`rounded-item` 6（菜单里的行、分段控件里的一段）。按钮用 Tailwind 刻度：≥ 22px 的按钮 `rounded-lg`（8），≤ 20px 的 `rounded-md`（6）；大卡片、气泡用 `rounded-2xl`。落在两档之间的往小取。
 - 菜单外框 `rounded-menu` 10px，内衬 `menu-inset` 4px、行高 `menu-row` 32px。输入框 `composer-in/x/out/control` 分别是 12/16/24/28px；对话列最宽 `content` 864px；窗格 `frame-pad/pane-chrome` 是 2/5px。这些尺寸不开放给皮肤。
 - 高度：输入框和下拉只有 `h-control`（34）；按钮 32 / 26 / 20 三档，见 [`components.md`](./components.md)。
-- 正文字号档：`text-caption`、`text-detail`、`text-label`（工作字号，默认）、`text-body`（正文，顺着读的句子）、`text-title`、`text-heading`、`text-display`、`text-code`。都由 `--plume-ui-size`、`--plume-code-size` 算出，自带行高和字距。字重不在档里：title 配 `font-medium`，heading、display 配 `font-semibold`。
+- 正文字号档：`text-caption`、`text-detail`、`text-label`（工作字号，默认）、`text-body`（正文，顺着读的句子）、`text-title`、`text-heading`、`text-display`、`text-hero`（只给欢迎页的问候）、`text-code`。都由 `--plume-ui-size`、`--plume-code-size` 算出，自带行高和字距。字重不在档里：title 配 `font-medium`，heading、display 配 `font-semibold`，hero 配 `font-medium`。
 
 - 数字角标另用 `text-badge` 和 `text-mark`（UI 字号减 5px / 4px），不用于正文。
 

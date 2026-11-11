@@ -443,7 +443,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("[data-plume-add-folder]");
 			await until(`document.querySelector('[data-plume-source-folder]') !== null`, "迁移项目选好目录");
 			await click("button", "创建项目");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('菜单迁移目标')`, "迁移目标创建完成");
+			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('菜单迁移目标')`, "迁移目标创建完成");
 			await click("[data-plume-row] > button");
 			const projectMenu = '[role=menu][aria-label="移动到项目"]';
 			await openSessionMenu();
@@ -459,7 +459,10 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click(`${projectMenu} [role=menuitem]`, "菜单迁移目标");
 			await waitFor(async () => Boolean(savedSummary().project && savedSummary().project !== originalProject), "迁入另一项目并落盘");
 			await click("[data-nav=new-chat]");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('菜单迁移目标')`, "移动当前会话同步下一段对话的项目");
+			await until(
+				`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('菜单迁移目标')`,
+				"移动当前会话同步下一段对话的项目",
+			);
 			await click("[data-plume-row] > button");
 			await openSessionMenu();
 			await click(`${sessionMenu} [role=menuitem]`, "项目");
@@ -602,6 +605,33 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			if (!result.aligned || !result.filled || result.shadow !== "none" || result.projectHeight !== 28 || result.trayHeight !== 40 || !result.fits) {
 				throw new Error(`${label}输入框未对齐：${JSON.stringify(result)}`);
 			}
+		};
+
+		// 欢迎页的头：问候是按时间的那几句之一，下面那一行有字，插图的下沿正好贴在输入框托盘的上沿、不压到问候。
+		const checkWelcomeHead = async (label: string) => {
+			await until(
+				`document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime)).every(animation => animation.playState === 'finished' || animation.playState === 'idle')`,
+				`${label}动画落位`,
+			);
+			const result = (await page(`(() => {
+				const screen = document.querySelector('[data-screen=empty]');
+				const greeting = screen?.querySelector('h1')?.textContent ?? '';
+				const line = screen?.querySelector('[data-welcome-line]');
+				const peek = screen?.querySelector('.plume-welcome-peek');
+				const tray = screen?.querySelector('.plume-composer-tray');
+				if (!line || !peek || !tray) return { error: '欢迎页结构不完整' };
+				const head = line.parentElement.getBoundingClientRect(), mark = peek.getBoundingClientRect(), top = tray.getBoundingClientRect().top;
+				return {
+					greeting,
+					line: line.textContent,
+					greeted: ['夜深了', '早上好', '上午好', '中午好', '下午好', '晚上好'].includes(greeting),
+					seated: Math.abs(mark.bottom - top) < 1 && mark.right <= tray.getBoundingClientRect().right,
+					clear: [...line.parentElement.querySelectorAll('h1, [data-welcome-line] > span')].every(text => text.getBoundingClientRect().right <= mark.left),
+					above: head.bottom <= top,
+				};
+			})()`)) as { error?: string; greeted?: boolean; line?: string; seated?: boolean; clear?: boolean; above?: boolean };
+			if (result.error || !result.greeted || !result.line || !result.seated || !result.clear || !result.above)
+				throw new Error(`${label}的问候和插图不对：${JSON.stringify(result)}`);
 		};
 
 		// 建议有自己的描边和悬停，不继承通用按钮；两种主题都用实际计算样式验证。
@@ -761,7 +791,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("[data-plume-add-folder]");
 			await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好导航测试目录");
 			await click("button", "创建项目");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace')`, "导航测试项目");
+			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "导航测试项目");
 			await click("[data-model-trigger]");
 			await click("button", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
@@ -793,7 +823,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("[data-plume-add-folder]");
 			await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好文件预览测试目录");
 			await click("button", "创建项目");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace')`, "文件预览测试项目");
+			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "文件预览测试项目");
 			await click("[data-model-trigger]");
 			await click("button", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
@@ -1026,7 +1056,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("[data-plume-add-folder]");
 			await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好菜单测试项目目录");
 			await click("button", "创建项目");
-			await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace')`, "打开菜单测试项目");
+			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "打开菜单测试项目");
 			await click("[data-model-trigger]");
 			await click("button", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
@@ -1316,7 +1346,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好项目目录");
 		await click("button", "创建项目");
 		await until(
-			`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace') && document.querySelector('.cm-content .cm-placeholder') !== null`,
+			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') && document.querySelector('.cm-content .cm-placeholder') !== null`,
 			"新项目的空白会话不串草稿",
 		);
 		await click("[data-model-trigger]");
@@ -1330,6 +1360,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-effort-menu]') === null`, "关闭思考档位菜单");
 		if ((await storedSessions()).length !== 0 || model.requests.some(() => true)) throw new Error("空白页操作不应创建会话或请求模型");
 		await checkComposer("浅色欢迎页");
+		await checkWelcomeHead("浅色欢迎页");
 		await checkDraftChips("浅色");
 		// 用真实 CSS 动画的时间轴采样，不用静态截图代替中间帧验证。
 		const reveal = await page(`(() => {
@@ -2084,7 +2115,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click("[data-nav=new-chat]");
 		await until(`document.querySelector('button[aria-label="不在项目中工作"]') !== null`, "准备项目外草稿");
 		await click('button[aria-label="不在项目中工作"]');
-		await until(`document.querySelector('[data-screen=empty] h1')?.textContent === '想聊点什么？'`, "打开 Chat 草稿");
+		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent === '想聊点什么？'`, "打开 Chat 草稿");
 		await click("button", "开发功能");
 		await until(`document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`, "重新准备导航验收草稿");
 		window.webContents.send("plume:command", `open-session:${sessions[0].id}`);
@@ -2103,7 +2134,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		);
 		await click("[data-nav=new-chat]");
 		await until(
-			`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace') && document.querySelectorAll('[data-plume-row]').length === 1`,
+			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') && document.querySelectorAll('[data-plume-row]').length === 1`,
 			"新对话继承项目而不生成空行",
 		);
 		// 侧边聊天、子 Agent 只围着一个会话转：新对话还没发消息时开始页不列（面板区收着也挂着开始页）。
@@ -2120,10 +2151,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`getComputedStyle(document.querySelector('button[aria-label="不在项目中工作"]').parentElement).opacity === '1'`, "键盘聚焦项目时显示清除按钮");
 		await click('button[aria-label="不在项目中工作"]');
 		await until(
-			`document.querySelector('[data-screen=empty] h1')?.textContent === '想聊点什么？' && document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`,
+			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent === '想聊点什么？' && document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`,
 			"项目外草稿恢复",
 		);
 		await checkComposer("深色欢迎页");
+		await checkWelcomeHead("深色欢迎页");
 		await checkDraftChips("深色");
 		await capture(window, join(outDir, "smoke-welcome-dark.png"));
 		const originalSize = window.getSize();
@@ -2135,10 +2167,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"最小窗口仍能到达发送按钮",
 		);
 		await checkComposer("最小窗口欢迎页");
+		await checkWelcomeHead("最小窗口欢迎页");
 		await page(`document.querySelector('.plume-draft-chip:last-child').scrollIntoView({ block: 'end' })`);
 		await until(
 			`(() => { const chips = [...document.querySelectorAll('.plume-draft-chip')]; const rects = chips.map(chip => chip.getBoundingClientRect()); return rects.length === 4 && rects.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight) && new Set(rects.map(rect => rect.top)).size > 1; })()`,
-			"最小窗口建议居中换行且四项都可到达",
+			"最小窗口建议换行且四项都可到达",
 		);
 		await capture(window, join(outDir, "smoke-welcome-compact.png"));
 		window.setSize(originalSize[0]!, originalSize[1]!);

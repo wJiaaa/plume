@@ -391,7 +391,7 @@ export async function checkPullRequests(options: {
 			assert.ok(matching.length > 0, "工作目录应该登记成了项目");
 			await click(detail, ["让 Agent 审查", "Have the agent review it"]);
 			await until(
-				`${JSON.stringify(matching)}.some((name) => document.querySelector('[data-screen="empty"] h1')?.textContent.includes(name)) && ${composerText}.includes('read_pull_request') && ${composerText}.includes('smoke/read-only-review')`,
+				`${JSON.stringify(matching)}.some((name) => document.querySelector('[data-screen="empty"] [data-welcome-line]')?.textContent.includes(name)) && ${composerText}.includes('read_pull_request') && ${composerText}.includes('smoke/read-only-review')`,
 				"匹配本地项目后在该项目准备审查草稿",
 			);
 			assert.deepEqual(sessionStamp(await agent.sessions()), sessionStamp(beforeSessions), "本地项目分支同样不自动创建会话或发送");

@@ -789,6 +789,13 @@ export interface SessionChange {
 	tools?: string[];
 }
 
+/** 欢迎页问候下面那一行（`ui.welcomeLine`）：一句话，可以带出处。 */
+export interface WelcomeLine {
+	text: string;
+	/** 出处（人名、书名），跟在这句话后面，小一号、更淡。 */
+	source?: string;
+}
+
 /** 插件在 `@` 菜单里提供的一项，选中只插入 token，不会自动发送。 */
 export interface ComposerMention {
 	id: string;
@@ -933,6 +940,11 @@ export interface UiContext {
 	/** 每次打开 `@` 时列出当前目录可用的引用；停用后自动撤销，一个插件一份。 */
 	mentions(provider: (context: { cwd?: string; sessionId?: string }) => ComposerMention[] | Promise<ComposerMention[]>): void;
 	composerHint(hint: (session: SessionView) => string | undefined): void;
+	/**
+	 * 换掉欢迎页问候下面的那一行（默认是「要在某个项目里开发什么？」）：宿主每次画欢迎页时按界面语言问一次，等答复时那一行先空着，
+	 * 回来了再淡入。只问最后注册的那一个；返回 undefined、空串或抛错时显示默认的那一句。一个插件只能有一个，再注册换掉上一个。
+	 */
+	welcomeLine(line: (locale: Locale) => WelcomeLine | undefined | PromiseLike<WelcomeLine | undefined>): void;
 	/**
 	 * 画回复的正文、复制回复之前，把字过一遍：插件让模型在回复里顺带写的标记（下一步建议的 `:followup[…]`）从这里拿掉。
 	 * 只改显示和复制，会话里存的、下一轮发给模型的都不变。正在生成的回复也会过，写了一半的标记也该拿掉。

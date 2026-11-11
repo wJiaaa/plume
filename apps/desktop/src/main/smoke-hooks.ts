@@ -73,7 +73,7 @@ export async function checkHooks(options: {
 		await click("[data-plume-add-folder]");
 		await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好钩子测试目录");
 		await click("button", "创建项目");
-		await until(`document.querySelector('[data-screen=empty] h1')?.textContent.includes('workspace')`, "钩子测试项目");
+		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "钩子测试项目");
 		await click("[data-model-trigger]");
 		await click("button", "fake-model");
 		await page(`document.querySelector('.cm-content').focus()`);
