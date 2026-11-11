@@ -18,10 +18,9 @@ import { realpath } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { words } from "../messages.ts";
-import { home, scratchHome, withinOrIs } from "./home.ts";
+import { home, scratchHome } from "./home.ts";
 import { displayPath, toAbsolute } from "./paths.ts";
-import { commandDialects, commandShell, dialectsOf } from "@plume/platform";
-import { splitCommands, splitWords, type Dialect } from "../shell-split.ts";
+import { commandDialects, commandShell, dialectsOf, withinOrIs, splitCommands, splitWords, type Dialect } from "@plume/platform";
 import { DECLINED } from "./result.ts";
 import type { ToolContext } from "./types.ts";
 

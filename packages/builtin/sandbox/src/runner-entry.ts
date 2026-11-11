@@ -1,7 +1,7 @@
 /**
  * 约束由我们自己的进程来做时，受限命令经过的那个程序。
  *
- * macOS 和有 bwrap 的 Linux 是在命令前面放别人的程序（`sandbox-exec`、`bwrap`）。Windows（受限令牌）和用 Landlock 的 Linux 没有这样的程序，所以就是这个：
+ * macOS 是在命令前面放别人的程序（`sandbox-exec`）。Windows（受限令牌）没有这样的程序，所以就是这个：
  * 后端用应用自己的运行时（`process.execPath` 加 `ELECTRON_RUN_AS_NODE=1`，不必另带一份 Node）带着旗标起这个文件，
  * 它做平台的活，然后以命令的退出状态退出。
  *
@@ -15,7 +15,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SANDBOX_RUNNER_FLAG } from "./runner-flag.ts";
-import { main as landlock } from "./linux/landlock.ts";
 import { main as windows } from "./windows/runner.ts";
 
 /** Windows 的路径不分大小写，盘符可能一大一小。 */
@@ -30,7 +29,6 @@ if (script !== undefined && samePath(resolve(script), fileURLToPath(import.meta.
 		process.exit(127);
 	}
 	if (process.platform === "win32") process.exit(windows(process.argv.slice(at + 1)));
-	if (process.platform === "linux") process.exit(landlock(process.argv.slice(at + 1)));
 	process.stderr.write(`sandbox-runner: 平台 ${process.platform} 不用这个 runner\n`);
 	process.exit(127);
 }

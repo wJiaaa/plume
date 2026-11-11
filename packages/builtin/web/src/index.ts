@@ -9,7 +9,7 @@ import { execFile } from "node:child_process";
 import { join } from "node:path";
 import type { Plugin } from "@plume/contract";
 import { KEY_IDS, PROVIDER_IDS, type KeyId, type SearchKeys, type WebApi } from "./api.ts";
-import { registerDefaultSearchProviders } from "./search/defaults.ts";
+import { defaultSearchProviders } from "./search/defaults.ts";
 import { createSearchRegistry } from "./search/index.ts";
 import { settingsFile, viewOf } from "./settings.ts";
 import { webFetchTool } from "./web-fetch.ts";
@@ -49,8 +49,7 @@ export default {
 
 		// 要 key 的后端读这一份；每次搜索前从文件现读、换成最新的。
 		let keys: SearchKeys = {};
-		const registry = createSearchRegistry();
-		registerDefaultSearchProviders(registry, () => keys);
+		const registry = createSearchRegistry(defaultSearchProviders(() => keys));
 
 		ctx.tools.register(
 			webSearchTool(registry, async () => {

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { assessCommand, assessWrite } from "../src/risk.ts";
 import { withScratchDirs } from "../src/risk-shared.ts";
-import { splitCommands } from "../src/shell-split.ts";
+import { splitCommands } from "@plume/platform";
 
 const safe = (command: string) => expect(assessCommand(command).risky, `应放行: ${command}`).toBe(false);
 const risky = (command: string) => expect(assessCommand(command).risky, `应拦截: ${command}`).toBe(true);

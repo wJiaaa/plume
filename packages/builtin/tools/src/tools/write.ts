@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
-import { computeDiff, formatDiff } from "../diff.ts";
+import { computeDiff } from "@plume/platform";
+import { formatDiff } from "../diff.ts";
 import { withTextFile } from "./file-write.ts";
 import { displayPath, resolveWorkspacePath, scratchDirsOf } from "./paths.ts";
 import { resourceScope, scratchFile } from "./scratch-file.ts";

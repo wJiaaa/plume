@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { commandDialects, resetSystemShell } from "@plume/platform";
 import { expect, it } from "vitest";
 import { assessCommand } from "../src/risk.ts";
-import { pipelines, splitCommands, splitWords } from "../src/shell-split.ts";
+import { pipelines, splitCommands, splitWords } from "@plume/platform";
 
 /*
  * 都按 bash 的读法判断。

@@ -110,7 +110,7 @@ export function PluginChatBackgroundSettings({ title }: { title?: string }) {
 	};
 	const remove = () =>
 		work(async () => {
-			await window.plume.chatBackground.remove();
+			// 存盘后主进程只留还被引用的那张图（`BackgroundImageStore.commit`），不用另外去删。
 			patch({ chatBackground: null });
 			setError(null);
 		});

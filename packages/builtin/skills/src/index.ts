@@ -1,7 +1,6 @@
 /**
  * plume.skills 的逻辑入口，跑在 agent 进程：系统提示词里列出技能（`model.context` 加一段），模型调 `skill` 工具时把那个技能的
- * 正文交回去；技能也进输入框的 `/` 菜单，人点了、或在话里写 `/skill:名字` 就让模型用它。技能写了 `allowed-tools` 的，
- * 生效期间别的工具经 tool.execute 的层拒掉。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
+ * 正文交回去；技能也进输入框的 `/` 菜单，人点了、或在话里写 `/skill:名字` 就让模型用它。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
  * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经服务 `resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
@@ -12,15 +11,12 @@ import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import type { Plugin, SlashCommand } from "@plume/contract";
 import type { SkillRow, SkillsApi, SkillsView } from "./api.ts";
-import { computeDiff } from "./line-diff.ts";
+import { computeDiff } from "@plume/platform";
 import { formatCatalogue, formatInvocation, loadSkills, personalDir, type PluginBundle, type Skill, skillSources } from "./loader.ts";
 import { MESSAGES } from "./messages.ts";
 import { skillResource } from "./resource.ts";
 
 const TOOL = "skill";
-/** plume.mcp 的两个工具：搜索只是看说明书，不受限制；`mcp_call` 按它要调的那个工具的名字查。 */
-const MCP_SEARCH = "mcp_search";
-const MCP_CALL = "mcp_call";
 
 /** 话里点名一个技能：「帮我 /skill:pdf 处理一下这个文件」。 */
 const MENTION = /(^|\s)\/skill:([a-z0-9:-]+)(?=\s|$)/i;
@@ -66,12 +62,6 @@ interface Settings {
 	preferred: Record<string, string>;
 }
 
-/** 生效中的技能和它允许的工具；没限制时 `allowedTools` 不给。 */
-interface ActiveSkill {
-	name: string;
-	allowedTools?: string[];
-}
-
 export default {
 	name: "plume.skills",
 	inject: ["resources"],
@@ -112,7 +102,7 @@ export default {
 		const load = async (cwd: string | undefined) => {
 			const settings = await readSettings();
 			const plugins = await bundles();
-			const loaded = await loadSkills(skillSources(cwd || undefined, plugins), { tools: ctx.tools.names(), preferred: settings.preferred });
+			const loaded = await loadSkills(skillSources(cwd || undefined, plugins), { preferred: settings.preferred });
 			return { ...loaded, settings, builtins: new Set(plugins.filter((plugin) => plugin.builtin).map((plugin) => plugin.root)) };
 		};
 		const enabledSkills = async (cwd: string | undefined): Promise<Skill[]> => {
@@ -120,18 +110,11 @@ export default {
 			return skills.filter((skill) => builtinSkill(skill, builtins) || !settings.disabled.has(skill.path));
 		};
 
-		/**
-		 * 按会话记：生效中的技能，和上下文里已经有的技能正文（指纹）。生效的技能到人说下一句话、或换了一个技能时为止：
-		 * 只在这次工具调用里算数的限制，管不到技能要指挥的那些活。
-		 */
+		/** 按会话记：上下文里已经有的技能正文（指纹）。 */
 		ctx.effect(ctx.use("resources").register(skillResource(enabledSkills)));
 
-		const active = new Map<string, ActiveSkill>();
 		const injected = new Map<string, Set<string>>();
-		ctx.sessions.onDeleted((sessionId) => {
-			active.delete(sessionId);
-			injected.delete(sessionId);
-		});
+		ctx.sessions.onDeleted((sessionId) => injected.delete(sessionId));
 
 		ctx.tools.register({
 			name: TOOL,
@@ -158,12 +141,7 @@ export default {
 						isError: true,
 					};
 				}
-				active.set(run.sessionId, { name: skill.name, ...(skill.allowedTools ? { allowedTools: skill.allowedTools } : {}) });
-				const limit = skill.allowedTools
-					? // i18n-exempt：写给模型的话。
-						`\n\n<skill-tools>这个技能声明了它只用这些工具：${skill.allowedTools.join("、")}。其他工具在它生效期间会被拒绝。</skill-tools>`
-					: "";
-				const output = formatInvocation(skill, typeof args.args === "string" ? args.args : undefined) + limit;
+				const output = formatInvocation(skill, typeof args.args === "string" ? args.args : undefined);
 				// 同一份正文已经在上下文里了，再放一遍只是占地方。压缩掉以后 model.context 重新数，就又能放了。
 				const seen = injected.get(run.sessionId) ?? new Set<string>();
 				injected.set(run.sessionId, seen);
@@ -171,8 +149,8 @@ export default {
 				const duplicate = seen.has(key);
 				seen.add(key);
 				return {
-					output: duplicate ? `Skill "${skill.name}" is already loaded in the current context. Follow its instructions above.${limit}` : output,
-					details: { name: skill.name, path: skill.path, scope: skill.scope, ...(skill.allowedTools ? { allowedTools: skill.allowedTools } : {}) },
+					output: duplicate ? `Skill "${skill.name}" is already loaded in the current context. Follow its instructions above.` : output,
+					details: { name: skill.name, path: skill.path, scope: skill.scope },
 				};
 			},
 		});
@@ -192,21 +170,7 @@ export default {
 			return next(catalogue ? { ...input, sections: [...input.sections, { id: "skills", text: catalogue }] } : input);
 		});
 
-		ctx.hook("tool.execute", async (input, next) => {
-			const skill = active.get(input.sessionId);
-			const name = input.tool.name === MCP_CALL && typeof input.call.args.tool === "string" ? input.call.args.tool : input.tool.name;
-			// `skill` 本身总能调：限制了工具的技能不能把会话困在自己里面，换一个技能就是出去的路。
-			if (!skill?.allowedTools || name === TOOL || name === MCP_SEARCH || skill.allowedTools.includes(name)) return next(input);
-			return {
-				// i18n-exempt：写给模型的话。
-				output: `技能“${skill.name}”声明了它只用 ${skill.allowedTools.join("、")}，所以 \`${name}\` 在它生效期间不可用。如果这一步确实需要它，先说明为什么，让用户决定。`,
-				isError: true,
-			};
-		});
-
 		ctx.hook("prompt.submit", async (input, next) => {
-			// 人说的新一句是新的吩咐：上一个技能的工具限制留过这句话，会悄悄拒掉人刚要的活。
-			if (!input.synthetic) active.delete(input.sessionId);
 			const verdict = await next(input);
 			// 话以命令开头时，里面的 `/skill:x` 是那条命令的参数，不是又点了一个技能。
 			const match = verdict.block || input.text.trimStart().startsWith("/") ? null : MENTION.exec(input.text);

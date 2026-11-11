@@ -327,7 +327,7 @@ export function fallbackSummary(messages: readonly Message[]): string {
 				.map((c) => c.text.trim())
 				.filter(Boolean)
 				.join("\n");
-			// 和 `lastRequest` 同一个上限：一段贴进来的长日志不该让兜底摘要本身放不下。
+			// 有上限：一段贴进来的长日志不该让兜底摘要本身放不下。
 			const points = [...text];
 			const excerpt = points.length <= 2000 ? text : `${points.slice(0, 2000).join("")}…`;
 			if (excerpt && !userPrompts.includes(excerpt)) userPrompts.push(excerpt);

@@ -470,24 +470,24 @@ export class PluginHost {
 
 	/**
 	 * 按洋葱顺序调用钩子，inner 是最里层。
-	 * `settle(交出去的, 改过的)` 在每一层交接时调：这一层交给里层的、里层交回来又被这一层改过的，都先经它对齐（见 `prompt/sections.ts`）。
+	 * `settle` 在每一层交接时调：这一层交给里层的、里层交回来又被这一层改过的，都先经它整理（见 `prompt/sections.ts`）。
 	 */
 	run<N extends HookName>(
 		name: N,
 		input: Hooks[N][0],
 		inner: (input: Hooks[N][0]) => Promise<Hooks[N][1]>,
-		settle?: (before: never, after: never) => unknown,
+		settle?: (value: never) => unknown,
 	): Promise<Hooks[N][1]> {
 		// 取快照：调用过程中有插件停用或新注册，不影响这一次。
 		const layers = [...(this.layers.get(name) ?? [])];
-		const align = (before: unknown, after: unknown) => (settle ? settle(before as never, after as never) : after);
+		const align = (value: unknown) => (settle ? settle(value as never) : value);
 		const dispatch = async (index: number, value: unknown): Promise<unknown> => {
 			const layer = layers[index];
 			if (!layer) return inner(value as Hooks[N][0]);
 			try {
 				let returned: unknown;
-				const output = await layer.run(value, async (next) => (returned = await dispatch(index + 1, align(value, next))));
-				return returned === undefined ? output : align(returned, output);
+				const output = await layer.run(value, async (next) => (returned = await dispatch(index + 1, align(next))));
+				return returned === undefined ? output : align(output);
 			} catch (error) {
 				// 里层的错误原样往外传，只在最先出错的那一层归因。
 				throw error instanceof HookError ? error : new HookError(layer.plugin, name, error);

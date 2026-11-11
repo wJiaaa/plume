@@ -1,7 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { appHomes, home, withinOrIs } from "./home.ts";
+import { withinOrIs } from "@plume/platform";
+import { appHomes, home } from "./home.ts";
 import type { ToolContext } from "./types.ts";
 
 /** 这个会话的工具能写的临时目录：同一脉的会话（`ToolRun.scratchDirs`）的那几个，宿主没给时只有自己的。读不受它限制，见 `read-access.ts`。 */

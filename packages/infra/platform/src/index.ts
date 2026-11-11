@@ -10,6 +10,9 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } f
 import { homedir, tmpdir } from "node:os";
 import nodePath, { basename, isAbsolute, join, resolve, win32 } from "node:path";
 
+export * from "./line-diff.ts";
+export * from "./shell-split.ts";
+
 export interface CommandShell {
 	/** 启动哪个程序。 */
 	file: string;

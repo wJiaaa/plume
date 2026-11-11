@@ -47,29 +47,10 @@ export function StatusSpinner({ size = 14, className = "" }: { size?: number; cl
  *
  * 轨道是这个记号的重点，不是装饰：亮弧单独转的话，图形的轮廓跟着弧一起走，在按钮那个方寸
  * 之间会读成「有东西在里面甩」。垫一圈淡的，形状就恒定是一个完整的圆，动的只有亮处。
- *
- * 轨道浓度走 `--plume-track`，默认 0.18。实心底的按钮（`bg-ink`、`bg-accent`）上 `currentColor`
- * 是底色的反色，0.18 基本看不见，那几处传 `onFill`——见 `ui/motion.css` 里那一档的注释。
  */
-export function ActionSpinner({
-	size = 14,
-	className = "",
-	onFill = false,
-}: {
-	size?: number;
-	className?: string;
-	/** 画在实心底的按钮上（`bg-ink` / `bg-accent`），轨道要更浓才看得见。 */
-	onFill?: boolean;
-}) {
+export function ActionSpinner({ size = 14, className = "" }: { size?: number; className?: string }) {
 	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 24 24"
-			fill="none"
-			aria-hidden
-			className={`plume-arc ${onFill ? "plume-arc--on-fill " : ""}shrink-0 ${className}`}
-		>
+		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={`plume-arc shrink-0 ${className}`}>
 			<circle className="plume-arc-track" cx="12" cy="12" r="10" />
 			<circle className="plume-arc-head" cx="12" cy="12" r="10" />
 		</svg>

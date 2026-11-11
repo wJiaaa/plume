@@ -96,17 +96,8 @@ export const card = {
 	},
 };
 
-/** 卡片底部一行：左边是说明，右边是按钮。 */
-export const actions = {
-	row: "mt-2.5 flex items-center gap-2",
-	note: "flex-1 text-caption text-ink-muted",
-};
-
 const PRE = "max-h-72 overflow-auto rounded-lg border border-line-soft bg-code-bg font-mono text-code text-code-fg";
 
 export const code = {
 	block: `${PRE} px-2.5 py-2 break-words whitespace-pre-wrap`,
-	diff: `${PRE} py-1.5`,
-	diffLine: "px-2.5 break-words whitespace-pre-wrap",
-	diffKind: { same: "", add: "bg-diff-add", remove: "bg-diff-remove" },
 };

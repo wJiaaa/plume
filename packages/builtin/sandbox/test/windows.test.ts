@@ -18,7 +18,7 @@ import { confine, looksDenied, resetProbeCache, SandboxUnavailableError, selectR
 import { runCommand } from "../src/local.ts";
 import { SANDBOX_RUNNER_FLAG } from "../src/runner-flag.ts";
 import * as abi from "../src/windows/abi.ts";
-import { buildCommandLine, quoteArg, restrictingSidNames, tempWriteSid, workspaceWriteSid } from "../src/windows/identity.ts";
+import { buildCommandLine, quoteArg, tempWriteSid, workspaceWriteSid } from "../src/windows/identity.ts";
 import { explicitAccess } from "../src/windows/restrict.ts";
 import { parseArgs, RUNNER_FAILURE_EXIT, RUNNER_FAILURE_PREFIX } from "../src/windows/runner.ts";
 
@@ -70,7 +70,7 @@ describe("选后端与包装", () => {
 	});
 
 	it("workspace-write 点名从工作区推出的能力，再带一个自有身份的私有临时目录", () => {
-		// Seatbelt 和 bwrap 授权临时目录；这里没有的话 Git Bash 里每个 heredoc 都失败。
+		// Seatbelt 授权临时目录；这里没有的话 Git Bash 里每个 heredoc 都失败。
 		const wrap = confine({ mode: "workspace-write", workspaceRoot: "C:\\work" }, win);
 		if (!wrap) throw new Error("受限模式必须有包装");
 		expect(flagValue(wrap.args, "--write-sid")).toMatch(/^S-1-4-\d+-\d+$/);
@@ -200,23 +200,6 @@ describe("命令行引号", () => {
 	});
 });
 
-describe("受限列表", () => {
-	it("read-only 一个写能力都不带，workspace-write 带给它的、去重", () => {
-		expect(restrictingSidNames("read-only", ["S-1-4-1-2"]).write).toEqual([]);
-		expect(restrictingSidNames("workspace-write", ["S-1-4-1-2", "S-1-4-3-4-1"]).write).toEqual(["S-1-4-1-2", "S-1-4-3-4-1"]);
-		expect(restrictingSidNames("workspace-write", ["S-1-4-1-2", "S-1-4-1-2"]).write).toEqual(["S-1-4-1-2"]);
-	});
-
-	it("workspace-write 没有能力时拒绝，而不是悄悄变成只读", () => {
-		expect(() => restrictingSidNames("workspace-write", [])).toThrow(/至少需要一个/);
-	});
-
-	it("保命的两个身份总在", () => {
-		// 缺了它们进程在加载器初始化时就死，这也是这里报 partial 的原因。
-		for (const mode of ["read-only", "workspace-write"] as const) expect(restrictingSidNames(mode, ["S-1-4-9-9"])).toMatchObject({ logon: true, world: true });
-	});
-});
-
 describe("runner 的参数约定", () => {
 	it("拆成各个部分，`--` 之后全是命令（旗标也算）", () => {
 		expect(parseArgs(["--workspace", "C:\\work\\app", "--mode", "read-only", "--", "cmd.exe", "/c", "echo hi"])).toEqual({
@@ -305,7 +288,7 @@ describe("从输出认出 Windows 的拒绝", () => {
 		expect(
 			looksDenied("0 [main] bash (2104) bash.exe: *** fatal error - CreateFileMapping S-1-5-21-1-2-3-500.1, Win32 error 5.  Terminating.", "windows-acl"),
 		).toBe(true);
-		expect(looksDenied(hook, "bwrap"), "Cygwin 的说法只代表 Windows 令牌").toBe(false);
+		expect(looksDenied(hook, "seatbelt"), "Cygwin 的说法只代表 Windows 令牌").toBe(false);
 		// 同一个运行时的别的 Win32 错误不是沙箱。
 		expect(looksDenied("0 [main] bash (1) bash.exe: *** fatal error - couldn't allocate heap, Win32 error 487", "windows-acl")).toBe(false);
 	});

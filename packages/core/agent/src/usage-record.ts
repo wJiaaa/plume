@@ -27,8 +27,8 @@ export const TOKEN_PARTS = [...INPUT_PARTS, "outputThinking", "outputReply"] as 
 
 /** 指令和记忆：人写的、记下的，每轮原样进提示词。段名是 plume.prompt 和 plume.memory 给的。 */
 const INSTRUCTION_SECTIONS = new Set(["userInstructions", "projectInstructions", "userMemory", "projectMemory"]);
-/** 能力目录：技能、子智能体、延后加载的 MCP 工具，和外层往提示词后面接的那截。 */
-const SKILL_SECTIONS = new Set(["skills", "subagents", "mcpDeferred", "extension"]);
+/** 能力目录：技能、子智能体、延后加载的 MCP 工具。 */
+const SKILL_SECTIONS = new Set(["skills", "subagents", "mcpDeferred"]);
 
 /** 图片按一个固定数算：各家算法不同，它在比例里只是一个量级。 */
 const IMAGE_TOKENS = 1600;

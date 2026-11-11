@@ -149,7 +149,7 @@ it("界面能打开同一脉的会话临时目录里的文件和文件夹，别�
 	expect(await agent.filePath(other.id, report)).toBeNull();
 	await expect(service.listDirectory(other.id, scratch)).rejects.toThrow();
 
-	await expect(service.renameFile(own.id, scratch, "renamed")).rejects.toThrow();
+	expect(await service.fileOperation(own.id, { type: "rename", from: scratch, to: `${scratch}-renamed` })).toMatchObject({ ok: false });
 	expect(await service.fileOperation(own.id, { type: "remove", paths: [scratch] })).toMatchObject({ ok: false });
 	expect(await readFile(report, "utf8")).toBe("# 报告");
 });

@@ -198,10 +198,7 @@ async function runSuite(suite, out, output) {
 	const ok = !timedOut && code === 0 && (output === "inherit" || verdict?.ok === true);
 	const error = timedOut ? `${SUITE_TIMEOUT / 1000} 秒未结束` : (verdict?.error ?? (ok ? undefined : `退出码 ${code}，日志里没有结果行`));
 	// 过了的段删掉装进去的插件和数据目录，只留截图、日志、工作目录；只跑一段时也一样，没过的留着查。
-	if (ok)
-		await Promise.all(
-			["plugins", "local-plugins", "home"].map((name) => rm(join(dir, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })),
-		);
+	if (ok) await Promise.all(["home"].map((name) => rm(join(dir, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })));
 	return { name: suite.name, ok, error: error?.split("\n")[0], log, ms: Date.now() - begin };
 }
 

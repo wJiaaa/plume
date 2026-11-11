@@ -247,7 +247,7 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 	const notes: Plugin = {
 		name: "test.notes",
 		apply(ctx) {
-			ctx.hook("model.context", async (input, next) => next({ ...input, systemPrompt: `${input.systemPrompt}\nNOTES_HINT` }));
+			ctx.hook("model.context", async (input, next) => next({ ...input, sections: [...input.sections, { id: "notes", text: "NOTES_HINT" }] }));
 			ctx.tools.register({
 				name: "note",
 				description: "记一条笔记",
@@ -339,7 +339,7 @@ it("上下文分段：发请求前没有，发过以后按那次请求分段、�
 	expect(breakdown?.memoryFiles).toEqual([]);
 });
 
-it("上下文分段：项目指令和项目记忆按插件标的文件列出来源，只往提示词后面接字的层不丢来源", async () => {
+it("上下文分段：项目指令和项目记忆按插件标的文件列出来源", async () => {
 	await writeFile(join(workspace, "AGENTS.md"), "用 pnpm。\n".repeat(200));
 	const memory: Plugin = {
 		name: "test.memory-files",
@@ -348,8 +348,6 @@ it("上下文分段：项目指令和项目记忆按插件标的文件列出来�
 				const text = "<project_memory>\n- 记下的\n</project_memory>";
 				return next({ ...input, sections: [...input.sections, { id: "projectMemory", text, files: [{ path: "/data/learned.md", chars: text.length }] }] });
 			});
-			// 更里面的一层只在字符串后面接一句：宿主把它对齐成 `extension` 段，前面各段的来源要还在。
-			ctx.hook("model.context", (input, next) => next({ ...input, systemPrompt: `${input.systemPrompt}\n\n再说一句。` }), { order: 10 });
 		},
 	};
 	const { service, session, idle } = await start([{ text: "好" }], [memory]);
@@ -1315,7 +1313,7 @@ it("context.compact 的层给的边界会拆开调用和结果时当作压缩失
 				// 第二步的历史是：人的话、调用、结果；从结果起留会拆开它和它的调用。
 				if (input.history.length !== 3) return undefined;
 				keeps.push(input.history.length);
-				return { keep: 2, summary: "OWN_SUMMARY" };
+				return { keep: 2, summary: "OWN_SUMMARY", head: [{ role: "user", content: [{ type: "text", text: "摘要" }], timestamp: 0 }] };
 			}),
 	};
 	const { service, session, events, idle } = await start([{ toolCalls: [read] }, { text: "读完了" }], [own]);

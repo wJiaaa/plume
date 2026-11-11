@@ -13,7 +13,7 @@
 import { streamAssistant } from "../../packages/core/llm/src/ai/index.ts";
 import type { AssistantMessage, Message, ModelConfig, ProviderConfig } from "../../packages/core/llm/src/types.ts";
 import type { EditCase } from "./cases.ts";
-import { type EditFormat, snapshotTag } from "./formats.ts";
+import type { EditFormat } from "./formats.ts";
 
 type Outcome =
 	| "pass"
@@ -21,7 +21,7 @@ type Outcome =
 	| "no-call"
 	/** 参数解析不了，或结构不对。 */
 	| "bad-args"
-	/** 应用器拒了：锚点找不到、范围越界、tag 过期。 */
+	/** 应用器拒了：锚点找不到、不唯一。 */
 	| "apply-failed"
 	/** 应用得很顺，结果却不对。最危险的那种。 */
 	| "wrong-result"
@@ -94,8 +94,7 @@ async function callModel(
 }
 
 export async function runCase(testCase: EditCase, format: EditFormat, provider: ProviderConfig, model: ModelConfig): Promise<CaseResult> {
-	const tag = snapshotTag(testCase.before);
-	const rendered = format.renderFile(testCase.path, testCase.before, tag);
+	const rendered = format.renderFile(testCase.path, testCase.before);
 
 	const messages: Message[] = [
 		{
@@ -131,7 +130,7 @@ export async function runCase(testCase: EditCase, format: EditFormat, provider: 
 			} else {
 				const call = calls[0]!;
 				seenArgs = call.arguments;
-				const result = await format.apply(call.arguments, testCase.before, tag);
+				const result = await format.apply(call.arguments, testCase.before);
 				if (!result.ok) {
 					// 分开「参数连形状都不对」和「编辑形状没错、只是对不上文件」：两者要的修法不同。
 					const structural =

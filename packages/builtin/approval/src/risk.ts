@@ -10,8 +10,7 @@
  */
 
 import { isAbsolute } from "node:path";
-import { commandDialects } from "@plume/platform";
-import { withinOrIs } from "./paths.ts";
+import { commandDialects, withinOrIs, pipelines, splitCommands, splitWords, substitutionHosts, type Dialect } from "@plume/platform";
 import { WINDOWS_DELETERS, climbsOut, findExec, judgeFind, judgeRm, judgeWindowsDelete } from "./risk-delete.ts";
 import { judgeGit } from "./risk-git.ts";
 import { judgeOpen } from "./risk-open.ts";
@@ -27,7 +26,6 @@ import {
 	SECRET_PATH,
 	SHELLS,
 } from "./risk-tables.ts";
-import { pipelines, splitCommands, splitWords, substitutionHosts, type Dialect } from "./shell-split.ts";
 
 export { assessWrite } from "./risk-paths.ts";
 

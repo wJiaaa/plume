@@ -672,8 +672,6 @@ export interface AgentService {
 	/** `@` 菜单列会话或已登记项目的源目录顶层；新聊天没有目录时为空。 */
 	mentionFiles(target: SessionTarget, sessionId: string | undefined): Promise<(FileEntry & { origin?: string })[]>;
 	listDirectory(sessionId: string, path: string): Promise<FileEntry[]>;
-	/** 在原目录中改名；不覆盖同名目标，不改会话根目录。 */
-	renameFile(sessionId: string, path: string, name: string): Promise<string>;
 	/**
 	 * 在会话工作目录里找一个写得不全的路径：裸文件名（`approvals.ts`）或相对于某个子目录的路径。
 	 * 返回找到的绝对路径，按路径排好；跳过依赖和构建产物目录。

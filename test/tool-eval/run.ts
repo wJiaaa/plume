@@ -4,7 +4,7 @@
  *   node --experimental-transform-types test/tool-eval/run.ts
  *   node --experimental-transform-types test/tool-eval/run.ts --models <供应商 id>/<模型 id>,... --formats str-replace,production
  *
- * 参数：`--models`（逗号分隔，默认设置里的默认模型）、`--formats`（默认 str-replace,hunk-text,hunk-json,production）、
+ * 参数：`--models`（逗号分隔，默认设置里的默认模型）、`--formats`（默认 str-replace,production）、
  * `--cases`（用例 id 的片段，逗号分隔）、`--concurrency`（默认 3）、`--repeats`（默认 1）。
  * 模型和 key 从 Plume 的设置里解析（`PLUME_HOME`，默认 `~/.plume`），见 `model.ts`。
  * 要 `--experimental-transform-types` 而不是只剥类型：production 格式跑的是 plume.tools 的真工具，宿主代码里有参数属性。
@@ -19,7 +19,7 @@ import { FORMATS, type FormatId } from "./formats.ts";
 import { type CaseResult, runCase } from "./harness.ts";
 import { type EvalModel, loadModel } from "./model.ts";
 
-const DEFAULT_FORMATS: FormatId[] = ["str-replace", "hunk-text", "hunk-json", "production"];
+const DEFAULT_FORMATS: FormatId[] = ["str-replace", "production"];
 
 function arg(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);

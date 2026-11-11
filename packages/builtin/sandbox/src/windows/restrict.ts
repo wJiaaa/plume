@@ -267,8 +267,20 @@ function packSids(sids: readonly (Ptr | Buffer)[]): Buffer {
 /**
  * 造受限令牌。
  *
- * 受限列表就是沙箱：里面有什么、为什么必须有 Everyone 见 `identity.ts`。`DISABLE_MAX_PRIVILEGE` 去掉能让子进程绕过这一切提权的特权，
- * `LUA_TOKEN` 把管理员令牌过滤成受限的那一种。
+ * 受限列表（登录 SID、Everyone，加上给它的写能力）就是沙箱：`WRITE_RESTRICTED` 令牌每次写都查两遍：一遍照常对照对象的 DACL，一遍对照*这张*列表，两遍都过才放行。
+ * 所以这张表完整回答了「这个进程能改什么」。
+ *
+ * 总在里面的两项，是这里报 `partial` 而不是 `full` 的原因：
+ *
+ * - **登录 SID** 和 **Everyone** 必须在，否则进程起不来。Windows 加载器初始化和 CNG 都要写按登录会话分的对象，缺了它们的令牌
+ *   在我们的任何代码跑之前就死在 `0xC0000142`。有 Everyone 意味着 DACL 给 Everyone 写权限的对象都还能写：这是写在文档里的缺口，
+ *   只要还想有个进程就堵不上。
+ * - `Authenticated Users`、`INTERACTIVE`、`LOCAL` 有意**不在**。默认安装的 Windows 上它们各在某处有写权限（`C:\` 根、Public 目录），
+ *   放进任何一个，沙箱拿走的大半又还回去了。
+ *
+ * `read-only` 下一个写能力都不加：之前 `workspace-write` 会话留在工作区上的 ACE 因此就是死的，不用去找、去撤。
+ *
+ * `DISABLE_MAX_PRIVILEGE` 去掉能让子进程绕过这一切提权的特权，`LUA_TOKEN` 把管理员令牌过滤成受限的那一种。
  */
 export function createRestrictedToken(api: Win32, source: Ptr, logonSid: Buffer, world: Buffer, capabilitySids: readonly Ptr[]): Ptr {
 	const restricting = packSids([logonSid, world, ...capabilitySids]);

@@ -38,21 +38,7 @@ it("精确重复优先，同时继续累计翻页；同工具同参数但新结�
 	expect(watch.exhausted()).toBe(false);
 });
 
-it("切图、读切片与测距脚本累积第五次提醒；成功写测距脚本不清零，真实改动清零", () => {
-	const watch = new RepetitionWatch();
-	for (let index = 0; index < 3; index++) {
-		expect(observe(watch, "write", { path: `/tmp/probe${index}.py`, content: "from PIL import Image\nImage.open('shot.png')" }, `${index}`)).toBeUndefined();
-	}
-	expect(observe(watch, "read", { path: "C:\\Temp\\band_4.png" }, "3")).toBeUndefined();
-	expect(observe(watch, "bash", { command: "python -c \"import numpy; Image.open('shot.png')\"" }, "4")).toContain("切图、读切片或做像素测距");
-	for (let index = 5; index < 25; index++) expect(observe(watch, "read", { path: `/tmp/band_${index}.png` }, `${index}`)).toBeUndefined();
-	expect(watch.exhausted()).toBe(false);
-	observe(watch, "edit", { path: "src/style.css" }, "edit");
-	for (let index = 0; index < 4; index++) expect(observe(watch, "read", { path: `/tmp/band_${index}.png` }, `reset${index}`)).toBeUndefined();
-	expect(observe(watch, "read", { file_path: "/tmp/band_5.png" }, "reset5")).toContain("切图、读切片");
-});
-
-it("探测仍受精确重复上限保护，普通导出图片不算测距", () => {
+it("同参数同结果到上限停下，每次参数不同的不算", () => {
 	const watch = new RepetitionWatch();
 	for (let index = 0; index < 10; index++) observe(watch, "read", { path: "/tmp/band_0.png" }, `${index}`);
 	expect(watch.exhausted()).toBe(true);

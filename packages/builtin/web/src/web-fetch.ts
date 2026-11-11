@@ -6,16 +6,14 @@
  * 防线在下游：正文用 `<fetched>` 包起来、标成数据。公网、内网、本机地址按同一套规则读。
  *
  * 剩下的是传输上的规矩，这里自己执行：只要 http(s)，URL 里不带账号密码，长度有限，跳转次数有限，不跟随跨源跳转，
- * 每一跳解析一次 DNS、连接固定到解析出的地址（`pinnedLookup`），内容类型白名单，声明的 charset 必须认得。
+ * 内容类型白名单，声明的 charset 必须认得。
  * body 流式读，超过上限当场断开，不先读完再判断大小。
  */
 
 import { randomUUID } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import { mkdir, writeFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import type { LookupFunction } from "node:net";
 import { join } from "node:path";
 import { pipeline, type Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
@@ -40,10 +38,7 @@ function errorResult(output: string): ToolOutput {
 	return { output, isError: true };
 }
 
-/**
- * @param resolve 解析主机名，测试里换掉；默认是系统 DNS。
- */
-export function webFetchTool(resolve: (hostname: string) => Promise<string[]> = resolveAll): ToolDefinition {
+export function webFetchTool(): ToolDefinition {
 	return {
 		name: "web_fetch",
 		// i18n-exempt：发给模型的工具说明
@@ -53,7 +48,7 @@ export function webFetchTool(resolve: (hostname: string) => Promise<string[]> = 
 			type: "object",
 			properties: {
 				url: { type: "string", description: "Absolute http(s) URL." },
-				format: { type: "string", enum: ["text", "markdown", "raw"], description: "Output format. Default text." },
+				format: { type: "string", enum: ["text", "raw"], description: "Output format. Default text." },
 			},
 			required: ["url"],
 			additionalProperties: false,
@@ -64,12 +59,11 @@ export function webFetchTool(resolve: (hostname: string) => Promise<string[]> = 
 			if (typeof args.url !== "string" || args.url.trim().length === 0) return errorResult("`url` is required.");
 			if (args.url.length > MAX_URL_LENGTH) return errorResult(`URL is longer than ${MAX_URL_LENGTH} characters.`);
 
-			const first = await checkTarget(args.url, resolve);
+			const first = checkTarget(args.url);
 			if ("error" in first) return errorResult(first.error);
 			const origin = first.url.origin;
 
 			let current = first.url;
-			let addresses = first.addresses;
 			let response: IncomingMessage;
 			let deadline: AbortSignal;
 			// 接了连接却永远不回的服务器，不设时限就会把这次调用一直挂到人按停止。
@@ -83,7 +77,7 @@ export function webFetchTool(resolve: (hostname: string) => Promise<string[]> = 
 				deadline = AbortSignal.timeout(HOP_TIMEOUT_MS);
 				try {
 					// 每一跳自己处理，跳转才守得住同源和次数。
-					response = await get(current, addresses, AbortSignal.any([run.signal, deadline]));
+					response = await get(current, AbortSignal.any([run.signal, deadline]));
 				} catch (error) {
 					return errorResult(`Request failed: ${failure(error)}`);
 				}
@@ -111,10 +105,9 @@ export function webFetchTool(resolve: (hostname: string) => Promise<string[]> = 
 						`Refused a redirect that leaves the original origin (${origin} → ${next.origin}). Fetch ${next.href} explicitly if that is what you want.`,
 					);
 				}
-				const checked = await checkTarget(next.href, resolve);
+				const checked = checkTarget(next.href);
 				if ("error" in checked) return errorResult(checked.error);
 				current = checked.url;
-				addresses = checked.addresses;
 			}
 
 			const status = response.statusCode ?? 0;
@@ -180,11 +173,6 @@ async function saveFull(text: string, scratchDir: string): Promise<string | unde
 	}
 }
 
-async function resolveAll(hostname: string): Promise<string[]> {
-	const entries = await lookup(hostname, { all: true });
-	return entries.map((entry) => entry.address);
-}
-
 /** 只看传输上的规矩：协议、账号密码。地址是公网、内网还是本机不影响能不能读。 */
 function refusal(url: URL): string | undefined {
 	// i18n-exempt：发给模型的拒绝理由
@@ -193,53 +181,22 @@ function refusal(url: URL): string | undefined {
 	return undefined;
 }
 
-/**
- * 校验 URL，再解析一次 DNS，这一跳的连接只去这些地址。
- *
- * 解析失败不当成拒绝：请求本来就会失败，DNS 的报错比一句规则拒绝说得更清楚。
- */
-async function checkTarget(input: string, resolve: (hostname: string) => Promise<string[]>): Promise<{ url: URL; addresses: string[] } | { error: string }> {
+function checkTarget(input: string): { url: URL } | { error: string } {
 	let url: URL;
 	try {
 		url = new URL(input.trim());
 	} catch {
 		return { error: `Not a valid URL: ${input}` };
 	}
-
 	const reason = refusal(url);
-	if (reason) return { error: `Refused: ${reason} (${url.href})` };
-	const addresses = await resolve(url.hostname).catch(() => [] as string[]);
-
-	return { url, addresses };
+	return reason ? { error: `Refused: ${reason} (${url.href})` } : { url };
 }
 
-/**
- * 连接只去判定过的地址：请求的 `lookup` 不再问 DNS，直接交回 `checkTarget` 解析出的那一组。
- * 主机名照旧放在请求里，所以 HTTPS 的 SNI、证书校验和 Host 头都还是原域名。字面 IP 不经过 `lookup`，它本身就是被判定的地址。
- * 解析失败时这里是空的，连接照样失败，不会再解析一次。
- */
-function pinnedLookup(addresses: readonly string[]): LookupFunction {
-	return (hostname, options, callback) => {
-		const entries = addresses.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
-		const wanted = options.family === 4 || options.family === 6 ? entries.filter((entry) => entry.family === options.family) : entries;
-		const first = wanted[0];
-		if (!first) {
-			callback(Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: "ENOTFOUND" }), "", 4);
-			return;
-		}
-		if (options.all) (callback as unknown as (error: null, entries: { address: string; family: number }[]) => void)(null, wanted);
-		else callback(null, first.address, first.family);
-	};
-}
-
-function get(url: URL, addresses: readonly string[], signal: AbortSignal): Promise<IncomingMessage> {
+function get(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
 	const request = url.protocol === "https:" ? httpsRequest : httpRequest;
 	return new Promise((resolve, reject) => {
 		const req = request(url, {
 			method: "GET",
-			lookup: pinnedLookup(addresses),
-			// 不复用连接池：池里的连接按主机名找，可能连着上一次解析出的地址。
-			agent: false,
 			signal,
 			headers: {
 				"user-agent": USER_AGENT,

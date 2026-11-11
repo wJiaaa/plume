@@ -477,7 +477,7 @@ export const zhCN = {
 	"market.unreadable": "{n} 个插件有问题，去设置里看看",
 	"market.notInCatalog": "插件目录里已经没有它了",
 	"market.unreachable": "连不上插件市场（{reason}），列出的是已装的和上次读到的",
-	"market.localOwned": "这是本机直接放进目录的插件，到它的目录里删",
+	"market.localOwned": "本地上传了同名的插件，先卸掉那一份",
 	"market.builtinOwned": "这是随应用发的插件，不能卸载、停用",
 	"market.notAPlugin": "这个文件夹不是构建好的插件：文件夹名只能用小写字母、数字和连字符，里面要有 dist/index.mjs",
 	"market.pickPluginFolder": "选择插件文件夹",

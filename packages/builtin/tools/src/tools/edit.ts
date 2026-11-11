@@ -7,7 +7,8 @@
  * 不记显示了哪几行：上一次读没读全（大纲、撞上上限的窗口），在一次指明窗口的读之前这个文件不能改。
  */
 
-import { computeDiff, type FileDiff, formatDiff } from "../diff.ts";
+import { computeDiff, type FileDiff } from "@plume/platform";
+import { formatDiff } from "../diff.ts";
 import { findEditMatch, replacementFor } from "./edit-match.ts";
 import { withTextFile } from "./file-write.ts";
 import { formatCharWindow, MAX_LINE_CHARS } from "./long-line.ts";

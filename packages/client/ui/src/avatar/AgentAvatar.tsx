@@ -28,8 +28,6 @@ export interface AgentAvatarProps {
 	/** 像素边长。 */
 	size?: number;
 	mood?: AvatarMood;
-	/** 右下角的小圆点：在跑是强调色、会一圈圈往外扩；出错是红的。 */
-	badge?: "running" | "failed" | null;
 	/**
 	 * 悬停时眼睛跟着指针、身子弹一下。默认开。
 	 *
@@ -77,18 +75,7 @@ function blink(node: HTMLElement): () => void {
 	return () => clearTimeout(again);
 }
 
-export function AgentAvatar({
-	avatar,
-	size = 20,
-	mood = "idle",
-	badge = null,
-	interactive = true,
-	host,
-	seed = "",
-	label,
-	cheer = null,
-	className = "",
-}: AgentAvatarProps) {
+export function AgentAvatar({ avatar, size = 20, mood = "idle", interactive = true, host, seed = "", label, cheer = null, className = "" }: AgentAvatarProps) {
 	const root = useRef<HTMLSpanElement>(null);
 	const art = SHAPE_ART[avatar.shape];
 	const colour = COLOR_ART[avatar.color];
@@ -233,7 +220,6 @@ export function AgentAvatar({
 					</g>
 				</g>
 			</svg>
-			{badge && <span className="plume-avatar-badge" data-tone={badge} />}
 		</span>
 	);
 }

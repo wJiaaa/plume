@@ -13,7 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 import { confine, looksDenied, resetProbeCache, SandboxUnavailableError, selectRunner } from "../src/backend.ts";
-import { bwrapArgs, canonicalPath, seatbeltArgs, writableRoots } from "../src/policy.ts";
+import { canonicalPath, seatbeltArgs, writableRoots } from "../src/policy.ts";
 
 const profileOf = (args: string[]) => args[1] ?? "";
 
@@ -137,40 +137,20 @@ describe("Seatbelt profile", () => {
 	});
 });
 
-describe("bwrap 参数", () => {
-	it("整个文件系统只读绑定", () => {
-		const args = bwrapArgs({ mode: "read-only", workspaceRoot: "/p" });
-		expect(args.slice(0, 3)).toEqual(["--ro-bind", "/", "/"]);
-		// 被杀掉的一轮不能留下还在跑的命令。
-		expect(args).toContain("--die-with-parent");
-		expect(args).not.toContain("--bind");
-	});
-
-	it("每个可写根绑回只读挂载之上", () => {
-		const args = bwrapArgs({ mode: "workspace-write", workspaceRoot: realpathSync.native(tmpdir()) });
-		const binds = args.map((arg, i) => (arg === "--bind" ? i : -1)).filter((i) => i >= 0);
-		expect(binds.length).toBeGreaterThan(0);
-		for (const i of binds) expect(args[i + 1]).toBe(args[i + 2]);
-	});
-});
-
 describe("选后端与包装", () => {
 	beforeEach(() => resetProbeCache());
 
-	it("macOS 探测通过选 Seatbelt，Linux 选 bwrap", () => {
+	it("macOS 探测通过选 Seatbelt", () => {
 		expect(selectRunner({ platform: "darwin", probe: () => true })).toBe("seatbelt");
-		expect(selectRunner({ platform: "linux", probe: () => true })).toBe("bwrap");
 	});
 
 	it("在但拒绝 profile 的后端不选", () => {
 		// 存在不等于能用，所以探测是真的跑而不是看文件在不在。
 		expect(selectRunner({ platform: "darwin", probe: () => false })).toBe("none");
-		resetProbeCache();
-		expect(selectRunner({ platform: "linux", probe: () => false })).toBe("none");
 	});
 
 	it("其他平台没有后端（Windows 的受限令牌见 windows.test.ts）", () => {
-		expect(selectRunner({ platform: "freebsd", probe: () => true })).toBe("none");
+		expect(selectRunner({ platform: "linux", probe: () => true })).toBe("none");
 	});
 
 	it("每台机器只探测一次，不是每条命令一次", () => {
@@ -193,7 +173,7 @@ describe("选后端与包装", () => {
 		resetProbeCache();
 		expect(() => confine({ mode: "read-only", workspaceRoot: "/p" }, { platform: "darwin", probe: () => false })).toThrow(SandboxUnavailableError);
 		resetProbeCache();
-		expect(() => confine({ mode: "read-only", workspaceRoot: "/p" }, { platform: "linux", probe: () => false })).toThrow(/没有可用的沙箱后端/);
+		expect(() => confine({ mode: "read-only", workspaceRoot: "/p" }, { platform: "linux" })).toThrow(/没有可用的沙箱后端/);
 	});
 
 	it("探测失败的原因写进报错", () => {
@@ -219,12 +199,6 @@ describe("选后端与包装", () => {
 		expect(wrap?.args[0]).toBe("-p");
 		expect(wrap?.args.at(-1)).toBe("--");
 	});
-
-	it("bwrap 包装也以分隔符结尾", () => {
-		const wrap = confine({ mode: "read-only", workspaceRoot: "/p" }, { platform: "linux", probe: () => true });
-		expect(wrap).toMatchObject({ command: "bwrap", runner: "bwrap", enforcement: "full" });
-		expect(wrap?.args.at(-1)).toBe("--");
-	});
 });
 
 describe("从输出认出拒绝", () => {
@@ -233,13 +207,11 @@ describe("从输出认出拒绝", () => {
 		// macOS 默认的 zsh 写小写，整行形状也不同；只认 bash 的写法会漏掉真实环境里的每一次拒绝。
 		expect(looksDenied("zsh:1: operation not permitted: /Users/x/.ssh/config")).toBe(true);
 		expect(looksDenied("sandbox-exec: sandbox_apply: Operation not permitted")).toBe(true);
-		expect(looksDenied("bwrap: Can't create file at /etc/x: Read-only file system")).toBe(true);
 		expect(looksDenied("mkdir: cannot create directory '/x': Read-only file system")).toBe(true);
 	});
 
-	it("Permission denied 在 Seatbelt、bwrap 下都只是普通失败", () => {
+	it("Permission denied 在 Seatbelt 下只是普通失败", () => {
 		expect(looksDenied("/bin/bash: line 1: /home/u/x: Permission denied", "seatbelt")).toBe(false);
-		expect(looksDenied("/bin/bash: line 1: /home/u/x: Permission denied", "bwrap")).toBe(false);
 		expect(looksDenied("git@github.com: Permission denied (publickey).")).toBe(false);
 	});
 
@@ -252,7 +224,7 @@ describe("从输出认出拒绝", () => {
 		const prefs = "Error: Could not write domain dev.example.probe; exiting";
 		for (const output of [launch, document, prefs]) {
 			expect(looksDenied(output, "seatbelt"), output).toBe(true);
-			expect(looksDenied(output, "bwrap"), output).toBe(false);
+			expect(looksDenied(output, "windows-acl"), output).toBe(false);
 			expect(looksDenied(output), output).toBe(false);
 		}
 	});

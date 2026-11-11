@@ -59,15 +59,6 @@ function problemText(diagnostic: SkillDiagnostic, text: Messages): string {
 			return text.badName(diagnostic.detail ?? "");
 		case "shadowed":
 			return text.shadowed(diagnostic.detail ?? "");
-		case "allowedTools": {
-			const tools = diagnostic.tools;
-			if (!tools) return "";
-			if (tools.kind === "notList") return text.toolsNotList(tools.items[0] ?? "");
-			if (tools.kind === "strays") return text.toolsStrays(tools.items);
-			if (tools.kind === "scoped") return text.toolsScoped(tools.widened ?? [], tools.items);
-			if (tools.kind === "unmatched") return text.toolsUnmatched(tools.items);
-			return text.toolsServerWide(tools.items);
-		}
 	}
 }
 

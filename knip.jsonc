@@ -69,6 +69,6 @@
   // 没有界面入口的插件不 import react，写在那一组会对它们逐个提示「用不着这条」。
   "ignoreDependencies": ["react"],
 
-  // 沙箱在 Linux 上调用的外部程序，本来就不该装在这台机器上；mkfifo 是测试里造命名管道用的系统命令。
-  "ignoreBinaries": ["bwrap", "mkfifo"],
+  // mkfifo 是测试里造命名管道用的系统命令。
+  "ignoreBinaries": ["mkfifo"],
 }

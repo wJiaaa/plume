@@ -5,7 +5,7 @@
  *
  * 两条规矩：
  * - `available()` 只做本地判断（有没有 key），不联网。每次搜索都要重新选一次，选的时候发请求就等于每次搜索前都多探一次。
- * - 选择不看注册先后。指定的优先；没指定时填了 key 的胜过免配置的，只有一个免配置默认就用它，真的分不出来时报错让人选，
+ * - 选择不看清单里的先后。指定的优先；没指定时填了 key 的胜过免配置的，只有一个免配置默认就用它，真的分不出来时报错让人选，
  *   不抛硬币。
  */
 
@@ -58,8 +58,6 @@ export class SearchError extends Error {
 }
 
 export interface SearchRegistry {
-	/** 注册一家，返回撤销函数。 */
-	register(provider: SearchProvider): () => void;
 	/** 这一次搜索用哪一家。 */
 	select(configuredId?: string | null): SearchProvider;
 	/** 经选中的那家搜一次，并把条数压到上限以内。 */
@@ -67,12 +65,12 @@ export interface SearchRegistry {
 }
 
 /**
- * 一份注册表。每次启用插件新建一份，不放在模块顶层：插件重新加载时不会撞上上一次注册的同名后端。
+ * 在这几家里选。清单是写死的（`defaults.ts`），`id` 不重复、免配置的默认只有一个由那份清单保证。
  *
  * 发给模型的错误文字保持原样，不随界面语言变。
  */
-export function createSearchRegistry(): SearchRegistry {
-	const providers = new Map<string, SearchProvider>();
+export function createSearchRegistry(list: readonly SearchProvider[]): SearchRegistry {
+	const providers = new Map(list.map((provider) => [provider.id, provider]));
 
 	/** 唯一一种要人做决定而不是改设置的失败，把候选都列出来。 */
 	function ambiguous(candidates: SearchProvider[]): SearchError {
@@ -110,21 +108,6 @@ export function createSearchRegistry(): SearchRegistry {
 	}
 
 	return {
-		register(provider) {
-			if (providers.has(provider.id)) {
-				// i18n-exempt：发给模型的错误
-				throw new SearchError(`搜索提供方 ${provider.id} 已经注册过了`, "SEARCH_DUPLICATE_PROVIDER");
-			}
-			// 两个默认等于又回到「谁先加载用谁」，这是注册清单写错了，设置里改不过来，所以注册时就拦下。
-			if (provider.keyless === "default" && [...providers.values()].some((known) => known.keyless === "default")) {
-				// i18n-exempt：发给模型的错误
-				throw new SearchError(`默认的免配置搜索提供方已经有一个了，${provider.id} 不能也是默认`, "SEARCH_DUPLICATE_DEFAULT");
-			}
-			providers.set(provider.id, provider);
-			return () => {
-				providers.delete(provider.id);
-			};
-		},
 		select,
 		async search(request, configuredId) {
 			const provider = select(configuredId);

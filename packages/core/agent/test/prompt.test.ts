@@ -6,7 +6,7 @@ import type { ModelContext, Plugin } from "@plume/contract";
 import { PluginHost } from "../src/host.ts";
 import { settlePrompt } from "../src/prompt/sections.ts";
 
-describe("systemPrompt 和 sections 对齐", () => {
+describe("systemPrompt 跟着 sections 重拼", () => {
 	const sections = [
 		{ id: "identity", text: "I" },
 		{ id: "workspace", text: "W" },
@@ -24,32 +24,17 @@ describe("systemPrompt 和 sections 对齐", () => {
 		tools: [],
 	};
 
-	it("只改段落：重新拼字符串", () => {
-		expect(settlePrompt(context, { ...context, sections: [{ id: "identity", text: "J" }, ...sections.slice(1)] }).systemPrompt).toBe("J\n\nW");
-	});
-
-	it("只往字符串后面接：接上的那截成为 extension 段", () => {
-		const settled = settlePrompt(context, { ...context, systemPrompt: "I\n\nW\nHINT" });
-		expect(settled.sections).toEqual([...sections, { id: "extension", text: "HINT" }]);
-		expect(settled.systemPrompt).toBe("I\n\nW\n\nHINT");
-	});
-
-	it("整个换掉字符串：只剩一段 extension", () => {
-		const settled = settlePrompt(context, { ...context, systemPrompt: "全新的" });
-		expect(settled.sections).toEqual([{ id: "extension", text: "全新的" }]);
-		expect(settled.systemPrompt).toBe("全新的");
-	});
-
-	it("两个都改了以段落为准；都没改原样交回", () => {
-		expect(settlePrompt(context, { ...context, systemPrompt: "别的", sections: [{ id: "x", text: "X" }] }).systemPrompt).toBe("X");
+	it("按段落重拼字符串；直接改字符串的不作数；没变的原样交回", () => {
+		expect(settlePrompt({ ...context, sections: [{ id: "identity", text: "J" }, ...sections.slice(1)] }).systemPrompt).toBe("J\n\nW");
+		expect(settlePrompt({ ...context, systemPrompt: "别的" }).systemPrompt).toBe("I\n\nW");
 		const same = { ...context };
-		expect(settlePrompt(context, same)).toBe(same);
+		expect(settlePrompt(same)).toBe(same);
 	});
 
-	it("钩子里外层拼字符串、里层按段改，两边的改动都留着", async () => {
+	it("钩子里外层加一段、里层按段改，每一层读到的字符串都跟得上", async () => {
 		const outer: Plugin = {
 			name: "outer",
-			apply: (ctx) => ctx.hook("model.context", (input, next) => next({ ...input, systemPrompt: `${input.systemPrompt}\nOUTER` })),
+			apply: (ctx) => ctx.hook("model.context", (input, next) => next({ ...input, sections: [...input.sections, { id: "outer", text: "OUTER" }] })),
 		};
 		const inner: Plugin = {
 			name: "inner",
@@ -88,7 +73,7 @@ describe("systemPrompt 和 sections 对齐", () => {
 			},
 			settlePrompt,
 		);
-		expect(seen?.sections.map((section) => section.id)).toEqual(["workspace", "extension"]);
+		expect(seen?.sections.map((section) => section.id)).toEqual(["workspace", "outer"]);
 		expect(seen?.systemPrompt).toBe("W\n\nOUTER");
 		expect(result.systemPrompt).toBe("W\n\nOUTER\n\nAFTER");
 		await rm(dir, { recursive: true, force: true });

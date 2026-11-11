@@ -47,8 +47,6 @@ export function loadAppearance(): Appearance {
 	return current;
 }
 
-const clearBackgrounds = (keep?: string): Promise<void> => store().cleanup(keep);
-
 function bytesOf(value: unknown): Uint8Array | null {
 	if (value instanceof Uint8Array) return value;
 	if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -166,6 +164,4 @@ export function registerAppearanceIpc(onChange: (appearance: Appearance) => void
 		if (typeof name !== "string" || !CHAT_BACKGROUND_NAME.test(name)) return null;
 		return store().read(name);
 	});
-
-	ipcMain.handle("plume:chat-background:remove", () => clearBackgrounds(current.chatBackground));
 }

@@ -15,7 +15,7 @@
 import type { CompactSummary, ContextCompact, Message, ToolResultView } from "@plume/contract";
 import { type BudgetModel, type CompactionBudget, compactionBudget, KEEP_MIN } from "./budget.ts";
 import { forkable, forkSummary } from "./fork.ts";
-import { droppedMessage, lastRequest, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
+import { droppedMessage, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
 import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, pruneToolResults } from "./prune.ts";
 import { dropStaleResults } from "./stale-results.ts";
@@ -144,7 +144,7 @@ export interface CompactionRequest {
 	/** 从哪一次请求分叉出摘要请求（`fork.ts`）。不给就只有独立的摘要请求——超长恢复不给，完整历史本来就放不下。 */
 	lineage?: ContextCompact["lineage"];
 	/** 工具调用里的相对路径按它解析：判断一次读取是否被后来的读写覆盖要知道两个路径是不是同一个文件。 */
-	cwd?: string;
+	cwd: string;
 }
 
 export async function compactIfNeeded(request: CompactionRequest): Promise<Compacted | null> {
@@ -245,7 +245,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			if (at < start) retired.add(messages[at] as Message);
 			else tailChars += chars[at] as number;
 		}
-		const withHead = () => summaryMessages(text, retired.request(), origin, model, retired.files(), retired.taskContext());
+		const withHead = () => summaryMessages(text, origin, model, retired.files(), retired.taskContext());
 		const weight = (head: Message[]) => charsToTokens(head.reduce((sum, message) => sum + estimateChars(message), tailChars)) * scale;
 		let head = withHead();
 		while (weight(head) > target && messages.length - start > 1) {
@@ -364,7 +364,6 @@ function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionB
 	if (weight(messages) <= target) return null;
 	// 预算的是交出去的整份：前面那条说明带着最新请求和任务上下文，中文下能有好几千 token。丢掉的那段和留下的字符数逐条增减，同 `fit`。
 	const chars = messages.map(estimateChars);
-	const fallback = lastRequest(messages);
 	const older = new RetiredHistory();
 	let rest = chars.reduce((sum, value) => sum + value, 0);
 	let head: Message | undefined;
@@ -379,7 +378,7 @@ function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionB
 			rest -= chars[at] as number;
 		}
 		if (start >= messages.length) return null;
-		head = droppedMessage(older.request() ?? fallback, older.taskContext(), model, older.files());
+		head = droppedMessage(older.taskContext(), model, older.files());
 		if (start > floor && charsToTokens(estimateChars(head) + rest) * scale <= target) break;
 	}
 	if (!head || start <= floor) return null;

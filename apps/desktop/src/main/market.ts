@@ -5,8 +5,7 @@
  * 不用重启，界面经 agent 的 plugins 事件跟着变。连不上市场时目录用上次读到的（一次都没读到就是空的），已装的插件照常用。
  *
  * 本地上传的（「从本地上传」、`plume-plugin install`/`dev`）放在另一个目录（`uploadDir`），能卸，但不跟市场更新：
- * 和市场装的同名时它生效，市场那份留着不加载，卸掉本地那份就接着用市场那份。PLUME_PLUGIN_PATHS 下的插件是本机直接放的，
- * 照常加载，市场只列出来，不动它的文件。同名时生效的顺序见 `found`。
+ * 和市场装的同名时它生效，市场那份留着不加载，卸掉本地那份就接着用市场那份。同名时生效的顺序见 `found`。
  *
  * 更新按版本号判断：目录里的版本比装下的新就是有新版（发出去的版本不可变，插件仓库发布时查）。
  * 自动更新缺省开，启动一会儿后看一次，之后每 30 分钟、以及每次市场页读目录时再看；一次只换一个，
@@ -65,8 +64,6 @@ export interface MarketOptions {
 	installDir: string;
 	/** 本地上传的插件放这里，每个一个子目录；和 installDir 在同一个上级目录下。 */
 	uploadDir: string;
-	/** 本机直接放插件的目录（PLUME_PLUGIN_PATHS）。 */
-	localRoots: string[];
 	/** 市场自己的设置（自动更新开关）。 */
 	settingsFile: string;
 	/** plume-plugin:// 按它找插件目录，装卸时跟着改。 */
@@ -102,7 +99,7 @@ export interface Market {
 }
 
 export function createMarket(options: MarketOptions): Market {
-	const { catalogUrl, builtinDir, installDir, uploadDir, localRoots, settingsFile, pluginDirs, agent, announce, log } = options;
+	const { catalogUrl, builtinDir, installDir, uploadDir, settingsFile, pluginDirs, agent, announce, log } = options;
 	let auto = true;
 	let current: PluginUpdateState = { outdated: [], auto, updating: [], failed: [] };
 	/** 装、卸、更新排成一队：同一个目录不会被两件事同时改。 */
@@ -161,7 +158,7 @@ export function createMarket(options: MarketOptions): Market {
 	const entries = async (): Promise<MarketEntry[]> => (await remote(false)).map((entry) => entry.info);
 
 	const installed = async (): Promise<InstalledPlugin[]> => {
-		const { builtin, local, upload, market } = await found();
+		const { builtin, upload, market } = await found();
 		// 指纹要把发给插件的文件全读一遍（几十兆）：加载着的那份已经算过、盯着目录的 rescan 会跟着更新，直接用；没加载的才现算。
 		const info = async (key: string, dir: string) => {
 			const loaded = loadedPlugins.get(key);
@@ -169,23 +166,21 @@ export function createMarket(options: MarketOptions): Market {
 		};
 		return Promise.all([
 			...builtin.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "builtin" as const })),
-			...local.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "local" as const })),
 			...upload.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "upload" as const })),
 			...market.map(async ({ key, dir }) => ({ ...(await info(key, dir)), dir, source: "market" as const })),
 		]);
 	};
 
 	/**
-	 * 本机有的插件，同名目录只认先找到的：先内置的（不能被换掉），再本机直接放的（插件作者正在改的那份），
-	 * 再本地上传的，最后市场装的。越是人特意放的越靠前，市场装的被压住时原样留着，前面的没了它就接着生效。
+	 * 本机有的插件，同名目录只认先找到的：先内置的（不能被换掉），再本地上传的（插件作者正在改的那份），
+	 * 最后市场装的。市场装的被压住时原样留着，前面的没了它就接着生效。
 	 */
 	const found = async () => {
 		const builtin = (await discoverPlugins([builtinDir], log)).map((plugin) => ({ ...plugin, builtin: true }));
 		const taken = (key: string, ...lists: PluginDir[][]) => lists.some((list) => list.some((other) => other.key === key));
-		const local = (await discoverPlugins(localRoots, log)).filter((plugin) => !taken(plugin.key, builtin));
-		const upload = (await discoverPlugins([uploadDir], log)).filter((plugin) => !taken(plugin.key, builtin, local));
-		const market = (await discoverPlugins([installDir], log)).filter((plugin) => !taken(plugin.key, builtin, local, upload));
-		return { builtin, local, upload, market };
+		const upload = (await discoverPlugins([uploadDir], log)).filter((plugin) => !taken(plugin.key, builtin));
+		const market = (await discoverPlugins([installDir], log)).filter((plugin) => !taken(plugin.key, builtin, upload));
+		return { builtin, upload, market };
 	};
 
 	/** 市场装的、目录里有更新版本的那些。装下的没写版本号的，有版本就算新。 */
@@ -281,8 +276,8 @@ export function createMarket(options: MarketOptions): Market {
 
 	/** 要加载的插件，顺序见 `found`。 */
 	const discoverAll = async (): Promise<PluginDir[]> => {
-		const { builtin, local, upload, market } = await found();
-		return [...builtin, ...local, ...upload, ...market];
+		const { builtin, upload, market } = await found();
+		return [...builtin, ...upload, ...market];
 	};
 
 	/** 逐个换上落后的；ids 为空表示全部。 */
@@ -347,7 +342,7 @@ export function createMarket(options: MarketOptions): Market {
 				const entry = (await remote(false)).find((candidate) => candidate.info.id === id);
 				if (!entry) return { ok: false, error: "not-found" };
 				const have = (await installed()).find((plugin) => plugin.id === id);
-				if (have?.source === "local" || have?.source === "upload") return { ok: false, error: "local" };
+				if (have?.source === "upload") return { ok: false, error: "local" };
 				return result(() => put(installDir, id, download(entry), have?.dir));
 			}),
 		installFolder: (dir) =>
@@ -355,14 +350,14 @@ export function createMarket(options: MarketOptions): Market {
 				const id = basename(dir);
 				if (!isAbsolute(dir) || !DIR_NAME.test(id) || !existsSync(join(dir, PLUGIN_ENTRY))) return { ok: false, error: "invalid" };
 				const have = (await installed()).find((plugin) => plugin.id === id);
-				if (have?.source === "local" || have?.source === "builtin") return { ok: false, error: have.source };
+				if (have?.source === "builtin") return { ok: false, error: "builtin" };
 				return result(() => put(uploadDir, id, copyFolder(dir), have?.dir));
 			}),
 		uninstall: (id) =>
 			serial(async () => {
 				const have = (await installed()).find((plugin) => plugin.id === id);
 				if (!have) return { ok: false, error: "not-found" };
-				if (have.source === "local" || have.source === "builtin") return { ok: false, error: have.source };
+				if (have.source === "builtin") return { ok: false, error: "builtin" };
 				return result(async () => {
 					await agent.removePlugin(id);
 					pluginDirs.delete(id);
@@ -417,7 +412,7 @@ export function createMarket(options: MarketOptions): Market {
 			timers.push(setInterval(() => void check().catch((error: unknown) => log(errorText(error))), CHECK_EVERY_MS));
 			mkdirSync(installDir, { recursive: true });
 			mkdirSync(uploadDir, { recursive: true });
-			for (const root of [installDir, uploadDir, ...localRoots]) {
+			for (const root of [installDir, uploadDir]) {
 				try {
 					watchers.push(watch(root, { recursive: true }, scheduleRescan));
 				} catch (error) {

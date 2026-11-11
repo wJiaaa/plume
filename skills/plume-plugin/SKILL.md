@@ -76,7 +76,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 4. **界面入口**（要画东西时）：读 [references/ui.md](references/ui.md)。
 5. **样式和文案**（有界面或给人看的文字时）：读 [references/style-i18n.md](references/style-i18n.md)。
 6. **构建和加载**：
-   - 独立项目：`plume-plugin dev` 构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。也可以把插件的上级目录放进环境变量 `PLUME_PLUGIN_PATHS`，Plume 同样盯着那里。
+   - 独立项目：`plume-plugin dev` 构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。
    - Plume 的插件仓库里（`plugins/<目录名>`）：`pnpm plugin dev plugins/<目录名>`，和独立项目一样构建、装进本机的 Plume。
 7. **自检**：对照文末清单，再跑检查（独立项目 `plume-plugin check`：类型检查加插件规则；仓库里 `pnpm check`）。
 

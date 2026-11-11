@@ -83,17 +83,6 @@
 	--plume-track: 0.18;
 }
 
-/*
- * 实心底的按钮上要浓一档。
- *
- * `bg-ink` / `bg-accent` 那几处（发布、安装、保存、更新）的 `currentColor` 是底色的反色，0.18
- * 的白压在实色上基本看不见，轨道一消失这个记号就退回成「一段弧在甩」。0.35 是在那几个底色上
- * 都还读得出是轨道、又不至于抢过亮弧的那一档。
- */
-.plume-arc--on-fill {
-	--plume-track: 0.35;
-}
-
 .plume-arc circle {
 	stroke: currentColor;
 	stroke-width: 2;
@@ -413,16 +402,6 @@
 	}
 }
 
-/*
- * 拖动期间窗格里什么都接不到指针。
- *
- * 窗格里可能是一个 <webview>，那是另一个进程：拖动一越过它，指针就被它吞掉，而指针捕获——处理得了同文档的
- * iframe——够不着它。拖动期间让窗格不参与命中测试才盖住这种情况。拖动本身监听在 window 上，不受影响。
- */
-[data-plume-inert] {
-	pointer-events: none;
-}
-
 /* ---------------------------------------------------------------------------
  * 智能体的脸（`@plume/ui` 的 `avatar/AgentAvatar.tsx`）
  *
@@ -628,51 +607,6 @@
 	}
 	70% {
 		transform: rotate(-4deg);
-	}
-}
-
-/*
- * 右下角的状态点，外面一圈底色把它从脸上剥开——所在的面是什么颜色，调用方用
- * `--plume-avatar-ring` 说，默认是窗口底色。
- */
-.plume-avatar-badge {
-	position: absolute;
-	right: -8%;
-	bottom: -8%;
-	width: max(6px, 32%);
-	height: max(6px, 32%);
-	max-width: 11px;
-	max-height: 11px;
-	border-radius: 9999px;
-	box-shadow: 0 0 0 2px var(--plume-avatar-ring, var(--plume-shell));
-}
-
-.plume-avatar-badge[data-tone="running"] {
-	background: var(--plume-accent);
-}
-
-.plume-avatar-badge[data-tone="running"]::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	border-radius: inherit;
-	background: var(--plume-accent);
-	animation: plume-avatar-ping 1.6s var(--plume-e-out) infinite;
-}
-
-.plume-avatar-badge[data-tone="failed"] {
-	background: var(--plume-danger);
-}
-
-@keyframes plume-avatar-ping {
-	0% {
-		transform: scale(1);
-		opacity: 0.55;
-	}
-	70%,
-	100% {
-		transform: scale(2.4);
-		opacity: 0;
 	}
 }
 

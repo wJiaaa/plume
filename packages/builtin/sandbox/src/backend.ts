@@ -1,10 +1,8 @@
 /**
  * 这台机器实际能提供哪种约束，靠试出来决定。
  *
- * 先按平台选：macOS 用 Seatbelt，Linux 用 `bwrap`、不行时用 Landlock，Windows 用受限令牌。选中的候选再真的*探测*一次：用真实 profile 包一条什么都不做的命令跑起来。
- * 要问的不是「程序在不在」，而是「内核接不接受我们要它做的事」：`sandbox-exec` 每台 macOS 都有，仍可能拒绝 profile；
- * `bwrap` 常常装了却没有它需要的用户命名空间，最常见的 Linux 桌面上往往根本没装——所以 Linux 还有第二个后端 Landlock
- * （`linux/landlock.ts`），否则那里 fail-closed 就意味着默认权限档什么都跑不了。
+ * 先按平台选：macOS 用 Seatbelt，Windows 用受限令牌；别的平台（Linux）没有后端。选中的候选再真的*探测*一次：用真实 profile 包一条什么都不做的命令跑起来。
+ * 要问的不是「程序在不在」，而是「内核接不接受我们要它做的事」：`sandbox-exec` 每台 macOS 都有，仍可能拒绝 profile。
  *
  * 答案是不行就是不行（fail-closed）：管不住的后端如实说管不住，调用方要么*明知*地不受限运行，要么不运行。
  * 绝不能悄悄回退：一个本该包装 argv 的函数把原 argv 原样还回去，命令就会在显示「已沙箱」的界面下拿着完全权限跑。
@@ -15,13 +13,12 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { landlockAbi } from "./linux/landlock.ts";
-import { bwrapArgs, canonicalPath, seatbeltArgs, type SandboxEnforcement, type SandboxPolicy } from "./policy.ts";
+import { canonicalPath, seatbeltArgs, type SandboxEnforcement, type SandboxPolicy } from "./policy.ts";
 import { SANDBOX_RUNNER_FLAG } from "./runner-flag.ts";
 import { tempWriteSid, workspaceWriteSid } from "./windows/identity.ts";
 
 /** 平台的约束从哪来；没有能用的就是 `none`。 */
-export type Runner = "seatbelt" | "bwrap" | "landlock" | "windows-acl" | "none";
+export type Runner = "seatbelt" | "windows-acl" | "none";
 
 export interface Confinement {
 	/** 代替原命令去启动的程序。 */
@@ -48,30 +45,20 @@ export interface BackendHooks {
 	probe?: (runner: Exclude<Runner, "none">) => boolean;
 	/** 要调用的 `sandbox-exec`，测试可以指向一个会拒绝的脚本。 */
 	seatbeltExec?: string;
-	/** 要考虑的后端，按顺序：测试要能在有 `bwrap` 的机器上指定 Landlock。 */
-	runners?: readonly Exclude<Runner, "none">[];
 }
 
-/** 每个平台能用的后端，按优先顺序。 */
-const PLATFORM_RUNNERS: Partial<Record<NodeJS.Platform, readonly Exclude<Runner, "none">[]>> = {
-	darwin: ["seatbelt"],
-	// bwrap 在挂载命名空间里管文件；没有命名空间可用的地方用 Landlock。
-	linux: ["bwrap", "landlock"],
-	win32: ["windows-acl"],
-};
+/** 每个平台的后端。 */
+const PLATFORM_RUNNER: Partial<Record<NodeJS.Platform, Exclude<Runner, "none">>> = { darwin: "seatbelt", win32: "windows-acl" };
 
 /**
  * 选中一个后端时它承诺多少。
  *
- * Seatbelt 和 bwrap 管住了模式承诺的全部文件效果，是 `full`。受限令牌是 `partial`，原因是机制本身而不是没做完：
+ * Seatbelt 管住了模式承诺的全部文件效果，是 `full`。受限令牌是 `partial`，原因是机制本身而不是没做完：
  * `WRITE_RESTRICTED` 的受限列表里必须有 Everyone，否则进程死在加载器初始化里，所以 DACL 给 Everyone 写权限的对象都还能写；
  * NTFS 硬链接能把授权树里的文件别名到树外。两样都是这个机制写在文档里的边界，换个更好的实现也堵不上。
  */
 function enforcementOf(runner: Exclude<Runner, "none">): SandboxEnforcement {
-	if (runner === "windows-acl") return "partial";
-	// ABI 3 以下 Landlock 不管按路径的 `truncate(2)`。
-	if (runner === "landlock") return landlockAbi() >= 3 ? "full" : "partial";
-	return "full";
+	return runner === "windows-acl" ? "partial" : "full";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -95,15 +82,11 @@ function sandboxRunnerEntry(): string {
  * `process.execPath` 加 `ELECTRON_RUN_AS_NODE` 是从 Electron 应用里拿到一个 Node 进程的正规办法，不必另带一份运行时；
  * 在纯 Node 下这个变量什么都不做。脚本在前、旗标在后：Node 模式下脚本前面的东西都会被当成 Node 自己的选项。
  */
-function runnerArgv(runner: "landlock" | "windows-acl", policy: SandboxPolicy): { command: string; args: string[]; env: Record<string, string> } {
+function runnerArgv(policy: SandboxPolicy): { command: string; args: string[]; env: Record<string, string> } {
 	const entry = sandboxRunnerEntry();
 	const args = [...(entry.endsWith(".ts") ? ["--experimental-strip-types", "--no-warnings"] : []), entry, SANDBOX_RUNNER_FLAG];
 	const workspace = canonicalPath(policy.workspaceRoot);
 	args.push("--workspace", workspace, "--mode", policy.mode);
-	if (runner === "landlock") {
-		args.push("--");
-		return { command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: "1" } };
-	}
 	if (policy.mode === "workspace-write") args.push("--write-sid", workspaceWriteSid(workspace));
 	/*
 	 * read-only 也给一个私有临时目录，只在这个平台。
@@ -142,11 +125,9 @@ function probeRunner(runner: Exclude<Runner, "none">, seatbeltExec: string): { o
 	const policy: SandboxPolicy = { mode: "read-only", workspaceRoot: runner === "windows-acl" ? process.cwd() : "/" };
 	try {
 		let probe: ReturnType<typeof spawnSync>;
-		if (runner === "windows-acl" || runner === "landlock") {
-			// 内核没有 Landlock 时不值得起一个进程，这个答案不花钱。
-			if (runner === "landlock" && landlockAbi() < 2) return { ok: false, why: `Landlock ABI ${landlockAbi()}` };
-			const wrap = runnerArgv(runner, policy);
-			probe = spawnSync(wrap.command, [...wrap.args, ...(runner === "windows-acl" ? ["cmd.exe", "/c", "exit 0"] : ["true"])], {
+		if (runner === "windows-acl") {
+			const wrap = runnerArgv(policy);
+			probe = spawnSync(wrap.command, [...wrap.args, "cmd.exe", "/c", "exit 0"], {
 				timeout: PROBE_TIMEOUT_MS,
 				stdio: ["ignore", "ignore", "pipe"],
 				encoding: "utf8",
@@ -154,18 +135,11 @@ function probeRunner(runner: Exclude<Runner, "none">, seatbeltExec: string): { o
 				env: { ...process.env, ...wrap.env },
 			});
 		} else {
-			probe =
-				runner === "seatbelt"
-					? spawnSync(seatbeltExec, [...seatbeltArgs(policy), "--", "true"], {
-							timeout: PROBE_TIMEOUT_MS,
-							stdio: ["ignore", "ignore", "pipe"],
-							encoding: "utf8",
-						})
-					: spawnSync("bwrap", [...bwrapArgs(policy), "--", "true"], {
-							timeout: PROBE_TIMEOUT_MS,
-							stdio: ["ignore", "ignore", "pipe"],
-							encoding: "utf8",
-						});
+			probe = spawnSync(seatbeltExec, [...seatbeltArgs(policy), "--", "true"], {
+				timeout: PROBE_TIMEOUT_MS,
+				stdio: ["ignore", "ignore", "pipe"],
+				encoding: "utf8",
+			});
 		}
 		/*
 		 * 不是干净的 0 就说明这台机器不能保证执行约束，不提供这个后端（我们的 runner 管不住时带自己的前缀以 127 退出）。后端说了什么留下来：
@@ -205,12 +179,13 @@ export function resetProbeCache(): void {
 /**
  * 这台机器能用的后端，或者 `none`。
  *
- * `none` 是正当的答案：不支持的平台、精简过的容器、`sandbox-exec` 坏掉的 macOS。拿它怎么办由调用方决定，这个函数不能假装有。
+ * `none` 是正当的答案：不支持的平台（Linux）、`sandbox-exec` 坏掉的 macOS。拿它怎么办由调用方决定，这个函数不能假装有。
  */
 export function selectRunner(hooks: BackendHooks = {}): Runner {
 	const platform = hooks.platform ?? process.platform;
 	const seatbeltExec = hooks.seatbeltExec ?? "/usr/bin/sandbox-exec";
-	for (const runner of hooks.runners ?? PLATFORM_RUNNERS[platform] ?? []) {
+	const runner = PLATFORM_RUNNER[platform];
+	if (runner) {
 		const key = `${platform}:${runner}:${seatbeltExec}`;
 		let ok = probed.get(key);
 		if (ok === undefined) {
@@ -249,11 +224,8 @@ export function confine(policy: SandboxPolicy, hooks: BackendHooks = {}): Confin
 	if (runner === "seatbelt") {
 		return { command: hooks.seatbeltExec ?? "/usr/bin/sandbox-exec", args: [...seatbeltArgs(policy), "--"], runner, enforcement: enforcementOf(runner) };
 	}
-	if (runner === "windows-acl" || runner === "landlock") {
-		const wrap = runnerArgv(runner, policy);
-		return { command: wrap.command, args: wrap.args, runner, enforcement: enforcementOf(runner), env: wrap.env };
-	}
-	return { command: "bwrap", args: [...bwrapArgs(policy), "--"], runner, enforcement: enforcementOf(runner) };
+	const wrap = runnerArgv(policy);
+	return { command: wrap.command, args: wrap.args, runner, enforcement: enforcementOf(runner), env: wrap.env };
 }
 
 /** 要求约束而这台机器给不了。单独一个类，调用方才能专门接住它。 */
@@ -276,8 +248,8 @@ export class SandboxUnavailableError extends Error {
 export function looksDenied(output: string, runner?: Runner): boolean {
 	if (DENIAL_PATTERNS.some((pattern) => pattern.test(output))) return true;
 	if (runner === "seatbelt") return SEATBELT_SERVICE_DENIAL.test(output);
-	if (runner !== "windows-acl" && runner !== "landlock") return false;
-	if (runner === "windows-acl" && (MSYS_UNDER_TOKEN.test(output) || WINDOWS_DENIAL.test(output))) return true;
+	if (runner !== "windows-acl") return false;
+	if (MSYS_UNDER_TOKEN.test(output) || WINDOWS_DENIAL.test(output)) return true;
 	return output.split("\n").some((line) => GENERIC_DENIAL.test(line) && !NOT_A_DENIAL.test(line));
 }
 
@@ -303,8 +275,8 @@ const WINDOWS_DENIAL =
 	/UnauthorizedAccessException|拒绝访问|访问被拒绝|拒絕存取|存取被拒|アクセスが拒否されました|액세스가 거부되었습니다|Zugriff verweigert|Zugriff auf den Pfad .* verweigert|accès refusé|L\x27accès au chemin .* est refusé|Acceso denegado|Отказано в доступе|Acesso negado/i;
 
 /**
- * 我们自己的 runner 的拒绝用的是常见的词，没有自己的前缀：Landlock 拒绝时是 `EACCES`（`Permission denied`），受限令牌下原生程序说
- * `Access is denied`，PowerShell 和别的基于 .NET 的程序（受限命令在那里就跑在它里面）说 `Access to the path '…' is denied`。
+ * 我们自己的 runner 的拒绝用的是常见的词，没有自己的前缀：受限令牌下原生程序说 `Access is denied`（移植来的说 `Permission denied`），
+ * PowerShell 和别的基于 .NET 的程序（受限命令在那里就跑在它里面）说 `Access to the path '…' is denied`。
  * 这些词太常见，所以只在产生它们的 runner 下才算，而且 ssh 拒绝密钥、密码的两句话从不算：
  * `git push` 在哪种沙箱下都可能打印它们。
  */
@@ -323,10 +295,4 @@ const SEATBELT_SERVICE_DENIAL = /_LSOpenStuffCallLocal|kLSExecutableIncorrectFor
  * `bash` 把 EPERM 报成 `Operation not permitted`；macOS 默认的 `zsh`（这些命令多半在它下面跑）写的是小写的
  * `operation not permitted`，整行形状也不一样。只按 bash 的写法匹配，单元测试全过，真实环境里的拒绝却一条都认不出。
  */
-const DENIAL_PATTERNS = [
-	/\boperation not permitted\b/i,
-	/\bsandbox-exec:/i,
-	/\bdeny file-write\b/i,
-	/\bbwrap:.*(?:permission denied|read-only file system)/i,
-	/\bread-only file system\b/i,
-];
+const DENIAL_PATTERNS = [/\boperation not permitted\b/i, /\bsandbox-exec:/i, /\bdeny file-write\b/i, /\bread-only file system\b/i];

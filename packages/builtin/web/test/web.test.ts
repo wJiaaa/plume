@@ -8,7 +8,7 @@ import { test } from "node:test";
 import type { SecretsService, ToolRun } from "@plume/contract";
 import type { SearchKeys } from "../src/api.ts";
 import { htmlToText } from "../src/html-text.ts";
-import { registerDefaultSearchProviders } from "../src/search/defaults.ts";
+import { defaultSearchProviders } from "../src/search/defaults.ts";
 import { parseResults } from "../src/search/duckduckgo.ts";
 import { createSearchRegistry, SearchError } from "../src/search/index.ts";
 import { settingsFile, viewOf } from "../src/settings.ts";
@@ -20,9 +20,7 @@ const noFetch = (async () => {
 }) as unknown as typeof fetch;
 
 function registryWith(keys: SearchKeys, fetchImpl: typeof fetch = noFetch) {
-	const registry = createSearchRegistry();
-	registerDefaultSearchProviders(registry, () => keys, fetchImpl);
-	return registry;
+	return createSearchRegistry(defaultSearchProviders(() => keys, fetchImpl));
 }
 
 const codeOf = (fn: () => unknown) => {
@@ -54,19 +52,6 @@ test("选后端：什么都没配用速答，唯一的 key 胜过默认，两把
 	);
 	// 只有空白的 key 不算填了。
 	assert.equal(registryWith({ tavily: "  " }).select(null).id, "ddg-instant");
-});
-
-test("注册：同名和第二个默认都拦下", () => {
-	const registry = registryWith({});
-	const extra = { id: "x", name: "x", available: () => true, keyless: "default" as const, search: async () => ({ sources: [], truncated: false }) };
-	assert.equal(
-		codeOf(() => registry.register(extra)),
-		"SEARCH_DUPLICATE_DEFAULT",
-	);
-	assert.equal(
-		codeOf(() => registry.register({ ...extra, id: "exa", keyless: undefined })),
-		"SEARCH_DUPLICATE_PROVIDER",
-	);
 });
 
 test("DuckDuckGo：拆掉跳转外壳、解实体，丢掉打不开的链接但摘要不错位", () => {
@@ -189,7 +174,7 @@ test("web_fetch：正文超过上限时整份存进会话临时目录，结果�
 });
 
 test("web_fetch：拒绝非 http 协议和带账号密码的地址", async () => {
-	const tool = webFetchTool(async () => []);
+	const tool = webFetchTool();
 	assert.match((await tool.execute({ url: "file:///etc/passwd" }, run)).output, /^Refused: /);
 	assert.match((await tool.execute({ url: "http://u:p@example.com/" }, run)).output, /^Refused: /);
 });

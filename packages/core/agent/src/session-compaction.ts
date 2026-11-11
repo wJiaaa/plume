@@ -120,7 +120,7 @@ export function createCompactor(deps: CompactorDeps) {
 		const messages = await deps.messagesOf(session);
 		const record = await deps.recordOf(session);
 		const previous = latest(record, messages);
-		const history = historyFor(messages, record, provider, model);
+		const history = historyFor(messages, record);
 		// 历史里上一次换上的头占了前面几条，之后的和会话里从边界起的一一对应。
 		const head = history.length - (messages.length - (previous?.keptFrom ?? 0));
 
@@ -243,31 +243,31 @@ export function createCompactor(deps: CompactorDeps) {
 		}
 
 		const { keep, summary, head: given, via, views } = result as Exclude<CompactSummary, undefined | { pruneOnly: true }>;
-		const replacement = given === undefined ? undefined : validHead(given);
+		const replacement = validHead(given);
 		if (
 			!Number.isInteger(keep) ||
 			keep <= head ||
 			keep >= history.length ||
 			history[keep]?.role === "toolResult" ||
 			typeof summary !== "string" ||
-			(given !== undefined && replacement === undefined) ||
-			(!summary.trim() && !(via === "dropped" && replacement))
+			!replacement ||
+			(!summary.trim() && via !== "dropped")
 		) {
 			// i18n-exempt：invalid() 的理由只进日志。
-			return invalid(`context.compact 给的边界（${String(keep)}）会拆开历史，或者摘要是空的`);
+			return invalid(`context.compact 给的边界（${String(keep)}）会拆开历史，或者头、摘要不对`);
 		}
 		const kept = new Set(history.slice(keep).flatMap((message) => (message.role === "toolResult" ? [message.toolCallId] : [])));
 		// i18n-exempt：invalid() 的理由只进日志。
 		if (views !== undefined && !adoptViews(record, views, kept)) return invalid(`context.compact 给的剪枝视图对不上留下的工具结果`);
 		const keptFrom = keep - head + (previous?.keptFrom ?? 0);
-		const after = history.length - keep + (replacement?.length ?? 2);
+		const after = history.length - keep + replacement.length;
 		record.compactions.push({
 			at: Date.now(),
 			keptFrom,
 			keptStamp: (messages[keptFrom] as Message).timestamp,
 			count: messages.length,
 			summary: summary.trim(),
-			...(replacement ? { head: replacement } : {}),
+			head: replacement,
 			...(isVia(via) ? { via } : {}),
 			before: history.length,
 			after,
@@ -285,8 +285,7 @@ export function createCompactor(deps: CompactorDeps) {
 	/** 服务商拒收以后，把发给模型的历史里过大的工具结果剪成一行，记下来，重启以后照样剪着。剪了返回 true。 */
 	async function withhold(session: CompactingSession): Promise<boolean> {
 		const record = await deps.recordOf(session);
-		const { provider, model } = await deps.model(session);
-		const ids = oversized(historyFor(await deps.messagesOf(session), record, provider, model), record);
+		const ids = oversized(historyFor(await deps.messagesOf(session), record), record);
 		if (ids.length === 0) return false;
 		record.withheld.push(...ids);
 		deps.saveContext(session.summary.id, record);

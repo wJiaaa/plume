@@ -10,7 +10,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { InstalledPlugin, Message, Resource, ResourceAddress, ResourceEntry, ResourceHandler, ResourceScope, SessionSummary } from "@plume/contract";
-import { ResourceError, resolveInside, stillInside, type WritableHandler } from "./router.ts";
+import { resolveInside } from "@plume/platform";
+import { ResourceError, stillInside, type WritableHandler } from "./router.ts";
 
 /**
  * 临时目录里的一条路径，字面和真实落点都得在目录里。

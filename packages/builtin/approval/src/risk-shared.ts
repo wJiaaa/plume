@@ -7,7 +7,7 @@
 import { tmpdir } from "node:os";
 import { isAbsolute } from "node:path";
 import type { RiskCode, RiskParams } from "./messages.ts";
-import { within } from "./paths.ts";
+import { within } from "@plume/platform";
 
 export interface RiskVerdict {
 	risky: boolean;

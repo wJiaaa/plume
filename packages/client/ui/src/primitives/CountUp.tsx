@@ -20,20 +20,15 @@ export function CountUp({
 	className,
 	/** 走动中的数怎么写。默认是四舍五入的整数。 */
 	format = plain,
-	bidirectional,
-	ms,
 	...rest
 }: {
 	value: number;
 	className?: string;
 	format?: (shown: number) => string;
-	/** 往下也走——见 `useCountUp`。给按更短的时段重算的读数。 */
-	bidirectional?: boolean;
-	ms?: number;
 } & Omit<React.ComponentProps<"span">, "className" | "children">) {
 	return (
 		<span {...rest} className={className}>
-			{format(useCountUp(value, ms, { bidirectional }))}
+			{format(useCountUp(value))}
 		</span>
 	);
 }

@@ -359,7 +359,7 @@ it("单会话另存只带自己的摘要、压缩记录、消息、草稿和费�
 	}
 	db.spend(null, billed);
 	db.delete(["deleted"]);
-	const context = { compactions: [{ at: 3, keptFrom: 0, keptStamp: 1, count: 4, summary: "摘要", before: 4, after: 2 }], withheld: ["c1"] };
+	const context = { compactions: [{ at: 3, keptFrom: 0, keptStamp: 1, count: 4, summary: "摘要", head: [], before: 4, after: 2 }], withheld: ["c1"] };
 	db.saveContext("a", context);
 	const copy = join(dir, "one.db");
 	await writeFile(copy, "上一次导出");

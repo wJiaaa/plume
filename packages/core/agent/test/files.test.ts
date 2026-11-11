@@ -2,16 +2,9 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { operateSessionFile } from "../src/file-operations.ts";
 import { createAgent } from "../src/index.ts";
-import {
-	locateSessionFiles,
-	readListedFile,
-	readSessionFile,
-	readSessionFileBytes,
-	listSessionDirectory,
-	renameSessionFile,
-	sessionFilePath,
-} from "../src/files.ts";
+import { locateSessionFiles, readListedFile, readSessionFile, readSessionFileBytes, listSessionDirectory, sessionFilePath } from "../src/files.ts";
 
 let dir: string;
 let cwd: string;
@@ -119,9 +112,9 @@ it("服务按会话的工作目录读和找；没有这个会话时什么都不�
 		const controller = new AbortController();
 		const events = agent.service.watch({ signal: controller.signal });
 		const pending = events.next();
-		const moved = await agent.service.renameFile(session.id, "readme.md", "renamed.md");
+		const moved = await agent.service.fileOperation(session.id, { type: "rename", from: "readme.md", to: "renamed.md" });
 		expect((await pending).value).toEqual({ type: "fileMoved", from: join(cwd, "readme.md"), to: join(cwd, "renamed.md") });
-		expect(moved).toBe("renamed.md");
+		expect(moved).toMatchObject({ ok: true, path: join(cwd, "renamed.md") });
 		controller.abort();
 		await events.return();
 	} finally {
@@ -141,22 +134,13 @@ it("文档完整读取守目录、版本和取消边界", async () => {
 	await expect(readSessionFileBytes(cwd, "readme.md", undefined, cancelled.signal)).rejects.toThrow();
 });
 
-it("目录按文件夹优先列出，改名不覆盖、不能越界或改根目录", async () => {
-	const { listSessionDirectory, renameSessionFile } = await import("../src/files.ts");
+it("目录按文件夹优先列出，不列软链，不能越界", async () => {
+	const { listSessionDirectory } = await import("../src/files.ts");
 	await symlink(dir, join(cwd, "outside"));
 	const entries = await listSessionDirectory(cwd, cwd);
 	expect(entries.some((entry) => entry.name === "outside")).toBe(false);
 	expect(entries[0]?.isDirectory).toBe(true);
 	await expect(listSessionDirectory(cwd, dir)).rejects.toThrow();
-	await expect(renameSessionFile(cwd, "readme.md", "../escape.md")).rejects.toThrow();
-	await expect(renameSessionFile(cwd, cwd, "renamed")).rejects.toThrow();
-	await writeFile(join(cwd, "taken.md"), "保留");
-	await expect(renameSessionFile(cwd, "readme.md", "taken.md")).rejects.toThrow();
-	expect((await readSessionFile(cwd, "taken.md"))?.text).toBe("保留");
-	await renameSessionFile(cwd, join(cwd, "readme.md"), "renamed.md");
-	expect((await readSessionFile(cwd, "renamed.md"))?.text).toBe("# 你好\n");
-	await renameSessionFile(cwd, join(cwd, "src"), "source");
-	expect(await readSessionFile(cwd, "source/deep/approvals.ts")).not.toBeNull();
 });
 
 it("SQLite 文档快照包含尚未 checkpoint 的 WAL 提交", async () => {
@@ -180,7 +164,7 @@ it("SQLite 文档快照包含尚未 checkpoint 的 WAL 提交", async () => {
 	}
 });
 
-it("源目录可以预览、列目录和显式改名；未登记目录、软链逃逸和根目录改名仍拒绝", async () => {
+it("源目录可以预览、列目录和改名；未登记目录、软链逃逸和根目录改名仍拒绝", async () => {
 	const source = join(dir, "source");
 	await mkdir(source);
 	await writeFile(join(source, "a.txt"), "额外源文件");
@@ -191,8 +175,8 @@ it("源目录可以预览、列目录和显式改名；未登记目录、软链�
 	expect((await listSessionDirectory(cwd, source, [source])).map((entry) => entry.name)).toEqual(["a.txt"]);
 	expect(await sessionFilePath(cwd, join(source, "escape.txt"), [source])).toBeNull();
 	expect(await readSessionFile(cwd, "../secret.txt", [source])).toBeNull();
-	await expect(renameSessionFile(cwd, source, "renamed", [source])).rejects.toThrow();
-	expect(await renameSessionFile(cwd, join(source, "a.txt"), "b.txt", [source])).toBe(join(source, "b.txt"));
+	expect(await operateSessionFile(cwd, { type: "rename", from: source, to: join(dir, "renamed") }, [source])).toMatchObject({ ok: false });
+	expect(await operateSessionFile(cwd, { type: "rename", from: join(source, "a.txt"), to: join(source, "b.txt") }, [source])).toMatchObject({ ok: true });
 });
 
 it("@ 文件候选包含全部项目源目录，第二个源用绝对路径；任意 cwd 不扩大读取范围", async () => {

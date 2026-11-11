@@ -17,7 +17,7 @@
 
 import { realpath, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { relativeInside } from "./home.ts";
+import { relativeInside } from "@plume/platform";
 import { openRepo, withRepoView } from "./host-git.ts";
 
 /**

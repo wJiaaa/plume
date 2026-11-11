@@ -54,18 +54,17 @@ class SeenFiles {
 /**
  * 摘要和代替它的确认：有确认，摘要才是一来一回，后面留下的历史接得上。
  *
- * `standing` 是边界之前人最新的那句原话，引用而不转述：摘要是转述，最经不起转述的是指令——先说「先找原因别改」、后说「那彻底修」，
+ * 边界之前人最新的那句原话（`taskContext.latestRequest`）引用而不转述：摘要是转述，最经不起转述的是指令——先说「先找原因别改」、后说「那彻底修」，
  * 从两句写出的摘要有一半可能带着前一句，压完的那一轮就解释自己为什么还没动手。
  */
 export function summaryMessages(
 	summary: string,
-	standing: string | null,
 	origin: ReplyOrigin,
 	model: { contextWindow: number },
 	seen?: { read: string[]; changed: string[] },
 	taskContext?: CompactionContext,
 ): Message[] {
-	standing = taskContext?.latestRequest ?? standing;
+	const standing = taskContext?.latestRequest;
 	// 正文只列最近的那些；全量留在 `compactionFiles` 里给下一次压缩，见 `SeenFiles`。
 	const read = seen?.read.slice(-SEEN_FILES_CAP) ?? [];
 	const changed = seen?.changed.slice(-SEEN_FILES_CAP) ?? [];
@@ -128,37 +127,16 @@ const RECALL_NOTE =
 	"The full transcript of everything summarised above is still on disk. Use the `recall` tool to search it whenever you need the exact wording of an earlier request, a file's earlier contents, a command's exact output, or anything else the summary condensed. Prefer recalling over re-deriving: what is missing here is retrievable, not gone.";
 
 /**
- * 一段对话里人最新打的那句话。合成的（「继续」、上一次的摘要头）不算：那不是请求，拿它当现行指令会把对话钉在一句没人写过的话上。
- * 只取文字、有上限：截图已经和别的一起摘要掉了，整段引用回来会把省下的又加回去。
- */
-export function lastRequest(messages: readonly Message[], limit = 2000): string | null {
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const message = messages[i] as Message;
-		if (message.role !== "user" || message.synthetic) continue;
-		const text = message.content
-			.filter((block): block is { type: "text"; text: string } => block.type === "text")
-			.map((block) => block.text)
-			.join("\n")
-			.trim();
-		if (!text) continue;
-		const points = [...text];
-		return points.length <= limit ? text : `${points.slice(0, limit).join("")}…`;
-	}
-	return null;
-}
-
-/**
  * 没摘要、直接丢掉的那段历史换成什么。不说的话，模型不知道之前还有东西，会兴冲冲地重做做过的事；也要说明这是丢、不是摘要：没人读过
  * 丢掉的那些，除了自己 `recall` 回来的，之前的工作一样都不能当真。
  */
 export function droppedMessage(
-	standing: string | null = null,
 	taskContext?: CompactionContext,
 	model?: { contextWindow: number },
 	/** 不写进正文，只带给下一次压缩：没有它，丢弃边界之后再摘要时，边界之前碰过的文件就算不到了。 */
 	seen?: { read: string[]; changed: string[] },
 ): Message {
-	standing = taskContext?.latestRequest ?? standing;
+	let standing = taskContext?.latestRequest;
 	/*
 	 * 窗口小时按窗口收紧三段摘录（最新请求、原始请求、中间请求）。按一个汉字一个 token 的最坏情况折算；大窗口下这条线高于单条 2000 字的
 	 * 上限，不起作用。
@@ -189,24 +167,16 @@ export function droppedMessage(
 }
 
 /**
- * 压缩时被折进头里的那段历史，一条条往后长。收尾部每多折一条，头里的最新请求、任务上下文、文件清单都要按新的那段重算；每次对整段重跑
+ * 压缩时被折进头里的那段历史，一条条往后长。收尾部每多折一条，头里的任务上下文（含最新请求）、文件清单都要按新的那段重算；每次对整段重跑
  * 是 O(n²)。这里逐条读下去，读到哪儿交出的都和对那一段从头算的同一份。
  */
 export class RetiredHistory {
 	private context: CompactionContext = {};
 	private readonly seen = new SeenFiles();
-	private standing: string | null = null;
 
 	add(message: Message): void {
 		this.context = foldTaskContext(this.context, message);
 		this.seen.add(message);
-		// `lastRequest` 从后往前取第一条有话的人话；逐条往后读时，最后一条有话的就是它。
-		if (message.role === "user") this.standing = lastRequest([message]) ?? this.standing;
-	}
-
-	/** 同 `lastRequest(读过的那段)`。 */
-	request(): string | null {
-		return this.standing;
 	}
 
 	/** 读过的那段里碰过的文件，见 `SeenFiles`。 */

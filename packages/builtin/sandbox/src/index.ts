@@ -1,5 +1,5 @@
 /**
- * 沙箱：在这台机器能给的约束里跑 shell 命令（macOS 用 seatbelt，Linux 用 bubblewrap，Windows 用受限令牌），作为服务 `sandbox` 给别的插件用。
+ * 沙箱：在这台机器能给的约束里跑 shell 命令（macOS 用 seatbelt，Windows 用受限令牌），作为服务 `sandbox` 给别的插件用。
  *
  * Windows 的受限令牌由我们自己的 runner 进程造，runner 就是这个逻辑入口本身（见 `runner-entry.ts`），所以要在最前面导入它。
  *

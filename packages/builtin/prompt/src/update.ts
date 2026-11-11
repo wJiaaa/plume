@@ -17,7 +17,7 @@ import type { PromptSection, UserMessage } from "@plume/contract";
 export type SectionChange = NonNullable<UserMessage["promptUpdate"]>[number];
 
 /**
- * 段名 → 正文，按首次出现的顺序。同名的几块拼成一段（只改字符串的插件接上的都叫 `extension`）；空段不算，拼出来的系统提示词里
+ * 段名 → 正文，按首次出现的顺序。同名的几块拼成一段；空段不算，拼出来的系统提示词里
  * 本来就没有它。
  */
 export function promptSections(sections: readonly PromptSection[]): Map<string, string> {

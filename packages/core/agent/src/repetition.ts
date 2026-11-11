@@ -1,6 +1,6 @@
 /**
- * 同工具、同参数、同结果：第三次纠正、第十次停止；翻页和切图测距只提醒，不据此停下真实工作。
- * 一步的成功 edit/write 先统一清零，测距脚本不算；人工新消息和压缩后也清零，「继续」沿用计数。
+ * 同工具、同参数、同结果：第三次纠正、第十次停止；翻页只提醒，不据此停下真实工作。
+ * 一步的成功 edit/write 先统一清零；人工新消息和压缩后也清零，「继续」沿用计数。
  * 替换仅作用于模型上下文，会话和卡片保留原文；旧替换不随清零撤销，保持请求前缀稳定。
  */
 
@@ -10,22 +10,19 @@ import type { Message, ToolResultMessage } from "@plume/llm/types";
 const REPEAT_WARN = 3;
 const REPEAT_STOP = 10;
 const INTENT_WARN = 12;
-const PROBE_WARN = 5;
 const PAGING_KEYS = new Set(["offset", "limit", "page", "cursor", "after", "before", "start", "skip", "count"]);
 
 export class RepetitionWatch {
 	private readonly counts = new Map<string, number>();
 	private readonly warned = new Set<string>();
 	private readonly intents = new Map<string, number>();
-	private probes = 0;
-	private probeWarned = false;
 	readonly replaced = new Map<string, string>();
 	private hint: string | undefined;
 
 	/** 整步一起观察：同一步有真实改动时，旧观察先作废，再数这一批调用。 */
 	observe(calls: { name: string; arguments: unknown }[], results: ToolResultMessage[]): void {
-		if (calls.some((call, index) => isWorkspaceProgress(call.name, call.arguments, results[index]))) this.reset();
-		let warning: { tool: string; kind: "exact" | "intent" | "probe" } | undefined;
+		if (calls.some((call, index) => isWorkspaceProgress(call.name, results[index]))) this.reset();
+		let warning: { tool: string; kind: "exact" | "intent" } | undefined;
 		for (const [index, call] of calls.entries()) {
 			const result = results[index];
 			if (!result) continue;
@@ -48,14 +45,6 @@ export class RepetitionWatch {
 				warning = { tool: call.name, kind: "intent" };
 			}
 		}
-		for (const call of calls) {
-			if (!isProbe(call.name, call.arguments)) continue;
-			this.probes += 1;
-			if (!warning && this.probes >= PROBE_WARN && !this.probeWarned) {
-				this.probeWarned = true;
-				warning = { tool: call.name, kind: "probe" };
-			}
-		}
 		this.hint = warning ? repeatHint(warning.kind, warning.tool) : undefined;
 	}
 
@@ -74,21 +63,12 @@ export class RepetitionWatch {
 		this.counts.clear();
 		this.warned.clear();
 		this.intents.clear();
-		this.probes = 0;
-		this.probeWarned = false;
 		this.hint = undefined;
 	}
 }
 
 // i18n-exempt：发给模型的话，不随界面语言变。
-function repeatHint(kind: "exact" | "intent" | "probe", tool: string): string {
-	if (kind === "probe") {
-		return (
-			`（自动提示）你已经连续多次切图、读切片或做像素测距。` +
-			`这类探测回答不了「为什么间距是这样」——去读对应的 CSS 和组件结构，基于已有证据下结论。` +
-			`不要再写新的测距脚本，也不要再切图。`
-		);
-	}
+function repeatHint(kind: "exact" | "intent", tool: string): string {
 	if (kind === "intent") {
 		return (
 			`（自动提示）你已经用不同的翻页参数把 \`${tool}\` 的同一个问题问了很多遍。` +
@@ -154,50 +134,8 @@ function intentOf(name: string, args: unknown): string {
 	return `${name} ${stable(Object.fromEntries(kept))}`;
 }
 
-const IMAGE_FILE = /\.(?:png|jpe?g|webp|gif)\b/i;
-const MEASURE = /numpy|PIL\.|Image\.open|cv2\.|histogram|non[-_]?white|getBoundingClientRect|band_\d+|row_inspect|box_line|pixel.?count|screencast/i;
-// 两种分隔符都认：Windows 上模型写的是 `C:\…\band_1.png`。
-const SLICE_NAME = /(?:^|[\\/])(?:band_\d+|row_inspect|box_line|icon_\d+)[^\\/]*\.(?:png|jpe?g|webp)$/i;
-
-function commandOf(args: unknown): string {
-	if (args === null || typeof args !== "object" || !("command" in args)) return "";
-	return String((args as { command: unknown }).command);
-}
-
-function pathOf(args: unknown): string {
-	if (args === null || typeof args !== "object") return "";
-	const record = args as { path?: unknown; file_path?: unknown; contents?: unknown };
-	if (typeof record.path === "string") return record.path;
-	if (typeof record.file_path === "string") return record.file_path;
-	return "";
-}
-
-function contentsOf(args: unknown): string {
-	if (args === null || typeof args !== "object") return "";
-	const record = args as { content?: unknown; contents?: unknown };
-	if (typeof record.content === "string") return record.content;
-	if (typeof record.contents === "string") return record.contents;
-	return "";
-}
-
-/** 切图、读切片、像素测距算同一种探测；写新的测距脚本不算工作区推进。 */
-function isProbe(name: string, args: unknown): boolean {
-	if (name === "bash") {
-		const command = commandOf(args);
-		return IMAGE_FILE.test(command) && MEASURE.test(command);
-	}
-	if (name === "read") return SLICE_NAME.test(pathOf(args));
-	if (name === "write") {
-		const path = pathOf(args);
-		const contents = contentsOf(args);
-		return SLICE_NAME.test(path) || (path.endsWith(".py") && IMAGE_FILE.test(contents) && MEASURE.test(contents));
-	}
-	return false;
-}
-
-function isWorkspaceProgress(name: string, args: unknown, result: Message | undefined): boolean {
-	if ((name !== "edit" && name !== "write") || result?.role !== "toolResult" || result.isError) return false;
-	return !isProbe(name, args);
+function isWorkspaceProgress(name: string, result: Message | undefined): boolean {
+	return (name === "edit" || name === "write") && result?.role === "toolResult" && !result.isError;
 }
 
 function sample(result: ToolResultMessage): string {

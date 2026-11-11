@@ -6,9 +6,9 @@
  */
 
 import { readlink, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { Resource, ResourceAddress, ResourceEntry, ResourceHandler, ResourceScope } from "@plume/contract";
-import { withinOrIs } from "../tools/home.ts";
+import { withinOrIs } from "@plume/platform";
 
 /**
  * scheme 是字母、数字、连字符，后面必须跟 `://`。
@@ -161,13 +161,6 @@ function sliceResource(resource: Resource, range: { from: number; to?: number })
 	const from = Math.max(1, range.from);
 	const to = Math.min(lines.length, range.to ?? range.from);
 	return { ...resource, content: lines.slice(from - 1, to).join("\n") };
-}
-
-/** `child` 按 `root` 解析；是绝对路径、爬出了 `root` 时是 null。给从地址、清单里读来的名字用。 */
-export function resolveInside(root: string, child: string): string | null {
-	if (isAbsolute(child)) return null;
-	const resolved = resolve(root, child);
-	return withinOrIs(resolve(root), resolved) ? resolved : null;
 }
 
 /**

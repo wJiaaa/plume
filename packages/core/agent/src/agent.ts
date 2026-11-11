@@ -62,15 +62,7 @@ import { projectRootsFor } from "./project-roots.ts";
 import { layerProjectSettings, projectLayerView, withProjectLayer } from "./project-config.ts";
 import { operateSessionFile } from "./file-operations.ts";
 import { managedMediaPath, readManagedMedia } from "./media-access.ts";
-import {
-	listSessionDirectory,
-	locateSessionFiles,
-	readListedFile,
-	readSessionFile,
-	readSessionFileBytes,
-	renameSessionFile,
-	sessionFilePath,
-} from "./files.ts";
+import { listSessionDirectory, locateSessionFiles, readListedFile, readSessionFile, readSessionFileBytes, sessionFilePath } from "./files.ts";
 import { foldRetry, settleHiccups } from "./hiccups.ts";
 import { errorText, HookError, type HostPages, PluginHost } from "./host.ts";
 import { activeLocale, setLocale, text } from "./i18n.ts";
@@ -978,7 +970,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	async function buildContext(session: Session): Promise<ModelContext> {
 		const settings = await readSessionSettings(session);
-		const { provider, model } = resolveModel(settings, modelOf(session));
+		const { model } = resolveModel(settings, modelOf(session));
 		const input: ModelContext = {
 			sessionId: session.summary.id,
 			cwd: session.summary.cwd,
@@ -990,7 +982,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			systemPrompt: "",
 			sections: [],
 			// 压缩过的话是摘要加之后的原文，被剪过的结果换成一行（见 `historyFor`），重复的结果换成「这是第 N 次」。
-			messages: structuredClone(replaceRepeats(historyFor(await messagesOf(session), await recordOf(session), provider, model), session.repetition.replaced)),
+			messages: structuredClone(replaceRepeats(historyFor(await messagesOf(session), await recordOf(session)), session.repetition.replaced)),
 			tools: host.toolSpecs(),
 		};
 		await restoreImages(mediaDir, input.messages);
@@ -2449,12 +2441,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async listDirectory(sessionId, path) {
 			const { summary } = find(sessionId);
 			return listSessionDirectory(summary.cwd, path, sessionRoots(summary));
-		},
-		async renameFile(sessionId, path, name) {
-			const { summary } = find(sessionId);
-			const to = await renameSessionFile(summary.cwd, path, name, sessionRoots(summary));
-			emit({ type: "fileMoved", from: resolve(summary.cwd, path), to: resolve(summary.cwd, to) });
-			return to;
 		},
 		async fileOperation(sessionId, operation) {
 			const { summary } = find(sessionId);

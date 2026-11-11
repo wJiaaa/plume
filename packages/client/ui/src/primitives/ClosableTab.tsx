@@ -20,7 +20,6 @@ export function ClosableTab({
 	tip,
 	onContextMenu,
 	className = "",
-	labelClassName = "",
 	...data
 }: DataAttributes & {
 	children: ReactNode;
@@ -32,7 +31,6 @@ export function ClosableTab({
 	tip?: string;
 	onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
 	className?: string;
-	labelClassName?: string;
 }) {
 	return (
 		<div
@@ -43,14 +41,7 @@ export function ClosableTab({
 				current ? "bg-card-hover text-ink" : "text-ink-faint hover:bg-card-hover/60 hover:text-ink"
 			} ${className}`}
 		>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={current}
-				data-plume-tip={tip}
-				onClick={onSelect}
-				className={`py-1 text-detail whitespace-nowrap ${labelClassName}`}
-			>
+			<button type="button" role="tab" aria-selected={current} data-plume-tip={tip} onClick={onSelect} className="py-1 text-detail whitespace-nowrap">
 				{children}
 			</button>
 			<button

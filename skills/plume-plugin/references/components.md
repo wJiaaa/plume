@@ -265,7 +265,6 @@ export function TextArea({
 	onChange,
 	shell = "",
 	className = "",
-	fieldRef,
 	resizable = false,
 	...rest
 }: {
@@ -275,7 +274,6 @@ export function TextArea({
 	shell?: string;
 	/** 字那一层的额外类：等宽、字号、`h-[180px]` 这类只跟可写区域有关的。 */
 	className?: string;
-	fieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 	/** 能不能用鼠标拉高。只给写长文的地方，比如一份系统提示词。 */
 	resizable?: boolean;
 } & Omit<ComponentPropsWithoutRef<"textarea">, "value" | "onChange" | "className" | "ref">)
@@ -1071,14 +1069,12 @@ export const MENU_MAX_HEIGHT = 340;
 export function Overlay({
 	children,
 	onClose,
-	align = "center",
 	width = 460,
 	label,
 	returnFocus,
 }: {
 	children: React.ReactNode | ((dismiss: Dismiss) => React.ReactNode);
 	onClose: () => void;
-	align?: "center" | "bottom";
 	width?: number;
 	label?: string;
 	returnFocus?: HTMLElement;
@@ -1113,14 +1109,6 @@ export interface CardProps {
 
 ```tsx
 export function CodeBlock({ children }: { children: string })
-```
-
-### `DiffView`
-
-源码：`packages/client/ui/src/index.tsx`
-
-```tsx
-export function DiffView({ before, after }: { before: string; after: string })
 ```
 
 ## 审批卡
@@ -1276,28 +1264,7 @@ export function PanelEmpty({
 
 ```tsx
 /** 留住少数几个看过的页面；藏起来的页面暂停 effect，保留局部状态。 */
-export function RetainedViews<T extends string>({
-	active,
-	render,
-	limit = 3,
-	pageClassName = "plume-page-enter",
-	slide,
-}: {
-	active: T;
-	render: (key: T) => React.ReactNode;
-	limit?: number;
-	/** 到达时的类。不同的页面可以换一种更长的淡入加升起。 */
-	pageClassName?: string;
-	/**
-	 * 标签，按标签条上的顺序：每次切换，新页面从它所在的那一侧滑进来并淡入，而不是一帧之内换掉。
-	 *
-	 * 用 Web Animations API 在布局 effect 里播，不用类。用类的话——见下面 `seen` 的注释——从 `display: none`
-	 * 回来的页面会先在终点画一帧，动画才接上。布局 effect 在页面显示之后、任何东西画出来之前跑，所以谁看到的
-	 * 第一帧都已经是滑入的第一帧。回到一个页面也播：标签条是来回切的地方，只在第一次有动画的切换，第二次读起来
-	 * 就像坏了。
-	 */
-	slide?: readonly T[];
-})
+export function RetainedViews<T extends string>({ active, render, limit = 3 }: { active: T; render: (key: T) => React.ReactNode; limit?: number })
 ```
 
 ### `useNarrow`
@@ -1370,20 +1337,8 @@ export function PageTopRow({
  *
  * 轨道是这个记号的重点，不是装饰：亮弧单独转的话，图形的轮廓跟着弧一起走，在按钮那个方寸
  * 之间会读成「有东西在里面甩」。垫一圈淡的，形状就恒定是一个完整的圆，动的只有亮处。
- *
- * 轨道浓度走 `--plume-track`，默认 0.18。实心底的按钮（`bg-ink`、`bg-accent`）上 `currentColor`
- * 是底色的反色，0.18 基本看不见，那几处传 `onFill`——见 `ui/motion.css` 里那一档的注释。
  */
-export function ActionSpinner({
-	size = 14,
-	className = "",
-	onFill = false,
-}: {
-	size?: number;
-	className?: string;
-	/** 画在实心底的按钮上（`bg-ink` / `bg-accent`），轨道要更浓才看得见。 */
-	onFill?: boolean;
-})
+export function ActionSpinner({ size = 14, className = "" }: { size?: number; className?: string })
 ```
 
 ### `BreatheLoader`
@@ -1871,16 +1826,11 @@ export function CountUp({
 	className,
 	/** 走动中的数怎么写。默认是四舍五入的整数。 */
 	format = plain,
-	bidirectional,
-	ms,
 	...rest
 }: {
 	value: number;
 	className?: string;
 	format?: (shown: number) => string;
-	/** 往下也走——见 `useCountUp`。给按更短的时段重算的读数。 */
-	bidirectional?: boolean;
-	ms?: number;
 } & Omit<React.ComponentProps<"span">, "className" | "children">)
 ```
 
@@ -2034,26 +1984,13 @@ type Control = { open: boolean; onToggle: () => void; defaultOpen?: never } | { 
 源码：`packages/client/ui/src/avatar/AgentAvatar.tsx`
 
 ```tsx
-export function AgentAvatar({
-	avatar,
-	size = 20,
-	mood = "idle",
-	badge = null,
-	interactive = true,
-	host,
-	seed = "",
-	label,
-	cheer = null,
-	className = "",
-}: AgentAvatarProps)
+export function AgentAvatar({ avatar, size = 20, mood = "idle", interactive = true, host, seed = "", label, cheer = null, className = "" }: AgentAvatarProps)
 
 export interface AgentAvatarProps {
 	avatar: Avatar;
 	/** 像素边长。 */
 	size?: number;
 	mood?: AvatarMood;
-	/** 右下角的小圆点：在跑是强调色、会一圈圈往外扩；出错是红的。 */
-	badge?: "running" | "failed" | null;
 	/**
 	 * 悬停时眼睛跟着指针、身子弹一下。默认开。
 	 *
@@ -2817,23 +2754,10 @@ export const card = {
 };
 ```
 
-### `actions`
-
-```ts
-/** 卡片底部一行：左边是说明，右边是按钮。 */
-export const actions = {
-	row: "mt-2.5 flex items-center gap-2",
-	note: "flex-1 text-caption text-ink-muted",
-};
-```
-
 ### `code`
 
 ```ts
 export const code = {
 	block: `${PRE} px-2.5 py-2 break-words whitespace-pre-wrap`,
-	diff: `${PRE} py-1.5`,
-	diffLine: "px-2.5 break-words whitespace-pre-wrap",
-	diffKind: { same: "", add: "bg-diff-add", remove: "bg-diff-remove" },
 };
 ```

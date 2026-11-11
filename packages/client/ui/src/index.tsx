@@ -18,7 +18,6 @@ export { activeLocale, translate } from "./i18n/translate.ts";
 
 export * from "./avatar/AgentAvatar.tsx";
 export * from "./avatar/AvatarPile.tsx";
-export * from "./avatar/AvatarStack.tsx";
 export * from "./avatar/art.ts";
 export * from "./fileIcon.tsx";
 export * from "./hooks/useCopied.ts";
@@ -58,10 +57,8 @@ export * from "./lib/hour-style.ts";
 export * from "./lib/number-draft.ts";
 export * from "./lib/relative-time.ts";
 export * from "./lib/tiling.ts";
-export * from "./lib/typing.ts";
 export * from "./motion/RollWords.tsx";
 export * from "./motion/RollingText.tsx";
-export * from "./motion/TypedText.tsx";
 export * from "./motion/freeze.ts";
 export * from "./motion/held.ts";
 export * from "./motion/loaders.tsx";
@@ -87,10 +84,8 @@ export * from "./primitives/Caret.tsx";
 export * from "./primitives/ChoiceMark.tsx";
 export * from "./primitives/ClosableTab.tsx";
 export * from "./primitives/CountUp.tsx";
-export * from "./primitives/GitHubMark.tsx";
 export * from "./primitives/IconButton.tsx";
 export * from "./primitives/MarkNumber.tsx";
-export * from "./primitives/RowDeleteButton.tsx";
 export * from "./primitives/Skeleton.tsx";
 export * from "./primitives/TabStrip.tsx";
 export * from "./primitives/Text.tsx";
@@ -175,50 +170,6 @@ function ScrollingPre({ className, children }: { className: string; children: Re
 
 export function CodeBlock({ children }: { children: string }) {
 	return <ScrollingPre className={code.block}>{children}</ScrollingPre>;
-}
-
-type DiffLine = { kind: "same" | "add" | "remove"; text: string };
-
-/** 按行比较。用 LCS，够看小段改动；大文件的 diff 不在这里做。 */
-export function diffLines(before: string, after: string): DiffLine[] {
-	const a = before.split("\n");
-	const b = after.split("\n");
-	const lcs = Array.from({ length: a.length + 1 }, () => Array.from<number>({ length: b.length + 1 }).fill(0));
-	for (let i = a.length - 1; i >= 0; i--) {
-		for (let j = b.length - 1; j >= 0; j--) {
-			const row = lcs[i] as number[];
-			row[j] = a[i] === b[j] ? (lcs[i + 1]?.[j + 1] ?? 0) + 1 : Math.max(lcs[i + 1]?.[j] ?? 0, row[j + 1] ?? 0);
-		}
-	}
-	const lines: DiffLine[] = [];
-	let i = 0;
-	let j = 0;
-	while (i < a.length || j < b.length) {
-		if (i < a.length && j < b.length && a[i] === b[j]) {
-			lines.push({ kind: "same", text: a[i++] as string });
-			j++;
-		} else if (i < a.length && (j >= b.length || (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))) {
-			// 两边一样长时先删后加，和常见 diff 的顺序一致。
-			lines.push({ kind: "remove", text: a[i++] as string });
-		} else {
-			lines.push({ kind: "add", text: b[j++] as string });
-		}
-	}
-	return lines;
-}
-
-const MARKS = { same: " ", add: "+", remove: "-" };
-
-export function DiffView({ before, after }: { before: string; after: string }) {
-	return (
-		<ScrollingPre className={code.diff}>
-			{diffLines(before, after).map((line, index) => (
-				<div key={index} data-diff={line.kind} className={`${code.diffLine} ${code.diffKind[line.kind]}`}>
-					{MARKS[line.kind]} {line.text}
-				</div>
-			))}
-		</ScrollingPre>
-	);
 }
 
 export * from "./inputs/ColorField.tsx";

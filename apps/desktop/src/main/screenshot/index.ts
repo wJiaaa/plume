@@ -12,7 +12,6 @@ import type { ScreenRect } from "@plume/contract/ui";
 import { normalizeShortcut } from "./accelerator.ts";
 import {
 	closeOverlay,
-	configureOverlay,
 	copyImage,
 	destroyOverlay,
 	dismissStrayOverlay,
@@ -43,11 +42,7 @@ function isRect(value: unknown): value is ScreenRect {
 	return typeof rect === "object" && rect !== null && [rect.x, rect.y, rect.width, rect.height].every((n) => typeof n === "number" && Number.isFinite(n));
 }
 
-/**
- * @param smoke 冒烟验证：不预热、不真的注册全局快捷键（会抢走开发者机器上的按键），选文件夹直接给冒烟目录。
- */
-export function registerScreenshot({ smoke }: { smoke?: { dir: string } }): void {
-	configureOverlay({ smoke: Boolean(smoke) });
+export function registerScreenshot(): void {
 	const launchedAt = Date.now();
 	let warmScheduled = false;
 	/**
@@ -55,7 +50,7 @@ export function registerScreenshot({ smoke }: { smoke?: { dir: string } }): void
 	 * 只用按钮截屏的插件第一次截屏慢一些。
 	 */
 	const scheduleWarm = () => {
-		if (warmScheduled || smoke) return;
+		if (warmScheduled) return;
 		warmScheduled = true;
 		setTimeout(warmOverlay, Math.max(0, launchedAt + WARM_AFTER_LAUNCH_MS - Date.now()));
 	};
@@ -75,7 +70,7 @@ export function registerScreenshot({ smoke }: { smoke?: { dir: string } }): void
 		const current = shortcuts.get(plugin);
 		if ((current ?? "") === shortcut) return "ok";
 		if (current !== undefined) {
-			if (!smoke) globalShortcut.unregister(current);
+			globalShortcut.unregister(current);
 			shortcuts.delete(plugin);
 		}
 		if (!shortcut) return "ok";
@@ -84,17 +79,15 @@ export function registerScreenshot({ smoke }: { smoke?: { dir: string } }): void
 			console.warn(`[screen] ${plugin} 的快捷键 ${shortcut} 已经给了另一个插件`);
 			return "taken";
 		}
-		if (!smoke) {
-			try {
-				// Windows 上 Alt+A 常被微信截图占着；注册失败只是返回 false，记一笔，用户说按了没反应时有据可查。
-				if (!globalShortcut.register(shortcut, startFromShortcut)) {
-					console.warn(`[screen] ${plugin} 的快捷键注册失败（多半被别的程序占着）：${shortcut}`);
-					return "taken";
-				}
-			} catch (error) {
-				console.warn(`[screen] ${plugin} 的快捷键写法不认识：${shortcut}`, error);
-				return "invalid";
+		try {
+			// Windows 上 Alt+A 常被微信截图占着；注册失败只是返回 false，记一笔，用户说按了没反应时有据可查。
+			if (!globalShortcut.register(shortcut, startFromShortcut)) {
+				console.warn(`[screen] ${plugin} 的快捷键注册失败（多半被别的程序占着）：${shortcut}`);
+				return "taken";
 			}
+		} catch (error) {
+			console.warn(`[screen] ${plugin} 的快捷键写法不认识：${shortcut}`, error);
+			return "invalid";
 		}
 		shortcuts.set(plugin, shortcut);
 		scheduleWarm();
@@ -102,8 +95,6 @@ export function registerScreenshot({ smoke }: { smoke?: { dir: string } }): void
 	});
 
 	ipcMain.handle("plume:screen:pick-directory", async (event, title: unknown): Promise<string | null> => {
-		// 冒烟验证没有人点对话框。
-		if (smoke) return smoke.dir;
 		const options: OpenDialogOptions = { title: typeof title === "string" ? title : undefined, properties: ["openDirectory", "createDirectory"] };
 		const window = BrowserWindow.fromWebContents(event.sender);
 		const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);

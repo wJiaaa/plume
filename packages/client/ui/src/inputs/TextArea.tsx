@@ -27,7 +27,6 @@ export function TextArea({
 	onChange,
 	shell = "",
 	className = "",
-	fieldRef,
 	resizable = false,
 	...rest
 }: {
@@ -37,12 +36,10 @@ export function TextArea({
 	shell?: string;
 	/** 字那一层的额外类：等宽、字号、`h-[180px]` 这类只跟可写区域有关的。 */
 	className?: string;
-	fieldRef?: React.RefObject<HTMLTextAreaElement | null>;
 	/** 能不能用鼠标拉高。只给写长文的地方，比如一份系统提示词。 */
 	resizable?: boolean;
 } & Omit<ComponentPropsWithoutRef<"textarea">, "value" | "onChange" | "className" | "ref">) {
-	const own = useRef<HTMLTextAreaElement>(null);
-	const field = fieldRef ?? own;
+	const field = useRef<HTMLTextAreaElement>(null);
 	const host = useRef<HTMLDivElement>(null);
 	useFieldFade(field, host);
 

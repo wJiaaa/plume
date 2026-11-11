@@ -5,7 +5,7 @@ import type { SandboxProcess, SandboxService } from "@plume/contract";
 import { words } from "../messages.ts";
 import { beginMutation } from "./change-lock.ts";
 import { recordFileChange } from "./file-changes.ts";
-import { withinOrIs } from "./home.ts";
+import { withinOrIs } from "@plume/platform";
 import { assessRead } from "./read-access.ts";
 import { openRepo, withRepoView, type HostGit, type HostRepo } from "./host-git.ts";
 import type { ToolContext, ToolResult } from "./types.ts";

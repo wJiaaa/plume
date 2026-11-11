@@ -22,7 +22,6 @@ import {
 	type WebContents,
 } from "electron";
 import type { ScreenCaptureSession, ScreenRect } from "@plume/contract/ui";
-import { beginCaptureLog, captureLog } from "./debug.ts";
 import { canvasColorSpace, pickDisplaySource } from "./displays.ts";
 import { loadScreenPage, screenPagePreferences } from "./page.ts";
 import { isPinWindow } from "./pin.ts";
@@ -43,8 +42,6 @@ let overlayLoading: Promise<BrowserWindow> | null = null;
 let markListening: { resolve: () => void; reject: (error: Error) => void } | null = null;
 /** 每开始一轮截屏加一。上一轮收起时排下的延时动作，看到它变了就不再碰窗口（窗口已经归新的一轮）。 */
 let generation = 0;
-/** 冒烟验证：没有屏幕录制权限时不去触发系统的授权提示（没有人点）。 */
-let smoke = false;
 
 /**
  * 这一次截屏的全部状态，收在一个对象里：一轮结束该清掉哪些只在 `endCapture` 一处，加字段也有一处明确该改的地方。
@@ -126,10 +123,6 @@ const HIDE_SETTLE_MS = 80;
 /** 在页面里等下一帧：动画帧回调运行时，合成出来的帧已经存在。 */
 const NEXT_FRAME = "new Promise((done) => requestAnimationFrame(() => done(true)))";
 
-export function configureOverlay(options: { smoke: boolean }): void {
-	smoke = options.smoke;
-}
-
 export function isOverlay(window: BrowserWindow): boolean {
 	return overlay !== null && window === overlay;
 }
@@ -203,21 +196,13 @@ function mainWindow(predicate: (window: BrowserWindow) => boolean = () => true):
  */
 async function captureDisplay(display: Display): Promise<Snapshot | null> {
 	const scaleFactor = display.scaleFactor || 1;
-	// 冒烟不拍真屏幕：跑冒烟的机器不一定给了屏幕录制权限，开发者屏幕上的东西也不该进 .smoke/ 的截图。给一块灰底，浮层照常走一遍。
-	if (smoke) {
-		const width = Math.round(display.bounds.width * scaleFactor);
-		const height = Math.round(display.bounds.height * scaleFactor);
-		return { pixels: Buffer.alloc(width * height * 4, 0x80), width, height, scaleFactor, colorSpace: "srgb" };
-	}
 	// 还没给屏幕录制权限是一种状态，不是错误：去拍一次就是请系统弹出它自己的授权提示（那就是全部的说明），
 	// 这一次安静地返回。权限给了以后要重启进程才生效，所以授权的结果要到之后的某一次才看得到。
 	if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") {
-		captureLog("snapshot: no screen recording access — asking the system");
 		await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } }).catch(() => []);
 		return null;
 	}
 	try {
-		const askedAt = Date.now();
 		const sources = await desktopCapturer.getSources({
 			types: ["screen"],
 			thumbnailSize: { width: Math.round(display.bounds.width * scaleFactor), height: Math.round(display.bounds.height * scaleFactor) },
@@ -225,7 +210,6 @@ async function captureDisplay(display: Display): Promise<Snapshot | null> {
 		});
 		// macOS 拒绝权限时不报错，只是一张也不给；明说出来，否则表现只是快捷键按了没反应。
 		if (sources.length === 0) {
-			captureLog("snapshot: no sources");
 			console.error("[screen] 没有拿到任何屏幕画面，多半是没有屏幕录制权限");
 			return null;
 		}
@@ -242,14 +226,6 @@ async function captureDisplay(display: Display): Promise<Snapshot | null> {
 				candidates: sources.map((source) => ({ id: source.id, display_id: source.display_id, size: source.thumbnail.getSize() })),
 			});
 		}
-		const gotAt = Date.now();
-		// 「截到另一块屏幕」从外面看不出原因：画面是好的，只是属于别的屏。挑了哪张、凭什么挑、所有候选都记下。
-		captureLog("snapshot: source picked", {
-			how: choice?.how,
-			picked: choice ? { id: sources[choice.index]!.id, displayId: sources[choice.index]!.display_id } : null,
-			wanted: { id: display.id, bounds: display.bounds, scaleFactor },
-			candidates: sources.map((source) => ({ id: source.id, displayId: source.display_id, size: source.thumbnail.getSize() })),
-		});
 		const image = choice ? sources[choice.index]!.thumbnail : undefined;
 		if (!image || image.isEmpty()) {
 			console.error("[screen] 拍到的画面是空的");
@@ -258,9 +234,7 @@ async function captureDisplay(display: Display): Promise<Snapshot | null> {
 		const size = image.getSize();
 		// 直接给像素，不编码成 PNG：整屏 PNG 编码要上百毫秒，还得在页面里再解一遍，这段时间都算在浮层落下之前。
 		// 平台给的是 BGRA，换成 ImageData 要的 RGBA；放在这里换，免得在要画图的那个线程上跑一遍几十 MB 的循环。
-		const bitmapAt = Date.now();
 		const pixels = image.toBitmap();
-		const swapAt = Date.now();
 		for (let i = 0; i < pixels.length; i += 4) {
 			const b = pixels[i]!;
 			pixels[i] = pixels[i + 2]!;
@@ -268,17 +242,8 @@ async function captureDisplay(display: Display): Promise<Snapshot | null> {
 		}
 		const colorSpace = canvasColorSpace(display.colorSpace);
 		// 浮层落下前的等待几乎全在这里：getSources 是系统拍照，toBitmap、换通道是 Plume 自己花的。
-		captureLog("snapshot: taken", {
-			getSources: gotAt - askedAt,
-			toBitmap: swapAt - bitmapAt,
-			bgraSwap: Date.now() - swapAt,
-			size,
-			bytes: pixels.length,
-			colorSpace,
-		});
 		return { pixels, width: size.width, height: size.height, scaleFactor, colorSpace };
 	} catch (error) {
-		captureLog("snapshot: failed", { error: String(error) });
 		console.error("[screen] 拍屏幕失败：", error);
 		return null;
 	}
@@ -320,7 +285,6 @@ function ensureOverlay(): Promise<BrowserWindow> {
 	// 再设一次大小：窗口建在工作区里（屏幕减去菜单栏和 Dock），要等上面的层级允许它伸出去，整屏的大小才生效。
 	// 必须在建窗口时就设对：窗口第一次上屏时按当时的大小分配画面，短了的那块会被拉伸一两帧，看上去整个屏幕缩放了一下。
 	window.setBounds(bounds);
-	captureLog("overlay: window built", { asked: bounds, got: window.getBounds() });
 
 	window.on("closed", () => {
 		// i18n-exempt：给插件作者看的报错，经 ui.screen.start() 的 rejection 到插件。
@@ -342,7 +306,6 @@ function ensureOverlay(): Promise<BrowserWindow> {
 		markListening = {
 			resolve: () => {
 				markListening = null;
-				captureLog("overlay: page listening");
 				resolve(window);
 			},
 			reject,
@@ -389,14 +352,12 @@ function warmFirstPresentation(window: BrowserWindow): void {
 	// 看不见不等于不在：透明的全屏置顶窗口照样吃掉屏幕上的每一下点击，这几帧里它必须不挡鼠标。
 	window.setIgnoreMouseEvents(true);
 	window.showInactive();
-	captureLog("warm: first presentation", { bounds: window.getBounds(), display: screen.getPrimaryDisplay().bounds });
 	// 要等合成器出一帧（分配画面的就是这一帧），早藏回去就白做了。
 	paint.warming = setTimeout(() => {
 		paint.warming = null;
 		if (window.isDestroyed()) return;
 		window.hide();
 		window.setOpacity(1);
-		captureLog("warm: first presentation done");
 	}, 220);
 }
 
@@ -405,7 +366,6 @@ function endWarmPresentation(): void {
 	if (!paint.warming) return;
 	clearTimeout(paint.warming);
 	paint.warming = null;
-	captureLog("warm: first presentation cut short by a capture");
 	if (!overlay || overlay.isDestroyed()) return;
 	overlay.hide();
 	overlay.setOpacity(1);
@@ -418,12 +378,10 @@ function endWarmPresentation(): void {
  */
 async function warmCapturePipeline(): Promise<void> {
 	if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") {
-		captureLog("warm: skipped — no screen recording access yet");
 		return;
 	}
 	const display = screen.getPrimaryDisplay();
 	const scale = display.scaleFactor || 1;
-	const startedAt = Date.now();
 	await desktopCapturer
 		.getSources({
 			types: ["screen"],
@@ -432,30 +390,16 @@ async function warmCapturePipeline(): Promise<void> {
 		})
 		// 预热失败只是第一次截屏没有提前量。
 		.catch(() => undefined);
-	captureLog("warm: capture pipeline ready", { ms: Date.now() - startedAt });
 }
 
 /**
  * 开始一次截屏：指针所在的那块屏幕。拿不到快照（没有屏幕录制权限、拍失败）时返回 false，不开浮层。
  */
 export async function startCapture(): Promise<boolean> {
-	beginCaptureLog();
 	// 在任何东西显示之前问：过一会儿浮层自己就是有焦点的窗口，答案永远是「是」。
 	const windows = BrowserWindow.getAllWindows();
 	capture.cameFromApp = windows.some((window) => !window.isDestroyed() && window.isFocused());
 	capture.focusedBefore = windows.find((window) => window !== overlay && !window.isDestroyed() && window.isFocused()) ?? null;
-	captureLog("session start", {
-		cameFromApp: capture.cameFromApp,
-		windows: windows
-			.filter((window) => !window.isDestroyed())
-			.map((window) => ({
-				id: window.id,
-				focused: window.isFocused(),
-				visible: window.isVisible(),
-				minimized: window.isMinimized(),
-				bounds: window.getBounds(),
-			})),
-	});
 
 	generation++;
 	endWarmPresentation();
@@ -464,27 +408,17 @@ export async function startCapture(): Promise<boolean> {
 
 	const cursor = screen.getCursorScreenPoint();
 	const display = screen.getDisplayNearestPoint(cursor);
-	captureLog("display", {
-		cursor,
-		id: display.id,
-		bounds: display.bounds,
-		workArea: display.workArea,
-		scaleFactor: display.scaleFactor,
-		rotation: display.rotation,
-	});
 	const { bounds } = display;
 	const takingOver = await clearOverlayForSnapshot();
 	// 快照和窗口一起等：浮层落下前的等待就是桌面看上去跳一下的原因。第一次之后窗口早就建好了，剩下的只有拍屏本身。
 	const [snapshot, window] = await Promise.all([captureDisplay(display), ensureOverlay()]);
 	if (!snapshot || window.isDestroyed()) {
-		captureLog("abandoned: no snapshot or no window", { snapshot: Boolean(snapshot), takingOver });
 		// 为一张没来的快照清空了的浮层是透明的、在一切之上，不能留着。
 		if (takingOver) dropClearedOverlay();
 		return false;
 	}
 	// 从这里起屏上的浮层是有意的。在动窗口之前就记上，亮出的任何安排都不会出现「它在屏上、这里却说没人要它」。
 	capture.active = true;
-	captureLog("snapshot + window ready", { snapshot: { width: snapshot.width, height: snapshot.height, scaleFactor: snapshot.scaleFactor }, takingOver });
 	coverDisplay(window, bounds);
 	// 撤掉上一次取色留下的点击穿透和预热留下的透明度：这一次是要被看、被画的。
 	window.setIgnoreMouseEvents(false);
@@ -502,7 +436,6 @@ function handOff(window: BrowserWindow, snapshot: Snapshot, bounds: ScreenRect, 
 	// 页面一直没说 ready（插件的浮层组件出错、或者忘了调）：作废这一轮，而不是亮出一块可能什么都没画的全屏窗口——
 	// 它挡着所有点击，Esc 也要靠那个组件来响应。
 	capture.failsafe = setTimeout(() => {
-		captureLog("failsafe: page never said ready");
 		console.error(`[screen] 截屏浮层 ${READY_TIMEOUT_MS} 毫秒内没有说背景画好了（ready），这一次作废`);
 		endCapture();
 		dropClearedOverlay();
@@ -531,7 +464,6 @@ export function overlayReady(session: unknown): void {
 	if (!pendingReveal || pendingReveal.session !== session) return;
 	const { reveal } = pendingReveal;
 	pendingReveal = null;
-	captureLog("ready: page drew the snapshot");
 	reveal();
 }
 
@@ -549,22 +481,18 @@ function revealOverlay(window: BrowserWindow, takingOver: boolean): void {
 	clearFailsafe();
 	if (window.isDestroyed()) return;
 	if (window.isVisible()) {
-		captureLog("reveal: already on screen", { focused: window.isFocused(), takingOver });
 		holdEscape(true);
 		window.focus();
 		if (takingOver) awaitPaint(window);
 		return;
 	}
 	window.setOpacity(0);
-	captureLog("reveal: before showInactive", { bounds: window.getBounds() });
 	window.showInactive();
-	captureLog("reveal: after showInactive", { bounds: window.getBounds(), visible: window.isVisible() });
 	holdEscape(true);
 	awaitPaint(window);
 	setTimeout(() => {
 		if (window.isDestroyed()) return;
 		window.focus();
-		captureLog("reveal: after focus", { focused: window.isFocused() });
 	}, 32);
 }
 
@@ -574,7 +502,6 @@ function awaitPaint(window: BrowserWindow): void {
 	paint.window = window;
 	paint.wait = wait;
 	paint.fallback = setTimeout(() => {
-		captureLog("reveal: shown without a paint report");
 		overlayPainted(wait);
 	}, PAINT_FALLBACK_MS);
 	window.webContents.executeJavaScript(NEXT_FRAME).then(
@@ -592,7 +519,6 @@ function overlayPainted(wait: object): void {
 	paint.wait = null;
 	if (!window || window.isDestroyed() || !window.isVisible()) return;
 	window.setOpacity(1);
-	captureLog("reveal: painted — overlay made visible");
 	stepMainAside(window);
 }
 
@@ -612,7 +538,6 @@ function stepMainAside(window: BrowserWindow): void {
 	capture.steppedAside = main;
 	putAside.add(main);
 	if (!window.isDestroyed()) window.focus();
-	captureLog("reveal: main window stepped aside", { overlayFocused: !window.isDestroyed() && window.isFocused() });
 }
 
 /**
@@ -627,13 +552,7 @@ function coverDisplay(window: BrowserWindow, bounds: ScreenRect): void {
 		);
 	};
 	window.setBounds(bounds);
-	if (!off()) {
-		captureLog("after setBounds", { asked: bounds, got: window.getBounds() });
-		return;
-	}
-	const first = window.getBounds();
-	window.setBounds(bounds);
-	captureLog("after setBounds", { asked: bounds, first, got: window.getBounds(), retried: true, stillOff: off() });
+	if (off()) window.setBounds(bounds);
 }
 
 /**
@@ -647,12 +566,10 @@ async function clearOverlayForSnapshot(): Promise<boolean> {
 	if (opacityUnsupported) {
 		window.hide();
 		await new Promise((done) => setTimeout(done, HIDE_SETTLE_MS));
-		captureLog("snapshot: overlay hidden out of the picture (no window opacity on this platform)");
 		return true;
 	}
 	window.setOpacity(0);
 	await new Promise((done) => setTimeout(done, CLEAR_SETTLE_MS));
-	captureLog("snapshot: overlay cleared out of the picture");
 	return true;
 }
 
@@ -666,7 +583,6 @@ function dropClearedOverlay(): void {
 	window.setIgnoreMouseEvents(true);
 	window.hide();
 	window.setOpacity(1);
-	captureLog("snapshot: cleared overlay put away — no capture to show");
 	if (!window.webContents.isDestroyed()) window.webContents.send("plume:screen:hidden");
 }
 
@@ -684,15 +600,8 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	const cover = overlay && !overlay.isDestroyed() && overlay.isVisible() ? overlay : null;
 	// 在任何提前返回之前：每条出路都结束这一轮，哪条漏了都会让 `dismissStrayOverlay` 永远不碰这个窗口。
 	endCapture();
-	captureLog("close: entered", {
-		foregroundOption: options?.foreground,
-		restoreFocus: options?.restoreFocus,
-		cameFromApp: capture.cameFromApp,
-		covering: Boolean(cover),
-	});
 	const steppedAside = releaseSteppedAside();
 	if (!cover) {
-		captureLog("close: nothing on screen");
 		return;
 	}
 
@@ -703,16 +612,13 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	 * 一起下去，等藏好了再标成隐藏（`settleOverlayHidden`）。
 	 */
 	const stepBack = process.platform === "darwin" && options?.restoreFocus !== false && options?.stepAside !== false && !foreground && !capture.cameFromApp;
-	captureLog("close: decided", { stepBack });
 	if (stepBack) {
 		app.hide();
-		captureLog("close: app.hide() called");
 		settleOverlayHidden();
 		return;
 	}
 
 	if (options?.restoreFocus === false) {
-		captureLog("close: superseded — overlay kept for the next capture");
 		return;
 	}
 
@@ -727,11 +633,9 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 		const back = capture.focusedBefore;
 		capture.focusedBefore = null;
 		if (back && back !== cover && !back.isDestroyed() && back.isVisible() && !back.isMinimized()) {
-			captureLog("close: cancelled — handing focus back under the overlay", { window: back.id });
 			hideOnceRefocused(cover, back);
 			return;
 		}
-		captureLog("close: cancelled — leaving every window where it is", { mainVisible: main?.isVisible() });
 		takeOverlayOff(cover);
 		settleOverlayHidden();
 		return;
@@ -743,7 +647,6 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	 * 不在前台的应用的窗口，只会在应用内部把它提上来，应用本身还在后面。
 	 */
 	if (main) {
-		captureLog("close: bringing forward under the overlay", { wasVisible: main.isVisible() });
 		if (main.isMinimized()) main.restore();
 		main.show();
 		putAside.delete(main);
@@ -752,7 +655,6 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	}
 	takeOverlayOff(cover);
 	settleOverlayHidden();
-	captureLog("close: done (brought forward)");
 }
 
 /**
@@ -782,20 +684,18 @@ function takeOverlayOff(cover: BrowserWindow): void {
 function hideOnceRefocused(cover: BrowserWindow, back: BrowserWindow): void {
 	const owner = generation;
 	let settled = false;
-	const askedAt = Date.now();
-	const hide = (how: "focus" | "gave up") => {
+	const hide = () => {
 		if (settled) return;
 		settled = true;
 		clearTimeout(giveUp);
-		captureLog("close: overlay hidden after focus came back", { how, ms: Date.now() - askedAt });
 		if (!back.isDestroyed()) back.removeListener("focus", onFocus);
 		// 这期间开始了下一轮，浮层归它了。
 		if (generation !== owner || cover.isDestroyed()) return;
 		takeOverlayOff(cover);
 		settleOverlayHidden();
 	};
-	const onFocus = () => setTimeout(() => hide("focus"), REFOCUS_REPAINT_MS);
-	const giveUp = setTimeout(() => hide("gave up"), REFOCUS_GIVE_UP_MS);
+	const onFocus = () => setTimeout(hide, REFOCUS_REPAINT_MS);
+	const giveUp = setTimeout(hide, REFOCUS_GIVE_UP_MS);
 	if (back.isFocused()) {
 		onFocus();
 		return;
@@ -821,7 +721,6 @@ function settleOverlayHidden(): void {
 		if (!window || window.isDestroyed() || generation !== owner) return;
 		window.hide();
 		window.setIgnoreMouseEvents(true);
-		captureLog("close: overlay settled hidden");
 		if (!window.webContents.isDestroyed()) window.webContents.send("plume:screen:hidden");
 	}, 250);
 }
@@ -849,7 +748,6 @@ export async function copyImage(png: string): Promise<void> {
 export function passThrough(on: boolean): void {
 	const window = overlay && !overlay.isDestroyed() ? overlay : null;
 	if (on) {
-		captureLog("colour picked — overlay is now click-through");
 		holdEscape(false);
 		window?.setIgnoreMouseEvents(true);
 		return;
@@ -869,7 +767,6 @@ export function dismissStrayOverlay(): void {
 		if (capture.active) return;
 		const window = overlay;
 		if (!window || window.isDestroyed()) return;
-		if (window.isVisible()) captureLog("activation: stray overlay taken off screen");
 		window.setIgnoreMouseEvents(true);
 		window.hide();
 	};

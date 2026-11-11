@@ -26,12 +26,12 @@
 | `FlowRow` | 转录里的过程行：思考、一段工具活、压缩、送达和来信那一行，插件的工具卡片画成一行时也用它（建议新会话写到一半、开始以后） | `ui/flow.css` |
 | `ApprovalFrame`、`ApprovalExpiry` | 审批卡的外框（收放的标题栏、类型小标签、倒计时、+N）和每秒走的「m:ss 后失效」；产品的通用审批卡、插件的提问卡共用外框，自己画外框的插件卡（计划、MCP 表单）只用倒计时 | Tailwind 类 |
 | `Sideways` | 横向标签栏，普通鼠标滚轮横滚，触摸板保持原生方向；PR 账号标签复用 | `ui/scroll.css` |
-| `CodeBlock`、`DiffView` | 工具输出、文件内容、改动对比 | `code` |
+| `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |
 | `useAnnotator`、`AnnotateCanvas`、`AnnotateToolbar` | 图片标注：标记清单和撤销（hook）、画标记的画布、深色工具条；看图器和截图插件共用 | `ui.css` 的 `.plume-image-*`、`.plume-annotate-*`（压在图上，颜色不跟主题） |
 | `useMovableBar`、`useToolbarPlacement`、`HANDLES` 等选区几何 | 标注工具条的落点和拖动：看图器里贴窗口底边、截图浮层里跟着选区；选区的手柄、移动、缩放 | 无 |
 | `PageTopRow` | 自己画顶行的页面（`ui.page` 的 `topRow`）每一栏最上面那一行：顶行高、整行拖窗口、行里的控件不拖动、贴左边那一栏给红绿灯让位 | Tailwind 类，`ui/controls.css` 的 `.plume-top-row` |
 
-只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`actions`（理由在左、按钮在右的一行）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
+只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
 
 悬停提示靠 `data-plume-tip` 属性，`main.tsx` 启动时调一次 `installTooltips()`。弹层只留在触发元素所在的那一列：正文是 `<main>`，面板列带 `plume-panel` 类。
 

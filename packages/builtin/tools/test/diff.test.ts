@@ -8,7 +8,7 @@
 
 import { execFileSync } from "node:child_process";
 import { expect, test } from "vitest";
-import { computeDiff } from "../src/diff.ts";
+import { computeDiff } from "@plume/platform";
 
 const lines = (n: number, line: (i: number) => string) => `${Array.from({ length: n }, (_, i) => line(i)).join("\n")}\n`;
 
@@ -92,7 +92,7 @@ test("小 diff 用最少的编辑次数，重复行也一样", () => {
 });
 
 test("大文件里相隔很远的两处改动在有限的堆里算得出来，仍是两处改动", () => {
-	const module = new URL("../src/diff.ts", import.meta.url).href;
+	const module = new URL("../../../infra/platform/src/line-diff.ts", import.meta.url).href;
 	const output = execFileSync(
 		process.execPath,
 		[

@@ -909,7 +909,7 @@ console.log(
 console.log(`  edit 成功后下一步就是重读同一文件：${readAfterEdit} / ${editsOk} 次 (${share(readAfterEdit, editsOk)})`);
 
 console.log("\n── 4. 重复检测这条闸门 ──");
-console.log(`  提醒（精确重复、翻页、切图测距合计）：${warns} 次`);
+console.log(`  提醒（精确重复、翻页合计）：${warns} 次`);
 console.log(`  改写成「第 N 次」的结果：${corrected} 条，省下 ${tk(correctedChars).toLocaleString()} token (${share(correctedChars, allChars)})`);
 console.log(`  会被 exhausted() 停掉的会话：${wouldStop} 个；实际被叫停（stalled）的：${lastStops.get("stalled") ?? 0} 个（只看最后一轮）`);
 if (wouldStop === 0) console.log("  ⚠ 一个都没有 —— 这条停止线在这批数据上是死的");

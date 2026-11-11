@@ -1,7 +1,7 @@
 /**
  * Windows 上代替命令运行的那层包装。
  *
- * macOS 和 Linux 约束一条命令，是在它前面放一个程序：`sandbox-exec -p … --`、`bwrap --ro-bind / / --`。Windows 没有这样的程序：
+ * macOS 约束一条命令，是在它前面放一个程序：`sandbox-exec -p … --`。Windows 没有这样的程序：
  * 在那里约束意味着自己造令牌、自己调 `CreateProcessAsUserW`，这么多 FFI 不该在还要转发输出的 agent 进程里做。
  *
  * 所以这个文件*就是*那个程序。后端像起另外两种包装一样起它，它做 Win32 的活，再让真正的命令继承调用方的 stdio 句柄跑起来：
@@ -107,7 +107,7 @@ function runConfined(args: Args): number {
 	/*
 	 * 临时目录：每个平台的 `workspace-write` 都承诺了它。
 	 *
-	 * Seatbelt 和 bwrap 授权 `/tmp` 和 `os.tmpdir()`；只授权工作区的话，受限命令连一个临时文件都建不了：Git Bash 里每个 heredoc 都失败
+	 * Seatbelt 授权 `/tmp` 和 `os.tmpdir()`；只授权工作区的话，受限命令连一个临时文件都建不了：Git Bash 里每个 heredoc 都失败
 	 * （`cannot create temp file for here-document`），经 `%TEMP%` 中转的工具也一样。不授权用户自己的临时目录：它被用户跑的每样东西共用，
 	 * 授权会在其他程序的文件上活过这个会话。这里按工作区建一个私有的，授权给它自己的身份，作为命令的 `TEMP`、`TMP`、`TMPDIR` 交出去
 	 * （也是 Git Bash 挂 `/tmp` 的地方）。

@@ -6,7 +6,7 @@
 
 import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
-import { basename, delimiter, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { RpcChannel, remote, serve } from "@plume/rpc";
 import {
 	app,
@@ -187,29 +187,26 @@ async function boot(): Promise<void> {
 		resourcesPath: process.resourcesPath,
 	});
 	const dataDir = plumeHome();
-	// 冒烟验证用自己目录里的模型设置，不碰用户的。
-	const settingsFile = smoke ? join(smoke.dir, "model.json") : await userSettingsFile();
-	// 插件：从线上市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的（冒烟时都在冒烟目录里），
-	// 加上 PLUME_PLUGIN_PATHS 下本机直接放的。开发版和装好的应用用同一份；同名时谁生效见 market.ts 的 found。
+	const settingsFile = await userSettingsFile();
+	// 插件：从线上市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的
+	// （冒烟时 PLUME_HOME 在冒烟目录里）。开发版和装好的应用用同一份；同名时谁生效见 market.ts 的 found。
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
 	const builtinDir = app.isPackaged ? join(process.resourcesPath, "builtin") : resolve(app.getAppPath(), "../../packages/builtin");
-	const installDir = smoke ? join(smoke.dir, "plugins") : join(dataDir, "plugins");
-	const uploadDir = smoke ? join(smoke.dir, "local-plugins") : join(dataDir, "local-plugins");
+	const installDir = join(dataDir, "plugins");
+	const uploadDir = join(dataDir, "local-plugins");
 	const sdkDir = app.isPackaged ? join(process.resourcesPath, "plugin-sdk") : resolve(app.getAppPath(), "../../packages/sdk/plugin-sdk");
 	// 写插件用的命令 ~/.plume/bin/plume-plugin（见 plugin-cli.ts）；写不了不耽误应用本身。
-	const cliDir = smoke ? join(smoke.dir, "bin") : join(plumeHome(), "bin");
+	const cliDir = join(dataDir, "bin");
 	const pluginCli =
 		app.isPackaged || smoke
 			? await writePluginCli(cliDir, sdkDir).catch((error: unknown) => void console.warn(`写不了 plume-plugin 启动脚本：${String(error)}`))
 			: undefined;
-	const localRoots = (process.env.PLUME_PLUGIN_PATHS ?? "").split(delimiter).filter(Boolean);
 	const pluginDirs = new Map<string, string>();
 	const market = createMarket({
 		catalogUrl: MARKET_URL,
 		builtinDir,
 		installDir,
 		uploadDir,
-		localRoots,
 		settingsFile: join(dataDir, "market.json"),
 		pluginDirs,
 		agent: { addPlugin: async (dir) => await agent.addPlugin(dir), removePlugin: async (key) => await agent.removePlugin(key) },
@@ -230,7 +227,7 @@ async function boot(): Promise<void> {
 	registerOpenTargetsIpc();
 	registerUpdateIpc({ offline: Boolean(smoke) });
 	// 截屏的宿主能力（浮层、钉图窗口、剪贴板、全局快捷键），要在开主窗口之前登记：它得看着主窗口什么时候关。
-	registerScreenshot({ smoke });
+	registerScreenshot();
 	// 插件的网页（ctx.pages）：页面一出生就要挂上规矩，所以在开窗之前登记。事件推给 agent 进程里的插件。
 	registerWebPages({ emit: (plugin, event) => void agent.pageEvent(plugin, event).catch(() => {}) });
 
@@ -243,7 +240,7 @@ async function boot(): Promise<void> {
 			[SETTINGS_FILE_ENV]: settingsFile,
 			[PLUGINS_ENV]: JSON.stringify(plugins),
 			// 会在 Plume 开着时被换掉的插件目录；内置插件不在里面。
-			[NATIVE_ROOTS_ENV]: JSON.stringify([installDir, uploadDir, ...localRoots]),
+			[NATIVE_ROOTS_ENV]: JSON.stringify([installDir, uploadDir]),
 			[LOCALE_ENV]: resolvedLocale(),
 			// 冒烟验证不访问外网，断言的目录值也不能随上游变。
 			...(smoke ? {} : { [CATALOG_FILE_ENV]: join(plumeHome(), "model-catalog.json") }),

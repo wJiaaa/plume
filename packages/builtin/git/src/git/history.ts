@@ -8,7 +8,7 @@ import type { DiffFile, FileStatus, GitCommit, OpResult, RefDiff, RemoteResult }
 import { readBlobs, type BlobRead } from "./blobs.ts";
 import { capHunks, classify } from "./diff.ts";
 import { END_OF_OPTIONS, git, MAX_FILES, run, runRemote } from "./exec.ts";
-import { computeDiff } from "./line-diff.ts";
+import { computeDiff } from "@plume/platform";
 import { parseNumstat } from "./parse.ts";
 import { gitBranch, isGitRepo } from "./probe.ts";
 import { defaultRemote } from "./remote-state.ts";

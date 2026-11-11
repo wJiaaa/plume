@@ -71,7 +71,7 @@ it("普通文件面板可读托管图片，缺失会话、其他目录和写操�
 		expect(await agent.service.readFile("missing", path)).toBeNull();
 		expect(await agent.filePath("missing", path)).toBeNull();
 		await expect(agent.service.listDirectory(session.id, mediaDir)).rejects.toThrow();
-		await expect(agent.service.renameFile(session.id, path, "renamed.png")).rejects.toThrow();
+		expect(await agent.service.fileOperation(session.id, { type: "rename", from: path, to: join(mediaDir, "renamed.png") })).toMatchObject({ ok: false });
 	} finally {
 		await agent.shutdown();
 	}

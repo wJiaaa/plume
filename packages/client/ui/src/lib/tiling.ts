@@ -21,9 +21,6 @@ export interface Box {
 	height: number;
 }
 
-/** 两棵树共有的形状：只要分支，叶子长什么样这里不关心。 */
-type Tiling = { type: "leaf" } | { type: "split"; dir: Axis; sizes: readonly number[]; children: readonly Tiling[] };
-
 /**
  * 两个窗格之间一条能拖的边界。
  *
@@ -46,8 +43,6 @@ export interface SplitterBox extends Box {
 	split: Box;
 }
 
-export const FULL: Box = { left: 0, top: 0, width: 1, height: 1 };
-
 /**
  * 分隔条的抓取区，跨在两个窗格的边界上。
  *
@@ -69,50 +64,6 @@ export const GRIP_SPAN = 30;
  * 帧与帧之间字符串不变——这一点要紧：每帧都变的样式字符串会打断它本该在过渡的那个过渡。
  */
 export const pct = (fraction: number): string => `${(fraction * 100).toFixed(6)}%`;
-
-/** 给定在轴上从哪开始、占多少，从父框里切出孩子的框。 */
-export function slice(rect: Box, dir: Axis, offset: number, share: number): Box {
-	return dir === "row"
-		? { left: rect.left + offset * rect.width, top: rect.top, width: share * rect.width, height: rect.height }
-		: { left: rect.left, top: rect.top + offset * rect.height, width: rect.width, height: share * rect.height };
-}
-
-/**
- * 所有能拖的边界。
- *
- * n 个孩子的分支有 n−1 条——分支的外沿是包着它的东西的边，不是两个窗格之间的边界。
- *
- * 每条都画成零厚度的线；抓取区由组件加，只有组件知道九个像素是多宽。
- */
-export function layoutSplitters(tree: Tiling, within: Box = FULL): SplitterBox[] {
-	const out: SplitterBox[] = [];
-	const walk = (node: Tiling, rect: Box, path: number[]) => {
-		if (node.type === "leaf") return;
-		let offset = 0;
-		node.children.forEach((child, i) => {
-			const share = node.sizes[i] ?? 0;
-			walk(child, slice(rect, node.dir, offset, share), [...path, i]);
-			offset += share;
-			// 这个孩子后面的那条边界，最后一个孩子没有。
-			if (i < node.children.length - 1) {
-				const next = node.sizes[i + 1] ?? 0;
-				out.push({
-					path,
-					index: i,
-					dir: node.dir,
-					share,
-					pair: share + next,
-					split: rect,
-					...(node.dir === "row"
-						? { left: rect.left + offset * rect.width, top: rect.top, width: 0, height: rect.height }
-						: { left: rect.left, top: rect.top + offset * rect.height, width: rect.width, height: 0 }),
-				});
-			}
-		});
-	};
-	walk(tree, within, []);
-	return out;
-}
 
 /**
  * 把指针位置换算成分隔条近侧窗格该占的份额。

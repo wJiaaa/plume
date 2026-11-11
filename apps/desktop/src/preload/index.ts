@@ -128,7 +128,6 @@ contextBridge.exposeInMainWorld("plume", {
 		pick: (title?: string) => ipcRenderer.invoke("plume:chat-background:pick", title),
 		import: (bytes: Uint8Array, name: string) => ipcRenderer.invoke("plume:chat-background:import", bytes, name),
 		read: (name: string) => ipcRenderer.invoke("plume:chat-background:read", name),
-		remove: () => ipcRenderer.invoke("plume:chat-background:remove"),
 	},
 	registerShared: (exports: Record<string, string[]>) => ipcRenderer.invoke("plume:shared", exports),
 	connect: () => ipcRenderer.send("plume:connect"),

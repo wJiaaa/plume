@@ -45,7 +45,7 @@
       "Overlay"
     ]
   },
-  { "title": "卡片和代码", "names": ["Card", "CodeBlock", "DiffView"] },
+  { "title": "卡片和代码", "names": ["Card", "CodeBlock"] },
   { "title": "审批卡", "names": ["ApprovalFrame", "ApprovalExpiry"] },
   { "title": "设置分区", "names": ["SettingsSectionTitle", "SettingsCard", "SettingsRow", "SettingsNotice"] },
   { "title": "面板", "names": ["PanelEmpty", "RetainedViews", "useNarrow", "useLiveRefresh"] },

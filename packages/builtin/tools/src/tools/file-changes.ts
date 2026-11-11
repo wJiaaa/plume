@@ -4,10 +4,10 @@ import { chmod, lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/
 import { dirname, isAbsolute, join } from "node:path";
 import type { Stats } from "node:fs";
 import type { FileChangesService, SessionAccess, UndoProblem } from "@plume/contract";
-import { computeDiff } from "../diff.ts";
+import { computeDiff } from "@plume/platform";
 import { words } from "../messages.ts";
 import { beginUndo } from "./change-lock.ts";
-import { withinOrIs } from "./home.ts";
+import { withinOrIs } from "@plume/platform";
 import { displayPath } from "./paths.ts";
 import type { ToolContext } from "./types.ts";
 

@@ -10,7 +10,7 @@ import { join, resolve, sep } from "node:path";
 import type { DiffBlob, DiffFile, DiffHunk, FileStatus, WorkspaceDiff } from "../api.ts";
 import { readBlobs, type BlobRead } from "./blobs.ts";
 import { mapLimit, MAX_BLOB_BYTES, MAX_FILES } from "./exec.ts";
-import { computeDiff } from "./line-diff.ts";
+import { computeDiff } from "@plume/platform";
 import { parseStatusZ } from "./parse.ts";
 import { gitBranch, isGitRepo } from "./probe.ts";
 import { withView, type RepoView } from "./view.ts";

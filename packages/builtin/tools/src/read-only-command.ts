@@ -12,7 +12,7 @@
  * 这几种都不需要任何 shell 元字符，只看元字符是拦不住的。
  */
 
-import { literalWords, nests, sequence, type LiteralWord } from "./shell-split.ts";
+import { literalWords, nests, sequence, type LiteralWord } from "@plume/platform";
 
 /** 不管参数是什么都只读的程序。 */
 const READ_ONLY_COMMANDS = new Set([

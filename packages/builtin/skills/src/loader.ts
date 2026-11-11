@@ -9,7 +9,6 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { type AllowedToolsProblem, readAllowedTools } from "./allowed-tools.ts";
 
 type SkillScope = "workspace" | "user" | "plugin";
 
@@ -29,26 +28,20 @@ export interface Skill {
 	plugin?: PluginBundle;
 	/** 只给人从 `/` 菜单点，不列给模型自己挑。 */
 	manualOnly: boolean;
-	/** `allowed-tools`：它生效期间只能调这些工具。不限制时不给。 */
-	allowedTools?: string[];
 }
 
 /** 读的时候发现的问题，设置页里给人看。`warning` 是加载了、但值得看一眼；其余是没加载。 */
 export interface SkillDiagnostic {
 	path: string;
-	problem: "unclosed" | "invalidYaml" | "noDescription" | "longDescription" | "shortDescription" | "badName" | "shadowed" | "allowedTools";
+	problem: "unclosed" | "invalidYaml" | "noDescription" | "longDescription" | "shortDescription" | "badName" | "shadowed";
 	/** `invalidYaml` 是解析器的原话，`badName` 是读到的名字，`shadowed` 是赢了的那个文件，`shortDescription` 是字数。 */
 	detail?: string;
 	/** `shadowed`：两个文件共用的技能名。 */
 	name?: string;
-	/** `allowedTools`：这个字段里哪些写法没能照原意生效。 */
-	tools?: AllowedToolsProblem;
 	warning?: true;
 }
 
 export interface LoadOptions {
-	/** 现在登记着的全部工具名，`allowed-tools` 按它对名字。 */
-	tools: readonly string[];
 	/** 技能名 → 同名时该赢的那个 `SKILL.md`（人在设置页点过「改用那个」）。没有这个文件时照常先出现的赢。 */
 	preferred?: Readonly<Record<string, string>>;
 }
@@ -100,7 +93,7 @@ export function skillSources(cwd: string | undefined, plugins: readonly PluginBu
 	return sources;
 }
 
-export async function loadSkills(sources: SkillSource[], options: LoadOptions): Promise<{ skills: Skill[]; diagnostics: SkillDiagnostic[] }> {
+export async function loadSkills(sources: SkillSource[], options: LoadOptions = {}): Promise<{ skills: Skill[]; diagnostics: SkillDiagnostic[] }> {
 	const diagnostics: SkillDiagnostic[] = [];
 	/** 读得出来的，按名字收齐再挑赢家：偏好的那个可能排在后面。 */
 	const candidates = new Map<string, { skill: Skill; notes: SkillDiagnostic[] }[]>();
@@ -148,8 +141,6 @@ export async function loadSkills(sources: SkillSource[], options: LoadOptions): 
 			if (description.length < MIN_DESCRIPTION) notes.push({ path, problem: "shortDescription", detail: String(description.length), warning: true });
 			// 两种拼写都有人写：连字符是文档里的写法，两个都写时它说了算。
 			const manual = frontmatter["disable-model-invocation"] ?? frontmatter.disableModelInvocation;
-			const allowed = readAllowedTools(frontmatter["allowed-tools"] ?? frontmatter.allowedTools, options.tools);
-			for (const problem of allowed.problems) notes.push({ path, problem: "allowedTools", tools: problem, warning: true });
 			const skill: Skill = {
 				name,
 				description,
@@ -160,7 +151,6 @@ export async function loadSkills(sources: SkillSource[], options: LoadOptions): 
 				root: source.dir,
 				...(source.plugin ? { plugin: source.plugin } : {}),
 				manualOnly: manual === true,
-				...(allowed.tools?.length ? { allowedTools: allowed.tools } : {}),
 			};
 			candidates.set(name, [...(candidates.get(name) ?? []), { skill, notes }]);
 		}

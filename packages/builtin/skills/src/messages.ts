@@ -9,17 +9,6 @@ import type { Locale } from "@plume/contract";
 const DESK = typeof navigator === "undefined" ? "mac" : /^Mac/i.test(navigator.platform) ? "mac" : /^Win/i.test(navigator.platform) ? "windows" : "other";
 const BIN = { zh: DESK === "mac" ? "废纸篓" : "回收站", en: DESK === "windows" ? "the Recycle Bin" : "the Trash" };
 
-/** 头几项，加引号；多了说一共几项。设置页给它一行，真实的技能能列十几个 `Bash(...)`。 */
-function list(items: string[], more: (n: number) => string, separator: string): string {
-	const shown = items
-		.slice(0, 3)
-		.map((item) => `\`${item}\``)
-		.join(separator);
-	return items.length > 3 ? `${shown}${more(items.length)}` : shown;
-}
-const zhList = (items: string[]) => list(items, (n) => ` 等 ${n} 项`, "、");
-const enList = (items: string[]) => list(items, (n) => ` and ${n - 3} more`, ", ");
-
 const zhCN = {
 	settingsTitle: "技能",
 	toolVerb: "使用技能",
@@ -57,7 +46,7 @@ const zhCN = {
 	delete: "删除",
 	cancel: "取消",
 	failedToLoad: (n: number) => `${n} 个技能没能加载`,
-	warnings: (n: number) => `${n} 个技能需要留意：agent 可能在该用的时候想不到它，或者它限制的工具和你想的不一样`,
+	warnings: (n: number) => `${n} 个技能需要留意：agent 可能在该用的时候想不到它`,
 	problemLabel: {
 		unclosed: "开头没闭合",
 		invalidYaml: "开头写错了",
@@ -66,7 +55,6 @@ const zhCN = {
 		shortDescription: "描述太短",
 		badName: "名字不合规矩",
 		shadowed: "被同名遮住",
-		allowedTools: "工具限制没按原意生效",
 	},
 	unclosed: "开头的 `---` 没有闭合，整个文件都被当成了正文。",
 	invalidYaml: (detail: string) => `开头的 frontmatter 不是有效的 YAML：${detail}`,
@@ -75,12 +63,6 @@ const zhCN = {
 	shortDescription: (length: string) => `\`description\` 只有 ${length} 个字符。模型靠它决定什么时候用这个技能，说清「做什么、什么情况下用」通常要 40 个以上。`,
 	badName: (name: string) => `技能名只能是小写字母、数字和连字符；当前是“${name}”。`,
 	shadowed: (winner: string) => `同名的技能已由 ${winner} 定义，这一个被遮蔽了。`,
-	toolsNotList: (value: string) => `\`allowed-tools\` 要写成列表或字符串，这里是 \`${value}\`，已忽略：这个技能不限制工具。`,
-	toolsStrays: (items: string[]) => `\`allowed-tools\` 里不是工具名的项已跳过：${zhList(items)}。`,
-	toolsScoped: (widened: string[], items: string[]) => `\`allowed-tools\` 里括号中的范围在 Plume 不生效，${zhList(widened)} 按整个工具放行：${zhList(items)}。`,
-	toolsUnmatched: (items: string[]) => `\`allowed-tools\` 里对应不到 Plume 工具的项不会放行任何调用：${zhList(items)}。`,
-	toolsServerWide: (items: string[]) =>
-		`\`allowed-tools\` 里指整个 MCP 服务的项不会放行任何调用，Plume 只认完整的工具名 \`mcp__<服务>__<工具>\`：${zhList(items)}。`,
 	shadowedHeader: "被同名遮住的技能",
 	shadowedBy: "被",
 	shadowedBySuffix: "覆盖",
@@ -139,8 +121,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		delete: "Delete",
 		cancel: "Cancel",
 		failedToLoad: (n) => (n === 1 ? "1 skill failed to load" : `${n} skills failed to load`),
-		warnings: (n) =>
-			`${n === 1 ? "1 skill needs" : `${n} skills need`} attention: the agent may not think of it when it should, or the tools it limits are not what you meant`,
+		warnings: (n) => `${n === 1 ? "1 skill needs" : `${n} skills need`} attention: the agent may not think of it when it should`,
 		problemLabel: {
 			unclosed: "Header not closed",
 			invalidYaml: "Header is invalid",
@@ -149,7 +130,6 @@ export const MESSAGES: Record<Locale, Messages> = {
 			shortDescription: "Description too short",
 			badName: "Name not allowed",
 			shadowed: "Shadowed",
-			allowedTools: "Tool limits not applied as written",
 		},
 		unclosed: "The opening `---` is never closed, so the whole file is treated as body text.",
 		invalidYaml: (detail) => `The frontmatter is not valid YAML: ${detail}`,
@@ -159,13 +139,6 @@ export const MESSAGES: Record<Locale, Messages> = {
 			`\`description\` is only ${length} characters. The model decides when to use the skill from it; saying what it does and when usually takes 40 or more.`,
 		badName: (name) => `Skill names may only use lowercase letters, digits and hyphens; got “${name}”.`,
 		shadowed: (winner) => `A skill with the same name is already defined by ${winner}, so this one is shadowed.`,
-		toolsNotList: (value) => `\`allowed-tools\` must be a list or a string; got \`${value}\`, so it is ignored and this skill does not restrict tools.`,
-		toolsStrays: (items) => `Entries in \`allowed-tools\` that are not tool names were skipped: ${enList(items)}.`,
-		toolsScoped: (widened, items) =>
-			`Scopes in parentheses in \`allowed-tools\` have no effect in Plume, so ${enList(widened)} is allowed as a whole: ${enList(items)}.`,
-		toolsUnmatched: (items) => `Entries in \`allowed-tools\` that match no Plume tool allow no calls: ${enList(items)}.`,
-		toolsServerWide: (items) =>
-			`Entries in \`allowed-tools\` naming a whole MCP server allow no calls; Plume only matches full tool names \`mcp__<server>__<tool>\`: ${enList(items)}.`,
 		shadowedHeader: "Skills shadowed by one of the same name",
 		shadowedBy: "is shadowed by",
 		shadowedBySuffix: "",

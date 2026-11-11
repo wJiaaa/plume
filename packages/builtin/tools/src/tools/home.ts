@@ -6,7 +6,7 @@
  */
 
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { join } from "node:path";
 
 let dataDir: string | undefined;
 
@@ -34,14 +34,3 @@ export function scratchHome(): string {
 }
 
 export const home = (): string => homedir();
-
-/** `target` 在 `root` 里面时的相对路径，`root` 自己是 `""`；不在里面时是 null。 */
-export function relativeInside(root: string, target: string): string | null {
-	if (!isAbsolute(root) || !isAbsolute(target)) return null;
-	const step = relative(root, target);
-	if (step === ".." || step.startsWith(`..${sep}`) || isAbsolute(step)) return null;
-	return step;
-}
-
-/** `root` 本身也算在里面。 */
-export const withinOrIs = (root: string, target: string): boolean => relativeInside(root, target) !== null;

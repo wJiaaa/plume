@@ -186,7 +186,7 @@ async function compactor(result: CompactSummary | Error) {
 }
 
 it("摘要保存后刷新记忆和循环状态", async () => {
-	const test = await compactor({ keep: 4, summary: "保留的结论" });
+	const test = await compactor({ keep: 4, summary: "保留的结论", head: [{ role: "user", content: [{ type: "text", text: "摘要" }], timestamp: 0 }] });
 	expect(await test.run()).toMatchObject({ compacted: true, outcome: { ok: true } });
 	expect(test.record.compactions).toHaveLength(1);
 	expect(test.reset).toHaveBeenCalledExactlyOnceWith("s1");
@@ -207,7 +207,7 @@ it("实际剪枝刷新，重复同一份视图不再刷新", async () => {
 it.each([
 	["无动作", undefined],
 	["空剪枝", { pruneOnly: true, views: [] }],
-	["无效边界", { keep: 3, summary: "摘要" }],
+	["无效边界", { keep: 3, summary: "摘要", head: [{ role: "user", content: [{ type: "text", text: "摘要" }], timestamp: 0 }] }],
 	["剪枝不存在的结果", { pruneOnly: true, views: [{ toolCallId: "missing", texts: ["节选"] }] }],
 	["插件失败", new Error("失败")],
 ] as const)("%s 不刷新上下文", async (_name, result) => {
@@ -218,7 +218,7 @@ it.each([
 });
 
 it("取消的压缩不采纳结果、不刷新", async () => {
-	const test = await compactor({ keep: 4, summary: "摘要" });
+	const test = await compactor({ keep: 4, summary: "摘要", head: [{ role: "user", content: [{ type: "text", text: "摘要" }], timestamp: 0 }] });
 	test.stop.abort();
 	expect(await test.run()).toMatchObject({ compacted: false, outcome: { code: "cancelled" } });
 	expect(test.record.compactions).toEqual([]);

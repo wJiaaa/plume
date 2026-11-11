@@ -114,9 +114,6 @@ export function seatbeltArgs(policy: SandboxPolicy): string[] {
  *   `looksDenied` 把这种失败认作沙箱拒绝，模型会被告知可以申请提权，而不是对着一个莫名的错误。
  * - **cfprefsd**：`defaults write` 把修改交给偏好设置守护进程，由它写 `~/Library/Preferences`。拒掉它以后 CFPreferences 直接读 plist，
  *   `defaults read`、`xcrun`、`xcodebuild`、git、node、pnpm、python 实测表现不变，只是写会失败。
- *
- * Linux 有同样形状的缺口，尚未堵上：bwrap 下命令可以请会话总线（`systemd-run --user`、D-Bus 激活的服务）在沙箱外跑东西。
- * 没堵是因为没有能验证修法的环境。
  */
 const HANDS_OFF =
 	"(deny mach-lookup" +
@@ -125,15 +122,3 @@ const HANDS_OFF =
 	' (global-name-prefix "com.apple.lsd.")' +
 	' (global-name "com.apple.cfprefsd.daemon")' +
 	' (global-name "com.apple.cfprefsd.agent"))';
-
-/**
- * 一个策略对应的 Linux `bwrap` 参数。
- *
- * 整个文件系统只读绑定，再把可写根绑回去，这是挂载命名空间里对 Seatbelt profile 那句话的同义表述。
- * `--die-with-parent` 让被杀掉的一轮不留下还在跑的命令；`--dev`、`--proc` 是因为缺了它们，几乎每个程序都会少两样默认存在的东西。
- */
-export function bwrapArgs(policy: SandboxPolicy): string[] {
-	const args = [policy.mode === "danger-full-access" ? "--bind" : "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"];
-	for (const root of writableRoots(policy)) args.push("--bind", root, root);
-	return args;
-}

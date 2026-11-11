@@ -84,25 +84,3 @@ export function freezeMotion(): () => void {
 		document.removeEventListener("selectstart", refuseSelection);
 	};
 }
-
-/**
- * 搬动一个窗格期间，让窗格不接指针。
- *
- * 窗格里可能是一个 <webview>，那是另一个进程：拖动一越过它，指针就被它吞掉，而指针捕获——处理得了同文档的
- * iframe——够不着它。让窗格不参与命中测试才盖住这种情况；拖动监听在 window 上，不受影响。
- *
- * 做法和理由都和上面的冻结一样：根上的标记要对整份装着正文的文档求一遍；用属性不用类，是因为窗格一被拿起，
- * React 就会重写这些元素的 `className`。
- */
-const INERT = "data-plume-inert";
-
-export function inertPanes(): () => void {
-	const panes = [...document.querySelectorAll(".plume-dock-pane")];
-	for (const pane of panes) pane.setAttribute(INERT, "");
-	let released = false;
-	return () => {
-		if (released) return;
-		released = true;
-		for (const pane of panes) pane.removeAttribute(INERT);
-	};
-}

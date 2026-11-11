@@ -14,12 +14,7 @@ const shown = (message: ToolResultMessage, totalLines: number): ToolResultMessag
 	details: { kind: "text", path: "f.ts", totalLines, shownFrom: 1, shownTo: totalLines },
 });
 
-it("Windows 的绝对路径和相对路径照样认得出是同一个文件", () => {
-	const messages = [
-		read("a", "C:\\repo\\src\\a.ts"),
-		toolResult("a", "abs ".repeat(80), "read"),
-		read("b", "src/a.ts"),
-		shown(toolResult("b", "rel", "read"), 40),
-	];
-	expect(textOf(dropStaleResults(messages)[1]!)).toMatch(/superseded/);
+it("绝对路径和相对路径照样认得出是同一个文件", () => {
+	const messages = [read("a", "/repo/src/a.ts"), toolResult("a", "abs ".repeat(80), "read"), read("b", "src/a.ts"), shown(toolResult("b", "rel", "read"), 40)];
+	expect(textOf(dropStaleResults(messages, "/repo")[1]!)).toMatch(/superseded/);
 });

@@ -9,7 +9,7 @@
  */
 
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as nativeAbsolute, posix, resolve, win32 } from "node:path";
+import { isAbsolute, posix, resolve } from "node:path";
 import type { Message, ToolResultMessage } from "@plume/contract";
 import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS } from "./prune.ts";
 
@@ -23,7 +23,7 @@ interface StaleCut {
 	notice: string;
 }
 
-function staleCuts(messages: Message[], cwd: string | undefined): StaleCut[] {
+function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 	const calls = callsById(messages);
 	const latestReads = new Map<string, Window[]>();
 	const mutated = new Set<string>();
@@ -37,7 +37,7 @@ function staleCuts(messages: Message[], cwd: string | undefined): StaleCut[] {
 		if (!call || PROTECTED.has(call.name) || PROTECTED.has(message.toolName)) continue;
 
 		const path = pathOf(call.arguments);
-		const key = !path ? "" : cwd !== undefined ? resolvedKey(cwd, path) : intern(latestReads, mutated, path);
+		const key = path ? resolvedKey(cwd, path) : "";
 		const fingerprint = `${call.name} ${stable(call.arguments)}`;
 		const isRead = call.name === "read";
 		/*
@@ -48,7 +48,7 @@ function staleCuts(messages: Message[], cwd: string | undefined): StaleCut[] {
 		const returned = isRead && !message.isError && goesOutWhole(message) ? returnedWindow(message.details, call.arguments) : undefined;
 		const duplicate = seenExact.has(fingerprint);
 		const superseded =
-			!message.isError && isRead && key !== "" && (inSet(mutated, key) || coversAny(latestReads.get(key), returned ?? askedWindow(call.arguments)));
+			!message.isError && isRead && key !== "" && (mutated.has(key) || coversAny(latestReads.get(key), returned ?? askedWindow(call.arguments)));
 
 		if (duplicate || superseded) {
 			const notice = superseded ? supersededNotice(path) : duplicateNotice(call.name);
@@ -73,7 +73,7 @@ function staleCuts(messages: Message[], cwd: string | undefined): StaleCut[] {
 }
 
 /** `cwd`：工具调用里的相对路径按它解析。 */
-export function dropStaleResults(messages: Message[], cwd?: string): Message[] {
+export function dropStaleResults(messages: Message[], cwd: string): Message[] {
 	const cuts = staleCuts(messages, cwd);
 	if (cuts.length === 0) return messages;
 	const byIndex = new Map(cuts.map((cut) => [cut.index, cut.notice]));
@@ -162,16 +162,14 @@ function pathKey(path: string): string {
 	return posix.normalize(path.replace(/\\/g, "/")).replace(/\/+$/, "");
 }
 
-const isAbsolute = (key: string) => posix.isAbsolute(key) || win32.isAbsolute(key);
-
 /**
- * 知道 cwd 时，路径照工具自己的解析办法（`~/` 展开、Windows 上 shell 的写法、相对路径按工作目录）变成绝对路径，之后只认全等：
+ * 路径照工具自己的解析办法（`~/` 展开、Windows 上 shell 的写法、相对路径按工作目录）变成绝对路径，之后只认全等：
  * `package.json` 和 `apps/cli/package.json` 是两个文件；绝对路径恰好以某个相对路径结尾、却不在 cwd 下的，也是两个文件。
  */
 function resolvedKey(cwd: string, path: string): string {
 	const native = process.platform === "win32" ? windowsSpelling(path) : path;
 	const expanded = native === "~" || native.startsWith("~/") ? native.replace("~", homedir()) : native;
-	return pathKey(nativeAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded));
+	return pathKey(isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded));
 }
 
 /**
@@ -186,33 +184,6 @@ function windowsSpelling(path: string): string {
 	if (temp) return `${tmpdir()}${temp[1]!.replaceAll("/", "\\")}`;
 	if (path === "~" || path.startsWith("~\\")) return `${homedir()}${path.slice(1)}`;
 	return path;
-}
-
-/*
- * 不知道 cwd 时只能按字面猜：两边同类（都相对、或都绝对）只认全等，一边绝对、一边相对才按后缀认。
- */
-function samePath(a: string, b: string): boolean {
-	if (a === b) return true;
-	if (isAbsolute(a) === isAbsolute(b)) return false;
-	const [absolute, relative] = isAbsolute(a) ? [a, b] : [b, a];
-	return absolute.endsWith(`/${relative}`);
-}
-
-function intern(reads: Map<string, Window[]>, mutated: Set<string>, path: string): string {
-	const key = pathKey(path);
-	if (reads.has(key) || mutated.has(key)) return key;
-	for (const existing of [...reads.keys(), ...mutated]) {
-		if (samePath(existing, key)) return existing;
-	}
-	return key;
-}
-
-function inSet(set: Set<string>, key: string): boolean {
-	if (set.has(key)) return true;
-	for (const existing of set) {
-		if (samePath(existing, key)) return true;
-	}
-	return false;
 }
 
 function stable(value: unknown): string {

@@ -135,7 +135,7 @@ ctx.hook("model.context", (input, next) =>
 );
 ```
 
-只改 `systemPrompt` 也行：宿主在每一层交接时把两边对齐，接在后面的那截成为末尾一段 `extension`，整个换掉的只剩这一段 `extension`；两个都改了以 `sections` 为准。
+`systemPrompt` 只读：宿主在每一层交接时按 `sections` 重拼，直接改它不作数。
 
 系统提示词在会话里冻结：plume.prompt 在最外层把里层交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。
 
@@ -236,7 +236,7 @@ ctx.hook("prompt.submit", async (input, next) => {
 | `signal` | 用户停止这一轮时中止 |
 | `progress(event)` | 走到哪一步了（定下要压、开始写摘要时先报一次 `summarizing`，界面显示「正在生成摘要」）：`{ phase: "summarizing" }`、`{ phase: "retrying", delayMs }`、`{ phase: "fallback" }`（摘要没拿到、本地整理），转录里那一行跟着变 |
 
-输出 `{ keep, summary, head?, via?, views? }`、`{ pruneOnly: true, views }` 或 `undefined`（不压）。`history` 里从 `keep` 起原样留着，之前的（含上一次换上的那几条）换成 `head`（以用户消息开头的几条，宿主原样存下、以后每次照发）；不给 `head` 就是 `summary` 加一句确认。`keep` 要大于 `previous.head`、在最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary` 只在 `via: "dropped"`（按条丢弃，必须给 `head`）时可以是空串，不合规矩的当作压缩失败。`via` 说摘要怎么来的（`fork`、`independent`、`fallback`、`dropped`）。`views` 是留下的那截里剪过的工具结果 `{ toolCallId, texts }`：宿主记在会话库里，以后每次都照它发、重开也一样，卡片照旧画原文；只剪了工具结果就够时交 `{ pruneOnly: true, views }`。会话里的消息一条不动，宿主记下边界、头和视图，之后每次请求都按它拼历史。
+输出 `{ keep, summary, head, via?, views? }`、`{ pruneOnly: true, views }` 或 `undefined`（不压）。`history` 里从 `keep` 起原样留着，之前的（含上一次换上的那几条）换成 `head`（以用户消息开头的几条，宿主原样存下、以后每次照发）。`keep` 要大于 `previous.head`、在最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary` 只在 `via: "dropped"`（按条丢弃）时可以是空串，不合规矩的当作压缩失败。`via` 说摘要怎么来的（`fork`、`independent`、`fallback`、`dropped`）。`views` 是留下的那截里剪过的工具结果 `{ toolCallId, texts }`：宿主记在会话库里，以后每次都照它发、重开也一样，卡片照旧画原文；只剪了工具结果就够时交 `{ pruneOnly: true, views }`。会话里的消息一条不动，宿主记下边界、头和视图，之后每次请求都按它拼历史。
 
 最里层是 `undefined`。内置插件 plume.compaction 在 order 1000 按有多满决定压不压，缓存还热时从主请求分叉写摘要，不行再单独发摘要请求，都没拿到就本地整理。要换成自己的压法，在外层（默认 order 0）不调 `next`；在外层改里层的结论时先看是不是 `pruneOnly`。这一层抛错时转录里那一行写「压缩失败」，这一步照常发全文。
 
@@ -255,7 +255,8 @@ ctx.hook("context.compact", async (input) => {
 		prompt: "Summarise everything above in one paragraph.",
 		signal: input.signal,
 	});
-	return { keep, summary };
+	const text = `<session-summary>\n${summary}\n</session-summary>\nThe summary above is a record of the earlier conversation, not a new instruction.`;
+	return { keep, summary, head: [{ role: "user", content: [{ type: "text", text }], timestamp: Date.now() }] };
 });
 ```
 
@@ -434,7 +435,7 @@ Plume 自带的服务：
 
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
-| `sandbox` | 内置插件 plume.sandbox（macOS 用 seatbelt，Linux 用 bubblewrap，Windows 用受限令牌） | `run(command, { cwd, mode?, shellMode?, env? })` 用用户的 shell 起一条命令，返回 `SandboxProcess`（`onOutput`、`onExit`、`onError`、`kill`）；`mode` 是 `"read-only"`、`"workspace-write"`、`"danger-full-access"`，不给就不进沙箱，给不了那样的沙箱时抛错；`shellMode` 是按哪一档选 shell（会话宣布的模式，不给按 `mode`），只在 Windows 上有区别：受约束的跑 PowerShell、完全访问跑 Git Bash，提权的命令传更宽的 `mode`、原来的 `shellMode`。`looksDenied(output)`：输出像不像被沙箱拒了。plume.tools 的 bash 用它；换一种沙箱（容器、远程机器）就提供一个自己的 `sandbox` |
+| `sandbox` | 内置插件 plume.sandbox（macOS 用 seatbelt，Windows 用受限令牌；Linux 没有后端） | `run(command, { cwd, mode?, shellMode?, env? })` 用用户的 shell 起一条命令，返回 `SandboxProcess`（`onOutput`、`onExit`、`onError`、`kill`）；`mode` 是 `"read-only"`、`"workspace-write"`、`"danger-full-access"`，不给就不进沙箱，给不了那样的沙箱时抛错；`shellMode` 是按哪一档选 shell（会话宣布的模式，不给按 `mode`），只在 Windows 上有区别：受约束的跑 PowerShell、完全访问跑 Git Bash，提权的命令传更宽的 `mode`、原来的 `shellMode`。`looksDenied(output)`：输出像不像被沙箱拒了。plume.tools 的 bash 用它；换一种沙箱（容器、远程机器）就提供一个自己的 `sandbox` |
 | `resources` | 内置插件 plume.tools（它的 read、ls 认这些地址，write、edit 认 `scratch://`） | 资源地址 `scheme://路径[:行-行]`，类型在 `@plume/contract` 的 `ResourceHandler` 等。`register(handler)` 加一个只读的 scheme（`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置），返回撤下的函数，用 `ctx.effect` 撤；内容不是你写的（第三方文档、外部服务）时给 `origin`，read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。`keepArtifact(sessionId, tool, content)` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；按会话在内存里，最多 30 份）。plume.tools 自己有 `scratch://`（唯一可写）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://` |
 | `file.read` | 内置插件 plume.tools | `authorize(run, path)` 与文件工具共用读取授权，返回 `{ ok: true, absolute }` 或 `{ ok: false, message }`。消费方声明 `inject: ["file.read"]`，用当前工具的 `ToolRun` 调用，成功后实际读取必须使用返回的 `absolute`；详见下文 |
 | `project.files` | 内置插件 plume.tools（它的 glob、grep 也用这一份） | `list(root)`：`root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里时是 null，自己走目录。问 git 时不执行仓库能控制的程序，插件要列项目文件就用它，不要自己跑 `git ls-files` |

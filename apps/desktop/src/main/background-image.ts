@@ -1,10 +1,10 @@
 /** 会话背景图的安全校验和串行存储；渲染进程只上传字节，不把路径交给插件。 */
 import { readdir, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { CHAT_BACKGROUND_NAME } from "../shared/appearance.ts";
 import { renameWithRetry } from "./rename-retry.ts";
 
 const EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
-const NAME = /^chat-\d+(?:-\d+)*\.(?:png|jpe?g|gif|webp)$/;
 
 type BackgroundImportError = "too-large" | "invalid" | "failed";
 export type BackgroundImportResult = { name: string } | { error: BackgroundImportError };
@@ -29,10 +29,6 @@ export function imageExtension(name: string, bytes: Uint8Array): "png" | "jpg" |
 		bytes[11] === 0x50;
 	if (webp) return "webp";
 	return null;
-}
-
-function isBackgroundName(name: string): boolean {
-	return NAME.test(name);
 }
 
 /** 文件写入、pending 保护和清理共用一条队列，避免同毫秒导入互相覆盖。 */
@@ -86,14 +82,9 @@ export class BackgroundImageStore {
 			const names = await readdir(this.directory).catch(() => [] as string[]);
 			await Promise.all(
 				names
-					.filter((name) => isBackgroundName(name) && name !== keep && !this.pending.has(name))
+					.filter((name) => CHAT_BACKGROUND_NAME.test(name) && name !== keep && !this.pending.has(name))
 					.map((name) => rm(join(this.directory, name), { force: true })),
 			);
 		});
-	}
-
-	/** 仅清理未引用文件；当前引用和仍待提交的导入都保留。 */
-	cleanup(keep?: string): Promise<void> {
-		return this.commit(keep);
 	}
 }

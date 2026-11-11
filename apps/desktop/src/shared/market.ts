@@ -43,9 +43,9 @@ export interface InstalledPlugin extends MarketInfo {
 	hash: string;
 	/**
 	 * market：从市场装进安装目录的，可以更新、卸载；upload：本地上传进本地上传目录的，可以卸载，不跟市场更新；
-	 * local：PLUME_PLUGIN_PATHS 下直接放的，市场不管它的文件；builtin：随应用发的，不在市场里列，不能卸载、停用。
+	 * builtin：随应用发的，不在市场里列，不能卸载、停用。
 	 */
-	source: "market" | "upload" | "local" | "builtin";
+	source: "market" | "upload" | "builtin";
 }
 
 /** 自动更新和「谁落后了」：主进程算好，有变化就推给窗口。 */

@@ -89,9 +89,7 @@ function DetailBody({
 	const act = useInstall(item);
 	const installed = isInstalled(item);
 	const enabled = isEnabled(item);
-	// 本机直接放的（PLUME_PLUGIN_PATHS）市场不动它的文件，不能卸；本地上传的同样标「本地」，能卸。
-	const local = item.installed?.source === "local";
-	const fromHere = local || item.installed?.source === "upload";
+	const fromHere = item.installed?.source === "upload";
 	const builtin = isBuiltin(item);
 	const switchable = installed && !builtin && item.status !== undefined && item.status.state !== "loading";
 	const readme = useReadme(item.key, item.installed?.hash ?? item.entry?.version ?? "");
@@ -250,8 +248,7 @@ function DetailBody({
 								<MenuItem
 									danger
 									icon={<Trash2 size={13} strokeWidth={1.8} />}
-									disabled={act.busy !== null || local}
-									title={local ? t("market.localOwned") : undefined}
+									disabled={act.busy !== null}
 									onClick={() => {
 										more.close();
 										confirm.ask({

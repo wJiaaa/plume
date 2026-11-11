@@ -13,7 +13,7 @@
  * 不会凭空加一个，也不会藏起拿不准的那个。
  */
 
-import { sequence, splitWords, type SequenceEntry } from "../shell-split.ts";
+import { sequence, splitWords, type SequenceEntry } from "@plume/platform";
 
 export interface ExitReading {
 	/** 要不要报成失败。 */

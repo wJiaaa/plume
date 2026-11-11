@@ -76,6 +76,7 @@ export function request(
 		request: { systemPrompt: "", messages, tools: [] },
 		force: false,
 		floor: 0,
+		cwd: "/repo",
 		...rest,
 	};
 }

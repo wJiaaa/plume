@@ -1,13 +1,10 @@
 /** 文件树修改统一在会话边界内执行，先验证整批路径；替换失败时还原原目标。 */
 import { cp, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { FileOperation, FileOpResult } from "@plume/contract";
+import { isInside as inside } from "./files.ts";
 import { text } from "./i18n.ts";
 
-const inside = (root: string, path: string) => {
-	const rel = relative(root, path);
-	return !rel || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-};
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function validFileName(name: string, platform = process.platform): boolean {

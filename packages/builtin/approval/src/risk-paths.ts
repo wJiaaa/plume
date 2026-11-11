@@ -4,7 +4,7 @@
  * 问的是地方而不是命令：项目和草稿目录是干活的地方，别处都值得人看一眼。
  */
 
-import { withinOrIs } from "./paths.ts";
+import { withinOrIs } from "@plume/platform";
 import { SAFE, risky, underScratchRoot, type RiskVerdict } from "./risk-shared.ts";
 import { PROTECTED_PATH } from "./risk-tables.ts";
 

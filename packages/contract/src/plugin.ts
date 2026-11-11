@@ -294,13 +294,9 @@ export interface ModelContext {
 	readOnly?: boolean;
 	/** 设置 › 个性化：语气和全局指令。 */
 	personalization: Personalization;
-	/** 发出去的系统提示词，就是 `sections` 依次用空行连起来。 */
+	/** 发出去的系统提示词，就是 `sections` 依次用空行连起来。只读：每层交接时宿主按 `sections` 重拼，改它不作数。 */
 	systemPrompt: string;
-	/**
-	 * 系统提示词按段拆开。改哪个都行，交给下一层时宿主把另一个跟上：只改了 `sections`，`systemPrompt` 重新拼；
-	 * 只改了 `systemPrompt` 而且是在后面接了一段，接上的那段成为末尾的 `extension` 段，整个换掉则只剩这一段 `extension`。
-	 * 两个都改了以 `sections` 为准。
-	 */
+	/** 系统提示词按段拆开。加、换、删都改这里，交给下一层时宿主把 `systemPrompt` 重新拼。 */
 	sections: PromptSection[];
 	messages: Message[];
 	tools: ToolSpec[];
@@ -444,9 +440,9 @@ export interface ToolResultView {
 
 /**
  * 钩子 context.compact 的结论：不给是不压。最里层不压。
- * 给了 `keep`，`history` 里从 `keep` 起原样留着，之前的（含上一次压缩换上的那几条）换成 `head`；不给 `head` 就是 `summary`
- * 加一句确认。`keep` 要落在上一次换上的那几条之后、最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary`
- * 只在按条丢弃（`via: "dropped"`，这时必须给 `head`）时可以是空串；不合规矩的宿主当作压缩失败。
+ * 给了 `keep`，`history` 里从 `keep` 起原样留着，之前的（含上一次压缩换上的那几条）换成 `head`。
+ * `keep` 要落在上一次换上的那几条之后、最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary`
+ * 只在按条丢弃（`via: "dropped"`）时可以是空串；不合规矩的宿主当作压缩失败。
  * `views` 是留下的那截里剪过的工具结果。只剪了工具结果、没有可摘要的（`pruneOnly`）时只给 `views`。
  */
 export type CompactSummary =
@@ -454,7 +450,7 @@ export type CompactSummary =
 			keep: number;
 			summary: string;
 			/** 代替边界之前那段的消息（以用户消息开头），宿主原样存下、以后每次照发。 */
-			head?: Message[];
+			head: Message[];
 			via?: CompactionVia;
 			views?: ToolResultView[];
 	  }
@@ -1244,7 +1240,7 @@ export interface SandboxProcess {
 	kill(signal?: "SIGTERM" | "SIGKILL"): void;
 }
 
-/** 服务 `sandbox`：在沙箱里跑 shell 命令。内置插件 plume.sandbox 提供（macOS 用 seatbelt，Linux 用 bubblewrap，Windows 用受限令牌）。 */
+/** 服务 `sandbox`：在沙箱里跑 shell 命令。内置插件 plume.sandbox 提供（macOS 用 seatbelt，Windows 用受限令牌；Linux 没有后端）。 */
 export interface SandboxService {
 	/**
 	 * 用用户的 shell 起一条命令，环境向登录 shell 要（从图标启动时也找得到用户装的工具）。`mode` 不给就不进沙箱；

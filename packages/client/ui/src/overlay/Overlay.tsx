@@ -30,14 +30,12 @@ function drawnNow(element: HTMLElement | null): React.CSSProperties {
 export function Overlay({
 	children,
 	onClose,
-	align = "center",
 	width = 460,
 	label,
 	returnFocus,
 }: {
 	children: React.ReactNode | ((dismiss: Dismiss) => React.ReactNode);
 	onClose: () => void;
-	align?: "center" | "bottom";
 	width?: number;
 	label?: string;
 	returnFocus?: HTMLElement;
@@ -158,7 +156,7 @@ export function Overlay({
 			<div
 				ref={scrim}
 				data-plume-overlay={depth}
-				className={`[app-region:no-drag] fixed inset-0 flex justify-center p-4 sm:p-8 ${align === "center" ? "items-center" : "items-end pb-[120px]"} ${leaving ? "plume-scrim-out" : "plume-scrim-in"}`}
+				className={`[app-region:no-drag] fixed inset-0 flex justify-center p-4 sm:p-8 items-center ${leaving ? "plume-scrim-out" : "plume-scrim-in"}`}
 				style={{ zIndex: 60 + depth * 20, ...exitFrom.scrim }}
 				onMouseDown={(event) => {
 					if (event.target === event.currentTarget) dismiss();

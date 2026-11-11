@@ -1,7 +1,7 @@
 {
   "name": "@plume/sandbox",
   "version": "0.1.0",
-  "description": "沙箱：在这台机器能给的约束里跑 shell 命令（macOS 用 seatbelt，Linux 用 bubblewrap、不行时用 Landlock，Windows 用受限令牌），作为服务 sandbox 给别的插件用。",
+  "description": "沙箱：在这台机器能给的约束里跑 shell 命令（macOS 用 seatbelt，Windows 用受限令牌），作为服务 sandbox 给别的插件用。",
   "author": "Plume",
   "plume": {
     "displayName": "沙箱"

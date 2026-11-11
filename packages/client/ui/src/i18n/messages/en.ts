@@ -485,7 +485,7 @@ export const en = {
 	"market.unreadable": { one: "{n} plugin has problems — see Settings", other: "{n} plugins have problems — see Settings" },
 	"market.notInCatalog": "It is no longer in the plugin catalog",
 	"market.unreachable": "Couldn't reach the plugin marketplace ({reason}). Showing installed plugins and the last catalog read",
-	"market.localOwned": "This plugin was placed on this machine directly — remove it from its folder",
+	"market.localOwned": "A locally uploaded plugin has this name — uninstall that one first",
 	"market.builtinOwned": "This plugin ships with the app and cannot be uninstalled or disabled",
 	"market.notAPlugin": "This folder isn't a built plugin: its name may only use lowercase letters, digits and hyphens, and it needs dist/index.mjs",
 	"market.pickPluginFolder": "Choose a plugin folder",

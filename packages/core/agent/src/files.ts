@@ -6,9 +6,9 @@
  */
 
 import { execFile } from "node:child_process";
-import { constants, lstatSync, renameSync, type Dirent } from "node:fs";
+import { constants, type Dirent } from "node:fs";
 import { mkdtemp, open, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
+import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { tmpdir } from "node:os";
 import { backup, DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
@@ -84,7 +84,7 @@ function remotePathAllowed(target: string, root: string): boolean {
 }
 
 /** `child` 在不在 `parent` 之下（含它自己）。按 `relative` 判断，`/a/bc` 不算在 `/a/b` 下面。 */
-function isInside(parent: string, child: string): boolean {
+export function isInside(parent: string, child: string): boolean {
 	const rel = relative(parent, child);
 	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
@@ -335,28 +335,4 @@ export async function listSessionDirectory(cwd: string, target: string, projectR
 			isDirectory: entry.isDirectory(),
 		}))
 		.sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-}
-
-export async function renameSessionFile(cwd: string, target: string, name: string, projectRoots: readonly string[] = []): Promise<string> {
-	if (
-		typeof name !== "string" ||
-		!name.trim() ||
-		name !== name.trim() ||
-		/[<>:\x22/\\|?*\p{Cc}]/u.test(name) ||
-		/[. ]$/.test(name) ||
-		name === "." ||
-		name === ".." ||
-		/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name) ||
-		Buffer.byteLength(name) > 255
-	)
-		throw new Error(text("files.badName"));
-	const source = await resolveInsideCwd(cwd, target, projectRoots);
-	const roots = await Promise.all([cwd, ...projectRoots].map((root) => realpath(root).catch(() => null)));
-	if (!source || roots.includes(source) || lstatSync(resolve(cwd, target)).isSymbolicLink()) throw new Error(text("files.unreadable"));
-	const destination = join(dirname(source), name);
-	if (basename(source) === name) return target;
-	// 同一次事件循环中检查和改名，避免两个界面请求相互覆盖；同名目标一律保留。
-	if (lstatSync(destination, { throwIfNoEntry: false })) throw new Error(text("files.exists"));
-	renameSync(source, destination);
-	return join(dirname(target), name);
 }

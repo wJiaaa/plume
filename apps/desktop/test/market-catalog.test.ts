@@ -47,7 +47,7 @@ test("本机缺图标时用市场补齐，不覆盖其他已有字段", () => {
 
 test("只有市场、只有本机和完全无图标的条目都能合并", () => {
 	assert.equal(merge([entry], [], [])[0].logo, entry.logo);
-	const local = { ...installed, source: "local" as const, logo: "data:image/png;base64,bG9jYWw=" };
+	const local = { ...installed, source: "upload" as const, logo: "data:image/png;base64,bG9jYWw=" };
 	const [item] = merge([entry], [local], [], ["example"]);
 	assert.equal(item.logo, local.logo);
 	assert.equal(item.outdated, false);

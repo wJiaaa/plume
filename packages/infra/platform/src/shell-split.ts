@@ -1,12 +1,13 @@
 /**
- * 把一行 bash 命令拆开，给风险判断一条一条地看。
+ * 把一行 bash 命令拆开，给风险判断（plume.approval）和只读、读了哪些文件的判断（plume.tools）一条一条地看。
  *
  * `&&`、`||`、`;`、`|` 和换行各起一条新命令；`$( )`、反引号、`<( )` 一层套一层。这里不判断任何东西，
  * 只负责拆：一串命令的危险程度等于其中最危险的那一条，判断的人得能一条一条看。
  *
- * 一个扫描器，四种看法。`splitCommands` 是每条规则用的平铺列表；`pipelines` 留着 `|` 的关系，给要它的那个问题用
+ * 一个扫描器，几种看法。`splitCommands` 是每条规则用的平铺列表；`pipelines` 留着 `|` 的关系，给要它的那个问题用
  * （下载的东西在同一条管道后面喂给了解释器）；`substitutionHosts` 留着「替换是谁的参数」，给 `sh -c "$(curl u)"` 用；
- * `splitWords` 是认引号的分词，让规则问得出 `bash -c "…"` 里到底是什么。只写一份，是因为再手写一个 shell 扫描器，
+ * `splitWords` 是认引号的分词，让规则问得出 `bash -c "…"` 里到底是什么；`sequence`、`nests`、`literalWords` 是
+ * 「按 bash 的跑法看这一行」，给只读判断用，只按 bash（zsh 同）的语法读。只写一份，是因为再手写一个 shell 扫描器，
  * 就多一个犯同一类错的地方。
  *
  * 扫描器在「一条命令到哪结束」上必须和 bash 一致，每一处不一致都是绕过判断的路。下面每一条都曾被判成
@@ -562,9 +563,107 @@ export function substitutionHosts(command: string, dialect: Dialect = "posix"): 
 	return out;
 }
 
+/** 这一行自己的一条命令，以及跟在它后面的操作符。 */
+export interface SequenceEntry {
+	/** 命令本身，其中的替换显示成 `…`。 */
+	text: string;
+	/** 后面跟的是什么：`;`、`|`、`&`、`&&`、`||`、换行，或者什么都没有（`end`）。 */
+	after: ";" | "|" | "&" | "&&" | "||" | "\n" | "end";
+}
+
+/**
+ * 这一行自己的命令，按顺序，带上它们之间的操作符。
+ *
+ * 替换折进它所在的命令，heredoc 正文去掉。这是「按 bash 的跑法看这一行」的视角：替换是它那条命令的一部分，
+ * 不是这一行的一条命令。
+ */
+export function sequence(command: string): SequenceEntry[] {
+	return rebuild(command)
+		.filter((entry) => entry.depth === 0)
+		.map((entry) => ({ text: entry.text, after: entry.after === "sub" || entry.after === "close" ? "end" : entry.after }));
+}
+
+/**
+ * 这一行是否跑了不属于它自己那几条命令的东西：替换（`$(…)`、一对反引号、`<(…)`）或 heredoc。
+ * `sequence` 把这些折成了 `…`，看不出来。
+ */
+export function nests(command: string): boolean {
+	return scan(command).some((piece) => piece.depth > 0 || piece.body || piece.after === "sub" || piece.after === "close");
+}
+
+/** shell 原样传下去的一个词：引号和转义已经去掉。 */
+export interface LiteralWord {
+	text: string;
+	/** `text` 里第一个没被引起来的 `*`、`?` 或 `[` 在哪，没有为 -1。从这里起 shell 可能换成文件名。 */
+	glob: number;
+}
+
+/**
+ * 一条命令的词，前提是 shell 会把每个词都原样传下去；否则为 `null`：有变量或替换（`$`、反引号）、
+ * 重定向、子 shell 或命令组、花括号展开、注释，或者还接着别的命令。
+ *
+ * 只在这种时候给出词，判断才看得到程序真正收到的参数；看不准的一律交回去按写处理。
+ */
+export function literalWords(command: string): LiteralWord[] | null {
+	const words: LiteralWord[] = [];
+	let text = "";
+	let glob = -1;
+	let started = false;
+	let quote: "'" | '"' | null = null;
+	const end = () => {
+		if (started) words.push({ text, glob });
+		text = "";
+		glob = -1;
+		started = false;
+	};
+	for (let i = 0; i < command.length; i++) {
+		const char = command[i]!;
+		const next = command[i + 1];
+		if (quote === "'") {
+			if (char === "'") quote = null;
+			else text += char;
+			continue;
+		}
+		if (quote === '"') {
+			if (char === "$" || char === "`") return null;
+			// \x60 就是反引号：直接写的话，文案检查会把正则里的它当成模板字符串的开头。
+			if (char === "\\" && next !== undefined && /[$\x60\x22\\]/.test(next)) {
+				text += next;
+				i++;
+			} else if (char === '"') quote = null;
+			else text += char;
+			continue;
+		}
+		if (/\s/.test(char)) {
+			end();
+			continue;
+		}
+		if (char === "'" || char === '"') {
+			quote = char;
+			started = true;
+			continue;
+		}
+		if (char === "\\") {
+			if (next === undefined || next === "\n") return null;
+			text += next;
+			i++;
+			started = true;
+			continue;
+		}
+		// 井号只在词首开始注释：issue#12 是一个词。
+		if ("$`()<>{}|&;".includes(char) || (char === "#" && !started)) return null;
+		if (glob === -1 && (char === "*" || char === "?" || char === "[")) glob = text.length;
+		text += char;
+		started = true;
+	}
+	if (quote) return null;
+	end();
+	return words;
+}
+
 /**
  * 一行拆成它要跑的每一条命令：`&&`、`||`、`;`、`|`、换行各起一条，`$( )`、反引号里的单独出来，heredoc 正文去掉。
- * 每一条单独判断：一串命令的危险程度等于其中最危险的那一条。
+ * 每一条单独判断：一串命令的危险程度等于其中最危险的那一条，读到的东西是每一条读到的总和。
  */
 export function splitCommands(command: string, dialect: Dialect = "posix"): string[] {
 	return scan(command, dialect)

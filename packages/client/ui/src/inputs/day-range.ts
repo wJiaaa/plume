@@ -93,11 +93,3 @@ export function pickDay(range: DayRange, day: string): DayRange {
 	if (day < range.from) return { from: day, to: null };
 	return { from: range.from, to: day };
 }
-
-/** 这段日子有几天，两头都算。哪一头空着都数不出来。 */
-export function rangeLength(range: DayRange): number | null {
-	const from = parseDay(range.from);
-	const to = parseDay(range.to);
-	if (!from || !to) return null;
-	return Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
-}

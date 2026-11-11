@@ -318,6 +318,9 @@ importers:
       react:
         specifier: ^19.3.1
         version: 19.3.1
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
 
   packages/builtin/mcp:
     devDependencies:
@@ -391,6 +394,9 @@ importers:
       yaml:
         specifier: 2.9.1
         version: 2.9.1
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
 
   packages/builtin/spawn-session:
     devDependencies:

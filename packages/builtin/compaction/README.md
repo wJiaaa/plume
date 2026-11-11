@@ -16,7 +16,7 @@
 
 ## 换成自己的
 
-它挂在钩子 `context.compact` 的里层（order 1000）。在外层加一层、不调 `next`，返回 `{ keep, summary, head?, via?, views? }`（从历史的第几条起原样留着、前面换成什么）、`{ pruneOnly: true, views }` 或 `undefined`（不压），就整个换成你的压法；摘要要调模型的话用 `ctx.model.complete({ sessionId, messages, ... })`，要从主请求分叉加 `fork: true`。字段见 skill `plume-plugin` 的 `references/logic.md`。
+它挂在钩子 `context.compact` 的里层（order 1000）。在外层加一层、不调 `next`，返回 `{ keep, summary, head, via?, views? }`（从历史的第几条起原样留着、前面换成什么）、`{ pruneOnly: true, views }` 或 `undefined`（不压），就整个换成你的压法；摘要要调模型的话用 `ctx.model.complete({ sessionId, messages, ... })`，要从主请求分叉加 `fork: true`。字段见 skill `plume-plugin` 的 `references/logic.md`。
 
 ## 已知的边界
 

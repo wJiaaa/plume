@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { openMarket, serveMarket } from "./market-fixture.ts";
@@ -86,20 +85,4 @@ test("本地上传的压住市场装的同名插件：市场那份留着、不�
 		[["market", join(installDir, "mine")]],
 	);
 	assert.deepEqual(state.updates.outdated, [{ id: "mine", name: "mine", version: "1.1.0" }]);
-});
-
-test("PLUME_PLUGIN_PATHS 下的同名插件压住本地上传的和市场装的", async (t) => {
-	const served = await serveMarket(t);
-	await served.publish([{ id: "mine", version: "1.0.0" }]);
-	const paths = await mkdtemp(join(tmpdir(), "plume-paths-"));
-	t.after(() => rm(paths, { recursive: true, force: true }));
-	await plugin(join(paths, "mine"));
-	const { market, work } = await openMarket(t, served.url, [paths]);
-	await plugin(join(work, "elsewhere/mine"));
-	assert.deepEqual(await market.installFolder(join(work, "elsewhere/mine")), { ok: false, error: "local" });
-	assert.deepEqual(await market.install("mine"), { ok: false, error: "local" });
-	assert.deepEqual(
-		(await market.plugins()).map((item) => [item.key, item.dir]),
-		[["mine", join(paths, "mine")]],
-	);
 });
