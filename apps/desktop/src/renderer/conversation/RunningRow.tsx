@@ -17,6 +17,8 @@ const STALL_MS = 2000;
  * 结论停住了（`STALL_MS` 没长）它也回来：字不动就没什么可跳的，一直藏着又看不出是在写还是卡住了。
  *
  * 回答写完（`answeredCleanly`）以后它先只是看不见，等 `running` 落下那一次提交才当帧收起，不走过渡。
+ * 停下后底下接着出「已暂停 · 继续」那一行（`handedOff`）时也当帧收起：那一行同一次提交就挂上了，
+ * 这一行慢慢收的话，它先出现在这一行下面，再跟着往上滑。
  * 展开是当帧的，只淡入：发送时这一行和那条消息在同一次提交里出现，转录当帧贴底。
  */
 export const RunningRow = memo(function RunningRow({
@@ -27,6 +29,7 @@ export const RunningRow = memo(function RunningRow({
 	waiting,
 	waitingText,
 	retrying,
+	handedOff,
 }: {
 	running: boolean;
 	compacting: boolean;
@@ -38,10 +41,14 @@ export const RunningRow = memo(function RunningRow({
 	/** 插件给的「在等什么」（`ApprovalRequest.waiting`）。 */
 	waitingText?: string | undefined;
 	retrying: boolean;
+	/** 这一轮停下了，「已暂停 · 继续」那一行接着它的位置。 */
+	handedOff: boolean;
 }) {
 	const open = running && !compacting;
 	const answering = looksLikeAnswer(messages) || leadsTheTurn(messages);
 	const answered = answeredCleanly(messages);
+	// 有东西当帧接上这一行的位置：不走收起过渡。
+	const instant = answered || handedOff;
 	const stalled = useStalled(proseLength(messages), open && answering);
 	// 收起时沿用收起前那一刻的隐/显：结论写到一半被停下时这一行正隐着，不能在往下收的那一阵把运行中淡入回来。
 	const quietNow = open && ((answering && !stalled) || answered);
@@ -51,15 +58,15 @@ export const RunningRow = memo(function RunningRow({
 	const quiet = open ? quietNow : foldQuiet && retained;
 	useLayoutEffect(() => {
 		if (open) setRetained(true);
-		else if (answered || motionReduced()) setRetained(false);
-	}, [open, answered]);
+		else if (instant || motionReduced()) setRetained(false);
+	}, [open, instant]);
 	return (
 		<div
 			className="plume-reveal"
 			data-open={open}
 			aria-hidden={!open || quiet}
 			// 过渡按变化之后的样式取：打开时只剩透明度，收起时回到 `.plume-reveal` 的整套。
-			style={answered ? { transition: "none" } : open ? { transition: "opacity var(--plume-t-base) var(--plume-e-out)" } : undefined}
+			style={instant ? { transition: "none" } : open ? { transition: "opacity var(--plume-t-base) var(--plume-e-out)" } : undefined}
 			onTransitionEnd={(event) => {
 				if (event.target === event.currentTarget && event.propertyName === "grid-template-rows" && !open) setRetained(false);
 			}}

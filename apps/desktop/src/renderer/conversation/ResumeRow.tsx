@@ -9,20 +9,14 @@ import { IconButton, useConfirmer, useI18n } from "@plume/ui";
 import { Play, RotateCcw } from "@plume/ui/icons";
 import { useMessageEdits } from "./message-edits.ts";
 import { lastUserIndex } from "./revert-draft.ts";
-import { carryOnPrompt, howItStopped, unfinishedTodos } from "./turn-stop.ts";
+import type { Resume } from "./turn-stop.ts";
 
-export function ResumeRow({ view, onCarryOn }: { view: SessionView; onCarryOn: (prompt: string) => void }) {
+/** `resume` 由 `Transcript` 算好传进来：运行行要按同一个判断决定收起时当不当帧。 */
+export function ResumeRow({ view, resume, onCarryOn }: { view: SessionView; resume: Resume; onCarryOn: (prompt: string) => void }) {
 	const { t } = useI18n();
 	const edits = useMessageEdits();
 	const confirm = useConfirmer();
-	// 派出去的后台运行还没回来，活就没停：它们回来，主会话接着干。先判这条，跑着时每一拍都不用扫整份转录。
-	if (view.summary.running || view.summary.background || view.messages.length === 0) return null;
-	const stop = howItStopped(view.summary, view.messages);
-	const unfinished = unfinishedTodos(view.messages);
-	const prompt = carryOnPrompt(stop, unfinished);
-	if (!prompt) return null;
-	// 失败那件事，上面的连接记录已经讲完了，还带着它自己的「继续」，这里不再讲一遍。
-	if (stop === "error" && view.hiccups.some((hiccup) => hiccup.outcome === "gave_up")) return null;
+	const { stop, unfinished, prompt } = resume;
 	const note =
 		stop === "user"
 			? t("common.paused")
@@ -35,11 +29,12 @@ export function ResumeRow({ view, onCarryOn }: { view: SessionView; onCarryOn: (
 	const retryAt = lastUserIndex(view.messages);
 	const retryFrom = edits && retryAt >= 0 ? view.messages[retryAt] : undefined;
 	return (
-		<div className="mt-2.5 flex items-center gap-2 text-detail text-ink-faint" data-resume={stop ?? "unfinished"}>
+		// 8px 加 20px 高的按钮，和运行行一样高：停下、继续时两行同一帧一出一进，字不上下错。见 `RunningIndicator`。
+		<div className="mt-2 flex items-center gap-2 text-detail text-ink-faint" data-resume={stop ?? "unfinished"}>
 			<span className="shrink-0 whitespace-nowrap">{note}</span>
 			<span className="shrink-0 text-line">·</span>
 			<IconButton
-				size="sm"
+				size="xs"
 				label={t("resume.carryOn")}
 				ariaLabel={t("resume.continueLabel")}
 				data-resume-continue
@@ -52,7 +47,7 @@ export function ResumeRow({ view, onCarryOn }: { view: SessionView; onCarryOn: (
 			 */}
 			{edits && retryFrom?.role === "user" && (
 				<IconButton
-					size="sm"
+					size="xs"
 					label={t("resume.regenerateHint")}
 					ariaLabel={t("resume.retryLabel")}
 					data-resume-retry

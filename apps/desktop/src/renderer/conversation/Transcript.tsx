@@ -30,7 +30,7 @@ import { PluginToolCard } from "./ToolCard.tsx";
 import { RunsCache, TurnBlocksCache } from "./transcript-shape.ts";
 import type { TurnBlock } from "./turn-blocks.ts";
 import { latestFooterTimestamp } from "./turn-footer.ts";
-import { CARRY_ON_PROMPTS } from "./turn-stop.ts";
+import { CARRY_ON_PROMPTS, resumeOf } from "./turn-stop.ts";
 import { type TurnEntry, TurnWork } from "./TurnWork.tsx";
 import {
 	type BackgroundJobInfo,
@@ -267,6 +267,7 @@ export function Transcript({
 	}, [revealing, range.start, range.end, scrollTo]);
 
 	const retrying = view.hiccups.some((hiccup) => hiccup.outcome === "waiting");
+	const resume = onCarryOn ? resumeOf(view) : null;
 
 	// 一个 Run 画成哪一行。依赖齐了它才换，`WorkStep` 的 memo 拿它的引用判断画出来的推理行会不会变。
 	const draw = useCallback(
@@ -410,8 +411,9 @@ export function Transcript({
 												waiting={view.approval === undefined ? undefined : view.approval.userOnly ? "answer" : "approval"}
 												waitingText={view.approval?.waiting}
 												retrying={retrying}
+												handedOff={resume !== null}
 											/>
-											{onCarryOn && <ResumeRow view={view} onCarryOn={onCarryOn} />}
+											{onCarryOn && resume && <ResumeRow view={view} resume={resume} onCarryOn={onCarryOn} />}
 											{/* 转录的末尾，作为一个元素：它进了视口，就是读者跟上了。零高度，不改变它报告的布局。 */}
 											<div ref={follow.tailRef} aria-hidden className="h-px w-full shrink-0" />
 										</>

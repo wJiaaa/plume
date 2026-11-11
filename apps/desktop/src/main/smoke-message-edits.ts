@@ -105,8 +105,20 @@ export async function checkMessageEdits(options: {
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "退回的问题可以再发");
 		await click("[data-composer-send=send]");
 		await until(`document.querySelector('${chat}')?.textContent.includes('写到一半的回答')`, "回复写到一半");
+		// 「已暂停」那一行挂上的那一刻，运行行已经收掉：两行同一帧一出一进，它不先挂在运行行下面再往上滑。
+		await page(`(() => {
+			const root = document.querySelector('${chat}');
+			window.__plumeResumeOverlap = undefined;
+			const observer = new MutationObserver(() => {
+				if (!root.querySelector('[data-resume=user]')) return;
+				window.__plumeResumeOverlap = root.querySelector('[data-plume-running]') !== null;
+				observer.disconnect();
+			});
+			observer.observe(root, { childList: true, subtree: true });
+		})()`);
 		await nativeClick(window, page, "[data-composer-send=stop]");
 		await until(`document.querySelector('${chat} [data-resume=user] [data-resume-retry]') !== null`, "按停以后「已暂停」旁边有重试");
+		if ((await page(`window.__plumeResumeOverlap`)) !== false) throw new Error("「已暂停」出现时运行行还没收掉，它会先挂在运行行下面再滑上去");
 		await click(`${chat} [data-resume-retry]`);
 		await until(`document.querySelector('[role=dialog]')?.textContent.includes('重新生成这次回答')`, "重试先确认");
 		await capture(window, join(outDir, "smoke-message-retry.png"));

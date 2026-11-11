@@ -2,7 +2,7 @@
  * 上一轮停在了没做完的地方没有，以及「继续」该说哪句话。
  */
 
-import type { Message, SessionSummary } from "@plume/contract";
+import type { Message, SessionSummary, SessionView } from "@plume/contract";
 
 /**
  * 停在半路的三种样子，读起来不一样：`user` 是人按了停，活没坏只是没在动；`interrupt` 是没被要求就停了
@@ -103,4 +103,22 @@ export function carryOnPrompt(stop: TurnStop, unfinished: number): (typeof CARRY
 	if (stop === "user") return CARRY_ON_PROMPTS[0];
 	if (stop === "error" || stop === "interrupt") return CARRY_ON_PROMPTS[1];
 	return unfinished > 0 ? CARRY_ON_PROMPTS[2] : null;
+}
+
+export type Resume = { stop: TurnStop; unfinished: number; prompt: (typeof CARRY_ON_PROMPTS)[number] };
+
+/**
+ * 转录末尾那一行「已暂停 · 继续」：怎么停的、还剩几项、「继续」说哪句；不出这一行是 `null`。
+ * 运行行也读它：有这一行接着它的位置，运行行就当帧收起，两行同一帧一出一进（见 `RunningRow`）。
+ */
+export function resumeOf(view: SessionView): Resume | null {
+	// 派出去的后台运行还没回来，活就没停：它们回来，主会话接着干。先判这条，跑着时每一拍都不用扫整份转录。
+	if (view.summary.running || view.summary.background || view.messages.length === 0) return null;
+	const stop = howItStopped(view.summary, view.messages);
+	const unfinished = unfinishedTodos(view.messages);
+	const prompt = carryOnPrompt(stop, unfinished);
+	if (!prompt) return null;
+	// 失败那件事，上面的连接记录已经讲完了，还带着它自己的「继续」，这里不再讲一遍。
+	if (stop === "error" && view.hiccups.some((hiccup) => hiccup.outcome === "gave_up")) return null;
+	return { stop, unfinished, prompt };
 }
