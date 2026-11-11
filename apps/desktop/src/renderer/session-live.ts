@@ -2,7 +2,8 @@
  * 不在屏上的会话的视图：插件的子会话（侧边聊天、子 Agent）画在面板和卡片里，审批卡压在主输入框上方，它们要的是
  * 屏上那个会话以外的视图。谁订阅就读一份、跟着事件流走，没人订阅了就扔掉。
  *
- * 事件怎么改一份视图（`viewChange`）和屏上那个会话共用：两边各合一遍，规则只有一份。
+ * 事件怎么改一份视图（`viewChange`）和屏上那个会话共用：两边各合一遍，规则只有一份。读一份视图也共用（`readSessionView`）：
+ * 读的期间到的事件补进读回来的那份。
  */
 
 import type { AgentEvent, AgentService, SessionView } from "@plume/contract";
@@ -22,8 +23,14 @@ export function viewChange(event: SessionEvent): ((view: SessionView) => Partial
 					delete progress[event.message.toolCallId];
 					delete startedAt[event.message.toolCallId];
 				}
-				// 写完的回复顶替它的草稿，同一次更新里换手：分两次换，中间那一帧整条回复不见。
-				return { messages: [...view.messages, event.message], progress, startedAt, ...(event.message.role === "assistant" ? { draft: undefined } : {}) };
+				// 放回它自己的位置，不接在末尾：快照接上事件流时，快照里已有的几条会再收一遍（见 `readSessionView`、`follow`），
+				// 放回原位就不重复，后面跟着的事件再把会话补齐。写完的回复顶替它的草稿，同一次更新里换手：分两次换，中间那一帧整条回复不见。
+				return {
+					messages: [...view.messages.slice(0, event.count - 1), event.message],
+					progress,
+					startedAt,
+					...(event.message.role === "assistant" ? { draft: undefined } : {}),
+				};
 			};
 		case "rewound":
 			// 截掉的那段里的调用、草稿、岔子都跟着没了；截完这个会话停着，没有在跑的。
@@ -57,11 +64,33 @@ export function viewChange(event: SessionEvent): ((view: SessionView) => Partial
 	}
 }
 
+/** 正在读的会话各自攒着读的期间到的事件，见 `readSessionView`。 */
+const catching = new Set<{ sessionId: string; events: SessionEvent[] }>();
+
+/**
+ * 读一个会话的整份视图，读的期间到的事件补进去：读回来的那份已经含着其中一部分，分不出是哪些，就全部按顺序再合一遍。
+ * 每种事件重收一遍都落回同一个样子（`message` 按位置放，其余是整份换掉或会被后面的抵掉），所以重收不出错，也不用再读一遍。
+ */
+export function readSessionView(service: Remote<AgentService>, sessionId: string): Promise<SessionView> {
+	const catcher = { sessionId, events: [] as SessionEvent[] };
+	catching.add(catcher);
+	return Promise.resolve(service.getSession(sessionId))
+		.then((read) => {
+			let view = read;
+			for (const event of catcher.events) {
+				const change = viewChange(event);
+				if (change) view = { ...view, ...change(view) };
+			}
+			return view;
+		})
+		.finally(() => catching.delete(catcher));
+}
+
 interface Entry {
 	view?: SessionView;
 	listeners: Set<() => void>;
-	/** 读的那一刻起到读回来之间的事件：读回来的视图已经含着其中一部分，没法分，所以读回来以后再读一遍。 */
-	stale?: boolean;
+	/** 最近一次读：先发出、后读回来的那次不能盖掉新的（事件流断过时重读）。 */
+	loading?: object;
 }
 
 const entries = new Map<string, Entry>();
@@ -83,20 +112,22 @@ function changed(entry: Entry): void {
 }
 
 /**
- * `reuse`：可以拿应用手上的那份。重读时不行——事件流断过，那份也错过了事件；读的时候来了事件，正在读的那份也没含着它们。
+ * `reuse`：可以拿应用手上的那份（它跟着事件流，正在读的那份也补齐了读的期间的事件）。重读时不行：事件流断过，那份也错过了事件。
  */
 function load(sessionId: string, entry: Entry, reuse = false): void {
 	if (!agent) return;
-	entry.stale = false;
-	void Promise.resolve((reuse ? held?.(sessionId) : undefined) ?? agent.getSession(sessionId)).then(
+	const token = {};
+	entry.loading = token;
+	void Promise.resolve((reuse ? held?.(sessionId) : undefined) ?? readSessionView(agent, sessionId)).then(
 		(view) => {
-			if (entries.get(sessionId) !== entry) return;
-			if (entry.stale) return load(sessionId, entry);
+			if (entries.get(sessionId) !== entry || entry.loading !== token) return;
+			entry.loading = undefined;
 			entry.view = view;
 			changed(entry);
 		},
 		() => {
-			if (entries.get(sessionId) !== entry) return;
+			if (entries.get(sessionId) !== entry || entry.loading !== token) return;
+			entry.loading = undefined;
 			entry.view = undefined;
 			changed(entry);
 		},
@@ -115,14 +146,12 @@ export function applyLive(event: AgentEvent): void {
 		return;
 	}
 	if (!("sessionId" in event)) return;
+	for (const catcher of catching) if (catcher.sessionId === event.sessionId) catcher.events.push(event);
 	const entry = entries.get(event.sessionId);
-	if (!entry) return;
+	// 还没读到的不用管：读回来时这期间的事件已经补进去了，见 `readSessionView`。
+	if (!entry?.view) return;
 	const change = viewChange(event);
 	if (!change) return;
-	if (!entry.view) {
-		entry.stale = true;
-		return;
-	}
 	entry.view = { ...entry.view, ...change(entry.view) };
 	changed(entry);
 }

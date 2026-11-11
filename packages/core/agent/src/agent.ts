@@ -821,7 +821,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		messages.push(message);
 		// 回复落进会话就顶替了它的草稿：界面收到这条 message 时一并换下草稿，不另发一次清空，见 `StreamTurn.draft`。
 		if (message.role === "assistant") session.draft = undefined;
-		emit({ type: "message", sessionId: session.summary.id, message });
+		emit({ type: "message", sessionId: session.summary.id, message, count: messages.length });
 		emit({ type: "sessions", sessions: summaries() });
 		return true;
 	}

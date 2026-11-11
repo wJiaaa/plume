@@ -11,7 +11,7 @@ test("插件收到后台落盘结果和删除通知，流式草稿不刷新，�
 	publishSessionChanges({ type: "draft", sessionId: session.id, draft: undefined }, []);
 	assert.equal(seen.length, 0);
 	const message: ToolResultMessage = { role: "toolResult", toolName: "image_generate", toolCallId: "call", content: [], isError: false, timestamp: 1 };
-	publishSessionChanges({ type: "message", sessionId: session.id, message }, []);
+	publishSessionChanges({ type: "message", sessionId: session.id, message, count: 1 }, []);
 	publishSessionChanges({ type: "sessions", sessions: [] }, [session]);
 	assert.deepEqual(seen, [
 		{ sessionId: session.id, type: "messages", tools: ["image_generate"] },

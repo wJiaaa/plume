@@ -159,7 +159,7 @@ import {
 import { FileScope, type FileScopeValue, touchedPaths } from "./files/scope.ts";
 import { MarketNavItem, MarketScreen, MarketToolbar } from "./market/market.tsx";
 import { NavItem } from "./nav-item.tsx";
-import { applyLive, connectLiveSessions, peekLiveSession, reloadLive, useLiveSession, viewChange } from "./session-live.ts";
+import { applyLive, connectLiveSessions, peekLiveSession, readSessionView, reloadLive, useLiveSession, viewChange } from "./session-live.ts";
 import { ChildConversation } from "./conversation/ChildConversation.tsx";
 import { dropChildDraft, flushChildDrafts, seedChildQuote } from "./conversation/child-drafts.ts";
 import { publishSessionChanges } from "./plugin-session-changes.ts";
@@ -437,24 +437,38 @@ function apply(event: AgentEvent): void {
 	}
 }
 
+/** 正在重新拉状态（`refresh`）：手上的视图都错过了断流期间的事件，不借给订阅会话的插件，见 `heldView`。 */
+let resyncing = false;
+
 async function refresh(): Promise<void> {
-	const [sessions, projects] = await Promise.all([agent.listSessions(), agent.listProjects(), refreshModels()]);
-	update({ sessions, projects });
-	// 流断过，停着的会话错过了这期间的事件，都不能再用；屏上这个重读一遍。
+	// 流断过，停着的会话错过了这期间的事件，都不能再用；屏上这个重读一遍。先作废再等别的：等的期间别处也可能来要。
+	resyncing = true;
 	parked.clear();
 	reloadLive();
-	if (state.currentId) await select(state.currentId, true);
+	try {
+		const [sessions, projects] = await Promise.all([agent.listSessions(), agent.listProjects(), refreshModels()]);
+		update({ sessions, projects });
+		if (state.currentId) await select(state.currentId, true);
+	} finally {
+		resyncing = false;
+	}
 }
 
-/** 一直跟着 agent 的事件流；流断了隔一会儿重新订阅，并把状态重新拉一遍。 */
+/**
+ * 一直跟着 agent 的事件流；流断了隔一会儿重新订阅，并把状态重新拉一遍。先订阅再拉：拉的期间的事件攒在流里，拉完再合，
+ * 其中拉回来的状态已经含着的那些重收一遍也落回原样（见 `viewChange`）。先拉再订阅的话，中间那段的事件就丢了。
+ */
 async function follow(): Promise<void> {
 	while (!state.fatal) {
+		const stream = agent.watch();
 		try {
-			const stream = agent.watch();
 			await refresh();
 			for await (const event of stream) apply(event);
 		} catch (error) {
 			console.error("事件流中断：", error);
+		} finally {
+			// 拉状态失败时流还没开始读：不撤掉的话 agent 那头一直往里推，这边一直攒着。
+			stream.cancel();
 		}
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
 	}
@@ -486,7 +500,7 @@ let reading: { id: string; read: Promise<SessionRead> } | undefined;
 
 function readSession(sessionId: string, again: boolean): Promise<SessionRead> {
 	if (!again && reading?.id === sessionId) return reading.read;
-	const read = agent.getSession(sessionId).then(
+	const read = readSessionView(agent, sessionId).then(
 		(view) => ({ view }),
 		(error: unknown) => ({ error }),
 	);
@@ -499,18 +513,18 @@ function readSession(sessionId: string, again: boolean): Promise<SessionRead> {
 }
 
 /**
- * 手上已有的一个会话的视图：屏上读完了的、停在缓存里的（两者都跟着事件流走），或者正在读的那一份。订阅会话的插件、面板
- * 从这里拿，不再整份读一遍，见 `connectLiveSessions`。
+ * 手上已有的一个会话的视图：正在读的那一份、屏上读完了的、停在缓存里的（后两者都跟着事件流走）。订阅会话的插件、面板
+ * 从这里拿，不再整份读一遍，见 `connectLiveSessions`。正在读的排在前面：事件流断过后重读屏上这个时，屏上的还是断流前那份。
  */
 function heldView(sessionId: string): SessionView | Promise<SessionView> | undefined {
+	if (reading?.id === sessionId)
+		return reading.read.then((result) => {
+			if ("view" in result) return result.view;
+			throw result.error;
+		});
+	if (resyncing) return undefined;
 	if (state.view?.summary.id === sessionId && !state.loading) return state.view;
-	const parkedView = parked.get(sessionId);
-	if (parkedView) return parkedView;
-	if (reading?.id !== sessionId) return undefined;
-	return reading.read.then((result) => {
-		if ("view" in result) return result.view;
-		throw result.error;
-	});
+	return parked.get(sessionId);
 }
 
 /** 屏上的会话要被换下去了：有内容、已经读完的停进缓存。 */

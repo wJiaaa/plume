@@ -482,8 +482,11 @@ export type AgentEvent =
 	| { type: "idle"; sessionId: string }
 	/** 项目登记、改动或移除了：全部项目，新登记的在前。 */
 	| { type: "projects"; projects: ProjectEntry[] }
-	/** 一条消息写进了会话。回复（assistant）同时顶替正在写的草稿，不另发清空草稿的 draft 事件。 */
-	| { type: "message"; sessionId: string; message: Message }
+	/**
+	 * 一条消息写进了会话，`count` 是写进它以后的条数（它是第 `count - 1` 条）。回复（assistant）同时顶替正在写的草稿，不另发清空草稿的 draft 事件。
+	 * 按位置放而不是接在末尾：界面拿快照接上事件流时会把快照里已有的几条再收一遍，放回原位就不会重复。
+	 */
+	| { type: "message"; sessionId: string; message: Message; count: number }
 	/** 会话截掉了尾巴（撤回、编辑重发）：只留前 `count` 条消息，压缩记录和压缩行换成留下的那些。 */
 	| { type: "rewound"; sessionId: string; count: number; compactions: CompactionMark[]; runs: CompactionRun[] }
 	/** 正在生成的回复的最新快照；回复写完后以 message 事件给出完整的一条。undefined 表示草稿作废、没有落进会话。 */
