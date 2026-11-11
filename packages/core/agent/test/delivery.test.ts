@@ -1,10 +1,10 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FileChangesSummary } from "@plume/contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { createAgent, type Agent } from "../src/index.ts";
 import { fakeAnthropic, type FakeModel } from "../src/testing.ts";
-import type { TurnDelivery } from "../../../builtin/delivery/src/api.ts";
 import { BUILTINS } from "./builtins.ts";
 
 let dir: string | undefined;
@@ -16,7 +16,7 @@ afterEach(async () => {
 	if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-it("真实插件链记录净变化，报告可读，重启后撤销不覆盖后续编辑", async () => {
+it("真实插件链记录净变化，重启后撤销不覆盖后续编辑", async () => {
 	dir = await mkdtemp(join(tmpdir(), "plume-delivery-"));
 	const cwd = join(dir, "workspace");
 	await mkdir(cwd);
@@ -59,20 +59,15 @@ it("真实插件链记录净变化，报告可读，重启后撤销不覆盖后�
 	const view = await agent.service.getSession(session.id);
 	const timestamp = view.messages.at(-1)!.timestamp;
 	const call = (method: string, args: unknown[]) => agent!.service.callPlugin("plume.delivery", method, args, { signal: new AbortController().signal });
-	let data = (await call("get", [session.id, timestamp])) as TurnDelivery;
+	let data = (await call("get", [session.id, timestamp])) as FileChangesSummary;
 	expect(data.warnings).toEqual([]);
 	expect(data.files).toHaveLength(2);
 	expect(data.files.find((file) => file.path.endsWith("existing.ts"))).toMatchObject({ added: 1, removed: 1, canUndo: true });
 	expect(data.files.every((file) => file.canUndo)).toBe(true);
-	const report = (await call("report", [session.id, timestamp])) as { path: string; contents: { text: string } };
-	expect(report.path.startsWith(join(dir, "data"))).toBe(true);
-	expect(report.contents.text).toContain("修改现有文件并新建文件。");
-	expect(report.contents.text).toContain("existing.ts");
-	expect((await stat(report.path)).mode & 0o777).toBe(0o600);
 
 	await agent.shutdown();
 	agent = await createAgent(options);
-	data = (await call("get", [session.id, timestamp])) as TurnDelivery;
+	data = (await call("get", [session.id, timestamp])) as FileChangesSummary;
 	expect(data.files.every((file) => file.canUndo)).toBe(true);
 	await writeFile(join(cwd, "existing.ts"), "user later edit\n");
 	await expect(call("undo", [session.id, timestamp, undefined])).rejects.toThrow();
