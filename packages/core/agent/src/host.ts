@@ -175,6 +175,8 @@ const HOOKS: ReadonlySet<string> = new Set<HookName>([
 	"tool.approve",
 	"session.rewind",
 ]);
+/** 市场插件的 `apply` 最多等多久，见 `PluginHost.limited`。 */
+const APPLY_TIMEOUT_MS = 15_000;
 /** 命令名：`/` 后面能敲的字，`:` 分段。 */
 const COMMAND_NAME = /^[a-z0-9][a-z0-9_-]*(?::[a-z0-9][a-z0-9_-]*)*$/;
 
@@ -206,6 +208,11 @@ export class PluginHost {
 	private seq = 0;
 	/** 关掉的插件名：启动时来自配置，之后随 setEnabled 变化。 */
 	private readonly disabled: Set<string>;
+	/**
+	 * `add`、`remove`、`setEnabled` 排成一队：市场的装卸在主进程排了队，界面的启停直达这里，不在那条队里，两边交错的话
+	 * 一个的 `settle` 会撞上另一个装到一半的插件。`load`、`dispose` 不排（启动、退出时没有并发），内部的私有方法也不排，否则互相等死。
+	 */
+	private queue: Promise<unknown> = Promise.resolve();
 
 	constructor(
 		private readonly options: {
@@ -230,6 +237,8 @@ export class PluginHost {
 			fetch?: PluginContext["fetch"];
 			/** 插件的 `ctx.trash`：移到系统废纸篓，桌面应用经主进程做。不给时插件调它就抛错。 */
 			trash?: (path: string) => Promise<void>;
+			/** 非内置插件的 `apply` 最多等多久，缺省 15 秒。只为测试能传短的。 */
+			applyTimeoutMs?: number;
 		},
 	) {
 		this.disabled = new Set(options.disabled);
@@ -344,44 +353,59 @@ export class PluginHost {
 	}
 
 	/** 运行中装上一个插件（插件市场安装、更新后），排在已加载的插件后面。key 已经在用时报错。 */
-	async add(entry: PluginEntry): Promise<void> {
-		if (this.records.some((record) => record.status.key === entry.key)) throw new Error(text("plugin.keyTaken", { key: entry.key }));
-		await this.loadOne(entry);
-		await this.settle();
-		this.pluginsChanged();
+	add(entry: PluginEntry): Promise<void> {
+		return this.serial(async () => {
+			if (this.records.some((record) => record.status.key === entry.key)) throw new Error(text("plugin.keyTaken", { key: entry.key }));
+			await this.loadOne(entry);
+			await this.settle();
+			this.pluginsChanged();
+		});
 	}
 
 	/** 运行中卸下一个插件：撤销它的全部注册，从列表里拿掉。没有这个 key 时什么都不做。 */
-	async remove(key: string): Promise<void> {
-		const record = this.records.find((candidate) => candidate.status.key === key);
-		if (!record) return;
-		if (record.status.state === "active") await this.unwind(record);
-		this.records.splice(this.records.indexOf(record), 1);
-		await this.settle();
-		this.pluginsChanged();
+	remove(key: string): Promise<void> {
+		return this.serial(async () => {
+			const record = this.records.find((candidate) => candidate.status.key === key);
+			if (!record) return;
+			if (record.status.state === "active") await this.unwind(record);
+			this.records.splice(this.records.indexOf(record), 1);
+			await this.settle();
+			this.pluginsChanged();
+		});
 	}
 
 	/**
 	 * 启用或停用一个插件，立即生效。返回停用名单，由调用方存进配置。内置插件不能停用。
+	 * 加载失败（`failed`）的启用就是再试一次，停用就记成停用。
 	 */
-	async setEnabled(name: string, enabled: boolean): Promise<string[]> {
-		const record = this.records.find((candidate) => candidate.status.name === name);
-		if (!record) throw new Error(text("plugin.notFound", { name }));
-		if (record.builtin) throw new Error(text("plugin.builtinLocked", { name }));
-		if (enabled) {
-			this.disabled.delete(name);
-			if (record.status.state === "disabled" && record.plugin) await this.activate(record, record.plugin);
-		} else {
-			this.disabled.add(name);
-			if (record.status.state === "active" || record.status.state === "waiting") {
-				await this.unwind(record);
-				record.status.state = "disabled";
-				delete record.status.waitingFor;
+	setEnabled(name: string, enabled: boolean): Promise<string[]> {
+		return this.serial(async () => {
+			const record = this.records.find((candidate) => candidate.status.name === name);
+			if (!record) throw new Error(text("plugin.notFound", { name }));
+			if (record.builtin) throw new Error(text("plugin.builtinLocked", { name }));
+			if (enabled) {
+				this.disabled.delete(name);
+				if ((record.status.state === "disabled" || record.status.state === "failed") && record.plugin) await this.activate(record, record.plugin);
+			} else {
+				this.disabled.add(name);
+				if (record.status.state === "active" || record.status.state === "waiting") {
+					await this.unwind(record);
+					record.status.state = "disabled";
+					delete record.status.waitingFor;
+				} else if (record.status.state === "failed") {
+					record.status.state = "disabled";
+				}
 			}
-		}
-		await this.settle();
-		this.pluginsChanged();
-		return [...this.disabled];
+			await this.settle();
+			this.pluginsChanged();
+			return [...this.disabled];
+		});
+	}
+
+	private serial<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.queue.then(work, work);
+		this.queue = run.catch(() => undefined);
+		return run;
 	}
 
 	tool(name: string): RegisteredTool | undefined {
@@ -564,13 +588,35 @@ export class PluginHost {
 		const dataDir = join(this.options.dataDir, plugin.name);
 		try {
 			await mkdir(dataDir, { recursive: true });
-			await plugin.apply(this.context(record, dataDir));
+			const applied = Promise.resolve(plugin.apply(this.context(record, dataDir)));
+			await (record.builtin ? applied : this.limited(applied, plugin.name));
 			status.state = "active";
 		} catch (error) {
 			await this.unwind(record);
 			status.state = "failed";
 			status.error = errorText(error);
 			this.options.log(status.name, "error", `加载失败：${status.error}`);
+		}
+	}
+
+	/**
+	 * 市场插件的 `apply` 和定时器赛跑：一个不返回的 `apply` 会让 `load` 一直等，agent 服务起不来，界面上也没法停用它。
+	 * 超时按 `apply` 抛错处理（撤销、记 `failed`）；它之后再调 `ctx` 上的注册会被 `live()` 拦下。内置插件不限时：
+	 * 它们是主路径，宁可等也不能缺。
+	 */
+	private async limited(applied: Promise<void>, name: string): Promise<void> {
+		const ms = this.options.applyTimeoutMs ?? APPLY_TIMEOUT_MS;
+		// 超时以后它再失败也没人等了，不让它变成未处理的拒绝。
+		applied.catch(() => undefined);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error(text("plugin.applyTimeout", { name, seconds: String(ms / 1000) }))), ms);
+			timer.unref?.();
+		});
+		try {
+			await Promise.race([applied, timeout]);
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 

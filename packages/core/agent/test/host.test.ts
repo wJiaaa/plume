@@ -14,8 +14,9 @@ beforeEach(async () => {
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
-function host(disabled: string[] = []): PluginHost {
+function host(disabled: string[] = [], options: { applyTimeoutMs?: number } = {}): PluginHost {
 	return new PluginHost({
+		...options,
 		dataDir: dir,
 		appDataDir: dir,
 		disabled: new Set(disabled),
@@ -390,6 +391,74 @@ declare module "@plume/contract" {
 		echo: { say(text: string): string };
 	}
 }
+
+describe("生命周期", () => {
+	it("市场插件的 apply 超时记为 failed、写明超时，后面的照常加载；超时后它再调 ctx 上的注册被拦下", async () => {
+		let late: PluginContext | undefined;
+		const h = host([], { applyTimeoutMs: 20 });
+		await h.load([
+			entry({ name: "stuck", apply: (ctx) => ((late = ctx), new Promise<void>(() => {})) } satisfies Plugin),
+			entry({ name: "after", apply: (ctx) => void ctx.tools.register(tool("after_tool")) } satisfies Plugin),
+		]);
+		const [stuck, after] = h.status();
+		expect(stuck).toMatchObject({ name: "stuck", state: "failed" });
+		expect(stuck?.error).toMatch(/没有返回/);
+		expect(after).toMatchObject({ name: "after", state: "active" });
+		expect(() => late!.hook("tool.execute", (input, next) => next(input))).toThrow(/已停用/);
+		expect(() => late!.tools.register(tool("late_tool"))).toThrow(/已停用/);
+		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(["after_tool"]);
+	});
+
+	it("内置插件的 apply 不限时", async () => {
+		const h = host([], { applyTimeoutMs: 20 });
+		const slow: Plugin = { name: "slow", apply: () => new Promise<void>((resolve) => setTimeout(resolve, 60)) };
+		await h.load([{ key: "slow", builtin: true, load: async () => slow }]);
+		expect(h.status()[0]).toMatchObject({ state: "active" });
+	});
+
+	it("failed 的插件经启用重试，成功了变 active；failed 的停用后是 disabled", async () => {
+		let attempts = 0;
+		const flaky: Plugin = {
+			name: "flaky",
+			apply: () => {
+				if (attempts++ === 0) throw new Error("第一次不行");
+			},
+		};
+		const broken: Plugin = {
+			name: "broken",
+			apply: () => {
+				throw new Error("总是不行");
+			},
+		};
+		const h = host();
+		await h.load([entry(flaky), entry(broken)]);
+		expect(h.status().map((status) => status.state)).toEqual(["failed", "failed"]);
+		await h.setEnabled("flaky", true);
+		expect(h.status()[0]).toMatchObject({ name: "flaky", state: "active" });
+		expect(h.status()[0]?.error).toBeUndefined();
+		expect(await h.setEnabled("broken", false)).toEqual(["broken"]);
+		expect(h.status()[1]).toMatchObject({ name: "broken", state: "disabled" });
+	});
+
+	it("add、remove、setEnabled 排队执行：后发起的等先发起的做完", async () => {
+		const done: string[] = [];
+		const h = host();
+		await h.load([entry({ name: "a", apply: (ctx) => void ctx.tools.register(tool("a_tool")) } satisfies Plugin)]);
+		const slow: Plugin = {
+			name: "slow",
+			apply: (ctx) => new Promise<void>((resolve) => setTimeout(() => (ctx.tools.register(tool("slow_tool")), resolve()), 30)),
+		};
+		const adding = h.add(entry(slow)).then(() => done.push("add"));
+		const disabling = h.setEnabled("a", false).then(() => done.push("setEnabled"));
+		await Promise.all([adding, disabling]);
+		expect(done).toEqual(["add", "setEnabled"]);
+		expect(h.status().map((status) => [status.name, status.state])).toEqual([
+			["a", "disabled"],
+			["slow", "active"],
+		]);
+		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(["slow_tool"]);
+	});
+});
 
 describe("服务", () => {
 	const echo = (name: string, label: string, builtin = false): PluginEntry => ({
