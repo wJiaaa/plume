@@ -85,7 +85,7 @@ import { openViewer } from "./image/index.ts";
 import { copyImage, saveImage } from "./image/image-out.ts";
 import { captureWindow } from "./image/capture-window.ts";
 import { requestReveal } from "./conversation/reveal.ts";
-import { setManagedSkin } from "./appearance-settings.ts";
+import { setManagedSkin, updateAppearance, useAppearance } from "./appearance-settings.ts";
 import { uiLifetime } from "./ui-lifetime.ts";
 import { skinRegistry } from "./skins.ts";
 import { PluginChatBackgroundSettings } from "./plugin-background.tsx";
@@ -1381,6 +1381,11 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		page: (id, component, options) => registerPage(name, id, component, options),
 		skin: (skin) => {
 			if (lifetime.active) skins.set(name, skin);
+		},
+		useTheme: () => useAppearance().theme ?? "system",
+		setTheme: (theme) => {
+			if (theme !== "system" && theme !== "light" && theme !== "dark") throw new Error(`Invalid theme ${String(theme)}`);
+			if (lifetime.active) updateAppearance({ theme });
 		},
 		effect: lifetime.effect,
 		composerItem: (id, component, options) => registerComposerItem(name, id, component, options),

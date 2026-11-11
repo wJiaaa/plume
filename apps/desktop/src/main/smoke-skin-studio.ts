@@ -106,25 +106,34 @@ export async function checkSkinStudio(options: {
 		await capture(`smoke-skin-preset-${base}.png`);
 	}
 	await page(`document.querySelector('[data-skin-default]').scrollIntoView({ block: 'center' })`);
+	// 「系统外观」三个按钮就是外观页的主题卡片：撤下工坊皮肤，改存下的主题偏好；配色照用户自己的，外圈照常是窗口材质。
 	for (const [mode, label] of [
 		["light", "浅色"],
 		["dark", "深色"],
 		["system", "跟随系统"],
 	] as const) {
 		await button(label, "[data-skin-default]");
-		await wait(async () => nativeTheme.themeSource === mode && (await library()).activeId === `default-${mode}`, "原生默认模式生效并保存");
+		await wait(
+			async () =>
+				nativeTheme.themeSource === mode &&
+				(await library()).activeId === null &&
+				JSON.parse(await readFile(join(plumeHome(), "appearance.json"), "utf8")).theme === mode,
+			"主题偏好改成所选并撤下工坊皮肤",
+		);
 		const dark = nativeTheme.shouldUseDarkColors;
 		await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${dark}`, "页面响应原生主题");
+		await until(`document.querySelector('[data-skin-default] button[aria-pressed=true]')?.textContent.trim() === ${JSON.stringify(label)}`, "工坊亮所选主题");
 		assert.equal((await token("bg")).toUpperCase(), dark ? "#171717" : "#F8F8F8");
-		assert.equal((await token("fg")).toUpperCase(), dark ? "#D4D4D4" : "#262626");
-		assert.equal((await token("accent")).toUpperCase(), "#339CFF");
+		assert.equal((await token("fg")).toUpperCase(), dark ? "#D4D4D4" : "#263748");
+		assert.equal((await token("accent")).toUpperCase(), "#336699");
+		assert.equal(await page<string>(`document.querySelector('[data-plume-head-fill]').dataset.plumeHeadFill`), "window");
 		await capture(`smoke-skin-default-${mode}.png`);
 	}
-	await button("恢复原外观");
-	await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "原生默认退出后恢复用户主题");
-	// 系统外观本身可能就是浅色，上一句会立刻成立；等撤下皮肤后的字色，而不是只读一次。
+	// 选回原来的浅色：偏好文件和开始时一字不差，配色没被动过。
+	await button("浅色", "[data-skin-default]");
+	await wait(async () => (await readFile(join(plumeHome(), "appearance.json"), "utf8")) === before, "选回浅色后偏好与原来一致");
+	await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "回到用户的浅色");
 	await wait(async () => (await token("ink")) === originalInk, "恢复用户字色");
-	assert.equal(await readFile(join(plumeHome(), "appearance.json"), "utf8"), before, "选择默认配色不删除用户原配色");
 	await page(`document.querySelector('[data-skin-id="light-peach"]').scrollIntoView({ block: 'center' })`);
 	await click('[data-skin-id="light-peach"] .skin-studio-choice');
 	await until(`getComputedStyle(document.documentElement).getPropertyValue('--plume-ink').trim().toUpperCase() === '#3A1F1D'`, "蜜桃配色应用");
@@ -351,17 +360,22 @@ export async function checkSkinStudio(options: {
 	await until(`innerWidth === ${size[0]}`, "恢复背景验证窗口");
 	await openStudioDetail();
 	await click(studioSwitch);
-	await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "停用默认皮肤恢复原模式");
+	await wait(async () => !(await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊停用");
+	// 「深色」改的是用户自己的主题偏好，不是工坊的皮肤：停用、再启用工坊都还是深色。
+	assert.equal((await appearance()).theme, "dark", "停用工坊不改用户选的主题");
+	assert.equal(await page<boolean>(`matchMedia('(prefers-color-scheme: dark)').matches`), true);
 	assert.equal((await appearance()).chatBackground, droppedImage, "停用工坊保留背景图");
 	assert.equal((await appearance()).lightForeground, "#263748");
 	await click(studioSwitch);
-	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重启恢复保存的默认深色模式");
+	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊重新启用");
+	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重新启用工坊仍是用户选的深色");
 	await leaveMarket();
 	await button("换肤工坊");
 	await button("清除", background);
 	await wait(async () => (await appearance()).chatBackground === undefined, "清除背景图引用");
 	await until(`document.querySelector('${background} [data-chat-background-preview]') === null`, "清除后显示空状态");
-	await button("恢复原外观");
+	await button("浅色", "[data-skin-default]");
+	await wait(async () => (await appearance()).theme === "light", "选回用户原来的浅色");
 	console.log(
 		"PLUME_SKIN_STUDIO_SMOKE " +
 			JSON.stringify({

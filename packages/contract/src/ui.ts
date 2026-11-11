@@ -891,6 +891,13 @@ export interface UiContext {
 	page(id: string, component: ComponentType<PageProps>, options: PageOptions): void;
 	/** 换皮肤：可重复调用更新，null 撤下自己的皮肤；最后注册的生效，撤下后前一个恢复。 */
 	skin(skin: Skin | null): void;
+	/** 应用的主题偏好，就是设置 › 外观那三张主题卡片（跟随系统、浅色、深色）；在组件里用，偏好变了跟着重画。 */
+	useTheme(): "system" | "light" | "dark";
+	/**
+	 * 改主题偏好，等同人在外观页点那张卡片：存盘、各窗口同步。有皮肤接管深浅模式时外观页的主题只读，这里同样不改；
+	 * 要改先 `skin(null)` 撤下自己的皮肤。只在人点了插件界面上的按钮时调。
+	 */
+	setTheme(theme: "system" | "light" | "dark"): void;
 	/** 登记界面入口的订阅清理；停用、重载或加载失败时执行，旧入口不能再注册皮肤。 */
 	effect(dispose: () => void): void;
 	/**
