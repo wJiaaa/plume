@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
@@ -336,25 +337,49 @@ test("只有装好的应用包算安装，开发用的 node_modules 里的 Elect
 	assert.equal(installedAppBundle("/usr/local/bin/plume"), null);
 });
 
-test("替换脚本等进程走了再换，失败时放回旧的，最后清隔离标记再打开", () => {
-	const script = swapScript({ pid: 4242, staged: "/u/Plume.app", target: "/Applications/Plume.app", backup: "/Applications/Plume.app.old" });
-	const order = [
-		"kill -0 4242",
-		'mv "/Applications/Plume.app" "/Applications/Plume.app.old"',
-		'ditto "/u/Plume.app" "/Applications/Plume.app"',
-		"com.apple.quarantine",
-		'open "/Applications/Plume.app"',
-	];
-	const at = order.map((piece) => script.indexOf(piece));
-	assert.ok(
-		at.every((index) => index >= 0),
-		String(at),
-	);
-	assert.deepEqual(
-		[...at].sort((a, b) => a - b),
-		at,
-	);
-	assert.match(script, /mv "\/Applications\/Plume.app.old" "\/Applications\/Plume.app"/);
+/** 在临时目录里真跑一次替换脚本。`open`、`xattr` 换成 PATH 里的桩，只记下被打开的是哪个。 */
+async function runSwap(prepare: (dir: string) => Promise<void>) {
+	const dir = await mkdtemp(join(tmpdir(), "plume-swap-test-"));
+	const bin = join(dir, "bin");
+	await mkdir(bin);
+	await writeFile(join(bin, "open"), `#!/bin/bash\necho "$1" >> ${JSON.stringify(join(dir, "opened"))}\n`, { mode: 0o755 });
+	await writeFile(join(bin, "xattr"), "#!/bin/bash\n", { mode: 0o755 });
+	await prepare(dir);
+	const target = join(dir, "Plume.app");
+	// 等的那个进程已经不在了：一个刚退出的子进程的 pid。
+	const gone = spawnSync("true").pid;
+	const script = swapScript({ pid: gone, incoming: `${target}.new`, target, backup: `${target}.old` });
+	const run = spawnSync("/bin/bash", ["-c", script], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, encoding: "utf8" });
+	assert.equal(run.status, 0, run.stderr);
+	const read = (path: string) => readFile(join(dir, path), "utf8").catch(() => null);
+	const result = { version: await read("Plume.app/version"), opened: await read("opened"), left: (await readdir(dir)).sort() };
+	await rm(dir, { recursive: true, force: true });
+	return { ...result, target };
+}
+
+async function bundle(path: string, version: string) {
+	await mkdir(path, { recursive: true });
+	await writeFile(join(path, "version"), version);
+}
+
+test("替换脚本等进程走了，把拷好的新版改名换上，清掉旧的再打开", { skip: process.platform === "win32" }, async () => {
+	const swapped = await runSwap(async (dir) => {
+		await bundle(join(dir, "Plume.app"), "old");
+		await bundle(join(dir, "Plume.app.new"), "new");
+	});
+	assert.equal(swapped.version, "new");
+	assert.equal(swapped.opened, `${swapped.target}\n`);
+	assert.deepEqual(swapped.left, ["Plume.app", "bin", "opened"]);
+});
+
+test("新版放不上时替换脚本把旧的放回去，照样打开能起来的那个", { skip: process.platform === "win32" }, async () => {
+	// 拷好的新版不见了：第二次 mv 失败，要走回滚，不能停在只剩 Plume.app.old 的样子。
+	const restored = await runSwap(async (dir) => {
+		await bundle(join(dir, "Plume.app"), "old");
+	});
+	assert.equal(restored.version, "old");
+	assert.equal(restored.opened, `${restored.target}\n`);
+	assert.deepEqual(restored.left, ["Plume.app", "bin", "opened"]);
 });
 
 // ── 界面 ──
