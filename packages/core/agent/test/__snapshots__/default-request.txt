@@ -130,6 +130,18 @@ Archive this conversation once the current turn ends. Use it only when the perso
 
 {"type":"object","properties":{"reason":{"type":"string","description":"Optional: what was finished, in a few words."}},"additionalProperties":false}
 
+## task
+
+Run a sub-agent in its own context window. It starts from nothing — your `prompt` is all it knows, and it cannot ask you questions. It runs in the background and this call immediately returns its ID. When it finishes, its final message is delivered automatically; do not poll, resume or duplicate running work. The files it read and the commands it ran stay out of your context. Your conclusion depends on what they return: write no final answer or summary, and never guess what they will find, until every sub-agent you dispatched has reported. Two kinds of work are worth delegating: work whose intermediate output is large and whose conclusion is all you need (sweeping dozens of files for one answer, running something with long output for its failures), and a sizeable piece of work that does not depend on what you are doing. Do everything else yourself: a change of a step or two, part of what you are writing now (such as tests for the function you just wrote), or work you could only hand off after spelling out its interfaces and conventions — spelling those out costs as much as doing it. Agents with write tools edit files directly; their risky actions are asked of the user, like yours. Calls in one reply run in parallel (extra ones queue), so dispatch independent pieces together; have each skip builds, lints and tests, and verify once yourself after they have all reported. Pieces that need a shared interface which does not exist yet are not independent — write the interface first, or do not split. Each file has one writer: when sub-agents may edit files, name in each prompt the files it owns, and never give two of them the same file.
+
+{"type":"object","properties":{"description":{"type":"string","description":"3-5 word summary of the task."},"prompt":{"type":"string","description":"Self-contained instructions for the sub-agent."},"subagent_type":{"type":"string","description":"Which agent definition to use. Defaults to `general`."},"resume":{"type":"string","description":"ID of a stopped or finished sub-agent to continue in the same context. Keeps its original identity and tool restrictions."}},"required":["description","prompt"],"additionalProperties":false}
+
+## stop_subagent
+
+Stop one of this conversation's sub-agents, including queued work. Does not stop the parent or siblings. Do not restart stopped work unless the user asks.
+
+{"type":"object","properties":{"id":{"type":"string","description":"The sub-agent ID returned by task."}},"required":["id"],"additionalProperties":false}
+
 ## todo_write
 
 Record the task list for work of three or more steps. Send the complete list every time — it replaces the previous one; exactly one item may be `in_progress`. Never let this be the only tool call in a reply: write the plan with your first real action, and mark steps done with the next one (or the one that finishes the work).
@@ -225,15 +237,3 @@ Search the web for pages: titles, snippets and URLs. Read one with web_fetch.
 Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.
 
 {"type":"object","properties":{"url":{"type":"string","description":"Absolute http(s) URL."},"format":{"type":"string","enum":["text","raw"],"description":"Output format. Default text."}},"required":["url"],"additionalProperties":false}
-
-## task
-
-Run a sub-agent in its own context window. It starts from nothing — your `prompt` is all it knows, and it cannot ask you questions. It runs in the background and this call immediately returns its ID. When it finishes, its final message is delivered automatically; do not poll, resume or duplicate running work. The files it read and the commands it ran stay out of your context. Your conclusion depends on what they return: write no final answer or summary, and never guess what they will find, until every sub-agent you dispatched has reported. Two kinds of work are worth delegating: work whose intermediate output is large and whose conclusion is all you need (sweeping dozens of files for one answer, running something with long output for its failures), and a sizeable piece of work that does not depend on what you are doing. Do everything else yourself: a change of a step or two, part of what you are writing now (such as tests for the function you just wrote), or work you could only hand off after spelling out its interfaces and conventions — spelling those out costs as much as doing it. Agents with write tools edit files directly; their risky actions are asked of the user, like yours. Calls in one reply run in parallel (extra ones queue), so dispatch independent pieces together; have each skip builds, lints and tests, and verify once yourself after they have all reported. Pieces that need a shared interface which does not exist yet are not independent — write the interface first, or do not split. Each file has one writer: when sub-agents may edit files, name in each prompt the files it owns, and never give two of them the same file.
-
-{"type":"object","properties":{"description":{"type":"string","description":"3-5 word summary of the task."},"prompt":{"type":"string","description":"Self-contained instructions for the sub-agent."},"subagent_type":{"type":"string","description":"Which agent definition to use. Defaults to `general`."},"resume":{"type":"string","description":"ID of a stopped or finished sub-agent to continue in the same context. Keeps its original identity and tool restrictions."}},"required":["description","prompt"],"additionalProperties":false}
-
-## stop_subagent
-
-Stop one of this conversation's sub-agents, including queued work. Does not stop the parent or siblings. Do not restart stopped work unless the user asks.
-
-{"type":"object","properties":{"id":{"type":"string","description":"The sub-agent ID returned by task."}},"required":["id"],"additionalProperties":false}
