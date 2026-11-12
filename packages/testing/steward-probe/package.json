@@ -1,0 +1,21 @@
+{
+  "name": "@plume/steward-probe",
+  "version": "0.1.0",
+  "description": "测试用插件：开一个由它代管的会话，在面板里往里转话、替人答卡、看回复。只给冒烟和开发者手动验证代管接口，不随应用发、不进插件市场。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "代管探针",
+    "category": "Testing"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.3.1"
+  }
+}

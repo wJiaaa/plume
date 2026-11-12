@@ -25,6 +25,7 @@
 | `infra/` | 和产品无关的通用基础设施：换个产品也能用，不认识 agent、会话、插件 | `rpc`（`@plume/rpc`）、`platform`（`@plume/platform`，本机的 shell、把一行命令拆开的扫描器、按行比较两段文本）、`document-text`（`@plume/document-text`，从 PDF、Office 文档里抽字） |
 | `builtin/` | 内置插件：随应用发、不能停用，写法和市场插件一样，只用公开接口 | `tools`（`@plume/tools`，插件名 plume.tools）、`sandbox`（`@plume/sandbox`，plume.sandbox，提供服务 `sandbox`）、`approval`（`@plume/approval`，plume.approval，钩子 `tool.approve` 上的帮我批准的风险规则）、`ask-user`（`@plume/ask-user`，plume.ask-user，`ask_user` 工具和提问卡）、`prompt`（`@plume/prompt`，plume.prompt）、`compaction`（`@plume/compaction`，plume.compaction）、`delivery`（`@plume/delivery`，plume.delivery，文件交付卡、审核）、`documents`（`@plume/documents`，plume.documents，文件面板和插件共用的只读文档预览） |
 | `client/` | 渲染进程共享的库：产品界面和插件界面入口都会用到 | `styles`（`@plume/styles`，设计 token `theme.css` 和共用的类名组合）、`ui`（`@plume/ui`，基础组件，类名来自 `styles`） |
+| `testing/` | 只给冒烟用的测试插件：写法和内置插件一样、只用公开接口，不随应用发、不进插件市场；用到它的冒烟段复制一份到自己的目录里构建、装上 | `steward-probe`（`@plume/steward-probe`，example.steward-probe，代管会话的接口：面板里开代管会话、转话、替人答卡） |
 | `sdk/` | 给插件作者的开发工具：随应用发到资源目录，不跑在 Plume 的进程里（插件包的格式 `manifest` 除外，主进程也引它） | `plugin-sdk`（`@plumeai/plugin-sdk`，类型声明、`plume-plugin` 命令、插件模板、插件包的格式） |
 
 ## 新包放哪

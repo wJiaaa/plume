@@ -5,6 +5,7 @@
  * - 文档、spec、单元测试、检查脚本：不用跑冒烟；
  * - 某一段自己的冒烟文件（`smoke-<x>.ts`）：用到它、或用到间接引用它的冒烟文件的那几段；smoke.ts 在各段之前的公共开头里
  *   用到的（每段都靠它），全跑；
+ * - 只给某一段用的测试插件（`packages/testing/<目录>`，见 `TESTING`）：那一段；
  * - 其余（界面、主进程、本体、内置插件、共用的包、smoke.ts 本身……）：哪段都可能受影响，全跑。
  * 段用到哪些冒烟文件从 smoke.ts 里读：每段是一个 `if (process.env.PLUME_SMOKE_ONLY === "<段名>") { … }`，主流程是最后那一长串，
  * 第一段之前是公共开头。冒烟文件之间互相引用（`smoke-kit.ts` 几乎人人用），所以按引用关系把改动传开，不只看 smoke.ts 直接用的。
@@ -13,6 +14,9 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+/** packages/testing/ 下的测试插件只有这几段装：目录名 → 段名。 */
+const TESTING = { "steward-probe": "steward" };
 
 const SKIP = [/\.md$/, /^spec\//, /^docs\//, /(^|\/)test\//, /\.test\.[cm]?[jt]sx?$/, /^scripts\/check-[^/]+\.mjs$/, /^\.github\//];
 
@@ -27,6 +31,11 @@ export function changedSuites(repo, entry, known, changed = changedFiles(repo)) 
 	};
 	for (const path of changed) {
 		if (SKIP.some((pattern) => pattern.test(path))) continue;
+		const probe = TESTING[/^packages\/testing\/([^/]+)\//.exec(path)?.[1]];
+		if (probe && known.includes(probe)) {
+			add(probe, path);
+			continue;
+		}
 		const own = /^apps\/desktop\/src\/main\/(smoke-[^/]+\.ts)$/.exec(path);
 		if (own) {
 			const touched = affected(own[1], importers);

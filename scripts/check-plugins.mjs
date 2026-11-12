@@ -2,7 +2,7 @@
  * 插件检查（`pnpm check` 的一部分）：写插件只靠 skill `skills/plume-plugin` 和公开接口，这里查两头都守住了；
  * 反过来，本体也不按名字认具体插件。
  *
- * 1. 内置插件（packages/builtin/*）只引用公开接口：规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/imports.mjs），
+ * 1. 内置插件（packages/builtin/*）和只给冒烟用的测试插件（packages/testing/*）只引用公开接口：规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/imports.mjs），
  *    另外允许 `packages/infra/` 下的通用库（不懂 agent 业务，构建时打进插件），同样要在 package.json 里声明。
  *    从 `@plume/ui` 引用的值只能是给插件用的名单里的（见规则 3）。市场插件在插件仓库里，由它自己的检查管。
  * 2. skill 跟得上接口：`PluginContext`、`UiContext` 的每个成员和 `Hooks` 的每个钩子名，skill 里都要提到
@@ -31,6 +31,8 @@ const STYLES_SRC = join(root, "packages/client/styles/src/index.ts");
 const COMPONENTS_DOC = join(SKILL, "references/components.md");
 const UI_PUBLIC = new Set(JSON.parse(readFileSync(UI_API, "utf8")).flatMap((group) => group.names));
 const BUILTIN = join(root, "packages/builtin");
+/** 只给冒烟用的测试插件，和内置插件按同一套规则查。 */
+const TESTING = join(root, "packages/testing");
 /** packages/infra/ 下的通用库：不懂 agent 业务，插件可以声明了打包进去。 */
 const INFRA = new Set(
 	readdirSync(join(root, "packages/infra"))
@@ -68,9 +70,8 @@ function uiValueImports(text) {
 	return names;
 }
 
-// 规则 1：内置插件只引用公开接口。
-for (const name of readdirSync(BUILTIN)) {
-	const pluginDir = join(BUILTIN, name);
+// 规则 1：内置插件（和测试插件）只引用公开接口。
+for (const pluginDir of [BUILTIN, TESTING].flatMap((group) => readdirSync(group).map((name) => join(group, name)))) {
 	if (!existsSync(join(pluginDir, "package.json"))) continue;
 	for (const { file, message } of importProblems(pluginDir, { allow: INFRA })) report(file, message);
 	for (const file of walk(join(pluginDir, "src"), [".ts", ".tsx"])) {

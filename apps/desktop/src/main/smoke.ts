@@ -58,6 +58,7 @@ import { checkUpdate } from "./smoke-update.ts";
 import { checkBackgroundJob } from "./smoke-background-job.ts";
 import { checkEnvironment } from "./smoke-environment.ts";
 import { checkPeers } from "./smoke-peers.ts";
+import { checkSteward } from "./smoke-steward.ts";
 import { checkSpawnSession } from "./smoke-spawn-session.ts";
 import { checkPlan } from "./smoke-plan.ts";
 import { checkHooks } from "./smoke-hooks.ts";
@@ -966,6 +967,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "peers") {
 			await checkPeers({ window, agent, plugin, outDir, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "peers" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "steward") {
+			await checkSteward({ window, agent, plugin, outDir, setModel: (next) => (override = next) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "steward" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();

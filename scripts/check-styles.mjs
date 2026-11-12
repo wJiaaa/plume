@@ -43,7 +43,7 @@ const OTHER = ["apps/desktop/src/main", "apps/desktop/src/preload", "apps/deskto
  * 插件：查规则 3、5、6、7，规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/styles.mjs），色值的例外写在文件里
  * （`color-exempt`），不在下面的表里。插件 SDK 的模板就是仓库外插件的起点，和插件按同一套规则查。市场插件在插件仓库里，由它自己的检查管。
  */
-const PLUGINS = ["packages/builtin", "packages/sdk/plugin-sdk/template"];
+const PLUGINS = ["packages/builtin", "packages/testing", "packages/sdk/plugin-sdk/template"];
 
 /** 允许出现的色值：文件 → 值 → 原因。 */
 const ALLOWED_COLORS = {

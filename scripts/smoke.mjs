@@ -292,7 +292,8 @@ async function takeSnapshot() {
 		await symlink(join(repo, path), join(snapshot, path), "junction");
 	};
 	await Promise.all([clone("apps/desktop/out"), clone("apps/desktop/package.json")]);
-	await Promise.all(["node_modules", "apps/desktop/node_modules", "apps/desktop/vendor", "packages/sdk/plugin-sdk"].map(link));
+	// packages/testing 下是只给冒烟用的测试插件（源码）：用到的段复制一份到自己的目录里构建，不往这里写。
+	await Promise.all(["node_modules", "apps/desktop/node_modules", "apps/desktop/vendor", "packages/sdk/plugin-sdk", "packages/testing"].map(link));
 	for (const entry of await readdir(join(repo, "packages/builtin"), { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const dir = `packages/builtin/${entry.name}`;

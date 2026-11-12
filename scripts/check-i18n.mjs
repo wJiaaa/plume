@@ -29,7 +29,7 @@ import { chineseFindings } from "../packages/sdk/plugin-sdk/lib/lint/i18n.mjs";
 const root = resolve(import.meta.dirname, "..");
 
 /** 扫描的目录：所有会把文字放到人眼前的代码。市场插件在插件仓库里，由它自己的检查（插件 SDK 的同一条规则）管。 */
-const SCANNED = ["apps/desktop/src", "packages/client", "packages/core/agent/src", "packages/builtin"];
+const SCANNED = ["apps/desktop/src", "packages/client", "packages/core/agent/src", "packages/builtin", "packages/testing"];
 
 /**
  * 内容本身就是中文的文件。
@@ -91,6 +91,8 @@ const EXEMPT = [
 	// 环境卡片的冒烟按中文界面读开关的说明、端口和唤醒，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-environment.ts",
 	"apps/desktop/src/main/smoke-peers.ts",
+	// 代管会话的冒烟按中文界面找会话菜单项、读气泡上的标注，假模型的回复和断言是写给开发者的。
+	"apps/desktop/src/main/smoke-steward.ts",
 	"apps/desktop/src/main/smoke-spawn-session.ts",
 	"apps/desktop/src/main/smoke-plan.ts",
 	// `/compact` 的冒烟按中文界面读压缩那一行，假模型的回复和断言是写给开发者的。
@@ -109,7 +111,7 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-kit.ts",
 ];
 
-const PLUGIN_MESSAGES = /^packages\/builtin\/[^/]+\/src\/messages\.ts$/;
+const PLUGIN_MESSAGES = /^packages\/(builtin|testing)\/[^/]+\/src\/messages\.ts$/;
 
 function walk(dir, out = []) {
 	for (const name of readdirSync(dir)) {

@@ -73,3 +73,15 @@ test("公共开头用到的冒烟文件每段都靠它，全跑", () => {
 		rmSync(repo, { recursive: true, force: true });
 	}
 });
+
+test("只给一段用的测试插件只挑那一段", () => {
+	const repo = fixture();
+	const probe = ["packages/testing/steward-probe/src/ui.tsx"];
+	try {
+		assert.deepEqual(changedSuites(repo, ENTRY, [...KNOWN, "steward"], probe).suites, ["steward"]);
+		// 那一段不在能跑的里（改了名、删了）时不认，照旧全跑。
+		assert.deepEqual(changedSuites(repo, ENTRY, KNOWN, probe).suites, KNOWN);
+	} finally {
+		rmSync(repo, { recursive: true, force: true });
+	}
+});

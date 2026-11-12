@@ -58,7 +58,8 @@
       "ignoreDependencies": ["@plume/contract", "@plume/llm", "@plume/rpc", "@plume/styles", "@plume/ui", "@types/react-dom"],
     },
     // 插件的两个入口是构建约定的（逻辑入口 src/index.ts、界面入口 src/ui.tsx），不写在 package.json 的 exports 里。
-    "packages/builtin/*": {
+    // packages/testing/ 下是只给冒烟用的测试插件，写法一样。
+    "packages/{builtin,testing}/*": {
       // 写成一个模式：不是每个插件都有界面入口和测试，分开写的话没匹配到的那几条会被当成配置写错。
       "entry": ["{src/index.ts,src/ui.tsx,test/**/*.test.{ts,tsx}}"],
       "project": ["src/**/*.{ts,tsx}"],
