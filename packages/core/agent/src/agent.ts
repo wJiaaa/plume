@@ -30,6 +30,7 @@ import type {
 	CommandContext,
 	CompactionOutcome,
 	Hiccup,
+	LetterFate,
 	LetterInput,
 	LetterReceipt,
 	Message,
@@ -74,7 +75,7 @@ import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
 import { BackgroundJobs } from "./jobs.ts";
 import { SessionWakeups } from "./wakeups.ts";
-import { lettersText } from "./letters.ts";
+import { CLOSED_TEXT, DROPPED_TEXT, excerpt, lettersText, unrepliedText } from "./letters.ts";
 import { ChildTasks } from "./child-tasks.ts";
 import { SessionQueues, type Source, childTask, stewardMessage } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
@@ -256,11 +257,18 @@ interface Session {
 
 /** 一封问出去还没答复的请求，见 `asking`。`read`：收件方已经读到。 */
 interface Asking {
+	/** 这封请求的 id（`PeerLetter.id`）：代答时据此找到读到它的那条消息。 */
+	id: string;
 	from: string;
 	to: string;
-	/** 寄它的插件：停用了就没人代答。 */
-	owner: string;
 	read: boolean;
+	/** 请求开头一截，答复的 `re`。 */
+	excerpt: string;
+	/** 代答时署的收件方地址（`LetterInput.recipient`）和收件方的目录：收件方删掉以后也要替它说一句。 */
+	recipient: string;
+	cwd: string;
+	/** 请求所在的往来链，代答接在它后面。 */
+	chain?: string[];
 }
 
 /**
@@ -359,7 +367,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const idleWaiters = new Map<string, Array<() => void>>();
 	/**
 	 * 问出去还没答复的请求（`request: true` 的信），见 `postLetter`。请求、答复是寄信原语自己的说法（`PeerLetter.request`、`answer`），
-	 * 本体据此知道一个会话还在等别人答复：开出来的会话等它们都有了答复才算做完（`settled`）。
+	 * 本体据此知道一个会话还在等别人答复：开出来的会话等它们都有了答复才算做完（`settled`）。配对和代答都在本体，见 `LetterReceipt`。
 	 */
 	const asking = new Set<Asking>();
 	/** 等某个会话问出去的都有答复的，见 `settled`。 */
@@ -497,8 +505,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				// 它登记的后台任务停掉（进程组是分离的，没人停就一直活到关机），它约的唤醒到点时要它给话，也取消。
 				jobs.forgetOwner(owner);
 				wakeups.cancelOwner(owner);
-				// 寄这些请求的插件停用了，没人再替对方代答：不再等。
-				answered([...asking].filter((entry) => entry.owner === owner));
 				const children = [...new Set([...sessions.values(), ...active])].filter((session) => session.summary.owner === owner);
 				for (const child of children) {
 					child.steering = [];
@@ -703,8 +709,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		// 等它闲下来的人不用再等了：它不在了。
 		for (const id of ids) for (const resolve of idleWaiters.get(id) ?? []) resolve();
 		for (const id of ids) idleWaiters.delete(id);
-		// 它问出去的不再等，问它的也等不来答复了。
-		answered([...asking].filter((entry) => ids.includes(entry.from) || ids.includes(entry.to)));
+		// 它问出去的不再等；问它的（读没读到都算）替它说一句「关了」，见 `LetterReceipt`。
+		answered([...asking].filter((entry) => ids.includes(entry.from)));
+		answerEach(
+			[...asking].filter((entry) => ids.includes(entry.to)),
+			"closed",
+			() => CLOSED_TEXT,
+		);
 		// 草稿只为那次对话而写，跟着会话一起走；删不掉只记日志，不挡删除本身。
 		for (const id of ids)
 			void rm(scratchDir(id), { recursive: true, force: true }).catch((error: unknown) =>
@@ -1782,9 +1793,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		}
 	}
 
-	/** 最后一段有字的回复（`LaunchedIdle.reply`）。 */
-	function lastReply(messages: readonly Message[]): string {
-		for (let index = messages.length - 1; index >= 0; index--) {
+	/** 最后一段有字的回复（`LaunchedIdle.reply`），`since` 起往后找（代答只认读到请求以后说的）。 */
+	function lastReply(messages: readonly Message[], since = 0): string {
+		for (let index = messages.length - 1; index >= since; index--) {
 			const message = messages[index];
 			if (message?.role !== "assistant") continue;
 			const words = message.content
@@ -1915,13 +1926,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/**
 	 * `from` 给 `toId` 寄一封信（`ToolRun.letter`、`LetterReceipt.answer`）。两边都得是顶层会话；发件方的 id、目录照实填。
-	 * 一封信是一件新的事，和人开口一样：停下过的会话也为它开一轮。`owner` 是寄信的插件。
 	 *
-	 * 请求记进 `asking`，有了答复才划掉：经回执的 `answer` 回了信，或者收件方读到它以后给发件方寄了一封答复（`answer`）——
-	 * 一封答复答掉它读到的全部，和会话互通的 `reply_session` 一样。没读到的（`dropped`、`closed`）由寄信的插件经 `answer`
-	 * 代答；一方删掉、插件停用时不再等，见 `deleteTree`、`disposeOwner`。
+	 * 请求记进 `asking`，有了答复才划掉，配对归本体（见 `LetterReceipt`）：一封答复答掉 `answering` 那几封，没给就是收件方问
+	 * 这边、这边读到了还没答的全部；一封也对不上的按通知送。没答的由本体代答：读到它的那一轮收场时（`answerUnreplied`），
+	 * 没读到时（下面 `read` 的下落），收件方删掉时（`deleteTree`）。
 	 */
-	function postLetter(from: Session, toId: string, input: LetterInput, owner: string): LetterReceipt {
+	function postLetter(from: Session, toId: string, input: LetterInput, answering?: Asking[]): LetterReceipt {
 		const to = sessions.get(String(toId));
 		if (quitting || !sessions.has(from.summary.id)) throw new Error(text("session.parentStopped"));
 		if (!to || to.summary.kind !== "top" || from.summary.kind !== "top" || to === from) throw new Error(text("session.badLetterTarget", { id: String(toId) }));
@@ -1929,9 +1939,15 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
 		const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined);
-		const re = strings(input.re);
 		const chain = strings(input.chain);
-		const answer = input.answer && ["replied", "unreplied", "dropped", "closed"].includes(input.answer) ? input.answer : undefined;
+		const kind = input.answer && ["replied", "unreplied", "dropped", "closed"].includes(input.answer) ? input.answer : undefined;
+		const answers = kind
+			? (answering ?? [...asking].filter((entry) => entry.from === to.summary.id && entry.to === from.summary.id && entry.read)).filter((entry) =>
+					asking.has(entry),
+				)
+			: [];
+		const given = strings(input.re);
+		const recipient = typeof input.recipient === "string" && input.recipient.trim() ? input.recipient.trim() : to.summary.title.trim() || to.summary.id;
 		const peer: PeerLetter = {
 			id: randomUUID(),
 			sessionId: from.summary.id,
@@ -1939,32 +1955,90 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			text: words,
 			cwd: from.summary.cwd,
 			...(input.request === true ? { request: true } : {}),
-			...(answer ? { answer } : {}),
-			...(re?.length ? { re } : {}),
+			...(kind && answers.length ? { answer: kind, re: given?.length ? given : answers.map((entry) => entry.excerpt) } : {}),
 			...(chain?.length ? { chain } : {}),
 		};
-		const read = background.letter(to.summary.id, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
-		to.stopped = false;
-		if (answer) answered([...asking].filter((entry) => entry.from === to.summary.id && entry.to === from.summary.id && entry.read));
-		const entry: Asking | undefined = peer.request ? { from: from.summary.id, to: to.summary.id, owner, read: false } : undefined;
+		const read = deliverLetter(to, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
+		answered(answers);
+		const entry: Asking | undefined = peer.request
+			? {
+					id: peer.id!,
+					from: from.summary.id,
+					to: to.summary.id,
+					read: false,
+					excerpt: excerpt(words),
+					recipient,
+					cwd: to.summary.cwd,
+					...(chain?.length ? { chain } : {}),
+				}
+			: undefined;
 		if (entry) {
 			asking.add(entry);
 			void read.then((fate) => {
 				if (fate.status === "read") entry.read = true;
+				// 没读到：人先按了停、钩子拦下是 `dropped`，删掉（`deleteTree` 已经答过）、退出是 `closed`。
+				else answerEach([entry], fate.status, () => (fate.status === "dropped" ? DROPPED_TEXT : CLOSED_TEXT));
 			});
 		}
-		let replied = false;
+		let used = false;
 		return {
 			id: peer.id!,
 			read,
+			answered: answers.length,
 			answer: (letter) => {
-				if (replied || !sessions.has(from.summary.id) || !sessions.has(to.summary.id) || quitting) return undefined;
-				replied = true;
-				const receipt = postLetter(to, from.summary.id, letter, owner);
-				if (entry) answered([entry]);
-				return receipt;
+				if (used || quitting || !sessions.has(from.summary.id) || !sessions.has(to.summary.id) || (entry && !asking.has(entry))) return undefined;
+				used = true;
+				return postLetter(to, from.summary.id, entry ? { ...letter, answer: letter?.answer ?? "replied" } : letter, entry ? [entry] : []);
 			},
 		};
+	}
+
+	/** 把一封信攒给 `to`：一封信是一件新的事，和人开口一样，停下过的会话也为它开一轮。 */
+	function deliverLetter(to: Session, peer: PeerLetter, guide?: string): Promise<LetterFate> {
+		const read = background.letter(to.summary.id, peer, guide);
+		to.stopped = false;
+		return read;
+	}
+
+	/**
+	 * 本体替收件方答这几封请求（没答、没读到、关了，见 `LetterReceipt`）：已经有了答复的跳过，按发件方分组、一家一封，
+	 * `words` 按那一家的几封写正文。发件方不在了只划掉，不寄；应用在退出时什么都不做，没有谁还会等。收件方可能已经删掉，所以不走 `postLetter`。
+	 */
+	function answerEach(entries: readonly Asking[], kind: "unreplied" | "dropped" | "closed", words: (theirs: Asking[]) => string): void {
+		if (quitting) return;
+		const open = entries.filter((entry) => asking.has(entry));
+		for (const askerId of new Set(open.map((entry) => entry.from))) {
+			const theirs = open.filter((entry) => entry.from === askerId);
+			const first = theirs[0]!;
+			const asker = sessions.get(askerId);
+			if (asker) {
+				const chain = theirs.reduce<string[]>((longest, entry) => (entry.chain && entry.chain.length > longest.length ? entry.chain : longest), []);
+				deliverLetter(asker, {
+					id: randomUUID(),
+					sessionId: first.to,
+					from: first.recipient,
+					text: words(theirs),
+					cwd: first.cwd,
+					answer: kind,
+					re: theirs.map((entry) => entry.excerpt),
+					...(chain.length ? { chain: [...chain, first.to] } : {}),
+				});
+			}
+			answered(theirs);
+		}
+	}
+
+	/** `session` 读到请求的那一轮收场了（怎么收场的都算）：读到了还没答的，拿它读到以后最后一段回复代答（`unreplied`）。 */
+	function answerUnreplied(session: Session, stop: TurnStop): void {
+		const unanswered = [...asking].filter((entry) => entry.to === session.summary.id && entry.read);
+		if (unanswered.length === 0) return;
+		const messages = session.messages ?? store.messages(session.summary.id);
+		answerEach(unanswered, "unreplied", (theirs) => {
+			const ids = new Set(theirs.map((entry) => entry.id));
+			// 压缩可能把那条消息折掉：找不到就从头找，最后一段回复还是这一轮的。
+			const at = messages.findIndex((message) => message.role === "user" && message.peer?.some((letter) => letter.id !== undefined && ids.has(letter.id)));
+			return unrepliedText(lastReply(messages, at + 1), stop);
+		});
 	}
 
 	async function runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel = false): Promise<TurnStop> {
@@ -2044,7 +2118,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 								background: (plugin, toolCallId) => background.channel(sessionId, toolCallId, plugin),
 								schedule: (plugin, toolCallId, wake) =>
 									wakeups.schedule(sessionId, plugin, toolCallId, background.channel(sessionId, toolCallId, plugin), wake),
-								letter: (plugin, to, letter) => postLetter(session, to, letter, plugin),
+								letter: (_plugin, to, letter) => postLetter(session, to, letter),
 								archiveAfterTurn: () => void (session.archiveAfterTurn = controller),
 							}),
 					progress: (toolCallId, output, push) => {
@@ -2086,6 +2160,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (session.looping === controller) session.looping = undefined;
 		// 退出应用时停下的不是人按的停：重开以后说「上次执行被中断」，而不是「已暂停」。
 		session.summary.stop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
+		// 先于 turnEnd 的观察：插件看到收场时，读到的请求已经有了答复。
+		answerUnreplied(session, session.summary.stop);
 		observe(sessionId, { type: "turnEnd", stop: session.summary.stop });
 		const task = prompt && handedPrompts.get(prompt);
 		if (task) handed.settle(task.childId, task.task, session.summary.stop);

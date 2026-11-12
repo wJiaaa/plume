@@ -22,7 +22,7 @@ afterEach(async () => {
  * 测试插件的工具：`keep` 留下这次调用的 `letter`，从测试里寄。寄信口子只在调用里有效，所以带 `hold` 的调用挂着不答，
  * 直到 `release()` 或这一轮被停下。
  */
-async function open(replies: FakeReply[], configure: (ctx: PluginContext) => void = () => undefined) {
+async function open(replies: FakeReply[] | ((request: Record<string, unknown>) => FakeReply), configure: (ctx: PluginContext) => void = () => undefined) {
 	dir = await mkdtemp(join(tmpdir(), "plume-letters-"));
 	model = await fakeAnthropic(replies);
 	const kept: Array<ToolRun["letter"] | null> = [];
@@ -98,7 +98,11 @@ async function open(replies: FakeReply[], configure: (ctx: PluginContext) => voi
 }
 
 const words = (message: Message) => message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+/** 会话里收到的答复（带 `answer` 的信），按收到的先后。 */
+const answersOf = (messages: Message[]) =>
+	messages.flatMap((message) => (message.role === "user" && message.peer ? message.peer.filter((letter) => letter.answer) : []));
 const keepCall: FakeReply = { toolCalls: [{ id: "call_keep", name: "keep", args: { hold: true } }] };
+const holdCall: FakeReply = { toolCalls: [{ id: "call_hold", name: "keep", args: { hold: true } }] };
 
 it("寄给闲着的会话：聚合后为它开一轮，消息带 peer，开头说明不是用户的话，同样的说明只写一遍", async () => {
 	const { service, asker, target, done, letterOf } = await open([keepCall, { text: "读到了" }]);
@@ -145,26 +149,34 @@ it("寄给忙着的会话：不另开一轮，在步骤边界读到，不算叫�
 	expect(roles).toEqual(["user", "assistant", "toolResult", "letter", "assistant"]);
 });
 
-it("收件方的人按停：请求没读到；通知、答复留着，不叫醒它，人下一次开口时接在那句后面读到", async () => {
-	const { service, target, done, letterOf } = await open([keepCall, { text: "答人" }]);
+it("收件方的人按停：请求没读到，本体替它答 dropped；通知留着，不叫醒它，人下一次开口时接在那句后面读到", async () => {
+	const { service, asker, target, done, letterOf, release } = await open([keepCall, { text: "答人" }]);
 	const letter = (await letterOf())!;
-	const request = letter(target.id, { from: "问的", text: "停之前的问", request: true });
+	const request = letter(target.id, { from: "问的", text: "停之前的问", request: true, recipient: "答的 [bbbbbb]" });
 	const notice = letter(target.id, { from: "问的", text: "停之前的通知" });
-	const answer = letter(target.id, { from: "问的", text: "停之前的答复", answer: "replied", re: ["问过的"] });
 	service.stop(target.id);
 	expect(await request.read).toEqual({ status: "dropped" });
 	await new Promise((resolve) => setTimeout(resolve, 600));
 	const idle = await service.getSession(target.id);
 	expect(idle.messages).toEqual([]);
 	expect(idle.summary.running).toBe(false);
+	// 发件方收到本体代写的「没读到」，插件再代答什么也不寄。
+	release();
+	await vi.waitFor(async () => expect(answersOf((await service.getSession(asker.id)).messages)).toHaveLength(1), { timeout: 5_000, interval: 10 });
+	expect(answersOf((await service.getSession(asker.id)).messages)[0]).toMatchObject({
+		sessionId: target.id,
+		from: "答的 [bbbbbb]",
+		answer: "dropped",
+		re: ["停之前的问"],
+	});
+	expect(request.answer({ from: "答的", text: "插件也来代答", answer: "dropped" })).toBeUndefined();
 
 	service.send(target.id, { content: [{ type: "text", text: "人开口" }] });
 	await done(target.id, 1);
 	expect(await notice.read).toEqual({ status: "read", opened: false });
-	expect(await answer.read).toEqual({ status: "read", opened: false });
 	const messages = (await service.getSession(target.id)).messages;
 	expect(messages.map((message) => (message.role === "user" && message.peer ? "letter" : message.role))).toEqual(["user", "letter", "assistant"]);
-	expect(messages[1]).toMatchObject({ peer: [{ text: "停之前的通知" }, { text: "停之前的答复", answer: "replied" }] });
+	expect(messages[1]).toMatchObject({ peer: [{ text: "停之前的通知" }] });
 	expect(JSON.stringify(messages)).not.toContain("停之前的问");
 });
 
@@ -231,31 +243,94 @@ it("只在顶层会话之间：子会话拿不到，寄给子会话、自己、�
 	expect(kept.at(-1)).toBeNull();
 });
 
-it("代答：从收件方寄回发件方，只能用一次；发件方不在了就寄不出", async () => {
-	const { service, asker, target, done, letterOf, release } = await open([keepCall, { text: "读到了" }, { text: "留好了" }, { text: "收到答复" }]);
+it("插件经回执替收件方答一封：只答这一封、只能一次，本体不再为它代答；没答的那封由本体代答", async () => {
+	const { service, asker, target, done, letterOf, release } = await open([keepCall, { text: "读到了" }]);
 	const letter = (await letterOf())!;
-	const receipt = letter(target.id, { from: "问的 [aaaaaa]", text: "问一句", request: true });
-	const later = letter(target.id, { from: "问的", text: "又一句" });
+	const first = letter(target.id, { from: "问的 [aaaaaa]", text: "问一句", request: true, recipient: "答的 [bbbbbb]" });
+	const second = letter(target.id, { from: "问的 [aaaaaa]", text: "又一句", request: true, recipient: "答的 [bbbbbb]" });
+	const answer = first.answer({ from: "答的 [bbbbbb]", text: "插件替它答" });
+	expect(answer?.answered).toBe(1);
+	expect(first.answer({ from: "答的", text: "再来一次" })).toBeUndefined();
 	await done(target.id, 1);
-	// 发件方答完那次调用、闲下来，代答才为它开一轮。
 	release();
-	await done(asker.id, 2);
-	const answer = receipt.answer({ from: "答的 [bbbbbb]", text: "它最后说的话", answer: "unreplied", re: ["问一句"] });
-	expect(answer).toBeDefined();
-	expect(receipt.answer({ from: "答的", text: "再来一次" })).toBeUndefined();
-	await done(asker.id, 3);
-	expect(await answer!.read).toEqual({ status: "read", opened: true });
-	const back = (await service.getSession(asker.id)).messages.at(-2)!;
-	expect(back).toMatchObject({ synthetic: true, peer: [{ sessionId: target.id, from: "答的 [bbbbbb]", answer: "unreplied", re: ["问一句"], cwd: dir }] });
-	expect(words(back)).toContain('answer="unreplied" re="问一句"');
+	await vi.waitFor(async () => expect(answersOf((await service.getSession(asker.id)).messages)).toHaveLength(2), { timeout: 5_000, interval: 10 });
+	expect(answersOf((await service.getSession(asker.id)).messages)).toMatchObject([
+		{ sessionId: target.id, from: "答的 [bbbbbb]", text: "插件替它答", answer: "replied", re: ["问一句"], cwd: dir },
+		{ sessionId: target.id, from: "答的 [bbbbbb]", text: "读到了", answer: "unreplied", re: ["又一句"], cwd: dir },
+	]);
+	expect(second.answer({ from: "答的", text: "插件也来代答" })).toBeUndefined();
+});
 
+it("答复对不上任何挂着的请求时按通知送；通知的回执寄回去的也是通知", async () => {
+	const { service, target, done, letterOf } = await open([keepCall, { text: "读到了" }]);
+	const letter = (await letterOf())!;
+	const stray = letter(target.id, { from: "问的", text: "没人问过的答复", answer: "replied", re: ["谁问的"] });
+	expect(stray.answered).toBe(0);
+	await done(target.id, 1);
+	const delivered = (await service.getSession(target.id)).messages[0]!;
+	expect(delivered).toMatchObject({ peer: [{ text: "没人问过的答复" }] });
+	expect(answersOf([delivered])).toEqual([]);
+	expect(words(delivered)).not.toContain("answer=");
+});
+
+it("发件方删掉了：读到请求的那一轮照常收场，不再答，回执也寄不出", async () => {
+	const { service, asker, target, done, letterOf } = await open([keepCall, { text: "读到了" }]);
+	const letter = (await letterOf())!;
+	const receipt = letter(target.id, { from: "问的", text: "问一句", request: true });
 	await service.deleteSession(asker.id);
-	expect(later.answer({ from: "答的", text: "x" })).toBeUndefined();
+	await done(target.id, 1);
+	expect(await receipt.read).toEqual({ status: "read", opened: true });
+	expect(receipt.answer({ from: "答的", text: "x" })).toBeUndefined();
+});
+
+it("收件方读到请求以后被人停下：那一轮以停下收场，本体拿它最后说的话代答，注明没做完", async () => {
+	const { service, asker, target, letterOf, release } = await open([keepCall, { ...holdCall, text: "先看看" }, { text: "收到" }]);
+	const letter = (await letterOf())!;
+	const receipt = letter(target.id, { from: "问的", text: "要答的问", request: true, recipient: "答的" });
+	expect(await receipt.read).toEqual({ status: "read", opened: true });
+	await vi.waitFor(async () => expect((await service.getSession(target.id)).messages.some((message) => message.role === "assistant")).toBe(true), {
+		timeout: 5_000,
+		interval: 10,
+	});
+	service.stop(target.id);
+	release();
+	await vi.waitFor(async () => expect(answersOf((await service.getSession(asker.id)).messages)).toHaveLength(1), { timeout: 5_000, interval: 10 });
+	const [back] = answersOf((await service.getSession(asker.id)).messages);
+	expect(back).toMatchObject({ from: "答的", answer: "unreplied", re: ["要答的问"] });
+	expect(back!.text).toContain("被它的人停下了");
+	expect(back!.text).toContain("先看看");
+});
+
+it("收件方删掉了：读到了的、还没读到的请求都由本体答 closed，各家一封", async () => {
+	// 收件方读到请求后挂在一次调用里；发件方的那次调用放开后说一句就收场。
+	const { service, asker, target, kept, letterOf, release } = await open((request) =>
+		JSON.stringify(request.messages).includes("读到的问") ? holdCall : JSON.stringify(request.messages).includes("call_keep") ? { text: "收到" } : keepCall,
+	);
+	const letter = (await letterOf())!;
+	const read = letter(target.id, { from: "问的", text: "读到的问", request: true, recipient: "答的" });
+	await vi.waitFor(() => expect(kept).toHaveLength(2), { timeout: 5_000, interval: 10 });
+	const other = await service.createSession({ cwd: dir });
+	// 还在聚合窗口里就删掉：这封没读到。
+	const unread = letter(other.id, { from: "问的", text: "没读到的问", request: true, recipient: "另一个" });
+	await service.deleteSession(target.id);
+	await service.deleteSession(other.id);
+	expect(await read.read).toEqual({ status: "read", opened: true });
+	expect(await unread.read).toEqual({ status: "closed" });
+	// 答复聚合好了再放开发件方，在它的下一个步骤边界读到。
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	release();
+	await vi.waitFor(async () => expect(answersOf((await service.getSession(asker.id)).messages)).toHaveLength(2), { timeout: 5_000, interval: 10 });
+	expect(answersOf((await service.getSession(asker.id)).messages)).toMatchObject([
+		{ sessionId: target.id, from: "答的", answer: "closed", re: ["读到的问"] },
+		{ sessionId: other.id, from: "另一个", answer: "closed", re: ["没读到的问"] },
+	]);
+	expect(read.answer({ from: "答的", text: "x" })).toBeUndefined();
 });
 
 /** 开出来的会话在第一轮里问 `target` 一句（`request: true`），回执留给测试。`target` 调 `answer` 时自己寄一封答复回去。 */
-async function launchAsking(replies: FakeReply[], targetReplies = 1) {
+async function launchAsking(replies: FakeReply[]) {
 	let receipt: LetterReceipt | undefined;
+	let replied: LetterReceipt | undefined;
 	let targetId = "";
 	let launchedId = "";
 	const opened = await open([{ toolCalls: [{ id: "call_ask", name: "ask", args: {} }] }, { text: "问完了，等答复" }, ...replies], (ctx) => {
@@ -264,7 +339,7 @@ async function launchAsking(replies: FakeReply[], targetReplies = 1) {
 			description: "问一句",
 			parameters: { type: "object", properties: {} },
 			async execute(_args, run) {
-				receipt = run.letter!(targetId, { from: "新会话", text: "帮我看看", request: true });
+				receipt = run.letter!(targetId, { from: "新会话", text: "帮我看看", request: true, recipient: "对方 [bbbbbb]" });
 				return { output: "问了" };
 			},
 		});
@@ -273,7 +348,7 @@ async function launchAsking(replies: FakeReply[], targetReplies = 1) {
 			description: "自己寄答复",
 			parameters: { type: "object", properties: {} },
 			async execute(_args, run) {
-				run.letter!(launchedId, { from: "对方", text: "看好了", answer: "replied" });
+				replied = run.letter!(launchedId, { from: "对方", text: "看好了", answer: "replied" });
 				return { output: "回了" };
 			},
 		});
@@ -281,40 +356,39 @@ async function launchAsking(replies: FakeReply[], targetReplies = 1) {
 	targetId = opened.target.id;
 	const launched = await opened.sessions.launch({ cwd: dir, message: "去问" });
 	launchedId = launched.session.id;
-	let idle = false;
-	void launched.idle.then(() => (idle = true));
 	expect(await launched.done).toMatchObject({ reason: "done" });
-	// 对方读到请求、跑完那一轮；这时开出来的会话早就闲着了，问出去的却还没答复。
-	await opened.done(targetId, targetReplies);
-	await new Promise((resolve) => setTimeout(resolve, 600));
-	return { ...opened, launched, receipt: receipt!, idle: () => idle };
+	return { ...opened, launched, receipt: () => receipt!, replied: () => replied };
 }
 
-it("开出来的会话问出去还没答复时不算做完：答复送到、为它跑完那一轮，launch 的 idle 才兑现", async () => {
-	const { service, launched, receipt, idle } = await launchAsking([{ text: "这就看" }, { text: "收到答复" }]);
-	expect(idle()).toBe(false);
-	receipt.answer({ from: "对方", text: "看好了", answer: "replied", re: ["帮我看看"] });
-	await launched.idle;
-	const replies = (await service.getSession(launched.session.id)).messages.filter((message) => message.role === "assistant").map(words);
-	expect(replies).toEqual(["", "问完了，等答复", "收到答复"]);
-});
-
-it("对方读到以后自己寄来答复也算答了", async () => {
-	// 对方那一轮调了 `answer`：在那次调用里经它的寄信口子回一封答复，不走回执。
-	const { launched } = await launchAsking([{ toolCalls: [{ id: "call_answer", name: "answer", args: {} }] }, { text: "回过去了" }, { text: "收到答复" }], 2);
+it("收件方那一轮没答：本体拿它读到以后最后一段回复代答，答复唤起的那一轮做完 launch 的 idle 才兑现", async () => {
+	const { service, target, launched, receipt } = await launchAsking([{ text: "这就看" }, { text: "收到答复" }]);
 	expect(await launched.idle).toMatchObject({ stop: { reason: "done" }, reply: "收到答复" });
+	const messages = (await service.getSession(launched.session.id)).messages;
+	expect(answersOf(messages)).toEqual([
+		expect.objectContaining({ sessionId: target.id, from: "对方 [bbbbbb]", text: "这就看", answer: "unreplied", re: ["帮我看看"], cwd: dir }),
+	]);
+	const back = messages.find((message) => message.role === "user" && message.peer)!;
+	expect(words(back)).toContain('answer="unreplied" re="帮我看看"');
+	expect(words(back)).toContain("unreplied 是对方读到请求的那一轮收场了却没答");
+	// 收件方读到的请求前面说明了没答会被代答。
+	expect(words((await service.getSession(target.id)).messages[0]!)).toContain("最后一段回复会原样交给发件方");
+	// 插件（比如会话互通）随后也来代答：什么也不寄。
+	expect(receipt().answer({ from: "对方", text: "它最后说的话", answer: "unreplied" })).toBeUndefined();
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	expect(answersOf((await service.getSession(launched.session.id)).messages)).toHaveLength(1);
 });
 
-it("问的对方删掉了：不再等答复", async () => {
-	const { service, target, launched, idle } = await launchAsking([{ text: "这就看" }]);
-	expect(idle()).toBe(false);
-	await service.deleteSession(target.id);
-	await launched.idle;
-});
-
-it("寄请求的插件停用了：没人再代答，不再等", async () => {
-	const { service, launched, idle } = await launchAsking([{ text: "这就看" }]);
-	expect(idle()).toBe(false);
-	await service.setPluginEnabled("test.letters", false);
-	await launched.idle;
+it("收件方自己寄来答复：本体对上那封请求、补上 re，那一轮收场时不再代答", async () => {
+	// 对方那一轮调了 `answer`：在那次调用里经它的寄信口子回一封答复，不走回执。
+	const { service, launched, receipt, replied } = await launchAsking([
+		{ toolCalls: [{ id: "call_answer", name: "answer", args: {} }] },
+		{ text: "回过去了" },
+		{ text: "收到答复" },
+	]);
+	expect(await launched.idle).toMatchObject({ stop: { reason: "done" }, reply: "收到答复" });
+	expect(replied()?.answered).toBe(1);
+	expect(answersOf((await service.getSession(launched.session.id)).messages)).toEqual([
+		expect.objectContaining({ text: "看好了", answer: "replied", re: ["帮我看看"] }),
+	]);
+	expect(receipt().answer({ from: "对方", text: "它最后说的话", answer: "unreplied" })).toBeUndefined();
 });

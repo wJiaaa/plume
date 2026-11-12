@@ -312,7 +312,7 @@ export interface UserMessage {
 	 * 另一个会话的模型发来的消息——不是看着这个面板的人说的话。
 	 *
 	 * `content` 是给模型读的那份（外面套着 `<session-message>`）；这一项给界面画成「来自 X」，
-	 * 并让回信的那一方接上同一条链（见 `runtime/agent-session/peer-letters.ts`）。
+	 * 并让回信的那一方接上同一条链（插件经 `ToolRun.letter` 寄，配对和代答见 `@plume/contract` 的 `LetterReceipt`）。
 	 */
 	peer?: PeerLetter[];
 	/**
@@ -375,17 +375,17 @@ export interface DeliveredReport {
  * 另一个会话发来的一条消息。
  *
  * 请求、通知、答复走同一条路：对方在跑就在两步之间读到，闲着就开一轮。问是发出即返回，请求的答复
- * 由收件方用 `reply_session` 交回，作为一封 `answer` 信送到发件方；通知没有答复。
+ * 由收件方交回，作为一封 `answer` 信送到发件方，收件方没答时由本体代答；通知没有答复。
  */
 export interface PeerLetter {
-	/** 这一封的 id：发件方据此认出交回的回答、或兜底时它进了哪一次运行，见桌面端的 `session-peers.ts`。旧记录里没有。 */
+	/** 这一封的 id：本体据此认出读到它的那条消息，代答时从那里往后找回复。 */
 	id?: string;
 	/** 请求：发件方要一个答复。没有就是通知（或答复）。 */
 	request?: true;
 	/**
-	 * 这是对我问过的请求的答复：`replied` 是对方用 `reply_session` 交回的；`unreplied` 是对方读到请求的那一轮
+	 * 这是对我问过的请求的答复：`replied` 是对方交回的；`unreplied` 是对方读到请求的那一轮
 	 * 收场了却没回，正文是那一轮最后说的话；`dropped` 是请求没被读到就被对方的人停下了；`closed` 是对方会话关了。
-	 * 后三种由路由器代写，见桌面端的 `session-peers.ts`。
+	 * 后三种由本体代写，见 `@plume/contract` 的 `LetterReceipt`。
 	 */
 	answer?: "replied" | "unreplied" | "dropped" | "closed";
 	/** 答复对着我发过的哪几封：每封开头一截，按发出的顺序。 */
@@ -397,7 +397,7 @@ export interface PeerLetter {
 	text: string;
 	/** 对方的工作目录，跨项目时路径的意思会变，模型要知道是从哪儿说的。 */
 	cwd?: string;
-	/** 这封信所在的往来链，按经手的会话 id 排；跳数上限在桌面端的 `peer-policy.ts`。 */
+	/** 这封信所在的往来链，按经手的会话 id 排；跳数上限由寄信的插件定。 */
 	chain?: string[];
 }
 

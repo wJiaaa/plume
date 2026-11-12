@@ -248,7 +248,8 @@ export interface ToolRun {
 	schedule?(wake: WakeupInput): SessionWakeup | undefined;
 	/**
 	 * 给另一个顶层会话寄一封信（`to` 是它的 id），见 `LetterReceipt`。只有顶层会话有，也只寄得到别的顶层会话：
-	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。对方不在、是子会话、是自己时抛错。
+	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。请求的答复由本体配对、没答时由本体代答，见 `LetterReceipt`。
+	 * 对方不在、是子会话、是自己时抛错。
 	 * 只在这次调用里用：调用答完以后再调就抛错（回执的 `answer` 不受影响）。
 	 */
 	letter?(to: string, letter: LetterInput): LetterReceipt;
@@ -339,10 +340,15 @@ export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "i
 
 /**
  * 一封信写什么（`ToolRun.letter`）。字段的意思见 `PeerLetter`：`from` 是发件方的地址，收件方回信时原样当作收件人；
- * 是请求、答复还是通知，答复对着哪几问，所在的往来链，都由寄信的插件定。
- * `guide` 是给收件方模型的处理说明（「标着 reply="expected" 的用 reply_session 回」），一次送达里一样的只写一遍。
+ * 是请求、答复还是通知，所在的往来链，由寄信的插件定。
+ * - 答复（`answer`，插件写的一般是 `replied`）对着哪几封请求由本体认：收件方读到了、还没答的、这封信的收件方问它的请求，一封答复
+ *   全部答掉；`re` 不给时本体按这几封请求的开头填。一封也对不上（问的都答过了、根本没问过）时按通知送，`answer`、`re` 都不带。
+ * - `recipient` 只对请求有用：收件方的地址，写法和 `from` 一样由寄信的插件定。本体替收件方代答（见 `LetterReceipt`）时拿它当
+ *   答复的 `from`；不给就用收件方此刻的标题。
+ * - `guide` 是给收件方模型的处理说明（「标着 reply="expected" 的用某件工具回」），一次送达里一样的只写一遍。各个标记本身是什么意思
+ *   （请求没答会被代答、`answer` 的几种值）本体自己会说，插件只说怎么用它的工具。
  */
-export type LetterInput = Pick<PeerLetter, "from" | "text" | "request" | "answer" | "re" | "chain"> & { guide?: string };
+export type LetterInput = Pick<PeerLetter, "from" | "text" | "request" | "answer" | "re" | "chain"> & { recipient?: string; guide?: string };
 
 /**
  * 信的下落。`read`：写进了收件方的对话；`opened` 是这封信（和同批的）叫起了收件方的一轮，不是插进一轮已经在跑的。
@@ -354,15 +360,26 @@ export type LetterFate = { status: "read"; opened: boolean } | { status: "droppe
 /**
  * 寄出的一封信。信和后台结果走同一条路：收件方忙着时在下一个步骤边界读到，闲着时为它开一轮（停下过的也开：一封信是
  * 一件新的事），送达经钩子 prompt.submit（`synthetic`）。前面带一句本体的话：这不是用户说的，不构成用户的授权。
+ *
+ * 请求（`request: true`）总会有一封答复，由本体配对，不靠哪个插件记账：
+ * - 收件方答了：它寄回一封答复（见 `LetterInput`），或者寄信的插件经 `answer` 替它答了。
+ * - 读到它的那一轮收场了还没答（完成、人按停、出错、跑到步数上限、原地打转都算）：本体拿那一轮读到它以后最后一段回复代答，
+ *   `answer` 是 `unreplied`（太长的截掉，没以完成收场的前面注一句是怎么收场的，什么也没说的也说一句）。
+ * - 没读到：收件方的人先按了停、或钩子 prompt.submit 拦下了这次送达，本体代答 `dropped`；收件方删掉了（读没读到都算）代答 `closed`。
+ * - 发件方删掉了、应用退出了：不再答。
+ * 代答从收件方寄回发件方，`from` 是请求的 `recipient`，和收件方自己回的一样走信的路。答过的请求再答一次（收件方答了以后又回、
+ * 插件在本体代答以后再代答）什么也不寄：`answer` 返回 `undefined`，寄来的答复按通知送或不寄（见 `answer`）。
  */
 export interface LetterReceipt {
 	/** 这封信的 id，记在收件方对话里那条消息的 `peer` 上。 */
 	id: string;
 	/** 信有了着落时兑现，见 `LetterFate`。 */
 	read: Promise<LetterFate>;
+	/** 这封信作为答复答掉了几封请求（见 `LetterInput`）；不是答复、或一封也没对上时是 0。 */
+	answered: number;
 	/**
-	 * 替收件方回发件方一封信（收件方没用工具回、没读到、关了时插件代答）：从收件方寄回给发件方，只能用一次。
-	 * 发件方已经不在时返回 `undefined`。
+	 * 替收件方答这一封请求：从收件方寄回给发件方，只答这一封，`answer` 不给就是 `replied`。请求已经有了答复（收件方答了、本体代答了、
+	 * 这里答过了）、两边有一方不在了、应用在退出时返回 `undefined`，什么也不寄。通知的回执也能用一次，寄回去的是一封通知。
 	 */
 	answer(letter: LetterInput): LetterReceipt | undefined;
 }
@@ -1263,8 +1280,8 @@ export interface SessionAccess {
 	 * 建好就返回：`session` 是新会话的摘要，`done` 在这第一轮结束时给出它为什么结束（之后人接着聊的几轮不算）。
 	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的后台任务
 	 * 都结束了、约好的唤醒都触发或取消了（被人停掉、撤回而作废的不算在等），它经 `ToolRun.letter`
-	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求有了答复：经回执的 `answer` 回了信，或对方读到以后
-	 * 寄回一封带 `answer` 的信（答掉它读到的全部）；对方删掉、寄信的插件停用了也不再等。
+	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求总会有答复（见 `LetterReceipt`）：对方答了，
+	 * 或者本体在对方没答时代答。
 	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
 	 */
 	launch(options: SessionLaunch): Promise<LaunchedSession>;
