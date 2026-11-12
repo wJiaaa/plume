@@ -2,6 +2,48 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.1.8] - 2026-11-12
+
+<!-- plume:notes en -->
+### Changes
+
+- **Side chat, sub-agents and plan mode are built in.** You no longer install them from the Marketplace: they come with Plume, are always there and update with the app. If you installed them before, the built-in ones are used. Plan mode's limits (no file changes before you approve, commands in a read-only sandbox) no longer vanish when a plugin update fails to load.
+- **Attached files reach the agent with their location.** Files you drag in or choose are sent with their path on disk, so the agent can change the original file instead of searching the workspace for it by name or pasting the edited part back to you. Pasted screenshots have no path and are sent as before.
+- **Plugin updates wait until Plume is idle.** Automatic updates are applied once no conversation is running, so they no longer stop a running sub-agent or briefly lift the checks of plan mode or hook plugins. Clicking "Update" in the Marketplace still updates right away.
+- A Marketplace plugin that hangs while loading no longer keeps conversations from starting: after 15 seconds it is marked as failed. Turning a failed plugin on tries again, and turning it off works.
+- Fewer full re-reads of a conversation by the model, which cost time and money: installing or removing a plugin no longer resets the cache of conversations that are running, and speaking again after a conversation was compacted no longer moves the date note and re-reads everything after the summary.
+- In a conversation's hover card, usage by sub-conversations is listed per plugin, under the plugin's name. A task a side chat hands to its main conversation is marked with the name of the plugin it came from.
+- Skin Studio's "Follow system", "Light" and "Dark" are now the same as the three theme cards in Settings › Appearance: your colors and window material stay as they are. This needs Skin Studio 0.3.0 from the Marketplace.
+
+### For plugin authors
+
+- `plume.side-chat`, `plume.subagents` and `plume.plan` are built-in plugins and have left the Marketplace.
+- `ModelContext` carries `parentId` and `owner`, the same as on `SessionSummary`, so a `model.context` hook can tell sub-conversations and plugin-owned conversations apart without listing every session.
+- `ui.useTheme()` reads the app's theme preference and `ui.setTheme(theme)` changes it, as if the person clicked that card in Settings › Appearance. While a skin controls light and dark, the setting is read-only and `setTheme` does nothing.
+- `QueuedMessage.origin` is `"child"` instead of `"side-chat"` and `sideId` is now `childId`; `UserMessage.origin` is `"child" | "parent"`. A task handed over by a sub-conversation carries `UserMessage.fromPlugin`, the plugin that owns it.
+- A Marketplace plugin's `apply` must return within 15 seconds; otherwise it counts as failed and later registrations from it are ignored.
+- The tool list sent to the model is fixed for a turn: tools a plugin adds mid-turn appear from the next turn, and a tool removed mid-turn stays listed until the turn ends (calling it returns an error).
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **侧边聊天、子智能体、计划模式随应用自带。** 不用再去插件市场装：它们随 Plume 一起提供、一直都在，跟着应用更新。以前装过的，用的是自带的这份。插件更新加载失败时，计划模式的限制（你批准之前不改文件、命令只在只读沙箱里跑）不会再悄悄没了。
+- **附件带着位置交给 agent。** 拖进来或选择的文件，发出去时带上它在磁盘上的路径，agent 可以直接改原文件，不用再按名字去工作区里找、找不到就把改好的那段贴回给你。粘贴的截图没有路径，照旧。
+- **插件等闲下来再更新。** 自动更新等所有对话都停下来才换，不会再打断正在跑的子智能体，也不会让计划模式、钩子插件的拦截短暂失效。在插件市场里点「更新」仍然当场更新。
+- 市场插件加载时卡住，不再让对话起不来：15 秒后算它加载失败。加载失败的插件重新启用会再试一次，停用也停得掉。
+- 模型重读整段对话的次数少了，省时间也省钱：装上或卸下插件，不再让正在跑的对话的缓存作废；对话压缩过之后再开口，日期提示不再挪位置、把摘要之后的内容整段重读一遍。
+- 会话悬停卡里，子会话的用量按插件分开列，标的是插件的名字；侧边聊天交给主对话的任务，标着它来自哪个插件。
+- 换肤工坊的「跟随系统」「浅色」「深色」，就是设置 › 外观里的那三张主题卡片，你调过的配色和窗口材质原样保留。要用插件市场里的换肤工坊 0.3.0。
+
+### 给插件作者
+
+- `plume.side-chat`、`plume.subagents`、`plume.plan` 改成内置插件，插件市场里不再列它们。
+- `ModelContext` 带上 `parentId`、`owner`，和 `SessionSummary` 上的同名字段一样；`model.context` 钩子分辨子会话、插件自己的会话，不用再列一遍全部会话。
+- 新增 `ui.useTheme()` 读应用的主题偏好，`ui.setTheme(theme)` 改它，等同人在设置 › 外观里点那张卡片。皮肤接管了深浅模式时，这个设置是只读的，`setTheme` 不起作用。
+- `QueuedMessage.origin` 从 `"side-chat"` 改成 `"child"`，`sideId` 改名 `childId`；`UserMessage.origin` 是 `"child" | "parent"`。子会话交过来的任务带着 `UserMessage.fromPlugin`，是它所属的插件。
+- 市场插件的 `apply` 要在 15 秒内返回，否则算加载失败，之后它再注册的东西都不算数。
+- 发给模型的工具表在一轮之内不变：一轮中途插件新加的工具从下一轮起出现，中途卸下的工具留在表里直到这一轮结束（调用它会返回错误）。
+
 ## [0.1.7] - 2026-11-11
 
 <!-- plume:notes en -->
