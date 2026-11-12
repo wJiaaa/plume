@@ -26,7 +26,18 @@ export interface FileChangesSummary {
 	warnings: string[];
 }
 
-/** 快照标识来自工具结果的 changeId / changeIds，不接受界面传来的文件原文。 */
+/**
+ * 工具结果的 `details` 带上这几个字段，就是声明「这次调用改了文件，改动快照记在服务 `file.changes` 里」：`changeId` 是一处，
+ * `changeIds` 是几处（命令改的），`changeWarning` 是有改动没记全时给人看的话。要知道一段对话改了哪些文件的插件按它们找，
+ * 不认是哪个工具交的。`details` 里别的字段照旧归插件。
+ */
+export interface FileChangeDetails {
+	changeId?: string;
+	changeIds?: string[];
+	changeWarning?: string;
+}
+
+/** 快照标识来自工具结果的 `FileChangeDetails`，不接受界面传来的文件原文。 */
 export interface FileChangesService {
 	collect(sessionId: string, cwd: string, ids: readonly string[]): Promise<FileChangesSummary>;
 	/** path 不给时撤销全部；写入前重新校验快照、当前内容和项目边界。 */

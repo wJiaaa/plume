@@ -27,7 +27,8 @@ export interface BackgroundJobInfo {
 	pid?: number;
 	status: "running" | "stopping" | "exited" | "failed";
 	error?: string;
-	kind?: "monitor";
+	/** 每有新输出就叫醒这个会话开一轮（监视命令）：人得认得出哪一个在持续花钱。普通后台命令没有。 */
+	wakes?: true;
 }
 
 export interface BackgroundJobsService {

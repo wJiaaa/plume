@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { AssistantMessage, Message, SessionObservation, SessionView } from "@plume/contract";
 import type { TraceObservation } from "../src/api.ts";
 import { DiagnosticStore } from "../src/store.ts";
-import { entriesOf, filterEntries, latestTodos } from "../src/entries.ts";
+import { entriesOf, filterEntries, jobCall, latestTodos } from "../src/entries.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -127,6 +127,21 @@ it("只接受成功工具结果中有效的最新计划", () => {
 		},
 	});
 	expect(latestTodos(session.messages)).toEqual([{ content: "test", status: "in_progress" }]);
+});
+
+it("起后台任务的那次调用按结果里声明的 `job` 认，不认是哪个工具、不认它自己的字段", () => {
+	const result = (toolCallId: string, details: unknown): Message => ({
+		role: "toolResult",
+		toolCallId,
+		toolName: "run",
+		content: [],
+		isError: false,
+		timestamp: 1,
+		details,
+	});
+	const messages = [result("own", { jobId: "job-1", id: "job-1" }), result("declared", { job: { id: "job-1", command: "sleep 9" } })];
+	expect(jobCall(messages, "job-1")?.toolCallId).toBe("declared");
+	expect(jobCall(messages, "job-2")).toBeUndefined();
 });
 
 it("不重复存图片像素，不丢工具参数中的 data 字段", async () => {

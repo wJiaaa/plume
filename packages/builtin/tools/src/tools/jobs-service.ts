@@ -22,7 +22,7 @@ export function createJobsService(states: ReadonlyMap<string, Map<string, unknow
 				pid,
 				status,
 				error,
-				kind,
+				...(kind === "monitor" ? { wakes: true as const } : {}),
 			}));
 		},
 		async output(sessionId, jobId) {

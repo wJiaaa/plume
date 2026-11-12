@@ -297,8 +297,7 @@ export function latestTodos(messages: Message[]): Array<{ content: string; statu
 	return [];
 }
 
+/** 起这个后台任务的那次调用：结果的 `details` 声明了 `job`（`BackgroundJobDetails`），不认是哪个工具交的。 */
 export function jobCall(messages: Message[], id: string): ToolResultMessage | undefined {
-	return messages.find(
-		(message): message is ToolResultMessage => message.role === "toolResult" && [object(message.details).jobId, object(message.details).id].includes(id),
-	);
+	return messages.find((message): message is ToolResultMessage => message.role === "toolResult" && object(object(message.details).job).id === id);
 }

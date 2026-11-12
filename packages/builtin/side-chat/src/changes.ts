@@ -5,14 +5,15 @@
  * 读的是工具结果上挂着的改动记录而不是工具参数：命令里观测到的改动也算，而那些在参数里看不出来。
  */
 
-import type { Message } from "@plume/contract";
+import type { FileChangeDetails, Message } from "@plume/contract";
 
 /** 这一段消息里出过错之外的工具结果挂着的改动记录。 */
 export function changeIds(messages: readonly Message[]): string[] {
 	const ids = new Set<string>();
 	for (const message of messages) {
 		if (message.role !== "toolResult" || message.isError || !message.details || typeof message.details !== "object") continue;
-		const detail = message.details as { changeId?: unknown; changeIds?: unknown };
+		// 改动记录按结果里的通用声明认（`FileChangeDetails`），不认是哪个工具交的。
+		const detail = message.details as { [K in keyof FileChangeDetails]?: unknown };
 		if (typeof detail.changeId === "string") ids.add(detail.changeId);
 		if (Array.isArray(detail.changeIds)) for (const id of detail.changeIds) if (typeof id === "string") ids.add(id);
 	}

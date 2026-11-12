@@ -195,7 +195,8 @@ export const bashTool: Tool<BashArgs> = {
 									`Stop it with bash_output({ id: "${id}", kill: true }).]`,
 							},
 						],
-						details: { kind: "bash", command: args.command, backgrounded: true, jobId: id },
+						// `job` 是给宿主和别的插件看的通用声明（`BackgroundJobDetails`）：这次调用在后台起了任务。
+						details: { kind: "bash", command: args.command, backgrounded: true, jobId: id, job: { id, command: args.command } },
 					});
 				}, timeout);
 

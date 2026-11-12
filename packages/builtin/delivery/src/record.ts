@@ -1,4 +1,4 @@
-import type { FileChangesService, FileChangesSummary, Locale, Message, RevertPlan } from "@plume/contract";
+import type { FileChangeDetails, FileChangesService, FileChangesSummary, Locale, Message, RevertPlan } from "@plume/contract";
 import { MESSAGES } from "./logic-messages.ts";
 
 /** 只认该轮最后一条回答；系统补充和继续消息不切断真实用户发起的一轮。 */
@@ -22,7 +22,8 @@ export function recordedChanges(messages: readonly Message[]): { ids: string[]; 
 	const warnings: string[] = [];
 	for (const message of messages) {
 		if (message.role !== "toolResult" || !message.details || typeof message.details !== "object") continue;
-		const detail = message.details as Record<string, unknown>;
+		// 改动记录按结果里的通用声明认（`FileChangeDetails`），不认是哪个工具交的。
+		const detail = message.details as { [K in keyof FileChangeDetails]?: unknown };
 		if (Array.isArray(detail.changeIds)) for (const id of detail.changeIds) if (typeof id === "string") ids.add(id);
 		if (!message.isError && typeof detail.changeId === "string") ids.add(detail.changeId);
 		if (typeof detail.changeWarning === "string") warnings.push(detail.changeWarning);

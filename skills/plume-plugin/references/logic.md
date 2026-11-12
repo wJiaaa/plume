@@ -549,7 +549,7 @@ const content = await readFile(access.absolute, "utf8");
 
 内置插件 `plume.tools` 提供 `file.changes`。消费方声明 `inject: ["file.changes"]` 后，经 `ctx.use("file.changes")` 调用：
 
-- `collect(sessionId, cwd, ids)`：`ids` 来自本轮工具结果的 `changeId` / `changeIds`，返回按文件合并的净变化、diff、能否撤销和警告；修改后又恢复原文的不列出。
+- `collect(sessionId, cwd, ids)`：`ids` 来自本轮工具结果 `details` 里的改动记录（`@plume/contract` 的 `FileChangeDetails`：`changeId` / `changeIds`，记不全时 `changeWarning` 是给人看的话；按这个形状认，不认是哪个工具交的），返回按文件合并的净变化、diff、能否撤销和警告；修改后又恢复原文的不列出。
 - `undo(sessionId, cwd, ids, path?)`：指定文件或整轮撤销。它重新读取快照，不接收界面提供的原文；检查当前内容、连续修改链和项目边界，命令观测的改动不能自动撤销。界面必须先确认，显示状态不是写入许可，最终以执行时复查为准。
 
 快照由工具在实际写入处记录，保存在工具插件的私有目录；插件不要从工作区当前 Git diff 猜本轮修改。`plume.delivery` 消费此服务，按会话原始消息生成交付报告，报告不调用模型。

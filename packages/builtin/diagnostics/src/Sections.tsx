@@ -3,7 +3,7 @@
  * 卡片是别的插件画的，这里只管节的内容；没东西时返回 null，卡片不留空位。数据都来自本插件自己的逻辑入口（`state.useSnapshot`），
  * 点了去的是本插件的任务面板、调用轨迹。
  *
- * 后台任务、定时唤醒两节带 `attention`：卡片收着时，会自己叫醒这个会话的东西让开关挂圆点——在跑的 `monitor`（有输出就开一轮）、
+ * 后台任务、定时唤醒两节带 `attention`：卡片收着时，会自己叫醒这个会话的东西让开关挂圆点——在跑的监视命令（`wakes`，有输出就开一轮）、
  * 待触发的唤醒（过一会儿自己开一轮）。普通后台命令不算：开着一个开发服务器是常态，算进去圆点就一直亮着。
  */
 
@@ -74,7 +74,7 @@ export function environmentSections(runtime: Runtime) {
 							<button
 								type="button"
 								className="plume-diagnostics-row plume-diagnostics-grow"
-								data-plume-tip={job.kind === "monitor" ? `${words.monitorTip}\n${job.command}` : job.command}
+								data-plume-tip={job.wakes ? `${words.monitorTip}\n${job.command}` : job.command}
 								onClick={() => runtime.openJob(id, job.id)}
 							>
 								<span className="plume-diagnostics-dot" data-status="running" />
@@ -82,7 +82,7 @@ export function environmentSections(runtime: Runtime) {
 									<ScrollText text={job.description || job.command} />
 								</Text>
 								{/* 和普通后台命令分开：它每送一批输出就是一轮，人得认得出哪一行在持续花钱。 */}
-								{job.kind === "monitor" && (
+								{job.wakes && (
 									<Text size="caption" tone="muted" data-environment-monitor>
 										{words.monitor}
 									</Text>
@@ -179,7 +179,7 @@ export function environmentSections(runtime: Runtime) {
 	function useMonitors(session: SessionView): string | undefined {
 		const words = MESSAGES[useI18n().resolvedLocale];
 		const { jobs } = runtime.state.useSnapshot(session.summary.id, true);
-		const count = jobs.filter((job) => job.kind === "monitor" && job.finishedAt === undefined).length;
+		const count = jobs.filter((job) => job.wakes && job.finishedAt === undefined).length;
 		return count > 0 ? words.runningMonitors(count) : undefined;
 	}
 
