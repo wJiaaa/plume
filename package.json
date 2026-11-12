@@ -21,6 +21,7 @@
     "probe:prune": "node --experimental-transform-types scripts/probe-prune-accuracy.ts",
     "tool-eval": "node --experimental-transform-types test/tool-eval/run.ts",
     "smoke": "node scripts/smoke.mjs",
+    "market:local": "node scripts/local-market.mjs",
     "typecheck": "pnpm -r --no-bail typecheck",
     "test": "pnpm -r --no-bail test && pnpm test:root",
     "test:root": "node --experimental-transform-types --test \"scripts/test/*.test.ts\" test/tool-eval/formats.test.ts",

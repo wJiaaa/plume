@@ -18,16 +18,19 @@
  * 构建完趁还拿着锁把产物快照到这次运行自己的 app/ 下，各段的 Electron 都从这一份快照启动；别的会话之后再构建，动不到正在跑的这一份。
  * 快照按仓库的目录结构摆，宿主从 apps/desktop 往上找内置插件的路子不用改；macOS 上是 APFS 的克隆，几乎不占时间和空间。跑完删掉。
  *
- * 各段要用的市场插件从线上市场装（要联网）。
+ * 各段要用的市场插件缺省从线上市场装（要联网）。设 PLUME_SMOKE_MARKET=<市场目录>（`pnpm market:local <插件仓库>` 打出来的）时，
+ * 在 127.0.0.1 上起一个静态服务把这个目录发出去，各段改从它装（经 PLUME_SMOKE_MARKET_URL 告诉应用），跑完关掉：
+ * 改插件接口时线上那批插件跟不上，用本地 SDK 构建的插件仓库跑。
  */
 
 import { spawn } from "node:child_process";
 import { constants, createWriteStream, existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { cp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { stopProcessTree } from "../apps/desktop/scripts/stop-process.mjs";
 import { changedSuites } from "./smoke-changed.mjs";
 
@@ -60,6 +63,7 @@ const runDir = dirname(file);
 const snapshot = join(runDir, "app");
 console.log(`冒烟输出目录：${runDir}`);
 
+const market = await serveMarket(process.env.PLUME_SMOKE_MARKET);
 await pruneRuns();
 await withBuildLock(async () => {
 	await run("pnpm", ["build"]);
@@ -73,6 +77,7 @@ let results;
 try {
 	results = single ? [await runSuite(suites[0], file, "inherit")] : await runAll();
 } finally {
+	market?.close();
 	await rm(snapshot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 const failed = results.filter((result) => !result.ok);
@@ -157,6 +162,7 @@ async function runSuite(suite, out, output) {
 	await mkdir(dir, { recursive: true });
 	const log = join(dir, "smoke.log");
 	const env = { ...process.env, PLUME_SMOKE_OUT: out };
+	if (market) env.PLUME_SMOKE_MARKET_URL = market.url;
 	if (suite.name === "main") delete env.PLUME_SMOKE_ONLY;
 	else env.PLUME_SMOKE_ONLY = suite.name;
 	const begin = Date.now();
@@ -200,6 +206,30 @@ async function runSuite(suite, out, output) {
 	// 过了的段删掉装进去的插件和数据目录，只留截图、日志、工作目录；只跑一段时也一样，没过的留着查。
 	if (ok) await Promise.all(["home"].map((name) => rm(join(dir, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })));
 	return { name: suite.name, ok, error: error?.split("\n")[0], log, ms: Date.now() - begin };
+}
+
+/** 把本地的市场目录在 127.0.0.1 上发出去；没给目录时用线上市场，返回 undefined。只发目录里的文件。 */
+async function serveMarket(dir) {
+	if (!dir) return undefined;
+	const root = resolve(dir);
+	if (!existsSync(join(root, "marketplace.json"))) fail(`PLUME_SMOKE_MARKET=${dir} 里没有 marketplace.json：先 pnpm market:local <插件仓库>`);
+	const server = createServer((request, response) => {
+		let path;
+		try {
+			path = join(root, decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname));
+		} catch {
+			return response.writeHead(400).end();
+		}
+		if (!path.startsWith(root + sep)) return response.writeHead(403).end();
+		readFile(path).then(
+			(body) => response.writeHead(200, { "content-length": body.length }).end(body),
+			() => response.writeHead(404).end(),
+		);
+	});
+	await new Promise((done) => server.listen(0, "127.0.0.1", done));
+	const url = `http://127.0.0.1:${server.address().port}/marketplace.json`;
+	console.log(`插件市场：${root}（${url}）`);
+	return { url, close: () => server.close() };
 }
 
 function parseVerdict(text) {

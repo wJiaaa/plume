@@ -189,7 +189,7 @@ async function boot(): Promise<void> {
 	});
 	const dataDir = plumeHome();
 	const settingsFile = await userSettingsFile();
-	// 插件：从线上市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的
+	// 插件：从市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的
 	// （冒烟时 PLUME_HOME 在冒烟目录里）。开发版和装好的应用用同一份；同名时谁生效见 market.ts 的 found。
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
 	const builtinDir = app.isPackaged ? join(process.resourcesPath, "builtin") : resolve(app.getAppPath(), "../../packages/builtin");
@@ -204,7 +204,8 @@ async function boot(): Promise<void> {
 			: undefined;
 	const pluginDirs = new Map<string, string>();
 	const market = createMarket({
-		catalogUrl: MARKET_URL,
+		// 冒烟可以换成本机起的市场（scripts/smoke.mjs 给了 PLUME_SMOKE_MARKET 时），改插件接口时用本地构建的插件跑；别的时候只认线上那个。
+		catalogUrl: (smoke && process.env.PLUME_SMOKE_MARKET_URL) || MARKET_URL,
 		builtinDir,
 		installDir,
 		uploadDir,
@@ -408,7 +409,7 @@ async function boot(): Promise<void> {
 			shutdown,
 			plugin: {
 				cli: pluginCli,
-				// 各段要用的市场插件从线上市场装，和人在「插件市场」里点安装走同一条路。
+				// 各段要用的市场插件从市场装（线上的，或冒烟起的本机市场），和人在「插件市场」里点安装走同一条路。
 				install: async (name: string) => {
 					const result = await market.install(name);
 					if (!result.ok) throw new Error(`market install ${name}: ${result.error === "failed" ? result.message : result.error}`);

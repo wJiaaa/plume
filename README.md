@@ -23,7 +23,7 @@ Plume 是一个 coding agent 桌面应用（Electron），是 [Lyra](https://git
 pnpm install
 pnpm dev      # 构建内置插件并启动开发模式
 pnpm check    # 类型检查、lint、格式、测试和各项检查，提交前必须通过
-pnpm smoke    # 起真实 Electron 跑冒烟（要联网）
+pnpm smoke    # 起真实 Electron 跑冒烟（缺省从线上市场装插件，要联网；换成本地构建的市场见 AGENTS.md）
 pnpm package  # 打安装包到 apps/desktop/release/
 ```
 

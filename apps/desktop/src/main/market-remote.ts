@@ -3,9 +3,10 @@
  *
  * 市场是插件仓库 plume-plugins 发到 GitHub Pages 的一个静态目录（格式见插件仓库的 docs/distribution.md）：
  * `marketplace.json` 列出插件和每个平台的包，包按 `plugins/<名字>/<版本>/<平台>-<架构>.tgz` 放，版本发出去就不变；
- * 图标、README 和它引用的图在 `assets/<名字>/` 下，安装前就能画。开发版、装好的应用和冒烟都用线上这一个市场。
+ * 图标、README 和它引用的图在 `assets/<名字>/` 下，安装前就能画。开发版、装好的应用都用线上这一个市场；冒烟缺省也用它，
+ * 给了本地构建的市场目录时换成本机起的服务（scripts/smoke.mjs 的 PLUME_SMOKE_MARKET）。
  *
- * 只认 https；http 只给本机（127.0.0.1、localhost），那是测试起的服务。包的大小和 SHA-256 都要和索引一致才解开，
+ * 只认 https；http 只给本机（127.0.0.1、localhost），那是测试和冒烟起的服务。包的大小和 SHA-256 都要和索引一致才解开，
  * 解开的是这个平台的那一份，不再裁原生模块。
  *
  * 不引用 electron，测试才能直接加载它。
