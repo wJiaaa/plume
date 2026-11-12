@@ -1,7 +1,7 @@
 import type { ImageContent, SessionView, SessionWakeup } from "@plume/contract";
 import type { ConversationCardProps, EnvironmentSectionEntry } from "@plume/contract/ui";
 import { IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
-import { AlarmClock, Bot, File, History, Layers, MessageCircle, Settings2, Square, X } from "@plume/ui/icons";
+import { AlarmClock, Bot, File, History, Layers, Settings2, Square, X } from "@plume/ui/icons";
 import { Fragment, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { object } from "./entries.ts";
 import { MESSAGES } from "./messages.ts";
@@ -10,16 +10,16 @@ import type { Runtime } from "./state.tsx";
 /**
  * 卡片自己的几节和它们在卡片里的位置。别的插件经 `ui.environmentSection` 加的节（批准过的计划、建议的新会话、当前分支的拉取请求、
  * 会话摘要）按 order 排进这几节之间，所以这里的 order 留着空档：30 是计划、40 是建议的新会话、60 是拉取请求、80 是会话摘要的位置。
+ * `children` 是插件建的子会话，按建它的插件（`owner`）分成几节，一个插件一节，在菜单里作为一项一起开关。
  */
-const OWN = { openIn: 0, jobs: 10, children: 20, wakeups: 50, sideChats: 70, compactions: 85, references: 90 } as const;
+const OWN = { openIn: 0, jobs: 10, children: 20, wakeups: 50, compactions: 85, references: 90 } as const;
 type SectionName = keyof typeof OWN;
 const SECTIONS = Object.keys(OWN) as SectionName[];
 const LABEL_KEY = {
 	openIn: "sectionOpenIn",
 	jobs: "jobs",
-	children: "children",
+	children: "childSessions",
 	wakeups: "wakeups",
-	sideChats: "sideChats",
 	compactions: "compactions",
 	references: "references",
 } as const;
@@ -203,8 +203,12 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 	const children = data.children
 		.filter((child) => child.title.trim() !== "")
 		.sort((a, b) => Number(b.running) - Number(a.running) || a.createdAt - b.createdAt);
-	const subagents = children.filter((child) => child.owner !== "plume.side-chat");
-	const sides = children.filter((child) => child.owner === "plume.side-chat");
+	/*
+	 * 按建它的插件分节，节名是插件名：界面入口拿不到别的插件的显示名（市场目录只在本体里），这里也不认哪个插件是做什么的。
+	 * 先出现的插件在前（各节内部的顺序同上：在跑的在前，再按建的先后）。
+	 */
+	const owners = new Map<string, typeof children>();
+	for (const child of children) owners.set(child.owner ?? "", [...(owners.get(child.owner ?? "") ?? []), child]);
 	const files = session.messages.flatMap((message) => (message.role === "user" ? (message.attachments?.filter((file) => file.path) ?? []) : []));
 	const uniqueFiles = [...new Map(files.map((file) => [file.path!, file])).values()];
 	const images = session.messages.flatMap((message) =>
@@ -228,10 +232,10 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 			setBusy(undefined);
 		}
 	};
-	const childRows = (rows: typeof children, side: boolean) =>
+	const childRows = (rows: typeof children) =>
 		rows.slice(0, 5).map((child) => (
 			<button type="button" key={child.id} className="plume-diagnostics-row" onClick={() => openChild(child.id)}>
-				{side ? <MessageCircle size={14} /> : <Bot size={14} />}
+				<Bot size={14} />
 				<Text size="detail" className="plume-diagnostics-grow">
 					<ScrollText text={child.title} />
 				</Text>
@@ -286,33 +290,25 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 				})}
 			</Section>
 		),
-		children: subagents.length > 0 && (
-			<Section name="children" label={words.children}>
-				{childRows(subagents, false)}
-				{subagents.length > 5 && (
-					<button type="button" className="plume-diagnostics-row" onClick={() => runtime.ui.openPanel("children", id)}>
-						<Text size="caption" tone="faint">
-							{words.more(subagents.length - 5)}
-						</Text>
-					</button>
-				)}
-			</Section>
+		children: owners.size > 0 && (
+			<>
+				{[...owners].map(([owner, rows]) => (
+					<Section key={owner} name={`children:${owner}`} label={owner || words.childSessions}>
+						{childRows(rows)}
+						{rows.length > 5 && (
+							<button type="button" className="plume-diagnostics-row" onClick={() => runtime.ui.openPanel("children", id)}>
+								<Text size="caption" tone="faint">
+									{words.more(rows.length - 5)}
+								</Text>
+							</button>
+						)}
+					</Section>
+				))}
+			</>
 		),
 		wakeups: data.wakeups.length > 0 && (
 			<Section name="wakeups" label={words.wakeups}>
 				<Wakeups id={id} wakeups={data.wakeups} runtime={runtime} />
-			</Section>
-		),
-		sideChats: sides.length > 0 && (
-			<Section name="sideChats" label={words.sideChats}>
-				{childRows(sides, true)}
-				{sides.length > 5 && (
-					<button type="button" className="plume-diagnostics-row" onClick={() => runtime.ui.openPanel("children", id)}>
-						<Text size="caption" tone="faint">
-							{words.more(sides.length - 5)}
-						</Text>
-					</button>
-				)}
 			</Section>
 		),
 		compactions: session.compactionRuns.length > 0 && (
