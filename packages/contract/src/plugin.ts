@@ -710,7 +710,9 @@ export type CompactSummary =
  * 提权（`request.escalation`）只能由人答：它在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算。
  * 弹出来的卡可以由人点，也可以由代管这个会话的插件经 `ctx.sessions.respond` 转达，那条路不经这里。
  * 工具要人给答案（`ToolRun.request`）不是审批，不到这里。
- * 内置插件 plume.approval 在这里按帮我批准（`auto`）的风险规则放行；没有任何层时每一次都问人。
+ * 内置插件 plume.approval 在里层（order 1000）按帮我批准（`auto`）的风险规则放行，命中规则的把理由写进卡片再交给里层；
+ * 要在它之前替人答、或整个换掉这套规则的层挂在外面（order 小于 1000）；只管真要弹给人的那些（它放行的到不了里面，到了的
+ * 卡上带着它写的理由）的层挂在里面（order 大于 1000）。没有任何层时每一次都问人。
  */
 export interface ToolApproval {
 	sessionId: string;
