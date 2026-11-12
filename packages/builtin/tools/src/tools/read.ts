@@ -1,5 +1,6 @@
 import type { Stats } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
+import type { FileViewDetails } from "@plume/contract";
 import { textArg } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
@@ -112,11 +113,12 @@ export const readTool: Tool<ReadArgs> = {
 		const scratch = await scratchFile(ctx, path).catch(() => null);
 		const resourceResult = scratch ? null : await tryResource(path, ctx, { offset: args.offset, limit: args.limit, charOffset });
 		if (resourceResult) return resourceResult;
-		const shownPath = scratch ? path : displayPath(ctx.cwd, toAbsolute(ctx.cwd, path));
+		const named = scratch ?? toAbsolute(ctx.cwd, path);
+		const shownPath = scratch ? path : displayPath(ctx.cwd, named);
 
 		let absolute: string;
 		try {
-			absolute = await realpath(scratch ?? toAbsolute(ctx.cwd, path));
+			absolute = await realpath(named);
 		} catch {
 			return errorResult(scratch ? `File not found: ${path}` : await notFound(ctx.cwd, path));
 		}
@@ -142,13 +144,13 @@ export const readTool: Tool<ReadArgs> = {
 			return {
 				content: [],
 				images: [{ data: data.toString("base64"), mimeType: mime as NonNullable<ToolResult["images"]>[number]["mimeType"] }],
-				details: { kind: "image", path: shownPath, bytes: info.size, mimeType: mime },
+				details: { kind: "image", path: shownPath, bytes: info.size, mimeType: mime, ...viewOf(named, true) },
 			};
 		}
 
 		const extractable = EXTRACTABLE.has(extensionOf(absolute));
 		// 太大了，为几千个字不值得整个读进来；抽字要整份文档，所以文档照旧整个读。
-		if (info.size > STREAM_ABOVE_BYTES && !extractable) return readLarge(args, ctx, absolute, shownPath, info, charOffset);
+		if (info.size > STREAM_ABOVE_BYTES && !extractable) return readLarge(args, ctx, absolute, named, shownPath, info, charOffset);
 
 		const buffer = await readFile(absolute);
 
@@ -172,6 +174,7 @@ export const readTool: Tool<ReadArgs> = {
 					characters: extracted.fullLength ?? extracted.text.length,
 					truncated: extracted.truncated === true,
 					...(extracted.imageOnly ? { imageOnly: true } : {}),
+					...viewOf(named, extracted.truncated !== true),
 				},
 			};
 		}
@@ -207,6 +210,7 @@ export const readTool: Tool<ReadArgs> = {
 						outlined: true,
 						shownLines: shape.shownLines,
 						foldedLines: shape.foldedLines,
+						...viewOf(named, false, { from: 1, to: allLines.length, total: allLines.length, charOffset: 1 }),
 					},
 				};
 			}
@@ -234,10 +238,29 @@ export const readTool: Tool<ReadArgs> = {
 				shownFrom: offset,
 				shownTo: shownEnd,
 				...(long[0] ? { charFrom: long[0].shownFrom, charTo: long[0].shownTo, longLines: long.length } : {}),
+				...viewOf(named, true, { from: offset, to: shownEnd, total: allLines.length, charOffset }),
 			},
 		};
 	},
 };
+
+/**
+ * 给别的插件看的通用声明（`FileViewDetails`）：这次让模型看了 `named` 的哪一块，压缩据此认出被后来的读顶替掉的旧读。
+ * `named` 是调用里写的路径解析成的绝对路径、不追符号链接，和 edit、write 认路径的写法一样，同一个文件的读和改才对得上。
+ * 文字按行给：从头读到尾的不写 `lines`；每一行用的是同一个从 `charOffset` 起的字符窗口（大纲从第 1 个字符起）。
+ */
+function viewOf(named: string, verbatim: boolean, text?: { from: number; to: number; total: number; charOffset: number }): FileViewDetails {
+	if (!text) return { fileView: { path: named, verbatim } };
+	const whole = text.from <= 1 && text.to >= text.total;
+	return {
+		fileView: {
+			path: named,
+			...(whole ? {} : { lines: { from: text.from, to: text.to } }),
+			columns: { from: text.charOffset, to: text.charOffset + MAX_LINE_CHARS - 1 },
+			verbatim,
+		},
+	};
+}
 
 interface LineWindow {
 	body: string;
@@ -251,7 +274,15 @@ interface LineWindow {
  *
  * 不出大纲：这么大的是日志或导出，不是大纲帮得上的源码，而且组大纲要整个文本在内存里，这条路就是为了避免这个。
  */
-async function readLarge(args: ReadArgs, ctx: ToolContext, absolute: string, shownPath: string, info: Stats, charOffset: number): Promise<ToolResult> {
+async function readLarge(
+	args: ReadArgs,
+	ctx: ToolContext,
+	absolute: string,
+	named: string,
+	shownPath: string,
+	info: Stats,
+	charOffset: number,
+): Promise<ToolResult> {
 	const askedWindow = args.offset !== undefined || args.limit !== undefined || charOffset > 1;
 	const offset = Math.max(1, args.offset ?? 1);
 	const limit = Math.max(1, args.limit ?? DEFAULT_LIMIT);
@@ -275,6 +306,7 @@ async function readLarge(args: ReadArgs, ctx: ToolContext, absolute: string, sho
 			shownFrom: offset,
 			shownTo: shownEnd,
 			...(long[0] ? { charFrom: long[0].shownFrom, charTo: long[0].shownTo, longLines: long.length } : {}),
+			...viewOf(named, true, { from: offset, to: shownEnd, total: window.totalLines, charOffset }),
 		},
 	};
 }

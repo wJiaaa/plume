@@ -49,6 +49,7 @@ export interface ToolOutput {
 	/**
 	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认两个通用声明：
 	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务。
+	 * 插件之间另认两个：改了文件（`FileChangeDetails`），让模型看了文件的哪一块（`FileViewDetails`）。
 	 */
 	details?: unknown;
 	/**
@@ -90,6 +91,24 @@ export interface ChecklistDetails {
  */
 export interface BackgroundJobDetails {
 	job: { id: string; command?: string };
+}
+
+/**
+ * 工具结果的 `details` 带上 `fileView`，就是声明「这次调用让模型看了这个文件的这一块」：`path` 是调用里写的路径解析成的绝对路径
+ * （`~/` 展开、相对路径按工作目录，不追符号链接，同一个文件的读和改才对得上）；`lines` 是第几行到第几行（从 1 数，含两头），
+ * 不给就是从头到尾；`columns` 是每一行给了第几个到第几个字符，不给就是整行；`verbatim` 说给的是不是这一块的原文——大纲、
+ * 截断过的抽取文字只是看过这一块，不能拿来顶替别的读。
+ *
+ * 压缩据此清掉被后来的观察顶替掉的旧读：之后又原样读到了盖住它的一块，或者这个文件被改过。不带它的读文件结果压缩不动。
+ * 谁让模型读的谁填，不认是哪个工具交的；`details` 里别的字段照旧归插件。
+ */
+export interface FileViewDetails {
+	fileView: {
+		path: string;
+		lines?: { from: number; to: number };
+		columns?: { from: number; to: number };
+		verbatim: boolean;
+	};
 }
 
 /**

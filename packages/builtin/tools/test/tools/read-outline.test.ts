@@ -8,6 +8,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FileViewDetails } from "@plume/contract";
 import { expect, it, onTestFinished } from "vitest";
 import { editTool } from "../../src/tools/edit.ts";
 import { outline, outlineFooter } from "../../src/tools/outline.ts";
@@ -53,6 +54,8 @@ it("长源码文件读回来是大纲", async () => {
 	expect(text, "文档注释跟着它的声明").toMatch(/Does thing 0/);
 	expect(text, "函数体里的行要拿掉").not.toMatch(/const step3 =/);
 	expect((res.details as { outlined?: boolean }).outlined).toBe(true);
+	// 大纲只是看过整个文件，不是原文：压缩不拿它顶替别的读。
+	expect((res.details as FileViewDetails).fileView).toEqual({ path: file, columns: { from: 1, to: 2000 }, verbatim: false });
 });
 
 it("页脚说怎么拿回折起来的行，并且不许猜", async () => {
@@ -83,8 +86,10 @@ it("短文件原样返回", async () => {
 
 it("明确给了窗口的从不折叠", async () => {
 	const { file, ctx } = await fixture("mod.ts", sourceFile());
-	const text = textOf(await readTool.execute({ path: file, offset: 10, limit: 20 } as never, ctx));
+	const res = await readTool.execute({ path: file, offset: 10, limit: 20 } as never, ctx);
+	const text = textOf(res);
 	expect(text, "调用方已经说了看哪里").not.toMatch(/⋯ \d+ lines/);
+	expect((res.details as FileViewDetails).fileView).toEqual({ path: file, lines: { from: 10, to: 29 }, columns: { from: 1, to: 2000 }, verbatim: true });
 	expect(text, "窗口读要有函数体里的行").toMatch(/const step0/);
 });
 

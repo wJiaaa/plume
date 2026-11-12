@@ -25,7 +25,13 @@ it("PNG 原样交给模型，details 记下路径、大小、类型，并记作�
 	expect(result.isError).toBeUndefined();
 	expect(result.content).toEqual([]);
 	expect(result.images).toEqual([{ data: PNG.toString("base64"), mimeType: "image/png" }]);
-	expect(result.details).toEqual({ kind: "image", path: "dot.png", bytes: PNG.length, mimeType: "image/png" });
+	expect(result.details).toEqual({
+		kind: "image",
+		path: "dot.png",
+		bytes: PNG.length,
+		mimeType: "image/png",
+		fileView: { path: join(dir, "dot.png"), verbatim: true },
+	});
 	// 看过，但没读成文字：有记录、没时间戳，edit 照样要求先按文字读。
 	const record = readRecord(ctx, realpathSync(join(dir, "dot.png")));
 	expect(record).toBeDefined();
