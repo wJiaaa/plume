@@ -3152,6 +3152,9 @@ function Composer({ view, centered = false, cards = false }: { view?: SessionVie
 						respond={async (decision) => {
 							if (view.approval) await agent.respond(view.summary.id, view.approval.toolCallId, decision);
 						}}
+						answer={async (value) => {
+							if (view.approval) await agent.answer(view.summary.id, view.approval.toolCallId, value);
+						}}
 					/>
 				)}
 				{view && <ChildApprovals parentId={view.summary.id} sessions={app.sessions} compact={layoutMode(windowWidth) === "compact"} />}
@@ -3275,6 +3278,7 @@ function ChildApproval({ sessionId, compact }: { sessionId: string; compact: boo
 			compact={compact}
 			from={view.summary.title}
 			respond={async (decision) => await agent.respond(sessionId, approval.toolCallId, decision)}
+			answer={async (value) => await agent.answer(sessionId, approval.toolCallId, value)}
 		/>
 	);
 }
@@ -3322,6 +3326,7 @@ function PluginConversation(props: ConversationProps) {
 			onOpenSettings={onOpenSettings}
 			onQuote={onQuote}
 			respond={async (id, toolCallId, decision) => await agent.respond(id, toolCallId, decision)}
+			answer={async (id, toolCallId, value) => await agent.answer(id, toolCallId, value)}
 		/>
 	);
 }

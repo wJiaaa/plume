@@ -939,6 +939,8 @@ export const en = {
 	"approval.edit": "Change a file",
 	"approval.read": "Read a file",
 	"approval.expiresIn": "Expires in {time}",
+	"approval.requestUnavailable": "This card can’t be shown here (the plugin that draws it is off or failed). You can only decline it.",
+	"approval.decline": "Don’t answer",
 	"running.waitingForAnswer": "Waiting for your answer",
 	"composer.plumePlaceholder": "Type a message, / for commands, @ to mention",
 	"command.slash": "Slash commands",

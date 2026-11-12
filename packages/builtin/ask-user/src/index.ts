@@ -1,18 +1,16 @@
 /**
  * 内置插件 plume.ask-user 的逻辑入口：`ask_user` 工具，让模型停下来问人一个它自己答不了的问题（澄清、拿主意）。
  *
- * 问题经这次调用的 `run.ask` 弹成一张审批卡（带 `userOnly`：完全访问免的是操作审批，免不了问题的答案），界面入口按工具名
- * 认出来画成提问卡（`ui.tsx`）。人在卡上的回答先经 `answer` 交到这里、对着问题再核一遍，卡片再 `respond`；`run.ask`
- * 返回后取走。卡上没交回答就收场的（取消、停下这一轮、到时没人答），都是没有答案。
+ * 问题经这次调用的 `run.request` 弹给人（不是权限：完全访问免的是操作审批，免不了问题的答案），界面入口按 `kind` 画成提问卡
+ * （`ui.tsx`）。人在卡上的回答从 `run.request` 回来，在这里对着问题再核一遍：界面里的检查拦得住手误，拦不住一个不照着问题答的客户端。
+ * 没交回答就收场的（取消、停下这一轮、到时没人答）和核不过的，都是没有答案。
  *
  * 跳过不是同意：没给默认项时，模型只能接着做不依赖这个答案的事。
  */
 
-import { randomUUID } from "node:crypto";
 import type { Plugin, ToolOutput } from "@plume/contract";
-import type { AskUserApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
-import { ASK_USER, type CheckedReply, checkReply, type Question, readArgs } from "./question.ts";
+import { ASK_USER, type CheckedReply, checkReply, readArgs } from "./question.ts";
 
 // i18n-exempt：工具描述、参数说明和结果都是交给模型的。
 const DESCRIPTION =
@@ -47,9 +45,6 @@ function answerOutput(reply: CheckedReply | undefined): ToolOutput {
 export default {
 	name: "plume.ask-user",
 	apply(ctx) {
-		/** 在等回答的问题，和卡片交来的回答。 */
-		const pending = new Map<string, { question: Question; reply?: CheckedReply }>();
-
 		ctx.tools.register({
 			name: ASK_USER,
 			description: DESCRIPTION,
@@ -84,27 +79,12 @@ export default {
 				additionalProperties: false,
 			},
 			async execute(args, run) {
-				const question = readArgs(args, randomUUID());
+				const question = readArgs(args);
 				if (typeof question === "string") return { output: question, isError: true };
-				pending.set(question.id, { question });
-				try {
-					// `userOnly`：问的是人的决定，不是权限。到时没人答，本体按拒绝收场，这里就没有回答。
-					const decision = await run.ask({ kind: ASK_USER, title: MESSAGES[ctx.locale()].title, detail: JSON.stringify(question), userOnly: true });
-					return answerOutput(decision === "reject" ? undefined : pending.get(question.id)?.reply);
-				} finally {
-					pending.delete(question.id);
-				}
+				// 到时没人答、停下这一轮、人取消，都没有回答。
+				const reply = await run.request({ kind: ASK_USER, title: MESSAGES[ctx.locale()].title, payload: question });
+				return answerOutput(reply.answered ? checkReply(question, reply.value) : undefined);
 			},
 		});
-
-		ctx.serve({
-			async answer(id, reply) {
-				const entry = typeof id === "string" ? pending.get(id) : undefined;
-				if (!entry) throw new Error(MESSAGES[ctx.locale()].gone);
-				const checked = checkReply(entry.question, reply);
-				if (!checked) throw new Error(MESSAGES[ctx.locale()].invalid);
-				entry.reply = checked;
-			},
-		} satisfies AskUserApi);
 	},
 } satisfies Plugin;

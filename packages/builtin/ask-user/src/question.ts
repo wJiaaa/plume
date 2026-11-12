@@ -1,8 +1,8 @@
 /**
  * 一次提问的形状和两头的校验，逻辑入口和界面入口共用（不引用 Node 的东西）。
  *
- * 问题随审批卡的 `detail` 以 JSON 送到界面；人的回答经 `remote` 交回逻辑入口，在那里再对一遍：界面里的检查拦得住手误，
- * 拦不住一个不照着问题答的客户端。
+ * 问题是 `run.request` 的 `payload`，送到界面画成提问卡；人的回答从 `run.request` 回到逻辑入口，在那里再对一遍：界面里的检查
+ * 拦得住手误，拦不住一个不照着问题答的客户端。
  */
 
 export const ASK_USER = "ask_user";
@@ -13,9 +13,8 @@ interface QuestionOption {
 	recommended?: boolean;
 }
 
-/** 卡片要画的一个问题。`id` 是这次提问的编号，回答按它交回去。 */
+/** 卡片要画的一个问题。 */
 export interface Question {
-	id: string;
 	question: string;
 	options: (string | QuestionOption)[];
 	selectionMode: "single" | "multi";
@@ -47,7 +46,7 @@ function validOption(value: unknown): value is string | QuestionOption {
 
 /** 模型给的参数读成一个问题；不成立时是交给模型的那句话。 */
 // i18n-exempt：参数错误是交给模型的工具结果。
-export function readArgs(args: Record<string, unknown>, id: string): Question | string {
+export function readArgs(args: Record<string, unknown>): Question | string {
 	const { question, options, selectionMode, allowCustomInput, allowSkip, defaultOptionIndex } = args;
 	if (typeof question !== "string" || !question.trim() || !Array.isArray(options) || !options.every(validOption))
 		return "Provide a question and choices with nonempty labels.";
@@ -61,7 +60,6 @@ export function readArgs(args: Record<string, unknown>, id: string): Question | 
 	)
 		return "defaultOptionIndex must identify an existing choice.";
 	return {
-		id,
 		question: question.trim(),
 		options: choices,
 		selectionMode: selectionMode ?? "single",
@@ -71,26 +69,21 @@ export function readArgs(args: Record<string, unknown>, id: string): Question | 
 	};
 }
 
-/** 审批卡 `detail` 里的问题；认不出（不是这个插件问的、坏了）时是 undefined。 */
-export function readQuestion(detail: string): Question | undefined {
-	try {
-		const value = JSON.parse(detail) as Partial<Question> | null;
-		if (
-			!value ||
-			typeof value.id !== "string" ||
-			typeof value.question !== "string" ||
-			!Array.isArray(value.options) ||
-			!value.options.every(validOption) ||
-			(value.selectionMode !== "single" && value.selectionMode !== "multi") ||
-			typeof value.allowCustomInput !== "boolean" ||
-			typeof value.allowSkip !== "boolean" ||
-			(value.defaultOptionIndex !== undefined && (typeof value.defaultOptionIndex !== "number" || !value.options[value.defaultOptionIndex]))
-		)
-			return undefined;
-		return value as Question;
-	} catch {
+/** 卡片 `payload` 里的问题；认不出（不是这个插件问的、坏了）时是 undefined。 */
+export function readQuestion(payload: unknown): Question | undefined {
+	const value = (typeof payload === "object" ? payload : null) as Partial<Question> | null;
+	if (
+		!value ||
+		typeof value.question !== "string" ||
+		!Array.isArray(value.options) ||
+		!value.options.every(validOption) ||
+		(value.selectionMode !== "single" && value.selectionMode !== "multi") ||
+		typeof value.allowCustomInput !== "boolean" ||
+		typeof value.allowSkip !== "boolean" ||
+		(value.defaultOptionIndex !== undefined && (typeof value.defaultOptionIndex !== "number" || !value.options[value.defaultOptionIndex]))
+	)
 		return undefined;
-	}
+	return value as Question;
 }
 
 /**

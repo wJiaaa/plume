@@ -2,7 +2,6 @@
 
 import type { ServerDraft, VarDraft } from "./config.ts";
 import type { ServerStatus } from "./connections.ts";
-import type { FormAnswer } from "./form.ts";
 import type { CallContext } from "@plume/contract";
 
 export type { ServerDraft, VarDraft };
@@ -70,6 +69,4 @@ export interface McpApi {
 	/** 在浏览器里登录，等人授权完（最多五分钟）才返回。 */
 	login(id: string): Promise<McpView>;
 	logout(id: string): Promise<McpView>;
-	/** 交回服务中途要人填的那张表（审批卡上填的），卡片随后再 `respond`。表已经不等了、值和表对不上时报错（给人看的话）。 */
-	answerForm(form: string, answer: FormAnswer): Promise<void>;
 }

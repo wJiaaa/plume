@@ -1,57 +1,45 @@
 /**
- * `ask_user` 的提问卡，画在输入框上方的审批卡位置（`ui.approvalCard`）。外框和产品的审批卡是同一个（`ApprovalFrame`）：
+ * `ask_user` 的提问卡，画在输入框上方的审批卡位置（`ui.requestCard`）。外框和产品的审批卡是同一个（`ApprovalFrame`）：
  * 收放的标题栏、倒计时、+N；里面是问题、选项、「其他」一行自己写，底下跳过、取消、确认。
  *
- * 回答先经 `answer` 交给逻辑入口，再 `respond("once")`；取消是 `respond("reject")`，什么都不交。
+ * 回答经 `answer` 交回 `run.request`；取消是 `decline`，什么都不交。
  * 键盘：1–9 选第几项，0 去「其他」那一行写，Esc 跳过（允许跳过时），回车确认。
  */
 
-import type { ApprovalCardProps, Remote } from "@plume/contract/ui";
+import type { RequestCardProps } from "@plume/contract/ui";
 import { ApprovalFrame, Button, Input, Scroller, Text, useI18n } from "@plume/ui";
 import { Check, MessageCircle, SkipForward, X } from "@plume/ui/icons";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import type { AskUserApi } from "./api.ts";
 import { type Messages, MESSAGES } from "./messages.ts";
 import { type Question, type QuestionReply, readQuestion } from "./question.ts";
 
-export function questionCard(api: Remote<AskUserApi>) {
-	return function QuestionCard({ request, queued, from, respond, fallback }: ApprovalCardProps) {
-		const text = MESSAGES[useI18n().resolvedLocale];
-		const question = readQuestion(request.detail);
-		if (!question) return <>{fallback}</>;
-		return (
-			<ApprovalFrame
-				requestId={request.toolCallId}
-				icon={<MessageCircle size={15} strokeWidth={1.8} className="plume-ask-icon" />}
-				title={text.title}
-				expiresAt={request.expiresAt}
-				queued={queued}
-			>
-				<Text as="p" size="caption" tone="muted" className="plume-ask-note">
-					{text.fullAccessNote}
-				</Text>
-				<QuestionChoices
-					key={request.toolCallId}
-					question={question}
-					text={text}
-					answer={async (reply) => {
-						if (reply === "reject") return respond("reject");
-						await api.answer(question.id, reply);
-						await respond("once");
-					}}
-				>
-					{from !== undefined && (
-						<Text as="p" size="caption" tone="faint" className="plume-ask-from" data-approval-from="">
-							{text.fromChild(from || text.childUntitled)}
-						</Text>
-					)}
-					<Text as="p" size="label" className="plume-ask-question" data-ask-question="">
-						{question.question}
+export function QuestionCard({ request, queued, from, answer, decline, fallback }: RequestCardProps) {
+	const text = MESSAGES[useI18n().resolvedLocale];
+	const question = readQuestion(request.payload);
+	if (!question) return <>{fallback}</>;
+	return (
+		<ApprovalFrame
+			requestId={request.toolCallId}
+			icon={<MessageCircle size={15} strokeWidth={1.8} className="plume-ask-icon" />}
+			title={text.title}
+			expiresAt={request.expiresAt}
+			queued={queued}
+		>
+			<Text as="p" size="caption" tone="muted" className="plume-ask-note">
+				{text.fullAccessNote}
+			</Text>
+			<QuestionChoices key={request.toolCallId} question={question} text={text} answer={async (reply) => (reply === "reject" ? decline() : answer(reply))}>
+				{from !== undefined && (
+					<Text as="p" size="caption" tone="faint" className="plume-ask-from" data-approval-from="">
+						{text.fromChild(from || text.childUntitled)}
 					</Text>
-				</QuestionChoices>
-			</ApprovalFrame>
-		);
-	};
+				)}
+				<Text as="p" size="label" className="plume-ask-question" data-ask-question="">
+					{question.question}
+				</Text>
+			</QuestionChoices>
+		</ApprovalFrame>
+	);
 }
 
 function QuestionChoices({

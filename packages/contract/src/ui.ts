@@ -11,6 +11,7 @@ import type {
 	ApprovalRequest,
 	ContextBreakdown,
 	FileContents,
+	HumanRequest,
 	OutgoingMessage,
 	PermissionMode,
 	SessionSummary,
@@ -366,8 +367,8 @@ export interface ConversationProps {
 
 /**
  * 插件给自己的工具画的审批卡（`ui.approvalCard`）。卡片压在输入框正上方的那一格由产品摆，排队、停下这一轮时撤卡也归产品；
- * 组件画整张卡（外框、正文、按钮），人拍板时调 `respond`。要连同回答交给工具的别的话（修改意见、评论），先经自己的
- * `remote()` 交给逻辑入口，再 `respond`：工具从 `run.ask` 返回以后去取。
+ * 组件画整张卡（外框、正文、按钮），人拍板时调 `respond`。要人给答案（提问、计划、表单）的不是审批，用 `run.request` 和
+ * `ui.requestCard`（`RequestCardProps`）。
  */
 export interface ApprovalCardProps {
 	request: ApprovalRequest;
@@ -389,6 +390,32 @@ export interface ApprovalCardProps {
 	/** 窄窗口：面板区一次只摆一格，打开面板会盖住这张卡，要读的东西画在卡里。 */
 	compact: boolean;
 	/** 产品的通用审批卡。认不出这次请求时直接返回它。 */
+	fallback: ReactNode;
+}
+
+/**
+ * 插件给 `run.request` 画的卡（`ui.requestCard`）：问题、计划、表单。摆在哪、排队、过期、停下这一轮时撤卡归产品，
+ * 组件画整张卡（外框用 `@plume/ui` 的 `ApprovalFrame`），人答了调 `answer`，不答调 `decline`。
+ */
+export interface RequestCardProps {
+	request: HumanRequest;
+	/** 在问的会话；子会话（侧边聊天、子 Agent）问时是子会话的 id。 */
+	sessionId: string;
+	/** 问的是子会话时它的标题，卡上要写明是谁在请求。 */
+	from?: string;
+	/** 排在这张后面还在等的张数，卡上写 +N（`ApprovalFrame` 替你写）。到期时刻在 `request.expiresAt`。 */
+	queued: number;
+	/** 交回人给的数据，工具从 `run.request` 拿到 `{ answered: true, value }`。没送到时抛错，卡片自己把错误摆出来、让人再答。 */
+	answer(value: unknown): Promise<void>;
+	/** 人不答，工具拿到 `{ answered: false, reason: "declined" }`。 */
+	decline(): Promise<void>;
+	/** 设置里现在的权限模式。 */
+	permission: PermissionMode;
+	/** 同 `ApprovalCardProps.allowAuto`：「接受并开启自动模式」这样的按钮先调它，再 `answer`。 */
+	allowAuto(): Promise<void>;
+	/** 窄窗口：面板区一次只摆一格，打开面板会盖住这张卡，要读的东西画在卡里。 */
+	compact: boolean;
+	/** 产品的通用卡（标题和一个「不答」）。认不出 `payload` 时直接返回它。 */
 	fallback: ReactNode;
 }
 
@@ -884,6 +911,11 @@ export interface UiContext {
 	 * 中途要人填的表单，问它的是哪个 `mcp__…` 工具都有可能）。同一次请求两种都对得上时，按工具名登记的在前。
 	 */
 	approvalCard(tool: string, component: ComponentType<ApprovalCardProps>, options?: { order?: number; match?: "tool" | "kind" }): void;
+	/**
+	 * 给 `run.request` 画卡，见 `RequestCardProps`。`kind` 是 `HumanRequest.kind`；order 和让位规则同 `toolCard`：渲染出错时让给下一个，
+	 * 都不行用产品的通用卡。
+	 */
+	requestCard(kind: string, component: ComponentType<RequestCardProps>, options?: { order?: number }): void;
 	/**
 	 * 往工作区加一个面板，标签按会话保留，宽度和收起偏好在窗口内共享。
 	 * 全屏按会话保存，盖满工作区；窄窗口也盖满工作区，正文和面板放不下横排时上下排列。

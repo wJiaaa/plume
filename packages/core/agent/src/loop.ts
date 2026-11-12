@@ -51,6 +51,7 @@ export interface TurnScope {
 	withhold(): Promise<boolean>;
 	permission: ToolScope["permission"];
 	ask: ToolScope["ask"];
+	requestHuman: ToolScope["requestHuman"];
 	started: ToolScope["started"];
 	progress: ToolScope["progress"];
 	background?: ToolScope["background"];

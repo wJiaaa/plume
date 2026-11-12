@@ -23,6 +23,9 @@ import type {
 	AgentService,
 	ApprovalDecision,
 	ApprovalRequest,
+	HumanAnswer,
+	HumanRequest,
+	PendingRequest,
 	AssistantMessage,
 	CommandContext,
 	CompactionOutcome,
@@ -253,15 +256,19 @@ interface Asking {
 	read: boolean;
 }
 
+/** 一张卡怎么收场的：人答了审批、交回了数据，或者没人答（到时、停下）。 */
+type Settled = { decision: ApprovalDecision } | { value: unknown } | { gone: "expired" | "stopped" };
+
+/** 排着等人的一张卡：审批（`ask`）或等人给数据（`request`）。 */
 interface PendingApproval {
-	request: ApprovalRequest;
-	decide(decision: ApprovalDecision): void;
+	request: PendingRequest;
+	settle(outcome: Settled): void;
 }
 
 /** 权限请求没人答时等多久：等这么久没动静，多半没人在电脑前，按拒绝收场不放出任何本来没放的东西。 */
 const PERMISSION_TIMEOUT_MS = 5 * 60_000;
 /**
- * 只能由人答的问题（`userOnly`：提问、表单、计划）等得久得多：没答不是拒绝，多半是人走开了一会儿。
+ * 只能由人答的问题（`ToolRun.request` 和 `userOnly` 的审批：提问、表单、计划）等得久得多：没答不是拒绝，多半是人走开了一会儿。
  * 照样有个头，无人值守的一轮不该卡在第一个问题上一整夜；卡片上有倒计时，截止时刻看得见。
  */
 const QUESTION_TIMEOUT_MS = 30 * 60_000;
@@ -1183,14 +1190,18 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 弹审批卡等人决定。同时跑的几个调用都要问时排队，一次只弹一张：界面上同一时刻只有一张审批卡，
+	 * 弹审批卡等人决定。同时跑的几个调用都要问时排队，一次只弹一张（等人给数据的 `request` 也排在同一队）：界面上同一时刻只有一张卡，
 	 * 人一次也只回答一个问题；卡上写着后面还排着几张（+N）。
 	 * 每张从问出来起计时，没人答到时按拒绝收场（时长见 `PERMISSION_TIMEOUT_MS`、`QUESTION_TIMEOUT_MS`），排着的也在走：
 	 * 截止时刻随卡片发给界面画倒计时。这一轮停了，排着的、弹着的一起收掉，都得到拒绝。
 	 * 答「以后不再问」的记进设置再放行；提权只管这一次，不记。
 	 */
 	async function askUser(session: Session, request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
-		const decision = await waitForAnswer(session, request, signal);
+		const timeout = request.userOnly
+			? (options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS)
+			: (options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS);
+		const outcome = await waitForAnswer(session, request, timeout, signal);
+		const decision = "decision" in outcome ? outcome.decision : "reject";
 		const subject = request.subject;
 		if (decision === "always" && subject !== undefined && request.escalation === undefined) {
 			await changeSettings((settings) => {
@@ -1200,15 +1211,19 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		return decision;
 	}
 
-	function waitForAnswer(session: Session, request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
-		if (signal.aborted) return Promise.resolve("reject");
-		const timeout = request.userOnly
-			? (options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS)
-			: (options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS);
+	/** 等人给一份数据（`ToolRun.request`）：和审批同一队、同一套撤卡规则，等得和 `userOnly` 的审批一样久。 */
+	async function requestUser(session: Session, request: HumanRequest, signal: AbortSignal): Promise<HumanAnswer> {
+		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS, signal);
+		if ("value" in outcome) return { answered: true, value: outcome.value };
+		return { answered: false, reason: "gone" in outcome ? outcome.gone : "declined" };
+	}
+
+	function waitForAnswer(session: Session, request: PendingRequest, timeout: number, signal: AbortSignal): Promise<Settled> {
+		if (signal.aborted) return Promise.resolve({ gone: "stopped" });
 		return new Promise((resolve) => {
 			const entry: PendingApproval = {
 				request: { ...request, expiresAt: Date.now() + timeout },
-				decide: (decision) => {
+				settle: (outcome) => {
 					const queue = session.approvals ?? [];
 					const at = queue.indexOf(entry);
 					if (at === -1) return;
@@ -1216,11 +1231,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					clearTimeout(timer);
 					signal.removeEventListener("abort", onAbort);
 					showApprovals(session);
-					resolve(decision);
+					resolve(outcome);
 				},
 			};
-			const onAbort = () => entry.decide("reject");
-			const timer = setTimeout(() => entry.decide("reject"), timeout);
+			const onAbort = () => entry.settle({ gone: "stopped" });
+			const timer = setTimeout(() => entry.settle({ gone: "expired" }), timeout);
 			signal.addEventListener("abort", onAbort, { once: true });
 			(session.approvals ??= []).push(entry);
 			showApprovals(session);
@@ -1862,6 +1877,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						return { mode: settings.permissionMode ?? "auto", alwaysAllow: settings.alwaysAllow ?? [] };
 					},
 					ask: (approval) => askUser(session, approval, controller.signal),
+					requestHuman: (request) => requestUser(session, request, controller.signal),
 					parent: (plugin) => parentFor(session, plugin),
 					started: (toolCallId) => {
 						const at = Date.now();
@@ -2499,7 +2515,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		respond(sessionId, toolCallId, decision) {
 			const pending = find(sessionId).approvals?.[0];
 			if (pending?.request.toolCallId !== toolCallId) return;
-			pending.decide(decision === "once" || decision === "always" ? decision : "reject");
+			// 等人给数据的卡上「允许」没有意思：人只能交数据（`answer`）或不答。
+			if (pending.request.type === "request") {
+				if (decision === "reject") pending.settle({ decision: "reject" });
+				return;
+			}
+			pending.settle({ decision: decision === "once" || decision === "always" ? decision : "reject" });
+		},
+		answer(sessionId, toolCallId, value) {
+			const pending = find(sessionId).approvals?.[0];
+			if (pending?.request.type !== "request" || pending.request.toolCallId !== toolCallId) return;
+			pending.settle({ value });
 		},
 		listCommands: (context) => host.commands(commandContext(context)),
 		expandCommand: (plugin, name, rest, context) =>

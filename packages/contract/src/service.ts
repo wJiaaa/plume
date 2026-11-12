@@ -271,8 +271,9 @@ export interface ProviderImportEntry {
 	keepsLocalKey: boolean;
 }
 
-/** 正在等用户决定的一次工具调用。 */
+/** 正在等用户决定的一次工具调用。和 `HumanRequest` 同排一队，`type` 分开两者。 */
 export interface ApprovalRequest {
+	type?: "approval";
 	toolCallId: string;
 	tool: string;
 	/** 要做的是哪一类事：本体工具是 `bash`、`write`、`edit`，插件的工具是它的名字。卡片按它写一个小标签。 */
@@ -305,6 +306,29 @@ export interface ApprovalRequest {
 
 /** 人怎么答：允许这一次、以后都不再问这一项、拒绝。 */
 export type ApprovalDecision = "once" | "always" | "reject";
+
+/**
+ * 一次工具调用停下来等人给的一份数据（`ToolRun.request`）：回答问题、批准计划、填表。不是权限：不经钩子 tool.approve，权限模式
+ * 和「以后不再问」都管不着它，总是弹给人。和审批同排一队、同占输入框上方那一格（`SessionView.approval`），撤卡规则相同。
+ * 人经 `AgentService.answer` 交回一份数据，或经 `respond(…, "reject")` 不答。
+ */
+export interface HumanRequest {
+	type: "request";
+	toolCallId: string;
+	tool: string;
+	/** 哪一类请求，界面按它找插件登记的卡（`ui.requestCard`）。 */
+	kind: string;
+	title: string;
+	/** 卡片要画的数据（问题、计划、表单），插件给的原样（能结构化克隆的值）。 */
+	payload?: unknown;
+	/** 等这张卡时一句短的状态，同 `ApprovalRequest.waiting`；不给时本体说「等待你的回答」。 */
+	waiting?: string;
+	/** 这张卡等到什么时候（毫秒时间戳），到时没人答按过期收场：等 30 分钟，同 `userOnly` 的审批。本体弹卡时填。 */
+	expiresAt?: number;
+}
+
+/** 输入框上方那一格里的一张卡：审批或等人给数据。 */
+export type PendingRequest = ApprovalRequest | HumanRequest;
 
 /**
  * 用户发出去的一条消息。
@@ -401,8 +425,8 @@ export interface SessionView {
 	messages: Message[];
 	/** 正在生成、还没写完的回复。 */
 	draft?: AssistantMessage;
-	approval?: ApprovalRequest;
-	/** 排在 `approval` 后面还在等的审批张数，没有时不带。 */
+	approval?: PendingRequest;
+	/** 排在 `approval` 后面还在等的张数，没有时不带。 */
 	queuedApprovals?: number;
 	/** 正在执行的工具调用到目前为止的输出。 */
 	progress: Record<string, string>;
@@ -506,7 +530,7 @@ export type AgentEvent =
 	| { type: "toolStart"; sessionId: string; toolCallId: string; startedAt: number }
 	| { type: "progress"; sessionId: string; toolCallId: string; output: string }
 	/** 弹给人的那张审批卡换了；`queuedApprovals` 是排在它后面还在等的张数（卡上写 +N），没有时不带。 */
-	| { type: "approval"; sessionId: string; approval: ApprovalRequest | undefined; queuedApprovals?: number }
+	| { type: "approval"; sessionId: string; approval: PendingRequest | undefined; queuedApprovals?: number }
 	/** 这一轮的连接岔子变了（开始重试、又重试一次、收场）：全部的最新快照。 */
 	| { type: "hiccups"; sessionId: string; hiccups: Hiccup[] }
 	/** 压缩开始、走了一步、收场了：`runs` 是全部压缩行的最新快照。 */
@@ -693,7 +717,10 @@ export interface AgentService {
 	 */
 	locateFiles(sessionId: string, relative: string): Promise<string[]>;
 	stop(sessionId: string): void;
+	/** 答弹着的那张卡。对 `HumanRequest` 只认 `"reject"`（人不答），别的不理。 */
 	respond(sessionId: string, toolCallId: string, decision: ApprovalDecision): void;
+	/** 交回弹着的那张 `HumanRequest` 要的数据。卡已经不在了（停下、过期、答过）时不理。`value` 不可信，由工具自己核。 */
+	answer(sessionId: string, toolCallId: string, value: unknown): void;
 	/** 插件经 `ctx.commands` 供的全部命令，给输入框的 `/` 菜单。同名的只留先加载的插件那条；哪个插件列不出来就跳过它。 */
 	listCommands(context: CommandContext): Promise<CommandEntry[]>;
 	/** 让供它的插件把 `/name rest` 展开；插件已经撤下了或不再认这个名字时报错。 */

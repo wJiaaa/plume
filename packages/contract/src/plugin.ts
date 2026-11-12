@@ -11,6 +11,7 @@ import type {
 	ApprovalDecision,
 	ApprovalRequest,
 	CompactionCode,
+	HumanRequest,
 	NoticeLevel,
 	PermissionMode,
 	Personalization,
@@ -74,7 +75,16 @@ export interface SessionScope {
 }
 
 /** 审批卡上写什么，见 `ApprovalRequest`。`expiresAt` 由本体弹卡时定。 */
-export type ApprovalContent = Omit<ApprovalRequest, "toolCallId" | "tool" | "expiresAt">;
+export type ApprovalContent = Omit<ApprovalRequest, "type" | "toolCallId" | "tool" | "expiresAt">;
+
+/** `ToolRun.request` 弹给人的那张卡，见 `HumanRequest`。 */
+export type HumanRequestInput = Pick<HumanRequest, "kind" | "title" | "payload" | "waiting">;
+
+/**
+ * 人怎么回的 `ToolRun.request`：交回了一份数据，或者没有——`declined` 人点了不答，`expired` 到时没人答，`stopped` 这一轮停了
+ * （会话删了也算）。`value` 来自渲染进程，类型参数只是工具期望的形状，用之前自己核一遍。
+ */
+export type HumanAnswer<T = unknown> = { answered: true; value: T } | { answered: false; reason: "declined" | "expired" | "stopped" };
 
 /** 工具执行时拿到的环境。 */
 export interface ToolRun {
@@ -110,6 +120,13 @@ export interface ToolRun {
 	 * 不先问人一个没法成立的问题。用户停止这一轮时得到 `"reject"`。
 	 */
 	ask(content: ApprovalContent): Promise<ApprovalDecision>;
+	/**
+	 * 停下来等人给一份数据：回答一个问题、批准一份计划、填一张表。卡片由界面入口按 `kind` 登记（`ui.requestCard`），
+	 * 没登记时产品画一张只能「不答」的通用卡。和 `ask` 同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方。
+	 * 不是权限：不经钩子 tool.approve，完全访问、「以后不再问」都不替人答。等 30 分钟，到时得到 `expired`；这一轮停了得到
+	 * `stopped`。`payload` 要能结构化克隆（它要跨进程送到界面）。
+	 */
+	request<T = unknown>(input: HumanRequestInput): Promise<HumanAnswer<T>>;
 	/** 设置里现在的权限模式，用到才读：中途改了，下一个调用就照新的来。 */
 	permissionMode(): Promise<PermissionMode>;
 	/** 现在工具表里有哪些工具、各是哪个插件注册的（同名的只列生效的那个）。 */

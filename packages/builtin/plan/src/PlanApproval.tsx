@@ -1,20 +1,18 @@
 /**
- * 计划模式交上来的计划，等人拍板的那张卡（`ui.approvalCard`）：一行标题、一排动作；有评论时评论按序号列在卡上，下面接一个补充框。
+ * 计划模式交上来的计划，等人拍板的那张卡（`ui.requestCard`）：一行标题、一排动作；有评论时评论按序号列在卡上，下面接一个补充框。
  *
  * 计划本身在右栏的计划面板里读、划线评论（`PlanPanel.tsx`），评论落在这张卡上——序号和面板里那段字末尾的那枚一样，对得上号。
  * 四个动作各是一个按钮，键盘直达：Esc 修改，⌘↵ 主按钮，⇧⌘↵ 接受。窄窗口的面板区一次只摆一格，开面板会盖住这张卡，
  * 所以那时正文画在卡里。
  *
- * 回答还是产品审批认的那几种：接受是 `once`，拒绝和修改是 `reject`。修改意见、接受时带上的评论先经 `reply` 交给逻辑入口，
- * `submit_plan` 从 `run.ask` 返回后取走：带修改意见的拒绝回给模型改，什么都没说的拒绝让这一轮停下。
- * 「在新会话里执行」也是接受，附言里多一个 `handoff`（连同卡上给新会话挑的模型），逻辑入口开新会话、让这一轮停下。
+ * 回答经 `answer` 交回 `run.request`（`PlanReply`）：接受连同评论，修改是带着意见的拒绝，回给模型改；什么都没说的拒绝是
+ * `decline`，让这一轮停下。「在新会话里执行」也是接受，多一个 `handoff`（连同卡上给新会话挑的模型），逻辑入口开新会话、让这一轮停下。
  */
 
-import type { ApprovalCardProps, Remote, UiContext } from "@plume/contract/ui";
+import type { Remote, RequestCardProps, UiContext } from "@plume/contract/ui";
 import { ApprovalExpiry, Button, IconButton, macKeyboard, MarkNumber, Scroller, shortcutLabel, Text, Textarea, useI18n } from "@plume/ui";
 import { MessageCircle, X } from "@plume/ui/icons";
 import { text as textStyles, textarea } from "@plume/styles";
-import type { ApprovalDecision } from "@plume/contract";
 import { useEffect, useRef, useState } from "react";
 import type { PlanApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
@@ -39,7 +37,8 @@ function Keys({ keys }: { keys: string[] }) {
 }
 
 export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string) {
-	return function PlanApproval({ request, sessionId, respond, permission, allowAuto, compact, queued, fallback }: ApprovalCardProps) {
+	return function PlanApproval({ request, sessionId, answer: reply, decline, permission, allowAuto, compact, queued, fallback }: RequestCardProps) {
+		const plan = typeof request.payload === "string" ? request.payload : "";
 		const t = MESSAGES[useI18n().resolvedLocale];
 		const review = useReview(sessionId);
 		const comments = review?.requestId === request.toolCallId ? review.comments : EMPTY;
@@ -68,13 +67,13 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 
 		// 每份计划交上来时替人打开一次面板；人关了不追。窄窗口开面板会盖住这张卡，不开。
 		useEffect(() => {
-			if (showPlan(sessionId, request.toolCallId, request.detail) && !compact) ui.openPanel(panel, sessionId);
-			// oxlint-disable-next-line react-hooks/exhaustive-deps -- 每份计划交上来时只开一次面板，detail、compact 变了不追
+			if (showPlan(sessionId, request.toolCallId, plan) && !compact) ui.openPanel(panel, sessionId);
+			// oxlint-disable-next-line react-hooks/exhaustive-deps -- 每份计划交上来时只开一次面板，plan、compact 变了不追
 		}, [sessionId, request.toolCallId]);
 		// 卡片一出来焦点就在它身上，快捷键不用先点一下。
 		useEffect(() => cardRef.current?.focus(), []);
 
-		if (!request.detail.trim()) return <>{fallback}</>;
+		if (!plan.trim()) return <>{fallback}</>;
 
 		/*
 		 * 「接受并开启自动模式」只在请求批准档时给：已经是帮我批准或完全访问，这颗按钮要么什么也不改，要么把完全访问降回去——
@@ -82,14 +81,14 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 		 */
 		const offerAuto = permission === "ask";
 
-		async function answer(decision: ApprovalDecision, reply: PlanReply, before?: () => Promise<void>) {
+		/** `undefined` 是什么都没说的拒绝。 */
+		async function answer(value: PlanReply | undefined, before?: () => Promise<void>) {
 			if (busy.current) return;
 			busy.current = true;
 			setPending(true);
 			try {
 				await before?.();
-				await api.reply(sessionId, reply);
-				await respond(decision);
+				await (value ? reply(value) : decline());
 			} catch (error) {
 				busy.current = false;
 				setPending(false);
@@ -101,14 +100,14 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 		 * 要按评论改计划，走「修订」。
 		 */
 		const notes = planFeedback(comments);
-		const approval = notes ? { note: notes } : {};
+		const approval = { accept: true as const, ...(notes ? { note: notes } : {}) };
 		const notesTip = comments.length > 0 ? t.notesOnAccept(comments.length) : undefined;
-		const accept = () => void answer("once", approval);
+		const accept = () => void answer(approval);
 		// 先换档再放行：批准那一刻 agent 就接着往下跑，第一步的工具调用该已经按帮我批准判。
-		const acceptAuto = () => void answer("once", approval, allowAuto);
-		const reject = () => void answer("reject", {});
+		const acceptAuto = () => void answer(approval, allowAuto);
+		const reject = () => void answer(undefined);
 		// 评论照样随着交出去：它们写进计划文件末尾的「执行时注意」，新会话读得到。
-		const handoff = () => void answer("once", { ...approval, handoff: handoffModel ? { model: handoffModel } : {} });
+		const handoff = () => void answer({ ...approval, handoff: handoffModel ? { model: handoffModel } : {} });
 		/*
 		 * 模型选择是贴着这颗按钮的一枚箭头：选的只是新会话的模型，接受、原地执行不受它影响，当前会话的模型也不动。
 		 * 不做成带名字的选择框，是因为右栏开着时卡片只有四百多像素宽，那一格会把「接受」挤到第二行；挑了别的模型，
@@ -136,7 +135,7 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 		const editing = revising || comments.length > 0;
 		const feedback = planFeedback(comments, said);
 		const revise = () => {
-			if (feedback) void answer("reject", { feedback });
+			if (feedback) void answer({ accept: false, feedback });
 		};
 		const cancelRevise = () => {
 			setRevising(false);
@@ -176,7 +175,7 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 				</div>
 				{compact && (
 					<Scroller className="plume-plan-card-body">
-						<ui.Markdown text={request.detail} sessionId={sessionId} />
+						<ui.Markdown text={plan} sessionId={sessionId} />
 					</Scroller>
 				)}
 				{editing ? (

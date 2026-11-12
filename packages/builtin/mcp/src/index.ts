@@ -1,7 +1,7 @@
 /**
  * plume.mcp 的逻辑入口，跑在 agent 进程：按插件数据目录里的 `servers.json` 连上每台开着的 MCP 服务，把它们的工具以
  * `mcp__<服务>__<工具>` 登记进工具表，每次调用前经审批问人；工具多了改成按需搜索（`mcp_search`、`mcp_call`），
- * 服务的 prompt 进 `/` 菜单，服务声明的资源经资源地址 `mcp://` 给 read 读（`resources.ts`），服务中途要人填的表经那次调用的审批问人（`elicitation.ts`）。设置页经 `ctx.serve` 列服务和状态、
+ * 服务的 prompt 进 `/` 菜单，服务声明的资源经资源地址 `mcp://` 给 read 读（`resources.ts`），服务中途要人填的表经那次调用的 `run.request` 问人（`elicitation.ts`）。设置页经 `ctx.serve` 列服务和状态、
  * 添加、编辑、开关、重连、填值、登录；表单卡经它交回填的值。Magpie 资源库分发的服务从数据目录的 `magpie/mcp.json`
  * 一起读进来，只读：状态、重连、登录照常，改动在 Magpie 里做。插件随包带的 `.mcp.json`（插件市场的连接器）也一起读进来：
  * 能开关、填值，启动方式不能改、不能删（卸载插件就没了）；插件装上、卸下、启停时当场重读、重连。
@@ -327,11 +327,6 @@ export default {
 			async logout(id) {
 				await connections.logout(known((await read()).servers, id));
 				return view();
-			},
-			async answerForm(form, answer) {
-				const problem = connections.forms.answer(form, answer);
-				if (problem === "gone") throw new Error(text().formGone);
-				if (problem === "invalid") throw new Error(text().formInvalid);
 			},
 		} satisfies McpApi);
 	},

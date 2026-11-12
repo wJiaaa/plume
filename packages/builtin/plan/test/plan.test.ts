@@ -4,12 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type {
-	ApprovalContent,
 	ContextCompact,
-	ApprovalDecision,
 	AssistantMessage,
 	CommandProvider,
 	HookLayer,
+	HumanRequestInput,
 	Message,
 	ModelContext,
 	PluginContext,
@@ -20,10 +19,11 @@ import type {
 	ToolExecution,
 	ToolOutput,
 	ToolResultMessage,
+	ToolRun,
 } from "@plume/contract";
 import type { PlanApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
-import { approvedPlans, currentPlan, type PlanReply, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
+import { approvedPlans, currentPlan, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
 
 /**
  * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`。`launch` 记下开过的新会话，`fail` 给了就让它抛这个错。
@@ -92,28 +92,25 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 		);
 		return { output, reached };
 	};
-	/** 交一份计划，人怎么答由 `answer` 定；`reply` 是审批卡弹出后、回答前经接口交来的附言。 */
-	const submit = async (sessionId: string, plan: string, answer: ApprovalDecision, reply?: PlanReply) => {
-		const asked: ApprovalContent[] = [];
-		const output = (await (tools.get(SUBMIT_PLAN) as ToolDefinition).execute(
-			{ plan },
-			{
-				sessionId,
-				toolCallId: `call-${++calls}`,
-				cwd: "/w",
-				scratchDir: join(dataDir, "scratch", sessionId),
-				signal,
-				progress() {},
-				permissionMode: async () => "full",
-				tools: () => [],
-				calls: [],
-				ask: async (content) => {
-					asked.push(content);
-					if (reply) api?.reply(sessionId, reply);
-					return answer;
-				},
+	/** 交一份计划，`reply` 是人在计划卡上交回的（不给就是什么都没说的拒绝）。 */
+	const submit = async (sessionId: string, plan: string, reply?: unknown) => {
+		const asked: HumanRequestInput[] = [];
+		const output = (await (tools.get(SUBMIT_PLAN) as ToolDefinition).execute({ plan }, {
+			sessionId,
+			toolCallId: `call-${++calls}`,
+			cwd: "/w",
+			scratchDir: join(dataDir, "scratch", sessionId),
+			signal,
+			progress() {},
+			permissionMode: async () => "full",
+			tools: () => [],
+			calls: [],
+			ask: async () => "reject",
+			request: async (input) => {
+				asked.push(input);
+				return reply === undefined ? { answered: false, reason: "declined" } : { answered: true, value: reply };
 			},
-		)) as ToolOutput;
+		} as ToolRun)) as ToolOutput;
 		return { output, asked };
 	};
 	const end = (step: number, toolResults: string[], natural: StepVerdict = { continue: false }) =>
@@ -186,17 +183,21 @@ test("计划中在 plume.prompt 外面标上 readOnly，系统提示词按只读
 
 test("交计划：只能人答；批准就地关掉开关，拒绝结束这一轮、开关不动；关着时和子会话里交不了", async () => {
 	const plan = await fakeContext();
-	assert.equal((await plan.submit("main", "# 计划", "once")).output.isError, true);
+	assert.equal((await plan.submit("main", "# 计划", { accept: true })).output.isError, true);
 
 	plan.api.set("main", true);
-	assert.equal((await plan.submit("child", "# 计划", "once")).output.isError, true);
-	const declined = await plan.submit("main", "# 改登录\n\n概要", "reject");
-	assert.equal(declined.asked[0]?.userOnly, true);
-	assert.equal(declined.asked[0]?.detail, "# 改登录\n\n概要");
+	assert.equal((await plan.submit("child", "# 计划", { accept: true })).output.isError, true);
+	const declined = await plan.submit("main", "# 改登录\n\n概要");
+	assert.deepEqual(declined.asked, [{ kind: SUBMIT_PLAN, title: "Plume 提出了一个计划", payload: "# 改登录\n\n概要", waiting: "等你批准计划" }]);
 	assert.equal(declined.output.terminate, "done");
 	assert.equal((await plan.execute("main", "edit")).reached, undefined);
+	// 交回来的不成形（空的修改意见、认不出的回答）：和什么都没说的拒绝一样，这一轮停下。
+	for (const bad of [{ accept: false, feedback: "  " }, "once", { accept: "yes" }]) {
+		assert.equal((await plan.submit("main", "# 改登录", bad)).output.terminate, "done", JSON.stringify(bad));
+		assert.equal((await plan.execute("main", "edit")).reached, undefined);
+	}
 
-	const approved = await plan.submit("main", "# 改登录\n\n概要", "once");
+	const approved = await plan.submit("main", "# 改登录\n\n概要", { accept: true });
 	assert.match(approved.output.output, /^The user approved the plan\. Plan mode is off; every tool is available again\. The plan is saved at .*plan-\d+\.md\./);
 	const { file, approvedAt } = approved.output.details as { file: string; approvedAt: number };
 	assert.equal(file, join(dirname(file), `plan-${approvedAt}.md`));
@@ -271,15 +272,13 @@ test("环境卡片列批准过的每一份，按批准先后，打回的、退�
 test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停；接受带评论时评论成为注意事项", async () => {
 	const plan = await fakeContext();
 	plan.api.set("main", true);
-	const revised = await plan.submit("main", "# 改登录", "reject", { feedback: "  先别动数据库  " });
+	const revised = await plan.submit("main", "# 改登录", { accept: false, feedback: "  先别动数据库  " });
 	assert.match(revised.output.output, /Feedback: 先别动数据库[\s\S]*Revise the plan/);
 	assert.equal(revised.output.terminate, undefined);
 	assert.deepEqual(revised.output.details, { kind: "plan", plan: "# 改登录", approved: false, feedback: "先别动数据库" });
 	assert.equal((await plan.execute("main", "edit")).reached, undefined);
 
-	// 上一张卡留下的附言不算下一次的。
-	plan.api.reply("main", { feedback: "过期的" });
-	const approved = await plan.submit("main", "# 改登录", "once", { note: "> 第二节\n\n注意兼容" });
+	const approved = await plan.submit("main", "# 改登录", { accept: true, note: "> 第二节\n\n注意兼容" });
 	assert.match(approved.output.output, /approved the plan with notes[\s\S]*## 执行时注意\n> 第二节/);
 	const details = approved.output.details as { notes?: string; approvedAt?: number };
 	assert.equal(details.notes, "> 第二节\n\n注意兼容");
@@ -308,7 +307,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 	const plan = await fakeContext();
 	plan.api.set(origin, true);
 	const text = "# 改登录\n\n## 概要\n把登录改成短信验证码。\n\n## 改动\n- a.ts";
-	const handed = await plan.submit(origin, text, "once", { note: "注意兼容", handoff: { model: "m1" } });
+	const handed = await plan.submit(origin, text, { accept: true, note: "注意兼容", handoff: { model: "m1" } });
 	const details = handed.output.details as { file: string; handoff?: boolean; model?: string; approvedAt: number };
 	assert.equal(handed.output.terminate, "done");
 	assert.equal(
@@ -344,7 +343,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 test("在新会话里执行：原会话不在项目里时开在它的目录；开不出来时提示人、这一轮照样停下", async () => {
 	const alone = await fakeContext();
 	alone.api.set("main", true);
-	await alone.submit("main", "改登录", "once", { handoff: {} });
+	await alone.submit("main", "改登录", { accept: true, handoff: {} });
 	const [launch] = alone.launched;
 	assert.equal(launch?.cwd, "/w/app");
 	assert.equal(launch?.project, undefined);
@@ -352,7 +351,7 @@ test("在新会话里执行：原会话不在项目里时开在它的目录；�
 
 	const broken = await fakeContext([], { fail: "项目已移除" });
 	broken.api.set("main", true);
-	const failed = await broken.submit("main", "改登录", "once", { handoff: {} });
+	const failed = await broken.submit("main", "改登录", { accept: true, handoff: {} });
 	const { file } = failed.output.details as { file: string };
 	assert.equal(failed.output.terminate, "done");
 	assert.match(failed.output.output, /could not be started: 项目已移除\. The plan is saved at /);

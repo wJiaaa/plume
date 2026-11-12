@@ -4,15 +4,15 @@
  * 卡片放在输入框上方而不是工具卡片下面：人的视线本来就停在输入框这里，而且卡片按正常流占住自己的高度，
  * 对话在它上面滚，不会被它盖住。外框（收放的标题栏、倒计时、+N）是 `@plume/ui` 的 `ApprovalFrame`，插件画的提问卡也用它。
  *
- * 工具的插件登记了审批卡（`ui.approvalCard`，计划模式的计划卡）时那一张由插件画，这里只管它压在哪儿；
- * 插件的卡认不出这次请求或渲染出错时退回这张通用卡。
+ * 工具的插件登记了审批卡（`ui.approvalCard`）时那一张由插件画，这里只管它压在哪儿；插件的卡认不出这次请求或渲染出错时退回这张通用卡。
+ * 同一格也摆等人给数据的卡（`run.request`，提问卡、计划卡、表单）：插件按 `kind` 登记（`ui.requestCard`），没有时退回一张只能「不答」的通用卡。
  */
 
-import type { ApprovalDecision, ApprovalRequest } from "@plume/contract";
+import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest } from "@plume/contract";
 import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } from "@plume/ui";
-import { Check, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
+import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";
-import { ApprovalCardSlot } from "../plugins.tsx";
+import { ApprovalCardSlot, RequestCardSlot } from "../plugins.tsx";
 
 /** 卡片右上角的小标签：要做的是哪一类事。插件的工具没有，直接写工具名。 */
 const KIND_LABEL: Record<string, MessageKey> = {
@@ -31,36 +31,98 @@ function approvalReason(reason: string | undefined, detail: string): string | un
 /**
  * `from`：问的是插件的子会话（侧边聊天、子 Agent），卡上写明是它在请求，给它的标题。
  * `compact`：窄窗口，面板区一次只摆一格，交给插件的卡（打开面板会盖住卡片）。
- * `queued`：排在这张后面还在等的张数。
+ * `queued`：排在这张后面还在等的张数。`respond` 答审批（等人给数据的卡上「不答」也是它的 `reject`），`answer` 交回数据。
  */
 export function ApprovalOverlay({
 	request,
 	queued = 0,
 	sessionId,
 	respond,
+	answer,
 	from,
 	compact,
 }: {
-	request: ApprovalRequest | undefined;
+	request: PendingRequest | undefined;
 	queued?: number | undefined;
 	sessionId: string;
 	respond: (decision: ApprovalDecision) => Promise<void>;
+	answer: (value: unknown) => Promise<void>;
 	from?: string;
 	compact: boolean;
 }) {
 	if (!request) return null;
+	const source = from !== undefined ? { from } : {};
 	return (
 		<div data-approval-region="" className="flex shrink-0 justify-center pb-2">
-			<ApprovalCardSlot
-				request={request}
-				queued={queued}
-				sessionId={sessionId}
-				respond={respond}
-				compact={compact}
-				{...(from !== undefined ? { from } : {})}
-				fallback={<PermissionCard request={request} queued={queued} respond={respond} {...(from !== undefined ? { from } : {})} />}
-			/>
+			{request.type === "request" ? (
+				<RequestCardSlot
+					request={request}
+					queued={queued}
+					sessionId={sessionId}
+					answer={answer}
+					decline={() => respond("reject")}
+					compact={compact}
+					{...source}
+					fallback={<RequestFallback request={request} queued={queued} decline={() => respond("reject")} {...source} />}
+				/>
+			) : (
+				<ApprovalCardSlot
+					request={request}
+					queued={queued}
+					sessionId={sessionId}
+					respond={respond}
+					compact={compact}
+					{...source}
+					fallback={<PermissionCard request={request} queued={queued} respond={respond} {...source} />}
+				/>
+			)}
 		</div>
+	);
+}
+
+/** 来源一行：子会话问的，写明是谁在请求。 */
+function FromLine({ from }: { from: string | undefined }) {
+	if (from === undefined) return null;
+	return (
+		<p className="mb-1.5 break-words text-caption text-ink-faint" data-approval-from="">
+			{translate("approval.fromChild", { title: from || translate("approval.childUntitled") })}
+		</p>
+	);
+}
+
+/**
+ * 等人给数据、却没有插件能画的卡（插件停用了、渲染出错）：产品不知道要的是什么，画不出填的地方，只给标题和「不答」，
+ * 工具照「人没答」收场，不至于卡到过期。
+ */
+function RequestFallback({ request, queued, decline, from }: { request: HumanRequest; queued: number; decline: () => Promise<void>; from?: string }) {
+	useI18n();
+	const { pending, error, submit } = useOnceAnswer(decline);
+	return (
+		<ApprovalFrame
+			requestId={request.toolCallId}
+			icon={<MessageCircle size={15} strokeWidth={1.8} className="shrink-0 text-accent" />}
+			title={request.title}
+			kind={request.kind}
+			expiresAt={request.expiresAt}
+			queued={queued}
+		>
+			<div className="px-4 py-2">
+				<FromLine from={from} />
+				<p className="break-words text-label text-ink-muted">{translate("approval.requestUnavailable")}</p>
+			</div>
+			<div className="shrink-0 px-4 pt-1 pb-3" data-request-fallback="">
+				<div className="flex items-center justify-end" aria-busy={pending}>
+					<Button variant="subtle" disabled={pending} onClick={() => void submit(undefined)} icon={<X size={14} />}>
+						{translate("approval.decline")}
+					</Button>
+				</div>
+				{error && (
+					<p role="alert" className="mt-2 break-words text-caption text-danger">
+						{error}
+					</p>
+				)}
+			</div>
+		</ApprovalFrame>
 	);
 }
 
@@ -89,11 +151,7 @@ function PermissionCard({
 			queued={queued}
 		>
 			<Scroller className="plume-approval-scroll mx-2 max-h-[min(280px,30dvh)]" contentClassName="px-2 py-2">
-				{from !== undefined && (
-					<p className="mb-1.5 break-words text-caption text-ink-faint" data-approval-from="">
-						{translate("approval.fromChild", { title: from || translate("approval.childUntitled") })}
-					</p>
-				)}
+				<FromLine from={from} />
 				{reason && <p className="mb-2.5 whitespace-pre-wrap break-words text-label leading-relaxed text-ink">{reason}</p>}
 				<pre className="whitespace-pre-wrap break-words font-mono text-code text-ink-muted">{request.detail}</pre>
 			</Scroller>

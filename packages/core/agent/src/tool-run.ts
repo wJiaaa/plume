@@ -11,6 +11,9 @@ import type {
 	ApprovalDecision,
 	ApprovalRequest,
 	BackgroundChannel,
+	HumanAnswer,
+	HumanRequest,
+	HumanRequestInput,
 	LetterInput,
 	LetterReceipt,
 	Log,
@@ -62,6 +65,8 @@ export interface ToolScope {
 	/** 现在的权限模式和人答过「以后不再问」的东西，每个调用执行前读一次：中途改了，下一个调用就照新的来。 */
 	permission(): Promise<{ mode: PermissionMode; alwaysAllow: readonly string[] }>;
 	ask(request: ApprovalRequest): Promise<ApprovalDecision>;
+	/** 等人给一份数据（`ToolRun.request`），和 `ask` 同一队。 */
+	requestHuman(request: HumanRequest): Promise<HumanAnswer>;
 	/** 调用开始执行了（审批也算在执行里）：界面从这一刻给它计时。 */
 	started(toolCallId: string): void;
 	/** 执行中的输出：记下最新的一份，按节奏推给界面；`undefined` 表示这个调用跑完了。 */
@@ -214,16 +219,34 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		if (push) pushedAt = Date.now();
 		scope.progress(call.id, shown, push);
 	};
-	// 停下的那一刻在不在等审批：在等的那个根本没开始执行。
+	// 停下的那一刻在不在等人（审批或 `request`）：在等的那个还没动手。
 	let asking = false;
-	const askWith = async (content: ApprovalContent): Promise<ApprovalDecision> => {
+	const waitFor = async <T>(wait: () => Promise<T>): Promise<T> => {
 		asking = true;
 		try {
-			return await scope.ask({ toolCallId: call.id, tool: call.name, ...content });
+			return await wait();
 		} finally {
 			// 因为停下才拿到答复的，留着这个标记；正常答复了就清掉。
 			if (!signal.aborted) asking = false;
 		}
+	};
+	const askWith = (content: ApprovalContent): Promise<ApprovalDecision> => waitFor(() => scope.ask({ toolCallId: call.id, tool: call.name, ...content }));
+	/** `ToolRun.request`：不经 tool.approve、不看权限模式，直接排进等人的那一队。 */
+	const request = async <T>(input: HumanRequestInput): Promise<HumanAnswer<T>> => {
+		const { kind, title, payload, waiting } = (input ?? {}) as Partial<HumanRequestInput>;
+		// i18n-exempt：给插件作者的报错，作为工具结果交给模型。
+		if (typeof kind !== "string" || !kind || typeof title !== "string") throw new Error("run.request 需要 kind 和 title");
+		const asked: HumanRequest = {
+			type: "request",
+			toolCallId: call.id,
+			tool: call.name,
+			kind,
+			title,
+			// 先克隆：要跨进程送到界面，送不了的在这里就报给插件；之后插件再改它也不影响卡上的。
+			...(payload !== undefined ? { payload: structuredClone(payload) } : {}),
+			...(typeof waiting === "string" && waiting ? { waiting } : {}),
+		};
+		return (await waitFor(() => scope.requestHuman(asked))) as HumanAnswer<T>;
 	};
 	// 插件的层自己要问时，卡片上是这个调用的参数和它给的理由；没有 subject，只能答这一次。
 	const generic = { kind: call.name, title: call.name, detail: JSON.stringify(call.arguments, null, 2) };
@@ -306,6 +329,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				signal: input.signal,
 				progress: input.progress,
 				ask,
+				request,
 				permissionMode: async () => (await permission()).mode,
 				tools: () => scope.host.toolOwners(),
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),

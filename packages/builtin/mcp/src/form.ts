@@ -25,17 +25,19 @@ type FormValue = string | number | boolean;
 export type FormValues = Record<string, FormValue>;
 export type FormProblem = "required" | "type" | "option" | "format" | "minLength" | "maxLength" | "minimum" | "maximum";
 
-/** 卡片交回来的回答：填好提交、明说不给、没做决定就关了。三种对应协议的 accept、decline、cancel，服务据此决定放弃还是过会儿再问。 */
-export type FormAnswer = { action: "accept"; values: FormValues } | { action: "decline" } | { action: "cancel" };
+/**
+ * 卡片交回 `run.request` 的回答：填好提交、明说不给。没做决定就关了的是 `decline()`，不交回答。三种对应协议的 accept、decline、
+ * cancel，服务据此决定放弃还是过会儿再问。
+ */
+export type FormAnswer = { action: "accept"; values: FormValues } | { action: "decline" };
 
-/** 审批卡 `detail` 里的那份：卡片按它画表，交回答时带上 `form`。 */
+/** `run.request` 的 `payload`：卡片按它画表。 */
 export interface FormRequest {
-	form: string;
 	message: string;
 	fields: FormField[];
 }
 
-/** 审批卡的 `kind`：界面入口按它认出这是一张表。 */
+/** `run.request` 的 `kind`：界面入口按它认出这是一张表。 */
 export const FORM_KIND = "mcp-form";
 
 export class UnsupportedFormError extends Error {}
@@ -156,15 +158,11 @@ function formatOk(format: NonNullable<FormField["format"]>, value: string): bool
 	return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-/** 审批卡 `detail` 读回来；不是这个插件写的就是 null，卡片让给通用卡。 */
-export function readFormRequest(detail: string): FormRequest | null {
-	try {
-		const parsed = record(JSON.parse(detail));
-		if (!parsed || typeof parsed.form !== "string" || typeof parsed.message !== "string" || !Array.isArray(parsed.fields)) return null;
-		return parsed as unknown as FormRequest;
-	} catch {
-		return null;
-	}
+/** 卡片的 `payload` 读回来；不是这个插件给的就是 null，卡片让给通用卡。 */
+export function readFormRequest(payload: unknown): FormRequest | null {
+	const parsed = record(payload);
+	if (!parsed || typeof parsed.message !== "string" || !Array.isArray(parsed.fields)) return null;
+	return parsed as unknown as FormRequest;
 }
 
 function numberProp<K extends "minimum" | "maximum" | "minLength" | "maxLength">(schema: Record<string, unknown>, key: K): Partial<Record<K, number>> {

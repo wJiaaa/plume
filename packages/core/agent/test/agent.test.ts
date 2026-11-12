@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { AgentEvent, Message, Plugin, PluginContext } from "@plume/contract";
+import type { AgentEvent, ApprovalRequest, HumanRequest, Message, Plugin, PluginContext } from "@plume/contract";
 import { type Agent, type AgentOptions, createAgent } from "../src/index.ts";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";
@@ -272,8 +272,8 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 		subject: await realpath(join(workspace, "hello.txt")),
 	});
 	// 卡片上是这次改动的 diff。
-	expect(asked.approval?.detail).toContain("-hello");
-	expect(asked.approval?.detail).toContain("+hi");
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toContain("-hello");
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toContain("+hi");
 	service.respond(session.id, "call_edit", "once");
 	await done;
 
@@ -1748,6 +1748,134 @@ it("同时要问的排队：卡上带后面还排着几张，答一张换下一�
 	expect(results.filter((message) => textOf(message) === "once")).toHaveLength(1);
 });
 
+/** 经 `run.request` 等人给数据的工具，结果原样是人怎么回的；`approved` 记下钩子 tool.approve 收到过的调用。 */
+function filler(approved: string[] = []): Plugin {
+	return {
+		name: "test.filler",
+		apply(ctx) {
+			ctx.hook("tool.approve", async (input, next) => (approved.push(input.call.id), next(input)));
+			ctx.tools.register({
+				name: "fill",
+				description: "要人填",
+				parameters: { type: "object", properties: {} },
+				async execute(args, run) {
+					return { output: JSON.stringify(await run.request({ kind: "test-form", title: "填一下", payload: { asked: args.n ?? 0 }, waiting: "等你填" })) };
+				},
+			});
+		},
+	};
+}
+const isRequest = (event: AgentEvent): event is ApprovalEvent & { approval: HumanRequest } => isApproval(event) && event.approval?.type === "request";
+
+it("request 完全访问下也等人，不经 tool.approve；「允许」不算数，交回的数据原样到工具", async () => {
+	const approved: string[] = [];
+	const call = { id: "call_fill", name: "fill", args: { n: 1 } };
+	const { service, session, until, idle } = await start([{ toolCalls: [call] }, { text: "好了" }], [filler(approved)]);
+	await service.setPermissionMode("full");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "填" }] });
+	const asked = await until(isRequest);
+	expect(asked.approval).toMatchObject({
+		type: "request",
+		toolCallId: "call_fill",
+		tool: "fill",
+		kind: "test-form",
+		title: "填一下",
+		payload: { asked: 1 },
+		waiting: "等你填",
+	});
+	expect(asked.approval.expiresAt).toBeGreaterThan(Date.now());
+	// 审批的「允许」对它没有意思，卡还在。
+	service.respond(session.id, "call_fill", "once");
+	expect((await service.getSession(session.id)).approval?.toolCallId).toBe("call_fill");
+	service.answer(session.id, "call_fill", { name: "Ann" });
+	await done;
+	const result = (await service.getSession(session.id)).messages.find((message) => message.role === "toolResult");
+	expect(JSON.parse(textOf(result))).toEqual({ answered: true, value: { name: "Ann" } });
+	expect(approved).toEqual([]);
+});
+
+it("request 没人答：拒绝是 declined，到时是 expired，停下这一轮是 stopped，卡都撤掉", async () => {
+	const calls = ["decline", "expire", "stop"].map((id) => ({ id: `call_${id}`, name: "fill", args: {} }));
+	const { service, session, events, until, idle } = await start(
+		[{ toolCalls: [calls[0]!] }, { toolCalls: [calls[1]!] }, { toolCalls: [calls[2]!] }, { text: "好了" }],
+		[filler()],
+		{ approvalTimeoutMs: { permission: 5_000, question: 150 } },
+	);
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "填" }] });
+	await until((event): event is ApprovalEvent => isRequest(event) && event.approval.toolCallId === "call_decline");
+	service.respond(session.id, "call_decline", "reject");
+	// 第二张没人答，150ms 后自己过期；第三张弹出来时按停。
+	await until((event): event is ApprovalEvent => isRequest(event) && event.approval.toolCallId === "call_stop");
+	const from = events.length;
+	service.stop(session.id);
+	await done;
+	expect(events.slice(from).findLast(isApproval)).toMatchObject({ approval: undefined });
+	const view = await service.getSession(session.id);
+	expect(view.approval).toBeUndefined();
+	const results = view.messages.filter((message) => message.role === "toolResult").map((message) => JSON.parse(textOf(message)) as unknown);
+	expect(results).toEqual([
+		{ answered: false, reason: "declined" },
+		{ answered: false, reason: "expired" },
+		{ answered: false, reason: "stopped" },
+	]);
+});
+
+it("request 和审批同排一队：按问的先后弹，answer 只认弹着的那张 request", async () => {
+	const fill = { id: "call_fill", name: "fill", args: {} };
+	const decide = { id: "call_decide", name: "decide", args: {} };
+	const { service, session, until, idle } = await start([{ toolCalls: [fill, decide] }, { text: "好了" }], [asker, filler()]);
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "定" }] });
+	const first = await until((event): event is ApprovalEvent => isApproval(event) && event.queuedApprovals === 1);
+	expect(first.approval).toMatchObject({ type: "request", toolCallId: "call_fill" });
+	// 排着的审批答了不算，也不收数据；弹着的 request「允许」不算数。
+	service.respond(session.id, "call_decide", "once");
+	service.answer(session.id, "call_decide", "不是数据");
+	service.respond(session.id, "call_fill", "once");
+	expect((await service.getSession(session.id)).approval?.toolCallId).toBe("call_fill");
+	service.answer(session.id, "call_fill", "到了");
+	const next = await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_decide");
+	expect(next.approval).toMatchObject({ userOnly: true });
+	expect(next.approval?.type).toBeUndefined();
+	expect(next.queuedApprovals).toBeUndefined();
+	service.answer(session.id, "call_decide", "不是数据");
+	expect((await service.getSession(session.id)).approval?.toolCallId).toBe("call_decide");
+	service.respond(session.id, "call_decide", "once");
+	await done;
+	const results = (await service.getSession(session.id)).messages.filter((message) => message.role === "toolResult").map(textOf);
+	expect(results).toEqual([JSON.stringify({ answered: true, value: "到了" }), "once"]);
+});
+
+it("子会话里的 request 记在子会话上、由它答；父会话的卡位不被占", async () => {
+	let ctx!: PluginContext;
+	const owner: Plugin = { name: "test.owner", apply: (context) => void (ctx = context) };
+	const { service, session, until } = await start(
+		(request) => {
+			const messages = request.messages as Array<{ content: unknown }>;
+			const last = messages[messages.length - 1]?.content;
+			const answered = Array.isArray(last) && last.some((block: { type?: string }) => block.type === "tool_result");
+			return answered ? { text: "好" } : { toolCalls: [{ id: "call_child_fill", name: "fill", args: {} }] };
+		},
+		[filler(), owner],
+	);
+	const child = await ctx.sessions.create({ parentId: session.id });
+	const sent = ctx.sessions.send(child.id, "填");
+	const asked = await until((event): event is ApprovalEvent => isRequest(event) && event.sessionId === child.id);
+	expect(asked.approval?.toolCallId).toBe("call_child_fill");
+	expect((await service.getSession(session.id)).approval).toBeUndefined();
+	// 交给父会话的不算。
+	service.answer(session.id, "call_child_fill", "错了地方");
+	service.answer(child.id, "call_child_fill", "对了");
+	expect(await sent).toEqual({ reason: "done" });
+	const result = (await service.getSession(child.id)).messages.find((message) => message.role === "toolResult");
+	expect(JSON.parse(textOf(result))).toEqual({ answered: true, value: "对了" });
+});
+
 it.skipIf(process.platform !== "darwin")("tool.execute 的层要求只读时，完全访问下命令也跑在只读沙箱里", async () => {
 	const readOnly: Plugin = {
 		name: "test.read-only",
@@ -1799,7 +1927,7 @@ it.skipIf(process.platform !== "darwin")("请求批准下命令跑在只读沙�
 		(event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval?.toolCallId === "call_retry",
 	);
 	expect(escalation.approval).toMatchObject({ kind: "bash", reason: "要写测试文件", escalation: "workspace-write" });
-	expect(escalation.approval?.subject).toBeUndefined();
+	expect((escalation.approval as ApprovalRequest | undefined)?.subject).toBeUndefined();
 	service.respond(session.id, "call_retry", "once");
 	await done;
 

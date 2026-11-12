@@ -1,7 +1,7 @@
 /**
  * plume.mcp 的界面入口，跑在渲染进程：「插件市场 › 连接器 › 已安装」。每台服务一张卡片：它在不在跑、怎么启动、带来了哪些工具；
  * 添加在弹窗里（市场页头的「添加连接器」经 `actions` 打开），改已有的在卡片里就地改；开关、重连、填值、登录、删除都经逻辑入口（`ui.remote()`）改插件数据目录里的
- * `servers.json`。服务中途要人填的表画成一张审批卡（`FormCard.tsx`）。
+ * `servers.json`。服务中途要人填的表画成一张等人填的卡（`ui.requestCard`，`FormCard.tsx`）。
  *
  * 像密钥的环境变量、请求头，界面只知道填没填，原值不出 agent 进程。
  */
@@ -969,6 +969,6 @@ export default {
 			page: "extensions-connectors",
 			actions: [{ label: (locale) => MESSAGES[locale].addManual, detail: (locale) => MESSAGES[locale].addManualDetail, icon: Plus, run: requestAdd }],
 		});
-		ui.approvalCard(FORM_KIND, formCard(ui, api), { match: "kind" });
+		ui.requestCard(FORM_KIND, formCard(ui));
 	},
 } satisfies UiPlugin;

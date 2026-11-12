@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { PluginContext, SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
+import type { HumanAnswer, HumanRequestInput, PluginContext, SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
 import type { McpApi } from "../src/api.ts";
 import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
@@ -440,6 +440,7 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 			asked.push(content.title);
 			return "once";
 		},
+		request: async () => ({ answered: false, reason: "declined" }),
 		permissionMode: async () => "auto",
 		tools: () => [],
 		calls: [],
@@ -635,63 +636,50 @@ test("表单：读平铺的 Schema，选项两种写法；嵌套的认不出；�
 		problems: { name: "minLength", size: "option", mail: "format", count: "type" },
 	});
 	assert.deepEqual(checkFormValues(fields, { name: "Ann", count: 2, ok: false, extra: "dropped" }), { ok: true, values: { name: "Ann", count: 2, ok: false } });
-	assert.equal(readFormRequest("not json"), null);
+	assert.equal(readFormRequest({ fields: [] }), null);
 });
 
-test("服务中途要人填表：恰好一个调用在跑时经它问人；回答先交回、对不上的拒收；不给、认不出的表都回给服务", () =>
+test("服务中途要人填表：恰好一个调用在跑时经它的 run.request 问人；交回的值按表再核，对不上的当没做决定；不给、认不出的表都回给服务", () =>
 	withConnections(async (connections, tools) => {
 		const server: ServerConfig = { id: "e1", name: "echo", transport: "stdio", command: process.execPath, args: [FIXTURE], enabled: true };
 		connections.sync([server], { retry: false });
 		await until(() => connections.status(server).state !== "connecting");
 		assert.equal(connections.status(server).state, "connected", connections.status(server).error);
 
-		const formRun = (reply: (form: string) => "once" | "reject", seen: { kind: string; title: string; userOnly?: boolean }[]): ToolRun => ({
+		const formRun = (reply: HumanAnswer, seen: HumanRequestInput[] = []): ToolRun => ({
 			...fakeRun([]),
-			async ask(content) {
-				seen.push({ kind: content.kind, title: content.title, ...(content.userOnly ? { userOnly: true } : {}) });
-				if (content.kind !== FORM_KIND) return "once";
-				const request = readFormRequest(content.detail);
+			async request(input) {
+				seen.push(input);
+				const request = readFormRequest(input.payload);
 				assert.ok(request);
 				assert.equal(request.message, "Tell me about you");
-				return reply(request.form);
+				return reply as HumanAnswer<never>;
 			},
 		});
+		const ask = async (run: ToolRun) => (await tools.get("mcp__echo__ask")?.execute({ text: "you" }, run))?.output;
 
-		const seen: { kind: string; title: string; userOnly?: boolean }[] = [];
-		const accepted = await tools.get("mcp__echo__ask")?.execute(
-			{ text: "you" },
-			formRun((form) => {
-				assert.equal(connections.forms.answer(form, { action: "accept", values: { name: "Ann", age: "3" } }), "invalid");
-				assert.equal(connections.forms.answer(form, { action: "accept", values: { name: "Ann", age: 3, plan: "pro" } }), undefined);
-				return "once";
-			}, seen),
+		const seen: HumanRequestInput[] = [];
+		assert.equal(
+			await ask(formRun({ answered: true, value: { action: "accept", values: { name: "Ann", age: 3, plan: "pro" } } }, seen)),
+			JSON.stringify({ action: "accept", content: { name: "Ann", age: 3, plan: "pro" } }),
 		);
-		assert.equal(accepted?.output, JSON.stringify({ action: "accept", content: { name: "Ann", age: 3, plan: "pro" } }));
 		assert.deepEqual(
-			seen.map((one) => one.kind),
-			["mcp", FORM_KIND],
+			seen.map(({ kind, title }) => ({ kind, title })),
+			[{ kind: FORM_KIND, title: "echo" }],
 		);
-		assert.deepEqual(seen[1], { kind: FORM_KIND, title: "echo", userOnly: true });
-		assert.equal(connections.forms.answer("whatever", { action: "cancel" }), "gone");
-
-		const declined = await tools.get("mcp__echo__ask")?.execute(
-			{ text: "you" },
-			formRun((form) => {
-				connections.forms.answer(form, { action: "decline" });
-				return "reject";
-			}, []),
-		);
-		assert.equal(declined?.output, JSON.stringify({ action: "decline" }));
-		// 卡上没交回答就关了（产品的通用卡）：当作没做决定。
-		const closed = await tools.get("mcp__echo__ask")?.execute(
-			{ text: "you" },
-			formRun(() => "reject", []),
-		);
-		assert.equal(closed?.output, JSON.stringify({ action: "cancel" }));
+		// 渲染进程交来的不可信：类型对不上的值不交给服务。
+		assert.equal(await ask(formRun({ answered: true, value: { action: "accept", values: { name: "Ann", age: "3" } } })), JSON.stringify({ action: "cancel" }));
+		assert.equal(await ask(formRun({ answered: true, value: { action: "decline" } })), JSON.stringify({ action: "decline" }));
+		// 卡上「取消」、停下这一轮、到时没人答：当作没做决定。
+		for (const reason of ["declined", "stopped", "expired"] as const)
+			assert.equal(await ask(formRun({ answered: false, reason })), JSON.stringify({ action: "cancel" }), reason);
 
 		const bad = await tools.get("mcp__echo__ask")?.execute(
 			{ text: "bad" },
-			formRun(() => assert.fail("认不出的表不该问人"), []),
+			{
+				...fakeRun([]),
+				request: async () => assert.fail("认不出的表不该问人"),
+			},
 		);
 		// 嵌套的表 SDK 在协议这层就拒了（错误码 -32603）；它认得、我们画不出的那些由 `formFields` 拒（InvalidParams）。
 		assert.match(String(bad?.output), /^elicit failed: MCP error/);

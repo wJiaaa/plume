@@ -26,7 +26,8 @@ export default {
 | `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，详见下文 |
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
-| `ui.approvalCard(tool, Component, { order, match })` | 给自己的工具画审批卡；`match: "kind"` 按 `request.kind` 认 |
+| `ui.approvalCard(tool, Component, { order, match })` | 给自己的工具画审批卡；`match: "kind"` 按 `request.kind` 认（旧写法） |
+| `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
 | `ui.toolLine(tool, { verb, subject, like, group, times, callOnly, icon })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标；画法还是通用卡片 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面 |
@@ -189,21 +190,37 @@ ui.toolCard("my_tool", MyCard);
 ## 审批卡
 
 ```tsx
-function PlanApproval({ request, sessionId, respond, permission, allowAuto, compact, fallback }: ApprovalCardProps) {
+function ShellApproval({ request, sessionId, respond, permission, allowAuto, compact, fallback }: ApprovalCardProps) {
 	if (!request.detail) return <>{fallback}</>;
-	return <div className="my-card">…<Button onClick={() => void respond("once")}>接受</Button></div>;
+	return <div className="my-card">…<Button onClick={() => void respond("once")}>允许</Button></div>;
 }
-ui.approvalCard("submit_plan", PlanApproval);
+ui.approvalCard("my_shell", ShellApproval);
 ```
 
-- 工具名不固定、一类问题从几个工具里问出来时（MCP 服务中途要人填的表单），按 `kind` 登记：`ui.approvalCard("mcp-form", FormCard, { match: "kind" })`，`run.ask` 时给同一个 `kind`。卡上要的结构化内容（表单的字段）写进 `detail`（JSON），认不出就返回 `fallback`。两种都对得上时按工具名登记的在前。
 - 只给自己的工具画（`request.tool`）：卡片压在输入框正上方的那一格、排队一次一张、停下这一轮时撤卡归产品；组件画整张卡（外框、正文、按钮）。认不出这次请求就返回 `fallback`（产品的通用卡），渲染出错时让给下一个注册者，都不行用通用卡。
-- 回答只有 `"once"`、`"always"`、`"reject"`。卡上还有别的话要交给工具（修改意见、评论），先经 `ui.remote()` 交给自己的逻辑入口，再 `respond`；工具从 `run.ask` 返回以后去取。
+- 回答只有 `"once"`、`"always"`、`"reject"`，问的是放不放行。要人给答案（回答问题、批准计划、填表）用下面的「等人给数据的卡」。
+- `match: "kind"` 按 `request.kind` 登记、`userOnly` 的审批卡是还没迁走的旧写法，新写的不用。
 - `permission` 是现在的权限模式；`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `respond`，别的档调用不改。只在人点了卡上的按钮时调。
 - `compact`：窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`from` 是问的子会话的标题，卡上要写明。
-- 没人答时卡会过期（权限请求 5 分钟，`userOnly` 的 30 分钟），截止时刻在 `request.expiresAt`；`queued` 是排在这张后面还在等的张数。外框想和产品的审批卡一样（收放的标题栏、倒计时、+N），用 `@plume/ui` 的 `ApprovalFrame`，正文和按钮放在里面；自己画外框的，标题行放一个 `ApprovalExpiry`（`at={request.expiresAt}`），有排队时写 `+{queued}`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）和 `plan` 插件（`ApprovalExpiry`）。
-- 卡片一出来把焦点给它，键盘能直接答；完全访问下要真弹给人，`run.ask` 带 `userOnly`（见 logic.md）。例子是 `plan` 插件。
-- 等这张卡时对话末尾、侧栏悬停和系统通知说的那句状态，`run.ask` 带 `waiting` 给（「等你批准计划」，按 `ctx.locale()`）；不给时宿主按 `userOnly` 说「等待你的回答」或「等待你的批准」。
+- 没人答时卡会过期（权限请求 5 分钟），截止时刻在 `request.expiresAt`；`queued` 是排在这张后面还在等的张数。外框想和产品的审批卡一样（收放的标题栏、倒计时、+N），用 `@plume/ui` 的 `ApprovalFrame`，正文和按钮放在里面；自己画外框的，标题行放一个 `ApprovalExpiry`（`at={request.expiresAt}`），有排队时写 `+{queued}`。
+- 等这张卡时对话末尾、侧栏悬停和系统通知说的那句状态，`run.ask` 带 `waiting` 给（按 `ctx.locale()`）；不给时宿主说「等待你的批准」。
+
+## 等人给数据的卡
+
+```tsx
+function QuestionCard({ request, answer, decline, from, queued, fallback }: RequestCardProps) {
+	const question = readQuestion(request.payload);
+	if (!question) return <>{fallback}</>;
+	return <ApprovalFrame …>…<Button onClick={() => void answer({ answer: picked })}>确认</Button><Button onClick={() => void decline()}>取消</Button></ApprovalFrame>;
+}
+ui.requestCard("ask_user", QuestionCard);
+```
+
+- 工具经 `run.request({ kind, title, payload })` 要人给数据（见 logic.md），卡片按 `kind` 登记；`request.payload` 是工具给的数据，认不出就返回 `fallback`（产品的通用卡，只能「不答」）。渲染出错时让给下一个注册者。
+- 人答了调 `answer(value)`，`value` 原样交回 `run.request`（工具那边会再核一遍，卡上也先查一遍，拦住手误）；人不答调 `decline()`，工具得到 `reason: "declined"`。没送到时两者都抛错，卡片把错误摆出来、让人再答。一个回答连同附言（评论、修改意见）一起放进 `value`，不用经 `remote` 另交。
+- 摆在哪、排队、过期（30 分钟）、停下这一轮时撤卡和审批卡一样归产品；`from`、`queued`、`compact`、`permission`、`allowAuto()` 的意思同审批卡。外框用 `ApprovalFrame`，或自己画、标题行放 `ApprovalExpiry`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
+- 卡片一出来把焦点给它，键盘能直接答。
+- 等这张卡时那句状态由 `run.request` 带 `waiting` 给（「等你批准计划」，按 `ctx.locale()`）；不给时宿主说「等待你的回答」。
 
 ## 面板
 
@@ -426,7 +443,7 @@ function SidePanel({ tab }: PanelProps) {
 - `reask: true`：人说的最后一句底下多一颗「编辑并重新提问」，宿主截掉它和之后的、拿改过的字重跑一轮（照常经 `prompt.submit`，插件按截掉后的记录算），不问要不要退文件；一轮在跑时置灰。没有撤回、分叉。侧边聊天开它，子 Agent 的全过程不开（话是派它的会话写的）。
 - 这个子会话经 `run.parent.enqueue`、卡片的 `handToParent` 交给父会话的事，宿主在转录和输入框之间画一条回执（排队中、在跑、做完、失败、随父会话停下，悬停有立即执行、撤回、重试、移除），插件什么都不用做；撤回的那句话放回 `composer.draftKey` 那份草稿，没给 `draftKey` 时不摆「撤回」。
 - 没有「继续」：子会话的一轮只有插件能发起。等人批准的那一次压在主输入框上方，转录里只标「等待确认」。
-- 画的是独立会话（`create` 不给 `parentId`，见 logic.md「独立会话」）时：等人批准的那一次就压在这个视图的输入框上方（插件的 `ui.approvalCard` 照样用），因为它不挂在哪个对话下、没有别处可压；所以只在人看得到的地方画它，页面没开着时用 `ui.useSession` 读 `approval`、经 `ui.pageBadge` 带 `attention: true` 提醒人。`model: "choose"` 的菜单没有「跟随主会话」，没选的用默认模型；没有划词引用。
+- 画的是独立会话（`create` 不给 `parentId`，见 logic.md「独立会话」）时：等人批准的那一次（和 `run.request` 等人给数据的卡）就压在这个视图的输入框上方（插件的 `ui.approvalCard`、`ui.requestCard` 照样用），因为它不挂在哪个对话下、没有别处可压；所以只在人看得到的地方画它，页面没开着时用 `ui.useSession` 读 `approval`、经 `ui.pageBadge` 带 `attention: true` 提醒人。`model: "choose"` 的菜单没有「跟随主会话」，没选的用默认模型；没有划词引用。
 - 外面那一层给它高度（面板里 `height: 100%`），它自己撑满、底下贴着输入框。
 
 ## 设置分区

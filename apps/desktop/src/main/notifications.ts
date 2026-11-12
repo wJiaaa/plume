@@ -46,9 +46,9 @@ export function createNotifications(deps: {
 			}
 			if (approvals.get(event.sessionId) === event.approval.toolCallId) return;
 			approvals.set(event.sessionId, event.approval.toolCallId);
-			// 只能由人答的（提问、表单、计划）说「等待回复」，其余是批准。正文是插件给的那句状态，没给就用卡片标题；
-			// 不拿 `detail`：那是卡片正文，插件的卡多半在里面放 JSON。
-			const question = event.approval.userOnly === true;
+			// 等人给数据的（`run.request`：提问、表单、计划）和只能由人答的审批说「等待回复」，其余是批准。正文是插件给的那句状态，
+			// 没给就用卡片标题；不拿正文：插件的卡多半在里面放 JSON。
+			const question = event.approval.type === "request" || event.approval.userOnly === true;
 			show(event.sessionId, question ? "question" : "approval", event.approval.waiting ?? event.approval.title);
 		}
 		if (event.type === "idle") show(event.sessionId, "done");

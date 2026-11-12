@@ -3,7 +3,7 @@
  *
  * - 输入框底下那排的开关（`ui.composerItem`），挨着权限：关着是一颗淡色图标，开着带字、用强调色。新对话里拨的是
  *   逻辑入口记着的新对话开关，第一句话发出去时交给建出来的会话。
- * - 计划卡（`ui.approvalCard`，`PlanApproval.tsx`）：等人拍板，拒绝、修改、接受、接受并开启自动模式。
+ * - 计划卡（`ui.requestCard`，`PlanApproval.tsx`）：等人拍板，拒绝、修改、接受、接受并开启自动模式。
  * - 计划面板（`PlanPanel.tsx`）：计划在右栏按 Markdown 读，等审批时划线评论。计划交上来时由计划卡替人打开一次。
  * - `submit_plan` 在转录里读成一行「提交计划 标题」（`ui.toolLine`），和别的工具一样并进一段活：批没批、交给了谁，
  *   审批卡和交出去的会话那一条（宿主画在输入框上方）已经说了。
@@ -96,7 +96,7 @@ export default {
 			// 没交过计划的对话里没什么可看：只从计划卡、环境卡片打开，不在开始页列出。
 			listed: false,
 		});
-		ui.approvalCard(SUBMIT_PLAN, planApproval(ui, api, PANEL));
+		ui.requestCard(SUBMIT_PLAN, planApproval(ui, api, PANEL));
 		ui.toolLine(SUBMIT_PLAN, {
 			verb: (locale) => MESSAGES[locale].submitted,
 			subject: planSubject,

@@ -5,9 +5,9 @@
  * - 不改文件靠执行期拒绝（`tool.execute`），工具表一字不改：工具定义排在请求最前面，批准后要把写工具还给模型，
  *   表一变整段前缀缓存就作废。`write`、`edit` 直接拒绝；别的调用都带上 `readOnly`，命令压进只读沙箱，申请离开沙箱的拒绝。
  *   计划模式会话底下的子会话（子 Agent、侧边聊天）受同一道线。
- * - `submit_plan` 交计划：审批卡标着 `userOnly`，完全访问也不替人批——计划模式的全部意义是「动手之前人看一眼」。
- *   卡片是界面入口画的计划卡，回答之前把附言经 `reply` 交过来：接受带评论时评论是执行时的注意事项，计划照批；
- *   拒绝带修改意见时意见回给模型、开关不动，它改完再交；什么都没说的拒绝让这一轮停下，人说下一步。
+ * - `submit_plan` 交计划：经 `run.request` 等人拍板，不是权限，完全访问也不替人批——计划模式的全部意义是「动手之前人看一眼」。
+ *   卡片是界面入口画的计划卡，回答连同附言一起交回来：接受带评论时评论是执行时的注意事项，计划照批；
+ *   拒绝带修改意见时意见回给模型、开关不动，它改完再交；什么都没说的拒绝（和到时没人答、停下）让这一轮停下，人说下一步。
  *   批准那一刻开关就地关掉，同一轮里接着做。它常驻在工具表里，不在计划模式时调用返回一句错误。
  *   批准的计划存成会话临时目录里的一个文件；人选了「在新会话里执行」时，经 `ctx.sessions.launch` 在同一个项目里开一个
  *   只带着这份计划的会话（`handoff.ts` 写它的第一句话），这个会话就此停下，留着回答那边的提问。
@@ -21,7 +21,7 @@ import type { Plugin } from "@plume/contract";
 import type { PlanApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { handoffPrompt } from "./handoff.ts";
-import { approvedPlans, planTitle, renderPlan, SUBMIT_PLAN, type PlanDetails, type PlanReply } from "./plan.ts";
+import { approvedPlans, planTitle, readPlanReply, renderPlan, SUBMIT_PLAN, type PlanDetails } from "./plan.ts";
 import { ASK_USER, approvedPlanNote, editsFiles, planSection, refusal, SUBMIT_PLAN_DESCRIPTION, SUBMIT_PLAN_RESULTS, UNSUBMITTED_PLAN_NOTE } from "./prompt.ts";
 import { PlanStore } from "./store.ts";
 
@@ -39,8 +39,6 @@ export default {
 		/** 子会话 → 父会话；顶层会话记 null。父子关系建了就不变，查过就记下。 */
 		const parents = new Map<string, string | null>();
 		const turns = new Map<string, Turn>();
-		/** 审批卡交来的附言，按会话：同一个会话的审批卡一次只弹一张，答完就被那次 `submit_plan` 取走。 */
-		const replies = new Map<string, PlanReply>();
 
 		async function parentOf(sessionId: string): Promise<string | null> {
 			const known = parents.get(sessionId);
@@ -63,7 +61,6 @@ export default {
 			store.forget(sessionId);
 			parents.delete(sessionId);
 			turns.delete(sessionId);
-			replies.delete(sessionId);
 		});
 
 		ctx.hook("prompt.submit", async (input, next) => {
@@ -139,22 +136,17 @@ export default {
 				if (!store.has(run.sessionId)) return { output: SUBMIT_PLAN_RESULTS.off, isError: true };
 				const plan = typeof args.plan === "string" ? args.plan.trim() : "";
 				if (!plan) return { output: SUBMIT_PLAN_RESULTS.missing, isError: true };
-				// 上一张卡没答完就停下留下的附言不算这一次的。
-				replies.delete(run.sessionId);
 				const text = MESSAGES[ctx.locale()];
-				const decision = await run.ask({ kind: SUBMIT_PLAN, title: text.approvalTitle, detail: plan, userOnly: true, waiting: text.approvalWaiting });
-				const reply = replies.get(run.sessionId) ?? {};
-				replies.delete(run.sessionId);
-				if (decision === "reject") {
-					if (reply.feedback) {
-						return {
-							output: SUBMIT_PLAN_RESULTS.revise(reply.feedback),
-							details: { kind: "plan", plan, approved: false, feedback: reply.feedback } satisfies PlanDetails,
-						};
-					}
-					// 没有反馈就没有可改的方向：这一轮停在这里，人说要改什么，开关不动。
-					return { output: SUBMIT_PLAN_RESULTS.declined, details: { kind: "plan", plan, approved: false } satisfies PlanDetails, terminate: "done" };
+				const answer = await run.request({ kind: SUBMIT_PLAN, title: text.approvalTitle, payload: plan, waiting: text.approvalWaiting });
+				const reply = answer.answered ? readPlanReply(answer.value) : undefined;
+				if (reply?.accept === false) {
+					return {
+						output: SUBMIT_PLAN_RESULTS.revise(reply.feedback),
+						details: { kind: "plan", plan, approved: false, feedback: reply.feedback } satisfies PlanDetails,
+					};
 				}
+				// 没有反馈就没有可改的方向：这一轮停在这里，人说要改什么，开关不动。
+				if (!reply) return { output: SUBMIT_PLAN_RESULTS.declined, details: { kind: "plan", plan, approved: false } satisfies PlanDetails, terminate: "done" };
 				const notes = reply.note;
 				const approvedAt = Date.now();
 				// 计划连同注意事项存成文件：交给新会话靠它；原地执行时压缩以后路径还在，随时能重读。
@@ -218,17 +210,6 @@ export default {
 
 		ctx.serve({
 			set: (sessionId: string | null, on: boolean) => store.set(sessionId === null ? null : String(sessionId), on === true),
-			reply(sessionId: string, reply: PlanReply) {
-				const note = typeof reply?.note === "string" ? reply.note.trim() : "";
-				const feedback = typeof reply?.feedback === "string" ? reply.feedback.trim() : "";
-				const handoff = reply?.handoff && typeof reply.handoff === "object" ? reply.handoff : undefined;
-				const model = typeof handoff?.model === "string" && handoff.model ? handoff.model : undefined;
-				replies.set(String(sessionId), {
-					...(note ? { note } : {}),
-					...(feedback ? { feedback } : {}),
-					...(handoff ? { handoff: model ? { model } : {} } : {}),
-				});
-			},
 			models: async () => (await ctx.sessions.models()).map(({ id, name }) => ({ id, name })),
 			watch: (call) => store.watch(call),
 		} satisfies PlanApi);

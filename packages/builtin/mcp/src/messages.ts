@@ -102,8 +102,6 @@ const zhCN = {
 	formRequired: "必填",
 	formSubmit: "提交",
 	formDecline: "拒绝提供",
-	formGone: "这张表已经不等了：这一轮停下了，或者服务不再要它",
-	formInvalid: "填的内容和表对不上，检查一下再提交",
 	formKind: { string: "文字", number: "数字", integer: "整数" },
 	formProblem: {
 		required: () => "这一项必填",
@@ -229,8 +227,6 @@ export const MESSAGES: Record<Locale, Messages> = {
 		formRequired: "Required",
 		formSubmit: "Submit",
 		formDecline: "Decline",
-		formGone: "This form is no longer waiting: the turn stopped, or the server no longer needs it",
-		formInvalid: "What you entered doesn't fit the form; check it and submit again",
 		formKind: { string: "text", number: "a number", integer: "a whole number" },
 		formProblem: {
 			required: () => "This field is required",

@@ -903,6 +903,8 @@ export const zhCN = {
 	"approval.edit": "修改文件",
 	"approval.read": "读取文件",
 	"approval.expiresIn": "{time} 后失效",
+	"approval.requestUnavailable": "这张卡画不出来（画它的插件停用了或出了错），只能不答。",
+	"approval.decline": "不答",
 	"running.waitingForAnswer": "等待你的回答",
 	"composer.plumePlaceholder": "输入消息，/ 命令，@ 引用",
 	"command.slash": "斜杠命令",

@@ -1,16 +1,14 @@
 /**
- * MCP 服务中途要人填的一张表（elicitation），画在输入框上方的审批卡位置（`ui.approvalCard(FORM_KIND, …, { match: "kind" })`）。
+ * MCP 服务中途要人填的一张表（elicitation），画在输入框上方的审批卡位置（`ui.requestCard(FORM_KIND, …)`）。
  *
  * 三个出口对应协议的三种回答，不能并成两个：「拒绝提供」是人明确说不给（decline），「取消」是人没做决定就把它关了
- * （cancel）——服务据此决定是放弃还是过会儿再问。回答先经 `answerForm` 交给逻辑入口，再 `respond`：提交是 `once`，
- * 另外两个是 `reject`。
+ * （cancel）——服务据此决定是放弃还是过会儿再问。提交和「拒绝提供」经 `answer` 交回 `run.request`，「取消」是 `decline`。
  */
 
-import type { ApprovalCardProps, Remote, UiContext } from "@plume/contract/ui";
+import type { RequestCardProps, UiContext } from "@plume/contract/ui";
 import { ApprovalExpiry, Button, ChoiceMark, Input, Scroller, Text, useI18n } from "@plume/ui";
 import { Check, X } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
-import type { McpApi } from "./api.ts";
 import { checkFormValues, type FormAnswer, type FormField, type FormProblem, initialValues, readFormRequest } from "./form.ts";
 import { type Messages, MESSAGES } from "./messages.ts";
 
@@ -58,10 +56,10 @@ function problemText(field: FormField, problem: FormProblem, text: Messages): st
 	return said[problem]();
 }
 
-export function formCard(ui: UiContext, api: Remote<McpApi>) {
-	return function FormCard({ request, queued, respond, fallback }: ApprovalCardProps) {
+export function formCard(ui: UiContext) {
+	return function FormCard({ request, queued, answer: reply, decline, fallback }: RequestCardProps) {
 		const text = MESSAGES[useI18n().resolvedLocale];
-		const form = readFormRequest(request.detail);
+		const form = readFormRequest(request.payload);
 		const fields = form?.fields ?? [];
 		const [draft, setDraft] = useState<Draft>(() => initialValues(fields));
 		const [tried, setTried] = useState(false);
@@ -78,13 +76,13 @@ export function formCard(ui: UiContext, api: Remote<McpApi>) {
 		const problems = tried && !checked.ok ? checked.problems : {};
 		const set = (name: string, value: string | boolean | undefined) => setDraft((current) => ({ ...current, [name]: value }));
 
-		async function answer(reply: FormAnswer) {
+		/** `undefined` 是「取消」：没做决定，不交回答。 */
+		async function answer(value: FormAnswer | undefined) {
 			if (busy.current || !form) return;
 			busy.current = true;
 			setPending(true);
 			try {
-				await api.answerForm(form.form, reply);
-				await respond(reply.action === "accept" ? "once" : "reject");
+				await (value ? reply(value) : decline());
 			} catch (error) {
 				busy.current = false;
 				setPending(false);
@@ -142,7 +140,7 @@ export function formCard(ui: UiContext, api: Remote<McpApi>) {
 						{text.formDecline}
 					</Button>
 					<span className="mcp-spacer" />
-					<Button variant="subtle" disabled={pending} onClick={() => void answer({ action: "cancel" })} data-mcp-form-action="cancel">
+					<Button variant="subtle" disabled={pending} onClick={() => void answer(undefined)} data-mcp-form-action="cancel">
 						{text.cancel}
 					</Button>
 					<Button type="submit" variant="primary" disabled={pending} icon={<Check size={14} />} data-mcp-form-action="submit">

@@ -45,6 +45,7 @@ import type {
 	PinnedShotProps,
 	ProjectInfo,
 	QueueAction,
+	RequestCardProps,
 	QuoteAction,
 	DraftQuote,
 	Remote,
@@ -116,6 +117,8 @@ const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<stri
 const approvalCards = new Map<string, Entry<ApprovalCardProps>[]>();
 /** `ui.approvalCard(kind, …, { match: "kind" })`：按 `ApprovalRequest.kind` 认的审批卡。 */
 const approvalKinds = new Map<string, Entry<ApprovalCardProps>[]>();
+/** `ui.requestCard`：按 `HumanRequest.kind` 认的、`run.request` 的卡。 */
+const requestCards = new Map<string, Entry<RequestCardProps>[]>();
 
 function register<P>(table: Map<string, Entry<P>[]>, kind: string, plugin: string, tool: unknown, component: unknown, options?: { order?: number }): Entry<P> {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
@@ -1378,6 +1381,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		toolLine: (tool, line) => registerToolLine(name, tool, line),
 		approvalCard: (tool, component, options) => register(options?.match === "kind" ? approvalKinds : approvalCards, "审批卡", name, tool, component, options),
+		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options),
 		panel: (id, component, options) => registerPanel(name, id, component, options),
 		page: (id, component, options) => registerPage(name, id, component, options),
 		skin: (skin) => {
@@ -1588,7 +1592,7 @@ function unloadPluginUi(name: string): void {
 	lifetimes.get(name)?.dispose();
 	lifetimes.delete(name);
 	removeToolLines(name);
-	for (const table of [codeBlocks, toolCards, toolPrefixes, approvalCards, approvalKinds] as Map<string, Entry<unknown>[]>[]) {
+	for (const table of [codeBlocks, toolCards, toolPrefixes, approvalCards, approvalKinds, requestCards] as Map<string, Entry<unknown>[]>[]) {
 		for (const [tool, list] of table) {
 			const kept = list.filter((entry) => entry.plugin !== name);
 			if (kept.length > 0) table.set(tool, kept);
@@ -1741,6 +1745,14 @@ export function ApprovalCardSlot(props: Omit<ApprovalCardProps, "permission" | "
 	const version = usePluginRegistrations();
 	const permission = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
 	const entries = [...(approvalCards.get(props.request.tool) ?? []), ...(approvalKinds.get(props.request.kind) ?? [])];
+	return <Chain key={`${version}:${props.request.toolCallId}`} entries={entries} props={{ ...props, permission, allowAuto }} />;
+}
+
+/** `run.request` 的卡：按 `kind` 找插件登记的，渲染出错让给下一个，都不行用 `fallback`（产品的通用卡）。 */
+export function RequestCardSlot(props: Omit<RequestCardProps, "permission" | "allowAuto">) {
+	const version = usePluginRegistrations();
+	const permission = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
+	const entries = requestCards.get(props.request.kind) ?? [];
 	return <Chain key={`${version}:${props.request.toolCallId}`} entries={entries} props={{ ...props, permission, allowAuto }} />;
 }
 

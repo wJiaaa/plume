@@ -74,6 +74,7 @@ async function setup() {
 		calls: [],
 		permissionMode: async () => "auto",
 		tools: () => [...tools.keys()].map((name) => ({ name, plugin: name === "probe" ? "test.probe" : "plume.tools" })),
+		request: async () => ({ answered: false, reason: "declined" }),
 		ask: async (content) => {
 			seen.push(content);
 			return decision;

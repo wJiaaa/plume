@@ -104,6 +104,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 		withhold: async () => false,
 		permission: async () => ({ mode: "full", alwaysAllow: [] }),
 		ask: async () => "once",
+		requestHuman: async () => ({ answered: false, reason: "declined" }),
 		started: () => {},
 		progress: () => {},
 	};

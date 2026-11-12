@@ -5,7 +5,7 @@
  * 在跑不在这里，摘要的 `running` 就是它。在看着的那个会话跑完不留记号：结果就在眼前。
  */
 
-import type { ApprovalRequest, SessionSummary, StopReason } from "@plume/contract";
+import type { PendingRequest, SessionSummary, StopReason } from "@plume/contract";
 import type { SessionActivity } from "@plume/contract/ui";
 import { useSyncExternalStore } from "react";
 
@@ -70,10 +70,11 @@ export function sessionsChanged(previous: readonly SessionSummary[], next: reado
 	changed();
 }
 
-/** 等人批准的请求来了或撤了。记下它是不是只能由人答、插件给的那句状态（`ApprovalRequest.waiting`），说「在等什么」用。 */
-export function approvalChanged(sessionId: string, approval: Pick<ApprovalRequest, "userOnly" | "waiting"> | undefined): void {
+/** 等人的卡来了或撤了。记下它是不是只能由人答（`run.request` 的都是）、插件给的那句状态（`waiting`），说「在等什么」用。 */
+export function approvalChanged(sessionId: string, approval: PendingRequest | undefined): void {
 	if (approval) {
-		const wait: Wait = { userOnly: approval.userOnly === true, ...(approval.waiting ? { waiting: approval.waiting } : {}) };
+		const userOnly = approval.type === "request" || approval.userOnly === true;
+		const wait: Wait = { userOnly, ...(approval.waiting ? { waiting: approval.waiting } : {}) };
 		const before = waits.get(sessionId);
 		waits.set(sessionId, wait);
 		if (marks.get(sessionId) === "waiting" && (before?.userOnly !== wait.userOnly || before?.waiting !== wait.waiting)) changed();

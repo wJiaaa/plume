@@ -70,7 +70,14 @@ ctx.tools.register({
 });
 ```
 
-想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation?, userOnly?, waiting? })`：宿主不再在执行前替你问，`run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。要不要真弹给人由钩子 `tool.approve` 定（见下面）：内置插件 plume.approval 让完全访问、外层设了 `approved`、答过「以后不再问」（`subject` 对得上）的直接得到 `"once"`，`escalation`（申请更宽的沙箱）总是问人。问的是人的决定而不是权限（批准一份计划）时写 `userOnly: true`：完全访问、外层放行都不替人答，总是弹给人，卡上只有拒绝和允许这一次。`waiting` 是等这张卡时一句短的状态（按 `ctx.locale()`，「等你批准计划」「等你填写表单」），画在对话末尾、侧栏悬停和系统通知里；不给时宿主按 `userOnly` 说「等待你的回答」或「等待你的批准」。弹给人的卡没人答会过期：权限请求等 5 分钟，`userOnly` 的等 30 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）；要分清「人说了不」和「没人答」，让卡片先经 `remote` 交回答再 `respond`，`run.ask` 返回时看有没有交来的回答（`mcp` 插件的表单、`plume.ask-user`）。
+想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation?, userOnly?, waiting? })`：宿主不再在执行前替你问，`run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。要不要真弹给人由钩子 `tool.approve` 定（见下面）：内置插件 plume.approval 让完全访问、外层设了 `approved`、答过「以后不再问」（`subject` 对得上）的直接得到 `"once"`，`escalation`（申请更宽的沙箱）总是问人。`waiting` 是等这张卡时一句短的状态（按 `ctx.locale()`），画在对话末尾、侧栏悬停和系统通知里；不给时宿主说「等待你的批准」。弹给人的卡没人答会过期：权限请求等 5 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）。`userOnly: true` 是还没迁走的旧写法（审批卡只能由人答、等 30 分钟），新写的插件要人给答案时用下面的 `run.request`。
+
+要人给一份数据而不是批准一次操作（回答问题、批准一份计划、填一张表）时调 `run.request({ kind, title, payload?, waiting? })`，不用写 `asks`。它不是权限：不经钩子 `tool.approve`，完全访问、「以后不再问」都不替人答，总是弹给人；和审批同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方、写明是谁在问。`payload` 是卡片要画的数据（问题、计划文本、表单字段），要能结构化克隆，不用序列化成字符串；卡片由界面入口按 `kind` 登记（`ui.requestCard`，见 ui.md），没登记时产品画一张只能「不答」的通用卡。返回 `{ answered: true, value }`，或 `{ answered: false, reason }`：`"declined"` 人点了不答，`"expired"` 等了 30 分钟没人答，`"stopped"` 这一轮停了（会话删了也算）。`value` 来自渲染进程，不可信：用之前按 `payload` 再核一遍（界面里的检查拦得住手误，拦不住一个不照着问题答的客户端），核不过就当没回答。`waiting` 不给时宿主说「等待你的回答」。例子是 `plume.ask-user`、`plan` 和 `mcp` 插件的表单。
+
+```ts
+const reply = await run.request({ kind: "ask_user", title: "需要你的意见", payload: question });
+const answer = reply.answered ? checkReply(question, reply.value) : undefined; // 核不过、没答都是 undefined
+```
 
 `run.projectRoots` 是宿主从会话所属项目推导出的源文件夹（只授予读取）；工作目录已移入独立工作树时为空，插件不能据此放宽写入权限。`run.allowedPaths` 是人在这个会话里（子会话连同它的上级会话）拖进来的文件的绝对路径，取自用户消息的附件，没有附件时不给：只授予读取这几个文件本身，不能据此改它们，也不能扩大到所在目录。
 
@@ -116,7 +123,7 @@ ctx.hook("model.context", async (input, next) => {
 | `session` | 调用所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见上面 |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具，`plugin` 是注册它的插件 |
-| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权、`userOnly` 和层自己问的除外） |
+| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权、`userOnly` 和层自己问的除外；`run.request` 不是审批，不受它管） |
 | `readOnly` | 外层要求这次调用不改动工作区，交给工具的 `run.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，一律在只读沙箱里跑，给不了只读沙箱时不跑。只能收紧，里层不去掉它 |
 | `signal` | 用户停止这一轮时中止 |
 | `ask(reason)` | 弹审批卡等用户决定，卡上是这次调用的参数和 `reason`，只能答这一次；返回是否允许，用户停止这一轮时得到 `false`。完全访问下本体直接允许，其余经过钩子 `tool.approve`（`byLayer` 为真） |
@@ -275,7 +282,7 @@ ctx.hook("context.compact", async (input) => {
 
 ### `tool.approve`
 
-一个工具调用要问人放不放行时经过一次：工具自己经 `run.ask` 问的、会改动工作区却没写 `asks` 的工具在执行前问的、`tool.execute` 的层自己经 `ask` 问的都算。最里层照着 `request` 把审批卡弹给人、等人答。
+一个工具调用要问人放不放行时经过一次：工具自己经 `run.ask` 问的、会改动工作区却没写 `asks` 的工具在执行前问的、`tool.execute` 的层自己经 `ask` 问的都算。最里层照着 `request` 把审批卡弹给人、等人答。工具经 `run.request` 要人给数据（提问、计划、表单）的不是审批，不到这里，层拦不下它。
 
 权限模式的含义在本体，到不了这里：完全访问、设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行（层自己问的只认完全访问）。提权（`request.escalation`）和 `request.userOnly` 只能由人答：完全访问下也到这里，层答放行本体不认、照样弹卡，层答拒绝照算。
 

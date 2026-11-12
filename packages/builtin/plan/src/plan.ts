@@ -40,14 +40,25 @@ export function renderPlan(plan: string, notes?: string): string {
 }
 
 /**
- * 审批卡交给逻辑入口的那几句话，连同回答一起交给 `submit_plan`：接受时是 `note`（注意事项），
- * 拒绝时有 `feedback` 就是「修改」——模型照着改完再交，这一轮不停。
+ * 计划卡交回 `submit_plan` 的回答（`run.request` 的 `value`）：接受，可带 `note`（注意事项）、`handoff`（「在新会话里执行」，
+ * `model` 是卡上给新会话挑的模型，没挑就是默认模型）；或者带 `feedback` 拒绝，就是「修改」——模型照着改完再交，这一轮不停。
+ * 什么都没说的拒绝不交回答（`decline`）。
  */
-export interface PlanReply {
-	note?: string;
-	feedback?: string;
-	/** 接受时选了「在新会话里执行」；`model` 是卡上给新会话挑的模型，没挑就是默认模型。 */
-	handoff?: { model?: string };
+export type PlanReply = { accept: true; note?: string; handoff?: { model?: string } } | { accept: false; feedback: string };
+
+/** 渲染进程交来的回答再核一遍：形状不对、修改意见是空的，都当作没回答。 */
+export function readPlanReply(value: unknown): PlanReply | undefined {
+	const reply = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+	const text = (field: unknown) => (typeof field === "string" ? field.trim() : "");
+	if (reply.accept === false) {
+		const feedback = text(reply.feedback);
+		return feedback ? { accept: false, feedback } : undefined;
+	}
+	if (reply.accept !== true) return undefined;
+	const note = text(reply.note);
+	const handoff = reply.handoff && typeof reply.handoff === "object" ? (reply.handoff as Record<string, unknown>) : undefined;
+	const model = text(handoff?.model);
+	return { accept: true, ...(note ? { note } : {}), ...(handoff ? { handoff: model ? { model } : {} } : {}) };
 }
 
 /** 引文太长时只带开头：模型据此认出是哪一段就够了，整段搬过去只是重复它自己写的计划。 */

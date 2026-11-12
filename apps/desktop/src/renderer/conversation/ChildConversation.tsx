@@ -32,6 +32,7 @@ export function ChildConversation({
 	edits,
 	tasks,
 	respond,
+	answer,
 }: ConversationProps & {
 	/** 回执条（`TaskStrip`）的操作：这个子会话交给父会话的事有了，就画在转录和输入框之间。 */
 	tasks: TaskActions;
@@ -42,6 +43,8 @@ export function ChildConversation({
 	onQuote: (quote: DraftQuote) => void;
 	/** 人在独立会话的审批卡上做的决定。 */
 	respond: (sessionId: string, toolCallId: string, decision: ApprovalDecision) => Promise<void>;
+	/** 人在独立会话里等人给数据的卡（`run.request`）上交回的数据。 */
+	answer: (sessionId: string, toolCallId: string, value: unknown) => Promise<void>;
 }) {
 	const view = useLiveSession(sessionId);
 	const arrival = useArrival(sessionId ?? "");
@@ -121,6 +124,7 @@ export function ChildConversation({
 					sessionId={view.summary.id}
 					compact={false}
 					respond={async (decision) => await respond(view.summary.id, approval.toolCallId, decision)}
+					answer={async (value) => await answer(view.summary.id, approval.toolCallId, value)}
 				/>
 			)}
 			{composer &&

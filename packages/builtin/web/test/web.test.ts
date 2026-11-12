@@ -125,6 +125,7 @@ const run: ToolRun = {
 	scratchDir: "/scratch/s1",
 	signal: new AbortController().signal,
 	progress: () => {},
+	request: async () => ({ answered: false, reason: "declined" }),
 	ask: async () => "once",
 	permissionMode: async () => "ask",
 	tools: () => [],
