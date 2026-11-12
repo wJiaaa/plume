@@ -102,12 +102,13 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 ### 工具结果里的通用声明
 
-`details` 归插件，宿主不看里面，只认通用声明（类型在 `@plume/contract`）。宿主不认工具名：换一个插件提供同类能力，照样声明就行。
+`details` 归插件，宿主不看里面，只认两个通用声明（类型在 `@plume/contract`）。宿主不认工具名：换一个插件提供同类能力，照样声明就行。
 
+- `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。转录里怎么画这次调用另在界面入口经 `ui.toolLine` 的 `checklist: true` 说（见 ui.md）。例子是 `plume.todo`。
 - `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
 
 ```ts
-return { output: `Started background job ${id}.`, details: { job: { id, command } } satisfies BackgroundJobDetails };
+return { output: "Task list updated (1/3 done)", details: { checklist: todos } satisfies ChecklistDetails };
 ```
 
 ## 钩子

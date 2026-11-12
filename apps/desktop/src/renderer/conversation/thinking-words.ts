@@ -50,7 +50,6 @@ const BY_TOOL: Record<string, Mood> = {
 	glob: "searching",
 	grep: "searching",
 	ls: "searching",
-	todo_write: "weaving",
 };
 
 /** 不管从哪个工具进来，其实是一轮测试的命令。 */
@@ -64,8 +63,9 @@ export function moodFor(toolName: string | undefined, summary: string | undefine
 	if (retrying) return "connecting";
 	if (summary && TEST_HINT.test(summary)) return "solving";
 	if (toolName) {
-		// 插件的工具按它像的那个内置工具说；不像哪个的当成在想。
+		// 插件的工具按它像的那个内置工具说；记清单的在排步骤；不像哪个的当成在想。
 		const line = toolLine(toolName);
+		if (line?.checklist) return "weaving";
 		return BY_TOOL[line ? (line.like ?? "") : toolName] ?? "breathing";
 	}
 	return writing ? "composing" : "breathing";

@@ -176,7 +176,7 @@ test("todo_write 只收三种状态、最多一项在做", async () => {
 	);
 	const ok = await write(open, [call("todo_write")]);
 	assert.equal(ok.output, "Task list updated (1/2 done):\n[x] 读代码\n[~] 改代码");
-	assert.deepEqual(ok.details, { kind: "todo", todos: open });
+	assert.deepEqual(ok.details, { checklist: open });
 });
 
 test("单独调一次 todo_write：结果末尾说一句；和别的调用一起、只有它一个工具、回答追问时都不说", async () => {

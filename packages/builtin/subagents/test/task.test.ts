@@ -594,7 +594,7 @@ const todoResult = (...statuses: string[]): Message =>
 		toolCallId: "t",
 		toolName: "todo_write",
 		content: [{ type: "text", text: "ok" }],
-		details: { kind: "todo", todos: statuses.map((status, index) => ({ content: `step ${index}`, status })) },
+		details: { checklist: statuses.map((status, index) => ({ content: `step ${index}`, status })) },
 		isError: false,
 		timestamp: Date.now(),
 	}) as Message;

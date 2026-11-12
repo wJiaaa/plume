@@ -2,7 +2,8 @@
  * 上一轮停在了没做完的地方没有，以及「继续」该说哪句话。
  */
 
-import type { Message, SessionSummary, SessionView } from "@plume/contract";
+import type { ChecklistDetails, Message, SessionSummary, SessionView } from "@plume/contract";
+import { checklistTool } from "./tool-lines.ts";
 
 /**
  * 停在半路的三种样子，读起来不一样：`user` 是人按了停，活没坏只是没在动；`interrupt` 是没被要求就停了
@@ -12,7 +13,7 @@ import type { Message, SessionSummary, SessionView } from "@plume/contract";
 export type TurnStop = "user" | "interrupt" | "error" | null;
 
 /**
- * 「继续」发的那几句。不翻译：它们是发给模型的话，不随界面语言变。第三句和 todo 插件卡片上「继续」发的是同一句。
+ * 「继续」发的那几句。不翻译：它们是发给模型的话，不随界面语言变。第三句和清单插件卡片上「继续」发的是同一句。
  */
 // i18n-exempt：发给模型的文本。
 export const CARRY_ON_PROMPTS = ["继续，从暂停的地方接着做。", "继续，从中断的地方接着做。", "继续，把清单里没做完的做完。"] as const;
@@ -31,10 +32,11 @@ export function howItStopped(summary: SessionSummary, messages: readonly Message
 }
 
 /**
- * 去掉回答之后补勾清单的那一段：[回答] [替人追问清单（todo 插件的清单收尾）] [只调 todo_write] [它的结果]。
+ * 去掉回答之后补勾清单的那一段：[回答] [替人追问清单（记清单的插件在收尾时问的）] [只调记清单的工具] [它的结果]。
+ * 哪个工具记清单由插件在界面入口说（`ToolLine.checklist`），本体不认工具名。
  *
  * 这一轮停在工具结果上，却不是没说完：回答在它前面已经说完了，补勾之后有意不再要一段正文。
- * 只认这一种形状：同样停在 todo_write 结果上、前面却没有那句替人说的话，仍是真被打断（比如勾完清单
+ * 只认这一种形状：同样停在清单工具的结果上、前面却没有那句替人说的话，仍是真被打断（比如勾完清单
  * 正要写回答时退了应用），回答确实没来。
  */
 export function beforePlanTick(messages: readonly Message[]): readonly Message[] {
@@ -44,19 +46,19 @@ export function beforePlanTick(messages: readonly Message[]): readonly Message[]
 	return messages.slice(0, at - 1);
 }
 
-const ticked = (message: Message | undefined) => message?.role === "toolResult" && message.toolName === "todo_write";
+const ticked = (message: Message | undefined) => message?.role === "toolResult" && checklistTool(message.toolName);
 
 /**
  * `messages[at]` 是不是回答之后补勾清单的那条回复，形状见 `beforePlanTick`。
  *
  * 转录分组也用它：补勾不该在回答下面再画一行，读起来像回答完又动手干了点什么。所以它不只在末尾成立：
  * 补勾之后人又说了话也算；补勾之后模型接着干了活就不算，那是在回答追问里的「真是漏做了，就接着做完」，
- * 这次 todo_write 是新一段工作的开头。
+ * 这次更新清单是新一段工作的开头。
  */
 export function isPlanTick(messages: readonly Message[], at: number): boolean {
 	const tick = messages[at];
 	if (tick?.role !== "assistant" || !tick.content.some((part) => part.type === "toolCall")) return false;
-	if (!tick.content.every((part) => (part.type === "toolCall" ? part.name === "todo_write" : part.type !== "text" || !part.text.trim()))) return false;
+	if (!tick.content.every((part) => (part.type === "toolCall" ? checklistTool(part.name) : part.type !== "text" || !part.text.trim()))) return false;
 	const asked = messages[at - 1];
 	const answer = messages[at - 2];
 	if (asked?.role !== "user" || !asked.synthetic) return false;
@@ -81,16 +83,16 @@ function wasCutShort(messages: readonly Message[]): boolean {
 }
 
 /**
- * 最新那份清单里还没勾完的项数。清单是 todo 插件的，本体按工具名和结果 `details` 的形状（`{ kind: "todo", todos }`）认，
- * 和转录里「更新清单 3/5」那一行一样；`todo_write` 每次发整张清单，只有最新一条成功的结果算数。没有清单就是 0。
+ * 最新那份清单里还没勾完的项数。清单由插件在工具结果里声明（`details.checklist`，见 `ChecklistDetails`），本体只认这个形状、
+ * 不认工具名；每次给的都是整张清单，只有最新一条成功的结果算数。没有清单就是 0。
  */
 export function unfinishedTodos(messages: readonly Message[]): number {
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const message = messages[index];
-		if (message?.role !== "toolResult" || message.toolName !== "todo_write" || message.isError) continue;
-		const details = message.details as { kind?: unknown; todos?: unknown } | undefined;
-		if (details?.kind !== "todo" || !Array.isArray(details.todos)) continue;
-		return details.todos.filter((todo: { status?: unknown } | null) => todo?.status !== "completed").length;
+		if (message?.role !== "toolResult" || message.isError) continue;
+		const checklist = (message.details as Partial<Record<keyof ChecklistDetails, unknown>> | undefined)?.checklist;
+		if (!Array.isArray(checklist)) continue;
+		return checklist.filter((item: { status?: unknown } | null) => item?.status !== "completed").length;
 	}
 	return 0;
 }

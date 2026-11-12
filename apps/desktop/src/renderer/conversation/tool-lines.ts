@@ -42,6 +42,11 @@ export function toolLine(tool: string): ToolLine | undefined {
 	return best === undefined ? undefined : prefixes.get(best)?.at(-1)?.line;
 }
 
+/** 记进度清单的工具（`ToolLine.checklist`）。 */
+export function checklistTool(tool: string): boolean {
+	return toolLine(tool)?.checklist === true;
+}
+
 /** 插件给的动作，按当前语言取；插件的函数出错或不给字时是空串，由调用方退回工具名。没给 `verb` 的照没登记说法的工具说，不走到这里（见 `call-words.ts` 的 `spokenLine`）。 */
 export function lineVerb(line: ToolLine, locale: Locale): string {
 	if (line.verb === undefined) return "";

@@ -3,7 +3,7 @@
  * 可以漏，这几样不能：约束只存在于人说的那句话里，模型不知道自己忘了哪句，`recall` 也就无从查起。
  */
 
-import type { Message, UserMessage } from "@plume/contract";
+import type { ChecklistDetails, Message, UserMessage } from "@plume/contract";
 
 export type CompactionContext = NonNullable<UserMessage["compactionContext"]>;
 type ApprovedPlan = NonNullable<CompactionContext["plan"]>;
@@ -24,8 +24,7 @@ const REQUEST_STORE_CHARS = 64_000;
 /** 按条截短时每条至少留多少字——大约一句话。再短就不是在引用原话了，宁可整条省掉。 */
 const QUOTE_FLOOR = 200;
 
-/** 清单工具（todo 插件）和交计划的工具（计划模式插件）的名字：按它们存在会话里的结果读，不引用插件本身。 */
-const TODO_TOOL = "todo_write";
+/** 交计划的工具（计划模式插件）的名字：按它存在会话里的结果读，不引用插件本身。清单按结果里的通用声明认（`ChecklistDetails`）。 */
 const PLAN_TOOL = "submit_plan";
 
 /**
@@ -58,11 +57,8 @@ export function foldTaskContext(context: CompactionContext, message: Message): C
 		let from = 0;
 		while (stored > REQUEST_STORE_CHARS && from < requests.length - 1) stored -= (requests[from++] as (typeof requests)[number]).text.length;
 		context.requests = from > 0 ? requests.slice(from) : requests;
-	} else if (message.role === "toolResult" && message.toolName === TODO_TOOL && !message.isError) {
-		const details = message.details as { kind?: string; todos?: CompactionContext["todos"] } | undefined;
-		if (details?.kind === "todo" && Array.isArray(details.todos)) {
-			context.todos = details.todos.map(({ content, status }) => ({ content, status }));
-		}
+	} else if (message.role === "toolResult" && !message.isError && Array.isArray((message.details as Partial<ChecklistDetails> | undefined)?.checklist)) {
+		context.todos = (message.details as ChecklistDetails).checklist.map(({ content, status }) => ({ content, status }));
 	} else if (message.role === "toolResult" && message.toolName === PLAN_TOOL && !message.isError) {
 		// 只认批准的那份：打回的是反馈，不是计划。后一次批准覆盖前一次。
 		const approved = approvedPlanOf(message.details);

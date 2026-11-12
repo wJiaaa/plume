@@ -19,6 +19,8 @@ const zhCN = {
 	pending: "{n} 项待处理",
 	failed: "失败",
 	paused: "已暂停",
+	/** 转录里 todo_write 那一行的动作，后面接进度（「更新清单 3/5 · 在做的那一项」）。 */
+	toolVerb: "更新清单",
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = {
@@ -35,6 +37,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		pending: "{n} to go",
 		failed: "Failed",
 		paused: "Paused",
+		toolVerb: "Updated the plan",
 	},
 };
 

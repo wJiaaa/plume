@@ -47,8 +47,8 @@ export interface ToolOutput {
 	 */
 	shownImages?: ToolOutput["images"];
 	/**
-	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认一个通用声明：
-	 * 带 `job`（`BackgroundJobDetails`）是在后台起了一个任务。
+	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认两个通用声明：
+	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务。
 	 */
 	details?: unknown;
 	/**
@@ -61,6 +61,22 @@ export interface ToolOutput {
 	 * 不占后面每一轮的上下文。给人看的卡片照旧是原文。
 	 */
 	uneventful?: boolean;
+}
+
+/** 进度清单的一项。`activeForm` 是正在做这一项时的说法（「正在接上路由」）。 */
+export interface ChecklistItem {
+	content: string;
+	status: "pending" | "in_progress" | "completed";
+	activeForm?: string;
+}
+
+/**
+ * 工具结果的 `details` 带上 `checklist`，就是声明「这是这件事最新的一份进度清单」：每次给的都是整张，会话里最新一条成功的那份算数。
+ * 宿主按它决定一轮收尾时要不要提醒还有没做完的（转录底下的「继续」）；`details` 里别的字段照旧归插件。
+ * 转录里怎么画这次调用另由界面入口经 `ui.toolLine` 的 `checklist` 说。
+ */
+export interface ChecklistDetails {
+	checklist: ChecklistItem[];
 }
 
 /**

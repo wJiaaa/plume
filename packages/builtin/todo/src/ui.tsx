@@ -1,7 +1,7 @@
 /**
  * todo 插件的界面入口：跟着会话的清单卡片（`ui.conversationCard`）。
  *
- * 一长轮下来是一整墙工具调用，最答不上来的就是「还剩多少」。清单在转录里只是一段活里的一行（本体画的「更新清单 3/5」），
+ * 一长轮下来是一整墙工具调用，最答不上来的就是「还剩多少」。清单在转录里只是一段活里的一行（这里经 `ui.toolLine` 登记的「更新清单 3/5」），
  * 马上就被后面的调用埋掉；这张卡片一直在：对话那一列够宽时浮在转录右上角，不够时在输入框正上方。
  * 默认展开整张清单（太长就在卡片里滚），收起时只剩一行「现在在做什么」。清单全勾完了卡片自己收走：做过什么还在转录里。
  * 在做的那一步旁边有它的动作：在跑时暂停，失败了重试这一步，停下了继续。
@@ -104,6 +104,16 @@ function useDelayedOffer(enabled: boolean) {
 			setShow(false);
 		},
 	};
+}
+
+/** 那一行说的进度：勾了几项、一共几项，接着是在做的那一项。参数还在流进来时清单不全，取不出就只说动作。 */
+function progressOf(args: Record<string, unknown>): string | undefined {
+	const todos = args.todos;
+	if (!Array.isArray(todos) || todos.length === 0) return undefined;
+	const items = todos.filter((todo): todo is { content?: unknown; status?: unknown } => !!todo && typeof todo === "object");
+	const done = items.filter((todo) => todo.status === "completed").length;
+	const task = items.find((todo) => todo.status === "in_progress")?.content;
+	return typeof task === "string" && task.trim() ? `${done}/${todos.length} · ${task.trim()}` : `${done}/${todos.length}`;
 }
 
 function TodoCard({ session, placement, stop, carryOn }: ConversationCardProps) {
@@ -267,5 +277,7 @@ export default {
 	apply(ui) {
 		mountStyles();
 		ui.conversationCard("todo", TodoCard);
+		// 转录里那一行：「更新清单 3/5 · 在做的那一项」。`checklist` 让宿主把它当成一段活的记账：并进旁边的活、不单独占一行。
+		ui.toolLine("todo_write", { verb: (locale) => MESSAGES[locale].toolVerb, subject: progressOf, icon: ListTodo, checklist: true });
 	},
 } satisfies UiPlugin;

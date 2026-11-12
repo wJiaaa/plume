@@ -120,8 +120,7 @@ it("只接受成功工具结果中有效的最新计划", () => {
 		isError: false,
 		timestamp: 200,
 		details: {
-			kind: "todo",
-			todos: [
+			checklist: [
 				{ content: "test", status: "in_progress" },
 				{ content: 3, status: "other" },
 			],

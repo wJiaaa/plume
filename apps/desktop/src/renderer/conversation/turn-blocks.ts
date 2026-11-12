@@ -7,7 +7,7 @@
 
 import type { DeliveredReport } from "@plume/contract";
 import { runKey, type Call, type Run, type ToolCallBlock } from "./grouping.ts";
-import { isPluginGroup, toolCategory } from "./tool-category.ts";
+import { CHECKLIST, isPluginGroup, toolCategory } from "./tool-category.ts";
 import { opensTurn, settled } from "./turns.ts";
 
 type MessageRun = Extract<Run, { kind: "message" }>;
@@ -117,17 +117,14 @@ function merges(category: string): boolean {
 }
 
 /**
+ * 这次调用接不接在这一段后面：`MERGES` 里的几类和清单（`CHECKLIST`）互相接，其余的只和同一类接（插件说自成一段的那一类，
+ * 比如 MCP 服务的工具不分服务器，见 `ToolLine.apart`）。
+ *
  * 更新清单是这段活的记账，不是一件单独的事：它跟 `MERGES` 那几类接成一段，不自己占一行——勾到哪一项清单上看得到，
  * 转录里每勾一次就横一行，一段连着的活被切成好几截。
  */
-const TODO = "todo_write";
-
-/**
- * 这次调用接不接在这一段后面：`MERGES` 里的几类和清单互相接，其余的只和同一类接（插件说自成一段的那一类，
- * 比如 MCP 服务的工具不分服务器，见 `ToolLine.apart`）。
- */
 function joins(step: Step, category: string): boolean {
-	const work = (one: string) => merges(one) || one === TODO;
+	const work = (one: string) => merges(one) || one === CHECKLIST;
 	return (work(step.category) && work(category)) || step.category === category;
 }
 
@@ -250,7 +247,7 @@ function itemsOf(body: Run[]): TurnItem[] {
 				thoughts = [];
 				if (step && joins(step, category)) {
 					// 清单开的头、接着来了活：这一段从此是那一类活，后台命令的结果也挂得上来（`inlineReturn`）。
-					if (step.category === TODO) step.category = category;
+					if (step.category === CHECKLIST) step.category = category;
 					step.calls.push(call);
 					step.members.push(...before, { kind: "call", call });
 					continue;

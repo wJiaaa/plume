@@ -1,8 +1,8 @@
 /**
  * 内置插件：todo 清单的逻辑入口。
  *
- * - 工具 todo_write：每次传完整的清单，整表替换，同一时刻最多一项在做；清单放进结果的 details（`kind: "todo"`），
- *   本体的转录把这次调用并进一段活、说成「更新清单 3/5 · 在做的那一项」，界面入口的卡片从这里读出最新的一份。
+ * - 工具 todo_write：每次传完整的清单，整表替换，同一时刻最多一项在做；清单放进结果的 details（宿主认的 `ChecklistDetails`），
+ *   界面入口的卡片从这里读出最新的一份，宿主据此在收尾时提醒没做完的。转录里怎么说这次调用由界面入口登记（`ui.toolLine` 的 `checklist`）。
  *   怎么用写在工具描述里，不另往系统提示词里加段。
  * 清单跟着事走，循环里和清单有关的三句话（都只问不停）：
  * - 单独调一次 `todo_write`：在那条结果末尾说一句（`SOLO_TODO_NOTE`）。
@@ -12,8 +12,8 @@
  *   外层说还在等派出去的后台工作（`StepEnd.awaiting`）时不问。
  */
 
-import type { Plugin } from "@plume/contract";
-import { isTodoList, latestTodos, type TodoDetails, type TodoItem } from "./types.ts";
+import type { ChecklistDetails, Plugin } from "@plume/contract";
+import { isTodoList, latestTodos, type TodoItem } from "./types.ts";
 
 // i18n-exempt：工具描述和结果是发给模型的，不随界面语言变。
 const DESCRIPTION =
@@ -119,7 +119,7 @@ export default {
 				const solo = !settled && run.calls.length === 1 && (offered.get(run.sessionId)?.length ?? 0) > 1;
 				return {
 					output: `Task list updated (${done}/${todos.length} done):\n${summary}${solo ? `\n\n${SOLO_TODO_NOTE}` : ""}`,
-					details: { kind: "todo", todos } satisfies TodoDetails,
+					details: { checklist: todos } satisfies ChecklistDetails,
 					...(settled ? { terminate: "done" as const } : {}),
 				};
 			},

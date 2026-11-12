@@ -100,7 +100,7 @@ it("回答后补勾清单仍能找到原回答那一轮", () => {
 	const turn = [user(), result({ changeId: "one" }), answer()];
 	const tick = answer(12, "", "toolUse");
 	tick.content = [{ type: "toolCall", id: "todo", name: "todo_write", arguments: {} }];
-	expect(deliveryMessages([...turn, user(11, "tick", true), tick, result({ kind: "todo" })], 10, "en")).toEqual(turn);
+	expect(deliveryMessages([...turn, user(11, "tick", true), tick, result({ checklist: [] })], 10, "en")).toEqual(turn);
 });
 
 it("去重全部快照标识，失败结果只保留 changeIds，收集警告而不接受旧 diff 原文", () => {

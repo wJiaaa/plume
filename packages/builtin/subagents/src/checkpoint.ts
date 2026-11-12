@@ -59,16 +59,16 @@ export function openSegment(rounds: number): Segment {
 }
 
 /**
- * 会话里最新的那份清单：`todo_write` 每次发的都是整张，结果的 `details` 是 `{ kind: "todo", todos }`，倒着找第一份认得出的。
+ * 会话里最新的那份清单：记清单的工具每次给的都是整张，结果的 `details` 带 `checklist`（`ChecklistDetails`），倒着找第一份认得出的。
  * 没装清单插件时一份也没有。
  */
 export function latestTodos(messages: readonly Message[]): Todo[] {
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const message = messages[index]!;
-		if (message.role !== "toolResult" || message.toolName !== "todo_write" || message.isError) continue;
-		const details = message.details as { kind?: unknown; todos?: unknown } | undefined;
-		if (details?.kind !== "todo" || !Array.isArray(details.todos)) continue;
-		return details.todos.filter((todo): todo is Todo => typeof todo === "object" && todo !== null && typeof todo.status === "string");
+		if (message.role !== "toolResult" || message.isError) continue;
+		const checklist = (message.details as { checklist?: unknown } | undefined)?.checklist;
+		if (!Array.isArray(checklist)) continue;
+		return checklist.filter((todo): todo is Todo => typeof todo === "object" && todo !== null && typeof todo.status === "string");
 	}
 	return [];
 }

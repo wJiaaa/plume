@@ -9,7 +9,7 @@ import { activeLocale, formatList, type MessageKey, translate } from "@plume/ui"
 import { baseName } from "../files/open-file.ts";
 import { relativeTo } from "../markdown/assets.ts";
 import type { Call, ToolCallBlock } from "./grouping.ts";
-import { lineSubject, lineVerb, toolLine } from "./tool-lines.ts";
+import { checklistTool, lineSubject, lineVerb, toolLine } from "./tool-lines.ts";
 import { polledJob } from "./turn-blocks.ts";
 
 /** 工具名到「它在做什么」的那个说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
@@ -22,7 +22,6 @@ const KIND: Record<string, MessageKey> = {
 	glob: "tools.find",
 	grep: "tools.grep",
 	ls: "tools.ls",
-	todo_write: "tools.todo",
 };
 
 /** 插件登记了动作的说法；只登记了归类、图标（没给 `verb`）的照没登记说法的工具说。 */
@@ -64,23 +63,24 @@ function describeRun(calls: { toolName: string; subject?: string | undefined }[]
 /**
  * 一段调用做了什么，一段活那一行和收起的那一行说的那一句。
  *
- * 清单并在一段活里时不点名：那一行说的是干了什么活，勾到哪一项清单上看得到。只有清单时照旧说它。
+ * 清单（`ToolLine.checklist`）并在一段活里时不点名：那一行说的是干了什么活，勾到哪一项清单上看得到。只有清单时照旧说它，
+ * 也不说进度：进度是每一次的，合在一起说的是动作。
  * 查输出是那条后台命令的一部分：这一段里有命令（`bash` 和像它的）时不另记；只有查看时，一个任务记一次。按调用数的话，一条命令被查了九次，
  * 这一行就说「执行命令 1 个、查看输出 9 个」。
  */
 export function describeCalls(calls: Call[]): string {
 	return describeRun(
-		counted(calls).map(({ block }) => ({ toolName: block.name, subject: subjectFor(block) })),
+		counted(calls).map(({ block }) => ({ toolName: block.name, subject: checklistTool(block.name) ? undefined : subjectFor(block) })),
 		true,
 	);
 }
 
 function counted(calls: Call[]): Call[] {
-	const work = calls.some(({ block }) => block.name !== "todo_write");
+	const work = calls.some(({ block }) => !checklistTool(block.name));
 	const commands = calls.some(({ block }) => block.name === "bash" || toolLine(block.name)?.like === "bash");
 	const jobs = new Set<unknown>();
 	return calls.filter(({ block }) => {
-		if (work && block.name === "todo_write") return false;
+		if (work && checklistTool(block.name)) return false;
 		if (block.name !== "bash_output") return true;
 		const job = (block.arguments as { id?: unknown } | undefined)?.id;
 		if (commands || jobs.has(job)) return false;
@@ -140,23 +140,11 @@ export function describeOne(block: ToolCallBlock, root?: string, job?: string): 
 	if (said && DESCRIBED.has((line ? line.like : block.name) ?? "")) return said;
 	const spoken = spokenLine(block.name);
 	if (spoken) return describeRun([{ toolName: block.name, subject: lineSubject(spoken, block.arguments) }]);
-	if (block.name === "todo_write") return describeTodos(block.arguments);
 	const location = locationOf(block, root);
 	if (location) return describeRun([{ toolName: block.name, subject: location }]);
 	if (KIND[block.name]) return describeRun([{ toolName: block.name, subject: subjectOf(block) }]);
 	// 不认得的工具（没登记说法的插件工具）照原名说：「使用工具」读不出是哪一个。
 	return block.name;
-}
-
-/** 更新清单那一行：进度，加上接下来在做的那一项。参数还在流进来时清单不全，退回只说「更新清单」。 */
-function describeTodos(args: unknown): string {
-	const todos = (args as { todos?: unknown } | undefined)?.todos;
-	if (!Array.isArray(todos) || todos.length === 0) return translate("tools.todo");
-	const items = todos.filter((todo): todo is { content?: unknown; status?: unknown } => !!todo && typeof todo === "object");
-	const done = items.filter((todo) => todo.status === "completed").length;
-	const task = items.find((todo) => todo.status === "in_progress")?.content;
-	const progress = { done, total: todos.length };
-	return typeof task === "string" && task.trim() ? translate("tools.todoAt", { ...progress, task: task.trim() }) : translate("tools.todoOf", progress);
 }
 
 /** 家目录缩成 `~`：`/Users/someone/…` 那一截在一行摘要里只占地方，谁都知道它是哪里。 */

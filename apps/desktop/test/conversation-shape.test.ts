@@ -36,14 +36,16 @@ const result = (id: string, name: string): Message =>
 const thinking = (text: string) => ({ type: "thinking" as const, thinking: text });
 
 /**
- * 假装装了连 MCP 服务的插件：本体不认它的工具名，只认它在界面入口登记的说法（`ui.toolLine`）。
- * 跑完撤下，别的测试看到的是没装它的样子。
+ * 假装装了记清单、连 MCP 服务的插件：本体不认它们的工具名，只认它们在界面入口登记的说法（`ui.toolLine`）。
+ * 跑完撤下，别的测试看到的是没装它们的样子。
  */
 function withPluginLines(body: () => void): void {
+	addToolLine("example.todo", "todo_write", { verb: "更新清单", checklist: true });
 	addToolLine("example.mcp", "mcp__", { group: "mcp", apart: true }, "prefix");
 	try {
 		body();
 	} finally {
+		removeToolLines("example.todo");
 		removeToolLines("example.mcp");
 	}
 }
@@ -363,6 +365,10 @@ test("最终答复重说过的播报不再画；没有最终答复时播报留�
 });
 
 test("回答之后补勾清单的那一次不画，停在它上面也不算被打断；补勾后接着干活的照常画", () => {
+	withPluginLines(planTick);
+});
+
+function planTick() {
 	const messages: Message[] = [
 		user("改一下"),
 		reply([call("t1", "todo_write"), call("e", "edit", { path: "a.ts" })]),
@@ -388,16 +394,27 @@ test("回答之后补勾清单的那一次不画，停在它上面也不算被�
 	// 前面没有那句替人说的话：真是勾完清单正要回答时断了。
 	const cut = [messages[0]!, reply([call("t3", "todo_write")]), result("t3", "todo_write")];
 	assert.equal(howItStopped({ id: "s", title: "", cwd: "/", createdAt: 0, updatedAt: 0, running: false }, cut), "interrupt");
+}
+
+test("没有插件说它记清单的工具，叫 todo_write 也只是一次普通调用", () => {
+	const messages: Message[] = [
+		user("改一下"),
+		reply([text("改好了")], "stop"),
+		user("（自动提示）", { synthetic: true }),
+		reply([call("t", "todo_write")]),
+		result("t", "todo_write"),
+	];
+	assert.equal(isPlanTick(messages, 3), false);
 });
 
-test("一轮正常收尾、最新那份清单还有没勾的：「继续」说把清单做完；停在半路时照旧按怎么停的说", () => {
+test("一轮正常收尾、最新那份清单（结果里声明的 checklist）还有没勾的：「继续」说把清单做完；停在半路时照旧按怎么停的说", () => {
 	const todos = (id: string, statuses: string[], isError = false): Message =>
 		({
 			role: "toolResult",
 			toolCallId: id,
 			toolName: "todo_write",
 			content: [{ type: "text", text: "ok" }],
-			details: { kind: "todo", todos: statuses.map((status, index) => ({ content: `第 ${index + 1} 项`, status })) },
+			details: { checklist: statuses.map((status, index) => ({ content: `第 ${index + 1} 项`, status })) },
 			isError,
 			timestamp: 3,
 		}) as Message;
@@ -473,8 +490,10 @@ test("说完话、清单后面、这一轮已经停了时回来的结果自己�
 	);
 	assert.deepEqual(describe(answered[1]!.items), ["step:a", "message", "jobs:j1,j2"]);
 	// 清单那一段不挂：挂上去是不相干的两件事。
-	const todo = turnBlocks(runs([user("go"), reply([call("t", "todo_write")]), result("t", "todo_write"), jobDelivery("j3")]));
-	assert.deepEqual(describe(todo[1]!.items), ["step:t", "jobs:j3"]);
+	withPluginLines(() => {
+		const todo = turnBlocks(runs([user("go"), reply([call("t", "todo_write")]), result("t", "todo_write"), jobDelivery("j3")]));
+		assert.deepEqual(describe(todo[1]!.items), ["step:t", "jobs:j3"]);
+	});
 	// 最后那条回复已经停了（被按停）：结果是把会话叫醒了，不是插在这段活中间。
 	const stopped = turnBlocks(runs([user("go"), reply([call("a", "read")], "aborted"), result("a", "read"), jobDelivery("j4")]));
 	assert.deepEqual(describe(stopped[1]!.items), ["step:a", "jobs:j4"]);

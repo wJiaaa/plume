@@ -284,9 +284,10 @@ export function latestTodos(messages: Message[]): Array<{ content: string; statu
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const message = messages[index]!;
 		if (message.role !== "toolResult" || message.isError) continue;
+		// 清单按结果里的通用声明认（`ChecklistDetails`），不认是哪个工具交的。
 		const details = object(message.details);
-		if (details.kind !== "todo" || !Array.isArray(details.todos)) continue;
-		return details.todos.flatMap((item: unknown) => {
+		if (!Array.isArray(details.checklist)) continue;
+		return details.checklist.flatMap((item: unknown) => {
 			const todo = object(item);
 			return typeof todo.content === "string" && (todo.status === "pending" || todo.status === "in_progress" || todo.status === "completed")
 				? [{ content: todo.content, status: todo.status }]
