@@ -110,10 +110,11 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 ### 工具结果里的通用声明
 
-`details` 归插件，宿主不看里面，只认两个通用声明（类型在 `@plume/contract`）；插件之间另认几个（改了文件、读了文件的哪一块）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
+`details` 归插件，宿主不看里面，只认这几个通用声明（类型在 `@plume/contract`）；插件之间另认几个（改了文件、读了文件的哪一块）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
 
 - `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。记清单的工具在定义上标 `category: "checklist"`（见下面「按类别找工具」），转录据它把这次调用并进一段活。例子是 `plume.todo`。
 - `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
+- `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）：这次调用改了一个文件，`path` 是给人看的路径（工作目录里的写相对路径），`hunks` 是 `ChangeHunk[]`。通用卡片据它画 diff、写 +N −M，一段活的那一行把各次的加减合起来；自己登记了 `ui.toolCard` 的照样可以带。和 `FileChangeDetails`（改动快照记在服务 `file.changes` 里，见下文）是两件事，常一起带。例子是 `plume.tools` 的 `edit`、`write`。
 - `changeId` / `changeIds` / `changeWarning`（`FileChangeDetails`）：这次调用改了文件，快照记在服务 `file.changes` 里，见下面「文件变更服务」。
 - `fileView`（`FileViewDetails`）：这次调用让模型看了一个文件的哪一块 `{ path, lines?, columns?, verbatim }`。`path` 是调用里写的路径解析成的绝对路径（`~/` 展开、相对路径按工作目录，不追符号链接）；`lines` 是第几行到第几行（从 1 数、含两头），从头到尾的不写；`columns` 是每行给了第几个到第几个字符，整行的不写；`verbatim` 说给的是不是这一块的原文（大纲、截断的抽取文字是 `false`）。压缩据此清掉被后来的观察顶替掉的旧读：之后又原样读到了盖住它的一块，或者文件被改过。不带它的读文件结果压缩不当作读，只照「同样的调用又跑了一次」处理。例子是 `plume.tools` 的 `read`。
 

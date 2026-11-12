@@ -37,6 +37,19 @@ export interface FileChangeDetails {
 	changeWarning?: string;
 }
 
+/**
+ * 工具结果的 `details` 带上这几个字段，就是声明「这次调用改了一个文件，改的是这几处」：转录的通用卡片按它画 diff、写 +N −M，
+ * 一段活的那一行把各次的加减合起来。和 `FileChangeDetails` 是两件事，常常一起带：那个说改动快照记在服务里（能撤销、能汇总），
+ * 这个只说这一次改了什么给人看；命令改的文件只有快照，没有这一份。`details` 里别的字段照旧归插件。
+ */
+export interface FileDiffDetails {
+	/** 改的是哪个文件，给人看的写法（工作目录里的写相对路径）；diff 按它的扩展名配色。 */
+	path: string;
+	added: number;
+	removed: number;
+	hunks: ChangeHunk[];
+}
+
 /** 快照标识来自工具结果的 `FileChangeDetails`，不接受界面传来的文件原文。 */
 export interface FileChangesService {
 	collect(sessionId: string, cwd: string, ids: readonly string[]): Promise<FileChangesSummary>;

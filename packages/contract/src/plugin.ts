@@ -47,8 +47,9 @@ export interface ToolOutput {
 	 */
 	shownImages?: ToolOutput["images"];
 	/**
-	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认两个通用声明：
-	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务。
+	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认这几个通用声明：
+	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务，
+	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff。
 	 * 插件之间另认两个：改了文件（`FileChangeDetails`），让模型看了文件的哪一块（`FileViewDetails`）。
 	 */
 	details?: unknown;

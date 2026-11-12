@@ -1,4 +1,5 @@
 import { realpath, stat } from "node:fs/promises";
+import type { FileDiffDetails } from "@plume/contract";
 import { computeDiff } from "@plume/platform";
 import { formatDiff } from "../diff.ts";
 import { withTextFile } from "./file-write.ts";
@@ -93,14 +94,12 @@ export const writeTool: Tool<WriteArgs> = {
 							text: `${alreadyExists ? "Updated" : "Created"} ${shown} (${lines} lines).`,
 						},
 					],
+					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；`changeId` 是 `FileChangeDetails`。
 					details: {
 						kind: "write",
 						...(changeId ? { changeId } : {}),
-						path: shown,
 						created: !alreadyExists,
-						added: diff.added,
-						removed: diff.removed,
-						hunks: diff.hunks,
+						...({ path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks } satisfies FileDiffDetails),
 					},
 				};
 			});

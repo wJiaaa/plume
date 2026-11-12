@@ -4,7 +4,7 @@
  * 工具行（`ToolCard`）、一段活那一行（`WorkStep`）和跑完收起的那一行（`TurnWork`）共用：同一次调用在几种行上是同一种说法。
  */
 
-import type { ToolKind, ToolResultMessage } from "@plume/contract";
+import type { FileDiffDetails, ToolKind, ToolResultMessage } from "@plume/contract";
 import { activeLocale, formatList, type MessageKey, translate } from "@plume/ui";
 import { baseName } from "../files/open-file.ts";
 import { relativeTo } from "../markdown/assets.ts";
@@ -175,8 +175,8 @@ function subjectOf(block: ToolCallBlock): string | undefined {
 	}
 }
 
-/** 一次改动加、删了几行，读工具结果的 `details`。 */
+/** 一次改动加、删了几行：工具结果的 `details` 声明的文件改动（`FileDiffDetails`），没声明是 0。 */
 export function diffOf(result: ToolResultMessage | undefined, key: "added" | "removed"): number {
-	const value = (result?.details as Record<string, unknown> | undefined)?.[key];
+	const value = (result?.details as Partial<Record<keyof FileDiffDetails, unknown>> | undefined)?.[key];
 	return typeof value === "number" ? value : 0;
 }

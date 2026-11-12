@@ -7,6 +7,7 @@
  * 不记显示了哪几行：上一次读没读全（大纲、撞上上限的窗口），在一次指明窗口的读之前这个文件不能改。
  */
 
+import type { FileDiffDetails } from "@plume/contract";
 import { computeDiff, type FileDiff } from "@plume/platform";
 import { formatDiff } from "../diff.ts";
 import { findEditMatch, replacementFor } from "./edit-match.ts";
@@ -124,13 +125,11 @@ export const editTool: Tool<EditArgs> = {
 							text: `Edited ${file ? args.path : shown}: ${count} replacement${count === 1 ? "" : "s"}, +${diff.added} -${diff.removed}.${echo}`,
 						},
 					],
+					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；`changeId` 是 `FileChangeDetails`。
 					details: {
 						kind: "edit",
 						...(written.changeId ? { changeId: written.changeId } : {}),
-						path: shown,
-						added: diff.added,
-						removed: diff.removed,
-						hunks: diff.hunks,
+						...({ path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks } satisfies FileDiffDetails),
 					},
 				};
 			});

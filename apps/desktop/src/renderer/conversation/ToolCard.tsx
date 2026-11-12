@@ -5,7 +5,7 @@
  * 失败和停下各带一个记号。插件给工具登记了自己的卡片时，整张卡照原样画（`PluginToolCard`），这一行是它的通用卡片。
  */
 
-import type { ImageContent, ToolOutput, ToolResultMessage } from "@plume/contract";
+import type { FileDiffDetails, ImageContent, ToolOutput, ToolResultMessage } from "@plume/contract";
 import type { ToolCardProps } from "@plume/contract/ui";
 import { Collapse, FlowRow, RollWords, Scroller, translate, useI18n, useNow } from "@plume/ui";
 import { Ban, CircleX } from "@plume/ui/icons";
@@ -15,7 +15,6 @@ import { AnsweredBy } from "./AnsweredBy.tsx";
 import { hasToolCard, queueTask, ToolCardSlot, usePluginRegistrations } from "../plugins.tsx";
 import { describeOne, describePolls, diffOf } from "./call-words.ts";
 import { CodeText } from "./detail/CodeText.tsx";
-import type { DiffHunk } from "./detail/diff-highlight.ts";
 import { DiffView } from "./detail/DiffView.tsx";
 import { Section } from "./detail/Section.tsx";
 import { DiffCount } from "./DiffCount.tsx";
@@ -283,9 +282,14 @@ export function ToolCard({
 	);
 }
 
-function hunksOf(result: ToolResultMessage | undefined): DiffHunk[] | undefined {
-	const hunks = (result?.details as { hunks?: unknown } | undefined)?.hunks;
-	return Array.isArray(hunks) && hunks.length > 0 ? (hunks as DiffHunk[]) : undefined;
+/** 工具结果的 `details` 声明的文件改动（`FileDiffDetails`），逐个字段核过再用：形状由插件填，本体不认是哪个工具交的。 */
+function declaredDiff(result: ToolResultMessage | undefined): Partial<Record<keyof FileDiffDetails, unknown>> | undefined {
+	return result?.details as Partial<Record<keyof FileDiffDetails, unknown>> | undefined;
+}
+
+function hunksOf(result: ToolResultMessage | undefined): FileDiffDetails["hunks"] | undefined {
+	const hunks = declaredDiff(result)?.hunks;
+	return Array.isArray(hunks) && hunks.length > 0 ? (hunks as FileDiffDetails["hunks"]) : undefined;
 }
 
 /** 点开以后的内容：diff，或者命令、参数、输出。 */
@@ -310,7 +314,7 @@ function ToolCardBody({
 	result: ToolResultMessage | undefined;
 	reads: readonly (ToolResultMessage | undefined)[];
 	progress: string | undefined;
-	hunks: DiffHunk[] | undefined;
+	hunks: FileDiffDetails["hunks"] | undefined;
 	running: boolean;
 	stopped: boolean;
 	failed: boolean;
@@ -318,7 +322,7 @@ function ToolCardBody({
 }) {
 	const { t } = useI18n();
 	if (hunks) {
-		const path = (result?.details as { path?: unknown } | undefined)?.path;
+		const path = declaredDiff(result)?.path;
 		return <DiffView hunks={hunks} path={typeof path === "string" ? path : undefined} showPath />;
 	}
 	const output = job ? pollOutput(reads.flatMap((read) => (read ? [resultText(read.content)] : []))) : result ? resultText(result.content) : (progress ?? "");
