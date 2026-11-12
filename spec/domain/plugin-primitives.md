@@ -14,8 +14,9 @@
 | --- | --- | --- |
 | 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`、`session.rewind`），`ctx.tools.register` |
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
-| 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
+| 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
 | 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话；会话是哪一种 | `ctx.sessions`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
+| 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它弹着的卡（审批、提权、等人）；只能动自己代管的，人随时在会话菜单里停止代管 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
 | 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
 | 服务 | 插件之间按名字配合，装一个同名的就换掉实现 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
 
@@ -48,6 +49,7 @@
 - **基本文件和命令工具的名字。** 本体认 plume.tools 的 `read`、`write`、`edit`、`ls`、`glob`、`grep`、`bash`、`bash_output`：转录里的说法、分类和图标，回复里的文件签按读写过的路径认文件，重复检测，导出会话，以及 `ToolLike`（`ui.toolLine` 的 `like`）。它们是本体界面骨架的一部分，抽成声明的代价大于收益；插件注册同名工具覆盖它们时，本体照样按这几个名字认。别的工具（`monitor`、定时唤醒、`todo_write`……）不在内。
 - **plume.prompt 的两个段名。** 上下文用量和用量记录按段名 `userInstructions`、`projectInstructions` 认出人写的指令。别的段（技能目录、记忆、能力目录）按 `PromptSection.category` 认。
 - **只有一个插件在用、但按能力命名的接口。** `ToolRun.parent` / `ParentSession`、`AgentService` 的 `queueTask` / `retryTask` / `dismissTask`、`ToolCardProps.handToParent`、`ui.queueAction`、`ui.quoteAction` 现在只有侧边聊天用。可以留，条件是：名字、注释、类型说的是能力（「子会话够得着它的父会话」「排队消息的菜单项」），不提用它的插件；本体不知道是谁在用；换一个插件来用不用改接口。哪一条不满足，就回到上一节按违规处理。
+- **代管先由测试插件验证。** 真实需求是插件仓库里的 plume.im（它的 README 写着缺「创建或映射 Plume 会话」），但这一轮只做了本体接口，plume.im 还没接上；接口由测试插件 `packages/testing/steward-probe`（不随应用发，冒烟 `steward` 段装它）和 `packages/core/agent/test/session-steward.test.ts` 验证。plume.im 接上时发现不够用，按上一节改接口，不在插件里绕。
 
 ### 插件之间怎么互相用
 

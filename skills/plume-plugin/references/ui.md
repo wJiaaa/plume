@@ -223,6 +223,7 @@ ui.requestCard("ask_user", QuestionCard);
 
 - 工具经 `run.request({ kind, title, payload })` 要人给数据（见 logic.md），卡片按 `kind` 登记；`request.payload` 是工具给的数据，认不出就返回 `fallback`（产品的通用卡，只能「不答」）。渲染出错时让给下一个注册者。
 - 人答了调 `answer(value)`，`value` 原样交回 `run.request`（工具那边会再核一遍，卡上也先查一遍，拦住手误）；人不答调 `decline()`，工具得到 `reason: "declined"`。没送到时两者都抛错，卡片把错误摆出来、让人再答。一个回答连同附言（评论、修改意见）一起放进 `value`，不用经 `remote` 另交。
+- 代管这个会话的插件可能在外面先答了（`ctx.sessions.answer`、`respond`，见 logic.md「代管会话」）：卡和过期、停下时一样被产品收起，你的卡不用为它另做处理；那次调用底下由产品写「由 X 代答」。
 - 摆在哪、排队、过期（30 分钟）、停下这一轮时撤卡和审批卡一样归产品；`from`、`queued`、`compact`、`permission`、`allowAuto()` 的意思同审批卡。外框用 `ApprovalFrame`，或自己画、标题行放 `ApprovalExpiry`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
 - 卡片一出来把焦点给它，键盘能直接答。
 - 等这张卡时那句状态由 `run.request` 带 `waiting` 给（「等你批准计划」，按 `ctx.locale()`）；不给时宿主说「等待你的回答」。
