@@ -73,6 +73,8 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	mutating?: boolean;
 	/** mutating 的工具里，这一次调用能证明什么都不改：可以和相邻的只读调用同时跑。 */
 	readsOnly?(args: Record<string, unknown>): boolean;
+	/** 导出会话成 Markdown 时这一次调用写成的一行，见 `ToolDefinition.describe`。 */
+	describe?(args: Record<string, unknown>): string | undefined;
 	execute(args: TArgs, ctx: ToolContext): Promise<ToolResult>;
 }
 
@@ -124,6 +126,7 @@ export function toDefinition<TArgs>(tool: Tool<TArgs>, env: ToolEnv): ToolDefini
 		parameters: tool.parameters,
 		...(tool.mutating ? { mutating: true } : {}),
 		...(tool.readsOnly ? { readsOnly: tool.readsOnly } : {}),
+		...(tool.describe ? { describe: tool.describe } : {}),
 		asks: true,
 		async execute(args, run: ToolRun): Promise<ToolOutput> {
 			// 沙箱只管跑命令的那个（bash），它会改动工作区；只读的工具在进程里读文件，不用它。

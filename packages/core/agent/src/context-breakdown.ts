@@ -8,7 +8,7 @@
  * 那些层是插件，有的会记状态。
  */
 
-import type { ContextBreakdown, ContextSegmentKey, Message, ModelContext, PromptSection } from "@plume/contract";
+import type { ContextBreakdown, ContextSegmentKey, Message, ModelContext, PromptSection, ToolDefinition } from "@plume/contract";
 
 /** 项目指令和记忆这两段可以按文件列出来源。 */
 type MemoryKey = "projectInstructions" | "memory";
@@ -39,19 +39,22 @@ function messageChars(message: Message): number {
 	return chars;
 }
 
-/** MCP 服务的工具：plume.mcp 登记的 `mcp__服务__工具`，和工具多了时代替它们的那两个。 */
-function isMcpTool(name: string): boolean {
-	return name.startsWith("mcp__") || name === "mcp_search" || name === "mcp_call";
-}
-
-/** 系统提示词里单独列出的段：内置插件 plume.skills、plume.prompt 给的两段按段名认，记忆按插件标的类别认（`PromptSection.category`）。 */
+/**
+ * 系统提示词里单独列出的段：技能目录和记忆按插件标的类别认（`PromptSection.category`），项目指令按内置插件 plume.prompt 给的段名认。
+ * 别的能力目录（`catalog`）在这里算系统提示词。
+ */
 type Carved = "skills" | MemoryKey;
 function carvedAs(section: PromptSection): Carved | undefined {
-	if (section.category === "memory") return "memory";
-	return section.id === "skills" || section.id === "projectInstructions" ? section.id : undefined;
+	if (section.category === "memory" || section.category === "skills") return section.category;
+	return section.id === "projectInstructions" ? section.id : undefined;
 }
 
-export function estimateContext(context: Pick<ModelContext, "systemPrompt" | "sections" | "messages" | "tools">): ContextEstimate {
+/** `categoryOf` 查工具表里某个工具是哪一类（注册它的插件标的 `ToolDefinition.category`）：MCP 服务的工具单独一段。 */
+export function estimateContext(
+	context: Pick<ModelContext, "systemPrompt" | "sections" | "messages" | "tools">,
+	categoryOf: (tool: string) => ToolDefinition["category"],
+): ContextEstimate {
+	const isMcpTool = (name: string) => categoryOf(name) === "mcp";
 	const carved: Record<Carved, number> = { skills: 0, projectInstructions: 0, memory: 0 };
 	for (const section of context.sections) {
 		const key = carvedAs(section);

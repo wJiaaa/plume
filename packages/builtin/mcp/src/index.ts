@@ -127,7 +127,7 @@ export default {
 				return next({
 					...input,
 					tools: input.tools.filter((tool) => !hidden.has(tool.name)),
-					sections: [...input.sections, { id: "mcpDeferred", text: deferredSection(movable) }],
+					sections: [...input.sections, { id: "mcpDeferred", text: deferredSection(movable), category: "catalog" }],
 				});
 			}
 			return next({ ...input, tools: input.tools.filter((tool) => tool.name !== MCP_SEARCH && tool.name !== MCP_CALL) });

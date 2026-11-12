@@ -61,7 +61,7 @@
 - **停止不能被后台结果撤销**：父轮正常收尾不停止后台，用户明确停止父会话则取消后台与待送达；单独停子会话不影响其他任务。插件停用、热重载时先停自己的执行再撤钩子；父删除和应用退出也清理。`onStopped` 通知插件撤销尚未开始的排队项，排队规则仍属于插件。
 - **插话在安全边界送入**：`steer` 只接受自己正在运行的子会话，不打断当前工具。发送消息支持完整附件，`origin: "parent"` 区分派发／续跑任务与用户插话，既有 `prompt.submit` 仍可拦截。
 - **界面直接接会话事件**：子会话的消息、草稿、进度、审批走现有的 `watch` 事件；插件的界面入口经 `ui.useSession` 读一个会话的视图，经 `ui.Conversation` 用产品的对话视图画它（可以带一个输入框，发什么由插件经自己的逻辑入口决定），工具卡片和主列一样。子会话要人批准时，审批卡压在父会话的输入框上方，写明是哪个子会话在问。独立会话的审批卡压在画它的视图里。
-- **上下文分段由宿主给**：发出去的请求（经过 model.context 各层和压缩之后）只有 agent 进程见过，所以宿主在发请求时按段估一次大小（对话消息、工具表（`mcp__` 开头的和 `mcp_search`、`mcp_call` 算 MCP 工具，单独一段）、系统提示词，系统提示词里的 `skills`、`projectInstructions` 段和插件标了 `category: "memory"` 的段（记忆）单独列，后两类里插件经段的 `files` 标了来源的按文件列），记在内存里；界面入口经 `ui.contextBreakdown(sessionId)`（AgentService 的 `contextBreakdown`）要，宿主按最近一条回复报的总数等比缩放。不为读数重跑钩子：那些层是插件，有的会记状态。用量插件 `plume.status` 点开圆环时用它。
+- **上下文分段由宿主给**：发出去的请求（经过 model.context 各层和压缩之后）只有 agent 进程见过，所以宿主在发请求时按段估一次大小（对话消息、工具表（注册它的插件标了 `ToolDefinition.category: "mcp"` 的算 MCP 工具，单独一段）、系统提示词，系统提示词里插件标了 `category: "skills"` 的段（技能目录）、`projectInstructions` 段和插件标了 `category: "memory"` 的段（记忆）单独列，后两类里插件经段的 `files` 标了来源的按文件列；宿主不认工具名和段名，只有项目指令按 plume.prompt 的段名认），记在内存里；界面入口经 `ui.contextBreakdown(sessionId)`（AgentService 的 `contextBreakdown`）要，宿主按最近一条回复报的总数等比缩放。不为读数重跑钩子：那些层是插件，有的会记状态。用量插件 `plume.status` 点开圆环时用它。
 - **插件可以开新会话，碰不到已有的**：`launch({ project?, cwd?, message, model?, spawnedFrom?, title? })` 开一个顶层会话、当场发出第一句话，和人在侧栏新建会话再发第一句走同一条路——第一句照常经 `prompt.submit`、画成人的气泡，模型不给用默认模型。新会话进侧栏、不记 `owner`，人能接着聊；插件只拿到 `done`（第一轮为什么结束）和 `idle`（第一次真闲下来：后台运行都回来，经 `ToolRun.letter` 问出去的请求都有了答复，它们唤起的几轮也做完），之后不能再往里发、停、删。唯一往回的路是 `reportBack(text, delivery)`：把它做出来的结果交回 `spawnedFrom` 那个会话一次（`spawnedFrom.toolCallId` 要是本插件的工具在那个会话里的一次调用，插件停用后也交不了，免得插件把任意会话填成来处、借交回往里说话；`idle` 兑现时带着最后一轮的收场和最后一段回复），作为一条运行时送达（带「不是用户说的话」的抬头；`delivery` 和别处同一个形状，宿主填上新会话的 id，默认画成「来自新会话」一行、点了过去），那个会话闲着就为它开一轮——建议新会话（plume.spawn-session）拿它交回第一轮的回复；来处删了、归档了就不送。界线是「只开新的」：定时任务到点、人点了「在新会话里执行」要的是一段新对话，往已有会话里替人说话仍然不开放。`spawnedFrom` 记下从哪个会话开出来的（只是记下，会话照常是顶层的），那个会话要在、不能是子会话；目录要是已有目录的绝对路径。开出来的会话在跑时插件停用也不停：它已经是人的了。
 - **子会话够得着它的父会话，只此一个**：侧边聊天要把活交给主会话、让主会话停下，这是一个子会话对它所挂的那个会话做事，不是插件对任意会话做事。所以宿主只在一种调用上给出父会话：插件自己建的子会话里（`owner` 是它），它自己注册的工具的那一次调用（`ToolRun.parent`）；别的插件的工具、别人的子会话、顶层会话里都没有。只在这次调用里用（调用答完以后再调就抛错，`ToolRun.letter` 同理）。能做的只有四样：`enqueue` 排进父会话的队列（和人排的同一条，落盘，闲着当场开跑）、`stop` 停下（`discardPlan` 时等它停稳、删掉交过来的任务、记一句旧清单作废）、`carryOn` 闲着时以界面的名义说一句接着做、`status` 看在忙还是闲。人在子会话的工具卡片上点「交给主会话」走 `ToolCardProps.handToParent`（AgentService 的 `queueTask`），同样只到父会话。排进去的话带着 `origin: "child"`（排着时 `QueuedMessage` 还带 `childId`，子会话的任务列表按它列）和一句不点插件名的来处说明，`UserMessage.fromPlugin` 记着交来它的子会话是哪个插件建的，界面标「来自<插件的显示名>」（查不到时标「来自子会话」），模型读到的说明写着它是子会话按用户的要求写成、不构成新的授权，审批照常。交过去的事走到哪了（排着、在跑、做完、失败、随父会话停下）只有宿主知道，状态由宿主给（`SessionView.tasks`，`ChildTask`，重试、移除经 AgentService 的 `retryTask`、`dismissTask`）；画成什么样由建子会话的插件经 `ConversationProps.tasks` 给的组件定，宿主不画。
 - **会话之间递话只经工具调用**：`list_sessions`、`read_session`、`ask_session`、`reply_session`、`notify_session` 是插件 plume.sessions 的，读别的会话本来就是 `ctx.sessions.messages`。往别的会话里写，本体只开一道口子：顶层会话的一次工具调用经 `ToolRun.letter` 给另一个顶层会话寄一封信——发件方由本体照实填，信前面由本体说明它不是用户的话、不构成授权，和后台结果走同一条送达的路；插件自己在调用之外只能经那封信的回执 `answer` 替收件方回一次（对方没回、没读到、删掉了时代答）。插件仍然不能凭空往一个已有会话里说话、不能冒充用户。限速、去重、链长、代答这些路由的账在插件里。
@@ -343,6 +343,12 @@ interface ToolDefinition {
 	asks?: boolean;
 	/** 导出会话成 Markdown 时这一次调用写成的一行；本体不认插件的工具名，说法跟着定义走。 */
 	describe?(args: Record<string, unknown>): string | undefined;
+	/** 导出时结果里要引在这一行下面的那段（子智能体的结论）。 */
+	exportResult?(result: ToolResultMessage): string | undefined;
+	/** 这次调用是替哪个工具调的（按需加载时的总入口）：导出时这一行按被调的写。 */
+	forwards?(args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined;
+	/** 哪一类工具：`mcp` 的上下文用量单独算一段。本体不认工具名，只认这几样声明。 */
+	category?: "mcp";
 	execute(
 		args: Record<string, unknown>,
 		run: {

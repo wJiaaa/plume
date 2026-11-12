@@ -45,6 +45,11 @@ export function webSearchTool(registry: SearchRegistry, configuredProvider: () =
 		name: "web_search",
 		// i18n-exempt：发给模型的工具说明
 		description: "Search the web for pages: titles, snippets and URLs. Read one with web_fetch.",
+		// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+		describe: (args) => {
+			const query = [args.query, args.pattern, args.search].find((value): value is string => typeof value === "string");
+			return query ? `Search ${query}` : "Search the web";
+		},
 		parameters: {
 			type: "object",
 			properties: {

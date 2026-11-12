@@ -11,7 +11,7 @@ import { Connections, type ConnectionsOptions } from "../src/connections.ts";
 import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
 import { missingFor, placeholdersOf, resolveServer } from "../src/placeholders.ts";
 import { bindArguments, commandSegment, splitArguments } from "../src/prompts.ts";
-import { callTool, deferredSection, findTool, type McpTool, rank } from "../src/search.ts";
+import { callTool, deferredSection, findTool, type McpTool, rank, searchTool } from "../src/search.ts";
 import { mcpResource } from "../src/resources.ts";
 import { mcpResult, normalizeInputSchema, qualifiedToolName, RESULT_CHARS } from "../src/tools.ts";
 import { openServers, openStates, sealServers, sealStates } from "../src/sealed.ts";
@@ -315,6 +315,15 @@ test("按需搜索：工具名里的词最重；mcp_call 按几种写法找到�
 	assert.equal(findTool(tools, "list_projects")?.name, "mcp__linear__list_projects");
 	const call = callTool(() => tools);
 	const run = fakeRun([]);
+	// 总入口转调真正的那个工具：导出会话时这一行按被调的写；两个入口都算 MCP 工具。
+	assert.deepEqual(call.forwards?.({ tool: "mcp__linear__create_issue", arguments: { title: "x" } }), {
+		name: "mcp__linear__create_issue",
+		args: { title: "x" },
+	});
+	assert.deepEqual(call.forwards?.({ tool: "mcp__linear__create_issue", arguments: "{}" }), { name: "mcp__linear__create_issue", args: {} });
+	assert.equal(call.forwards?.({}), undefined);
+	assert.equal(call.category, "mcp");
+	assert.equal(searchTool(() => tools).category, "mcp");
 	assert.deepEqual(await call.execute({ tool: "mcp__linear__create_issue", arguments: '{"title":"x"}' }, run), { output: 'ran create_issue {"title":"x"}' });
 	assert.match((await call.execute({ tool: "mcp__linear__create_issue", arguments: {} }, run)).output, /required arguments are missing \(title\)/);
 	assert.match((await call.execute({ tool: "mcp__linear__nope" }, run)).output, /^No tool named "mcp__linear__nope"\. Closest: /);
@@ -504,6 +513,9 @@ test("连上真的 stdio 服务：登记工具、调用前问人、信任只读�
 		);
 		assert.equal(tools.get("mcp__echo__echo")?.mutating, false);
 		assert.equal(tools.get("mcp__echo__shout")?.mutating, true);
+		// 上下文用量按类别把它们算进「MCP 工具」；导出会话时写成「服务: 工具」。
+		assert.equal(tools.get("mcp__echo__echo")?.category, "mcp");
+		assert.equal(tools.get("mcp__echo__shout")?.describe?.({ text: "hi" }), "echo: shout");
 
 		const asked: string[] = [];
 		const shout = await tools.get("mcp__echo__shout")?.execute({ text: "hi" }, fakeRun(asked));

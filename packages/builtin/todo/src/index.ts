@@ -81,6 +81,8 @@ export default {
 		ctx.tools.register({
 			name: "todo_write",
 			description: DESCRIPTION,
+			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+			describe: () => "Update task list",
 			parameters: {
 				type: "object",
 				properties: {

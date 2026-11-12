@@ -18,6 +18,7 @@ import type {
 	SessionSummary,
 	ToolDefinition,
 	ToolOutput,
+	ToolResultMessage,
 	ToolRun,
 	TurnStop,
 } from "@plume/contract";
@@ -389,6 +390,8 @@ test("validation and catalogue remain available without starting invalid tasks",
 	const layer = f.layers.get("model.context") as HookLayer<"model.context">;
 	const main = await layer(context("main"), async (input) => input);
 	assert.match(main.sections.at(-1)!.text, /<available_subagents>/);
+	// 名单是能力目录：上下文用量、使用统计按这个类别分段，不认段名。
+	assert.equal(main.sections.at(-1)!.category, "catalog");
 	// 名单后面说清同时跑几个：和登记簿真实的上限是同一个数。
 	assert.match(main.sections.at(-1)!.text, /最多 4 个子代理同时跑/);
 	const hidden = await layer(context("main"), async (input) => ({ ...input, tools: input.tools.filter((tool) => tool.name !== "task") }));
@@ -826,4 +829,26 @@ test("task 的说明写明结论要等子代理都回来", async (t) => {
 	);
 	const result = await f.run({ description: "Find entry", prompt: "Find it" });
 	assert.match(result.output, /until every dispatched sub-agent has reported, do not write a conclusion/);
+});
+
+test("导出会话时的说法（describe）和引出来的结论（exportResult）：写派活的说明，结论引出来，出错的和只派出去的不引", async (t) => {
+	const f = await fixture(t);
+	const task = f.tools.get("task")!;
+	assert.equal(task.describe?.({ description: "查调用方", prompt: "x" }), "查调用方");
+	assert.equal(task.describe?.({}), "Sub-agent task");
+	const result = (extra: Partial<ToolResultMessage> = {}): ToolResultMessage => ({
+		role: "toolResult",
+		toolCallId: "c",
+		toolName: "task",
+		content: [
+			{ type: "text", text: "结论一" },
+			{ type: "text", text: "- a.ts" },
+		],
+		isError: false,
+		timestamp: 1,
+		...extra,
+	});
+	assert.equal(task.exportResult?.(result()), "结论一\n- a.ts");
+	assert.equal(task.exportResult?.(result({ isError: true })), undefined);
+	assert.equal(task.exportResult?.(result({ details: { detached: true } })), undefined);
 });

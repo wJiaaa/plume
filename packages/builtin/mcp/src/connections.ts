@@ -596,6 +596,9 @@ export class Connections implements McpResources {
 			parameters: normalizeInputSchema(raw.inputSchema),
 			mutating: !readOnly,
 			asks: true,
+			category: "mcp",
+			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+			describe: () => `${name.split("__")[1]}: ${name.split("__")[2]}`,
 			execute: (args, run) => this.call(shared, raw, name, readOnly, args, run),
 		};
 	}

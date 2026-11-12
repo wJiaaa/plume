@@ -120,6 +120,8 @@ export default {
 			name: TOOL,
 			// i18n-exempt：写给模型的工具说明。
 			description: "Load a skill's instructions. They come back as the result and take precedence over your default approach.",
+			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+			describe: (args) => `Skill: ${typeof args.name === "string" ? args.name : ""}`.trim(),
 			parameters: {
 				type: "object",
 				properties: {
@@ -167,7 +169,7 @@ export default {
 			const skills = await enabledSkills(input.cwd);
 			if (skills.length === 0) return next({ ...input, tools: input.tools.filter((tool) => tool.name !== TOOL) });
 			const catalogue = formatCatalogue(skills);
-			return next(catalogue ? { ...input, sections: [...input.sections, { id: "skills", text: catalogue }] } : input);
+			return next(catalogue ? { ...input, sections: [...input.sections, { id: "skills", text: catalogue, category: "skills" }] } : input);
 		});
 
 		ctx.hook("prompt.submit", async (input, next) => {

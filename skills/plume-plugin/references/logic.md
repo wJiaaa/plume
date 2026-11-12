@@ -63,6 +63,10 @@ ctx.tools.register({
 	parameters: { type: "object", properties: { /* JSON Schema */ }, required: [] },
 	mutating: false,                 // 会改工作区（写文件、执行命令）就写 true：不和相邻的调用同时跑，宿主在执行前把参数拿给用户看、问一次
 	describe: (args) => `Search ${String(args.query ?? "")}`, // 可选：导出会话成 Markdown 时这次调用写成的一行（英文）；不给就写工具名。界面上的说法用界面入口的 ui.toolLine
+	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
+	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
+	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
+	// category: "mcp",                         // MCP 服务的工具（连同总入口）：上下文用量单独算「MCP 工具」一段
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
 		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
@@ -157,7 +161,13 @@ ctx.hook("model.context", (input, next) =>
 
 系统提示词在会话里冻结：plume.prompt 在最外层把里层交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。工具表也按会话冻结：`ctx.tools.register` 和撤下、插件装卸带来的变化（包括里层经 `model.context` 改的 `tools`）在下一轮开头才发给模型，原有工具的顺序不变、新的接在后面；一轮中间撤下的工具还留在表里，模型调它会拿到「没有这个工具」。
 
-插件记下、每轮带上的记忆（用户的、项目的）在段上标 `category: "memory"`：上下文用量把它们算进「记忆」一段，使用统计的 Token 构成算进「指令和记忆」；宿主不认段名，不标的算系统提示词。
+段上标 `category`，宿主按它分段统计，不认段名，不标的算系统提示词：
+
+- `memory`：插件记下、每轮带上的记忆（用户的、项目的）。上下文用量算进「记忆」一段，使用统计的 Token 构成算进「指令和记忆」。
+- `skills`：技能目录。上下文用量算进「技能」一段，Token 构成算进「技能与智能体」。
+- `catalog`：别的按需取用的能力目录（可以派的智能体名单、没放进工具表的工具目录）。上下文用量算系统提示词，Token 构成算进「技能与智能体」。
+
+工具也一样：MCP 服务的工具（连同按需搜索、调用它们的总入口）在 `ctx.tools.register` 的定义上标 `category: "mcp"`，上下文用量把它们的定义单独算成「MCP 工具」一段。
 
 段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：`projectInstructions` 段和标了 `category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
 

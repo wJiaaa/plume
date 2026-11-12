@@ -10,7 +10,7 @@
 import type { AssistantMessage, Message, ModelContext, UsageCacheMissCause, UsageTokenPart } from "@plume/contract";
 import { requestUsage, type RequestPrefix } from "@plume/llm/types";
 
-/** 送进去的按来源分的几类。系统提示词按段名拆成前三类。 */
+/** 送进去的按来源分的几类。系统提示词按段的类别（指令按段名）拆成前三类。 */
 const INPUT_PARTS = [
 	"system",
 	"instructions",
@@ -27,8 +27,6 @@ export const TOKEN_PARTS = [...INPUT_PARTS, "outputThinking", "outputReply"] as 
 
 /** 指令和记忆：人写的、记下的，每轮原样进提示词。指令的段名是内置插件 plume.prompt 给的；记忆按插件标的类别认（`PromptSection.category`）。 */
 const INSTRUCTION_SECTIONS = new Set(["userInstructions", "projectInstructions"]);
-/** 能力目录：技能、子智能体、延后加载的 MCP 工具。 */
-const SKILL_SECTIONS = new Set(["skills", "subagents", "mcpDeferred"]);
 
 /** 图片按一个固定数算：各家算法不同，它在比例里只是一个量级。 */
 const IMAGE_TOKENS = 1600;
@@ -64,7 +62,8 @@ export function estimateParts(context: Pick<ModelContext, "systemPrompt" | "sect
 		const tokens = estimateTokens(section.text);
 		sectioned += tokens;
 		if (INSTRUCTION_SECTIONS.has(section.id) || section.category === "memory") parts.instructions += tokens;
-		else if (SKILL_SECTIONS.has(section.id)) parts.skills += tokens;
+		// 能力目录：技能，和可以派的智能体、没放进工具表的工具这类按需取用的目录，按插件标的类别认。
+		else if (section.category === "skills" || section.category === "catalog") parts.skills += tokens;
 		else parts.system += tokens;
 	}
 	// 段与段之间的空行，以及没拆成段的提示词，算系统提示词。

@@ -27,8 +27,16 @@ const result = (id: string, text: string, extra: Partial<ToolResultMessage> = {}
 	timestamp: 3,
 	...extra,
 });
+/** 假装有个插件注册了派活的工具 `task`：这一行写它的说明，结论引出来（出错的、只派出去没等结果的不引）。 */
+const dispatch = {
+	describeTool: (name: string, args: Record<string, unknown>) => (name === "task" && typeof args.description === "string" ? args.description : undefined),
+	quoteResult: (result: ToolResultMessage) =>
+		result.toolName === "task" && !result.isError && !(result.details as { detached?: unknown } | undefined)?.detached
+			? result.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n")
+			: undefined,
+};
 const markdown = (messages: readonly Message[], locale = "zh-CN", compactions: readonly CompactionMark[] = []) =>
-	conversationMarkdown({ summary, messages, compactions, exportedAt }, locale);
+	conversationMarkdown({ summary, messages, compactions, exportedAt, ...dispatch }, locale);
 
 it("导出正文和工具摘要，不导出思考、普通工具输出和运行时提示，压缩和换模型重新标出说话人", () => {
 	const messages: Message[] = [
@@ -201,7 +209,7 @@ it("压缩按原始消息下标排序，跳过 synthetic 不改变分隔位置�
 	expect(md).not.toContain("隐藏");
 });
 
-it("同步 task 只引用成功结论，不导出失败结果、后台派发确认和空结论", () => {
+it("插件给的结论（exportResult）引成一段，插件不引的（失败、后台派发确认）和空结论不导出", () => {
 	const md = markdown([
 		reply([{ type: "toolCall", id: "task", name: "task", arguments: { description: "查调用方", prompt: "PRIVATE PROMPT" } }]),
 		result("task", "结论一\n\n- a.ts", { toolName: "task" }),
@@ -244,4 +252,30 @@ it("插件工具的说法由注册它的插件给（describe），没给时写�
 		"en",
 	);
 	expect(described).toContain("- `paint_picture` Paint a red fox in snow\n- `other_tool`\n- `read` Read a.ts");
+});
+
+it("本体不认插件的工具：没有插件给说法时，派活的结果不引、MCP 的工具只写名字；转调的那一行按插件说的被调工具写", () => {
+	const messages = [
+		reply([
+			{ type: "toolCall", id: "t", name: "task", arguments: { description: "查调用方" } },
+			{ type: "toolCall", id: "m", name: "mcp__github__search", arguments: { q: "x" } },
+			{ type: "toolCall", id: "f", name: "gateway", arguments: { tool: "remote_search", arguments: { q: "y" } } },
+		]),
+		result("t", "PRIVATE CONCLUSION", { toolName: "task" }),
+	];
+	const bare = conversationMarkdown({ summary, messages, compactions: [], exportedAt }, "en");
+	expect(bare).toContain("- `task`\n- `mcp__github__search`\n- `gateway`");
+	expect(bare).not.toContain("PRIVATE");
+	const forwarded = conversationMarkdown(
+		{
+			summary,
+			messages,
+			compactions: [],
+			exportedAt,
+			forwardTool: (name, args) => (name === "gateway" ? { name: String(args.tool), args: args.arguments as Record<string, unknown> } : undefined),
+			describeTool: (name, args) => (name === "remote_search" ? `Search ${String(args.q)}` : undefined),
+		},
+		"en",
+	);
+	expect(forwarded).toContain("- `remote_search` Search y");
 });

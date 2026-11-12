@@ -110,6 +110,13 @@ export default {
 			name: "task",
 			description: DESCRIPTION,
 			parameters: PARAMETERS,
+			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+			describe: (args) => (typeof args.description === "string" ? args.description : "Sub-agent task"),
+			// 导出时把结论引在这一行下面；出错的、标了只派出去（`detached`）的不引。
+			exportResult: (result) =>
+				result.isError || (result.details as { detached?: unknown } | undefined)?.detached
+					? undefined
+					: result.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n"),
 			async execute(args, run) {
 				if (registry.identity(run.sessionId)) return failed("Sub-agents cannot dispatch sub-agents. Do the work yourself.");
 				const description = typeof args.description === "string" ? args.description.trim() : "";
@@ -154,7 +161,7 @@ export default {
 				const agents = await registry.enabled(input.cwd);
 				// 种类全关掉了：没有能派的，task 也不给模型，免得它调了只拿到错误。
 				if (agents.length === 0) return { ...context, tools: tools.filter((tool) => tool.name !== "task") };
-				return { ...context, tools, sections: [...context.sections, { id: "subagents", text: catalogue(agents) }] };
+				return { ...context, tools, sections: [...context.sections, { id: "subagents", text: catalogue(agents), category: "catalog" }] };
 			}
 			registry.model(input.sessionId, input.model);
 			const context = await next(input);

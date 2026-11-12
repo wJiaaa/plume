@@ -200,3 +200,10 @@ it("没有送达渠道（子会话）时不跑，叫模型改用后台的 bash",
 	expect(textOf(result)).toContain("monitor is not available here");
 	expect(backgroundJobs(state).list()).toEqual([]);
 });
+
+it("导出会话时的说法（describe）和 bash 那一行一样：模型写的说明，没有就是命令的第一行", () => {
+	expect(monitorTool.describe?.({ command: "tail -f log", description: "看日志" })).toBe("看日志");
+	expect(monitorTool.describe?.({ command: "npm run dev\n--watch" })).toBe("npm run dev");
+	expect(monitorTool.describe?.({})).toBe("bash");
+	expect(monitorTool.describe?.({ description: "" })).toBe("Run bash command");
+});

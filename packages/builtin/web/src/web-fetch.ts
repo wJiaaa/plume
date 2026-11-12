@@ -44,6 +44,8 @@ export function webFetchTool(): ToolDefinition {
 		// i18n-exempt：发给模型的工具说明
 		description:
 			"Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.",
+		// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
+		describe: (args) => `Fetch ${typeof args.url === "string" ? args.url : ""}`.trim(),
 		parameters: {
 			type: "object",
 			properties: {

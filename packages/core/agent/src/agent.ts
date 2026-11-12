@@ -55,6 +55,7 @@ import type {
 	QueuedMessage,
 	ChildTask,
 	RevertPlan,
+	ToolDefinition,
 	TurnStop,
 } from "@plume/contract";
 import { renameWithRetry, writeFileAtomic } from "./atomic-write.ts";
@@ -1136,7 +1137,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		// 同一个位置上一次失败的回复没写进会话（拒收、超长以后重发）：那条「放弃了」不再算数。
 		const redone = session.hiccups.filter((hiccup) => !(hiccup.outcome === "gave_up" && hiccup.at === at()));
 		if (redone.length !== session.hiccups.length) hiccups(redone);
-		session.contextEstimate = estimateContext(context);
+		session.contextEstimate = estimateContext(context, (tool) => host.tool(tool)?.definition.category);
 		const previous = session.sent?.segments;
 		// 记下这次请求的请求头，压缩从它分叉（`SentRequest`）；请求体的分段指纹在出门前补上。
 		const sent: SentRequest = {
@@ -2310,6 +2311,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			protectSource(join(dataDir, "sessions", "sessions.db"), file);
 			const settings = await readSettings();
 			await recordOf(session);
+			/** 导出时问注册这个工具的插件要它的说法；插件的函数出错时当没给，照本体的写法导出。 */
+			const askTool = <T>(name: string, what: string, read: (definition: ToolDefinition) => T): T | undefined => {
+				const definition = host.tool(name)?.definition;
+				if (!definition) return undefined;
+				try {
+					return read(definition);
+				} catch (error) {
+					log("agent", "warn", `工具 ${name} 的 ${what} 出错，导出时照没给处理：${errorText(error)}`);
+					return undefined;
+				}
+			};
 			const markdown = conversationMarkdown(
 				{
 					summary: session.summary,
@@ -2321,13 +2333,16 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						return `${provider?.name ?? providerId}/${provider?.models.find((entry) => entry.modelId === modelId)?.name ?? modelId}`;
 					},
 					describeTool: (name, args) => {
-						try {
-							const said = host.tool(name)?.definition.describe?.(args);
-							return typeof said === "string" ? said : undefined;
-						} catch (error) {
-							log("agent", "warn", `工具 ${name} 的 describe 出错，导出时写工具名：${errorText(error)}`);
-							return undefined;
-						}
+						const said = askTool(name, "describe", (definition) => definition.describe?.(args));
+						return typeof said === "string" ? said : undefined;
+					},
+					forwardTool: (name, args) => {
+						const target = askTool(name, "forwards", (definition) => definition.forwards?.(args));
+						return target && typeof target.name === "string" && target.args && typeof target.args === "object" ? target : undefined;
+					},
+					quoteResult: (result) => {
+						const quoted = askTool(result.toolName, "exportResult", (definition) => definition.exportResult?.(result));
+						return typeof quoted === "string" ? quoted : undefined;
 					},
 				},
 				activeLocale(),

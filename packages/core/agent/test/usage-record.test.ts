@@ -2,15 +2,17 @@ import { expect, it } from "vitest";
 import type { AssistantMessage } from "@plume/contract";
 import { diagnoseCache, estimateParts } from "../src/usage-record.ts";
 
-it("提示词按段名和插件标的类别分到系统、说明与记忆、技能与智能体；没标类别的记忆段算系统；消息按谁说的分，界面替人说的算注入", () => {
+it("提示词按指令的段名和插件标的类别分到系统、说明与记忆、技能与智能体；没标类别的记忆、技能段算系统；消息按谁说的分，界面替人说的算注入", () => {
 	const sections = [
 		{ id: "identity", text: "a".repeat(40) },
 		{ id: "projectInstructions", text: "b".repeat(80) },
 		{ id: "learned", text: "记".repeat(5), category: "memory" as const },
 		// 不认段名：没标类别的算系统提示词。
 		{ id: "notes", text: "f".repeat(16) },
-		{ id: "skills", text: "c".repeat(120) },
-		{ id: "subagents", text: "d".repeat(40) },
+		{ id: "catalogue", text: "c".repeat(120), category: "skills" as const },
+		{ id: "agents", text: "d".repeat(40), category: "catalog" as const },
+		// 段名叫 skills、没标类别的也算系统提示词。
+		{ id: "skills", text: "g".repeat(8) },
 	];
 	const parts = estimateParts({
 		// 段与段之间的两个换行算系统提示词。
@@ -22,7 +24,7 @@ it("提示词按段名和插件标的类别分到系统、说明与记忆、技�
 			{ role: "user", content: [{ type: "text", text: "e".repeat(8) }], timestamp: 1, synthetic: true },
 		],
 	});
-	expect(parts).toEqual({ system: 10 + 4 + 2.5, instructions: 20 + 5, skills: 30 + 10, toolDefs: 0, user: 3, injected: 2, assistant: 0, toolResults: 0 });
+	expect(parts).toEqual({ system: 10 + 4 + 2 + 3, instructions: 20 + 5, skills: 30 + 10, toolDefs: 0, user: 3, injected: 2, assistant: 0, toolResults: 0 });
 });
 
 it("缓存诊断：没量到前缀分不清，前缀没变是服务商，参数变了不归到服务商头上，没报过缓存的不计", () => {

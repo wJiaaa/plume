@@ -232,3 +232,12 @@ test("设置文件：0600 写入，key 加密落盘、读回来解开，解不�
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+test("导出会话时的说法（describe）：搜索写查询词，抓取写地址；参数不全时退回只说动作", () => {
+	const search = webSearchTool(registryWith({}), async () => null);
+	assert.equal(search.describe?.({ query: "plume agent" }), "Search plume agent");
+	assert.equal(search.describe?.({}), "Search the web");
+	const fetchTool = webFetchTool();
+	assert.equal(fetchTool.describe?.({ url: "https://example.com/a" }), "Fetch https://example.com/a");
+	assert.equal(fetchTool.describe?.({}), "Fetch");
+});

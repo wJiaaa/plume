@@ -14,8 +14,12 @@ export function conversationMarkdown(
 		compactions: readonly CompactionMark[];
 		exportedAt: Date;
 		modelLabel?: (provider: string, model: string) => string;
-		/** 注册这个工具的插件给的说法（`ToolDefinition.describe`）；没有时用这里认得的几种，再不然写工具名。 */
+		/** 注册这个工具的插件给的说法（`ToolDefinition.describe`）；没有时用这里认得的几种基本工具，再不然写工具名。 */
 		describeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
+		/** 这次调用是替哪个工具调的（`ToolDefinition.forwards`）：这一行按被调的那个写。 */
+		forwardTool?: (name: string, args: Record<string, unknown>) => { name: string; args: Record<string, unknown> } | undefined;
+		/** 这次调用的结果里要引出来的那段（`ToolDefinition.exportResult`）。 */
+		quoteResult?: (result: Extract<Message, { role: "toolResult" }>) => string | undefined;
 	},
 	locale: string,
 ): string {
@@ -84,16 +88,10 @@ export function conversationMarkdown(
 			continue;
 		}
 		if (message.role === "toolResult") {
-			const detached = (message.details as { detached?: unknown } | undefined)?.detached;
-			if (message.toolName === "task" && !message.isError && !detached) {
-				const conclusion = message.content
-					.flatMap((block) => (block.type === "text" ? [block.text] : []))
-					.join("\n")
-					.trim();
-				if (conclusion) {
-					flush();
-					body.push(quote(conclusion));
-				}
+			const conclusion = input.quoteResult?.(message)?.trim();
+			if (conclusion) {
+				flush();
+				body.push(quote(conclusion));
 			}
 			continue;
 		}
@@ -110,7 +108,7 @@ export function conversationMarkdown(
 				body.push(closeOpenFence(block.text.trim()));
 			} else {
 				say("assistant");
-				const routed = routedCall(block.name, block.arguments);
+				const routed = input.forwardTool?.(block.name, block.arguments) ?? { name: block.name, args: block.arguments };
 				const summary = (input.describeTool?.(routed.name, routed.args) || toolSummary(routed.name, routed.args)).replace(/\s+/g, " ").trim();
 				calls.push(
 					`- ${inlineCode(routed.name)}${summary && summary !== routed.name ? ` ${escapeInline(summary)}` : ""}${results.get(block.id)?.isError ? t("failed") : ""}`,
@@ -182,14 +180,7 @@ function restated(block: AssistantMessage["content"][number], content: Assistant
 	);
 }
 
-function routedCall(name: string, args: Record<string, unknown>): { name: string; args: Record<string, unknown> } {
-	if (name !== "mcp_call" || typeof args.tool !== "string") return { name, args };
-	return {
-		name: args.tool,
-		args: args.arguments && typeof args.arguments === "object" && !Array.isArray(args.arguments) ? (args.arguments as Record<string, unknown>) : {},
-	};
-}
-
+/** 基本文件和命令工具的说法；别的工具由注册它的插件给（`describeTool`），没给时写工具名。 */
 function toolSummary(name: string, args: Record<string, unknown>): string {
 	const str = (...keys: string[]) => keys.map((key) => args[key]).find((value): value is string => typeof value === "string");
 	const path = str("path", "file", "filePath");
@@ -207,25 +198,12 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
 			return term ? `Find ${term}` : "Find files";
 		case "grep":
 			return term ? `Search "${term}"` : "Search";
-		case "symbol":
-			return str("name", "query", "symbol", "pattern") ? `Find definition of ${str("name", "query", "symbol", "pattern")}` : "Find definition";
-		case "web_search":
-			return str("query", "pattern", "search") ? `Search ${str("query", "pattern", "search")}` : "Search the web";
-		case "web_fetch":
-			return `Fetch ${str("url") ?? ""}`.trim() || "Fetch URL";
 		case "bash":
-		case "monitor":
 			return (str("description") ?? (str("command") ?? "bash").split("\n")[0]!.slice(0, 80)) || "Run bash command";
 		case "bash_output":
 			return args.kill === true ? "Stop job" : "Check job";
-		case "todo_write":
-			return "Update task list";
-		case "task":
-			return str("description") ?? "Sub-agent task";
-		case "skill":
-			return `Skill: ${str("name") ?? ""}`.trim();
 		default:
-			return name.startsWith("mcp__") ? `${name.split("__")[1]}: ${name.split("__")[2]}` : name;
+			return name;
 	}
 }
 

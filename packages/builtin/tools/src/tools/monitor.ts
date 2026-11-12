@@ -67,6 +67,10 @@ interface MonitorArgs {
 
 export const monitorTool: Tool<MonitorArgs> = {
 	name: "monitor",
+	// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。写法和 bash 那一行一样：模型写的说明，没有就是命令的第一行。
+	describe: (args) =>
+		(typeof args.description === "string" ? args.description : (typeof args.command === "string" ? args.command : "bash").split("\n")[0]!.slice(0, 80)) ||
+		"Run bash command",
 	/*
 	 * 每次请求都发，所以只写决定要不要调、怎么调的。凑批的数、上限、怎么停，调过以后在结果里说。
 	 */

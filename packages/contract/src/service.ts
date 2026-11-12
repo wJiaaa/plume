@@ -543,8 +543,8 @@ export type AgentEvent =
 	| { type: "plugins"; plugins: PluginStatus[] };
 
 /**
- * 上下文窗口按来源拆开：对话消息、工具表（MCP 服务的工具 `mcpTools` 单独一段，其余是 `tools`）、系统提示词，
- * 以及系统提示词里单独列出的技能目录（plume.skills 的 `skills` 段）、项目指令（plume.prompt 的 `projectInstructions` 段）
+ * 上下文窗口按来源拆开：对话消息、工具表（`ToolDefinition.category` 是 `mcp` 的工具 `mcpTools` 单独一段，其余是 `tools`）、系统提示词，
+ * 以及系统提示词里单独列出的技能目录（`PromptSection.category` 是 `skills` 的段）、项目指令（plume.prompt 的 `projectInstructions` 段）
  * 和记忆（`PromptSection.category` 是 `memory` 的段）。
  */
 export type ContextSegmentKey = "messages" | "tools" | "mcpTools" | "skills" | "systemPrompt" | "projectInstructions" | "memory";

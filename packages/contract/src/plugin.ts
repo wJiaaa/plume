@@ -263,6 +263,21 @@ export interface ToolDefinition {
 	 * 导出在 agent 进程，够不着界面入口的 `ui.toolLine`，所以说法跟着工具定义走。
 	 */
 	describe?(args: Record<string, unknown>): string | undefined;
+	/**
+	 * 导出会话成 Markdown 时，这次调用的结果里要引出来的那段（子智能体交回的结论）：写在调用列表后面，引成一段。
+	 * 不给、返回空或抛错时不引，结果照旧不导出。
+	 */
+	exportResult?(result: ToolResultMessage): string | undefined;
+	/**
+	 * 这一次调用是替另一个工具调的（工具多了按需加载时，模型经一个总入口按名字调它们）：返回被调的那个工具和交给它的参数。
+	 * 导出会话成 Markdown 时这一行按被调的那个写（它的名字、它的 `describe`）。不是转调的调用返回 undefined。
+	 */
+	forwards?(args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined;
+	/**
+	 * 这是哪一类工具，宿主按它分段统计，不认工具名。`mcp` 是 MCP 服务的工具（连同按需搜索、调用它们的总入口），
+	 * 上下文用量里单独算「MCP 工具」一段。不给的算普通工具。
+	 */
+	category?: "mcp";
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 
@@ -301,10 +316,14 @@ export interface PromptSection {
 	id: string;
 	text: string;
 	/**
-	 * 这段是什么，宿主按它分段统计（上下文用量的「记忆」、使用统计 Token 构成里的「指令和记忆」），不认段名。`memory` 是插件记下、
-	 * 每轮带上的记忆（用户的、项目的都算）。不给的段算系统提示词（plume.prompt、plume.skills 给的几段宿主另按段名认）。
+	 * 这段是什么，宿主按它分段统计，不认段名：
+	 * - `memory`：插件记下、每轮带上的记忆（用户的、项目的都算）。上下文用量的「记忆」，使用统计 Token 构成里的「指令和记忆」。
+	 * - `skills`：技能目录（有哪些技能、各自什么时候用）。上下文用量的「技能」，Token 构成里的「技能与智能体」。
+	 * - `catalog`：别的按需取用的能力目录（可以派的智能体、没放进工具表的工具）。上下文用量里算系统提示词，Token 构成里算「技能与智能体」。
+	 *
+	 * 不给的段算系统提示词（plume.prompt 的 `userInstructions`、`projectInstructions` 两段宿主另按段名认）。
 	 */
-	category?: "memory";
+	category?: "memory" | "skills" | "catalog";
 	/**
 	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `projectInstructions` 段和
 	 * `category: "memory"` 的段的来源按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；

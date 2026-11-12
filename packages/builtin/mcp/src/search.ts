@@ -80,6 +80,7 @@ export function searchTool(tools: () => McpTool[]): ToolDefinition {
 			},
 			required: ["query"],
 		},
+		category: "mcp",
 		async execute(args): Promise<ToolOutput> {
 			const query = typeof args.query === "string" ? args.query : "";
 			const limit = Math.min(MAX_LIMIT, Math.max(1, Number.isInteger(args.limit) ? (args.limit as number) : DEFAULT_LIMIT));
@@ -118,6 +119,15 @@ export function callTool(tools: () => McpTool[]): ToolDefinition {
 		mutating: true,
 		// 真正的那个工具自己问（带服务名和参数），这里不替它问。
 		asks: true,
+		category: "mcp",
+		// 导出会话时这一行按真正调的那个工具写。
+		forwards: (args) =>
+			typeof args.tool === "string"
+				? {
+						name: args.tool,
+						args: args.arguments && typeof args.arguments === "object" && !Array.isArray(args.arguments) ? (args.arguments as Record<string, unknown>) : {},
+					}
+				: undefined,
 		async execute(args, run: ToolRun): Promise<ToolOutput> {
 			const name = typeof args.tool === "string" ? args.tool.trim() : "";
 			const all = tools();
