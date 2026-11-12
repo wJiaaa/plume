@@ -117,6 +117,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 - `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）：这次调用改了一个文件，`path` 是给人看的路径（工作目录里的写相对路径），`hunks` 是 `ChangeHunk[]`。通用卡片据它画 diff、写 +N −M，一段活的那一行把各次的加减合起来；自己登记了 `ui.toolCard` 的照样可以带。和 `FileChangeDetails`（改动快照记在服务 `file.changes` 里，见下文）是两件事，常一起带。例子是 `plume.tools` 的 `edit`、`write`。
 - `changeId` / `changeIds` / `changeWarning`（`FileChangeDetails`）：这次调用改了文件，快照记在服务 `file.changes` 里，见下面「文件变更服务」。
 - `fileView`（`FileViewDetails`）：这次调用让模型看了一个文件的哪一块 `{ path, lines?, columns?, verbatim }`。`path` 是调用里写的路径解析成的绝对路径（`~/` 展开、相对路径按工作目录，不追符号链接）；`lines` 是第几行到第几行（从 1 数、含两头），从头到尾的不写；`columns` 是每行给了第几个到第几个字符，整行的不写；`verbatim` 说给的是不是这一块的原文（大纲、截断的抽取文字是 `false`）。压缩据此清掉被后来的观察顶替掉的旧读：之后又原样读到了盖住它的一块，或者文件被改过。不带它的读文件结果压缩不当作读，只照「同样的调用又跑了一次」处理。例子是 `plume.tools` 的 `read`。
+- `cancelled: true`（`CancelledDetails`）：出错的结果（`isError`）是因为人按了停，不是失败，转录画成「已停止」。工具被停下时自己交结果（命令跑到一半被杀）就带上；没带 `details` 的停下结果由宿主补上。例子是 `plume.tools` 的 `bash`。
 
 ```ts
 return { output: "Task list updated (1/3 done)", details: { checklist: todos } satisfies ChecklistDetails };

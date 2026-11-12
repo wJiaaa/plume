@@ -13,7 +13,7 @@ import type { DeliveryDetails } from "../delivery.ts";
 import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE, sandboxDenialMarker } from "../escalation.ts";
 import { words } from "../messages.ts";
 import { isReadOnlyCommand } from "../read-only-command.ts";
-import type { BackgroundChannel, RunProcess, SandboxProcess } from "@plume/contract";
+import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess } from "@plume/contract";
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
 import { commandChangesForJob, withCommandChanges } from "./command-changes.ts";
 import { OutputBuffer } from "./bash-output.ts";
@@ -209,7 +209,8 @@ export const bashTool: Tool<BashArgs> = {
 					child.kill();
 					resolve({
 						content: [{ type: "text", text: `${output()}\n\n[cancelled]` }],
-						details: { kind: "bash", command: args.command, cancelled: true },
+						// `cancelled` 是通用声明（`CancelledDetails`）：人按了停，转录画成「已停止」。
+						details: { kind: "bash", command: args.command, ...({ cancelled: true } satisfies CancelledDetails) },
 						isError: true,
 					});
 				};

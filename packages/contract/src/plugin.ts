@@ -49,7 +49,8 @@ export interface ToolOutput {
 	/**
 	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认这几个通用声明：
 	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务，
-	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff。
+	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff，
+	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败。
 	 * 插件之间另认两个：改了文件（`FileChangeDetails`），让模型看了文件的哪一块（`FileViewDetails`）。
 	 */
 	details?: unknown;
@@ -110,6 +111,15 @@ export interface FileViewDetails {
 		columns?: { from: number; to: number };
 		verbatim: boolean;
 	};
+}
+
+/**
+ * 出错的工具结果（`isError`）的 `details` 带上 `cancelled: true`，就是声明「没做完是因为人按了停，不是失败」：转录画成「已停止」，
+ * 不画成出错。工具被停下时自己交结果的（命令跑到一半被杀）自己带上；本体替停下的调用交结果、或停下以后工具交回的错误结果
+ * 没有 `details` 时由本体带上。`details` 里别的字段照旧归插件。
+ */
+export interface CancelledDetails {
+	cancelled: true;
 }
 
 /**

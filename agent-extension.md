@@ -77,7 +77,7 @@
 | 界面位置 | 现在 | 什么时候开 | 前提（缺的能力） |
 | --- | --- | --- | --- |
 | 工具卡片 | 开放 | — | 插件已能注册工具，数据放在 `details` |
-| 工具在转录里的说法（通用卡片那一行的动作和对象、归哪一类、图标、是不是记清单） | 开放 | — | 插件已能注册工具（索引插件的 `symbol`）；本体不认插件的工具名，自成一类（`apart`，MCP）、按前缀登记经 `ui.toolLine` 说，记清单在工具定义上说（`category: "checklist"`，界面经工具表拿到）；结果里的进度清单、后台任务按 `@plume/contract` 的 `ChecklistDetails`、`BackgroundJobDetails` 认，改了一个文件的 diff 按 `FileDiffDetails` 认，读了文件的哪一块（压缩据此清掉被顶替的旧读）按 `FileViewDetails` 认 |
+| 工具在转录里的说法（通用卡片那一行的动作和对象、归哪一类、图标、是不是记清单） | 开放 | — | 插件已能注册工具（索引插件的 `symbol`）；本体不认插件的工具名，自成一类（`apart`，MCP）、按前缀登记经 `ui.toolLine` 说，记清单在工具定义上说（`category: "checklist"`，界面经工具表拿到）；结果里的进度清单、后台任务按 `@plume/contract` 的 `ChecklistDetails`、`BackgroundJobDetails` 认，人按了停按 `CancelledDetails` 认，改了一个文件的 diff 按 `FileDiffDetails` 认，读了文件的哪一块（压缩据此清掉被顶替的旧读）按 `FileViewDetails` 认 |
 | 审批卡 | 开放 | — | 审批是本体的（放不放行、排队、过期）；插件经 `ui.approvalCard` 给自己的工具（或按 `kind`）画整张卡，没登记的用产品的通用卡，插件调 `ask` 时卡上是这次调用的参数和理由；`run.request` 的卡经 `ui.requestCard` 按 `kind` 画，没登记的是只能「不答」的通用卡 |
 | 自定义消息渲染 | 不开 | 插件能往会话里写自己的条目之后 | 会话日志写入 |
 | 会话头部小部件 | 开放 | — | `ui.sessionToolbar` 在会话标题栏加局部控件（环境卡片的开关），不能接管标题或布局 |

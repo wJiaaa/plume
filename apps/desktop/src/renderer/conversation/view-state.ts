@@ -8,7 +8,7 @@
  * 展示状态按会话记、不跟着 DOM 和消息走：挂载了哪一段历史、哪些思考和工具组被点开过。最多记 12 个会话。
  */
 
-import type { ToolResultMessage } from "@plume/contract";
+import type { CancelledDetails, ToolResultMessage } from "@plume/contract";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 
 export interface TranscriptState {
@@ -168,9 +168,9 @@ export function callStatus(calls: CallState, id: string, stopReason: string): Ca
 	return stopReason === "toolUse" && calls.running ? "running" : "error";
 }
 
-/** 结果出错是因为人按了停，不是失败：两处停下的地方都在 `details.cancelled` 上说。 */
+/** 结果出错是因为人按了停，不是失败：按结果 `details` 里的通用声明 `CancelledDetails` 认。 */
 export function stoppedByUser(result: ToolResultMessage | undefined): boolean {
-	return result?.isError === true && (result.details as { cancelled?: unknown } | undefined)?.cancelled === true;
+	return result?.isError === true && (result.details as Partial<Record<keyof CancelledDetails, unknown>> | undefined)?.cancelled === true;
 }
 
 interface View {

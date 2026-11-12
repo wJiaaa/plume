@@ -11,6 +11,7 @@ import type {
 	ApprovalDecision,
 	ApprovalRequest,
 	BackgroundChannel,
+	CancelledDetails,
 	HumanAnswer,
 	HumanRequest,
 	HumanRequestInput,
@@ -169,7 +170,7 @@ export function failCalls(calls: ToolCallContent[], reason: string, cancelled = 
 		toolResult(call, {
 			output: `"${call.name}" was not executed: ${reason}. Re-issue the call.`,
 			isError: true,
-			...(cancelled ? { details: { cancelled: true } } : {}),
+			...(cancelled ? { details: { cancelled: true } satisfies CancelledDetails } : {}),
 		}),
 	);
 }
@@ -425,7 +426,9 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				relayed(
 					toolResult(
 						call,
-						asking ? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } } : { ...result, details: result.details ?? { cancelled: true } },
+						asking
+							? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } satisfies CancelledDetails }
+							: { ...result, details: result.details ?? ({ cancelled: true } satisfies CancelledDetails) },
 						startedAt,
 					),
 					scope.answeredBy?.(call.id),
