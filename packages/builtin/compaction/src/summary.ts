@@ -2,13 +2,12 @@
  * 写摘要：独立的摘要请求，以及请求失败时的本地兜底整理。从主请求分叉的那条路在 `fork.ts`；选哪条路、压到多大在 `compaction.ts`。
  */
 
-import type { Message } from "@plume/contract";
+import type { Message, TokenEstimate } from "@plume/contract";
 import { type BudgetModel, SUMMARY_INPUT, summaryReplyTokens } from "./budget.ts";
 import type { KindOf, ReplyOrigin } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
 import { FIRST_SUMMARY, focusNote, hasSummary, SUMMARY_SYSTEM, UPDATE_SUMMARY } from "./prompts.ts";
 import { allowance } from "./prune.ts";
-import { estimateTokens, textTokens } from "./tokens.ts";
 
 /**
  * 历史一次放不进摘要请求时，最多分几段写。每多一段就多一次不吃缓存的请求，还要多等一份摘要写完。超长恢复时历史大约一个窗口，摘要请求的
@@ -25,6 +24,8 @@ export interface Manual {
 
 export async function summarize(
 	messages: Message[],
+	/** 本体估 token 的那一份（`ContextCompact.estimate`）。 */
+	estimate: TokenEstimate,
 	model: BudgetModel,
 	models: Models,
 	origin: ReplyOrigin,
@@ -36,7 +37,7 @@ export async function summarize(
 	const focus = focusNote(manual?.instructions);
 	const instructionFor = (iterative: boolean): string => [iterative ? UPDATE_SUMMARY : FIRST_SUMMARY, focus].filter(Boolean).join("\n\n");
 	const instructionTokens = (iterative: boolean) =>
-		estimateTokens([{ role: "user", content: [{ type: "text", text: instructionFor(iterative) }], timestamp: 0 }]);
+		estimate.messages([{ role: "user", content: [{ type: "text", text: instructionFor(iterative) }], timestamp: 0 }]);
 	/*
 	 * 预算按实测比例折回字符估算的单位：估算在中文和密集 JSON 上会低估到三分之一，不校正的话四成的预算实际发出去超过整个窗口，摘要请求被拒。
 	 * 只往保守方向校正：估算偏高时不据此多塞。历史那份还要扣掉系统提示词、指令和回复——小窗口上、或 `/compact` 说明很长时，四成比剩下的多。
@@ -44,20 +45,20 @@ export async function summarize(
 	 */
 	const inflate = Math.max(1, scale);
 	const reply = summaryReplyTokens(model);
-	const fixed = textTokens(SUMMARY_SYSTEM) + Math.max(instructionTokens(true), instructionTokens(false));
+	const fixed = estimate.text(SUMMARY_SYSTEM) + Math.max(instructionTokens(true), instructionTokens(false));
 	const budget = Math.min((model.contextWindow * SUMMARY_INPUT) / inflate, (model.contextWindow - reply) / inflate - fixed);
 	const ask = (history: Message[], iterative: boolean) =>
-		requestSummary(history, instructionFor(iterative), { model, models, manual, observer, inflate, reply, fixed });
+		requestSummary(history, instructionFor(iterative), { estimate, model, models, manual, observer, inflate, reply, fixed });
 
 	// 有没有上一份摘要决定用哪条指令：重写一份和写第一份是两件事，这个差别让会话开头的那句话活过第十次压缩。
-	if (estimateTokens(messages) <= budget) return ask(messages, hasSummary(messages));
+	if (estimate.messages(messages) <= budget) return ask(messages, hasSummary(messages));
 
 	/*
 	 * 一次放不下：按顺序一段一段地写，每段都更新上一段写下的摘要——和会话的第二次压缩做的是同一件事。把每条消息都截到同一个长度、塞进一次
 	 * 请求的话，超长恢复时每条只剩几百字，报错原文、人的长指令、一个决定的理由都跟着中段没了；分段写，每段都整段读。
 	 */
-	const draftRoom = reply / inflate + estimateTokens([draftMessage("", origin)[0] as Message]);
-	const parts = splitHistory(messages, Math.max(1, budget - draftRoom));
+	const draftRoom = reply / inflate + estimate.messages([draftMessage("", origin)[0] as Message]);
+	const parts = splitHistory(messages, Math.max(1, budget - draftRoom), estimate);
 	let draft: string | null = null;
 	for (const part of parts) {
 		const history = draft === null ? part : [...draftMessage(draft, origin), ...part];
@@ -89,7 +90,7 @@ function draftMessage(summary: string, origin: ReplyOrigin): Message[] {
  * 按顺序切成至多 `MAX_PASSES` 段，每段放进 `budget`。只在完整的单元之间切：回复和回答它的工具结果是一个单元，拆开两种协议都拒收。
  * 一个单元自己就超过预算的那一段截短到预算。段数超过上限时把每段放大到「总量 / 上限」，再各自截短——截短只发生在放不下的那几段里。
  */
-function splitHistory(messages: Message[], budget: number): Message[][] {
+function splitHistory(messages: Message[], budget: number, estimate: TokenEstimate): Message[][] {
 	const units: Message[][] = [];
 	for (let at = 0; at < messages.length;) {
 		let to = at + 1;
@@ -97,7 +98,7 @@ function splitHistory(messages: Message[], budget: number): Message[][] {
 		units.push(messages.slice(at, to));
 		at = to;
 	}
-	const weights = units.map((unit) => estimateTokens(unit));
+	const weights = units.map((unit) => estimate.messages(unit));
 	const total = weights.reduce((sum, weight) => sum + weight, 0);
 	const pack = (target: number) => {
 		const parts: Message[][] = [];
@@ -122,10 +123,11 @@ function splitHistory(messages: Message[], budget: number): Message[][] {
 		// 按单元装箱会多出零头：并进最后一段，由下面的截短收住。
 		while (parts.length > MAX_PASSES) parts.splice(-2, 2, [...(parts.at(-2) as Message[]), ...(parts.at(-1) as Message[])]);
 	}
-	return parts.map((part) => condense(part, budget));
+	return parts.map((part) => condense(part, budget, estimate));
 }
 
 interface RequestScope {
+	estimate: TokenEstimate;
 	model: BudgetModel;
 	models: Models;
 	manual: Manual | undefined;
@@ -139,7 +141,7 @@ interface RequestScope {
 async function requestSummary(
 	history: Message[],
 	instruction: string,
-	{ model, models, manual, observer, inflate, reply, fixed }: RequestScope,
+	{ estimate, model, models, manual, observer, inflate, reply, fixed }: RequestScope,
 ): Promise<string | null> {
 	const decline = () => {
 		if (!observer?.signal?.aborted) observer?.progress({ phase: "fallback" });
@@ -149,7 +151,7 @@ async function requestSummary(
 	 * 发之前就核对，不等服务商拒收：`condense` 不总能落到预算里——图片的分量是固定的，比窗口还长的说明留不下任何预算。明知放不下的请求只会
 	 * 白等一轮重试再被拒，有的中转还拒成看起来能重试的样子。
 	 */
-	if ((fixed + estimateTokens(history)) * inflate + reply > model.contextWindow) {
+	if ((fixed + estimate.messages(history)) * inflate + reply > model.contextWindow) {
 		if (manual) throw new Error(manual.words.tooBig);
 		return decline();
 	}
@@ -182,10 +184,10 @@ async function requestSummary(
  * 预算对结果整体成立：每条限在同一个额度下（总数还放得下的最大额度），短消息整条留着；一条里的几部分也这样分。只有每条剪到
  * `CONDENSE_FLOOR` 还放不下（几千条消息）时才丢步，丢开头之后最早的那几步（见 `elide`）。
  */
-function condense(messages: Message[], budget: number): Message[] {
-	if (estimateTokens(messages) <= budget) return messages;
-	const fits = (list: Message[], limit: number) => estimateTokens(clipAll(list, limit)) <= budget;
-	const kept = fits(messages, CONDENSE_FLOOR) ? messages : elide(messages, budget);
+function condense(messages: Message[], budget: number, estimate: TokenEstimate): Message[] {
+	if (estimate.messages(messages) <= budget) return messages;
+	const fits = (list: Message[], limit: number) => estimate.messages(clipAll(list, limit)) <= budget;
+	const kept = fits(messages, CONDENSE_FLOOR) ? messages : elide(messages, budget, estimate);
 
 	let low = 0;
 	let high = 1;
@@ -251,14 +253,14 @@ function clipAll(messages: Message[], limit: number): Message[] {
  * 去掉开头之后最早的那几步，直到剩下的按 `CONDENSE_FLOOR` 放得下。开头是目标——人的第一句话，或带着它的上一份摘要；最新的那几步是摘要
  * 要更新到的地方；所以丢的是紧挨开头的那段。原处留一句说明，摘要模型知道这里有个缺口，不把隔得很远的两步读成相邻的。按完整的单元丢。
  */
-function elide(messages: Message[], budget: number): Message[] {
+function elide(messages: Message[], budget: number, estimate: TokenEstimate): Message[] {
 	const unit = (from: number) => {
 		let to = from + 1;
 		while (to < messages.length && messages[to]?.role === "toolResult") to++;
 		return to;
 	};
 	const head = unit(0);
-	const cost = messages.map((message) => estimateTokens(clipAll([message], CONDENSE_FLOOR)));
+	const cost = messages.map((message) => estimate.messages(clipAll([message], CONDENSE_FLOOR)));
 	const note = (count: number): Message => ({
 		role: "user",
 		content: [
@@ -271,7 +273,7 @@ function elide(messages: Message[], budget: number): Message[] {
 		synthetic: true,
 	});
 	let rest = cost.slice(head).reduce((sum, value) => sum + value, 0);
-	const fixed = cost.slice(0, head).reduce((sum, value) => sum + value, 0) + estimateTokens([note(messages.length)]);
+	const fixed = cost.slice(0, head).reduce((sum, value) => sum + value, 0) + estimate.messages([note(messages.length)]);
 	let from = head;
 	while (from < messages.length && fixed + rest > budget) {
 		const to = unit(from);

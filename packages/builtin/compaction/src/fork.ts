@@ -14,11 +14,10 @@
  * 前缀由宿主在发出前核对（请求体切段后和上一次比），对不上就不发、抛错，这里退回独立请求。
  */
 
-import type { ContextCompact, Message, ToolSpec } from "@plume/contract";
+import type { ContextCompact, Message, TokenEstimate } from "@plume/contract";
 import { type BudgetModel, summaryReplyTokens } from "./budget.ts";
 import type { Models, Observer } from "./models.ts";
 import { forkInstruction, hasSummary } from "./prompts.ts";
-import { measureTotal, textTokens, toolTokens } from "./tokens.ts";
 
 /**
  * 离上一次请求开始多久以内算缓存还热，宿主不知道这家服务商的规则时的默认值。常见服务商里最短的有效期是 Anthropic 默认的 5 分钟，
@@ -34,11 +33,11 @@ export function forkable(lineage: Lineage | undefined, modelId: string, now = Da
 	return now - lineage.at <= (lineage.cacheHotMs ?? FORK_HOT_MS);
 }
 
-/** 分叉出去的那份请求要接的历史和开销：下一次要发的那份（`ContextCompact.request`）。 */
+/** 分叉出去的那份请求要接的历史：下一次要发的那份（`ContextCompact.request`），和它有多满（`ContextCompact.usage`）。 */
 export interface ForkBase {
 	messages: Message[];
-	systemPrompt: string;
-	tools: readonly ToolSpec[];
+	usage: ContextCompact["usage"];
+	estimate: TokenEstimate;
 }
 
 /** 拿到一份摘要；没分叉成（放不下、前缀对不上、失败、调了工具、空回复）时交回 null，调用方退回独立请求。 */
@@ -53,8 +52,7 @@ export async function forkSummary(
 	 * 摘要要的位置和独立请求一样多（`summaryReplyTokens`）。不够就不发：发出去要么被拒、要么摘要写到一半被截断，两样都白付一整段
 	 * 历史的钱。
 	 */
-	const total = measureTotal(base.messages);
-	const input = total.tokens + textTokens(prompt) + (total.measured ? 0 : textTokens(base.systemPrompt) + toolTokens(base.tools));
+	const input = base.usage.tokens + base.estimate.text(prompt);
 	if (model.contextWindow - input < summaryReplyTokens(model)) return null;
 
 	const { observer, signal } = options;

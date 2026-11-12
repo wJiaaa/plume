@@ -12,7 +12,7 @@
  * 这里只决定压不压、从哪切、摘要怎么写、头里放什么；摘要、边界和剪过的结果由宿主记下，发请求时由它把历史拼回来，会话里的消息一条不动。
  */
 
-import type { CompactSummary, ContextCompact, Message, ToolResultView } from "@plume/contract";
+import type { CompactSummary, ContextCompact, Message, TokenEstimate, ToolResultView } from "@plume/contract";
 import { type BudgetModel, type CompactionBudget, compactionBudget, KEEP_MIN } from "./budget.ts";
 import { forkable, forkSummary } from "./fork.ts";
 import { droppedMessage, type KindOf, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
@@ -20,7 +20,6 @@ import type { ManualWords, Models, Observer } from "./models.ts";
 import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, pruneToolResults } from "./prune.ts";
 import { dropStaleResults } from "./stale-results.ts";
 import { fallbackSummary, summarize } from "./summary.ts";
-import { charsToTokens, estimateChars, estimateTokens, measureTotal, textTokens, toolTokens } from "./tokens.ts";
 
 type Via = "fork" | "independent" | "fallback" | "dropped";
 
@@ -62,10 +61,10 @@ export async function compact(input: ContextCompact, deps: CompactDeps): Promise
 		model: input.model,
 		origin,
 		models: deps.models,
-		overhead: textTokens(input.request.systemPrompt) + toolTokens(input.request.tools),
+		overhead: input.estimate.text(input.request.systemPrompt) + input.estimate.tools(input.request.tools),
 		request: input.request,
-		// 在这之前（含）落定的回复，用量量的是改写前那份历史。
-		staleAt: input.rewrittenAt,
+		usage: input.usage,
+		estimate: input.estimate,
 		force: input.force,
 		floor: input.previous?.head ?? 0,
 		...(deps.artifacts ? { artifacts: deps.artifacts } : {}),
@@ -132,10 +131,12 @@ export interface CompactionRequest {
 	 * 实际每次整份发，结果落在要落的线上方。
 	 */
 	overhead: number;
-	/** 下一次要发的那份请求（经过 model.context）：量有多满用它，分叉也接在它后面。 */
+	/** 下一次要发的那份请求（经过 model.context）：分叉接在它后面。 */
 	request: ContextCompact["request"];
-	/** 见 `measureTotal`。 */
-	staleAt?: number;
+	/** `request` 有多满，宿主算好的（`ContextCompact.usage`）。 */
+	usage: ContextCompact["usage"];
+	/** 宿主估 token 的那一份（`ContextCompact.estimate`）：切在哪、摘要请求放不放得下都按它量。 */
+	estimate: TokenEstimate;
 	/** 不管量出来多满都压：超长恢复、`/compact`。 */
 	force: boolean;
 	/** 上一次换上的头占了开头几条：新边界要在它后面。 */
@@ -153,15 +154,15 @@ export interface CompactionRequest {
 }
 
 export async function compactIfNeeded(request: CompactionRequest): Promise<Compacted | null> {
-	const { model, origin, artifacts, manual, observer, overhead, force, floor } = request;
+	const { model, origin, artifacts, manual, observer, overhead, force, floor, estimate } = request;
 	let messages = request.messages;
 	/*
 	 * 服务商自己量的数，不是估算：估算在中文和密集 JSON 上低得厉害，而且两样错的方向一致，200k 窗口里已经 200.7k 的对话估出来
-	 * 八十几 k，永远到不了线。没量过（第一条回复落地前、刚压完）才退回估算，那时系统提示词和工具表另算。
+	 * 八十几 k，永远到不了线。没量过（第一条回复落地前、刚压完）才退回估算，那时宿主连系统提示词和工具表一起估。
 	 */
-	const measured = measureTotal(request.request.messages, request.staleAt);
+	const measured = request.usage;
 	const originalMessages = messages;
-	const used = measured.tokens + (measured.measured ? 0 : overhead);
+	const used = measured.tokens;
 	const budget = compactionBudget(model, overhead, force ? Math.max(0, used - overhead) : undefined);
 	if (!force && used < budget.trigger) return null;
 
@@ -188,9 +189,9 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 		 * 用量过的那份校准估算，再把同一个校准用到剪过的那份上。拿实测除以剪过那份的估算，任何剪法算出来都还是 `used`，有实测时
 		 * 这条路永远走不到。`messages` 代表上一次发出去的那份：宿主给的历史已经用上了记下的剪枝视图，剪过的再剪不会再省一次。
 		 */
-		const sent = estimateTokens(messages);
+		const sent = estimate.messages(messages);
 		const calibration = measured.measured && sent > 0 ? Math.max(0, used - overhead) / sent : 1;
-		const next = estimateTokens(pruned) * calibration;
+		const next = estimate.messages(pruned) * calibration;
 		/*
 		 * 要越过线一段余量：乘积两边都是估算，往乐观那边错就会发出一轮放不下的请求，回来一样大、再没什么可剪。点名要压
 		 * （`/compact`）时不走这条近路：剪工具输出不动对话本身，而那正是敲 `/compact` 的人想收起来的。
@@ -207,7 +208,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 * 消息、不作用于开销。除以剪过的那份，不除以发出去的：`/compact` 交来的可能是实测好几倍的历史，偏低的比例会让摘要请求和留下的
 	 * 尾部超出窗口；除以剪过的只会偏高，往安全的方向。
 	 */
-	const raw = estimateTokens(messages);
+	const raw = estimate.messages(messages);
 	const conversation = Math.max(0, used - overhead);
 	const scale = measured.measured && raw > 0 ? conversation / raw : 1;
 
@@ -219,7 +220,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	let cut = messages.length;
 	let kept = 0;
 	while (cut > lowest) {
-		const next = estimateTokens([messages[cut - 1] as Message]) * scale;
+		const next = estimate.messages([messages[cut - 1] as Message]) * scale;
 		if (messages.length - cut >= KEEP_MIN && kept + next > budget.keep) break;
 		kept += next;
 		cut--;
@@ -235,23 +236,23 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 * 不删到按条丢弃的那条线：尾部是它的预算选中的正在做的事，摘要旁边通常本来就远在线下。
 	 */
 	const target = budget.settled;
-	const scaled = (list: Message[]) => estimateTokens(list) * scale;
-	const chars = messages.map(estimateChars);
+	const scaled = (list: Message[]) => estimate.messages(list) * scale;
+	const costs = messages.map((message) => estimate.messages([message]));
 	/*
-	 * `from` 总是 `messages` 的一段后缀。折进头里的那段和尾部的字符数都逐条增减（`RetiredHistory`），不是每删一条就对整段重算——
-	 * 算出来的和每次 `scaled([...头, ...尾])` 是同一个数。
+	 * `from` 总是 `messages` 的一段后缀。折进头里的那段和尾部的估算都逐条增减（`RetiredHistory`），不是每删一条就对整段重算——
+	 * 估算不取整、能逐条相加，算出来的和每次 `scaled([...头, ...尾])` 是同一个数。
 	 */
 	const fit = (text: string, from: Message[]) => {
 		let start = messages.length - from.length;
 		// 删尾部可能又折进去一句请求、一次计划更新；它们的事实也要留在摘要外面。
 		const retired = new RetiredHistory(request.kindOf);
-		let tailChars = 0;
+		let tailCost = 0;
 		for (let at = 0; at < messages.length; at++) {
 			if (at < start) retired.add(messages[at] as Message);
-			else tailChars += chars[at] as number;
+			else tailCost += costs[at] as number;
 		}
 		const withHead = () => summaryMessages(text, origin, model, retired.files(), retired.taskContext());
-		const weight = (head: Message[]) => charsToTokens(head.reduce((sum, message) => sum + estimateChars(message), tailChars)) * scale;
+		const weight = (head: Message[]) => (estimate.messages(head) + tailCost) * scale;
 		let head = withHead();
 		while (weight(head) > target && messages.length - start > 1) {
 			let drop = 1;
@@ -260,7 +261,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			if (start + drop >= messages.length) break;
 			for (const end = start + drop; start < end; start++) {
 				retired.add(messages[start] as Message);
-				tailChars -= chars[start] as number;
+				tailCost -= costs[start] as number;
 			}
 			head = withHead();
 		}
@@ -277,7 +278,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	if (forkable(request.lineage, request.modelId)) {
 		observer?.progress({ phase: "summarizing" });
 		const signal = manual?.signal ?? observer?.signal;
-		const forked = await forkSummary(request.request, model, request.models, {
+		const forked = await forkSummary({ messages: request.request.messages, usage: request.usage, estimate }, model, request.models, {
 			...(force && manual?.instructions ? { instructions: manual.instructions } : {}),
 			...(signal ? { signal } : {}),
 			...(observer ? { observer } : {}),
@@ -304,6 +305,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 				observer?.progress({ phase: "summarizing" });
 				written = await summarize(
 					summarised,
+					estimate,
 					model,
 					request.models,
 					origin,
@@ -329,7 +331,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			tail = fitted;
 		}
 	}
-	if (!summary) return dropOldest(messages, model, budget, scale, floor, request.kindOf);
+	if (!summary) return dropOldest(messages, estimate, model, budget, scale, floor, request.kindOf);
 	const text = summary;
 
 	// 摘要写好了，按它的实际长度再收一次尾部：分叉那份覆盖整段，删多少都在摘要里；独立的那份已经按最长留过位置。
@@ -347,7 +349,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 */
 	const { room } = budget;
 	if (room > 0 && scaled(compacted) >= room) {
-		const dropped = dropOldest(messages, model, budget, scale, floor, request.kindOf);
+		const dropped = dropOldest(messages, estimate, model, budget, scale, floor, request.kindOf);
 		if (dropped && scaled(dropped.messages) < room) return dropped;
 		if (dropped && scaled(dropped.messages) < scaled(result?.messages ?? messages)) result = dropped;
 		if (result && scaled(result.messages) + overhead > model.contextWindow) return null;
@@ -362,15 +364,23 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
  *
  * `floor`：上一次换上的头占了开头几条，丢要丢过它们。
  */
-function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionBudget, scale: number, floor: number, kindOf: KindOf): Compacted | null {
+function dropOldest(
+	messages: Message[],
+	estimate: TokenEstimate,
+	model: BudgetModel,
+	budget: CompactionBudget,
+	scale: number,
+	floor: number,
+	kindOf: KindOf,
+): Compacted | null {
 	const target = budget.dropped;
-	const weight = (list: Message[]) => estimateTokens(list) * scale;
+	const weight = (list: Message[]) => estimate.messages(list) * scale;
 
 	if (weight(messages) <= target) return null;
-	// 预算的是交出去的整份：前面那条说明带着最新请求和任务上下文，中文下能有好几千 token。丢掉的那段和留下的字符数逐条增减，同 `fit`。
-	const chars = messages.map(estimateChars);
+	// 预算的是交出去的整份：前面那条说明带着最新请求和任务上下文，中文下能有好几千 token。丢掉的那段和留下的估算逐条增减，同 `fit`。
+	const costs = messages.map((message) => estimate.messages([message]));
 	const older = new RetiredHistory(kindOf);
-	let rest = chars.reduce((sum, value) => sum + value, 0);
+	let rest = costs.reduce((sum, value) => sum + value, 0);
 	let head: Message | undefined;
 	let start = 0;
 	while (start < messages.length - 1) {
@@ -380,11 +390,11 @@ function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionB
 		while (start < messages.length && messages[start]?.role === "toolResult") start++;
 		for (let at = from; at < start; at++) {
 			older.add(messages[at] as Message);
-			rest -= chars[at] as number;
+			rest -= costs[at] as number;
 		}
 		if (start >= messages.length) return null;
 		head = droppedMessage(older.taskContext(), model, older.files());
-		if (start > floor && charsToTokens(estimateChars(head) + rest) * scale <= target) break;
+		if (start > floor && (estimate.messages([head]) + rest) * scale <= target) break;
 	}
 	if (!head || start <= floor) return null;
 	const result = [head, ...messages.slice(start)];

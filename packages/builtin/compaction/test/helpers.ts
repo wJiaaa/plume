@@ -1,4 +1,4 @@
-import type { AssistantMessage, CompactionProgress, ContextCompact, Message, ToolKind, ToolResultMessage } from "@plume/contract";
+import type { AssistantMessage, CompactionProgress, ContextCompact, Message, TokenEstimate, ToolKind, ToolResultMessage } from "@plume/contract";
 import type { CompactionRequest } from "../src/compaction.ts";
 import type { Models, SummaryRequest } from "../src/models.ts";
 
@@ -9,6 +9,39 @@ export const words = { tooBig: "TOO_BIG", cancelled: "CANCELLED", empty: "EMPTY"
 /** 假的工具表：测试里用的这几个工具各自声明的活（插件在 `ToolDefinition.kind` 上标的）。 */
 const KINDS: Record<string, ToolKind> = { read: "view", write: "create", edit: "modify", bash: "command" };
 export const kindOf = (tool: string): ToolKind | undefined => KINDS[tool];
+
+/** 宿主估 token 的那一份（`ContextCompact.estimate`）的替身，和本体同一个算法：约 3.5 个字符一个 token，一张图按 6000 个字符。 */
+export const estimate: TokenEstimate = {
+	text: (text) => text.length / 3.5,
+	tools: (tools) => tools.reduce((sum, tool) => sum + `${tool.name}${tool.description}${JSON.stringify(tool.parameters)}`.length / 3.5, 0),
+	messages: (messages) => {
+		let chars = 0;
+		for (const message of messages)
+			for (const block of message.content) {
+				if (block.type === "text") chars += block.text.length;
+				else if (block.type === "thinking") chars += block.thinking.length;
+				else if (block.type === "toolCall") chars += (block.argumentsText ?? JSON.stringify(block.arguments ?? {})).length + block.name.length;
+				else chars += 6000;
+			}
+		return chars / 3.5;
+	},
+};
+
+/**
+ * 宿主算的 `ContextCompact.usage` 的替身：最近一条落定、报了用量的回复量的数加上它之后的估算；`staleAt` 之前（含）的不算；
+ * 都没有时是 `overhead` 加全部消息的估算。
+ */
+export function usageOf(messages: readonly Message[], staleAt?: number, overhead = 0): ContextCompact["usage"] {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i] as Message;
+		if (message.role !== "assistant" || message.stopReason === "pending") continue;
+		if (staleAt !== undefined && message.timestamp <= staleAt) break;
+		const used = message.lastAttemptUsage ?? message.usage;
+		const total = used.input + used.cacheRead + used.cacheWrite + used.output;
+		if (total > 0) return { measured: true, tokens: Math.ceil(total + estimate.messages(messages.slice(i + 1))) };
+	}
+	return { measured: false, tokens: Math.ceil(overhead + estimate.messages(messages)) };
+}
 
 export function usage(input = 0): AssistantMessage["usage"] {
 	return { input, output: 0, cacheRead: 0, cacheWrite: 0, total: input, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -78,6 +111,8 @@ export function request(
 		models,
 		overhead: 0,
 		request: { systemPrompt: "", messages, tools: [] },
+		usage: usageOf(messages, undefined, rest.overhead ?? 0),
+		estimate,
 		force: false,
 		floor: 0,
 		cwd: "/repo",
@@ -89,13 +124,16 @@ export function request(
 /** 钩子 context.compact 的一份输入，宿主给的那样。 */
 export function compactInput(history: Message[], extra: Partial<ContextCompact> = {}): ContextCompact & { events: CompactionProgress[] } {
 	const events: CompactionProgress[] = [];
+	const request = extra.request ?? { systemPrompt: "", messages: history, tools: [] };
 	return {
 		sessionId: "s",
 		session: { id: "s", kind: "top" },
 		cwd: "/repo",
 		model: { id: "fake/model", name: "Fake", contextWindow: 10_000, maxOutputTokens: 1000 },
 		history,
-		request: { systemPrompt: "", messages: history, tools: [] },
+		request,
+		usage: usageOf(request.messages, extra.rewrittenAt, estimate.text(request.systemPrompt) + estimate.tools(request.tools)),
+		estimate,
 		force: false,
 		signal: new AbortController().signal,
 		progress: (event) => events.push(event),

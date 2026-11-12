@@ -10,8 +10,8 @@
 
 import { KEEP_MIN } from "../packages/builtin/compaction/src/budget.ts";
 import { FORK_HOT_MS } from "../packages/builtin/compaction/src/fork.ts";
-import { estimateTokens } from "../packages/builtin/compaction/src/tokens.ts";
 import type { Message, UsageCacheMissCause } from "../packages/contract/src/index.ts";
+import { messageTokens } from "../packages/core/agent/src/token-estimate.ts";
 import { CACHE_NOISE_FLOOR_TOKENS } from "../packages/core/agent/src/usage-record.ts";
 
 interface AuditCall {
@@ -109,7 +109,7 @@ export function afterCompaction(streams: AuditStream[]) {
 				userAfter++;
 				if (REFER_BACK.test(text) || folded.some((earlier) => restates(text, earlier))) repeatedAfter++;
 			}
-			tailTokens.push(estimateTokens(stream.messages.slice(keptFrom, boundary.at)));
+			tailTokens.push(Math.ceil(messageTokens(stream.messages.slice(keptFrom, boundary.at))));
 			// 折叠掉的那段里每个文件最后一次读在哪；保留的尾部里读过的，压缩后还看得见，不算。
 			const lastFolded = new Map<string, number>();
 			const visible = new Set<string>();

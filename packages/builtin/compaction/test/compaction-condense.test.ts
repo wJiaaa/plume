@@ -1,8 +1,7 @@
 import { expect, it } from "vitest";
 import type { Message } from "@plume/contract";
 import { compactIfNeeded } from "../src/compaction.ts";
-import { estimateTokens } from "../src/tokens.ts";
-import { recorder, reply, request, say, user } from "./helpers.ts";
+import { estimate, recorder, reply, request, say, user } from "./helpers.ts";
 
 it("截短的工具调用参数两份同源：只读参数对象的协议也看得到剪短的路径和命令", async () => {
 	const command = `npm test -- ${"--flag ".repeat(2000)}`;
@@ -44,10 +43,10 @@ it("摘要请求的预算按实测比例校正", async () => {
 	}
 	// 服务商量出来的比字符除以 3.5 多得多，中文上就是这样。
 	history[history.length - 1] = say("最后", 190_000);
-	const scale = 190_000 / estimateTokens(history);
+	const scale = 190_000 / estimate.messages(history);
 	expect(scale).toBeGreaterThan(1.5);
 	const { requests, models } = recorder();
 	const result = await compactIfNeeded(request(history, models, { contextWindow: 200_000 }));
 	expect(result?.kept).toBeDefined();
-	for (const sent of requests) expect(estimateTokens(sent.messages) * scale).toBeLessThanOrEqual(200_000 * 0.42);
+	for (const sent of requests) expect(estimate.messages(sent.messages) * scale).toBeLessThanOrEqual(200_000 * 0.42);
 });

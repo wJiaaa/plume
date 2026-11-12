@@ -6,13 +6,12 @@ import { expect, it } from "vitest";
 import type { Message } from "@plume/contract";
 import { compactIfNeeded } from "../src/compaction.ts";
 import type { SummaryRequest } from "../src/models.ts";
-import { estimateTokens, textTokens } from "../src/tokens.ts";
-import { recorder, reply, request, say, textOf, toolResult, user } from "./helpers.ts";
+import { estimate, recorder, reply, request, say, textOf, toolResult, user } from "./helpers.ts";
 
 /** 摘要请求带的全部，按估算的单位。 */
-const requestTokens = (sent: SummaryRequest) => textTokens(sent.systemPrompt) + estimateTokens(sent.messages) + textTokens(sent.prompt);
+const requestTokens = (sent: SummaryRequest) => estimate.text(sent.systemPrompt) + estimate.messages(sent.messages) + estimate.text(sent.prompt);
 /** 只算截短后的历史。 */
-const historyTokens = (sent: SummaryRequest) => estimateTokens(sent.messages);
+const historyTokens = (sent: SummaryRequest) => estimate.messages(sent.messages);
 
 it("一次摘要请求放不下的历史分段写，每段都在预算里，一步也不丢", async () => {
 	const history: Message[] = [user("做这件事")];
@@ -84,14 +83,14 @@ it("剪掉上一次整份发出去的结果、按实测折算后放得下时，�
 	const history: Message[] = [user("找一下")];
 	for (let i = 0; i < 3; i++)
 		history.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
-	history.push(say("完成", estimateTokens(history)));
+	history.push(say("完成", estimate.messages(history)));
 	const { requests, models } = recorder();
 	const result = await compactIfNeeded(request(history, models));
 	expect(result).toBeTruthy();
 	expect(requests).toHaveLength(0);
 	expect(result!.kept).toBeUndefined();
 	expect(result!.messages).toHaveLength(history.length);
-	expect(estimateTokens(result!.messages)).toBeLessThan(10_000 * 0.7);
+	expect(estimate.messages(result!.messages)).toBeLessThan(10_000 * 0.7);
 });
 
 it("实测比估算大、剪完落不到余量以下时照样摘要", async () => {
@@ -99,7 +98,7 @@ it("实测比估算大、剪完落不到余量以下时照样摘要", async () =
 	for (let i = 0; i < 3; i++)
 		history.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
 	for (let i = 0; i < 6; i++) history.push(say(`说明 ${"z".repeat(1200)}`), user(`继续 ${"q".repeat(1200)}`));
-	history.push(say("完成", estimateTokens(history) * 2));
+	history.push(say("完成", estimate.messages(history) * 2));
 	const { requests, models } = recorder();
 	const result = await compactIfNeeded(request(history, models));
 	expect(result?.kept).toBeDefined();
@@ -109,7 +108,7 @@ it("实测比估算大、剪完落不到余量以下时照样摘要", async () =
 it("摘要请求要的回复就是发前核对给它留的位置", async () => {
 	const history: Message[] = [user("开始")];
 	for (let i = 0; i < 12; i++) history.push(say(`步骤 ${i} ${"x".repeat(1200)}`), user(`继续 ${"y".repeat(1200)}`));
-	history.push(say("完成", estimateTokens(history) * 2));
+	history.push(say("完成", estimate.messages(history) * 2));
 	const { requests, models } = recorder();
 	await compactIfNeeded(request(history, models, { maxOutputTokens: 8000 }));
 	expect(requests.length).toBeGreaterThanOrEqual(1);
