@@ -7,12 +7,12 @@
  * key 不进渲染进程：这里只知道每家填没填，输入框里是这次新打的字，存下的那把看不到；填了新的才替换，可以清掉。
  */
 
-import type { Remote } from "@plume/contract/ui";
+import type { Remote, UiContext } from "@plume/contract/ui";
 import { Button, IconButton, Input, SettingsCard, SettingsSectionTitle, Text, useI18n } from "@plume/ui";
 import { Check, Eraser, ExternalLink, Eye, EyeOff, Search } from "@plume/ui/icons";
 import { text as textStyles } from "@plume/styles";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { KeyId, ProviderId, SearchSettingsView, WebApi } from "./api.ts";
+import { type KeyId, type ProviderId, type SearchSettingsView, SIGNUP, type WebApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 
 type Messages = (typeof MESSAGES)["zh-CN"];
@@ -55,7 +55,7 @@ function emphasize(sentence: string): React.ReactNode {
 	);
 }
 
-export function SearchSettings({ api, notify }: { api: Remote<WebApi>; notify: Notify }) {
+export function SearchSettings({ api, notify, openExternal }: { api: Remote<WebApi>; notify: Notify; openExternal: UiContext["openExternal"] }) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const [view, setView] = useState<SearchSettingsView | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -94,7 +94,7 @@ export function SearchSettings({ api, notify }: { api: Remote<WebApi>; notify: N
 		void save(api.setProvider(provider));
 	};
 
-	const openSignup = (which: KeyId) => api.openSignup(which).then(undefined, (error: unknown) => notify(text.openFailed(reasonOf(error)), "error"));
+	const openSignup = (which: KeyId) => openExternal(SIGNUP[which]).then(undefined, (error: unknown) => notify(text.openFailed(reasonOf(error)), "error"));
 
 	return (
 		<div data-search-settings="">

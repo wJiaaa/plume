@@ -44,7 +44,7 @@ export default {
 		// 查资料时抓一页、搜一次是同一段活，和浏览器、读文件那几类接在一起。
 		ui.toolLine("web_fetch", { verb: (locale) => MESSAGES[locale].toolFetch, subject: (args) => pageSubject(args.url), group: "web", icon: Globe });
 		ui.toolLine("web_search", { verb: (locale) => MESSAGES[locale].toolSearch, group: "web" });
-		ui.settingsSection("search", () => <SearchSettings api={api} notify={notify} />, {
+		ui.settingsSection("search", () => <SearchSettings api={api} notify={notify} openExternal={ui.openExternal.bind(ui)} />, {
 			title: (locale) => MESSAGES[locale].title,
 			detail: (locale) => MESSAGES[locale].intro,
 			icon: Search,

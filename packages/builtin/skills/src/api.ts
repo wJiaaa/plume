@@ -39,10 +39,8 @@ export interface SkillsApi {
 	list(cwd: string | null): Promise<SkillsView>;
 	/** 开、关一批已经读到的技能（一组一起拨时一次写完）。关掉的不进技能目录、`skill` 工具和 `/` 菜单。 */
 	setEnabled(paths: string[], enabled: boolean, cwd: string | null): Promise<void>;
-	/** 用系统默认的编辑器打开一个已经读到的 `SKILL.md`。 */
-	open(path: string, cwd: string | null): Promise<void>;
-	/** 在访达里打开一个已经读到的技能所在的那一组目录；`path` 是 null 时打开个人技能目录，没有就先建。 */
-	reveal(path: string | null, cwd: string | null): Promise<void>;
+	/** 一个已经读到的技能所在的那一组目录，界面经 `ui.openPath` 打开；`path` 是 null 时是个人技能目录，没有就先建。 */
+	folder(path: string | null, cwd: string | null): Promise<string>;
 	/** 把一个已经读到的技能的整个目录移到废纸篓。插件带来的不删，报错。 */
 	remove(path: string, cwd: string | null): Promise<void>;
 	/** 两个同名技能的 `SKILL.md` 差在哪：赢的在前，「+」是改用输的那个会多出来的。 */

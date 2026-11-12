@@ -1,9 +1,8 @@
 /**
  * plume.commands 的逻辑入口，跑在 agent 进程：把磁盘上的 Markdown 命令供给输入框的 `/` 菜单，发送前展开成要发的话；
- * 设置页经 `ctx.serve` 列个人或某个项目的命令、新建、打开、删除。
+ * 设置页经 `ctx.serve` 列个人或某个项目的命令、新建、删除，给出命令目录（打开由界面经 `ui.openPath` 做）。
  */
 
-import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type { Plugin, SlashCommand } from "@plume/contract";
@@ -18,19 +17,6 @@ const SETTINGS_SECTION = "commands";
 
 /** 新建时的名字：只能是一段，命名空间靠子目录。 */
 const FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * 用系统的默认程序打开，目录在文件管理器里打开。Windows 上交给 explorer，不经 cmd 的 `start`：文件名里的 `&` 会被它当成
- * 命令分隔符。explorer 打开成功也报退出码 1，所以那边只看起没起得来。
- */
-function openWith(path: string): Promise<void> {
-	const [command, args] = process.platform === "darwin" ? ["open", [path]] : process.platform === "win32" ? ["explorer.exe", [path]] : ["xdg-open", [path]];
-	return new Promise((resolve, reject) =>
-		execFile(command as string, args as string[], (error) =>
-			error && (process.platform !== "win32" || typeof error.code !== "number") ? reject(error) : resolve(),
-		),
-	);
-}
 
 export default {
 	name: "plume.commands",
@@ -119,14 +105,12 @@ export default {
 					if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(messages.nameTaken(name), { cause: error });
 					throw error;
 				}
-				await openWith(file);
 				return file;
 			},
-			open: async (path, cwd) => openWith(await known(path, cwd)),
-			async reveal(scope, cwd) {
+			async folder(scope, cwd) {
 				const dir = dirOf(scope, cwd);
 				await mkdir(dir, { recursive: true });
-				await openWith(dir);
+				return dir;
 			},
 			async remove(path, cwd) {
 				const file = await known(path, cwd);

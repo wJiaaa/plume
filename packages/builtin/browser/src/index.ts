@@ -5,10 +5,8 @@
  * 设置（搜索引擎、默认缩放、书签）存在插件数据目录的 `browser.json`。
  */
 
-import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import { join, win32 } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join } from "node:path";
 import type { Plugin } from "@plume/contract";
 import type { BrowserApi, BrowserSettings, BrowserUpdate, PageSelection } from "./api.ts";
 import { DEFAULT_SETTINGS, SEARCH_ENGINES, validViewport, validZoom, webUrl } from "./address.ts";
@@ -21,23 +19,6 @@ import { browserTools } from "./tools.ts";
 import { createWorkspace } from "./workspace.ts";
 
 // i18n-exempt：下面的报错交给面板，面板换成当前语言的话再给人看。
-
-/**
- * 交给系统的默认浏览器。只交 http(s) 和本机页面背后的 `.html` 文件：别的协议、别的文件由系统交给哪个程序打开，
- * 网页里的一个链接就成了本机执行。
- *
- * Windows 上不经 cmd 的 `start`：网址里的 `&` 会被它当成命令分隔符，网页给的地址后半截就被当成命令跑。`url.dll` 的
- * FileProtocolHandler 把整条地址原样交给系统的默认浏览器；文件先写成 `file:` 地址，路径里的空格不用再加引号。
- */
-function openOutside(url: string): Promise<void> {
-	const [command, args] =
-		process.platform === "darwin"
-			? ["open", [url]]
-			: process.platform === "win32"
-				? ["rundll32.exe", ["url.dll,FileProtocolHandler", win32.isAbsolute(url) ? pathToFileURL(url).href : url]]
-				: ["xdg-open", [url]];
-	return new Promise((resolve, reject) => execFile(command as string, args as string[], (error) => (error ? reject(error) : resolve())));
-}
 
 function cleanSettings(value: unknown): BrowserSettings {
 	const raw = (value && typeof value === "object" ? value : {}) as Partial<Record<keyof BrowserSettings, unknown>>;
@@ -145,7 +126,7 @@ export default {
 					if (!raw) continue;
 					// 本机页面的地址出了 Plume 就打不开：交出去的是它背后的文件。只认自己给出的地址，网页跳去的 `file:` 不交。
 					const file = local.source(raw);
-					if (file) return openOutside(file);
+					if (file) return { file };
 					let address: string;
 					try {
 						address = webUrl(raw);
@@ -153,7 +134,7 @@ export default {
 						continue;
 					}
 					if (address === "about:blank") continue;
-					return openOutside(address);
+					return { url: address };
 				}
 				throw new Error("nothing to open outside");
 			},

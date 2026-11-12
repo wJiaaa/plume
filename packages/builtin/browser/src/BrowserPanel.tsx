@@ -123,7 +123,11 @@ export function browserPanel(ui: UiContext, api: Remote<BrowserApi>, store: Brow
 		const blank = !page || page.url === "about:blank";
 		const command = (name: "back" | "forward" | "reload" | "devtools") => void api.command(tab, name).catch(fail);
 		const open = (url: string) => void api.open(url, sessionId ?? null).catch(fail);
-		const outside = (url: string | null) => void api.outside(url ? null : tab, url).catch(() => ui.notify(text.nothingOutside, "error"));
+		const outside = (url: string | null) =>
+			void (async () => {
+				const target = await api.outside(url ? null : tab, url);
+				await ("file" in target ? ui.openPath(target.file) : ui.openExternal(target.url));
+			})().catch(() => ui.notify(text.nothingOutside, "error"));
 		const zoom = (factor: number) => void api.zoom(tab, Math.min(ZOOM.max, Math.max(ZOOM.min, Math.round(factor * 100) / 100))).catch(fail);
 		const viewport = (next: Viewport | null) => void api.viewport(tab, next).catch(fail);
 		const saved = !!page && settings.bookmarks.some((entry) => entry.url === page.url);

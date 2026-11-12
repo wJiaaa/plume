@@ -103,8 +103,12 @@ export interface BrowserApi {
 	/** 人切到了这一页：成为它那个会话当前的一页，agent 不给 tabId 时操作的就是它。 */
 	select(page: string): Promise<void>;
 	command(page: string, command: "back" | "forward" | "reload" | "devtools"): Promise<void>;
-	/** 交给系统的浏览器：给了 `url` 开它，否则开这一页此刻的地址。 */
-	outside(page: string | null, url: string | null): Promise<void>;
+	/**
+	 * 交给系统的浏览器打开什么：给了 `url` 是它，否则是这一页此刻的地址；本机页面交它背后的 `.html` 文件。界面拿到后网址经
+	 * `ui.openExternal`、文件经 `ui.openPath` 打开。只交 http(s) 和自己给出的本机页面：别的协议、别的文件由系统交给哪个程序打开，
+	 * 网页里的一个链接就成了本机执行。
+	 */
+	outside(page: string | null, url: string | null): Promise<{ url: string } | { file: string }>;
 	zoom(page: string, factor: number): Promise<void>;
 	viewport(page: string, viewport: Viewport | null): Promise<void>;
 	/** 面板里放页面的那块的大小，视口仿真按它缩小。 */

@@ -26,14 +26,12 @@ export interface CommandsApi {
 	/** `cwd` 是设置页顶上选着的项目，null 是只看个人的。 */
 	list(cwd: string | null): Promise<CommandsView>;
 	/**
-	 * 在个人目录或项目目录里新建 `<name>.md`，写好模板，用编辑器打开；返回新文件的路径。名字不合规矩、已经有了、
-	 * 选了项目却没给项目时报错（给人看的话）。
+	 * 在个人目录或项目目录里新建 `<name>.md`，写好模板；返回新文件的路径，界面经 `ui.openPath` 用编辑器打开。名字不合规矩、
+	 * 已经有了、选了项目却没给项目时报错（给人看的话）。
 	 */
 	create(name: string, scope: CommandScope, cwd: string | null): Promise<string>;
-	/** 用系统默认的编辑器打开一个已经读到的命令文件。 */
-	open(path: string, cwd: string | null): Promise<void>;
-	/** 在访达里打开个人或项目的命令目录，没有就先建。 */
-	reveal(scope: CommandScope, cwd: string | null): Promise<void>;
+	/** 个人或项目的命令目录，界面经 `ui.openPath` 打开；没有就先建。 */
+	folder(scope: CommandScope, cwd: string | null): Promise<string>;
 	/** 把一个已经读到的命令文件移到废纸篓。 */
 	remove(path: string, cwd: string | null): Promise<void>;
 }

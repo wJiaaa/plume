@@ -6,7 +6,7 @@
  * `<项目>/.claude/commands`）。项目来自 `ui.useProjects()`。
  */
 
-import type { ListedCommand, ProjectInfo, Remote, UiPlugin } from "@plume/contract/ui";
+import type { ListedCommand, ProjectInfo, Remote, UiContext, UiPlugin } from "@plume/contract/ui";
 import {
 	Button,
 	Dialog,
@@ -86,11 +86,13 @@ function CommandsSettings({
 	api,
 	listAll,
 	notify,
+	openPath,
 	projects,
 }: {
 	api: Remote<CommandsApi>;
 	listAll: ListAll;
 	notify: Notify;
+	openPath: UiContext["openPath"];
 	projects: readonly ProjectInfo[];
 }) {
 	const text = MESSAGES[useI18n().resolvedLocale];
@@ -182,7 +184,7 @@ function CommandsSettings({
 						size="sm"
 						icon={<FolderOpen size={13} aria-hidden />}
 						label={scope === "workspace" ? text.openProjectDir : text.openPersonalDir}
-						onClick={() => void (async () => api.reveal(scope, cwd))().catch((error: unknown) => notify(reasonOf(error), "error"))}
+						onClick={() => void (async () => openPath(await api.folder(scope, cwd)))().catch((error: unknown) => notify(reasonOf(error), "error"))}
 					/>
 					<Button variant="subtle" size="sm" icon={<RefreshCw size={13} aria-hidden />} label={text.refresh} onClick={refresh} />
 					<Button size="sm" icon={<Plus size={13} aria-hidden />} onClick={() => setCreating(true)}>
@@ -216,11 +218,11 @@ function CommandsSettings({
 								tabIndex={0}
 								aria-label={text.editNamed(command.name)}
 								data-command-row={command.name}
-								onClick={() => void (async () => api.open(command.path, cwd))().catch((error: unknown) => notify(reasonOf(error), "error"))}
+								onClick={() => void openPath(command.path).catch((error: unknown) => notify(reasonOf(error), "error"))}
 								onKeyDown={(event) => {
 									if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
 									event.preventDefault();
-									void (async () => api.open(command.path, cwd))().catch((error: unknown) => notify(reasonOf(error), "error"));
+									void openPath(command.path).catch((error: unknown) => notify(reasonOf(error), "error"));
 								}}
 							>
 								<span className="cmd-row-mark" aria-hidden>
@@ -316,8 +318,10 @@ function CommandsSettings({
 					text={text}
 					onClose={() => setCreating(false)}
 					onCreate={async (name, target) => {
-						await api.create(name, target, cwd);
+						const file = await api.create(name, target, cwd);
 						setCreating(false);
+						// 建好了就用编辑器打开；打不开只提示，文件已经在了，列表照常刷新。
+						void openPath(file).catch((error: unknown) => notify(reasonOf(error), "error"));
 						// 建在个人目录里时顶上还停在项目，列表按范围筛，新的那条就不在眼前。
 						if (target === "user") choose(null);
 						else refresh();
@@ -530,14 +534,18 @@ export default {
 		const api = ui.remote<CommandsApi>();
 		const notify = ui.notify.bind(ui);
 		const listAll: ListAll = (context) => ui.listCommands(context);
-		ui.settingsSection("commands", () => <CommandsSettings api={api} listAll={listAll} notify={notify} projects={ui.useProjects()} />, {
-			title: (locale) => MESSAGES[locale].settingsTitle,
-			detail: (locale) => MESSAGES[locale].intro,
-			icon: SquareTerminal,
-			// 「Agent 能力」组里依次是命令、钩子、网页搜索。
-			order: 1,
-			group: "agent",
-			page: "nav",
-		});
+		ui.settingsSection(
+			"commands",
+			() => <CommandsSettings api={api} listAll={listAll} notify={notify} openPath={ui.openPath.bind(ui)} projects={ui.useProjects()} />,
+			{
+				title: (locale) => MESSAGES[locale].settingsTitle,
+				detail: (locale) => MESSAGES[locale].intro,
+				icon: SquareTerminal,
+				// 「Agent 能力」组里依次是命令、钩子、网页搜索。
+				order: 1,
+				group: "agent",
+				page: "nav",
+			},
+		);
 	},
 } satisfies UiPlugin;

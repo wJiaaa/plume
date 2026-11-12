@@ -152,5 +152,5 @@ test("设置页切到项目：列出项目和个人两层；项目的文件只�
 	assert.deepEqual(trashed, [ours]);
 
 	await assert.rejects(api!.create("new-one", "workspace", null), /先在页面顶上切到一个项目/);
-	await assert.rejects(api!.reveal("workspace", null), /先在页面顶上切到一个项目/);
+	await assert.rejects(api!.folder("workspace", null), /先在页面顶上切到一个项目/);
 });

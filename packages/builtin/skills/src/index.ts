@@ -4,7 +4,6 @@
  * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经服务 `resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -25,19 +24,6 @@ const MENTION = /(^|\s)\/skill:([a-z0-9:-]+)(?=\s|$)/i;
 function tilde(path: string): string {
 	const home = homedir();
 	return path === home || path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
-}
-
-/**
- * 用系统的默认程序打开，目录在文件管理器里打开。Windows 上交给 explorer，不经 cmd 的 `start`：文件名里的 `&` 会被它当成
- * 命令分隔符。explorer 打开成功也报退出码 1，所以那边只看起没起得来。
- */
-function openWith(path: string): Promise<void> {
-	const [command, args] = process.platform === "darwin" ? ["open", [path]] : process.platform === "win32" ? ["explorer.exe", [path]] : ["xdg-open", [path]];
-	return new Promise((resolve, reject) =>
-		execFile(command as string, args as string[], (error) =>
-			error && (process.platform !== "win32" || typeof error.code !== "number") ? reject(error) : resolve(),
-		),
-	);
 }
 
 /** 插件给人看的名字和说明：`package.json` 里的 `plume.displayName`、`description`。 */
@@ -248,13 +234,12 @@ export default {
 				}
 				await writeSettings(settings);
 			},
-			open: async (path, cwd) => openWith(await known(path, cwd)),
-			async reveal(path, cwd) {
+			async folder(path, cwd) {
 				// 一组的目录就是它里面一个技能的上上级（`<目录>/<技能>/SKILL.md`），按读到过的技能认，指不到别处。
-				if (path !== null) return openWith(dirname(dirname(await known(path, cwd))));
+				if (path !== null) return dirname(dirname(await known(path, cwd)));
 				const dir = personalDir(ctx.appDataDir);
 				await mkdir(dir, { recursive: true });
-				await openWith(dir);
+				return dir;
 			},
 			async remove(path, cwd) {
 				const file = await known(path, cwd);

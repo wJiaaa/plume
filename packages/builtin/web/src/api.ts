@@ -8,6 +8,14 @@
 export const KEY_IDS = ["tavily", "deepseek", "brave", "exa"] as const;
 export type KeyId = (typeof KEY_IDS)[number];
 
+/** 各家申请 key 的页面，设置页经 `ui.openExternal` 打开。 */
+export const SIGNUP: Record<KeyId, string> = {
+	tavily: "https://tavily.com",
+	deepseek: "https://platform.deepseek.com/api_keys",
+	brave: "https://brave.com/search/api/",
+	exa: "https://exa.ai",
+};
+
 /** 设置里能选的后端，顺序就是设置页里的顺序。 */
 export const PROVIDER_IDS = ["tavily", "deepseek", "brave", "exa", "ddg-instant", "duckduckgo"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
@@ -33,6 +41,4 @@ export interface WebApi {
 	setProvider(provider: string | null): Promise<SearchSettingsView>;
 	/** 换上一把新的 key；空串是清掉。 */
 	setKey(which: KeyId, key: string): Promise<SearchSettingsView>;
-	/** 在系统浏览器里打开这家申请 key 的页面。 */
-	openSignup(which: KeyId): Promise<void>;
 }

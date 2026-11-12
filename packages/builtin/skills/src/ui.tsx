@@ -6,7 +6,7 @@
  * （`~/.plume/skills`、`~/.agents/skills`）和插件带来的。
  */
 
-import type { ExtensionsSectionProps, FileDiffProps, Remote, UiPlugin } from "@plume/contract/ui";
+import type { ExtensionsSectionProps, FileDiffProps, Remote, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Button, IconButton, Text, Toggle, useConfirmer, useI18n } from "@plume/ui";
 import {
 	ArrowLeftRight,
@@ -118,11 +118,12 @@ function PluginMark({ name, pluginKey }: { name: string; pluginKey: string | und
 function SkillsSettings({
 	api,
 	notify,
+	openPath,
 	FileDiff,
 	project = null,
 	refreshKey = 0,
 	openPlugin,
-}: { api: Remote<SkillsApi>; notify: Notify; FileDiff: ComponentType<FileDiffProps> } & ExtensionsSectionProps) {
+}: { api: Remote<SkillsApi>; notify: Notify; openPath: UiContext["openPath"]; FileDiff: ComponentType<FileDiffProps> } & ExtensionsSectionProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const cwd = project;
 	const [view, setView] = useState<SkillsView | null>(null);
@@ -183,8 +184,8 @@ function SkillsSettings({
 			},
 		});
 
-	const open = (path: string) => void (async () => api.open(path, cwd))().catch((error: unknown) => notify(reasonOf(error), "error"));
-	const reveal = (path: string) => void (async () => api.reveal(path, cwd))().catch((error: unknown) => notify(reasonOf(error), "error"));
+	const open = (path: string) => void openPath(path).catch((error: unknown) => notify(reasonOf(error), "error"));
+	const reveal = (path: string) => void (async () => openPath(await api.folder(path, cwd)))().catch((error: unknown) => notify(reasonOf(error), "error"));
 
 	const card = (skill: SkillRow) => (
 		<SkillCard
@@ -599,7 +600,7 @@ export default {
 			group: "skill",
 			icon: Sparkles,
 		});
-		ui.settingsSection("skills", (props) => <SkillsSettings api={api} notify={notify} FileDiff={ui.FileDiff} {...props} />, {
+		ui.settingsSection("skills", (props) => <SkillsSettings api={api} notify={notify} openPath={ui.openPath.bind(ui)} FileDiff={ui.FileDiff} {...props} />, {
 			title: (locale) => MESSAGES[locale].settingsTitle,
 			icon: WandSparkles,
 			page: "extensions-skills",
@@ -608,7 +609,7 @@ export default {
 					label: (locale) => MESSAGES[locale].openPersonalDir,
 					detail: (locale) => MESSAGES[locale].openPersonalDirDetail,
 					icon: FolderOpen,
-					run: () => void (async () => api.reveal(null, null))().catch((error: unknown) => notify(reasonOf(error), "error")),
+					run: () => void (async () => ui.openPath(await api.folder(null, null)))().catch((error: unknown) => notify(reasonOf(error), "error")),
 				},
 			],
 		});
