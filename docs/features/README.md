@@ -15,7 +15,7 @@
 | [agent-extensions.md](agent-extensions.md) | 自定义命令、技能、MCP 连接器、钩子、记忆 |
 | [multi-session.md](multi-session.md) | 子智能体、侧边聊天、会话互通、建议新会话、代码审阅、定时任务 |
 | [files.md](files.md) | 文件树、文件预览与文档预览、文件交付卡 |
-| [diagnostics.md](diagnostics.md) | 任务面板、调用轨迹、环境卡片、会话摘要 |
+| [diagnostics.md](diagnostics.md) | 任务面板、调用轨迹（运行诊断）、环境卡片（会话环境）、会话摘要 |
 | [browser-and-preview.md](browser-and-preview.md) | 内置浏览器、回复内交互网页 |
 | [terminal-and-ssh.md](terminal-and-ssh.md) | 本机终端面板、SSH 运维台与 AI 运维助手 |
 | [git.md](git.md) | 分支签、Git 面板、对话工作树、拉取请求 |

@@ -314,43 +314,6 @@
 	max-width: 100%;
 	object-fit: contain;
 }
-.plume-diagnostics-environment {
-	pointer-events: auto;
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-	max-height: 100%;
-	width: 100%;
-	overflow: hidden;
-	border-radius: var(--plume-radius-panel);
-	border: 1px solid var(--plume-line-soft);
-	background: var(--plume-float);
-	box-shadow: var(--plume-shadow-glass);
-}
-.plume-diagnostics-environment-head {
-	display: flex;
-	align-items: center;
-	height: 36px;
-	flex-shrink: 0;
-	gap: 8px;
-	padding: 0 6px 0 14px;
-}
-/* 卡片在右边那一列里，高度由那一列给（从顶到转录底），太长正文自己滚。 */
-.plume-diagnostics-environment-body {
-	overflow-y: auto;
-	min-height: 0;
-	padding: 0 6px 4px;
-}
-.plume-diagnostics-environment-section {
-	padding: 4px 0;
-}
-/* 别的插件加的一节没东西时是空的：不占位，也不让它挨着的两节之间多出一条线。 */
-.plume-diagnostics-environment-section:empty {
-	display: none;
-}
-.plume-diagnostics-environment-section:not(:empty) ~ .plume-diagnostics-environment-section:not(:empty) {
-	border-top: 1px solid var(--plume-line-soft);
-}
 .plume-diagnostics-truncate {
 	display: block;
 	min-width: 0;
@@ -373,41 +336,11 @@
 .plume-diagnostics-note {
 	padding: 2px 8px 4px;
 }
-.plume-diagnostics-toggle {
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-.plume-diagnostics-toggle-dot {
-	position: absolute;
-	top: -4px;
-	right: -6px;
-	width: 6px;
-	height: 6px;
-	border-radius: var(--plume-radius-field);
-	background: var(--plume-accent);
-}
 .plume-diagnostics-section-label {
 	display: flex;
 	align-items: center;
 	height: 28px;
 	padding: 0 8px;
-}
-.plume-diagnostics-pictures {
-	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 6px;
-	padding: 0 8px 6px;
-}
-.plume-diagnostics-pictures .plume-diagnostics-image {
-	aspect-ratio: 4 / 3;
-	background: var(--plume-card);
-}
-.plume-diagnostics-pictures img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
 }
 .plume-diagnostics-file {
 	display: flex;
@@ -415,10 +348,6 @@
 	flex: 1;
 	min-height: 0;
 	min-width: 0;
-}
-.plume-diagnostics-child-list {
-	overflow: auto;
-	padding: 8px;
 }
 @container (max-width: 700px) {
 	.plume-diagnostics-trace-body[data-has-detail="true"] .plume-diagnostics-ledger {

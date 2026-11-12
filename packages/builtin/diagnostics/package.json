@@ -1,7 +1,7 @@
 {
   "name": "@plume/diagnostics",
   "version": "0.1.0",
-  "description": "集中查看后台任务、运行记录、调用轨迹和会话环境。",
+  "description": "集中查看后台任务、运行记录和调用轨迹；往环境卡片里放后台任务、定时唤醒、压缩记录三节。",
   "keywords": [],
   "plume": {
     "displayName": "运行诊断",

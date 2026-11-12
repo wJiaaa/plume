@@ -34,7 +34,7 @@ function deliveries(ui: UiContext): ComponentType<AgentDeliveryProps> {
 				{reports.map((report) => {
 					const details = detailsOf(report);
 					if (details?.kind !== "wakeup") return null;
-					// 一行题注，不能点：要做的事模型这一轮自己会说，还在等的那些在运行诊断的环境卡片里。cron 表达式只在悬停时出现。
+					// 一行题注，不能点：要做的事模型这一轮自己会说，还在等的那些在环境卡片里。cron 表达式只在悬停时出现。
 					return (
 						<div key={report.id} data-delivery-row="" data-delivery-kind="wakeup" data-plume-tip={details.cron}>
 							<FlowRow icon={<AlarmClock size={13} strokeWidth={1.8} className="plume-tools-icon" />} summary={`${text.wakeupFired} · ${report.title}`} />

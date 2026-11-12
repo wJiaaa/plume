@@ -63,7 +63,7 @@ export async function checkBackgroundJob(options: {
 		);
 		await page(`[...document.querySelectorAll('[data-approval-card] button')].find((button) => button.textContent.includes('允许一次'))?.click()`);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(STARTED)}) === true`, "放到后台后这一轮先收尾");
-		await until(`document.querySelector('[data-environment-toggle]') !== null`, "内置诊断插件已加载");
+		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 		await page(`document.querySelector('[data-environment-toggle]').click()`);
 		await until(`document.querySelector('[data-environment-job]') !== null`, "环境卡显示后台任务");
 		await settled();

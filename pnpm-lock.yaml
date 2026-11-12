@@ -319,6 +319,18 @@ importers:
         specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
 
+  packages/builtin/environment:
+    devDependencies:
+      '@plumeai/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../sdk/plugin-sdk
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.19.2
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.3.0
+
   packages/builtin/git:
     devDependencies:
       '@plume/platform':

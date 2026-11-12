@@ -97,7 +97,7 @@ export async function checkSpawnSession(options: {
 			return parentId !== "";
 		}, "对话已创建");
 		await until(chatHas(SUGGESTED), "模型提完建议接着做");
-		await until(`document.querySelector('[data-environment-toggle]') !== null`, "内置诊断插件已加载");
+		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 
 		const card = "[data-screen=chat] [data-spawn-suggestion=suggested]";
 		await until(`document.querySelector(${JSON.stringify(card)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "对话里画出建议卡片");

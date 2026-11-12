@@ -40,7 +40,7 @@ export default {
 | `ui.composerChip(id, Component, { side, order })` | 输入框上方、项目签那一行加一格 |
 | `ui.composerAbove(id, Component, { order })` | 主输入框上方独占一行，收到 `{ session }`；返回 null 不占位，组件自己管理展开退场，不会浮到转录侧面 |
 | `ui.conversationCard(id, Component, { order, lane })` | 跟着会话的一张卡片：对话列够宽时浮在转录右上角，不够时在输入框正上方；`lane: true` 的占右边一列（够宽停靠、不够浮在转录上，从不到输入框上方，太长自己滚） |
-| `ui.environmentSection(id, Component, { label, order, attention? })` | 往会话的环境卡片（`plume.diagnostics` 画）里加一节，收到 `{ session }`；返回 null 不占位、不画分隔线；`label` 是卡片「显示哪些内容」菜单里的名字；`attention(session)` 是 hook，有事等人决定、或有会自己叫醒这个会话的事时返回一句话，卡片收着时开关上挂圆点 |
+| `ui.environmentSection(id, Component, { label, order, attention? })` | 往会话的环境卡片（内置的 `plume.environment` 画）里加一节，收到 `{ session }`；返回 null 不占位、不画分隔线；`label` 是卡片「显示哪些内容」菜单里的名字；`attention(session)` 是 hook，有事等人决定、或有会自己叫醒这个会话的事时返回一句话，卡片收着时开关上挂圆点 |
 | `ui.mentions(provider)` | 每次打开 `@` 时传 `{ cwd?, sessionId? }`，返回 `ComposerMention[]` 或 Promise：`id/title/kind/token` 必填，kind 是 subagent 或 plugin，可带 description/origin/avatar；只插入 token，用户自行发送，停用自动撤销 |
 | `ui.composerHint(session => text)` | 输入框空着时的灰字建议，按 Tab 填进去 |
 | `ui.welcomeLine(locale => ({ text, source }))` | 换掉欢迎页问候下面的那一行（默认问要在哪个项目里做什么），只问最后注册的那一个 |
@@ -565,7 +565,7 @@ apply(ui) {
 
 `react`、`react/jsx-runtime`、`@plume/ui`、`@plume/styles` 不打包，运行时用产品的那一份；其余（包括 `@plume/ui/icons` 和第三方库）打进 `dist/ui.mjs`。宿主启动时就加载每个插件的 `ui.mjs`：只在某个操作里才用到的大库（预览、图表、编辑器）写成 `await import("…")`，构建时拆到 `dist/chunks/`，用到时才取。能用哪些组件、各自的签名和用法，见 [components.md](components.md)（从源码生成）；`@plume/ui` 里没列在那里的导出是产品内部用的，引用了 `pnpm check:plugins` 会拦。
 
-## 运行诊断入口
+## 运行诊断与环境卡片入口
 
 - `ui.sessionToolbar(id, Component)` 在有会话的标题栏放局部控件，收到 `{ session }`；新会话不画，不能接管标题与布局。使用 `IconButton`，停用自动撤下。
 - `ui.sessionMenuItem(id, { label, icon?, run })` 在会话操作菜单加一项。`run` 收到被点的会话摘要，异步操作固定使用它的 id，不跟随焦点；报错由宿主提示。同插件同 id 替换。
@@ -575,6 +575,6 @@ apply(ui) {
 - `ui.environmentSection(id, Component, { label, order?, attention? })` 往环境卡片里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。没东西时返回 null。order 排进卡片自己的几节（打开方式 0、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、引用 90）和别的插件的节之间；内置插件已经用了的：后台任务 10、定时唤醒 50、压缩记录 85（`plume.diagnostics`），计划 30（`plume.plan`），建议的新会话 40（`plume.spawn-session`）。卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。`attention` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关的说明后面。要提醒的是两种事：等人回来决定的，和会自己叫醒这个会话的（人不回来，会话也会自己开一轮）；普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。例子：内置的 `plume.spawn-session` 用 40 放「建议的新会话」，还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」；`plume.diagnostics` 的后台任务一节说「N 个监视在跑」（监视有输出就开一轮，普通后台命令不算），定时唤醒一节说「N 个定时唤醒待触发」。
 - `ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`、`label`、`order`、已包好错误边界的 `component`），按 order 排好。
 
-内置 `plume.diagnostics` 用以上入口和 `ui.panel`、`ui.conversationCard` 提供任务、轨迹与环境卡。工具结果和历史正文读 `SessionView`，观察数据与后台任务经自己的 `remote` 读取。
+内置 `plume.diagnostics` 用以上入口和 `ui.panel` 提供任务和轨迹，经 `ui.environmentSection` 往环境卡片里放后台任务、定时唤醒、压缩记录三节；工具结果和历史正文读 `SessionView`，观察数据与后台任务经自己的 `remote` 读取。环境卡片本身是内置的 `plume.environment`：`ui.sessionToolbar` 放开关，`ui.conversationCard`（`lane: true`）画卡片，`ui.useEnvironmentSections()` 拿各插件的节，挂上各节的 `attention` 决定开关上的圆点；它不认是谁登记的节，两个插件互不点名。
 
 `ui.pageBadge` 的 badge 可带 `attention: true`，同时在通知菜单中显示该页面的待处理事项；label 是通知标题，点击打开该页面。

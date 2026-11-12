@@ -1,0 +1,26 @@
+{
+  "name": "@plume/environment",
+  "version": "0.1.0",
+  "description": "标题栏的「环境」开关和跟着会话的环境卡片：打开方式、子会话、引用，别的插件加的节（后台任务、定时唤醒、计划、建议的新会话……）也排在这里；卡片收着时有事要提醒，开关上挂圆点。",
+  "author": "Plume",
+  "keywords": [
+    "环境",
+    "环境卡片",
+    "子会话",
+    "environment"
+  ],
+  "plume": {
+    "displayName": "会话环境",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0"
+  }
+}

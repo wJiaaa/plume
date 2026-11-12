@@ -1002,7 +1002,7 @@ export interface UiContext {
 	 */
 	conversationCard(id: string, component: ComponentType<ConversationCardProps>, options?: { order?: number; lane?: boolean }): void;
 	/**
-	 * 往会话的环境卡片里加一节（卡片由运行诊断插件画）：和这个会话相关的一件周边的事，比如当前分支的拉取请求，每一行都只是入口，
+	 * 往会话的环境卡片里加一节（卡片由随应用提供的会话环境插件画，它经 `useEnvironmentSections` 拿到各节、不认是谁登记的）：和这个会话相关的一件周边的事，比如当前分支的拉取请求，每一行都只是入口，
 	 * 点了去插件自己的页面或面板。没什么可说时返回 null，卡片不留空位，也不画分隔线。`label` 是卡片「显示哪些内容」菜单里的名字。
 	 * 按 order 从小到大排进卡片自己的几节之间（默认 0）。id 在插件内唯一，停用时撤下。
 	 *

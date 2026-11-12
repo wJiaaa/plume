@@ -1,15 +1,21 @@
 import type { ImageContent, SessionView } from "@plume/contract";
-import type { ConversationCardProps, EnvironmentSectionEntry } from "@plume/contract/ui";
+import type { ConversationCardProps, EnvironmentSectionEntry, UiContext } from "@plume/contract/ui";
 import { IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
 import { Bot, File, Layers, Settings2 } from "@plume/ui/icons";
 import { Fragment, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import { object } from "./entries.ts";
 import { MESSAGES } from "./messages.ts";
-import type { Runtime } from "./state.tsx";
+import type { EnvironmentState } from "./state.ts";
+
+/** 界面入口给卡片和开关的：宿主的 `ui` 和本插件的状态。 */
+export interface Runtime {
+	ui: UiContext;
+	state: EnvironmentState;
+}
 
 /**
- * 卡片自己的几节和它们在卡片里的位置：只是和会话本身有关的这几样。别的节都经 `ui.environmentSection` 登记、按 order 排进这几节之间
- * （后台任务 10、计划 30、建议的新会话 40、定时唤醒 50、拉取请求 60、会话摘要 80、压缩记录 85），所以这里的 order 留着空档。
+ * 卡片自己的几节和它们在卡片里的位置：只是和会话本身有关、不用别的插件的数据的这几样。别的节都经 `ui.environmentSection` 登记、
+ * 按 order 排进这几节之间（现在有后台任务 10、计划 30、建议的新会话 40、定时唤醒 50、拉取请求 60、会话摘要 80、压缩记录 85），
+ * 所以这里的 order 留着空档。卡片不认是哪个插件登记的，那个插件没装或停用了，只是少一节。
  * `children` 是插件建的子会话，按建它的插件（`owner`）分成几节，一个插件一节，在菜单里作为一项一起开关。
  */
 const OWN = { openIn: 0, children: 20, references: 90 } as const;
@@ -20,12 +26,13 @@ const LABEL_KEY = {
 	children: "childSessions",
 	references: "references",
 } as const;
-const KEY = "plume.diagnostics.environment";
+const KEY = "plume.environment.card";
 const listeners = new Set<() => void>();
 /** `hidden` 里是自己几节的名字和别的插件那几节的 `key`（`插件名/id`）。 */
 function read(): { open: boolean; hidden: string[] } {
 	try {
-		const value = object(JSON.parse(localStorage.getItem(KEY) ?? "{}"));
+		const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+		const value: Record<string, unknown> = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
 		return {
 			open: value.open === true,
 			hidden: Array.isArray(value.hidden) ? value.hidden.filter((entry): entry is string => typeof entry === "string") : [],
@@ -98,9 +105,9 @@ export function EnvironmentToggle({ session, runtime }: { session: SessionView; 
 				expanded={open}
 				data-environment-toggle
 				icon={
-					<span className="plume-diagnostics-toggle">
+					<span className="plume-environment-toggle">
 						<Layers size={13} />
-						{noted.length > 0 && <span aria-hidden data-environment-dot className="plume-diagnostics-toggle-dot" />}
+						{noted.length > 0 && <span aria-hidden data-environment-dot className="plume-environment-toggle-dot" />}
 					</span>
 				}
 				onClick={() => update({ open: !open })}
@@ -110,9 +117,9 @@ export function EnvironmentToggle({ session, runtime }: { session: SessionView; 
 }
 function Section({ name, label, children }: { name: string; label?: string; children: ReactNode }) {
 	return (
-		<section data-environment-section={name} className="plume-diagnostics-environment-section">
+		<section data-environment-section={name} className="plume-environment-card-section">
 			{label && (
-				<div className="plume-diagnostics-section-label">
+				<div className="plume-environment-section-label">
 					<Text size="caption" tone="faint">
 						{label}
 					</Text>
@@ -126,7 +133,7 @@ function Section({ name, label, children }: { name: string; label?: string; chil
 function EnvironmentBody({ session, runtime, extra }: { session: SessionView; runtime: Runtime; extra: readonly EnvironmentSectionEntry[] }) {
 	const words = MESSAGES[useI18n().resolvedLocale];
 	const { hidden } = usePrefs();
-	const data = runtime.state.useSnapshot(session.summary.id, true);
+	const data = runtime.state.useChildren(session.summary.id, true);
 	const displayName = runtime.ui.usePluginDisplayName();
 	const [allReferences, setAllReferences] = useState(false);
 	const id = session.summary.id;
@@ -148,15 +155,12 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 			: [],
 	);
 	const pictures = [...new Map(images.map((image) => [image.media || image.data, image])).values()];
-	const openChild = (childId: string) => {
-		runtime.state.select(id, { child: childId });
-		runtime.ui.openPanel("child", id);
-	};
+	const openChild = (childId: string) => runtime.state.openChild(id, childId);
 	const childRows = (rows: typeof children) =>
 		rows.slice(0, 5).map((child) => (
-			<button type="button" key={child.id} className="plume-diagnostics-row" onClick={() => openChild(child.id)}>
+			<button type="button" key={child.id} className="plume-environment-row" onClick={() => openChild(child.id)}>
 				<Bot size={14} />
-				<Text size="detail" className="plume-diagnostics-grow">
+				<Text size="detail" className="plume-environment-grow">
 					<ScrollText text={child.title} />
 				</Text>
 				<Text size="caption" tone="faint">
@@ -176,7 +180,7 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 					<Section key={owner} name={`children:${owner}`} label={(owner && displayName(owner)) || words.childSessions}>
 						{childRows(rows)}
 						{rows.length > 5 && (
-							<button type="button" className="plume-diagnostics-row" onClick={() => runtime.ui.openPanel("children", id)}>
+							<button type="button" className="plume-environment-row" onClick={() => runtime.ui.openPanel("children", id)}>
 								<Text size="caption" tone="faint">
 									{words.more(rows.length - 5)}
 								</Text>
@@ -189,14 +193,14 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 		references: (uniqueFiles.length > 0 || pictures.length > 0) && (
 			<Section name="references" label={words.references}>
 				{pictures.length > 0 && (
-					<div className="plume-diagnostics-pictures">
+					<div className="plume-environment-pictures">
 						{(allReferences ? pictures : pictures.slice(0, 8)).map((image, index) => {
 							const src = image.media ? runtime.ui.mediaUrl(image.media) : `data:${image.mimeType};base64,${image.data}`;
 							return (
 								<button
 									type="button"
 									key={index}
-									className="plume-diagnostics-image"
+									className="plume-environment-image"
 									onClick={(event) =>
 										runtime.ui.openImage(
 											pictures.map((picture) => ({
@@ -217,18 +221,18 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 					<button
 						type="button"
 						key={file.path}
-						className="plume-diagnostics-row"
+						className="plume-environment-row"
 						data-plume-tip={file.path}
 						onClick={() => void runtime.ui.openFile(file.path!, id).catch((error: unknown) => runtime.ui.notify(String(error), "error"))}
 					>
 						<File size={14} />
-						<Text size="detail" className="plume-diagnostics-grow">
+						<Text size="detail" className="plume-environment-grow">
 							<ScrollText text={file.name} />
 						</Text>
 					</button>
 				))}
 				{!allReferences && (uniqueFiles.length > 8 || pictures.length > 8) && (
-					<button type="button" className="plume-diagnostics-row" onClick={() => setAllReferences(true)}>
+					<button type="button" className="plume-environment-row" onClick={() => setAllReferences(true)}>
 						<Text size="caption" tone="faint">
 							{words.more(Math.max(0, uniqueFiles.length - 8) + Math.max(0, pictures.length - 8))}
 						</Text>
@@ -244,7 +248,7 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 			key: entry.key,
 			order: entry.order,
 			node: (
-				<section className="plume-diagnostics-environment-section" data-environment-section={entry.key}>
+				<section className="plume-environment-card-section" data-environment-section={entry.key}>
 					<entry.component session={session} />
 				</section>
 			),
@@ -278,14 +282,14 @@ export function EnvironmentCard({ session, placement, runtime }: ConversationCar
 		...extra.map((entry) => ({ key: entry.key, order: entry.order, label: typeof entry.label === "function" ? entry.label(resolvedLocale) : entry.label })),
 	].sort((a, b) => a.order - b.order);
 	return (
-		<div data-environment className="plume-diagnostics-environment" data-placement={placement}>
-			<div className="plume-diagnostics-environment-head">
-				<Text size="label" tone="muted" className="plume-diagnostics-grow">
+		<div data-environment className="plume-environment-card" data-placement={placement}>
+			<div className="plume-environment-card-head">
+				<Text size="label" tone="muted" className="plume-environment-grow">
 					{words.environment}
 				</Text>
 				<IconButton size="sm" label={words.sections} active={menu.open} icon={<Settings2 size={13} />} onClick={menu.toggle} />
 			</div>
-			<div className="plume-diagnostics-environment-body">
+			<div className="plume-environment-card-body">
 				<EnvironmentBody key={session.summary.id} session={session} runtime={runtime} extra={extra} />
 			</div>
 			{menu.open && (

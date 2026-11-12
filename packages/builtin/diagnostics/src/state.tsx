@@ -11,7 +11,7 @@ export interface Snapshot extends DiagnosticSnapshot {
 	loading: boolean;
 }
 const EMPTY: Snapshot = { version: "", observations: [], prompts: {}, jobs: [], children: [], wakeups: [], loading: true };
-export type Selection = { job?: string; call?: string; child?: string; file?: Awaited<ReturnType<DiagnosticsApi["fullOutput"]>> };
+export type Selection = { job?: string; call?: string; file?: Awaited<ReturnType<DiagnosticsApi["fullOutput"]>> };
 const NONE: Selection = {};
 
 export function createState(api: Remote<DiagnosticsApi>, ui: UiContext) {

@@ -59,7 +59,7 @@ export interface Entry {
 function textOf(message: Message): string {
 	return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
 }
-export function object(value: unknown): Record<string, unknown> {
+function object(value: unknown): Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 export function outputPath(entry: Entry): boolean {

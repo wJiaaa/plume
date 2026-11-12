@@ -1,9 +1,7 @@
-import type { ConversationCardProps, PanelProps, UiPlugin } from "@plume/contract/ui";
-import type { SessionView } from "@plume/contract";
-import { PanelEmpty, Text, useI18n } from "@plume/ui";
-import { Bot, History, ListTodo } from "@plume/ui/icons";
+import type { PanelProps, UiPlugin } from "@plume/contract/ui";
+import { PanelEmpty, useI18n } from "@plume/ui";
+import { History, ListTodo } from "@plume/ui/icons";
 import type { DiagnosticsApi } from "./api.ts";
-import { EnvironmentCard, EnvironmentToggle } from "./Environment.tsx";
 import { MESSAGES } from "./messages.ts";
 import { environmentSections } from "./Sections.tsx";
 import { createState, type Runtime } from "./state.tsx";
@@ -63,12 +61,6 @@ export default {
 				</PanelEmpty>
 			);
 		}
-		function Environment(props: ConversationCardProps) {
-			return <EnvironmentCard {...props} runtime={runtime} />;
-		}
-		function Toggle({ session }: { session: SessionView }) {
-			return <EnvironmentToggle session={session} runtime={runtime} />;
-		}
 		function Output({ session }: PanelProps) {
 			const selected = state.useSelection(session?.summary.id ?? "");
 			const words = MESSAGES[useI18n().resolvedLocale];
@@ -78,39 +70,6 @@ export default {
 				</div>
 			) : (
 				<PanelEmpty icon={ListTodo} title={words.outputGone} />
-			);
-		}
-		function Child({ session }: PanelProps) {
-			const selected = state.useSelection(session?.summary.id ?? "");
-			return selected.child ? <ui.Conversation sessionId={selected.child} /> : null;
-		}
-		function Children({ session, shown }: PanelProps) {
-			const words = MESSAGES[useI18n().resolvedLocale];
-			const data = state.useSnapshot(session?.summary.id ?? "", Boolean(session) && shown);
-			return (
-				<div className="plume-diagnostics-child-list">
-					{data.children.map((child) => (
-						<button
-							type="button"
-							key={child.id}
-							className="plume-diagnostics-row"
-							onClick={() => {
-								if (session) {
-									state.select(session.summary.id, { child: child.id });
-									ui.openPanel("child", session.summary.id);
-								}
-							}}
-						>
-							<Bot size={14} />
-							<Text size="detail" className="plume-diagnostics-grow">
-								{child.title}
-							</Text>
-							<Text size="caption" tone="faint">
-								{child.running ? words.active : words.done}
-							</Text>
-						</button>
-					))}
-				</div>
 			);
 		}
 		ui.panel("tasks", Tasks, {
@@ -134,14 +93,10 @@ export default {
 			order: -19,
 		});
 		ui.panel("output", Output, { title: (locale) => MESSAGES[locale].output, listed: false });
-		ui.panel("child", Child, { title: (locale) => MESSAGES[locale].children, listed: false });
-		ui.panel("children", Children, { title: (locale) => MESSAGES[locale].children, listed: false });
 		const sections = environmentSections(runtime);
 		ui.environmentSection("jobs", sections.Jobs, { label: (locale) => MESSAGES[locale].jobs, order: 10, attention: sections.useMonitors });
 		ui.environmentSection("wakeups", sections.Wakeups, { label: (locale) => MESSAGES[locale].wakeups, order: 50, attention: sections.usePendingWakeups });
 		ui.environmentSection("compactions", sections.Compactions, { label: (locale) => MESSAGES[locale].compactions, order: 85 });
-		ui.conversationCard("environment", Environment, { order: -20, lane: true });
-		ui.sessionToolbar("environment", Toggle);
 		ui.sessionMenuItem("trajectory", {
 			label: (locale) => MESSAGES[locale].viewTrajectory,
 			icon: History,

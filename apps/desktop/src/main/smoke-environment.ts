@@ -94,7 +94,7 @@ export async function checkEnvironment(options: {
 		await send(PROMPTS[0]!);
 		await wait(async () => (await agent.sessions()).some((item) => !previous.has(item.id)), "新会话已创建");
 		await until(chatHas(STARTED), "这一轮安排好服务、监视和唤醒后收尾");
-		await until(`document.querySelector('[data-environment-toggle]') !== null`, "内置诊断插件已加载");
+		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 
 		// 卡片收着：开关上的圆点和说明数着待触发的唤醒和在跑的监视。
 		if (await page<boolean>(`document.querySelector('[data-environment]') !== null`)) await page(`document.querySelector('[data-environment-toggle]').click()`);
@@ -203,7 +203,7 @@ export async function checkEnvironment(options: {
 				await send(prompt);
 				await until(chatHas(replies[index]!), `第 ${index + 1} 句的回复`);
 			}
-			await until(`document.querySelector('[data-environment-toggle]') !== null`, "内置诊断插件已加载");
+			await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 			if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`)))
 				await page(`document.querySelector('[data-environment-toggle]').click()`);
 			await until(
