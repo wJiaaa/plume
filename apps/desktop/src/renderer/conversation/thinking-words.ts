@@ -8,6 +8,7 @@
  * 这是程序在屏幕角落自言自语，不是给谁的进度汇报。
  */
 
+import type { ToolKind } from "@plume/contract/ui";
 import { toolLine } from "./tool-lines.ts";
 
 /**
@@ -15,7 +16,7 @@ import { toolLine } from "./tool-lines.ts";
  *
  * - `breathing`  模型在想，什么都没在跑
  * - `listening`  在读
- * - `searching`  grep、glob、ls
+ * - `searching`  搜内容、找文件、列目录
  * - `working`    命令在跑
  * - `solving`    一轮测试，要么过要么不过
  * - `connecting` 连接断了在等重连
@@ -42,14 +43,15 @@ const WORDS: Record<Mood, string[]> = {
 const PATIENCE_MS = 45_000;
 const LONG_WORDS = ["Still at it", "This one's stubborn", "Taking its time", "Nearly there", "Wrestling with it"];
 
-const BY_TOOL: Record<string, Mood> = {
-	read: "listening",
-	write: "composing",
-	edit: "shaping",
-	bash: "working",
-	glob: "searching",
-	grep: "searching",
-	ls: "searching",
+/** 每种活（`ToolLine.kind`）在等的是哪一种。 */
+const BY_KIND: Record<ToolKind, Mood> = {
+	view: "listening",
+	create: "composing",
+	modify: "shaping",
+	command: "working",
+	find: "searching",
+	search: "searching",
+	list: "searching",
 };
 
 /** 不管从哪个工具进来，其实是一轮测试的命令。 */
@@ -63,10 +65,10 @@ export function moodFor(toolName: string | undefined, summary: string | undefine
 	if (retrying) return "connecting";
 	if (summary && TEST_HINT.test(summary)) return "solving";
 	if (toolName) {
-		// 插件的工具按它像的那个内置工具说；记清单的在排步骤；不像哪个的当成在想。
+		// 按插件登记的种类说；记清单的在排步骤；什么都没说的当成在想。
 		const line = toolLine(toolName);
 		if (line?.checklist) return "weaving";
-		return BY_TOOL[line ? (line.like ?? "") : toolName] ?? "breathing";
+		return line?.kind ? BY_KIND[line.kind] : "breathing";
 	}
 	return writing ? "composing" : "breathing";
 }

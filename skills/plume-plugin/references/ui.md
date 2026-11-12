@@ -28,7 +28,7 @@ export default {
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
 | `ui.approvalCard(tool, Component, { order })` | 给自己的工具画审批卡，按 `request.tool` 认 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
-| `ui.toolLine(tool, { verb, subject, like, group, apart, times, callOnly, checklist, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标、是不是记清单；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
+| `ui.toolLine(tool, { verb, subject, kind, file, note, command, job, group, apart, times, callOnly, checklist, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、做的是哪种活、对着哪个文件、归哪一类、怎么数、图标、是不是记清单；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；name 与 mode 都提供时管理配色和深浅模式 |
@@ -147,28 +147,34 @@ ui.codeBlock("my-language", ({ code, complete, send, fallback }) => {
 
 ## 工具在转录里的说法
 
-不画卡片的工具，转录里用宿主的通用卡片：一行图标加一句做了什么，连着做的同类调用合成一段活。没登记说法时那句话就是工具名、自成一类、图标是终端那枚；登记了就和内置工具一个样子：
+不画卡片的工具，转录里用宿主的通用卡片：一行图标加一句做了什么，连着做的同类调用合成一段活。没登记说法时那句话就是工具名、自成一类、图标是终端那枚。宿主不认任何工具名，读文件、跑命令这些基本工具（`plume.tools`）也是这样登记的：
 
 ```tsx
 ui.toolLine("symbol", {
 	verb: (locale) => MESSAGES[locale].toolVerb, // 「查找符号」
 	subject: (args) => (typeof args.name === "string" ? args.name : undefined),
-	like: "read",
+	kind: "view",
 });
 ```
 
 - 一次调用说成「动作 对象」（「查找符号 runAgent」），一段活里几次合在一起数个数（「查找符号 3 个」）。`verb` 写成事后描述的动词短语，和内置的「读取文件」「搜索内容」一个口吻。
 - `subject` 收到的参数是模型给的、没校验过：取不出就返回 undefined，只说动作；抛错也按没有对象处理。
-- `like` 是做的事像哪个内置工具（`read`、`grep`、`edit`、`write`、`bash`）：读和搜索归「探索」、改和写归「改文件」、`bash` 归「跑命令」，连着做时并进同一段活；运行行用同一种说法；没给 `icon` 时用它的图标。像 `bash`、`grep` 的，模型在参数里写了给人看的 `description` 时那一行就说它；像 `bash` 的算命令，一段活里有它时查后台任务输出的那几次不另数（`plume.tools` 的 `monitor`）。不给就自成一类。
-- `group` 是插件自己起名的一类活（浏览器的五个工具都写 `"browser"`）：同一类的连着做合成一段，和读、跑命令、改文件那几类也接成一段——边改边在页面上验是一件事。给了就不按 `like` 归类，`like` 照旧管运行行和图标。只该给「一段活里的一步」，要人单独看见的事（问人、派活）别给。
+- `kind` 是做的是哪种活：`view` 读文件、`list` 列目录、`find` 按名字找文件、`search` 按内容搜、`create` 写出一个文件、`modify` 改已有的文件、`command` 跑一条命令。前四种归「探索」、`create`、`modify` 归「改文件」、`command` 归「跑命令」，连着做时并进同一段活；宿主按它给默认的说法（没给 `verb` 时「读取文件」「执行命令」……）、图标和运行行。`command` 的算命令：一段活里有它时查后台任务输出的那几次不另数（`plume.tools` 的 `monitor`）。不给就自成一类。
+- 下面几个从参数里取值，参数同样没校验过，取不出就返回 undefined：
+  - `file(args)`：这次调用对着的本机文件 `{ path, lines? }`（`path` 照模型写的样子，绝对路径或相对工作目录；`lines: { from, to? }` 是只读了其中几行；列目录的是目录，空串是工作目录）。没给 `verb` 时，`view`、`list` 的那一行说相对工作区的路径（`src/a.ts:10-29`、`src/`），别的说文件名；不是列目录、调用成功了的，回复里写到这个文件时直接画成文件签。
+  - `note(args)`：模型在参数里写给人看的一句说明（`description`），有就整行说它。命令、正则一眼读不出在干什么的工具给它。
+  - `command(args)`：`kind: "command"` 跑的命令原文。只是在读的命令（`rg`、`sed -n`、`git log`）归「探索」；参数还在生成、命令还没写出来时这次调用先不画。
+  - `job(args)`：这次调用查看或停掉的后台任务 `{ id?, stop? }`，`id` 对得上起它那次结果的 `details.job.id`（`BackgroundJobDetails`）。查看的那一行说是哪条命令的输出，连着查同一个任务的几次合成一行；`stop` 的那一行说停止命令。认不出是哪个任务时返回 `{}`。
+- `create` 的参数要生成好一阵（整个文件的正文）：还在生成时那一行先带上 `file` 取到的路径，行尾说写了几行。
+- `group` 是插件自己起名的一类活（浏览器的五个工具都写 `"browser"`）：同一类的连着做合成一段，和读、跑命令、改文件那几类也接成一段——边改边在页面上验是一件事。给了就不按 `kind` 归类，`kind` 照旧管说法、运行行和图标。只该给「一段活里的一步」，要人单独看见的事（问人、派活）别给。
 - `apart: true`（要和 `group` 一起给）：这一类自成一段，只和同一类的接，不和读、跑命令、改文件接。例子是 `plume.mcp`：不管哪台服务的工具都是一类，和本地的活分开。
 - `checklist: true`：这个工具记进度清单，结果的 `details` 带 `checklist`（`@plume/contract` 的 `ChecklistDetails`，见 logic.md「工具结果里的通用声明」）。宿主把它当一段活的记账：跟旁边那段活接成一段、不单独占一行，有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。例子是 `plume.todo` 的 `todo_write`。
-- `verb` 可以不给：只登记归类和图标，说法照没登记的工具（一次说工具名，合在一起说「使用工具」）。
+- `verb` 可以不给：按 `kind` 的说法说；也没有 `kind` 时只登记归类和图标，说法照没登记的工具（一次说工具名，合在一起说「使用工具」）。
 - 工具名不固定时按前缀登记：`ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" })`。精确工具名登记的优先，几个前缀都对得上时取最长的。
 - `times: true`：几次合在一起时数次数（「操作网页 4 次」），不数个数。
 - `callOnly: true`：`verb` 只说这一次调用（跑着时那一行、展开后那一行），一段活收起后照没登记说法的工具说「使用工具」。给不算一件活、只是收尾手续的工具（子智能体交结果的 `yield`）。
 - `icon` 是 `@plume/ui/icons` 里的图标，13px。
-- 同时登记了 `toolCard` 的工具单独一行画卡片（`inline: true` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复；插件登记的优先于产品给内置工具的说法。宿主不认插件的工具名：转录里怎么说、怎么归类只看这里登记的。
+- 同时登记了 `toolCard` 的工具单独一行画卡片（`inline: true` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复。宿主不认插件的工具名：转录里怎么说、怎么归类只看这里登记的。
 
 ## 工具卡片
 

@@ -56,6 +56,7 @@ import type {
 	SessionMarkProps,
 	SettingsSectionOptions,
 	ToolCardProps,
+	ToolKind,
 	ToolLine,
 	TurnFooterProps,
 	ReplyActionProps,
@@ -149,7 +150,7 @@ export function copyCodeBlock(language: string, code: string, sessionId: string)
 	}
 }
 
-const TOOL_LIKES = new Set(["read", "grep", "edit", "write", "bash"]);
+const TOOL_KINDS = new Set<string>(["view", "list", "find", "search", "create", "modify", "command"] satisfies ToolKind[]);
 /** `ui.draftInSession` 收的图：模型认得的几种。 */
 const COMPOSER_IMAGES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 /** 会话媒体目录里的名字，和 `plume-media://` 认的一样。 */
@@ -181,7 +182,10 @@ function registerToolLine(plugin: string, tool: unknown, line: unknown, options:
 	if (match !== undefined && match !== "tool" && match !== "prefix") throw new Error(`工具说法 ${tool} 的 match 只能是 tool 或 prefix`);
 	if (candidate.verb !== undefined && !validTitle(candidate.verb)) throw new Error(`工具说法 ${tool} 的 verb 必须是文字或按语言取文字的函数`);
 	if (candidate.subject !== undefined && typeof candidate.subject !== "function") throw new Error(`工具说法 ${tool} 的 subject 必须是函数`);
-	if (candidate.like !== undefined && !TOOL_LIKES.has(candidate.like)) throw new Error(`工具说法 ${tool} 的 like 只能是 ${[...TOOL_LIKES].join("、")}`);
+	if (candidate.kind !== undefined && !TOOL_KINDS.has(candidate.kind)) throw new Error(`工具说法 ${tool} 的 kind 只能是 ${[...TOOL_KINDS].join("、")}`);
+	for (const key of ["file", "note", "command", "job"] as const) {
+		if (candidate[key] !== undefined && typeof candidate[key] !== "function") throw new Error(`工具说法 ${tool} 的 ${key} 必须是函数`);
+	}
 	if (candidate.group !== undefined && (typeof candidate.group !== "string" || candidate.group === ""))
 		throw new Error(`工具说法 ${tool} 的 group 必须是非空字符串`);
 	if (candidate.times !== undefined && candidate.times !== true) throw new Error(`工具说法 ${tool} 的 times 只能是 true`);

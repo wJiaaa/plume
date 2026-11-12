@@ -2,7 +2,7 @@
  * 界面入口：本插件交回的结果在对话里的那一行（`ui.agentDelivery`）。后台命令结束、`monitor` 送来新输出、定时唤醒到点时，
  * 结果作为一条运行时送达交给模型；那条消息是写给模型的，原样画出来，读的人会看见一大段自己没说过的话落在自己那一侧，
  * 什么都不画，模型又像是自己突然动了起来。所以画成一行：和工具行同一个骨架，标题先说结果，摘要说是哪件事，
- * 完整命令只在悬停时出现——那串 shell 不是写给人读的。另外登记 `monitor` 在转录里的说法（`ui.toolLine`）。
+ * 完整命令只在悬停时出现——那串 shell 不是写给人读的。另外登记本插件各工具在转录里的说法（`ui.toolLine`，见 `tool-lines.ts`）。
  */
 
 import type { DeliveredReport } from "@plume/contract";
@@ -12,6 +12,7 @@ import { AlarmClock, CircleAlert, Terminal } from "@plume/ui/icons";
 import type { ComponentType } from "react";
 import type { DeliveryDetails } from "./delivery.ts";
 import { MESSAGES } from "./messages.ts";
+import { TOOL_LINES } from "./tool-lines.ts";
 import css from "./tools.css";
 
 type Job = Extract<DeliveryDetails, { kind: "job" }>;
@@ -105,7 +106,6 @@ export default {
 		document.head.append(style);
 		ui.effect(() => style.remove());
 		ui.agentDelivery(deliveries(ui));
-		// monitor 是长跑的命令：和 bash 归成「跑命令」一类，模型写了说明就说它，没写说「监视命令」。
-		ui.toolLine("monitor", { verb: (locale) => MESSAGES[locale].monitorVerb, like: "bash" });
+		for (const [tool, line] of Object.entries(TOOL_LINES)) ui.toolLine(tool, line);
 	},
 } satisfies UiPlugin;

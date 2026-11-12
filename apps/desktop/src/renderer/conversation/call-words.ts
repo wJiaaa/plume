@@ -5,24 +5,31 @@
  */
 
 import type { ToolResultMessage } from "@plume/contract";
+import type { ToolKind } from "@plume/contract/ui";
 import { activeLocale, formatList, type MessageKey, translate } from "@plume/ui";
 import { baseName } from "../files/open-file.ts";
 import { relativeTo } from "../markdown/assets.ts";
 import type { Call, ToolCallBlock } from "./grouping.ts";
-import { checklistTool, lineSubject, lineVerb, toolLine } from "./tool-lines.ts";
+import { checklistTool, lineFile, lineJob, lineNote, lineSubject, lineVerb, toolLine } from "./tool-lines.ts";
 import { polledJob } from "./turn-blocks.ts";
 
-/** 工具名到「它在做什么」的那个说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
-const KIND: Record<string, MessageKey> = {
-	write: "tools.create",
-	edit: "tools.edit",
-	read: "tools.read",
-	bash: "tools.bash",
-	bash_output: "tools.output",
-	glob: "tools.find",
-	grep: "tools.grep",
-	ls: "tools.ls",
+/** 每种活（`ToolLine.kind`）默认的说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
+const KIND: Record<ToolKind, MessageKey> = {
+	view: "tools.read",
+	list: "tools.ls",
+	find: "tools.find",
+	search: "tools.grep",
+	create: "tools.create",
+	modify: "tools.edit",
+	command: "tools.bash",
 };
+
+/** 插件没给动作时的说法：按做的是哪种活；查后台任务的说查看输出。都不是的没有。 */
+function defaultVerb(tool: string): MessageKey | undefined {
+	const line = toolLine(tool);
+	if (line?.kind) return KIND[line.kind];
+	return line?.job ? "tools.output" : undefined;
+}
 
 /** 插件登记了动作的说法；只登记了归类、图标（没给 `verb`）的照没登记说法的工具说。 */
 function spokenLine(tool: string) {
@@ -41,7 +48,7 @@ function describeRun(calls: { toolName: string; subject?: string | undefined }[]
 	for (const call of calls) {
 		const registered = spokenLine(call.toolName);
 		const line = step && registered?.callOnly ? undefined : registered;
-		const key = KIND[call.toolName];
+		const key = defaultVerb(call.toolName);
 		const kind = line ? lineVerb(line, activeLocale()) || call.toolName : key ? translate(key) : translate("tools.using");
 		const entry = counts.get(kind) ?? { count: 0, subjects: [], times: false };
 		entry.count += 1;
@@ -65,7 +72,7 @@ function describeRun(calls: { toolName: string; subject?: string | undefined }[]
  *
  * 清单（`ToolLine.checklist`）并在一段活里时不点名：那一行说的是干了什么活，勾到哪一项清单上看得到。只有清单时照旧说它，
  * 也不说进度：进度是每一次的，合在一起说的是动作。
- * 查输出是那条后台命令的一部分：这一段里有命令（`bash` 和像它的）时不另记；只有查看时，一个任务记一次。按调用数的话，一条命令被查了九次，
+ * 查输出（`ToolLine.job`）是那条后台命令的一部分：这一段里有命令（`kind: "command"`）时不另记；只有查看时，一个任务记一次。按调用数的话，一条命令被查了九次，
  * 这一行就说「执行命令 1 个、查看输出 9 个」。
  */
 export function describeCalls(calls: Call[]): string {
@@ -77,12 +84,12 @@ export function describeCalls(calls: Call[]): string {
 
 function counted(calls: Call[]): Call[] {
 	const work = calls.some(({ block }) => !checklistTool(block.name));
-	const commands = calls.some(({ block }) => block.name === "bash" || toolLine(block.name)?.like === "bash");
+	const commands = calls.some(({ block }) => toolLine(block.name)?.kind === "command");
 	const jobs = new Set<unknown>();
 	return calls.filter(({ block }) => {
 		if (work && checklistTool(block.name)) return false;
-		if (block.name !== "bash_output") return true;
-		const job = (block.arguments as { id?: unknown } | undefined)?.id;
+		if (!toolLine(block.name)?.job) return true;
+		const job = lineJob(block.name, block.arguments)?.id;
 		if (commands || jobs.has(job)) return false;
 		jobs.add(job);
 		return true;
@@ -96,53 +103,45 @@ export function describePolls(what: string | undefined, times: number): string {
 }
 
 /**
- * 模型给人写了一句说明就用它的那几个（插件的工具说像它们的也算，见 `ToolLine.like`）：命令人一眼读不出在干什么，正则和通配也是。
- * 参数里没给 `pattern` 时那里是模型错放的式子，照样只当说明用模型自己写的那句。
- */
-const DESCRIBED = new Set(["grep", "glob", "bash"]);
-
-/**
- * 读文件、列目录那一行说的对象：相对工作区的完整路径。
+ * 读文件（`kind: "view"`）、列目录（`kind: "list"`）那一行说的对象：插件给的文件（`ToolLine.file`）相对工作区的完整路径。
  *
  * 只说文件名时，`apps/web/src/main.tsx` 和 `apps/cli/src/main.ts` 读起来是同一个 main。只读了一段的带上行号，同一个文件
- * 读两段才分得开；目录带 `/`，和文件一眼分开。工作区外的路径照原样，家目录缩成 `~`。
+ * 读两段才分得开；目录带 `/`，和文件一眼分开，没给目录的是工作目录。工作区外的路径照原样，家目录缩成 `~`。
+ * 改文件、写文件的那一行照旧只说名字：展开是带着完整路径的 diff。
  */
 function locationOf(block: ToolCallBlock, root?: string): string | undefined {
-	const { path, offset, limit } = (block.arguments ?? {}) as { path?: unknown; offset?: unknown; limit?: unknown };
+	const kind = toolLine(block.name)?.kind;
+	if (kind !== "view" && kind !== "list") return undefined;
+	const file = lineFile(block.name, block.arguments);
 	const shown = (value: string) => tildeHome(root ? (relativeTo(root, value) ?? value) : value);
-	if (block.name === "ls") {
-		const dir = shown(typeof path === "string" && path !== "" ? path : ".");
+	if (kind === "list") {
+		const dir = shown(file && file.path !== "" ? file.path : ".");
 		return /[\\/]$/.test(dir) ? dir : `${dir}/`;
 	}
-	if (block.name !== "read" || typeof path !== "string" || path === "") return undefined;
-	return `${shown(path)}${lineRange(offset, limit)}`;
+	if (!file || file.path === "") return undefined;
+	return `${shown(file.path)}${lineRange(file.lines)}`;
 }
 
-/** `:10-29`；只给了起点是 `:10-`，只给了行数从第 1 行算。模型常把没给的参数写成 null，所以按类型认。 */
-function lineRange(offset: unknown, limit: unknown): string {
-	const from = typeof offset === "number" ? offset : undefined;
-	const count = typeof limit === "number" ? limit : undefined;
-	if (from === undefined && count === undefined) return "";
-	const start = from ?? 1;
-	return `:${start}-${count === undefined ? "" : start + count - 1}`;
+/** `:10-29`；没给到哪一行是 `:10-`。 */
+function lineRange(lines: { from: number; to?: number } | undefined): string {
+	if (!lines) return "";
+	return `:${lines.from}-${lines.to === undefined ? "" : lines.to}`;
 }
 
 /**
- * 一次调用在行上怎么说：读文件、列目录说路径（`root` 是工作区）；模型写了一句给人看的说明就用它；其余说动作和对象。
+ * 一次调用在行上怎么说：模型写了一句给人看的说明（`ToolLine.note`）就用它；读文件、列目录说路径（`root` 是工作区）；其余说动作和对象。
  * 查后台任务输出的那一次说是哪个任务（`job`：启动它的那条命令的说明），停掉它的那一次说停止命令。
  */
 export function describeOne(block: ToolCallBlock, root?: string, job?: string): string {
 	if (polledJob(block)) return describePolls(job, 1);
-	if (block.name === "bash_output") return translate("tools.stopJob");
-	const line = toolLine(block.name);
-	const { description } = (block.arguments ?? {}) as { description?: unknown };
-	const said = typeof description === "string" ? description.trim() : "";
-	if (said && DESCRIBED.has((line ? line.like : block.name) ?? "")) return said;
+	if (toolLine(block.name)?.job) return translate("tools.stopJob");
+	const said = lineNote(block.name, block.arguments);
+	if (said) return said;
 	const spoken = spokenLine(block.name);
 	if (spoken) return describeRun([{ toolName: block.name, subject: lineSubject(spoken, block.arguments) }]);
 	const location = locationOf(block, root);
 	if (location) return describeRun([{ toolName: block.name, subject: location }]);
-	if (KIND[block.name]) return describeRun([{ toolName: block.name, subject: subjectOf(block) }]);
+	if (defaultVerb(block.name)) return describeRun([{ toolName: block.name, subject: subjectFor(block) }]);
 	// 不认得的工具（没登记说法的插件工具）照原名说：「使用工具」读不出是哪一个。
 	return block.name;
 }
@@ -152,10 +151,13 @@ function tildeHome(path: string): string {
 	return path.replace(/^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/, "~");
 }
 
-/** 一次调用在一段活的总说法里点名的对象：插件登记了说法的按它取，其余见 `subjectOf`。 */
+/** 一次调用在一段活的总说法里点名的对象：插件登记了说法的按它取，给了文件（`ToolLine.file`）的说文件名，其余见 `subjectOf`。 */
 function subjectFor(block: ToolCallBlock): string | undefined {
 	const line = spokenLine(block.name);
-	return line ? lineSubject(line, block.arguments) : subjectOf(block);
+	if (line) return lineSubject(line, block.arguments);
+	const file = lineFile(block.name, block.arguments);
+	if (file) return file.path !== "" ? baseName(file.path) : undefined;
+	return subjectOf(block);
 }
 
 /** 一次调用说的是哪个文件、哪个网页，值得在一句摘要里点名的那部分。 */

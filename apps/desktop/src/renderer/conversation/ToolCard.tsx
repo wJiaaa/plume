@@ -21,8 +21,9 @@ import { Section } from "./detail/Section.tsx";
 import { DiffCount } from "./DiffCount.tsx";
 import type { Call, ToolCallBlock } from "./grouping.ts";
 import { formatElapsed } from "./running-line.ts";
-import { streamedLines, streamedString } from "./streamed-arguments.ts";
+import { streamedLines, streamedStrings } from "./streamed-arguments.ts";
 import { ToolIcon } from "./tool-icons.tsx";
+import { toolLine } from "./tool-lines.ts";
 import { polledJob, pollOutput } from "./turn-blocks.ts";
 import {
 	type BackgroundJobInfo,
@@ -49,15 +50,14 @@ const SLOT_STATUS: Record<CallStatus, ToolCardProps["status"]> = {
 };
 
 /**
- * 还在写的文件：标题带上路径，行尾说写了几行。开跑之后交还给参数本身。
+ * 还在写的文件（`ToolLine.kind` 是 `create`）：标题带上路径，行尾说写了几行。开跑之后交还给参数本身。
  */
 export function writeDraft(block: ToolCallBlock, status: CallStatus): { block: ToolCallBlock; lines?: string } {
-	const raw = status === "pending" && block.name === "write" ? block.argumentsText : undefined;
+	const raw = status === "pending" && toolLine(block.name)?.kind === "create" ? block.argumentsText : undefined;
 	if (!raw) return { block };
-	const path = typeof block.arguments.path !== "string" ? streamedString(raw, "path") : undefined;
-	const lines = streamedLines(raw, "content");
+	const lines = streamedLines(raw);
 	return {
-		block: path ? { ...block, arguments: { ...block.arguments, path } } : block,
+		block: { ...block, arguments: { ...streamedStrings(raw), ...block.arguments } },
 		...(lines ? { lines: translate("toolCard.writtenLines", { n: lines }) } : {}),
 	};
 }

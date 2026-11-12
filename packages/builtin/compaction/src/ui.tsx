@@ -1,5 +1,5 @@
 /**
- * 界面入口：转录里怎么说 `recall`。它搜的是这个会话的转录，和搜项目的 grep 归成一类，连着做时并进同一段「探索」。
+ * 界面入口：转录里怎么说 `recall`。它搜的是这个会话的转录，和搜项目内容归成一类（`kind: "search"`），连着做时并进同一段「探索」。
  */
 
 import type { UiPlugin } from "@plume/contract/ui";
@@ -11,7 +11,7 @@ export default {
 		ui.toolLine("recall", {
 			verb: (locale) => MESSAGES[locale].recallVerb,
 			subject: (args) => (typeof args.query === "string" && args.query.trim() ? args.query.trim() : undefined),
-			like: "grep",
+			kind: "search",
 		});
 	},
 } satisfies UiPlugin;

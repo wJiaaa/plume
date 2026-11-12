@@ -1,12 +1,13 @@
 /**
- * 插件经 `ui.toolLine` 给自己的工具登记的说法：动作、对象、像哪个内置工具、归哪一类、图标。
+ * 插件经 `ui.toolLine` 给自己的工具登记的说法：动作、对象、做的是哪种活、对着哪个文件、归哪一类、图标。
  *
- * 说法（`call-words.ts`）、归类（`tool-category.ts`）、图标（`tool-icons.tsx`）、运行行（`thinking-words.ts`）都先查这里，
- * 查不到才用产品给内置工具的表：插件可以换掉同名的内置工具，说法跟着它走。单独一个模块、不碰界面：分组要在测试里直接跑。
+ * 说法（`call-words.ts`）、归类（`tool-category.ts`）、图标（`tool-icons.tsx`）、运行行（`thinking-words.ts`）、回复里的文件签
+ * （`files/scope.ts`）都只查这里，本体不认工具名：读文件、跑命令这些基本工具也是 plume.tools 在这里登记的。
+ * 单独一个模块、不碰界面：分组要在测试里直接跑。
  */
 
 import type { Locale } from "@plume/contract";
-import type { ToolLine } from "@plume/contract/ui";
+import type { ToolFile, ToolLine } from "@plume/contract/ui";
 
 interface Entry {
 	plugin: string;
@@ -70,4 +71,42 @@ export function lineSubject(line: ToolLine, args: unknown): string | undefined {
 		console.error("插件给的工具对象取不出来：", error);
 		return undefined;
 	}
+}
+
+/** 插件从参数里取值的函数：插件的函数出错当作取不出。 */
+function fromArgs<T>(take: ((args: Record<string, unknown>) => T) | undefined, args: unknown): T | undefined {
+	if (!take) return undefined;
+	try {
+		return take((args ?? {}) as Record<string, unknown>);
+	} catch (error) {
+		console.error("插件给的工具说法取不出来：", error);
+		return undefined;
+	}
+}
+
+/** 这次调用对着的文件或目录（`ToolLine.file`）；形状不对当作没有。 */
+export function lineFile(tool: string, args: unknown): ToolFile | undefined {
+	const file = fromArgs(toolLine(tool)?.file, args);
+	return typeof file?.path === "string" ? file : undefined;
+}
+
+/** 模型写给人看的那句说明（`ToolLine.note`），去掉两头空白；空的当作没有。 */
+export function lineNote(tool: string, args: unknown): string | undefined {
+	const note = fromArgs(toolLine(tool)?.note, args);
+	return typeof note === "string" && note.trim() !== "" ? note.trim() : undefined;
+}
+
+/** 这次跑的命令原文（`ToolLine.command`）。 */
+export function lineCommand(tool: string, args: unknown): string | undefined {
+	const command = fromArgs(toolLine(tool)?.command, args);
+	return typeof command === "string" ? command : undefined;
+}
+
+/** 这次调用查看或停掉的后台任务（`ToolLine.job`）；不是这类调用时是 undefined。 */
+export function lineJob(tool: string, args: unknown): { id: string | undefined; stop: boolean } | undefined {
+	const line = toolLine(tool);
+	if (!line?.job) return undefined;
+	const job = fromArgs(line.job, args);
+	if (!job || typeof job !== "object") return undefined;
+	return { id: typeof job.id === "string" ? job.id : undefined, stop: job.stop === true };
 }

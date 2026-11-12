@@ -8,6 +8,7 @@
 import type { DeliveredReport } from "@plume/contract";
 import { runKey, type Call, type Run, type ToolCallBlock } from "./grouping.ts";
 import { CHECKLIST, isPluginGroup, toolCategory } from "./tool-category.ts";
+import { lineCommand, lineJob, toolLine } from "./tool-lines.ts";
 import { opensTurn, settled } from "./turns.ts";
 
 type MessageRun = Extract<Run, { kind: "message" }>;
@@ -219,13 +220,16 @@ export function blocksFrom(list: Run[], live = false, from?: BlockStart, prefix:
 }
 
 /**
- * 一条 bash 的命令还在生成：先不画，命令到齐时直接出现在它该在的那一段里。
+ * 一条跑命令的调用（插件给了 `ToolLine.command`）命令还在生成：先不画，命令到齐时直接出现在它该在的那一段里。
  *
  * 归哪一类要看命令，而参数没生成完时 `arguments` 是空的。按空参数先算终端，一条 `sed -n` 会先在底下冒一行、
  * 几百毫秒后再并进上面的探索。代价是生成一条长命令的那几秒里，这条调用还不在转录上，底部运行指示的计时照走。
  */
 function unclassified(call: Call): boolean {
-	return call.block.name === "bash" && call.stopReason === "pending" && typeof call.block.arguments?.command !== "string";
+	const line = toolLine(call.block.name);
+	return (
+		line?.kind === "command" && line.command !== undefined && call.stopReason === "pending" && lineCommand(call.block.name, call.block.arguments) === undefined
+	);
 }
 
 function itemsOf(body: Run[]): TurnItem[] {
@@ -281,11 +285,10 @@ function itemsOf(body: Run[]): TurnItem[] {
 	return items;
 }
 
-/** 一次 `bash_output` 查的是哪个后台任务。停掉它的那一次不是在看输出，不和查看合在一起。 */
+/** 一次查后台任务的调用（`ToolLine.job`）查的是哪个任务。停掉它的那一次不是在看输出，不和查看合在一起。 */
 export function polledJob(block: ToolCallBlock): string | undefined {
-	if (block.name !== "bash_output") return undefined;
-	const { id, kill } = (block.arguments ?? {}) as { id?: unknown; kill?: unknown };
-	return typeof id === "string" && kill !== true ? id : undefined;
+	const job = lineJob(block.name, block.arguments);
+	return job && !job.stop ? job.id : undefined;
 }
 
 /** 一段活展开后挂在竖线上的一行：一次调用、一段推理、一份送回来的结果，或者连着查同一个后台任务的几次输出。 */
@@ -312,7 +315,7 @@ export function foldPolls(members: StepMember[]): StepLine[] {
 /**
  * 几次查看读到的输出，接成一段。
  *
- * 每一次 `bash_output` 只给上次之后新打出来的，按顺序接起来就是这段时间里的全部，不重复。去掉的是给模型看的那两样：
+ * 每一次查看只给上次之后新打出来的，按顺序接起来就是这段时间里的全部，不重复。去掉的是给模型看的那两样：
  * 开头那行带任务 id 的状态（`[job … running]`），和没有新输出时的那句占位。
  */
 export function pollOutput(texts: string[]): string {

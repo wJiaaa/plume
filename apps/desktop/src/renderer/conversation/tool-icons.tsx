@@ -3,25 +3,25 @@
  * 和它只有一次调用时那一行是同一枚——从一次长到两次，行首不换。
  */
 
+import type { ToolKind } from "@plume/contract/ui";
 import { FileCode, FilePlus, FileText, FolderTree, Search, Terminal } from "@plume/ui/icons";
 import { toolLine } from "./tool-lines.ts";
 
-const ICONS: Record<string, typeof FileText> = {
-	read: FileText,
-	write: FilePlus,
-	edit: FileCode,
-	ls: FolderTree,
-	glob: Search,
-	grep: Search,
-	bash: Terminal,
-	// 查后台命令的输出，和起它的那条命令同一枚。
-	bash_output: Terminal,
+/** 每种活（`ToolLine.kind`）默认的图标。 */
+const ICONS: Record<ToolKind, typeof FileText> = {
+	view: FileText,
+	create: FilePlus,
+	modify: FileCode,
+	list: FolderTree,
+	find: Search,
+	search: Search,
+	command: Terminal,
 };
 
 export function ToolIcon({ name }: { name: string }) {
-	// 插件登记了说法的，用它给的图标或它像的那个内置工具的。不认得的工具用终端那枚：一个工具调用读起来就是「跑了一件事」，
-	// 扳手说的是设置。
+	// 插件给的图标，没给就按它做的那种活。不认得的工具用终端那枚（查后台命令的输出也是这枚，和起它的那条命令同一枚）：
+	// 一个工具调用读起来就是「跑了一件事」，扳手说的是设置。
 	const line = toolLine(name);
-	const Icon = (line ? (line.icon ?? (line.like ? ICONS[line.like] : undefined)) : ICONS[name]) ?? Terminal;
+	const Icon = line?.icon ?? (line?.kind ? ICONS[line.kind] : undefined) ?? Terminal;
 	return <Icon size={13} strokeWidth={1.8} className="shrink-0" />;
 }
