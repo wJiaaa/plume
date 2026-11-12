@@ -12,7 +12,7 @@
  * 5. 点标题栏右端的开关打开面板区，是一个开始页标签，上面有任务、调用轨迹、项目文件和终端卡片；点「终端」这个标签变成终端面板，跑一条命令，用 ⌃` 收起、再打开；
  *    再用 `plume-plugin` 装上 Git 插件，把工作区变成仓库：开始页列出 Git，输入框上方出现分支签和改动计数，点改动计数开出 Git 面板，列出没提交的文件；
  * 6. 用 `plume-plugin`（应用生成的启动脚本）把子 Agent、侧边聊天插件装进安装目录，不重启就加载上；再装下一步建议插件发一句话：
- *    回复末尾的 `:followup[…]` 不画进正文、成了输入框的灰字，按 Tab 填进去；模型选择左边出现上下文用量的圆环（内置的用量与状态），点开写出窗口占用；
+ *    回复末尾的 `:followup[…]` 不画进正文、成了输入框的灰字，按 Tab 填进去；模型选择左边出现上下文用量的圆环（本体的），点开写出窗口占用；
  *    装上使用统计插件，设置 › 数据里多出「使用统计」一页，读出上面那几轮的花销；设置 › 常规里切一次「不让电脑休眠」；
  * 7. 到「外观」里选深色主题、选一张会话背景图（选图对话框直接给第一张截图），回到会话看背景。
  *
@@ -1820,7 +1820,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		childrenPhase = false;
 		// 排队消息、划词侧聊在单独的 queue、quote-side-chat 段。
 
-		// 下一步建议（市场里的插件）、用量与状态（内置插件）：用宿主开的三个扩展点（灰字建议、回复过滤、输入框工具栏右边那一格）。
+		// 下一步建议（市场里的插件）用宿主开的两个扩展点（灰字建议、回复过滤）；上下文用量是本体的。
 		// 回复末尾的 `:followup[…]` 不画进正文、变成输入框的灰字，按 Tab 整段填进去；模型选择左边是上下文用量的圆环，点开写出窗口占用。
 		await plugin.install("followups");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "followups" && status.state === "active"), "装上 followups 插件");
@@ -2229,7 +2229,6 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"plume.commands",
 			"plume.web",
 			"plume.browser",
-			"plume.status",
 			"plume.title",
 		])
 			if (!builtins.includes(name)) throw new Error(`内置插件 ${name} 没加载：${builtins.join()}`);

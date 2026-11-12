@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildQuoteFocus, type ChildDraft } from "./child-drafts.ts";
 import type { PickedFile } from "../composer/attachments/picked.ts";
 import { ComposerSend, ComposerShell } from "../composer/index.ts";
+import { ContextMeter } from "../composer/ContextMeter.tsx";
 import { QuoteChip } from "../composer/QuoteChip.tsx";
 import { useComposerAttachments } from "../composer/useComposerAttachments.tsx";
 import { useMentions } from "../composer/useMentions.tsx";
@@ -244,7 +245,7 @@ export function ChildComposer({
 }
 
 /**
- * 子会话输入框右下角，发送按钮左边：插件的 end 格子（上下文用量）、模型和思考档位，和主输入框同一套，量的是这个子会话。
+ * 子会话输入框右下角，发送按钮左边：插件的 end 格子、上下文用量、模型和思考档位，和主输入框同一套，量的是这个子会话。
  * 子会话没选模型、档位时 agent 进程用父会话的（`packages/core/agent/src/agent.ts` 的 `modelOf`），这里也照这样算，画的就是下一轮实际会用的。
  * 插件的独立会话没有父会话可跟，菜单和主输入框一样，没选的用默认模型。
  */
@@ -277,6 +278,7 @@ function ChildModels({
 				running={running}
 				{...(model ? { model: { id: model.id, name: model.name, contextWindow: model.contextWindow } } : {})}
 			/>
+			<ContextMeter view={view} contextWindow={model?.contextWindow} />
 			{composer.model === "show" && (
 				<ModelBadge
 					{...(chosen ? { model: chosen } : {})}

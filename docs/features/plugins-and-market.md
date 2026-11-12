@@ -45,7 +45,7 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 
 ## 内置插件
 
-随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、用量与状态（`plume.status`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、密钥加密（`plume.secrets`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）。
+随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、密钥加密（`plume.secrets`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）。
 
 ## 市场插件
 

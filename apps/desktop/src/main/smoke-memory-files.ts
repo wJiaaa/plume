@@ -5,7 +5,7 @@ import type { BrowserWindow } from "electron";
 
 /**
  * 上下文用量里的「记忆文件」点得开会话目录外的文件：工作目录的上一层做成仓库根、放一份 AGENTS.md，plume.prompt 把它整段放进提示词并标出
- * 来源；发一句话，点开内置用量与状态的圆环、展开「记忆文件」、点那一行，文件面板只读打开它。
+ * 来源；发一句话，点开上下文用量的圆环、展开「记忆文件」、点那一行，文件面板只读打开它。
  */
 export async function checkMemoryFiles(options: {
 	window: BrowserWindow;
@@ -50,7 +50,7 @@ export async function checkMemoryFiles(options: {
 
 	await click("[data-screen=chat] [data-plume-context-meter]");
 	await click("[data-plume-popover][role=group] button[aria-expanded]", "记忆文件");
-	await click("[data-plume-popover][role=group] .status-file", instructions);
+	await click("[data-plume-popover][role=group] [data-plume-memory-file]", instructions);
 	await until(`document.querySelector('[data-plume-popover][role=group]') === null`, "点了记忆文件，弹层收起");
 	await until(`document.querySelector('[data-panel]:not([inert])')?.textContent.includes('这一份在会话目录外') === true`, "文件面板打开会话目录外的 AGENTS.md");
 	if (await page(`document.querySelector('[data-plume-toaster]')?.textContent.includes('AGENTS.md') === true`)) throw new Error("不该提示读不到 AGENTS.md");

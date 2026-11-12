@@ -1,21 +1,9 @@
 /**
- * 上下文用量那一格的数：从会话的消息里读出上下文占用，再写成扫一眼就够的短字。
- * 都是纯函数，界面入口只管画。
+ * 上下文用量那一格的数：从会话的消息里读出上一次请求把上下文窗口占了多少。
+ * 都是纯函数，`ContextMeter` 只管画。
  */
 
 import type { Message } from "@plume/contract";
-
-/**
- * token 数写短：812、12.3k、4.1M、2.7B。
- *
- * 每一档都留一位小数：4.1M 和 4.9M 差的是账单的五分之一，小数点后那一位正是要看的。
- */
-export function formatTokens(count: number): string {
-	if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
-	if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-	if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-	return String(Math.round(count));
-}
 
 /** 上一次请求的上下文有多满。`tight` 是到了 80%：压缩在窗口真满之前就开始，提醒要早一些。 */
 export interface ContextReading {
