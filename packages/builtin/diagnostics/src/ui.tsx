@@ -5,6 +5,7 @@ import { Bot, History, ListTodo } from "@plume/ui/icons";
 import type { DiagnosticsApi } from "./api.ts";
 import { EnvironmentCard, EnvironmentToggle } from "./Environment.tsx";
 import { MESSAGES } from "./messages.ts";
+import { environmentSections } from "./Sections.tsx";
 import { createState, type Runtime } from "./state.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { TracePanel } from "./TracePanel.tsx";
@@ -135,6 +136,10 @@ export default {
 		ui.panel("output", Output, { title: (locale) => MESSAGES[locale].output, listed: false });
 		ui.panel("child", Child, { title: (locale) => MESSAGES[locale].children, listed: false });
 		ui.panel("children", Children, { title: (locale) => MESSAGES[locale].children, listed: false });
+		const sections = environmentSections(runtime);
+		ui.environmentSection("jobs", sections.Jobs, { label: (locale) => MESSAGES[locale].jobs, order: 10, attention: sections.useMonitors });
+		ui.environmentSection("wakeups", sections.Wakeups, { label: (locale) => MESSAGES[locale].wakeups, order: 50, attention: sections.usePendingWakeups });
+		ui.environmentSection("compactions", sections.Compactions, { label: (locale) => MESSAGES[locale].compactions, order: 85 });
 		ui.conversationCard("environment", Environment, { order: -20, lane: true });
 		ui.sessionToolbar("environment", Toggle);
 		ui.sessionMenuItem("trajectory", {

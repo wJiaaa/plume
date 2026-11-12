@@ -37,7 +37,7 @@ export interface DiagnosticSnapshot {
 
 export interface DiagnosticsApi {
 	/**
-	 * `version`：上次拿到的轨迹版本；null 表示不要轨迹（标题栏按钮、环境卡片只看任务和唤醒）。
+	 * `version`：上次拿到的轨迹版本；null 表示不要轨迹（环境卡片里的几节和开关圆点只看任务和唤醒）。
 	 * `ports`：要不要查后台任务的端口（要问系统，只在画得出端口的地方要）。
 	 */
 	read(sessionId: string, version: string | null, ports: boolean): Promise<DiagnosticSnapshot>;

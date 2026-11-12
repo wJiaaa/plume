@@ -1,26 +1,23 @@
-import type { ImageContent, SessionView, SessionWakeup } from "@plume/contract";
+import type { ImageContent, SessionView } from "@plume/contract";
 import type { ConversationCardProps, EnvironmentSectionEntry } from "@plume/contract/ui";
 import { IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
-import { AlarmClock, Bot, File, History, Layers, Settings2, Square, X } from "@plume/ui/icons";
+import { Bot, File, Layers, Settings2 } from "@plume/ui/icons";
 import { Fragment, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { object } from "./entries.ts";
 import { MESSAGES } from "./messages.ts";
 import type { Runtime } from "./state.tsx";
 
 /**
- * 卡片自己的几节和它们在卡片里的位置。别的插件经 `ui.environmentSection` 加的节（批准过的计划、建议的新会话、当前分支的拉取请求、
- * 会话摘要）按 order 排进这几节之间，所以这里的 order 留着空档：30 是计划、40 是建议的新会话、60 是拉取请求、80 是会话摘要的位置。
+ * 卡片自己的几节和它们在卡片里的位置：只是和会话本身有关的这几样。别的节都经 `ui.environmentSection` 登记、按 order 排进这几节之间
+ * （后台任务 10、计划 30、建议的新会话 40、定时唤醒 50、拉取请求 60、会话摘要 80、压缩记录 85），所以这里的 order 留着空档。
  * `children` 是插件建的子会话，按建它的插件（`owner`）分成几节，一个插件一节，在菜单里作为一项一起开关。
  */
-const OWN = { openIn: 0, jobs: 10, children: 20, wakeups: 50, compactions: 85, references: 90 } as const;
+const OWN = { openIn: 0, children: 20, references: 90 } as const;
 type SectionName = keyof typeof OWN;
 const SECTIONS = Object.keys(OWN) as SectionName[];
 const LABEL_KEY = {
 	openIn: "sectionOpenIn",
-	jobs: "jobs",
 	children: "childSessions",
-	wakeups: "wakeups",
-	compactions: "compactions",
 	references: "references",
 } as const;
 const KEY = "plume.diagnostics.environment";
@@ -60,9 +57,8 @@ function usePrefs() {
 /**
  * 标题栏上开关环境卡片的那颗，开着就亮。
  *
- * 卡片收着时，会自己叫醒会话的东西在按钮上挂一个圆点：待触发的定时唤醒（过一会儿自己开一轮），在跑的 `monitor`（有输出就开一轮）。
- * 普通后台命令不算——开着一个开发服务器是常态，算进去圆点就一直亮着。别的插件那几节有事等人决定时也挂（`attention`：
- * 建议的新会话还没人点开始），那句话接在说明后面。人把那一节关掉了就不再提醒。
+ * 卡片收着时，各节经 `attention` 报的事在按钮上挂一个圆点，那句话按节的 order 接在说明后面：等人决定的（建议的新会话还没人点开始），
+ * 或会自己叫醒会话的（在跑的监视、待触发的定时唤醒）。人把那一节关掉了就不再提醒。
  */
 export function EnvironmentToggle({ session, runtime }: { session: SessionView; runtime: Runtime }) {
 	const words = MESSAGES[useI18n().resolvedLocale];
@@ -88,15 +84,7 @@ export function EnvironmentToggle({ session, runtime }: { session: SessionView; 
 	};
 	const watched = open ? [] : extra.filter((entry) => entry.attention && !hidden.includes(entry.key));
 	const noted = watched.flatMap((entry) => (asks[entry.key] ? [asks[entry.key]!] : []));
-	const data = runtime.state.useSnapshot(session.summary.id, !open);
-	const monitors = !open && !hidden.includes("jobs") ? data.jobs.filter((job) => job.kind === "monitor" && job.finishedAt === undefined).length : 0;
-	const scheduled = !open && !hidden.includes("wakeups") ? data.wakeups.length : 0;
-	const label = [
-		words.environment,
-		...(scheduled ? [words.pendingWakeups(scheduled)] : []),
-		...(monitors ? [words.runningMonitors(monitors)] : []),
-		...noted,
-	].join(" · ");
+	const label = [words.environment, ...noted].join(" · ");
 	return (
 		<>
 			{watched.map((entry) => {
@@ -112,7 +100,7 @@ export function EnvironmentToggle({ session, runtime }: { session: SessionView; 
 				icon={
 					<span className="plume-diagnostics-toggle">
 						<Layers size={13} />
-						{scheduled + monitors + noted.length > 0 && <span aria-hidden data-environment-dot className="plume-diagnostics-toggle-dot" />}
+						{noted.length > 0 && <span aria-hidden data-environment-dot className="plume-diagnostics-toggle-dot" />}
 					</span>
 				}
 				onClick={() => update({ open: !open })}
@@ -135,72 +123,13 @@ function Section({ name, label, children }: { name: string; label?: string; chil
 	);
 }
 
-/** 今天的只写时刻，别的日子带上日期。 */
-function when(at: number, locale: string): string {
-	const sameDay = new Date(at).toDateString() === new Date().toDateString();
-	return new Intl.DateTimeFormat(
-		locale,
-		sameDay ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
-	).format(at);
-}
-
-/** 和对话里送达那一行同一句：唤醒写了理由用理由，否则是 prompt 的第一行。 */
-function wakeupLabel(wakeup: SessionWakeup): string {
-	return wakeup.reason?.trim() || (wakeup.prompt.split("\n").find((line) => line.trim()) ?? "").trim();
-}
-
-/**
- * 模型给这个对话安排的定时唤醒，还没触发的那些。对话里那次工具调用很快就被顶上去了，而它说的事要几分钟、几小时后才发生——
- * 这一节回答「它还会不会自己动起来、什么时候」，每一项都能当场取消。节底那一句说清楚它们只活在这次运行里。
- */
-function Wakeups({ id, wakeups, runtime }: { id: string; wakeups: SessionWakeup[]; runtime: Runtime }) {
-	const { resolvedLocale } = useI18n();
-	const words = MESSAGES[resolvedLocale];
-	const cancel = (wakeupId: string) =>
-		void runtime.api
-			.cancelWakeup(id, wakeupId)
-			.then(() => runtime.state.refresh(id))
-			.catch((error: unknown) => runtime.ui.notify(String(error), "error"));
-	return (
-		<>
-			{wakeups.map((wakeup) => {
-				const meta = [
-					when(wakeup.nextAt, resolvedLocale),
-					wakeup.recurring ? words.wakeupRecurring : words.wakeupOnce,
-					...(wakeup.expiresAt !== undefined ? [words.wakeupExpires(when(wakeup.expiresAt, resolvedLocale))] : []),
-				].join(" · ");
-				return (
-					<div key={wakeup.id} className="plume-diagnostics-wakeup" data-environment-wakeup={wakeup.id}>
-						<AlarmClock size={14} />
-						{/* 悬停读到完整的 prompt 和 cron 表达式：行里只放得下一句。 */}
-						<div className="plume-diagnostics-grow" data-plume-tip={wakeup.cron ? `${wakeup.cron}\n${wakeup.prompt}` : wakeup.prompt}>
-							<Text as="p" size="label" className="plume-diagnostics-truncate">
-								{wakeupLabel(wakeup)}
-							</Text>
-							<Text as="p" size="caption" tone="muted" numeric className="plume-diagnostics-truncate">
-								{meta}
-							</Text>
-						</div>
-						<IconButton size="xs" label={words.wakeupCancel} icon={<X size={12} />} onClick={() => cancel(wakeup.id)} data-wakeup-cancel />
-					</div>
-				);
-			})}
-			<Text as="p" size="caption" tone="faint" className="plume-diagnostics-note">
-				{words.wakeupMemoryOnly}
-			</Text>
-		</>
-	);
-}
-
 function EnvironmentBody({ session, runtime, extra }: { session: SessionView; runtime: Runtime; extra: readonly EnvironmentSectionEntry[] }) {
 	const words = MESSAGES[useI18n().resolvedLocale];
 	const { hidden } = usePrefs();
-	const data = runtime.state.useSnapshot(session.summary.id, true, true);
+	const data = runtime.state.useSnapshot(session.summary.id, true);
 	const displayName = runtime.ui.usePluginDisplayName();
-	const [busy, setBusy] = useState<string>();
 	const [allReferences, setAllReferences] = useState(false);
 	const id = session.summary.id;
-	const jobs = data.jobs.filter((job) => job.finishedAt === undefined);
 	const children = data.children
 		.filter((child) => child.title.trim() !== "")
 		.sort((a, b) => Number(b.running) - Number(a.running) || a.createdAt - b.createdAt);
@@ -223,17 +152,6 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 		runtime.state.select(id, { child: childId });
 		runtime.ui.openPanel("child", id);
 	};
-	const stop = async (jobId: string) => {
-		setBusy(jobId);
-		try {
-			await runtime.api.stop(id, jobId, false);
-			await runtime.state.refresh(id);
-		} catch (error) {
-			runtime.ui.notify(String(error), "error");
-		} finally {
-			setBusy(undefined);
-		}
-	};
 	const childRows = (rows: typeof children) =>
 		rows.slice(0, 5).map((child) => (
 			<button type="button" key={child.id} className="plume-diagnostics-row" onClick={() => openChild(child.id)}>
@@ -252,46 +170,6 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 				<runtime.ui.ProjectOpener path={session.summary.cwd} />
 			</Section>
 		),
-		jobs: jobs.length > 0 && (
-			<Section name="jobs" label={words.jobs}>
-				{jobs.map((job) => {
-					const port = job.endpoints[0]?.port;
-					return (
-						<div key={job.id} className="plume-diagnostics-heading" data-environment-job={job.id}>
-							<button
-								type="button"
-								className="plume-diagnostics-row plume-diagnostics-grow"
-								data-plume-tip={job.kind === "monitor" ? `${words.monitorTip}\n${job.command}` : job.command}
-								onClick={() => runtime.openJob(id, job.id)}
-							>
-								<span className="plume-diagnostics-dot" data-status="running" />
-								<Text size="detail" mono className="plume-diagnostics-grow">
-									<ScrollText text={job.description || job.command} />
-								</Text>
-								{/* 和普通后台命令分开：它每送一批输出就是一轮，人得认得出哪一行在持续花钱。 */}
-								{job.kind === "monitor" && (
-									<Text size="caption" tone="muted" data-environment-monitor>
-										{words.monitor}
-									</Text>
-								)}
-								{port !== undefined && (
-									<Text size="caption" tone="faint" numeric data-environment-port>
-										:{port}
-									</Text>
-								)}
-							</button>
-							<IconButton
-								size="sm"
-								label={words.stop}
-								disabled={busy === job.id || job.status === "stopping"}
-								icon={<Square size={11} />}
-								onClick={() => void stop(job.id)}
-							/>
-						</div>
-					);
-				})}
-			</Section>
-		),
 		children: owners.size > 0 && (
 			<>
 				{[...owners].map(([owner, rows]) => (
@@ -307,24 +185,6 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 					</Section>
 				))}
 			</>
-		),
-		wakeups: data.wakeups.length > 0 && (
-			<Section name="wakeups" label={words.wakeups}>
-				<Wakeups id={id} wakeups={data.wakeups} runtime={runtime} />
-			</Section>
-		),
-		compactions: session.compactionRuns.length > 0 && (
-			<Section name="compactions" label={words.compactions}>
-				<button type="button" className="plume-diagnostics-row" onClick={() => runtime.openTrace(id)}>
-					<History size={14} />
-					<Text size="detail" className="plume-diagnostics-grow">
-						{words.summary}
-					</Text>
-					<Text size="caption" tone="faint" numeric>
-						{session.compactionRuns.length}
-					</Text>
-				</button>
-			</Section>
 		),
 		references: (uniqueFiles.length > 0 || pictures.length > 0) && (
 			<Section name="references" label={words.references}>

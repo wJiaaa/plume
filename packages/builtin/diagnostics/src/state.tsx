@@ -19,9 +19,9 @@ export function createState(api: Remote<DiagnosticsApi>, ui: UiContext) {
 	const selections = new Map<string, Selection>();
 	const listeners = new Set<() => void>();
 	const watching = new Map<string, number>();
-	/** 要画端口的几处：端口要问系统，只在有人画得出来时查（任务面板、开着的环境卡片），标题栏按钮那份计数不要。 */
+	/** 要画端口的几处：端口要问系统，只在有人画得出来时查（任务面板、环境卡片里后台任务那一节），开关圆点那份计数不要。 */
 	const ports = new Map<string, number>();
-	/** 要轨迹的几处（轨迹、任务面板）：观察记录只给它们读，标题栏按钮和环境卡片只看任务和唤醒，不每两秒拉一遍。 */
+	/** 要轨迹的几处（轨迹、任务面板）：观察记录只给它们读，环境卡片里的几节和开关圆点只看任务和唤醒，不每两秒拉一遍。 */
 	const traces = new Map<string, number>();
 	const pending = new Set<string>();
 	let disposed = false;

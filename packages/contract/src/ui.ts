@@ -522,7 +522,7 @@ export interface EnvironmentSectionEntry {
 	/** 已经包好错误边界：一节出错只撤下这一节。 */
 	component: ComponentType<EnvironmentSectionProps>;
 	/**
-	 * 登记时给了 `attention` 才有：画环境卡片的插件把它挂在开关旁边（它什么都不画），这一节等人处理的那句话变了就调 `onChange`。
+	 * 登记时给了 `attention` 才有：画环境卡片的插件把它挂在开关旁边（它什么都不画），这一节要提醒人的那句话变了就调 `onChange`。
 	 * 已经包好错误边界，出错时当作没有。
 	 */
 	attention?: ComponentType<EnvironmentAttentionProps>;
@@ -531,7 +531,7 @@ export interface EnvironmentSectionEntry {
 /** `EnvironmentSectionEntry.attention` 拿到的。 */
 export interface EnvironmentAttentionProps {
 	session: SessionView;
-	/** 这一节等人处理的那句话，见 `UiContext.environmentSection` 的 `attention`；没有时是 undefined。 */
+	/** 这一节要提醒人的那句话，见 `UiContext.environmentSection` 的 `attention`；没有时是 undefined。 */
 	onChange(text: string | undefined): void;
 }
 
@@ -1006,9 +1006,11 @@ export interface UiContext {
 	 * 点了去插件自己的页面或面板。没什么可说时返回 null，卡片不留空位，也不画分隔线。`label` 是卡片「显示哪些内容」菜单里的名字。
 	 * 按 order 从小到大排进卡片自己的几节之间（默认 0）。id 在插件内唯一，停用时撤下。
 	 *
-	 * `attention` 是一个 React hook：这一节此刻有没有等人处理的事（建议的新会话还没人决定），有就返回一句给人看的话（按界面语言，
-	 * 「2 条建议的新会话等你决定」），没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话
-	 * 接在它的说明后面。只为提醒人回来做决定，不为「有东西在跑」——那样圆点会一直亮着。规则同 React 的 hook。
+	 * `attention` 是一个 React hook：这一节此刻有没有要提醒人的事，有就返回一句给人看的话（按界面语言，「2 条建议的新会话等你决定」
+	 * 「1 个定时唤醒待触发」），没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话按节的
+	 * order 接在它的说明后面；只在这时调，所以它要读的数据可以只在被调时拉。要提醒的是两种事：等人决定的（建议的新会话还没人点开始），
+	 * 和会自己叫醒这个会话的（待触发的定时唤醒、在跑的监视：人不回来，会话也会自己开一轮）。普通的「有东西在跑」不算（开着一个
+	 * 开发服务器是常态），算进去圆点就一直亮着。规则同 React 的 hook。
 	 */
 	environmentSection(
 		id: string,
