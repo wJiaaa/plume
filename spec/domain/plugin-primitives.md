@@ -48,7 +48,6 @@
 下面这些不算违规，也不能拿来类推出新的例外；要加新的，先改这一节、说出理由。
 
 - **基本文件和命令工具的名字。** 本体认 plume.tools 的 `read`、`write`、`edit`、`ls`、`glob`、`grep`、`bash`、`bash_output`：转录里的说法、分类和图标，回复里的文件签按读写过的路径认文件，重复检测，导出会话，以及 `ToolLike`（`ui.toolLine` 的 `like`）。它们是本体界面骨架的一部分，抽成声明的代价大于收益；插件注册同名工具覆盖它们时，本体照样按这几个名字认。别的工具（`monitor`、定时唤醒、`todo_write`……）不在内。
-- **plume.prompt 的两个段名。** 上下文用量和用量记录按段名 `userInstructions`、`projectInstructions` 认出人写的指令。别的段（技能目录、记忆、能力目录）按 `PromptSection.category` 认。
 - **只有一个插件在用、但按能力命名的接口。** `ToolRun.parent` / `ParentSession`、`AgentService` 的 `queueTask` / `retryTask` / `dismissTask`、`ToolCardProps.handToParent`、`ui.queueAction`、`ui.quoteAction` 现在只有侧边聊天用。可以留，条件是：名字、注释、类型说的是能力（「子会话够得着它的父会话」「排队消息的菜单项」），不提用它的插件；本体不知道是谁在用；换一个插件来用不用改接口。哪一条不满足，就回到上一节按违规处理。
 - **代管先由测试插件验证。** 真实需求是插件仓库里的 plume.im（它的 README 写着缺「创建或映射 Plume 会话」），但这一轮只做了本体接口，plume.im 还没接上；接口由测试插件 `packages/testing/steward-probe`（不随应用发，冒烟 `steward` 段装它）和 `packages/core/agent/test/session-steward.test.ts` 验证。plume.im 接上时发现不够用，按上一节改接口，不在插件里绕。
 
@@ -64,7 +63,7 @@
 
 - `pnpm check:plugins`（[`scripts/check-plugins.mjs`](../../scripts/check-plugins.mjs) 的规则 4、5、6，名单和匹配方式在 [`scripts/check-core-names.mjs`](../../scripts/check-core-names.mjs)）：
   - 本体代码里不出现插件名：内置插件名从源码读，市场插件名登记在脚本里；以插件名打头的面板 id 也算。注释不查。
-  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具和 plume.prompt 的两个段名不在名单里。提示词字面量里用反引号括着的名字（`` `task` ``）也算。
+  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具不在名单里。提示词字面量里用反引号括着的名字（`` `task` ``）也算。
   - 内置插件的源码（不含测试）和它带给模型的技能（`skills/**/*.md`）里不出现别的内置插件、市场插件的插件名，和登记在它们名下的工具名、段名、标签；自己的不算。
   - 正当的命中登记进脚本的 `ALLOWED`，写明理由；不放宽规则。
 - 检查查不到的，评审时对一遍：
@@ -79,6 +78,5 @@
 
 - 接口：`packages/contract/src/plugin.ts`（`PluginContext`、`ToolRun`、`ToolDefinition`、`PromptSection`、`Services`）、`packages/contract/src/ui.ts`（`UiContext`）、`packages/contract/src/service.ts`（`AgentService`、`QueuedMessage`、`ChildTask`）
 - 本体认基本工具的地方：`apps/desktop/src/renderer/conversation/call-words.ts`、`tool-category.ts`、`turn-blocks.ts`，`apps/desktop/src/renderer/files/scope.ts`，`packages/core/agent/src/conversation-markdown.ts`、`repetition.ts`
-- 本体认段名的地方：`packages/core/agent/src/context-breakdown.ts`、`usage-record.ts`
 - 检查：`scripts/check-core-names.mjs`、`scripts/test/check-core-names.test.ts`
 - 按类别找别的插件的工具的例子：plume.plan（`packages/builtin/plan/src/index.ts` 的 `toolOf`）、plume.subagents、plume.browser

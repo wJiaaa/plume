@@ -557,10 +557,10 @@ export type AgentEvent =
 
 /**
  * 上下文窗口按来源拆开：对话消息、工具表（`ToolDefinition.category` 是 `mcp` 的工具 `mcpTools` 单独一段，其余是 `tools`）、系统提示词，
- * 以及系统提示词里单独列出的技能目录（`PromptSection.category` 是 `skills` 的段）、项目指令（plume.prompt 的 `projectInstructions` 段）
- * 和记忆（`PromptSection.category` 是 `memory` 的段）。
+ * 以及系统提示词里单独列出的技能目录（`PromptSection.category` 是 `skills` 的段）、项目里的指令文件（`conventions` 的段）
+ * 和记忆（`memory` 的段）。
  */
-export type ContextSegmentKey = "messages" | "tools" | "mcpTools" | "skills" | "systemPrompt" | "projectInstructions" | "memory";
+export type ContextSegmentKey = "messages" | "tools" | "mcpTools" | "skills" | "systemPrompt" | "conventions" | "memory";
 
 export interface ContextBreakdown {
 	/** 下一轮会用的模型的上下文窗口。 */
@@ -572,7 +572,7 @@ export interface ContextBreakdown {
 	/** 大的在前；是 0 的不列。 */
 	segments: Array<{ key: ContextSegmentKey; tokens: number }>;
 	/**
-	 * 项目指令和记忆两段里来自各文件的部分（插件经 `PromptSection.files` 标的），先项目指令、后记忆，各按段里的顺序。
+	 * 项目指令（`conventions`）和记忆两段里来自各文件的部分（插件经 `PromptSection.files` 标的），先项目指令、后记忆，各按段里的顺序。
 	 * 和各段一样按字数估，按各自所在的段缩放；包在文件外面的说明文字不算哪个文件。没有标来源时是空的。
 	 */
 	memoryFiles: Array<{ path: string; tokens: number }>;

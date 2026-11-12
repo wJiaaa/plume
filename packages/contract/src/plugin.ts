@@ -363,19 +363,21 @@ export interface PromptSection {
 	id: string;
 	text: string;
 	/**
-	 * 这段是什么，宿主按它分段统计，不认段名：
-	 * - `memory`：插件记下、每轮带上的记忆（用户的、项目的都算）。上下文用量的「记忆」，使用统计 Token 构成里的「指令和记忆」。
+	 * 这段是什么。宿主按它分段统计，别的插件按它找段，都不认段名：
+	 * - `instructions`：人写给 agent 的全局指令（设置里填的，不分项目）。上下文用量里算系统提示词，使用统计 Token 构成里的「指令和记忆」。
+	 * - `conventions`：项目里写给 agent 的指令文件（AGENTS.md 这类）。上下文用量的「项目指令」，Token 构成里的「指令和记忆」。
+	 * - `memory`：插件记下、每轮带上的记忆（用户的、项目的都算）。上下文用量的「记忆」，Token 构成里的「指令和记忆」。
 	 * - `skills`：技能目录（有哪些技能、各自什么时候用）。上下文用量的「技能」，Token 构成里的「技能与智能体」。
 	 * - `catalog`：别的按需取用的能力目录（可以派的智能体、没放进工具表的工具）。上下文用量里算系统提示词，Token 构成里算「技能与智能体」。
 	 * - `identity`：agent 是谁的那一段。子会话要换一个身份（子智能体、侧边聊天）时换掉带这一类的段，不认段名。宿主算系统提示词。
 	 * - `guidelines`：做事的通用准则。要换一套准则、或往准则里补几条的插件按这一类找它。宿主算系统提示词。
 	 *
-	 * 不给的段算系统提示词（plume.prompt 的 `userInstructions`、`projectInstructions` 两段宿主另按段名认）。
+	 * 不给的段算系统提示词。
 	 */
-	category?: "memory" | "skills" | "catalog" | "identity" | "guidelines";
+	category?: "memory" | "skills" | "catalog" | "identity" | "guidelines" | "instructions" | "conventions";
 	/**
-	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `projectInstructions` 段和
-	 * `category: "memory"` 的段的来源按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；
+	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `conventions` 和 `memory` 两类段的来源
+	 * 按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；
 	 * 别的段带了不显示。改了 `text` 的层要么跟着改它，要么去掉它。
 	 */
 	files?: Array<{ path: string; chars: number }>;

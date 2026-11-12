@@ -391,7 +391,7 @@ it("上下文分段：项目指令和记忆按插件标的文件列出来源", a
 	const tokensOf = (key: string) => breakdown?.segments.find((segment) => segment.key === key)?.tokens ?? 0;
 	const [instructions, learned] = breakdown?.memoryFiles ?? [];
 	expect(instructions?.tokens).toBeGreaterThan(0);
-	expect(instructions?.tokens).toBeLessThanOrEqual(tokensOf("projectInstructions"));
+	expect(instructions?.tokens).toBeLessThanOrEqual(tokensOf("conventions"));
 	expect(learned?.tokens).toBe(tokensOf("memory"));
 });
 

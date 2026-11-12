@@ -19,7 +19,7 @@ const zhCN = {
 		mcpTools: "MCP 工具",
 		skills: "技能目录",
 		systemPrompt: "系统提示词",
-		projectInstructions: "项目指令",
+		conventions: "项目指令",
 		memory: "记忆",
 	} satisfies Record<ContextSegmentKey, string>,
 };
@@ -42,7 +42,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 			mcpTools: "MCP tools",
 			skills: "Skill catalogue",
 			systemPrompt: "System prompt",
-			projectInstructions: "Project instructions",
+			conventions: "Project instructions",
 			memory: "Memory",
 		},
 	},

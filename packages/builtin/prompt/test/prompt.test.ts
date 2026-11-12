@@ -94,6 +94,17 @@ describe("系统提示词的段", () => {
 			"projectInstructions",
 			"workspace",
 		]);
+		// 宿主按类别认人写的指令（上下文用量、使用统计），别的插件按类别找身份、准则，都不认段名。
+		expect(sections.map((section) => section.category)).toEqual([
+			"identity",
+			"guidelines",
+			undefined,
+			undefined,
+			undefined,
+			"instructions",
+			"conventions",
+			undefined,
+		]);
 		expect(sections[4]?.text).toMatch(/^Tone and Style: Be extremely concise/);
 		expect(sections[5]?.text).toBe(
 			"<global_user_instructions>\nUser's global personal instructions across all projects and chats:\nReply in haiku.\n</global_user_instructions>",

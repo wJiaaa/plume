@@ -179,7 +179,9 @@ ctx.hook("model.context", (input, next) =>
 
 段上标 `category`，宿主按它分段统计，不认段名，不标的算系统提示词：
 
-- `memory`：插件记下、每轮带上的记忆（用户的、项目的）。上下文用量算进「记忆」一段，使用统计的 Token 构成算进「指令和记忆」。
+- `instructions`：人写给 agent 的全局指令（设置里填的，不分项目；plume.prompt 的 `userInstructions` 段）。上下文用量算系统提示词，使用统计的 Token 构成算进「指令和记忆」。
+- `conventions`：项目里写给 agent 的指令文件（AGENTS.md 这类；plume.prompt 的 `projectInstructions` 段）。上下文用量算进「项目指令」一段，Token 构成算进「指令和记忆」。
+- `memory`：插件记下、每轮带上的记忆（用户的、项目的）。上下文用量算进「记忆」一段，Token 构成算进「指令和记忆」。
 - `skills`：技能目录。上下文用量算进「技能」一段，Token 构成算进「技能与智能体」。
 - `catalog`：别的按需取用的能力目录（可以派的智能体名单、没放进工具表的工具目录）。上下文用量算系统提示词，Token 构成算进「技能与智能体」。
 - `identity`：agent 是谁的那一段（plume.prompt 的 `identity`）。子会话要换一个身份（子智能体、侧边聊天）时换掉它。宿主算系统提示词。
@@ -204,7 +206,7 @@ ctx.hook("model.context", (input, next) => {
 });
 ```
 
-段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：`projectInstructions` 段和标了 `category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
+段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：标了 `category: "conventions"`、`category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；换掉它的指令段时记得带上 `category`，否则算成系统提示词；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
 
 ```ts
 const text = `<project_memory>\n${body}\n</project_memory>`;

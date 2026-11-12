@@ -2,10 +2,13 @@ import { expect, it } from "vitest";
 import type { AssistantMessage } from "@plume/contract";
 import { diagnoseCache, estimateParts } from "../src/usage-record.ts";
 
-it("提示词按指令的段名和插件标的类别分到系统、说明与记忆、技能与智能体；没标类别的记忆、技能段算系统；消息按谁说的分，界面替人说的算注入", () => {
+it("提示词按插件标的类别分到系统、说明与记忆、技能与智能体；没标类别的记忆、技能段算系统；消息按谁说的分，界面替人说的算注入", () => {
 	const sections = [
 		{ id: "identity", text: "a".repeat(40) },
-		{ id: "projectInstructions", text: "b".repeat(80) },
+		{ id: "agents-md", text: "b".repeat(80), category: "conventions" as const },
+		{ id: "settings", text: "h".repeat(12), category: "instructions" as const },
+		// 段名和 plume.prompt 的指令同名、没标类别：算系统提示词。
+		{ id: "userInstructions", text: "u".repeat(4) },
 		{ id: "learned", text: "记".repeat(5), category: "memory" as const },
 		// 不认段名：没标类别的算系统提示词。
 		{ id: "notes", text: "f".repeat(16) },
@@ -24,7 +27,16 @@ it("提示词按指令的段名和插件标的类别分到系统、说明与记�
 			{ role: "user", content: [{ type: "text", text: "e".repeat(8) }], timestamp: 1, synthetic: true },
 		],
 	});
-	expect(parts).toEqual({ system: 10 + 4 + 2 + 3, instructions: 20 + 5, skills: 30 + 10, toolDefs: 0, user: 3, injected: 2, assistant: 0, toolResults: 0 });
+	expect(parts).toEqual({
+		system: 10 + 4 + 2 + 1 + 4,
+		instructions: 20 + 3 + 5,
+		skills: 30 + 10,
+		toolDefs: 0,
+		user: 3,
+		injected: 2,
+		assistant: 0,
+		toolResults: 0,
+	});
 });
 
 it("缓存诊断：没量到前缀分不清，前缀没变是服务商，参数变了不归到服务商头上，没报过缓存的不计", () => {

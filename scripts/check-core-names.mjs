@@ -55,9 +55,10 @@ const BUILTIN_TOOLS = {
 	web: ["web_search", "web_fetch"],
 };
 
-/** 内置插件目录 → 它自己定的提示词段名、送达标签。plume.prompt 的 `userInstructions`、`projectInstructions` 是已定的例外，不在这里。 */
+/** 内置插件目录 → 它自己定的提示词段名、送达标签。 */
 const BUILTIN_MARKS = {
 	mcp: ["mcpDeferred"],
+	prompt: ["userInstructions", "projectInstructions"],
 	"spawn-session": ["session_result"],
 	subagents: ["subagent_result"],
 	tools: ["background_job", "monitor_events"],

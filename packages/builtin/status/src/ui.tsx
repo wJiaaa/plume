@@ -81,7 +81,7 @@ function Row({ swatch, label, tokens, share }: { swatch: Swatch; label: string; 
 }
 
 /** 收进「记忆文件」那一行的两段，不单独列行；进度条上照样各占一截。 */
-const MEMORY_SEGMENTS: ReadonlySet<ContextSegmentKey> = new Set(["projectInstructions", "memory"]);
+const MEMORY_SEGMENTS: ReadonlySet<ContextSegmentKey> = new Set(["conventions", "memory"]);
 
 /** 「记忆文件」折叠行：右边是两段合计和文件数，展开列出各文件，点一个在文件面板里打开。 */
 function MemoryFiles({ breakdown, onOpen }: { breakdown: ContextBreakdown; onOpen: (path: string) => void }) {

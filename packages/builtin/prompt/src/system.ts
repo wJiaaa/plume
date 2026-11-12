@@ -135,6 +135,7 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 	if (instructions) {
 		sections.push({
 			id: "userInstructions",
+			category: "instructions",
 			text: `<global_user_instructions>\nUser's global personal instructions across all projects and chats:\n${instructions}\n</global_user_instructions>`,
 		});
 	}
@@ -145,6 +146,7 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 		}));
 		sections.push({
 			id: "projectInstructions",
+			category: "conventions",
 			text: `<project_context>\n\nProject-specific instructions and guidelines:\n\n${files.map((file) => file.text).join("\n\n")}\n\n</project_context>`,
 			// 上下文用量按文件列出各份指令占了多少。
 			files: files.map((file) => ({ path: file.path, chars: file.text.length })),
