@@ -551,6 +551,7 @@ Plume 自带的服务：
 | `file.read` | 内置插件 plume.tools | `authorize(run, path)` 与文件工具共用读取授权，返回 `{ ok: true, absolute }` 或 `{ ok: false, message }`。消费方声明 `inject: ["file.read"]`，用当前工具的 `ToolRun` 调用，成功后实际读取必须使用返回的 `absolute`；详见下文 |
 | `project.files` | 内置插件 plume.tools（它的 glob、grep 也用这一份） | `list(root)`：`root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里时是 null，自己走目录。问 git 时不执行仓库能控制的程序，插件要列项目文件就用它，不要自己跑 `git ls-files` |
 | `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。建、收回、合并回去都归 plume.git |
+| `session.plan` | 内置插件 plume.plan | `approved(sessionId)`：这个会话照着做的、人批准过的计划（正文连同批准时附的注意事项），没有是 null。会话自己最后批准、没交给新会话执行的那份；会话是计划「在新会话里执行」开出来的，就是交给它的那份。要读计划的插件用它，不认 `submit_plan` 的结果 |
 
 ### 文件读取授权
 

@@ -1501,6 +1501,19 @@ export interface Services {
 	"project.files": ProjectFilesService;
 	resources: ResourcesService;
 	"session.worktree": SessionWorktreeService;
+	"session.plan": SessionPlanService;
+}
+
+/**
+ * 服务 `session.plan`：一个会话照着做的、人批准过的计划。内置插件 plume.plan 提供。
+ * 要把「这段活原本批的是什么」带到别处（审阅这个会话的改动）时用它，不读交计划那次调用的结果。
+ */
+export interface SessionPlanService {
+	/**
+	 * 这个会话照着做的那份计划：它自己最近批准、没交给新会话执行的那份；没有的话，它是计划「在新会话里执行」开出来的，
+	 * 就是交给它的那份。正文连同批准时附上的注意事项，和交给模型的一样。没有是 null；没有这个会话时抛错。
+	 */
+	approved(sessionId: string): Promise<string | null>;
 }
 
 /**

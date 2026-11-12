@@ -14,6 +14,7 @@
  *   只带着这份计划的会话（`handoff.ts` 写它的第一句话），这个会话就此停下，留着回答那边的提问。
  * - 开着时系统提示词多一段（`model.context`）；一轮查过东西、以正文收尾却没交计划时提醒一次（`step.end`）。
  * - 压缩把批准计划的那次结果折进摘要头时，计划原样接在头里（`context.compact`），执行所依据的计划不被概括掉。
+ * - 提供服务 `session.plan`：一个会话照着做的那份批准过的计划，交给新会话的算新会话的。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -129,6 +130,22 @@ export default {
 			if (first?.role !== "user") return result;
 			const content = typeof first.content === "string" ? [{ type: "text" as const, text: first.content }] : first.content;
 			return { ...result, head: [{ ...first, content: [...content, { type: "text", text: approvedPlanNote(latest) }] }, ...rest] };
+		});
+
+		/*
+		 * 别的插件要「这个会话照着做的计划」时问这里，不读 `submit_plan` 的结果。交给新会话的那份归新会话：原会话没照它做，
+		 * 新会话的记录里没有交计划的调用，只有 `spawnedFrom` 指回原会话的那次调用。原会话后来删了就没有。
+		 */
+		ctx.provide("session.plan", {
+			async approved(sessionId) {
+				const own = approvedPlans(await ctx.sessions.messages(sessionId)).findLast((plan) => !plan.handoff);
+				if (own) return renderPlan(own.plan, own.notes);
+				const from = (await ctx.sessions.get(sessionId))?.spawnedFrom;
+				if (!from?.toolCallId) return null;
+				const origin = await ctx.sessions.messages(from.sessionId).catch(() => []);
+				const handed = approvedPlans(origin).find((plan) => plan.handoff && plan.toolCallId === from.toolCallId);
+				return handed ? renderPlan(handed.plan, handed.notes) : null;
+			},
 		});
 
 		ctx.tools.register({

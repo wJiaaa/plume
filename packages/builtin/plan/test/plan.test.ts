@@ -12,6 +12,7 @@ import type {
 	Message,
 	ModelContext,
 	PluginContext,
+	SessionPlanService,
 	SessionLaunch,
 	StepEnd,
 	StepVerdict,
@@ -27,13 +28,15 @@ import { approvedPlans, currentPlan, planSubject, SUBMIT_PLAN } from "../src/pla
 import { planSection, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "../src/prompt.ts";
 
 /**
- * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`。`launch` 记下开过的新会话，`fail` 给了就让它抛这个错。
+ * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`，`spawned` 是从 `main` 的调用 `p` 开出来的。`launch` 记下开过的新会话，
+ * `fail` 给了就让它抛这个错。会话的记录取 `records` 里那一份，没有的都是 `stored`。
  */
-async function fakeContext(stored: Message[] = [], options: { fail?: string } = {}) {
+async function fakeContext(stored: Message[] = [], options: { fail?: string; records?: Record<string, Message[]> } = {}) {
 	const tools = new Map<string, ToolDefinition>();
 	const layers = new Map<string, unknown>();
 	let commands: CommandProvider | undefined;
 	let api: PlanApi | undefined;
+	let plans: SessionPlanService | undefined;
 	const dataDir = await mkdtemp(join(tmpdir(), "plume-plan-"));
 	const launched: SessionLaunch[] = [];
 	const notices: string[] = [];
@@ -62,6 +65,7 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 			void layers.set(options?.order === undefined ? name : `${name}@${options.order}`, layer),
 		commands: { provide: (provider: CommandProvider) => void (commands = provider) },
 		serve: (served: PlanApi) => void (api = served),
+		provide: (name: string, service: SessionPlanService) => void (name === "session.plan" && (plans = service)),
 		sessions: {
 			get: async (id: string) =>
 				[
@@ -69,8 +73,9 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 					{ id: "main", title: "", cwd: "/w/app" },
 					{ id: "fresh" },
 					{ id: "child", parentId: "main" },
+					{ id: "spawned", spawnedFrom: { sessionId: "main", toolCallId: "p" } },
 				].find((session) => session.id === id),
-			messages: async () => stored,
+			messages: async (id: string) => options.records?.[id] ?? stored,
 			onDeleted: () => undefined,
 			models: async () => [{ id: "m1", name: "Model One", contextWindow: 1 }],
 			async launch(launch: SessionLaunch) {
@@ -81,7 +86,7 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 		},
 	} as unknown as PluginContext;
 	await plugin.apply(ctx);
-	if (!api || !commands) throw new Error("插件没开接口或没供命令");
+	if (!api || !commands || !plans) throw new Error("插件没开接口、没供命令或没提供服务 session.plan");
 
 	const signal = new AbortController().signal;
 	/** 经 tool.execute 跑一次调用，最里层记下交给工具的输入。 */
@@ -167,7 +172,7 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 				async (context) => context,
 			)
 		).readOnly === true;
-	return { api, commands, execute, submit, end, sections, readOnly, submitPrompt, compact, launched, notices };
+	return { api, commands, plans, execute, submit, end, sections, readOnly, submitPrompt, compact, launched, notices };
 }
 
 test("关着时什么都不管；开着时每次调用都带着 readOnly 和拒绝的话交下去，子会话受父会话的开关管", async () => {
@@ -404,4 +409,33 @@ test("在新会话里执行：原会话不在项目里时开在它的目录；�
 	assert.equal(failed.output.terminate, "done");
 	assert.match(failed.output.output, /could not be started: 项目已移除\. The plan is saved at /);
 	assert.deepEqual(broken.notices, [`执行计划的新会话没能开出来：项目已移除。计划保存在 ${file}。`]);
+});
+
+test("服务 session.plan：会话照着做的是自己最后批准的那份；交给新会话的归新会话，原会话不再算它", async () => {
+	const result = (id: string, details: Record<string, unknown>) => ({ role: "toolResult", toolCallId: id, toolName: SUBMIT_PLAN, isError: false, details });
+	const approved = (id: string, plan: string, extra: Record<string, unknown> = {}) =>
+		result(id, { kind: "plan", plan, approved: true, approvedAt: 1, ...extra });
+	// 原地执行：最后批准的那份，带着注意事项；打回的不算。
+	const inPlace = [
+		approved("a", "# 一"),
+		approved("b", "# 二", { notes: "小心" }),
+		result("c", { kind: "plan", plan: "# 三", approved: false }),
+	] as unknown as Message[];
+	assert.equal(await (await fakeContext(inPlace)).plans.approved("main"), "# 二\n\n## 执行时注意\n小心");
+	assert.equal(await (await fakeContext()).plans.approved("main"), null);
+
+	// 交给新会话：原会话退回到它自己照着做的那份（没有就是 null），新会话拿到交给它的那份。
+	const handed = [approved("a", "# 一"), approved("p", "# 交出去的", { notes: "注意兼容", handoff: true })] as unknown as Message[];
+	const plan = await fakeContext([], { records: { main: handed } });
+	assert.equal(await plan.plans.approved("main"), "# 一");
+	assert.equal(await plan.plans.approved("spawned"), "# 交出去的\n\n## 执行时注意\n注意兼容");
+	const onlyHanded = await fakeContext([], { records: { main: handed.slice(1) } });
+	assert.equal(await onlyHanded.plans.approved("main"), null);
+
+	// 新会话自己后来又批准了一份：照它自己的那份做。
+	const replanned = await fakeContext([], { records: { main: handed, spawned: [approved("s", "# 新会话自己的")] as unknown as Message[] } });
+	assert.equal(await replanned.plans.approved("spawned"), "# 新会话自己的");
+	// 那次调用没交出计划（原地批准的、不是交计划的调用）时不算交给它的。
+	const notHanded = await fakeContext([], { records: { main: [approved("p", "# 原地做的")] as unknown as Message[] } });
+	assert.equal(await notHanded.plans.approved("spawned"), null);
 });
