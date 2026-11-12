@@ -11,6 +11,7 @@ import { gitListedFiles, insideGitWorkTree, SKIP_DIRS } from "./project-files.ts
 import { formatMatchWindow, formatMatchWindowAt, utf8ByteOffsetToIndex, type MatchOptions } from "./long-line.ts";
 import { displayPath, looksBinary } from "./paths.ts";
 import { authorizeRead } from "./read-access.ts";
+import { describeGrep } from "./describe.ts";
 
 const MAX_MATCHES = 200;
 // 所有命中加起来约 3.4k token；再多就该把搜索收窄。
@@ -60,6 +61,7 @@ interface GrepArgs {
 
 export const grepTool: Tool<GrepArgs> = {
 	name: "grep",
+	describe: describeGrep,
 	description:
 		"Search file contents with a regular expression. A matching line over 2000 characters comes back as a window around the hit, " +
 		"with the `char_offset` that lets `read` open more of it. " +

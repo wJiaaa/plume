@@ -70,7 +70,7 @@ ctx.tools.register({
 	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
 	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
 	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
-	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"，见「按类别找工具」
+	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"、"files"，见「按类别找工具」
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
 		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
@@ -195,6 +195,7 @@ ctx.hook("model.context", (input, next) =>
 - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`（`plume.todo` 的 `todo_write`）。
 - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`；`plume.ask-user` 的 `ask_user`）。
 - `web`：只读地查网页的工具（搜索网页、把网址读成文字，`plume.web` 的两件）。
+- `files`：写、改本机文件的工具（`plume.tools` 的 `write`、`edit`）。它成功一次就是工作区有了进展，重复检测从头数；不标的话，改完文件再读同一个文件、得到同样的结果，会被当成原地打转。
 
 插件的提示词要点名别的插件的工具（「用它记下步骤」「拿不准就用它问人」）时，不写死名字：按类别在 `ctx.tools.list()`（工具里用 `run.tools()`）找它这会儿叫什么，`model.context` 里再和这一轮的 `input.tools` 对一下，找不到就换一种不靠那件工具的说法。那个插件被换掉、停用时提示词照样是对的：
 

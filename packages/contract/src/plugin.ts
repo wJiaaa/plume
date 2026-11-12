@@ -320,10 +320,11 @@ export interface ToolDefinition {
 	 * - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`。别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
 	 * - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`）。别的插件要对模型说「拿不准就问人」时同样按这一类找。
 	 * - `web`：只读地查网页的工具（搜索网页、把网址读成文字），不碰工作区。给模型一套收窄的工具表的插件按这一类留下它们。
+	 * - `files`：写、改本机文件的工具。成功一次就是工作区有了实打实的进展：重复检测从头数，同样的调用之前反复得到同样的结果不再算原地打转。
 	 *
 	 * 不给的算普通工具。
 	 */
-	category?: "mcp" | "checklist" | "question" | "web";
+	category?: "mcp" | "checklist" | "question" | "web" | "files";
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 

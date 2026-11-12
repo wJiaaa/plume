@@ -13,6 +13,7 @@ import { resourceScope, scratchFile } from "./scratch-file.ts";
 import { decodeText } from "./text-layout.ts";
 import { LINE_KEEP_BYTES, readLineWindow, STREAM_ABOVE_BYTES } from "./large-text.ts";
 import { extractDocumentText } from "@plume/document-text";
+import { describeRead } from "./describe.ts";
 
 const DEFAULT_LIMIT = 2000;
 const PATH_KEYS = ["path", "file", "filePath"];
@@ -72,6 +73,7 @@ async function notFound(cwd: string, path: string): Promise<string> {
 
 export const readTool: Tool<ReadArgs> = {
 	name: "read",
+	describe: describeRead,
 	description:
 		"Read a file. Text comes back under a `[path]` header as 1-indexed lines, `NNNN→content`; the `NNNN→` prefix is not part of the file. " +
 		"A long source file read without `offset`/`limit` comes back as its STRUCTURE: declarations and doc comments, each body folded to " +

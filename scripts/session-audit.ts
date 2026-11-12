@@ -371,6 +371,12 @@ let corrected = 0;
 let correctedChars = 0;
 let wouldStop = 0;
 
+/**
+ * 回放时没有插件宿主，循环里查的是工具定义上的 `category: "files"`；记录里的改文件调用都出自 plume.tools 标了它的 write、edit
+ * （`packages/builtin/tools/src/tools/{write,edit}.ts`）。不直接 import 那两个工具：它们连带的模块用了 strip-only 不支持的写法。
+ */
+const FILE_EDITORS = new Set(["write", "edit"]);
+const editsFiles = (tool: string) => FILE_EDITORS.has(tool);
 for (const session of sessions) {
 	const watch = new RepetitionWatch();
 	const resets = new Set(session.boundaries.map((boundary) => boundary.at));
@@ -381,7 +387,7 @@ for (const session of sessions) {
 		const step = steps.get(at);
 		if (!step || step.settled || step.results.length === 0) return;
 		const before = new Map(watch.replaced);
-		watch.observe(step.calls, step.results);
+		watch.observe(step.calls, step.results, editsFiles);
 		if (watch.takeHint() !== undefined) warns++;
 		for (const result of step.results) {
 			const notice = watch.replaced.get(result.toolCallId);

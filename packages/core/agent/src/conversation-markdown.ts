@@ -14,7 +14,7 @@ export function conversationMarkdown(
 		compactions: readonly CompactionMark[];
 		exportedAt: Date;
 		modelLabel?: (provider: string, model: string) => string;
-		/** 注册这个工具的插件给的说法（`ToolDefinition.describe`）；没有时用这里认得的几种基本工具，再不然写工具名。 */
+		/** 注册这个工具的插件给的说法（`ToolDefinition.describe`）；没有时写工具名。 */
 		describeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
 		/** 这次调用是替哪个工具调的（`ToolDefinition.forwards`）：这一行按被调的那个写。 */
 		forwardTool?: (name: string, args: Record<string, unknown>) => { name: string; args: Record<string, unknown> } | undefined;
@@ -109,7 +109,7 @@ export function conversationMarkdown(
 			} else {
 				say("assistant");
 				const routed = input.forwardTool?.(block.name, block.arguments) ?? { name: block.name, args: block.arguments };
-				const summary = (input.describeTool?.(routed.name, routed.args) || toolSummary(routed.name, routed.args)).replace(/\s+/g, " ").trim();
+				const summary = (input.describeTool?.(routed.name, routed.args) || routed.name).replace(/\s+/g, " ").trim();
 				calls.push(
 					`- ${inlineCode(routed.name)}${summary && summary !== routed.name ? ` ${escapeInline(summary)}` : ""}${results.get(block.id)?.isError ? t("failed") : ""}`,
 				);
@@ -178,33 +178,6 @@ function restated(block: AssistantMessage["content"][number], content: Assistant
 		block.phase === "commentary" &&
 		content.some((other) => other.type === "text" && other.phase === "final_answer" && other.text.trim() !== "")
 	);
-}
-
-/** 基本文件和命令工具的说法；别的工具由注册它的插件给（`describeTool`），没给时写工具名。 */
-function toolSummary(name: string, args: Record<string, unknown>): string {
-	const str = (...keys: string[]) => keys.map((key) => args[key]).find((value): value is string => typeof value === "string");
-	const path = str("path", "file", "filePath");
-	const term = str("pattern", "query", "search");
-	switch (name) {
-		case "read":
-			return path ? `Read ${path}` : "Read file";
-		case "write":
-			return path ? `Write ${path}` : "Write file";
-		case "edit":
-			return path ? `Edit ${path}` : "Edit file";
-		case "ls":
-			return `List ${str("path", "dir", "cwd") ?? "."}`;
-		case "glob":
-			return term ? `Find ${term}` : "Find files";
-		case "grep":
-			return term ? `Search "${term}"` : "Search";
-		case "bash":
-			return (str("description") ?? (str("command") ?? "bash").split("\n")[0]!.slice(0, 80)) || "Run bash command";
-		case "bash_output":
-			return args.kill === true ? "Stop job" : "Check job";
-		default:
-			return name;
-	}
 }
 
 /** 行内代码的围栏比内容里最长的一串反引号还长。 */

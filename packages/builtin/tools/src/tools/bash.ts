@@ -23,6 +23,7 @@ import { authorizeCommandReads } from "./read-access.ts";
 import { declinedResult, errorResult } from "./result.ts";
 import { rerouteShellCommand } from "./reroute.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
+import { describeCommand, describeJobRead } from "./describe.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -47,6 +48,7 @@ interface BashArgs {
 
 export const bashTool: Tool<BashArgs> = {
 	name: "bash",
+	describe: describeCommand,
 	/*
 	 * shell 本身要模型知道的（是哪个 shell、怎么写）不写在这里，写在系统提示词的环境一段：同一个工具给所有会话用，
 	 * 而那取决于这台机器和会话的权限模式（Windows 上受约束的命令跑在 PowerShell 里，见 `commandShell`）。
@@ -477,6 +479,7 @@ interface BashOutputArgs {
 
 export const bashOutputTool: Tool<BashOutputArgs> = {
 	name: "bash_output",
+	describe: describeJobRead,
 	description:
 		"Read a background job's new output since your last bash_output call (the first call returns everything so far), and optionally kill it. " +
 		"While it runs, a call within 30s of your last read waits until it ends or those 30s are up, and returns everything printed meanwhile.",

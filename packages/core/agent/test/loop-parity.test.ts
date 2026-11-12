@@ -52,6 +52,8 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 					name,
 					description: name,
 					parameters: { type: "object", required: name === "noargs" ? [] : ["path"] },
+					// 本体不认工具名：edit 改文件靠这个声明，重复检测据此清零。
+					...(name === "edit" ? { category: "files" as const } : {}),
 					execute: async () => {
 						executed.push(name);
 						return { output: "结果" };
@@ -208,7 +210,7 @@ it("todo 清单共用循环计数：有未完项只认更新清单，完成后�
 	expect(notes[1]).toContain("连续 20 次请求没有对用户说过话");
 });
 
-it("同一步末尾成功 edit 先让旧观察作废，精确重复仍在第十次停下", async () => {
+it("同一步末尾成功改了文件（category: files）先让旧观察作废，精确重复仍在第十次停下", async () => {
 	const state = await setup([
 		reply(Array.from({ length: 9 }, () => call("read", { path: "a" }))),
 		reply([call("read", { path: "a" }), call("edit", { path: "b" })]),

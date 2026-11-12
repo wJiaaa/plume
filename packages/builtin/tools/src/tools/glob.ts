@@ -7,6 +7,7 @@ import type { Tool, ToolResult } from "./types.ts";
 import { displayPath } from "./paths.ts";
 import { gitListedFiles, SKIP_DIRS } from "./project-files.ts";
 import { authorizeRead } from "./read-access.ts";
+import { describeGlob } from "./describe.ts";
 
 const MAX_RESULTS = 500;
 /**
@@ -24,6 +25,7 @@ interface GlobArgs {
 
 export const globTool: Tool<GlobArgs> = {
 	name: "glob",
+	describe: describeGlob,
 	description:
 		"Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. " +
 		"Skips files git ignores (outside a git repository: build and dependency directories). " +

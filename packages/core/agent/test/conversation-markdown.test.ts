@@ -27,9 +27,17 @@ const result = (id: string, text: string, extra: Partial<ToolResultMessage> = {}
 	timestamp: 3,
 	...extra,
 });
-/** 假装有个插件注册了派活的工具 `task`：这一行写它的说明，结论引出来（出错的、只派出去没等结果的不引）。 */
+/**
+ * 假装有个插件注册了派活的工具 `task`：这一行写它的说明，结论引出来（出错的、只派出去没等结果的不引）。
+ * read、bash 的说法也是注册它们的插件给的（随应用发的是 plume.tools），本体不认。
+ */
+const SAID: Record<string, (args: Record<string, unknown>) => string | undefined> = {
+	task: (args) => (typeof args.description === "string" ? args.description : undefined),
+	read: (args) => `Read ${String(args.path)}`,
+	bash: (args) => String(args.command),
+};
 const dispatch = {
-	describeTool: (name: string, args: Record<string, unknown>) => (name === "task" && typeof args.description === "string" ? args.description : undefined),
+	describeTool: (name: string, args: Record<string, unknown>) => SAID[name]?.(args),
 	quoteResult: (result: ToolResultMessage) =>
 		result.toolName === "task" && !result.isError && !(result.details as { detached?: unknown } | undefined)?.detached
 			? result.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n")
@@ -237,7 +245,7 @@ it("运行时送达套宿主自己的外壳：每份按标题和收场写一行�
 	expect(md).not.toMatch(/运行时送达|## 用户|explore/);
 });
 
-it("插件工具的说法由注册它的插件给（describe），没给时写工具名；本体不认插件的工具名", () => {
+it("工具的说法由注册它的插件给（describe），没给时写工具名；本体不认工具名，读文件的也一样", () => {
 	const messages = [
 		reply([
 			{ type: "toolCall", id: "c1", name: "paint_picture", arguments: { prompt: "a red fox\nin snow" } },
@@ -245,13 +253,13 @@ it("插件工具的说法由注册它的插件给（describe），没给时写�
 			{ type: "toolCall", id: "c3", name: "read", arguments: { path: "a.ts" } },
 		]),
 	];
-	const plain = markdown(messages, "en");
-	expect(plain).toContain("- `paint_picture`\n- `other_tool`\n- `read` Read a.ts");
+	const plain = conversationMarkdown({ summary, messages, compactions: [], exportedAt }, "en");
+	expect(plain).toContain("- `paint_picture`\n- `other_tool`\n- `read`\n");
 	const described = conversationMarkdown(
 		{ summary, messages, compactions: [], exportedAt, describeTool: (name, args) => (name === "paint_picture" ? `Paint ${String(args.prompt)}` : undefined) },
 		"en",
 	);
-	expect(described).toContain("- `paint_picture` Paint a red fox in snow\n- `other_tool`\n- `read` Read a.ts");
+	expect(described).toContain("- `paint_picture` Paint a red fox in snow\n- `other_tool`\n- `read`\n");
 });
 
 it("本体不认插件的工具：没有插件给说法时，派活的结果不引、MCP 的工具只写名字；转调的那一行按插件说的被调工具写", () => {

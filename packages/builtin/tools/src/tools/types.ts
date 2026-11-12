@@ -75,6 +75,8 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	readsOnly?(args: Record<string, unknown>): boolean;
 	/** 导出会话成 Markdown 时这一次调用写成的一行，见 `ToolDefinition.describe`。 */
 	describe?(args: Record<string, unknown>): string | undefined;
+	/** 是哪一类工具，见 `ToolDefinition.category`。 */
+	category?: ToolDefinition["category"];
 	execute(args: TArgs, ctx: ToolContext): Promise<ToolResult>;
 }
 
@@ -127,6 +129,7 @@ export function toDefinition<TArgs>(tool: Tool<TArgs>, env: ToolEnv): ToolDefini
 		...(tool.mutating ? { mutating: true } : {}),
 		...(tool.readsOnly ? { readsOnly: tool.readsOnly } : {}),
 		...(tool.describe ? { describe: tool.describe } : {}),
+		...(tool.category ? { category: tool.category } : {}),
 		asks: true,
 		async execute(args, run: ToolRun): Promise<ToolOutput> {
 			// 沙箱只管跑命令的那个（bash），它会改动工作区；只读的工具在进程里读文件，不用它。

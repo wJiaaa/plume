@@ -6,6 +6,7 @@ import type { Tool, ToolResult } from "./types.ts";
 import { displayPath } from "./paths.ts";
 import { authorizeRead } from "./read-access.ts";
 import { resourceScope } from "./scratch-file.ts";
+import { describeLs } from "./describe.ts";
 
 const MAX_ENTRIES = 400;
 
@@ -16,6 +17,7 @@ interface LsArgs {
 
 export const lsTool: Tool<LsArgs> = {
 	name: "ls",
+	describe: describeLs,
 	description: "List the contents of a directory, with directories first and file sizes shown.",
 	parameters: {
 		type: "object",

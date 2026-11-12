@@ -11,8 +11,10 @@ const result = (id: string, output = "一样", isError = false): ToolResultMessa
 	isError,
 	timestamp: 0,
 });
+/** 假装注册了两个改文件的工具（`ToolDefinition.category` 是 `files`）：本体不认工具名，只认这个声明。 */
+const editsFiles = (tool: string) => tool === "save_file" || tool === "patch_file";
 const observe = (watch: RepetitionWatch, name: string, args: unknown, id: string, output = "一样", isError = false) => {
-	watch.observe([{ name, arguments: args }], [result(id, output, isError)]);
+	watch.observe([{ name, arguments: args }], [result(id, output, isError)], editsFiles);
 	return watch.takeHint();
 };
 
@@ -50,13 +52,14 @@ it("同参数同结果到上限停下，每次参数不同的不算", () => {
 it("整个工具步先按成功改动清零，失败写入不清零；重置保留已替换历史", () => {
 	const watch = new RepetitionWatch();
 	for (let index = 0; index < 9; index++) observe(watch, "read", { path: "a" }, `${index}`);
-	observe(watch, "write", { path: "a" }, "failed", "拒绝", true);
+	observe(watch, "save_file", { path: "a" }, "failed", "拒绝", true);
 	watch.observe(
 		[
 			{ name: "read", arguments: { path: "a" } },
-			{ name: "edit", arguments: { path: "b" } },
+			{ name: "patch_file", arguments: { path: "b" } },
 		],
 		[result("last"), result("changed")],
+		editsFiles,
 	);
 	expect(watch.exhausted()).toBe(false);
 	expect(watch.takeHint()).toBeUndefined();
@@ -71,6 +74,7 @@ it("图片内容变化不算同一结果；原文不在上下文时不把唯一�
 		watch.observe(
 			[{ name: "read", arguments: { path: "image.png" } }],
 			[{ ...result(`${index}`), content: [{ type: "image", data: `image${index}`, mimeType: "image/png" }] }],
+			editsFiles,
 		);
 	}
 	expect(watch.exhausted()).toBe(false);
