@@ -142,6 +142,10 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 		(layers.get("context.compact") as HookLayer<"context.compact">)({ sessionId: "main", history } as unknown as ContextCompact, async () => ({
 			keep,
 			summary: "摘要",
+			head: [
+				{ role: "user", content: [{ type: "text", text: "<session-summary>\n摘要\n</session-summary>" }], timestamp: 0, synthetic: true },
+				{ role: "assistant", content: [{ type: "text", text: "Understood." }] } as unknown as Message,
+			],
 		}));
 	const readOnly = async (sessionId: string) =>
 		(
@@ -285,21 +289,38 @@ test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停�
 	assert.equal(typeof details.approvedAt, "number");
 });
 
-test("压缩把批准计划的那次结果换成摘要时，计划接在摘要后面；结果还留着时不重复", async () => {
+test("压缩把批准计划的那次结果折进摘要头时，计划接在头的第一条后面；结果还留着时不重复；交给新会话的不写成执行它", async () => {
 	const call = { role: "assistant", content: [{ type: "toolCall", id: "p", name: SUBMIT_PLAN, arguments: { plan: "# 计划" } }] };
 	const result = {
 		role: "toolResult",
 		toolCallId: "p",
 		toolName: SUBMIT_PLAN,
 		isError: false,
-		details: { kind: "plan", plan: "# 计划", approved: true, notes: "小心", approvedAt: 1 },
+		details: { kind: "plan", plan: "# 计划", approved: true, notes: "小心", approvedAt: 1, file: "/s/plans/plan-1.md" },
 	};
 	const later = { role: "user", content: "接着做" };
 	const history = [call, result, later, later] as unknown as Message[];
 	const plan = await fakeContext(history);
+	const texts = (compacted: Awaited<ReturnType<typeof plan.compact>>) =>
+		compacted && "head" in compacted
+			? compacted.head.flatMap((message) => (message.role === "user" && Array.isArray(message.content) ? message.content : []))
+			: [];
 	const dropped = await plan.compact(history, 2);
-	assert.match(dropped?.summary ?? "", /^摘要\n\nUser-approved plan[\s\S]*# 计划\n\n## 执行时注意\n小心$/);
-	assert.equal((await plan.compact(history, 1))?.summary, "摘要");
+	assert.equal(dropped && "summary" in dropped ? dropped.summary : undefined, "摘要");
+	const [summary, note] = texts(dropped);
+	assert.match(summary && "text" in summary ? summary.text : "", /^<session-summary>/);
+	assert.match(
+		note && "text" in note ? note.text : "",
+		/^<approved-plan>\nTranscript fact, not a summary claim\. User-approved plan \(execute it; re-plan only if the user says so\), saved at \/s\/plans\/plan-1\.md:\n\n# 计划\n\n## 执行时注意\n小心\n<\/approved-plan>$/,
+	);
+	assert.equal(texts(await plan.compact(history, 1)).length, 1);
+
+	const handed = [call, { ...result, details: { ...result.details, handoff: true } }, later, later] as unknown as Message[];
+	const [, handedNote] = texts(await (await fakeContext(handed)).compact(handed, 2));
+	assert.match(
+		handedNote && "text" in handedNote ? handedNote.text : "",
+		/handed to another session that carries it out from \/s\/plans\/plan-1\.md \(do not carry it out here/,
+	);
 });
 
 test("在新会话里执行：计划存成文件，在原会话的项目里开新会话、记着从这次调用开出来，这一轮停下", async () => {

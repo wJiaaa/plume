@@ -1,12 +1,11 @@
 /**
- * 压缩头里的「转录事实」：人说过的原话、最新的清单、批准过的计划。都从会话里的记录机械地读，不从模型写的摘要里读——摘要可以写错、
+ * 压缩头里的「转录事实」：人说过的原话、最新的清单。都从会话里的记录机械地读，不从模型写的摘要里读——摘要可以写错、
  * 可以漏，这几样不能：约束只存在于人说的那句话里，模型不知道自己忘了哪句，`recall` 也就无从查起。
  */
 
 import type { ChecklistDetails, Message, UserMessage } from "@plume/contract";
 
 export type CompactionContext = NonNullable<UserMessage["compactionContext"]>;
-type ApprovedPlan = NonNullable<CompactionContext["plan"]>;
 
 const REQUEST_CHARS = 2000;
 /**
@@ -23,9 +22,6 @@ const USER_WORDS_FLOOR = 8000;
 const REQUEST_STORE_CHARS = 64_000;
 /** 按条截短时每条至少留多少字——大约一句话。再短就不是在引用原话了，宁可整条省掉。 */
 const QUOTE_FLOOR = 200;
-
-/** 交计划的工具（计划模式插件）的名字：按它存在会话里的结果读，不引用插件本身。清单按结果里的通用声明认（`ChecklistDetails`）。 */
-const PLAN_TOOL = "submit_plan";
 
 /**
  * 读进一条消息，交回读到这里为止的历史事实（模型写的摘要改不了任务状态和人的原话）。原地改 `context`，有时换一个新的。
@@ -58,33 +54,15 @@ export function foldTaskContext(context: CompactionContext, message: Message): C
 		while (stored > REQUEST_STORE_CHARS && from < requests.length - 1) stored -= (requests[from++] as (typeof requests)[number]).text.length;
 		context.requests = from > 0 ? requests.slice(from) : requests;
 	} else if (message.role === "toolResult" && !message.isError && Array.isArray((message.details as Partial<ChecklistDetails> | undefined)?.checklist)) {
+		// 清单按结果里的通用声明认（`ChecklistDetails`），不认是哪个工具交的。
 		context.todos = (message.details as ChecklistDetails).checklist.map(({ content, status }) => ({ content, status }));
-	} else if (message.role === "toolResult" && message.toolName === PLAN_TOOL && !message.isError) {
-		// 只认批准的那份：打回的是反馈，不是计划。后一次批准覆盖前一次。
-		const approved = approvedPlanOf(message.details);
-		if (approved) context.plan = approved;
 	}
 	return context;
-}
-
-/** 计划模式插件把批准的计划放在 `submit_plan` 结果的 details 里（`{ kind: "plan", plan, approved: true, notes?, approvedAt }`）。 */
-function approvedPlanOf(details: unknown): ApprovedPlan | undefined {
-	const found = details as { kind?: unknown; plan?: unknown; approved?: unknown; notes?: unknown; approvedAt?: unknown } | undefined;
-	if (found?.kind !== "plan" || found.approved !== true || typeof found.plan !== "string") return undefined;
-	return {
-		plan: found.plan,
-		...(typeof found.notes === "string" && found.notes ? { notes: found.notes } : {}),
-		approvedAt: typeof found.approvedAt === "number" ? found.approvedAt : 0,
-	};
 }
 
 /** 读到一半时取走的那份：`requests` 会被后面的读原地追加，要自己的一份。其余字段只会被整体换掉。 */
 export function copyTaskContext(context: CompactionContext): CompactionContext {
 	return { ...context, ...(context.requests ? { requests: [...context.requests] } : {}) };
-}
-
-function renderPlan(plan: ApprovedPlan): string {
-	return plan.notes ? `${plan.plan}\n\n## Notes from the user when approving\n${plan.notes}` : plan.plan;
 }
 
 export function formatTaskContext(context: CompactionContext, requestBudget = USER_WORDS_CHARS): string {
@@ -99,14 +77,6 @@ export function formatTaskContext(context: CompactionContext, requestBudget = US
 		shown.length ? `Intermediate user requests, oldest first:\n${shown.join("\n\n")}` : "",
 		omitted
 			? `${omitted} earlier user request excerpts omitted from this window. Their constraints may still apply; use recall to check the original wording before assuming permission or changing scope.`
-			: "",
-		// 交给新会话的那份不能在这里写成「执行它」：压缩以后这个会话会把已经交出去的活再做一遍。
-		context.plan
-			? `${
-					context.plan.handoff
-						? `User-approved plan, handed to another session that carries it out${context.plan.file ? ` from ${context.plan.file}` : ""} (do not carry it out here; answer that session's questions about it):`
-						: `User-approved plan (execute it; re-plan only if the user says so)${context.plan.file ? `, saved at ${context.plan.file}` : ""}:`
-				}\n${renderPlan(context.plan)}`
 			: "",
 		context.todos !== undefined
 			? `Latest recorded task list:\n${context.todos.length ? context.todos.map((todo) => `[${todo.status}] ${todo.content}`).join("\n") : "No active task list; the previous list was cleared."}`

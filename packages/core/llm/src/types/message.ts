@@ -246,29 +246,6 @@ export interface CompactionContext {
 	/** Ordered excerpts of real user messages; rendering has its own window budget. */
 	requests?: { ordinal: number; text: string; timestamp: number }[];
 	todos?: { content: string; status: "pending" | "in_progress" | "completed" }[];
-	/** 人批准过的计划；摘要可以忘，它不能。见 `runtime/plan/plan-mode.ts`。 */
-	plan?: ApprovedPlan;
-}
-
-/**
- * 计划模式里交上去、被人批准的那份计划：一段 Markdown。
- *
- * 不拆成字段。拆过一次（现状、方案、改动、验证……），每份计划都被套进同一张表，三行的小改动也得
- * 填满六栏；该写什么由提示词说，怎么写由模型按这件事的大小定。计划也不是清单：怎么拆步是执行时
- * 模型自己用 `todo_write` 记的账。
- */
-export interface ApprovedPlan {
-	/** 计划全文，Markdown。 */
-	plan: string;
-	/** 人批准时附上的注意事项（多是在计划上划线留的评论）：不改计划，执行时照着做。 */
-	notes?: string;
-	/** 批准时写出的计划文件，绝对路径，写完不再改：交给别的会话的就是这一份。宿主没有临时目录时没有。 */
-	file?: string;
-	/** 人选了「在新会话里执行」：实施在另一个会话里，这个会话不再执行它。 */
-	handoff?: true;
-	/** 交接时人给那个新会话挑的模型。没挑就没有，宿主用默认模型开。 */
-	modelId?: string;
-	approvedAt: number;
 }
 
 export interface UserMessage {

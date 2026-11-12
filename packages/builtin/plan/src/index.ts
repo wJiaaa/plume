@@ -12,7 +12,7 @@
  *   批准的计划存成会话临时目录里的一个文件；人选了「在新会话里执行」时，经 `ctx.sessions.launch` 在同一个项目里开一个
  *   只带着这份计划的会话（`handoff.ts` 写它的第一句话），这个会话就此停下，留着回答那边的提问。
  * - 开着时系统提示词多一段（`model.context`）；一轮查过东西、以正文收尾却没交计划时提醒一次（`step.end`）。
- * - 压缩把批准计划的那次结果换成摘要时，计划原样接在摘要后面（`context.compact`），执行所依据的计划不被概括掉。
+ * - 压缩把批准计划的那次结果折进摘要头时，计划原样接在头里（`context.compact`），执行所依据的计划不被概括掉。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -107,15 +107,20 @@ export default {
 			return { continue: true, say: UNSUBMITTED_PLAN_NOTE };
 		});
 
-		// 在 plume.compaction（order 1000）外面：它定了压哪一段、写好了摘要，这里只往摘要后面接上计划。
-		// 只剪枝的没有摘要；里层自己写好了头（plume.compaction 的头里 <task-context> 已经带着批准的计划）就不再接。
+		/*
+		 * 在里层的压缩（order 1000）外面：它定了压哪一段、写好了头，这里只往头的第一条（用户消息）后面接上批准的计划，执行所依据的计划
+		 * 不被概括掉。批准那次的结果还留在压缩边界之后时不接，模型看得到原文。每次压缩都从会话的完整记录里重新找，不靠上一次的头带下来。
+		 */
 		ctx.hook("context.compact", async (input, next) => {
 			const result = await next(input);
-			if (!result || "pruneOnly" in result || result.head) return result;
+			if (!result || "pruneOnly" in result) return result;
 			const latest = approvedPlans(await ctx.sessions.messages(input.sessionId)).at(-1);
 			if (!latest || input.history.slice(result.keep).some((message) => message.role === "toolResult" && message.toolCallId === latest.toolCallId))
 				return result;
-			return { ...result, summary: `${result.summary}\n\n${approvedPlanNote(renderPlan(latest.plan, latest.notes))}` };
+			const [first, ...rest] = result.head;
+			if (first?.role !== "user") return result;
+			const content = typeof first.content === "string" ? [{ type: "text" as const, text: first.content }] : first.content;
+			return { ...result, head: [{ ...first, content: [...content, { type: "text", text: approvedPlanNote(latest) }] }, ...rest] };
 		});
 
 		ctx.tools.register({

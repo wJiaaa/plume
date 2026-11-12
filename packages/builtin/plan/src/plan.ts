@@ -167,6 +167,8 @@ export interface ApprovedPlan {
 	plan: string;
 	notes?: string;
 	approvedAt: number;
+	/** 批准时存下的计划文件。 */
+	file?: string;
 	/** 交给了新会话执行。 */
 	handoff?: boolean;
 }
@@ -183,6 +185,7 @@ export function approvedPlans(messages: readonly Message[]): ApprovedPlan[] {
 			plan: details.plan,
 			...(details.notes ? { notes: details.notes } : {}),
 			approvedAt: details.approvedAt,
+			...(details.file ? { file: details.file } : {}),
 			...(details.handoff ? { handoff: true } : {}),
 		});
 	}

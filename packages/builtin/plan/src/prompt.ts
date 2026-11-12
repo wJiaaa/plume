@@ -6,7 +6,7 @@
  * 三十轮后模型顺手改一个错字是常事。
  */
 
-import { SUBMIT_PLAN } from "./plan.ts";
+import { renderPlan, SUBMIT_PLAN, type ApprovedPlan } from "./plan.ts";
 
 /** 问人的工具（内置插件 plume.ask-user）。 */
 export const ASK_USER = "ask_user";
@@ -80,10 +80,16 @@ export const SUBMIT_PLAN_RESULTS = {
 		`The user approved the plan and asked for it to run in a new session, but that session could not be started: ${reason}. The plan is saved at ${file}. Do not carry it out here; wait for the user.`,
 };
 
-/** 压缩把批准计划的那次结果换成摘要时，接在摘要后面的那一段：执行所依据的计划不能跟着被概括掉。 */
-// i18n-exempt：发给模型的摘要。
-export function approvedPlanNote(plan: string): string {
-	return `User-approved plan (execute it; re-plan only if the user says so):\n\n${plan}`;
+/**
+ * 压缩把批准计划的那次结果折进摘要头时，接在头里的那一段：执行所依据的计划不能跟着被概括掉。是从会话记录里机械读出的事实，
+ * 不是摘要的转述。交给了新会话的那份不能写成「执行它」：压缩以后这个会话会把已经交出去的活再做一遍。
+ */
+// i18n-exempt：发给模型的压缩头。
+export function approvedPlanNote(plan: ApprovedPlan): string {
+	const lead = plan.handoff
+		? `User-approved plan, handed to another session that carries it out${plan.file ? ` from ${plan.file}` : ""} (do not carry it out here; answer that session's questions about it):`
+		: `User-approved plan (execute it; re-plan only if the user says so)${plan.file ? `, saved at ${plan.file}` : ""}:`;
+	return `<approved-plan>\nTranscript fact, not a summary claim. ${lead}\n\n${renderPlan(plan.plan, plan.notes)}\n</approved-plan>`;
 }
 
 /**
