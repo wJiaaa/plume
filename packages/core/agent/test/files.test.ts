@@ -1,6 +1,8 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { operateSessionFile } from "../src/file-operations.ts";
 import { createAgent } from "../src/index.ts";
@@ -91,6 +93,24 @@ it("找文件：按原样拼得上的直接给，裸文件名在目录里按结�
 	expect(await locateSessionFiles(cwd, "deep/approvals.ts")).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
 	expect(await locateSessionFiles(cwd, "src/")).toEqual([`${join(cwd, "src")}/`]);
 	expect(await locateSessionFiles(cwd, "nothing.ts")).toEqual([]);
+});
+
+// 程序写成 sh 脚本，Windows 上起不来，测不出有没有被执行。
+it.skipIf(process.platform === "win32")("找文件时不执行仓库配置里的程序：沙箱写进 `.git/config` 的 fsmonitor、钩子都不跑", async () => {
+	const run = (args: string[]) => promisify(execFile)("git", args, { cwd });
+	await writeFile(join(cwd, ".gitignore"), "node_modules/\n");
+	await run(["init", "-q"]);
+	await run(["add", "-A"]);
+	const trace = join(dir, "ran");
+	const program = join(dir, "fsmonitor.sh");
+	await writeFile(program, `#!/bin/sh\necho "$0" >> '${trace}'\n`, { mode: 0o755 });
+	await run(["config", "core.fsmonitor", program]);
+	await run(["config", "core.hooksPath", dir]);
+	for (const hook of ["post-index-change", "post-checkout", "reference-transaction"])
+		await writeFile(join(dir, hook), `#!/bin/sh\necho hook >> '${trace}'\n`, { mode: 0o755 });
+
+	expect(await locateSessionFiles(cwd, "approvals.ts")).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
+	expect(await readFile(trace, "utf8").catch(() => null)).toBeNull();
 });
 
 it("找文件：通配符、走出目录的 `..`、绝对路径都不找", async () => {

@@ -294,10 +294,27 @@ async function listFiles(root: string): Promise<string[] | null> {
 	}
 }
 
+/**
+ * 宿主进程里对工作区仓库跑 git。工作区是沙箱可写的，`.git/config` 里写的程序 git 会替它在宿主上执行，而这里
+ * 是回复一画出来就自动调的，不用人点。
+ *
+ * 临时做法：只压住这里用到的两条命令（`ls-files --cached --others --exclude-standard`，带或不带 pathspec）
+ * 碰得到的执行点。完整的办法是 plume.tools 的 `host-git.ts` 那种隔离视图（git 读不到仓库配置），等它收进本体后换掉这里。
+ *
+ * - `core.fsmonitor`：任何一次读 index 都会执行，这两条命令都读 index。`-c` 的优先级高于仓库配置和它 include 的文件。
+ * - 钩子：`ls-files` 不写 index，不触发 `post-index-change`；`core.hooksPath` 指空仍然压上，防以后改了命令。
+ * - 惰性拉取（partial clone 的 promisor 远端，会经 `core.sshCommand`、`remote.*.uploadpack` 起程序）：
+ *   `--exclude-standard` 遇到 skip-worktree 的 `.gitignore` 会从 index 里的 blob 读，sparse index 展开要读树，
+ *   对象缺了就去拉。`GIT_NO_LAZY_FETCH`（git 2.44 起）关掉它，更老的 git 不认这个变量，这一点压不住。
+ * - `filter.<名>.*`、`diff.<名>.textconv`、`diff.external`：驱动名由仓库自取，`-c` 压不住；但这两条命令只列
+ *   index 里的路径和没跟踪的文件名，不算工作区文件的哈希、不生成补丁、不读属性，碰不到它们。
+ * - 分页器：输出不是终端，git 不起分页器。
+ */
 async function git(cwd: string, args: string[]): Promise<string> {
-	const env = { ...process.env };
+	const env: NodeJS.ProcessEnv = { ...process.env, GIT_NO_LAZY_FETCH: "1" };
 	for (const name of REDIRECTING) delete env[name];
-	const { stdout } = await execFileAsync("git", args, { cwd, env, maxBuffer: 32 * 1024 * 1024, timeout: 10_000 });
+	const guarded = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", ...args];
+	const { stdout } = await execFileAsync("git", guarded, { cwd, env, maxBuffer: 32 * 1024 * 1024, timeout: 10_000 });
 	return stdout;
 }
 
