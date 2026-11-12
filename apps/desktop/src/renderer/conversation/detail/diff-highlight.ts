@@ -8,25 +8,13 @@
  * 字符串才不会断色——逐行解析总在这里出错。
  */
 
+import type { ChangeHunk } from "@plume/contract";
 import { useEffect, useState } from "react";
 import { grammarKeyFor, loadFenceLanguage, sharedHighlightStyle, type Token, tokenize } from "../../markdown/highlight.ts";
 
-interface DiffLine {
-	type: "context" | "add" | "remove";
-	text: string;
-	oldLine?: number;
-	newLine?: number;
-}
-
-export interface DiffHunk {
-	oldStart: number;
-	newStart: number;
-	lines: DiffLine[];
-}
-
 /** 每一行画出来的配色，按画的次序；还解析不了（语法没加载完、认不出的文件）时是 null，行照纯文本画。 */
-export function useDiffHighlight(hunks: DiffHunk[], path?: string): Token[][] | null {
-	const [result, setResult] = useState<{ hunks: DiffHunk[]; path: string | undefined; lines: Token[][] } | null>(null);
+export function useDiffHighlight(hunks: ChangeHunk[], path?: string): Token[][] | null {
+	const [result, setResult] = useState<{ hunks: ChangeHunk[]; path: string | undefined; lines: Token[][] } | null>(null);
 
 	useEffect(() => {
 		const grammar = path ? grammarKeyFor(path) : null;
@@ -54,7 +42,7 @@ export function useDiffHighlight(hunks: DiffHunk[], path?: string): Token[][] | 
  * 两边各拼回一段、上色，再按画的次序把行发回去。没改的行两段都有，两个游标都要走过它：漏了这一步，第一处改动之后的
  * 每一行颜色都错一行——而且看上去不像坏了，像是配色本来就不对。
  */
-function highlightHunks(hunks: DiffHunk[], toLines: (code: string) => Token[][]): Token[][] {
+function highlightHunks(hunks: ChangeHunk[], toLines: (code: string) => Token[][]): Token[][] {
 	const rows: Token[][] = [];
 	for (const hunk of hunks) {
 		const after = toLines(side(hunk, "remove"));
@@ -74,7 +62,7 @@ function highlightHunks(hunks: DiffHunk[], toLines: (code: string) => Token[][])
 }
 
 /** hunk 的一边，作为一段连续的源码：去掉另一边独有的行。 */
-function side(hunk: DiffHunk, exclude: "add" | "remove"): string {
+function side(hunk: ChangeHunk, exclude: "add" | "remove"): string {
 	return hunk.lines
 		.filter((line) => line.type !== exclude)
 		.map((line) => line.text)

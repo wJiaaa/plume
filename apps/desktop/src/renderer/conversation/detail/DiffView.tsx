@@ -1,6 +1,7 @@
+import type { ChangeHunk } from "@plume/contract";
 import { OverlayScrollbar, translate } from "@plume/ui";
 import { useRef } from "react";
-import { type DiffHunk, useDiffHighlight } from "./diff-highlight.ts";
+import { useDiffHighlight } from "./diff-highlight.ts";
 
 /**
  * 统一 diff：左边一栏行号，加的行一条绿色竖条、删的行一条红色，代码在底下照语法上色。
@@ -14,7 +15,7 @@ export function DiffView({
 	showPath = false,
 	maxLines = 600,
 }: {
-	hunks: DiffHunk[];
+	hunks: ChangeHunk[];
 	/** 是哪个文件：语法按扩展名定，没有路径就只能画纯文本。画不画在上面是 `showPath` 的事。 */
 	path?: string;
 	showPath?: boolean;
