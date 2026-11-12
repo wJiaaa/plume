@@ -71,7 +71,7 @@ ctx.tools.register({
 });
 ```
 
-想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation?, userOnly?, waiting? })`：宿主不再在执行前替你问，`run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。要不要真弹给人由钩子 `tool.approve` 定（见下面）：内置插件 plume.approval 让完全访问、外层设了 `approved`、答过「以后不再问」（`subject` 对得上）的直接得到 `"once"`，`escalation`（申请更宽的沙箱）总是问人。`waiting` 是等这张卡时一句短的状态（按 `ctx.locale()`），画在对话末尾、侧栏悬停和系统通知里；不给时宿主说「等待你的批准」。弹给人的卡没人答会过期：权限请求等 5 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）。`userOnly: true` 是还没迁走的旧写法（审批卡只能由人答、等 30 分钟），新写的插件要人给答案时用下面的 `run.request`。
+想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation? })`：宿主不再在执行前替你问，`run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。要不要真弹给人由钩子 `tool.approve` 定（见下面）：内置插件 plume.approval 让完全访问、外层设了 `approved`、答过「以后不再问」（`subject` 对得上）的直接得到 `"once"`，`escalation`（申请更宽的沙箱）总是问人。等这张卡时对话末尾、侧栏悬停和系统通知说「等待你的批准」。弹给人的卡没人答会过期：等 5 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）。问的是人的决定而不是放不放行（回答问题、批准计划、填表）时不用 `run.ask`，用下面的 `run.request`：完全访问、层的放行都不替人答。
 
 要人给一份数据而不是批准一次操作（回答问题、批准一份计划、填一张表）时调 `run.request({ kind, title, payload?, waiting? })`，不用写 `asks`。它不是权限：不经钩子 `tool.approve`，完全访问、「以后不再问」都不替人答，总是弹给人；和审批同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方、写明是谁在问。`payload` 是卡片要画的数据（问题、计划文本、表单字段），要能结构化克隆，不用序列化成字符串；卡片由界面入口按 `kind` 登记（`ui.requestCard`，见 ui.md），没登记时产品画一张只能「不答」的通用卡。返回 `{ answered: true, value }`，或 `{ answered: false, reason }`：`"declined"` 人点了不答，`"expired"` 等了 30 分钟没人答，`"stopped"` 这一轮停了（会话删了也算）。`value` 来自渲染进程，不可信：用之前按 `payload` 再核一遍（界面里的检查拦得住手误，拦不住一个不照着问题答的客户端），核不过就当没回答。`waiting` 不给时宿主说「等待你的回答」。例子是 `plume.ask-user`、`plan` 和 `mcp` 插件的表单。
 
@@ -124,7 +124,7 @@ ctx.hook("model.context", async (input, next) => {
 | `session` | 调用所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见上面 |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具，`plugin` 是注册它的插件 |
-| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权、`userOnly` 和层自己问的除外；`run.request` 不是审批，不受它管） |
+| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权和层自己问的除外；`run.request` 不是审批，不受它管） |
 | `readOnly` | 外层要求这次调用不改动工作区，交给工具的 `run.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，一律在只读沙箱里跑，给不了只读沙箱时不跑。只能收紧，里层不去掉它 |
 | `signal` | 用户停止这一轮时中止 |
 | `ask(reason)` | 弹审批卡等用户决定，卡上是这次调用的参数和 `reason`，只能答这一次；返回是否允许，用户停止这一轮时得到 `false`。完全访问下本体直接允许，其余经过钩子 `tool.approve`（`byLayer` 为真） |
@@ -287,7 +287,7 @@ ctx.hook("context.compact", async (input) => {
 
 一个工具调用要问人放不放行时经过一次：工具自己经 `run.ask` 问的、会改动工作区却没写 `asks` 的工具在执行前问的、`tool.execute` 的层自己经 `ask` 问的都算。最里层照着 `request` 把审批卡弹给人、等人答。工具经 `run.request` 要人给数据（提问、计划、表单）的不是审批，不到这里，层拦不下它。
 
-权限模式的含义在本体，到不了这里：完全访问、设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行（层自己问的只认完全访问）。提权（`request.escalation`）和 `request.userOnly` 只能由人答：完全访问下也到这里，层答放行本体不认、照样弹卡，层答拒绝照算。
+权限模式的含义在本体，到不了这里：完全访问、设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行（层自己问的只认完全访问）。提权（`request.escalation`）只能由人答：完全访问下也到这里，层答放行本体不认、照样弹卡，层答拒绝照算。`run.request` 不是审批，不到这里。
 
 | 输入字段 | 说明 |
 | --- | --- |
@@ -296,16 +296,16 @@ ctx.hook("context.compact", async (input) => {
 | `scratchDirs` | 同 `run.scratchDirs`：同一脉的会话的临时目录，往里写、删里面的东西算正当干活（plume.approval 这么判） |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具 |
-| `request` | 要弹给人的那张卡：`{ kind, title, detail, subject?, reason?, escalation?, userOnly? }`；`escalation` 是申请更宽的沙箱，`userOnly` 是只能由人答的决定（批准计划） |
+| `request` | 要弹给人的那张卡：`{ kind, title, detail, subject?, reason?, escalation? }`；`escalation` 是申请更宽的沙箱 |
 | `byLayer` | 是 `tool.execute` 的某一层自己问的，没有 `subject`，只能答这一次 |
-| `permissionMode` | 这次调用所在项目现在的权限模式；`full` 只有提权和 `userOnly` 会带到这里 |
+| `permissionMode` | 这次调用所在项目现在的权限模式；`full` 只有提权会带到这里 |
 | `signal` | 用户停止这一轮时中止 |
 
 输出是 `"once"`、`"always"` 或 `"reject"`。不调 `next` 就是替人答了，卡不弹；人在卡上答「以后不再问」时宿主把 `subject` 记进设置（提权的不记）。
 
-`plume.hooks` 在 order 2000（plume.approval 里面，只有真要弹给人的才到）跑 PermissionRequest 钩子：`userOnly` 和 `byLayer` 的不问钩子；钩子拒绝就 `"reject"`，放行就 `"once"`（提权的放行本体不认），没表态交给里层问人。
+`plume.hooks` 在 order 2000（plume.approval 里面，只有真要弹给人的才到）跑 PermissionRequest 钩子：`byLayer` 的不问钩子（`run.request` 本来就不经这里）；钩子拒绝就 `"reject"`，放行就 `"once"`（提权的放行本体不认），没表态交给里层问人。
 
-内置插件 plume.approval 在 order 1000，只管帮我批准（`auto`）的风险规则：请求批准档、提权、`userOnly`、层自己问的、没有 `subject` 的交给里层；其余按风险规则判：本体的 bash、write、edit 看不出风险的直接放行，命中规则的把理由写进 `request.reason`（按界面语言）交给里层，读项目外、插件的工具一律交给里层；其余交给里层。要放行自己的工具或改严、放宽规则，在外层（默认 order 0）判断，不关心的原样 `return next(input)`；要整个换掉风险规则，在外层不调 `next`。这一层抛错时这次调用以出错结束，不会当作放行。
+内置插件 plume.approval 在 order 1000，只管帮我批准（`auto`）的风险规则：请求批准档、提权、层自己问的、没有 `subject` 的交给里层；其余按风险规则判：本体的 bash、write、edit 看不出风险的直接放行，命中规则的把理由写进 `request.reason`（按界面语言）交给里层，读项目外、插件的工具一律交给里层；其余交给里层。要放行自己的工具或改严、放宽规则，在外层（默认 order 0）判断，不关心的原样 `return next(input)`；要整个换掉风险规则，在外层不调 `next`。这一层抛错时这次调用以出错结束，不会当作放行。
 
 ```ts
 // 读 .env 一律拒，不弹卡。

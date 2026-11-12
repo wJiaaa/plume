@@ -408,8 +408,8 @@ export function Transcript({
 												compacting={view.compacting}
 												messages={messages}
 												startedAt={view.startedAt}
-												waiting={view.approval === undefined ? undefined : view.approval.type === "request" || view.approval.userOnly ? "answer" : "approval"}
-												waitingText={view.approval?.waiting}
+												waiting={view.approval === undefined ? undefined : view.approval.type === "request" ? "answer" : "approval"}
+												waitingText={view.approval?.type === "request" ? view.approval.waiting : undefined}
 												retrying={retrying}
 												handedOff={resume !== null}
 											/>

@@ -56,7 +56,7 @@
 - **九个事件**：`SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`PostToolUse`、`PostToolUseFailure`、`Stop`、`StopFailure`（出错、被停、用满步数、原地打转、退出应用时被打断）、`SessionEnd`（删除、归档、换项目、退出应用；退出时最多等 2 秒）。
 - **输入输出**：钩子从 stdin 读 JSON（字段同时给 camelCase 和 snake_case）。退出码 0 读 stdout 的 JSON；退出码 2 拦下，原因取 stderr；其他退出码算运行失败，记进运行记录，这一步照常往下走。
   - `PreToolUse`：`permissionDecision` 可说 deny / ask / allow（多条取最严），`updatedInput` 改参数；allow 跳过审批卡，但提权仍要人批。
-  - `PermissionRequest`：`allow` 或 `deny`；拒绝就不弹卡，放行只放这一次；提权只认人批，提问、计划等只能由人答的卡不问钩子。
+  - `PermissionRequest`：`allow` 或 `deny`；拒绝就不弹卡，放行只放这一次；提权只认人批；提问、计划这类等人给答案的卡不是审批，不经钩子。
   - `UserPromptSubmit` 拦下时消息不发给 agent，原因弹提示条。
   - `Stop` 用 `decision: "block"` 加 `reason` 让 agent 接着干，每轮最多续三次。
   - `additionalContext` 交给 agent：会话开始、提交、Stop 的附在消息后，工具前后的接在工具结果后。

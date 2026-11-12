@@ -937,10 +937,8 @@ export interface UiContext {
 	/**
 	 * 给自己的工具画审批卡，见 `ApprovalCardProps`。`tool` 是 `ApprovalRequest.tool`；order 和让位规则同 `toolCard`：
 	 * 渲染出错时让给下一个，都不行用产品的通用卡。
-	 * `match: "kind"` 时第一个参数对的是 `ApprovalRequest.kind`：工具名不固定、一类问题从几个工具里问出来时用（MCP 服务
-	 * 中途要人填的表单，问它的是哪个 `mcp__…` 工具都有可能）。同一次请求两种都对得上时，按工具名登记的在前。
 	 */
-	approvalCard(tool: string, component: ComponentType<ApprovalCardProps>, options?: { order?: number; match?: "tool" | "kind" }): void;
+	approvalCard(tool: string, component: ComponentType<ApprovalCardProps>, options?: { order?: number }): void;
 	/**
 	 * 给 `run.request` 画卡，见 `RequestCardProps`。`kind` 是 `HumanRequest.kind`；order 和让位规则同 `toolCard`：渲染出错时让给下一个，
 	 * 都不行用产品的通用卡。

@@ -75,12 +75,15 @@ test("子会话审批去重、点击打开父会话，下一条通知即时使�
 	assert.deepEqual(state.opened, ["parent"]);
 	state.event({ type: "approval", sessionId: "child", approval: undefined });
 	state.locale("en");
-	// 只能由人答的问题：正文是插件给的状态，不是卡片正文（那里多半是 JSON）。
-	state.event({ ...approval, approval: { ...approval.approval!, tool: "ask_user", userOnly: true, detail: '{"question":"x"}', waiting: "Which branch?" } });
+	// 等人给答案（`run.request`）：正文是插件给的状态，不是卡上的数据。
+	state.event({
+		...approval,
+		approval: { type: "request", toolCallId: "q", kind: "ask_user", tool: "ask_user", title: "问", payload: { question: "x" }, waiting: "Which branch?" },
+	});
 	assert.match(state.sent[1]!.body, /needs your input: Which branch\?/);
 	state.event({ type: "approval", sessionId: "child", approval: undefined });
-	// 插件自己的表单（kind 不是本体认得的名字）照 userOnly 算提问；没给状态时用卡片标题。
-	state.event({ ...approval, approval: { toolCallId: "b", kind: "mcp-form", tool: "mcp_call", title: "github", detail: "{}", userOnly: true } });
+	// 插件自己的表单（kind 不是本体认得的名字）照样算提问；没给状态时用卡片标题。
+	state.event({ ...approval, approval: { type: "request", toolCallId: "b", kind: "mcp-form", tool: "mcp_call", title: "github", payload: {} } });
 	assert.match(state.sent[2]!.body, /needs your input: github$/);
 });
 test("插件的独立会话不发系统通知：它画在插件自己的页面里，点通知打不开", () => {

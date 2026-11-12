@@ -26,7 +26,7 @@ export default {
 | `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，详见下文 |
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
-| `ui.approvalCard(tool, Component, { order, match })` | 给自己的工具画审批卡；`match: "kind"` 按 `request.kind` 认（旧写法） |
+| `ui.approvalCard(tool, Component, { order })` | 给自己的工具画审批卡，按 `request.tool` 认 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
 | `ui.toolLine(tool, { verb, subject, like, group, times, callOnly, icon })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标；画法还是通用卡片 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
@@ -200,11 +200,10 @@ ui.approvalCard("my_shell", ShellApproval);
 
 - 只给自己的工具画（`request.tool`）：卡片压在输入框正上方的那一格、排队一次一张、停下这一轮时撤卡归产品；组件画整张卡（外框、正文、按钮）。认不出这次请求就返回 `fallback`（产品的通用卡），渲染出错时让给下一个注册者，都不行用通用卡。
 - 回答只有 `"once"`、`"always"`、`"reject"`，问的是放不放行。要人给答案（回答问题、批准计划、填表）用下面的「等人给数据的卡」。
-- `match: "kind"` 按 `request.kind` 登记、`userOnly` 的审批卡是还没迁走的旧写法，新写的不用。
 - `permission` 是现在的权限模式；`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `respond`，别的档调用不改。只在人点了卡上的按钮时调。
 - `compact`：窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`from` 是问的子会话的标题，卡上要写明。
-- 没人答时卡会过期（权限请求 5 分钟），截止时刻在 `request.expiresAt`；`queued` 是排在这张后面还在等的张数。外框想和产品的审批卡一样（收放的标题栏、倒计时、+N），用 `@plume/ui` 的 `ApprovalFrame`，正文和按钮放在里面；自己画外框的，标题行放一个 `ApprovalExpiry`（`at={request.expiresAt}`），有排队时写 `+{queued}`。
-- 等这张卡时对话末尾、侧栏悬停和系统通知说的那句状态，`run.ask` 带 `waiting` 给（按 `ctx.locale()`）；不给时宿主说「等待你的批准」。
+- 没人答时卡会过期（5 分钟），截止时刻在 `request.expiresAt`；`queued` 是排在这张后面还在等的张数。外框想和产品的审批卡一样（收放的标题栏、倒计时、+N），用 `@plume/ui` 的 `ApprovalFrame`，正文和按钮放在里面；自己画外框的，标题行放一个 `ApprovalExpiry`（`at={request.expiresAt}`），有排队时写 `+{queued}`。
+- 等审批卡时对话末尾、侧栏悬停和系统通知说的是「等待你的批准」，插件改不了；要说自己的那句状态（「等你批准计划」），那就不是审批，用 `run.request` 的 `waiting`。
 
 ## 等人给数据的卡
 

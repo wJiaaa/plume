@@ -180,7 +180,7 @@ export interface AgentOptions {
 	fetch?: import("@plume/contract").PluginFetch;
 	/** 系统废纸篓由桌面进程实现；无界面宿主没有时明确拒绝该操作。 */
 	trash?: (path: string) => Promise<void>;
-	/** 审批卡没人答时等多久（毫秒），见 `askUser`。不给用 5 分钟和 30 分钟；测试给短的，免得真等。 */
+	/** 卡片没人答时等多久（毫秒）：`permission` 是审批（`askUser`），`question` 是 `run.request`（`requestUser`）。不给用 5 分钟和 30 分钟；测试给短的，免得真等。 */
 	approvalTimeoutMs?: { permission?: number; question?: number };
 }
 
@@ -267,7 +267,7 @@ interface PendingApproval {
 /** 权限请求没人答时等多久：等这么久没动静，多半没人在电脑前，按拒绝收场不放出任何本来没放的东西。 */
 const PERMISSION_TIMEOUT_MS = 5 * 60_000;
 /**
- * 只能由人答的问题（`ToolRun.request` 和 `userOnly` 的审批：提问、表单、计划）等得久得多：没答不是拒绝，多半是人走开了一会儿。
+ * 等人给答案（`ToolRun.request`：提问、表单、计划）等得久得多：没答不是拒绝，多半是人走开了一会儿。
  * 照样有个头，无人值守的一轮不该卡在第一个问题上一整夜；卡片上有倒计时，截止时刻看得见。
  */
 const QUESTION_TIMEOUT_MS = 30 * 60_000;
@@ -1191,15 +1191,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/**
 	 * 弹审批卡等人决定。同时跑的几个调用都要问时排队，一次只弹一张（等人给数据的 `request` 也排在同一队）：界面上同一时刻只有一张卡，
 	 * 人一次也只回答一个问题；卡上写着后面还排着几张（+N）。
-	 * 每张从问出来起计时，没人答到时按拒绝收场（时长见 `PERMISSION_TIMEOUT_MS`、`QUESTION_TIMEOUT_MS`），排着的也在走：
+	 * 每张从问出来起计时，没人答到时按拒绝收场（时长见 `PERMISSION_TIMEOUT_MS`；`request` 的见 `QUESTION_TIMEOUT_MS`），排着的也在走：
 	 * 截止时刻随卡片发给界面画倒计时。这一轮停了，排着的、弹着的一起收掉，都得到拒绝。
 	 * 答「以后不再问」的记进设置再放行；提权只管这一次，不记。
 	 */
 	async function askUser(session: Session, request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
-		const timeout = request.userOnly
-			? (options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS)
-			: (options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS);
-		const outcome = await waitForAnswer(session, request, timeout, signal);
+		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS, signal);
 		const decision = "decision" in outcome ? outcome.decision : "reject";
 		const subject = request.subject;
 		if (decision === "always" && subject !== undefined && request.escalation === undefined) {
@@ -1210,7 +1207,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		return decision;
 	}
 
-	/** 等人给一份数据（`ToolRun.request`）：和审批同一队、同一套撤卡规则，等得和 `userOnly` 的审批一样久。 */
+	/** 等人给一份数据（`ToolRun.request`）：和审批同一队、同一套撤卡规则，等得比审批久（`QUESTION_TIMEOUT_MS`）。 */
 	async function requestUser(session: Session, request: HumanRequest, signal: AbortSignal): Promise<HumanAnswer> {
 		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS, signal);
 		if ("value" in outcome) return { answered: true, value: outcome.value };

@@ -275,7 +275,7 @@ export interface ToolExecution {
 	call: ToolCall;
 	/** `plugin` 是注册它的插件（read、write、edit、ls、glob、grep、bash 是内置插件 plume.tools 的）。 */
 	tool: { name: string; mutating: boolean; plugin: string };
-	/** 外层已经放行的理由。设了它，本体就不再问人（提权、`userOnly` 和层自己问的除外），也不经钩子 tool.approve。 */
+	/** 外层已经放行的理由。设了它，本体就不再问人（提权和层自己问的除外），也不经钩子 tool.approve。 */
 	approved?: string;
 	/**
 	 * 外层要求这次调用不改动工作区（计划模式）。交给工具的 `ToolRun.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，
@@ -529,7 +529,8 @@ export type CompactSummary =
  * 最里层照着传进来的 `request` 把审批卡弹给人、等人答。
  *
  * 权限模式的含义在本体，到不了这里：完全访问、tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行。
- * 提权（`request.escalation`）和 `request.userOnly` 只能由人答：它们在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算。
+ * 提权（`request.escalation`）只能由人答：它在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算。
+ * 工具要人给答案（`ToolRun.request`）不是审批，不到这里。
  * 内置插件 plume.approval 在这里按帮我批准（`auto`）的风险规则放行；没有任何层时每一次都问人。
  */
 export interface ToolApproval {
@@ -546,7 +547,7 @@ export interface ToolApproval {
 	request: ApprovalContent;
 	/** 是钩子 tool.execute 的某一层自己要问（`ToolExecution.ask`），不是工具问的：没有 `subject`，只能答这一次。 */
 	byLayer?: boolean;
-	/** 这次调用所在项目现在的权限模式。完全访问只有提权和 `userOnly` 会带到这里。 */
+	/** 这次调用所在项目现在的权限模式。完全访问只有提权会带到这里。 */
 	permissionMode: PermissionMode;
 	/** 用户停止这一轮时中止。 */
 	signal: AbortSignal;

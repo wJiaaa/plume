@@ -255,7 +255,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	const permission = () => (read ??= scope.permission());
 	/**
 	 * 要不要放行。权限模式的含义由本体定，换掉哪个插件都不变：
-	 * - 提权（`escalation`，放宽沙箱）和 `userOnly`（提问、批准计划）只能由人答：完全访问不替人点头，层答放行不算数、照样弹卡，层的拒绝照算；
+	 * - 提权（`escalation`，放宽沙箱）只能由人答：完全访问不替人点头，层答放行不算数、照样弹卡，层的拒绝照算；
 	 * - 完全访问直接放行；
 	 * - tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的直接放行；层自己问的（`byLayer`）没有 `subject`，不归这两条；
 	 * - 其余经钩子 tool.approve（插件替人答、帮我批准的风险规则在那里），最里层把审批卡弹给人。
@@ -263,7 +263,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	 */
 	const approve = async (from: ToolExecution, request: ApprovalContent, byLayer: boolean): Promise<ApprovalDecision> => {
 		const { mode, alwaysAllow } = await permission();
-		const humanOnly = request.escalation !== undefined || request.userOnly === true;
+		const humanOnly = request.escalation !== undefined;
 		if (!humanOnly && mode === "full") return "once";
 		if (!humanOnly && !byLayer && (from.approved || (request.subject !== undefined && alwaysAllow.includes(request.subject)))) return "once";
 		let asked = false;

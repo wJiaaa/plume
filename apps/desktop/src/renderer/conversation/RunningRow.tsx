@@ -38,7 +38,7 @@ export const RunningRow = memo(function RunningRow({
 	/** 正在执行的调用开始的时刻。 */
 	startedAt: Readonly<Record<string, number>>;
 	waiting: "approval" | "answer" | undefined;
-	/** 插件给的「在等什么」（`ApprovalRequest.waiting`）。 */
+	/** 插件给的「在等什么」（`HumanRequest.waiting`）。 */
 	waitingText?: string | undefined;
 	retrying: boolean;
 	/** 这一轮停下了，「已暂停 · 继续」那一行接着它的位置。 */

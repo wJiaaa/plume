@@ -16,7 +16,7 @@
 | 会话 | 不可变 | 格式和存储位置固定；只有循环能写入，插件经 `ctx.sessions` 列出会话、读消息原文、改标题（`setTitle`）；插件不能在已有的用户会话里发起一轮，只有自有后台运行的结果能经 `report` 由宿主送回真实父会话；能开一个新的顶层会话并发出它的第一句话（`launch`，见下方「会话的边界」）；顶层会话里工具的那次调用能要求这一轮完成后归档它所在的会话（`ToolRun.archiveAfterTurn`）；在自己建的子会话里，自己的工具的那次调用够得着它的父会话（`ToolRun.parent`：排一件事、停下、接着做、看状态），人在那个子会话的卡片上点也只到父会话（`ToolCardProps.handToParent`）；跟着会话的卡片上的按钮是人点的，经 `stop` / `carryOn` 停下或接着做，和输入框的停止、转录底下的「继续」一样。压缩只记账在本体（摘要、头、边界和剪枝视图怎么拼回历史，转录里的压缩行），何时压、剪哪些、摘要怎么写由 `context.compact` 的层定（内置插件 plume.compaction）；插件经 `ctx.sessions.compact` 现在就压一次（`/compact`）。插件可以建挂在某个会话下的**子会话**（见下方「会话的边界」），只在自己建的子会话里发起一轮 |
 | 有哪些工具 | 可变 | `ctx.tools.register` 新增或覆盖；read / write / edit / ls / glob / grep / bash 是内置插件 plume.tools 的，插件注册同名工具就覆盖它 |
 | 工具怎么执行 | 可变 | `tool.execute`：放行、拦截、改参数、改结果，或者整个接管 |
-| 审批 | 可变 | 哪些调用要问是本体定的（写了 `asks` 的工具自己问，其余会改动的执行前问，层可以调 `ask`），排在 `tool.execute` 所有层的里面；权限模式（请求批准 / 帮我批准 / 完全访问）的含义也是本体的：完全访问、`approved`、「以后不再问」的名单直接放行，提权和 `userOnly` 只认人答；其余经 `tool.approve`，内置插件 plume.approval 按帮我批准的风险规则放行，插件在外层替人答或交给里层弹卡。插件也可在 `tool.execute` 外层预先放行（`approved`）或拦截。工具经 `run.request` 要人给数据（提问、计划、表单）不是审批：不经 `tool.approve`、权限模式管不着，只和审批共用队列和卡位 |
+| 审批 | 可变 | 哪些调用要问是本体定的（写了 `asks` 的工具自己问，其余会改动的执行前问，层可以调 `ask`），排在 `tool.execute` 所有层的里面；权限模式（请求批准 / 帮我批准 / 完全访问）的含义也是本体的：完全访问、`approved`、「以后不再问」的名单直接放行，提权只认人答；其余经 `tool.approve`，内置插件 plume.approval 按帮我批准的风险规则放行，插件在外层替人答或交给里层弹卡。插件也可在 `tool.execute` 外层预先放行（`approved`）或拦截。工具经 `run.request` 要人给数据（提问、计划、表单）不是审批：不经 `tool.approve`、权限模式管不着，只和审批共用队列和卡位 |
 | 系统提示词、历史消息、工具列表 | 可变 | `model.context`；系统提示词按段（`sections`）给出，插件按段名加、换、删；只作用于这一次请求，会话里存的不变。系统提示词由 plume.prompt 按会话冻结，中途变了的段作为增量消息接在下一轮开头；工具表同样按会话冻结，变化在下一轮开头生效 |
 | 工具卡片 | 可变 | 插件的界面入口按工具名注册；没注册的用产品的通用卡片。结果里的图（交给模型的 `images`，和 `shownImages` 里只给人看的）通用卡片都画 |
 | 会话的临时目录 | 不可变 | 宿主给每个会话一个（`<数据目录>/scratch/<会话 id>`，`ToolRun.scratchDir`、`ModelContext.scratchDir`），会话删掉时连目录一起删；同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的）的临时目录经 `ToolRun.scratchDirs`、`ToolApproval.scratchDirs` 给出，互相写不问，别的会话的写不进或要问；读哪个会话的临时目录都不问；里面放什么由插件定（太大没交给模型的图、截断前的全文），plume.prompt 把它写进系统提示词 |
@@ -271,7 +271,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 | `prompt.submit` | 每一轮开始，人的消息写进会话之前 | `PromptSubmit` → `PromptVerdict` | 放行 | 按内容拦下消息、给模型补上下文（会话开始时的说明、提交时的检查结果）、第一轮把会话挪进它自己的工作树（`cwd`） | 这一轮结束，界面显示错误，消息不写进会话 |
 | `step.end` | 每一步收尾，回复出错、被停下的那步除外 | `StepEnd` → `StepVerdict` | 本体的自然结论：有工具结果接着做；没有的截断了接着写、空回复催一句，否则结束；够到重复警告线时带一句提醒 | 换掉本体的续写和催促、以出错或卡住结束 | 按自然结论走，界面显示错误 |
 | `context.compact` | 每次发请求前（过完 `model.context`）；服务商说超长时再一次（`force`）；人敲 `/compact` 时（`force`、`manual`）；一轮干净收尾、有可分叉的主请求时（`idle`，宿主为它再经一遍 `model.context`） | `ContextCompact` → `CompactSummary` | 不压；紧挨着它的 plume.compaction 快满时先剪工具结果，不够再把较早的换成摘要 | 换一种压法（留多少、摘要怎么写、用什么模型） | 那一行写压缩失败，照常发全文 |
-| `tool.approve` | 一个调用要问人时（工具的 `run.ask`、会改动的工具执行前、层的 `ask`） | `ToolApproval` → `ApprovalDecision` | 把审批卡弹给人、等人答；紧挨着它的 plume.approval 按帮我批准的风险规则放行（完全访问、`approved`、「以后不再问」本体已放行，到不了这里） | 放行自己的工具、按参数拒绝、换一套风险规则；提权和 `userOnly` 只能拒绝，放行本体不认 | 这次调用以错误结果交给模型 |
+| `tool.approve` | 一个调用要问人时（工具的 `run.ask`、会改动的工具执行前、层的 `ask`） | `ToolApproval` → `ApprovalDecision` | 把审批卡弹给人、等人答；紧挨着它的 plume.approval 按帮我批准的风险规则放行（完全访问、`approved`、「以后不再问」本体已放行，到不了这里） | 放行自己的工具、按参数拒绝、换一套风险规则；提权只能拒绝，放行本体不认 | 这次调用以错误结果交给模型 |
 | `session.rewind` | 撤回、编辑重发要截掉一段对话前：先只演算（`restore: false`），人选了连文件一起退时在截断前再写回（`restore: true`）；只动对话时不问 | `SessionRewind` → `RevertPlan` | 没有要退回的 `{ files: [], unrecorded: false }`；plume.delivery 退回那段里文件工具记下了快照的改动 | 撤回时把插件自己记着的改动一起退回 | 演算失败时界面只问要不要撤回对话；写回失败时不截对话，插件的原话弹给人 |
 
 ```ts
@@ -281,7 +281,7 @@ interface ToolExecution {
 	cwd: string;
 	call: { id: string; name: string; args: Record<string, unknown> };
 	tool: { name: string; mutating: boolean; plugin: string };
-	/** 外层已经放行的理由。设了它本体就不再问人（提权、`userOnly` 和层自己问的除外）。 */
+	/** 外层已经放行的理由。设了它本体就不再问人（提权和层自己问的除外）。 */
 	approved?: string;
 	/** 用户停止这一轮时中止。 */
 	signal: AbortSignal;
@@ -413,7 +413,7 @@ interface ToolCardProps {
 
 另外：
 
-- 审批卡的位置、排队和收场是产品的（`renderer/conversation/ApprovalOverlay.tsx`），插件只能经 `ui.approvalCard`（审批）、`ui.requestCard`（等人给数据）画整张卡；卡压在输入框正上方：人的视线本来停在那里，卡片占住自己的高度，对话照样能往上翻。标题栏是标题、类型小标签和收起箭头；正文是理由和要做的事（命令原文、diff、插件工具的参数）；底部是拒绝、以后不再问、允许一次，提权请求和没有可记对象的请求只有拒绝、允许一次。等待时工具卡片只标「等待确认」（`status: "approval"`）。人的回答经 AgentService 的 `respond(sessionId, toolCallId, decision)` 回到问的那一处。同一格也摆 `run.request` 等人给数据的卡（`HumanRequest`，`type: "request"`，和审批同在 `SessionView.approval`）：插件经 `ui.requestCard` 按 `kind` 画，人交回的数据经 `answer(sessionId, toolCallId, value)` 回去，「不答」是 `respond(…, "reject")`；没有插件能画时是一张只有标题和「不答」的通用卡。同时要问的几张（审批和等人的混在一起，按问的先后）在本体排队，一次弹一张，标题栏写后面还排着几张（+N，`approval` 事件和 `SessionView.queuedApprovals`）；每张从问出来起计时，没人答时权限请求 5 分钟、`run.request` 和 `userOnly` 的 30 分钟后收场（审批按拒绝，`run.request` 得到 `expired`），截止时刻随卡片发出（`expiresAt`），标题栏有「m:ss 后失效」；停下这一轮时排着的、弹着的一起收掉（`run.request` 得到 `stopped`）。外框（收放的标题栏、倒计时、+N）是 `@plume/ui` 的 `ApprovalFrame`，插件画的卡也用它或 `ApprovalExpiry`。有卡在等时侧栏的会话行首是警示色的点（渲染进程从 `approval` 事件推出来、只在内存里，见 `renderer/sidebar/activity.ts`；子会话在等也标在父会话上），运行行说「等待你的批准」，等 `run.request` 和 `userOnly` 的说「等待你的回答」。
+- 审批卡的位置、排队和收场是产品的（`renderer/conversation/ApprovalOverlay.tsx`），插件只能经 `ui.approvalCard`（审批）、`ui.requestCard`（等人给数据）画整张卡；卡压在输入框正上方：人的视线本来停在那里，卡片占住自己的高度，对话照样能往上翻。标题栏是标题、类型小标签和收起箭头；正文是理由和要做的事（命令原文、diff、插件工具的参数）；底部是拒绝、以后不再问、允许一次，提权请求和没有可记对象的请求只有拒绝、允许一次。等待时工具卡片只标「等待确认」（`status: "approval"`）。人的回答经 AgentService 的 `respond(sessionId, toolCallId, decision)` 回到问的那一处。同一格也摆 `run.request` 等人给数据的卡（`HumanRequest`，`type: "request"`，和审批同在 `SessionView.approval`）：插件经 `ui.requestCard` 按 `kind` 画，人交回的数据经 `answer(sessionId, toolCallId, value)` 回去，「不答」是 `respond(…, "reject")`；没有插件能画时是一张只有标题和「不答」的通用卡。同时要问的几张（审批和等人的混在一起，按问的先后）在本体排队，一次弹一张，标题栏写后面还排着几张（+N，`approval` 事件和 `SessionView.queuedApprovals`）；每张从问出来起计时，没人答时审批 5 分钟后按拒绝收场，`run.request` 30 分钟后得到 `expired`，截止时刻随卡片发出（`expiresAt`），标题栏有「m:ss 后失效」；停下这一轮时排着的、弹着的一起收掉（`run.request` 得到 `stopped`）。外框（收放的标题栏、倒计时、+N）是 `@plume/ui` 的 `ApprovalFrame`，插件画的卡也用它或 `ApprovalExpiry`。有卡在等时侧栏的会话行首是警示色的点（渲染进程从 `approval` 事件推出来、只在内存里，见 `renderer/sidebar/activity.ts`；子会话在等也标在父会话上），运行行说「等待你的批准」，等 `run.request` 的说「等待你的回答」（插件给了 `waiting` 就用它）。
 - 界面入口到逻辑入口只有一条路：逻辑入口 `ctx.serve(api)`，界面入口 `ui.remote()`，中间是 AgentService 的 `callPlugin(插件名, 方法, 参数)`，只能调到自己那个插件。方法的最后一个参数是 CallContext；参数和返回值要能结构化克隆。第一个用它的是终端插件 `plume.terminal`：attach 返回一个流，先回放再接着推输出，取消就是断开，shell 照常跑。
 - 工作区显示当前会话的面板，标签按会话保留；`session` / `cwd` 始终来自标签归属会话，子会话面板保留 owner 语义。`shown` 是标签归属会话正在显示、面板区已展开且它是当前标签。`available` 按目录和有无会话分别计算，只控制新开列表及快捷键新开，不隐藏、不卸载已有标签。
 - 面板宽度和收起偏好在窗口内共享；全屏状态按会话保存，盖满工作区。窄窗口面板盖满工作区，按 Esc 收起；正文与面板放不下横排时上下排列。关掉最后一个标签收起面板区，可从标题栏重新打开开始页。面板只在工作区出现，设置页不画。

@@ -14,7 +14,8 @@ export type { SessionActivity };
 const marks = new Map<string, SessionActivity>();
 /** 在等的那张卡说的是什么，见 `waitOf`。 */
 interface Wait {
-	userOnly: boolean;
+	/** 等人给答案（`run.request`），不是等批准。 */
+	answer: boolean;
 	waiting?: string;
 }
 const waits = new Map<string, Wait>();
@@ -70,14 +71,13 @@ export function sessionsChanged(previous: readonly SessionSummary[], next: reado
 	changed();
 }
 
-/** 等人的卡来了或撤了。记下它是不是只能由人答（`run.request` 的都是）、插件给的那句状态（`waiting`），说「在等什么」用。 */
+/** 等人的卡来了或撤了。记下它是等批准还是等人给答案（`run.request`）、插件给的那句状态（`waiting`），说「在等什么」用。 */
 export function approvalChanged(sessionId: string, approval: PendingRequest | undefined): void {
 	if (approval) {
-		const userOnly = approval.type === "request" || approval.userOnly === true;
-		const wait: Wait = { userOnly, ...(approval.waiting ? { waiting: approval.waiting } : {}) };
+		const wait: Wait = approval.type === "request" ? { answer: true, ...(approval.waiting ? { waiting: approval.waiting } : {}) } : { answer: false };
 		const before = waits.get(sessionId);
 		waits.set(sessionId, wait);
-		if (marks.get(sessionId) === "waiting" && (before?.userOnly !== wait.userOnly || before?.waiting !== wait.waiting)) changed();
+		if (marks.get(sessionId) === "waiting" && (before?.answer !== wait.answer || before?.waiting !== wait.waiting)) changed();
 		set(sessionId, "waiting");
 		return;
 	}
@@ -92,9 +92,9 @@ export function waitOf(sessionId: string): Wait | undefined {
 	return undefined;
 }
 
-/** 「在等什么」那句话：插件给了就用它，不然按是不是只能由人答说「等待你的回答」或「等待你的批准」。 */
+/** 「在等什么」那句话：插件给了就用它，不然按等的是答案还是批准说「等待你的回答」或「等待你的批准」。 */
 export function waitingWords(wait: Wait | undefined, t: (key: "running.waitingForAnswer" | "sessionStatus.waiting") => string): string {
-	return wait?.waiting ?? t(wait?.userOnly ? "running.waitingForAnswer" : "sessionStatus.waiting");
+	return wait?.waiting ?? t(wait?.answer ? "running.waitingForAnswer" : "sessionStatus.waiting");
 }
 
 /** 人打开了这个会话：结果看到了；等批准的不清，那是还没办的事。 */

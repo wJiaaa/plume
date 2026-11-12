@@ -115,8 +115,6 @@ const toolPrefixes = new Map<string, Entry<ToolCardProps>[]>();
 /** `ui.toolCard(…, { inline })`：只在通用卡片上补东西的卡片，调用照常并进一段活；给的是函数时逐次调用问它。 */
 const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean)>();
 const approvalCards = new Map<string, Entry<ApprovalCardProps>[]>();
-/** `ui.approvalCard(kind, …, { match: "kind" })`：按 `ApprovalRequest.kind` 认的审批卡。 */
-const approvalKinds = new Map<string, Entry<ApprovalCardProps>[]>();
 /** `ui.requestCard`：按 `HumanRequest.kind` 认的、`run.request` 的卡。 */
 const requestCards = new Map<string, Entry<RequestCardProps>[]>();
 
@@ -1392,7 +1390,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
 		},
 		toolLine: (tool, line) => registerToolLine(name, tool, line),
-		approvalCard: (tool, component, options) => register(options?.match === "kind" ? approvalKinds : approvalCards, "审批卡", name, tool, component, options),
+		approvalCard: (tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options),
 		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options),
 		panel: (id, component, options) => registerPanel(name, id, component, options),
 		page: (id, component, options) => registerPage(name, id, component, options),
@@ -1606,7 +1604,7 @@ function unloadPluginUi(name: string): void {
 	lifetimes.get(name)?.dispose();
 	lifetimes.delete(name);
 	removeToolLines(name);
-	for (const table of [codeBlocks, toolCards, toolPrefixes, approvalCards, approvalKinds, requestCards] as Map<string, Entry<unknown>[]>[]) {
+	for (const table of [codeBlocks, toolCards, toolPrefixes, approvalCards, requestCards] as Map<string, Entry<unknown>[]>[]) {
 		for (const [tool, list] of table) {
 			const kept = list.filter((entry) => entry.plugin !== name);
 			if (kept.length > 0) table.set(tool, kept);
@@ -1752,13 +1750,12 @@ async function allowAuto(): Promise<void> {
 }
 
 /**
- * 等人决定的那一次：工具的插件登记了审批卡就由它画，再看按 `kind` 登记的，渲染出错让给下一个，都不行用 `fallback`
- * （产品的通用卡）。
+ * 等人决定的那一次：工具的插件登记了审批卡就由它画，渲染出错让给下一个，都不行用 `fallback`（产品的通用卡）。
  */
 export function ApprovalCardSlot(props: Omit<ApprovalCardProps, "permission" | "allowAuto">) {
 	const version = usePluginRegistrations();
 	const permission = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
-	const entries = [...(approvalCards.get(props.request.tool) ?? []), ...(approvalKinds.get(props.request.kind) ?? [])];
+	const entries = approvalCards.get(props.request.tool) ?? [];
 	return <Chain key={`${version}:${props.request.toolCallId}`} entries={entries} props={{ ...props, permission, allowAuto }} />;
 }
 

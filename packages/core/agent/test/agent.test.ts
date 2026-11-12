@@ -1651,35 +1651,10 @@ it("完全访问由本体放行，不经 tool.approve：外层拒绝不了，层
 	expect(await readFile(join(workspace, "hello.txt"), "utf8")).toBe("hi\n");
 });
 
-it("userOnly 的问题完全访问下也弹给人", async () => {
-	const decide: Plugin = {
-		name: "test.decide",
-		apply(ctx) {
-			ctx.tools.register({
-				name: "decide",
-				description: "要人拍板",
-				parameters: { type: "object", properties: {} },
-				async execute(_args, run) {
-					return { output: await run.ask({ kind: "decide", title: "拍板", detail: "做不做", userOnly: true }) };
-				},
-			});
-		},
-	};
-	const call = { id: "call_decide", name: "decide", args: {} };
-	const { service, session, until, idle } = await start([{ toolCalls: [call] }, { text: "好了" }], [decide]);
-	await service.setPermissionMode("full");
-
-	const done = idle();
-	service.send(session.id, { content: [{ type: "text", text: "定" }] });
-	const asked = await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
-	expect(asked.approval).toMatchObject({ toolCallId: "call_decide", userOnly: true });
-	service.respond(session.id, "call_decide", "once");
-	await done;
-	const result = (await service.getSession(session.id)).messages.find((message) => message.role === "toolResult");
-	expect(result?.content[0]).toMatchObject({ text: "once" });
-});
-
-/** 一个不改动工作区、自己经 `run.ask` 问人的工具：同一步里调几次就同时问几张。 */
+/**
+ * 一个不改动工作区、自己经 `run.ask` 申请提权的工具：同一步里调几次就同时问几张。提权只认人答，完全访问、层的放行都不替人点头，
+ * 每张都真弹给人。
+ */
 const asker: Plugin = {
 	name: "test.asker",
 	apply(ctx) {
@@ -1689,15 +1664,30 @@ const asker: Plugin = {
 			parameters: { type: "object", properties: {} },
 			asks: true,
 			async execute(_args, run) {
-				return { output: await run.ask({ kind: "decide", title: "拍板", detail: "做不做", userOnly: true }) };
+				return { output: await run.ask({ kind: "decide", title: "拍板", detail: "做不做", escalation: "workspace-write" }) };
 			},
 		});
 	},
 };
+
+it("提权完全访问下也弹给人", async () => {
+	const call = { id: "call_decide", name: "decide", args: {} };
+	const { service, session, until, idle } = await start([{ toolCalls: [call] }, { text: "好了" }], [asker]);
+	await service.setPermissionMode("full");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "定" }] });
+	const asked = await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
+	expect(asked.approval).toMatchObject({ toolCallId: "call_decide", escalation: "workspace-write" });
+	service.respond(session.id, "call_decide", "once");
+	await done;
+	const result = (await service.getSession(session.id)).messages.find((message) => message.role === "toolResult");
+	expect(result?.content[0]).toMatchObject({ text: "once" });
+});
 type ApprovalEvent = Extract<AgentEvent, { type: "approval" }>;
 const isApproval = (event: AgentEvent): event is ApprovalEvent => event.type === "approval";
 
-it("只能由人答的，tool.approve 的层答放行不算数、照样弹卡；层的拒绝照算", async () => {
+it("提权只能由人答：完全访问下 tool.approve 的层答放行不算数、照样弹卡；层的拒绝照算", async () => {
 	const guard: Plugin = {
 		name: "test.guard",
 		apply(ctx) {
@@ -1719,11 +1709,11 @@ it("只能由人答的，tool.approve 的层答放行不算数、照样弹卡；
 	expect(results.map(textOf)).toEqual(["reject", "reject"]);
 });
 
-it("没人答的审批到时按拒绝收场：权限请求和只能由人答的问题各等各的，截止时刻随卡片发出", async () => {
+it("没人答的审批到时按拒绝收场，提权也一样等权限请求那一档，截止时刻随卡片发出", async () => {
 	const touch = { id: "call_touch", name: "bash", args: { command: "touch made.txt" } };
 	const decide = { id: "call_decide", name: "decide", args: {} };
 	const { service, session, events, until, idle } = await start([{ toolCalls: [touch] }, { toolCalls: [decide] }, { text: "好了" }], [asker], {
-		approvalTimeoutMs: { permission: 150, question: 400 },
+		approvalTimeoutMs: { permission: 150, question: 5_000 },
 	});
 	await service.setPermissionMode("ask");
 
@@ -1736,8 +1726,8 @@ it("没人答的审批到时按拒绝收场：权限请求和只能由人答的�
 	expect(permissionLeft).toBeLessThan(400);
 	const waiting = await service.getSession(session.id);
 	expect(waiting.approval?.expiresAt).toBe(permission.approval!.expiresAt);
-	const question = await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_decide");
-	expect(question.approval!.expiresAt! - Date.now()).toBeGreaterThan(200);
+	const escalated = await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_decide");
+	expect(escalated.approval!.expiresAt! - Date.now()).toBeLessThanOrEqual(150);
 	await done;
 
 	const results = (await service.getSession(session.id)).messages.filter((message) => message.role === "toolResult");
@@ -1871,7 +1861,7 @@ it("request 和审批同排一队：按问的先后弹，answer 只认弹着的�
 	expect((await service.getSession(session.id)).approval?.toolCallId).toBe("call_fill");
 	service.answer(session.id, "call_fill", "到了");
 	const next = await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_decide");
-	expect(next.approval).toMatchObject({ userOnly: true });
+	expect(next.approval).toMatchObject({ escalation: "workspace-write" });
 	expect(next.approval?.type).toBeUndefined();
 	expect(next.queuedApprovals).toBeUndefined();
 	service.answer(session.id, "call_decide", "不是数据");

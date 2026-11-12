@@ -33,9 +33,9 @@ export const RunningIndicator = memo(function RunningIndicator({
 	messages: readonly Message[];
 	/** 正在执行的调用开始的时刻。 */
 	startedAt: Readonly<Record<string, number>>;
-	/** 有一次调用在等人：`approval` 是等批准，`answer` 是等人答一个只有人能答的问题（提问、表单、计划，`userOnly`）。 */
+	/** 有一次调用在等人：`approval` 是等批准，`answer` 是等人给答案（提问、表单、计划，`run.request`）。 */
 	waiting: "approval" | "answer" | undefined;
-	/** 插件给的「在等什么」（`ApprovalRequest.waiting`）；不给时按 `waiting` 说。 */
+	/** 插件给的「在等什么」（`HumanRequest.waiting`）；不给时按 `waiting` 说。 */
 	waitingText?: string | undefined;
 	/** 连接断了，在等重连。 */
 	retrying: boolean;
