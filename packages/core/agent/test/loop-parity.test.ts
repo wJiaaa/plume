@@ -110,6 +110,9 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 		ask: async () => "once",
 		requestHuman: async () => ({ answered: false, reason: "declined" }),
 		commands: commandAccess,
+		track: () => {
+			throw new Error("这里不起后台任务");
+		},
 		started: () => {},
 		progress: () => {},
 	};

@@ -1241,7 +1241,7 @@ export interface UiContext {
  * 仓库外的插件给自己的服务用声明合并加一项：`declare module "@plume/contract/ui" { interface UiServices { … } }`。
  */
 export interface UiServices {
-	/** 打开一个后台任务（服务 `background.jobs` 列出的那些）给人看：人点了对话里那个后台任务那一行时调，不改变送达或命令状态。 */
+	/** 打开一个后台任务（`ctx.sessions.jobs` 列出的那些）给人看：人点了对话里那个后台任务那一行时调，不改变送达或命令状态。 */
 	"background.jobs.view": { open(sessionId: string, jobId: string): void };
 }
 

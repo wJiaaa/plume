@@ -130,8 +130,10 @@ export interface SessionSummary {
 	updatedAt: number;
 	running: boolean;
 	/**
-	 * 它派出去的后台运行（子智能体之类，见 `SessionAccess.start`）还没都回来，或者交回的结果攒着、还没送进会话。
-	 * 和 `running` 各管各的：`running || background` 才是这件事还没做完（回答底下的交付卡片等它）。只在内存里，不存盘。
+	 * 它还有后台的事没完：派出去的后台运行（子智能体之类，见 `SessionAccess.start`）还没都回来，交回的结果攒着、还没送进会话，
+	 * 登记着的后台任务（`ToolRun.track`，开发服务器这种不退出的也算）没结束，约好的唤醒（`ToolRun.schedule`）还没触发。
+	 * 被人停掉、撤回而作废的不算。和 `running` 各管各的：`running || background` 才是这件事还没做完（回答底下的交付卡片等它）。
+	 * 只在内存里，不存盘。
 	 */
 	background?: boolean;
 	/** 这个会话选的模型；没选、或者选的已经不可用时用默认模型。 */
@@ -526,7 +528,10 @@ export type AgentEvent =
 	/** 文件树改名成功；所有窗口里看着该文件或目录的标签同步跟随。 */
 	| { type: "fileMoved"; from: string; to: string }
 	| { type: "sessions"; sessions: SessionSummary[] }
-	/** 一轮及其后台工作全部收尾；系统通知不能把中间停顿说成完成。 */
+	/**
+	 * 一轮及其后台工作全部收尾（同 `SessionSummary.background` 落下）；系统通知不能把中间停顿说成完成。会话起着不退出的后台任务、
+	 * 约着还没触发的唤醒时不发。
+	 */
 	| { type: "idle"; sessionId: string }
 	/** 项目登记、改动或移除了：全部项目，新登记的在前。 */
 	| { type: "projects"; projects: ProjectEntry[] }

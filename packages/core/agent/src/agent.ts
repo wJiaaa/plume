@@ -72,6 +72,8 @@ import { activeLocale, setLocale, text } from "./i18n.ts";
 import { conversationMarkdown } from "./conversation-markdown.ts";
 import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
+import { BackgroundJobs } from "./jobs.ts";
+import { SessionWakeups } from "./wakeups.ts";
 import { lettersText } from "./letters.ts";
 import { ChildTasks } from "./child-tasks.ts";
 import { SessionQueues, type Source, childTask, stewardMessage } from "./queue.ts";
@@ -339,18 +341,20 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	let quitting = false;
 	// 删除会话不等循环收尾；退出和卸载仍须等这些已从列表移走的运行。
 	const active = new Set<Session>();
-	const background = new BackgroundRuns(
-		(parentId) => {
-			const parent = sessions.get(parentId);
-			if (parent) wakeReports(parent);
-		},
-		(parentId) => {
-			const parent = sessions.get(parentId);
-			if (!parent) return;
-			if (syncBackground(parent)) emit({ type: "sessions", sessions: summaries() });
-			checkIdle(parent);
-		},
-	);
+	/** 某个会话在等的后台的事变了（派发回来、任务结束、唤醒取消……）：重新看它闲没闲。 */
+	const backgroundChanged = (sessionId: string) => {
+		const session = sessions.get(sessionId);
+		if (!session) return;
+		if (syncBackground(session)) emit({ type: "sessions", sessions: summaries() });
+		checkIdle(session);
+	};
+	const background = new BackgroundRuns((parentId) => {
+		const parent = sessions.get(parentId);
+		if (parent) wakeReports(parent);
+	}, backgroundChanged);
+	/** 工具登记的后台任务（`ToolRun.track`）和约好的唤醒（`ToolRun.schedule`），见 `waiting`。 */
+	const jobs = new BackgroundJobs(backgroundChanged, (message) => log("agent", "warn", message));
+	const wakeups = new SessionWakeups(backgroundChanged, (message) => log("agent", "warn", message));
 	/** 等着某个会话真闲下来的（`launch` 的 `idle`），见 `checkIdle`。 */
 	const idleWaiters = new Map<string, Array<() => void>>();
 	/**
@@ -415,6 +419,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				const session = find(String(sessionId));
 				return structuredClone(session.messages ?? store.messages(session.summary.id));
 			},
+			jobs: (sessionId) => jobs.list(String(sessionId)),
+			stopJob: (sessionId, jobId, force) => jobs.stop(String(sessionId), String(jobId), force === true),
+			jobOutput: (sessionId, jobId) => jobs.output(String(sessionId), String(jobId)),
+			wakeups: (sessionId) => wakeups.list(String(sessionId)),
+			cancelWakeup: (sessionId, id) => wakeups.cancel(String(sessionId), String(id)),
 			compact: (sessionId, options) => compactNow(String(sessionId), typeof options?.instructions === "string" ? options.instructions.trim() : ""),
 			setTitle: async (sessionId, title, options) => {
 				const session = find(String(sessionId));
@@ -463,9 +472,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					session.summary.id,
 					parent.summary.id,
 					() => controller.abort(),
-					() => {
+					async () => {
 						session.controller = controller;
-						return (session.turn = runTurn(session, prompt, controller, true));
+						try {
+							return await (session.turn = runTurn(session, prompt, controller, true));
+						} finally {
+							// 子会话收不到后台送达，这次运行起的后台任务留下来就没人管了：收工时停掉，续跑要用就再起一个。
+							jobs.stopRunning(session.summary.id);
+						}
 					},
 				);
 				if (syncBackground(parent)) emit({ type: "sessions", sessions: summaries() });
@@ -480,6 +494,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			},
 			disposeOwner: async (owner) => {
 				background.cancelOwner(owner);
+				// 它登记的后台任务停掉（进程组是分离的，没人停就一直活到关机），它约的唤醒到点时要它给话，也取消。
+				jobs.forgetOwner(owner);
+				wakeups.cancelOwner(owner);
 				// 寄这些请求的插件停用了，没人再替对方代答：不再等。
 				answered([...asking].filter((entry) => entry.owner === owner));
 				const children = [...new Set([...sessions.values(), ...active])].filter((session) => session.summary.owner === owner);
@@ -669,13 +686,15 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const ids = [...new Set(sessionIds.flatMap(withChildren))].filter((id) => sessions.has(id));
 		for (const id of ids) {
 			background.cancelSession(id, "closed");
+			jobs.forget(id);
+			wakeups.forget(id);
 			const session = sessions.get(id)!;
 			session.stopped = true;
 			session.steering = [];
 			session.controller?.abort();
 			sessions.delete(id);
 			void host.sessionEnded(id, "deleted");
-			// 插件按会话记的东西（plume.tools 的后台任务、读过的文件）跟着清掉。
+			// 插件按会话记的东西（读过的文件之类）跟着清掉。
 			host.sessionDeleted(id);
 		}
 		store.delete(ids);
@@ -710,6 +729,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		session.steering = [];
 		// 只连带取消登记过的后台运行；独立 send 的侧边聊天不属于父任务。
 		background.cancelSession(session.summary.id);
+		/*
+		 * 约好的唤醒一起取消（续跑是模型的决定，按停就是收回它），取消了就说一声：那是模型说过「过一会儿再看」的事，
+		 * 悄悄没了，人会一直等。后台任务不停（渠道作废了，它们再结束也叫不醒会话），停不停归起它的工具。
+		 */
+		const cancelled = wakeups.cancelSession(session.summary.id);
+		if (cancelled > 0)
+			emit({
+				type: "notice",
+				sessionId: session.summary.id,
+				text: text(cancelled === 1 ? "session.wakeupCancelled" : "session.wakeupsCancelled", { n: cancelled }),
+			});
 		session.controller?.abort();
 		host.sessionStopped(session.summary.id);
 	}
@@ -781,6 +811,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (settled) session.summary.stop = { reason: "done" };
 		session.summary.running = false;
 		observe(session.summary.id, { type: "running", running: false });
+		wakeups.turnEnded(session.summary.id);
 		syncBackground(session);
 		saveSummary(session);
 		// 压缩占着会话时排进来的，压完接着发；人按停的不发，和一轮被停下一样留着等人。
@@ -889,6 +920,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			.slice(keep)
 			.flatMap((message) => (message.role === "assistant" ? message.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : [])) : []));
 		background.cancelCalls(sessionId, cutCalls);
+		wakeups.cancelCalls(sessionId, cutCalls);
 		background.cancelRuns(sessionId);
 		session.messages = kept;
 		session.record = record;
@@ -1674,7 +1706,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function parentStatus(session: Session): ParentStatus {
 		const sessionId = session.summary.id;
-		const state = session.controller ? "running" : background.pending(sessionId) || background.hasReady(sessionId) ? "background" : "idle";
+		const state = session.controller ? "running" : waiting(sessionId) ? "background" : "idle";
 		return { state, queued: queues.list(sessionId).length };
 	}
 
@@ -1684,15 +1716,22 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 变了返回 true，由调用方告诉界面。
 	 */
 	function syncBackground(session: Session): boolean {
-		const sessionId = session.summary.id;
-		const now = background.pending(sessionId) || background.hasReady(sessionId);
+		const now = waiting(session.summary.id);
 		if ((session.summary.background === true) === now) return false;
 		if (now) session.summary.background = true;
 		else delete session.summary.background;
 		return true;
 	}
 
-	/** 真闲着：没在跑，派出去的后台运行都回来了、没有攒着待送的。 */
+	/**
+	 * 会话还在等后台的事：派出去的后台运行没都回来、交回的结果攒着待送（`BackgroundRuns`），登记着的后台任务没结束（`BackgroundJobs`），
+	 * 约好的唤醒还没触发（`SessionWakeups`）。被人停掉、撤回而作废的都不算。
+	 */
+	function waiting(sessionId: string): boolean {
+		return background.pending(sessionId) || background.hasReady(sessionId) || jobs.pending(sessionId) || wakeups.pending(sessionId);
+	}
+
+	/** 真闲着：没在跑，后台没有在等的（`waiting`）。 */
 	function isIdle(session: Session): boolean {
 		return parentStatus(session).state === "idle";
 	}
@@ -1990,6 +2029,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					},
 					parent: (plugin) => parentFor(session, plugin),
 					commands: commandAccess,
+					// 只有顶层会话的任务算在等：结果经那次调用的送达渠道送回来，渠道作废（人按停、撤回）就不再算。子会话没有渠道。
+					track: (plugin, toolCallId, job) =>
+						jobs.track(sessionId, plugin, job, session.summary.kind === "top" ? background.channel(sessionId, toolCallId, plugin).signal : undefined),
 					started: (toolCallId) => {
 						const at = Date.now();
 						session.startedAt.set(toolCallId, at);
@@ -2000,6 +2042,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						? {}
 						: {
 								background: (plugin, toolCallId) => background.channel(sessionId, toolCallId, plugin),
+								schedule: (plugin, toolCallId, wake) =>
+									wakeups.schedule(sessionId, plugin, toolCallId, background.channel(sessionId, toolCallId, plugin), wake),
 								letter: (plugin, to, letter) => postLetter(session, to, letter, plugin),
 								archiveAfterTurn: () => void (session.archiveAfterTurn = controller),
 							}),
@@ -2063,6 +2107,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			session.steering = [];
 			session.summary.running = false;
 			observe(sessionId, { type: "running", running: false });
+			// 唤醒送进去开的那一轮收场了：循环的下次到点照常送（见 `SessionWakeups.turnEnded`）。
+			wakeups.turnEnded(sessionId);
 		}
 		syncBackground(session);
 		try {
@@ -2722,9 +2768,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			return pluginsChanged();
 		},
 		busy() {
-			// 列表里删掉了、还没收尾的也算（`active`）。后台运行看 `pending`：没跑完的、交回了没送达的、刚跑完还在聚合窗口里的。
+			// 列表里删掉了、还没收尾的也算（`active`）。后台看 `waiting`：没跑完的派发、交回了没送达的、刚跑完还在聚合窗口里的，
+			// 没结束的后台任务，没触发的唤醒。
 			const running = [...sessions.values(), ...active].some((session) => session.turn !== undefined);
-			return running || [...sessions.keys()].some((id) => background.pending(id));
+			return running || [...sessions.keys()].some((id) => waiting(id));
 		},
 		async filePath(sessionId, path) {
 			const session = sessions.get(sessionId);
@@ -2734,6 +2781,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async shutdown() {
 			quitting = true;
 			background.clear();
+			wakeups.clear();
+			// 后台任务（开发服务器之类）跟着停：它们的进程组是分离的，agent 进程退出不会带走它们。
+			jobs.clear();
 			clearInterval(catalogTimer);
 			const running = [...new Set([...sessions.values(), ...active])].filter((session) => session.turn);
 			for (const session of running) {
@@ -2746,7 +2796,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				Promise.all([...sessions.keys()].map((id) => host.sessionEnded(id, "quit"))),
 				sleep(SESSION_END_GRACE_MS, undefined, { ref: false }),
 			]);
-			// 插件停用时收拾自己的（plume.tools 停掉后台任务：它们的进程组是分离的，agent 进程退出不会带走它们）。
+			// 插件停用时收拾自己的。
 			await host.dispose();
 			await files.idle();
 			store.close();

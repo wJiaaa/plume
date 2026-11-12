@@ -66,7 +66,10 @@ const NO_SECRETS: PluginSecrets = {
 /**
  * 插件的 `ctx.sessions`：会话在 agent 那边，宿主只转交。动子会话的几样多给一个 `owner`（调它的插件），agent 据此只让插件动自己建的。
  */
-export interface HostSessions extends Pick<SessionAccess, "list" | "get" | "messages" | "compact" | "setTitle" | "setArchived" | "models"> {
+export interface HostSessions extends Pick<
+	SessionAccess,
+	"list" | "get" | "messages" | "compact" | "setTitle" | "setArchived" | "models" | "jobs" | "stopJob" | "jobOutput" | "wakeups" | "cancelWakeup"
+> {
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 只用来记日志：开出来的会话不记在插件名下。 */
 	launch(owner: string, options: Parameters<SessionAccess["launch"]>[0]): ReturnType<SessionAccess["launch"]>;
@@ -178,6 +181,11 @@ const NO_SESSIONS: HostSessions = {
 	respond: async (_owner, sessionId) => missing(sessionId),
 	answer: async (_owner, sessionId) => missing(sessionId),
 	models: async () => [],
+	jobs: () => [],
+	stopJob: () => false,
+	jobOutput: async (sessionId) => missing(sessionId),
+	wakeups: () => [],
+	cancelWakeup: () => false,
 	start: async (_owner, sessionId) => missing(sessionId),
 	wait: async (_owner, runId) => missing(runId),
 	report: async (_owner, runId) => missing(runId),
@@ -746,6 +754,11 @@ export class PluginHost {
 					return sessions.answer(name, sessionId, toolCallId, value);
 				},
 				models: () => sessions.models(),
+				jobs: (sessionId) => sessions.jobs(sessionId),
+				stopJob: (sessionId, jobId, force) => sessions.stopJob(sessionId, jobId, force),
+				jobOutput: (sessionId, jobId) => sessions.jobOutput(sessionId, jobId),
+				wakeups: (sessionId) => sessions.wakeups(sessionId),
+				cancelWakeup: (sessionId, id) => sessions.cancelWakeup(sessionId, id),
 				send: async (sessionId, message, options) => {
 					live();
 					return sessions.send(name, sessionId, message, options);

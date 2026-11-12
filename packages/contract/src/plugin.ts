@@ -4,7 +4,7 @@
  */
 
 import type { FileChangesService, RevertPlan } from "./changes.ts";
-import type { BackgroundJobsService, SessionObservation, SessionWakeupsService } from "./diagnostics.ts";
+import type { BackgroundJobInfo, BackgroundJobOutput, SessionObservation, SessionWakeup } from "./diagnostics.ts";
 import type { ResourcesService } from "./resources.ts";
 import type { AssistantMessage, DeliveredReport, Message, PeerLetter, ThinkingOption, ToolResultMessage, ToolSpec } from "@plume/llm/types";
 import type {
@@ -230,6 +230,23 @@ export interface ToolRun {
 	 */
 	background?(): BackgroundChannel;
 	/**
+	 * 登记一项调用答完以后还在跑的后台任务（后台命令、监视），见 `BackgroundJobInput`。本体据此：算会话闲没闲——顶层会话里
+	 * 登记着、没结束、这次调用的送达渠道（`background`）还没作废的任务，在它结束之前会话都不算闲（`LaunchedSession.idle`、
+	 * `ParentStatus`、`SessionSummary.background`）；删会话、退出应用、登记它的插件停用时调 `stop(true)` 停掉；
+	 * 子会话经 `ctx.sessions.start` 派出的那一次运行结束时停掉它还在跑的；经 `ctx.sessions.jobs` 列给界面（环境卡片、任务面板）。
+	 * 人按停、撤回截掉这次调用时本体不停它（渠道作废，它不再算在等），停不停由工具定。只在这次调用里用：调用答完以后再调就抛错，
+	 * 交回的 `TrackedJob` 不受影响。
+	 */
+	track(job: BackgroundJobInput): TrackedJob;
+	/**
+	 * 让这个会话以后再接着做：到点经这次调用的送达渠道送一条运行时送达进来（闲着开一轮，忙着在下一个步骤边界读到），那一行记在
+	 * 注册这个工具的插件名下（`DeliveredReport.plugin`）。见 `WakeupInput`。没触发的唤醒在的时候会话不算闲。
+	 * 人按停止时全部取消（本体跟人说一声取消了几个），撤回、编辑重发截掉这次调用时取消它约的，删会话、退出应用、注册工具的插件停用时取消。
+	 * 只有顶层会话有（同 `background`）。cron 表达式写错时抛错（message 说哪一段不对，给模型看）；在 `expiresAt` 之前一次也对不上时
+	 * 不登记，返回 `undefined`。只在这次调用里用。
+	 */
+	schedule?(wake: WakeupInput): SessionWakeup | undefined;
+	/**
 	 * 给另一个顶层会话寄一封信（`to` 是它的 id），见 `LetterReceipt`。只有顶层会话有，也只寄得到别的顶层会话：
 	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。对方不在、是子会话、是自己时抛错。
 	 * 只在这次调用里用：调用答完以后再调就抛错（回执的 `answer` 不受影响）。
@@ -264,6 +281,52 @@ export interface BackgroundChannel {
 	report(text: string | (() => string | undefined), delivery?: DeliveryInput): boolean;
 	/** 渠道作废时触发。 */
 	readonly signal: AbortSignal;
+}
+
+/** `ToolRun.track` 登记的一项后台任务：给人看的几样，和本体要用时调的两个方法。 */
+export interface BackgroundJobInput {
+	command: string;
+	/** 这条命令是干什么的，人读的是它。 */
+	description?: string;
+	pid?: number;
+	/** 每有新输出就叫醒会话开一轮（监视命令），界面据此标出来，见 `BackgroundJobInfo.wakes`。 */
+	wakes?: boolean;
+	/** 给人看的尾部输出（任务面板、环境卡片找端口）：不能算成模型读过，也不能消费它的送达。 */
+	output(): Promise<BackgroundJobOutput>;
+	/** 停掉它（`force` 是强杀）。停不掉就抛错。 */
+	stop(force: boolean): void;
+}
+
+/** `ToolRun.track` 交回的句柄。 */
+export interface TrackedJob {
+	/** 本体给这项任务的 id，在应用里唯一：工具交给模型、界面按它找这项任务都用它。 */
+	readonly id: string;
+	/** 它结束了（退出，或起不来：`error`）；不再算在等。可以再调，以最后一次的退出码为准。 */
+	done(exitCode: number | null, error?: string): void;
+}
+
+/**
+ * `ToolRun.schedule` 约的一次「以后再接着做」：`at` 或 `cron` 二选一。
+ * 本体管什么时候到点、到点时这件事上一次开的那一轮做完了没有（没做完就跳过这次，记着跳过了几次）、什么时候取消；
+ * 到点送进会话的话由约它的插件给（`message`），本体不替它说。
+ */
+export interface WakeupInput {
+	/** 一次性：到这个时刻（毫秒时间戳）送。 */
+	at?: number;
+	/** 5 段 cron 表达式，本地时间；第一次至少在一分钟以后。 */
+	cron?: string;
+	/** cron 到点以后留着等下一次，直到 `expiresAt`；不给是只触发一次。 */
+	recurring?: boolean;
+	/** cron 过了这个时刻不再触发，第一次也要落在它之前；循环的记进 `SessionWakeup.expiresAt`。不给时不设限。 */
+	expiresAt?: number;
+	/** 到点时要接着做的事，见 `SessionWakeup.prompt`。 */
+	prompt: string;
+	reason?: string;
+	/**
+	 * 到点时送进会话的话（运行时送达，给模型读）和对话里那一行（见 `DeliveryInput`）。`wakeup` 是这一刻的样子（`fired` 已经算上这一次），
+	 * `next` 是下一次触发的时刻，`null` 表示这是最后一次；`skipped` 是上一次送达之后因为那一轮还没做完而跳过的次数。抛错时这次不送。
+	 */
+	message(wakeup: SessionWakeup, info: { next: number | null; skipped: number }): { text: string; delivery?: DeliveryInput };
 }
 
 /**
@@ -306,7 +369,11 @@ export interface LetterReceipt {
 
 /** 父会话此刻在做什么，见 `ParentSession.status`。 */
 export interface ParentStatus {
-	/** `running` 正在跑一轮；`background` 这一轮收了尾，它派出去的后台运行还没都回来；`idle` 真闲着。 */
+	/**
+	 * `running` 正在跑一轮；`background` 这一轮收了尾，还有后台的事没完：派出去的后台运行没都回来、交回的结果还没送进去，
+	 * 登记着的后台任务（`ToolRun.track`，开发服务器这种不退出的也算）没结束，约好的唤醒（`ToolRun.schedule`）还没触发；`idle` 真闲着。
+	 * 被人停掉、撤回而作废的（不会再把结果送回会话的）不算。
+	 */
 	state: "running" | "background" | "idle";
 	/** 队里还排着几条（人排的和交过来的都算）。 */
 	queued: number;
@@ -1072,7 +1139,10 @@ export interface LaunchedSession {
 	session: SessionSummary;
 	/** 第一轮结束时给出它为什么结束。 */
 	done: Promise<TurnStop>;
-	/** 它第一次真闲下来时兑现，见 `SessionAccess.launch`；带上那时的收场和最后一段回复，交回用它。 */
+	/**
+	 * 它第一次真闲下来时兑现，见 `SessionAccess.launch`；带上那时的收场和最后一段回复，交回用它。它起着不退出的后台任务（开发服务器）、
+	 * 约着还没触发的唤醒（循环的最长几天）时一直不兑现，直到它们结束、被人停掉或取消。
+	 */
 	idle: Promise<LaunchedIdle>;
 	/**
 	 * 把它做出来的结果交回开出它的那个会话（`spawnedFrom`），只能交一次：`text` 是写给模型的话，作为一条运行时送达写进那个会话
@@ -1124,6 +1194,16 @@ export interface SessionAccess {
 	get(sessionId: string): Promise<SessionSummary | undefined>;
 	/** 一个会话存下的全部消息，是会话里的原文，不受压缩影响。没有这个会话时抛错。 */
 	messages(sessionId: string): Promise<Message[]>;
+	/** 会话里登记过的后台任务（`ToolRun.track`），结束了的也在，按登记的先后；没有这个会话、没登记过时是空数组。 */
+	jobs(sessionId: string): BackgroundJobInfo[];
+	/** 叫一项后台任务停下（`force` 是强杀）；没有这一项、已经结束时返回 false，停不掉时抛错。 */
+	stopJob(sessionId: string, jobId: string, force: boolean): boolean;
+	/** 一项后台任务的尾部输出，见 `BackgroundJobOutput`；没有这一项时抛错。 */
+	jobOutput(sessionId: string, jobId: string): Promise<BackgroundJobOutput>;
+	/** 会话里还没触发的唤醒（`ToolRun.schedule`），按下一次触发的先后；没有时是空数组。 */
+	wakeups(sessionId: string): SessionWakeup[];
+	/** 取消一个还没触发的唤醒；已经触发了、不存在时返回 false。 */
+	cancelWakeup(sessionId: string, id: string): boolean;
 	/**
 	 * 现在就压缩这个会话（人敲了 `/compact`）：照常经钩子 context.compact（带 `force` 和 `manual`），转录里画一行
 	 * `/compact` 和它的进度、结果。任何会话都行（压缩不替人说话，只改模型看到的历史）。会话正在跑、正在压、没有可用的模型、
@@ -1181,7 +1261,8 @@ export interface SessionAccess {
 	 * 本插件能往里转话、替人答卡，见 `SessionLaunch.steward`）。第一句话照常经
 	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的；对已有会话只有 `reportBack` 往开出它的那个会话交回一次。
 	 * 建好就返回：`session` 是新会话的摘要，`done` 在这第一轮结束时给出它为什么结束（之后人接着聊的几轮不算）。
-	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，它经 `ToolRun.letter`
+	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的后台任务
+	 * 都结束了、约好的唤醒都触发或取消了（被人停掉、撤回而作废的不算在等），它经 `ToolRun.letter`
 	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求有了答复：经回执的 `answer` 回了信，或对方读到以后
 	 * 寄回一封带 `answer` 的信（答掉它读到的全部）；对方删掉、寄信的插件停用了也不再等。
 	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
@@ -1214,7 +1295,10 @@ export interface SessionAccess {
 	answer(sessionId: string, toolCallId: string, value: unknown): Promise<boolean>;
 	/** 可用模型目录，只含名称、窗口和思考档位。 */
 	models(): Promise<SessionModel[]>;
-	/** 开始自己的子会话的一轮，立即交回句柄；首次运行固定实际模型与思考档位，续跑沿用。父轮正常结束不取消，明确停止父会话则取消。 */
+	/**
+	 * 开始自己的子会话的一轮，立即交回句柄；首次运行固定实际模型与思考档位，续跑沿用。父轮正常结束不取消，明确停止父会话则取消。
+	 * 这一次运行结束时，本体停掉这个子会话还在跑的后台任务（`ToolRun.track`）：子会话收不到后台送达，留下来就没人管了。
+	 */
 	start(sessionId: string, message: string | SessionMessage): Promise<SessionRun>;
 	/** 等待自己的后台运行结束，失败和停止也正常交回原因。 */
 	wait(runId: string): Promise<TurnStop>;
@@ -1519,8 +1603,6 @@ export interface Services {
 	"file.read": {
 		authorize(run: ToolRun, path: string): Promise<{ ok: true; absolute: string } | { ok: false; message: string }>;
 	};
-	"background.jobs": BackgroundJobsService;
-	"session.wakeups": SessionWakeupsService;
 	"file.changes": FileChangesService;
 	"project.files": ProjectFilesService;
 	resources: ResourcesService;

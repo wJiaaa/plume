@@ -56,6 +56,8 @@ export interface TurnScope {
 	started: ToolScope["started"];
 	progress: ToolScope["progress"];
 	background?: ToolScope["background"];
+	track: ToolScope["track"];
+	schedule?: ToolScope["schedule"];
 	letter?: ToolScope["letter"];
 	archiveAfterTurn?: ToolScope["archiveAfterTurn"];
 	parent?: ToolScope["parent"];

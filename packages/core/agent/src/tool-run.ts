@@ -11,6 +11,7 @@ import type {
 	ApprovalDecision,
 	ApprovalRequest,
 	BackgroundChannel,
+	BackgroundJobInput,
 	CancelledDetails,
 	HumanAnswer,
 	HumanRequest,
@@ -21,10 +22,13 @@ import type {
 	ParentSession,
 	PermissionMode,
 	SessionScope,
+	SessionWakeup,
 	ToolDefinition,
 	ToolExecution,
 	ToolOutput,
 	ToolRun,
+	TrackedJob,
+	WakeupInput,
 } from "@plume/contract";
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
@@ -80,6 +84,10 @@ export interface ToolScope {
 	progress(toolCallId: string, output: string | undefined, push: boolean): void;
 	/** `plugin` 的工具在 `toolCallId` 那次调用把后台结果送回这个会话的渠道（`ToolRun.background`）；子会话没有。 */
 	background?(plugin: string, toolCallId: string): BackgroundChannel;
+	/** `plugin` 的工具在 `toolCallId` 那次调用登记一项后台任务（`ToolRun.track`，`jobs.ts`）。 */
+	track(plugin: string, toolCallId: string, job: BackgroundJobInput): TrackedJob;
+	/** `plugin` 的工具在 `toolCallId` 那次调用约一次唤醒（`ToolRun.schedule`，`wakeups.ts`）；子会话没有。 */
+	schedule?(plugin: string, toolCallId: string, wake: WakeupInput): SessionWakeup | undefined;
 	/** 注册这个工具的插件给另一个顶层会话寄信（`ToolRun.letter`）；子会话没有。 */
 	letter?(plugin: string, to: string, letter: LetterInput): LetterReceipt;
 	/** 这一轮以完成收场后归档这个会话（`ToolRun.archiveAfterTurn`）；子会话没有。 */
@@ -407,6 +415,18 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),
 				...(input.readOnly ? { readOnly: true } : {}),
 				...(scope.background ? { background: () => scope.background!(tool.plugin, call.id) } : {}),
+				track: (job: BackgroundJobInput) => {
+					alive("ToolRun.track");
+					return scope.track(tool.plugin, call.id, job);
+				},
+				...(scope.schedule
+					? {
+							schedule: (wake: WakeupInput) => {
+								alive("ToolRun.schedule");
+								return scope.schedule!(tool.plugin, call.id, wake);
+							},
+						}
+					: {}),
 				...(scope.letter
 					? {
 							letter: (to: string, letter: LetterInput) => {
