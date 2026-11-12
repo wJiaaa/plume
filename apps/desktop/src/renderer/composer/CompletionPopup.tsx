@@ -51,15 +51,20 @@ export function CompletionPopup<T>({
 	const panel = useRef<HTMLDivElement>(null);
 	const list = useRef<HTMLDivElement>(null);
 	const pointer = useRef<{ x: number; y: number } | null>(null);
-	const previous = useRef<{ items: T[]; term: string; active: number }>({ items: [], term, active });
+	/*
+	 * 收起后画的上一份连同画它的 `row` 一起记下：`row` 会读调用方当时的状态（比如 @ 菜单按条目名查子智能体的脸），
+	 * 收起期间调用方的状态可能已经换了一份（装了插件、菜单重拉条目），拿新的 `row` 画旧的条目就会查不到、整个界面崩掉。
+	 */
+	const previous = useRef<{ items: T[]; term: string; active: number; row: typeof row }>({ items: [], term, active, row });
 	const [height, setHeight] = useState(MAX_HEIGHT);
 	const open = items.length > 0;
 	const shown = open ? items : previous.current.items;
 	const shownTerm = open ? term : previous.current.term;
 	const shownActive = open ? active : previous.current.active;
+	const shownRow = open ? row : previous.current.row;
 	useLayoutEffect(() => {
-		if (open) previous.current = { items, term, active };
-	}, [items, term, active, open]);
+		if (open) previous.current = { items, term, active, row };
+	}, [items, term, active, open, row]);
 	useLayoutEffect(() => {
 		const anchor = panel.current?.parentElement;
 		if (!anchor) return;
@@ -105,7 +110,7 @@ export function CompletionPopup<T>({
 				<Scroller scrollRef={list} className="min-h-0" contentClassName="p-1.5">
 					{shown.map((item, index) => {
 						const selected = index === shownActive;
-						const { label: spoken, data, content } = row(item, index, selected);
+						const { label: spoken, data, content } = shownRow(item, index, selected);
 						const first = !shownTerm && (index === 0 || groupOf(item) !== groupOf(shown[index - 1]!));
 						return (
 							<div key={keyOf(item)}>

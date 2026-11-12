@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
 
@@ -12,6 +13,7 @@ export async function checkNavigation({
 	capture,
 	setModel,
 	sessionId,
+	installPlugin,
 }: {
 	window: BrowserWindow;
 	outDir: string;
@@ -21,6 +23,8 @@ export async function checkNavigation({
 	capture(window: BrowserWindow, path: string): Promise<void>;
 	setModel(override: ModelOverride | undefined): void;
 	sessionId: string;
+	/** 从市场装一个插件，等它在 agent 进程里生效。 */
+	installPlugin(name: string): Promise<void>;
 }): Promise<void> {
 	const clear = async () => {
 		await page(`document.querySelector('main .cm-content').focus()`);
@@ -28,6 +32,8 @@ export async function checkNavigation({
 		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "A", modifiers: [process.platform === "darwin" ? "meta" : "control"] });
 		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Backspace" });
 		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Backspace" });
+		// 按键不等页面处理完就返回：紧接着 insertText 的字可能先到、再被这次全选删掉。
+		await until(`document.querySelector('main .cm-placeholder') !== null`, "清空输入框");
 	};
 	const escape = () => {
 		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
@@ -74,6 +80,17 @@ export async function checkNavigation({
 		await page(`window.plume.saveAppearance({ theme: 'light' })`);
 		await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "@ 切到浅色");
 		await capture(window, join(outDir, "smoke-mentions-light.png"));
+		// Esc 收起菜单、「@」还留在输入框里时装上一个插件：菜单按新的插件名单重拉条目，收起后还画着的上一份里有子智能体的脸，不能因此崩掉。
+		await until(`document.querySelector('[data-mention-kind=subagent]') !== null`, "@ 列出子智能体");
+		escape();
+		await until(`document.querySelector('[data-mention-kind=subagent]')?.closest('[data-open]')?.getAttribute('data-open') === 'false'`, "Esc 收起引用菜单");
+		await installPlugin("usage");
+		// 界面入口在 plugins 事件到了之后才载入，页面上看不出载完没有：给它一会儿。
+		await delay(1500);
+		if (!(await page(`document.querySelector('main .cm-content') !== null`))) throw new Error("引用菜单收起时装插件，界面崩了");
+		await clear();
+		await window.webContents.insertText("@");
+		await until(`document.querySelector('[data-mention-kind=file]')?.closest('[data-open]')?.getAttribute('data-open') === 'true'`, "重新打开引用菜单");
 		await click("[data-mention-kind=file]");
 		await until(`document.querySelector('main .cm-content')?.textContent.includes('@"')`, "文件引用加引号");
 		await clear();

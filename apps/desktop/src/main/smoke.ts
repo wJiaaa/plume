@@ -812,6 +812,10 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 					override = value;
 				},
 				sessionId,
+				installPlugin: async (name) => {
+					await plugin.install(name);
+					await waitFor(async () => (await agent.plugins()).some((status) => status.key === name && status.state === "active"), `装上 ${name} 插件`);
+				},
 			});
 			// 页面既开不出新窗口，也不能把主窗口带去别的地址。
 			const windows = BrowserWindow.getAllWindows().length;
