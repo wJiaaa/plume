@@ -53,7 +53,7 @@ export const editTool: Tool<EditArgs> = {
 	mutating: true,
 
 	async execute(args, ctx): Promise<ToolResult> {
-		// 不吃 `ctx.allowedPaths`，理由见 `write.ts` 同一处：附件是「给你看」，不是「可以改」。
+		// 不认附件（`ToolRun.allowedPaths`），理由见 `write.ts` 同一处：附件是「给你看」，不是「可以改」。
 		if (typeof args.old_string !== "string" || typeof args.new_string !== "string") {
 			return errorResult("`old_string` and `new_string` must both be strings.");
 		}

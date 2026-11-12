@@ -9,6 +9,7 @@ import { expect, it, onTestFinished } from "vitest";
 import { editTool } from "../../src/tools/edit.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const NAME = "Qwen3-LiveTranslate Flash Realtime";
 
@@ -19,7 +20,7 @@ async function workspace(content: string, name = "catalog.json"): Promise<{ file
 	onTestFinished(() => rm(dir, { recursive: true, force: true }));
 	const file = join(dir, name);
 	await writeFile(file, content, "utf8");
-	return { file, ctx: { cwd: dir, state: new Map() } };
+	return { file, ctx: withFiles({ cwd: dir, state: new Map() }) };
 }
 
 it("默认读一条长行，不假装后面没有了", async () => {

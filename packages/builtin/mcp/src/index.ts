@@ -85,7 +85,6 @@ function promptCommands(entries: { server: ServerConfig; prompts: PromptEntry[] 
 
 export default {
 	name: "plume.mcp",
-	inject: ["resources"],
 	apply(ctx) {
 		const text = () => MESSAGES[ctx.locale()];
 		const file = join(ctx.dataDir, "servers.json");
@@ -100,7 +99,7 @@ export default {
 			locale: () => ctx.locale(),
 		});
 		ctx.effect(() => connections.closeAll());
-		ctx.effect(ctx.use("resources").register(mcpResource(connections)));
+		ctx.resources.register(mcpResource(connections));
 
 		/** 已经改成按需搜索的会话：改过去就不改回来，免得工具表在会话中途来回变。 */
 		const deferred = new Set<string>();

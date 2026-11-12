@@ -13,6 +13,7 @@ import { readTool } from "../../src/tools/read.ts";
 import { writeTool } from "../../src/tools/write.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
 import { setLocaleSource, words } from "../../src/messages.ts";
+import { withFiles } from "../files.ts";
 
 vi.mock("node:fs", async (original) => {
 	const fs = await original<typeof import("node:fs")>();
@@ -35,7 +36,7 @@ async function fixture() {
 		dataDir = join(base, "data");
 	await mkdir(cwd);
 	await mkdir(dataDir);
-	const ctx: ToolContext = { cwd, dataDir, sessionId: "session/不能作路径", state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd, dataDir, sessionId: "session/不能作路径", state: new Map() });
 	const running: SessionSummary[] = [];
 	const service = createFileChangesService(dataDir, { list: async () => running });
 	const save = async (name: string, content: string) => withTextFile(ctx, name, async (file) => (await file.write(content)).changeId!);

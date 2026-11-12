@@ -12,19 +12,17 @@ import { dirname, join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { globTool } from "../../src/tools/glob.ts";
 import { grepTool } from "../../src/tools/grep.ts";
-import { setDataDir } from "../../src/tools/home.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
-const ctx = (cwd: string) => ({ cwd, state: new Map<string, unknown>() });
+const ctx = (cwd: string) => withFiles({ cwd, state: new Map<string, unknown>() });
 const textOf = (res: ToolResult) => res.content.map((part) => part.text).join("");
 
 /** 返回经软链指向仓库的那个路径。 */
 async function repo(files: Record<string, string>): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "plume-project-files-"));
 	const saved = process.env.PLUME_RIPGREP;
-	// 问 git 要经 `host-git.ts` 在 `appHome()` 下建临时视图，不能落到真实的 ~/.plume。
-	setDataDir(join(dir, "home"));
 	onTestFinished(async () => {
 		if (saved === undefined) delete process.env.PLUME_RIPGREP;
 		else process.env.PLUME_RIPGREP = saved;

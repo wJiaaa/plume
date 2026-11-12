@@ -5,6 +5,7 @@
 import { expect, it } from "vitest";
 import { bashTool } from "../../src/tools/bash.ts";
 import { rerouteShellCommand, translatedShellCommand } from "../../src/tools/reroute.ts";
+import { withFiles } from "../files.ts";
 
 const ALL = new Set(["read", "grep", "glob", "ls", "bash"]);
 
@@ -101,7 +102,7 @@ it("改道的话里说的是建议的那个工具", () => {
 });
 
 it("bash 工具真的会查有哪些工具：改道是错误，但 details 说清它是一次改道", async () => {
-	const result = await bashTool.execute({ command: "ls -la src" }, { cwd: process.cwd(), state: new Map(), toolNames: ALL });
+	const result = await bashTool.execute({ command: "ls -la src" }, withFiles({ cwd: process.cwd(), state: new Map(), toolNames: ALL }));
 	expect(result.isError).toBe(true);
 	expect(result.content.map((part) => part.text).join("")).toMatch(/`ls`/);
 	expect(result.details).toEqual({ kind: "reroute", tool: "ls" });

@@ -13,6 +13,7 @@ import { bashOutputTool, bashTool } from "../../src/tools/bash.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
 import { localExec } from "../sandbox.ts";
+import { withFiles } from "../files.ts";
 
 let cwd: string;
 const states: Map<string, unknown>[] = [];
@@ -42,7 +43,7 @@ afterAll(async () => {
 function ctx(extra: Partial<ToolContext> = {}): ToolContext {
 	const state = new Map<string, unknown>();
 	states.push(state);
-	return { cwd, state, exec: localExec(cwd), ...extra };
+	return withFiles({ cwd, state, exec: localExec(cwd), ...extra });
 }
 
 const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("\n");

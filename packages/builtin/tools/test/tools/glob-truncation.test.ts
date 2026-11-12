@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { byDirectory, globTool } from "../../src/tools/glob.ts";
+import { withFiles } from "../files.ts";
 
 async function scratch(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "plume-glob-"));
@@ -27,7 +28,7 @@ it("glob 遍历整棵树，所以「最新在前」和剩余个数是真的", as
 		}
 	}
 	await writeFile(join(dir, "b", "newest.ts"), "");
-	const res = await globTool.execute({ pattern: "**/*.ts", limit: 10 }, { cwd: dir, state: new Map() });
+	const res = await globTool.execute({ pattern: "**/*.ts", limit: 10 }, withFiles({ cwd: dir, state: new Map() }));
 	const text = res.content.map((part) => part.text).join("");
 	expect(text.split("\n")[0]).toBe("b/newest.ts");
 	expect(text).toMatch(/\[2991 more matches not shown\]/);
@@ -50,7 +51,7 @@ it("分组后的列表能还原出每一条路径", async () => {
 		const when = new Date(2020, 0, 1 + index);
 		await utimes(join(dir, file), when, when);
 	}
-	const res = await globTool.execute({ pattern: "**/*.ts" }, { cwd: dir, state: new Map() });
+	const res = await globTool.execute({ pattern: "**/*.ts" }, withFiles({ cwd: dir, state: new Map() }));
 	const text = res.content.map((part) => part.text).join("");
 	expect(text).toBe(["top.ts", "lone/e.ts", "src/deep/", "  d.ts", "  c.ts", "src/", "  b.ts", "  a.ts"].join("\n"));
 	// 按工具描述教模型的方式读回来。

@@ -14,7 +14,8 @@
 import type { ModelContext, PermissionMode, RunProcess, SandboxMode, ShellInfo, ToolRun } from "@plume/contract";
 import { commandShell } from "@plume/platform";
 import { looksDenied, runCommand, selectRunner } from "@plume/sandbox";
-import { type CallCommands, DECLINED } from "./tool-run.ts";
+import { DECLINED } from "./declined.ts";
+import type { CallCommands } from "./tool-run.ts";
 
 /**
  * 每个权限模式下命令跑在哪个沙箱模式里。请求批准只读，什么都不经人同意就写不了；帮我批准能写项目目录和临时目录，项目随便改，

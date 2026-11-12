@@ -1,5 +1,5 @@
 /**
- * 拆开一个地址，交给拥有那个 scheme 的一方（服务 `resources`，见 `@plume/contract` 的 `resources.ts`）。
+ * 拆开一个地址，交给拥有那个 scheme 的一方：本体自己的几个（`handlers.ts`），和插件经 `ctx.resources.register` 登记的（见 `@plume/contract` 的 `resources.ts`）。
  *
  * 路由只有一个，各会话的不同由 `ResourceScope`（会话 id、工作目录、临时目录）带进来，scheme 自己不存「当前会话」：
  * 存了的话，主会话和子会话同时跑时 `skill://x` 会按最后写进去的那个会话解析，偶尔读到别人的东西，只在并发时出现。
@@ -51,13 +51,13 @@ export function parseResourceUrl(input: string): ResourceAddress | null {
 	};
 }
 
-/** 服务自己的那个可写 scheme：只有 `scratch://`，见 `handlers.ts`。 */
+/** 本体自己的那个可写 scheme：只有 `scratch://`，见 `handlers.ts`。 */
 export interface WritableHandler extends ResourceHandler {
 	write(address: ResourceAddress, content: string, scope: ResourceScope): Promise<void>;
 }
 
 /**
- * 别的插件经服务 `resources` 登记的 scheme 只留读的几样：`ResourceHandler` 的类型里没有 `write`，可类型挡不住绕过它的插件，
+ * 插件经 `ctx.resources.register` 登记的 scheme 只留读的几样：`ResourceHandler` 的类型里没有 `write`，可类型挡不住绕过它的插件，
  * 而 `write` 只看对象上有没有这个方法。不复制的话，插件塞一个 `write` 就能让模型改它该遵守的说明。
  */
 export function readOnly(handler: ResourceHandler): ResourceHandler {

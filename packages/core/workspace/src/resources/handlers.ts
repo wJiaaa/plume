@@ -1,5 +1,5 @@
 /**
- * plume.tools 自己的四个 scheme：`scratch://`、`artifact://`、`session://`、`plugin://`。
+ * 本体自己的四个 scheme：`scratch://`、`artifact://`、`session://`、`plugin://`。
  *
  * 路由已经做完了解析、列目录和切行，每个 scheme 剩下的只有它自己的事：东西在哪，什么算越界。
  * 后三个的内容不是这个项目写的（命令的原始输出、另一次会话的话、第三方插件的说明），都带 `origin`，

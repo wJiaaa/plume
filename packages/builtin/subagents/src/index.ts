@@ -104,7 +104,6 @@ const NOT_TOP =
 
 export default {
 	name: "plume.subagents",
-	inject: ["resources"],
 	async apply(ctx) {
 		const registry = new Registry(
 			ctx,
@@ -116,7 +115,7 @@ export default {
 			),
 		);
 		await registry.restore();
-		ctx.effect(ctx.use("resources").register(agentResource((sessionId) => registry.list(sessionId))));
+		ctx.resources.register(agentResource((sessionId) => registry.list(sessionId)));
 
 		/** 工具表里记进度清单的工具（`category: "checklist"`），不认别的插件的工具名。 */
 		const checklists = () => ctx.tools.list().flatMap((tool) => (tool.category === "checklist" ? [tool.name] : []));

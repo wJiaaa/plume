@@ -11,6 +11,7 @@ import { createFileChangesService, readFileChange } from "../../src/tools/file-c
 import { setDataDir } from "../../src/tools/home.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
 import { words } from "../../src/messages.ts";
+import { withFiles } from "../files.ts";
 
 async function fixture(born = true) {
 	const base = await realpath(await mkdtemp(join(tmpdir(), "plume-command-changes-")));
@@ -27,7 +28,7 @@ async function fixture(born = true) {
 		git("add", ".");
 		git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial");
 	}
-	const ctx: ToolContext = { cwd, dataDir, sessionId: "session", state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd, dataDir, sessionId: "session", state: new Map() });
 	const service = createFileChangesService(dataDir, { list: async () => [] });
 	return { base, ctx, git, service };
 }

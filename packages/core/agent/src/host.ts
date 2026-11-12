@@ -12,6 +12,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { activeLocale, text } from "./i18n.ts";
+import { Workspace } from "./run-files.ts";
 import type {
 	CallContext,
 	CommandContext,
@@ -23,6 +24,7 @@ import type {
 	HookLayer,
 	HookName,
 	Hooks,
+	InstalledPlugin,
 	Log,
 	Logger,
 	MediaAccess,
@@ -243,6 +245,8 @@ export class PluginHost {
 	 * 一个的 `settle` 会撞上另一个装到一半的插件。`load`、`dispose` 不排（启动、退出时没有并发），内部的私有方法也不排，否则互相等死。
 	 */
 	private queue: Promise<unknown> = Promise.resolve();
+	/** 插件的 `ctx.resources`、`ctx.workspace` 和工具调用的 `ToolRun.files` 背后的那一份，见 `run-files.ts`。 */
+	readonly workspace: Workspace;
 
 	constructor(
 		private readonly options: {
@@ -276,6 +280,7 @@ export class PluginHost {
 		},
 	) {
 		this.disabled = new Set(options.disabled);
+		this.workspace = new Workspace(options.appDataDir, options.sessions ?? NO_SESSIONS, () => this.installed());
 	}
 
 	/**
@@ -297,6 +302,7 @@ export class PluginHost {
 
 	/** 会话删掉了：告诉登记过 `ctx.sessions.onDeleted` 的插件。某个插件出错只记日志，不拦着别的。 */
 	sessionDeleted(sessionId: string): void {
+		this.workspace.forget(sessionId);
 		for (const { plugin, listener } of [...this.deletedListeners]) {
 			try {
 				listener(sessionId);
@@ -444,6 +450,13 @@ export class PluginHost {
 		const run = this.queue.then(work, work);
 		this.queue = run.catch(() => undefined);
 		return run;
+	}
+
+	/** 现在启用着、已经加载好的插件（`ctx.plugins.list()`，`plugin://` 也读它）。 */
+	private installed(): InstalledPlugin[] {
+		return this.records.flatMap((other) =>
+			other.status.state === "active" && other.dir ? [{ name: other.status.name, dir: other.dir, builtin: other.builtin }] : [],
+		);
 	}
 
 	tool(name: string): RegisteredTool | undefined {
@@ -713,6 +726,23 @@ export class PluginHost {
 			model: this.options.model,
 			media: this.options.media ?? NO_MEDIA,
 			secrets: this.options.secrets?.(name) ?? NO_SECRETS,
+			resources: {
+				// 停用时撤下：重新加载的插件要能再登记同一个 scheme。插件自己撤下时也从清理表里拿掉，理由同 `tools.register`。
+				register: (handler) => {
+					live();
+					const remove = this.workspace.resources.register(handler);
+					const unregister = () => {
+						const at = record.disposers.indexOf(unregister);
+						if (at >= 0) record.disposers.splice(at, 1);
+						remove();
+					};
+					own(unregister);
+					return unregister;
+				},
+				list: () => this.workspace.resources.list(),
+				keepArtifact: (sessionId, tool, content) => this.workspace.resources.keepArtifact(sessionId, tool, content),
+			},
+			workspace: this.workspace.workspace,
 			appDataDir: this.options.appDataDir,
 			sessions: {
 				list: () => sessions.list(),
@@ -879,10 +909,7 @@ export class PluginHost {
 				list: () => this.toolOwners(),
 			},
 			plugins: {
-				list: () =>
-					this.records.flatMap((other) =>
-						other.status.state === "active" && other.dir ? [{ name: other.status.name, dir: other.dir, builtin: other.builtin }] : [],
-					),
+				list: () => this.installed(),
 				onChange: (listener) => {
 					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
 					const entry = { plugin: name, listener };

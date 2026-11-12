@@ -4,7 +4,7 @@ import { computeDiff } from "@plume/platform";
 import { formatDiff } from "../diff.ts";
 import { withTextFile } from "./file-write.ts";
 import { displayPath, resolveWorkspacePath, scratchDirsOf } from "./paths.ts";
-import { resourceScope, scratchFile } from "./scratch-file.ts";
+import { addressOf, scratchFile, writeAddress } from "./scratch-file.ts";
 import { changedSince, markRead, readRecord } from "./read-state.ts";
 import { declinedResult, errorResult } from "./result.ts";
 import { decodeInput, decodeText, encodeText } from "./text-layout.ts";
@@ -40,9 +40,10 @@ export const writeTool: Tool<WriteArgs> = {
 		 * 可写的地址只有一个（`scratch://`），其余的拒掉正是要的：能 `write skill://<名字>` 的模型就能改掉它该遵守的说明，
 		 * 而那次修改看起来和别的工具调用没两样。改技能走文件系统，那里有人自己对 diff 的审核。
 		 */
-		if (ctx.resources?.canResolve(args.path)) {
+		const address = addressOf(ctx, args.path);
+		if (address) {
 			try {
-				await ctx.resources.write(args.path, args.content, resourceScope(ctx));
+				await writeAddress(ctx, address, args.content);
 				// 刚写的它看过了：紧接着 edit 同一个地址不该要求先读。
 				const file = await scratchFile(ctx, args.path);
 				if (file) markRead(ctx, await realpath(file), await stat(file));
@@ -56,7 +57,7 @@ export const writeTool: Tool<WriteArgs> = {
 		}
 
 		/*
-		 * 不吃 `ctx.allowedPaths`：那是「给你看一眼」，不是「可以改」。拖一个文件进来的意思是让模型读它，
+		 * 不认附件（`ToolRun.allowedPaths`）：那是「给你看一眼」，不是「可以改」。拖一个文件进来的意思是让模型读它，
 		 * 把同一份许可接到写这一侧，等于一次「你看看我的 ~/.zshrc」就换来了对它的写权限。
 		 */
 		try {

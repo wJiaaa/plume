@@ -13,6 +13,7 @@ import { editTool } from "../../src/tools/edit.ts";
 import { readTool } from "../../src/tools/read.ts";
 import { writeTool } from "../../src/tools/write.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const text = (result: ToolResult) => result.content.map((part) => part.text).join("\n");
 
@@ -21,7 +22,7 @@ async function fixture(content = "a\nb\nc\nd\n") {
 	onTestFinished(() => rm(cwd, { recursive: true, force: true }));
 	const path = join(cwd, "sample.txt");
 	await writeFile(path, content);
-	const ctx: ToolContext = { cwd, state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd, state: new Map() });
 	return { cwd, path, ctx };
 }
 

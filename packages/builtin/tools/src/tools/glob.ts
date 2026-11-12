@@ -4,9 +4,8 @@ import { join, relative, sep } from "node:path";
 import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolResult } from "./types.ts";
-import { displayPath } from "./paths.ts";
-import { gitListedFiles, SKIP_DIRS } from "./project-files.ts";
-import { authorizeRead } from "./read-access.ts";
+import { displayPath, toAbsolute } from "./paths.ts";
+import { SKIP_DIRS } from "./project-files.ts";
 import { describeGlob } from "./describe.ts";
 
 const MAX_RESULTS = 500;
@@ -50,9 +49,10 @@ export const globTool: Tool<GlobArgs> = {
 
 		let root = ctx.cwd;
 		if (path) {
-			const authorized = await authorizeRead(ctx, path);
+			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
+			const authorized = await ctx.files.read(toAbsolute(ctx.cwd, path));
 			if (!authorized.ok) return errorResult(authorized.message);
-			root = authorized.absolute;
+			if (authorized.path) root = authorized.path;
 		}
 		if (!pattern)
 			return errorResult(
@@ -92,7 +92,7 @@ export const globTool: Tool<GlobArgs> = {
 			}
 		};
 
-		const listed = await gitListedFiles(root);
+		const listed = await ctx.projectFiles(root);
 		if (listed) for (const full of listed) consider(full);
 		else await walk(root);
 		const matches: { path: string; mtime: number }[] = [];

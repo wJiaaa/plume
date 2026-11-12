@@ -4,8 +4,6 @@ import { join } from "node:path";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolResult } from "./types.ts";
 import { displayPath } from "./paths.ts";
-import { authorizeRead } from "./read-access.ts";
-import { resourceScope } from "./scratch-file.ts";
 import { describeLs } from "./describe.ts";
 
 const MAX_ENTRIES = 400;
@@ -32,20 +30,13 @@ export const lsTool: Tool<LsArgs> = {
 	async execute(args, ctx): Promise<ToolResult> {
 		let absolute = ctx.cwd;
 		if (args.path) {
-			// 和 read/edit/write 认同一批地址：不换成磁盘上的位置，`scratch://` 会被当成相对路径拼成 `<cwd>/scratch:/`。
-			let located: string | null;
-			try {
-				located = ctx.resources ? await ctx.resources.locate(args.path, resourceScope(ctx)) : null;
-			} catch (error) {
-				return errorResult(error instanceof Error ? error.message : String(error));
-			}
-			// 地址给的位置不问：落点已由 scheme 限在它自己的目录里（临时目录、技能目录），和 `read <scheme>://` 一样，问一次只是让人替它点头。
-			if (located) absolute = located;
-			else {
-				const authorized = await authorizeRead(ctx, args.path);
-				if (!authorized.ok) return errorResult(authorized.message);
-				absolute = authorized.absolute;
-			}
+			/*
+			 * 经本体读，要的是目录：地址换成 scheme 给的磁盘位置（和 read/edit/write 认同一批地址，不换的话 `scratch://` 会被当成相对路径
+			 * 拼成 `<cwd>/scratch:/`），不问人；路径和 read 按同一个边界判。
+			 */
+			const authorized = await ctx.files.read(args.path, { directory: true });
+			if (!authorized.ok) return errorResult(authorized.message);
+			if (authorized.path) absolute = authorized.path;
 		}
 
 		let entries: Dirent[];

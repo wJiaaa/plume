@@ -15,16 +15,11 @@
 
 import { existsSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
-import { words } from "../messages.ts";
-import { home, scratchHome } from "./home.ts";
+import { join, relative, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import type { ShellInfo } from "@plume/contract";
 import { displayPath, toAbsolute } from "./paths.ts";
 import { commandDialects, commandShell, dialectsOf, withinOrIs, splitCommands, splitWords, type Dialect } from "@plume/platform";
-import { DECLINED } from "./result.ts";
-import type { ToolContext } from "./types.ts";
-
-export { toAbsolute } from "./paths.ts";
 
 /** 本机的密钥文件（引号写成 `\x27\x22\x60`：直接写的话文案检查会把它当成字符串的开头）：Plume 的模型设置（Magpie 网关的 key 明文在里面）、加密存放供应商 key 的 `credentials.json` 和它的钥匙 `vault.key`（插件的 `ctx.secrets` 也用它）、ssh 私钥、云服务的凭据、gpg、netrc、gh 的登录。 */
 const SECRET_PATH =
@@ -41,10 +36,44 @@ export type ReadVerdict =
 	  };
 
 export interface ReadAccessOptions {
-	/** 这一轮明确交给它的工作区外的文件，见 `ToolContext.allowedPaths`。 */
+	/** 这一轮明确交给它的工作区外的文件，见 `ToolRun.allowedPaths`。 */
 	allowedPaths?: ReadonlySet<string> | readonly string[];
 	/** 同一个项目的其他源码目录：放进同一个项目，就是说它们属于一起。 */
 	projectRoots?: readonly string[];
+	/** Plume 的数据目录：它下面的 `scratch/`（各会话的临时目录）读都不问。不给就没有这一条。 */
+	dataDir?: string;
+}
+
+/** 一次调用读东西时的环境：在哪个工作区、人交过来什么、命令照哪个 shell 写、怎么问人。 */
+export interface ReadScope {
+	/** 会话的工作目录，绝对路径。 */
+	cwd: string;
+	/** Plume 的数据目录，见 `ReadAccessOptions.dataDir`。 */
+	dataDir: string;
+	/** 这一轮明确交给它看的工作区外的文件（拖进来的附件）。 */
+	allowedPaths?: ReadonlySet<string>;
+	/** 同一个项目的其他源码目录，读它们不用问。 */
+	projectRoots?: readonly string[];
+	/** 命令照哪个 shell 写（`ToolRun.shell()`）；不给时按这台机器的默认 shell 读。 */
+	shell?: Pick<ShellInfo, "kind">;
+	/** 问人能不能读（卡片怎么画、人拒绝了怎么说由调用方定）。 */
+	confirm(request: ReadRequest): Promise<{ ok: true } | { ok: false; message: string }>;
+}
+
+/** 要人点头的一次读。 */
+export interface ReadRequest {
+	/** 判定用的绝对路径。 */
+	absolute: string;
+	/** 交给模型的话里怎么写这个路径（工作区里的写相对路径）。 */
+	shown: string;
+	/** 交给模型的结果里用的说法（「读取本机密钥文件」）。 */
+	reason: string;
+	/** `file` 只批准这一个文件（密钥）；`tree` 批准 `grant` 这个目录。 */
+	scope: "file" | "tree";
+	/** 批准覆盖的范围：密钥是它自己，别处是它所属的项目。 */
+	grant: string;
+	/** 「以后不再问」记在什么名下（`ApprovalContent.subject`）。 */
+	subject: string;
 }
 
 /**
@@ -98,7 +127,7 @@ export function assessRead(absolute: string, cwd: string, options: ReadAccessOpt
 	 * 模型自己的草稿：太大没交给它的图、截断前的全文都存在这里，让它读回来还要问人，只会让人替它点头。读不分是哪个会话的：
 	 * 子智能体的报告、别的对话存下的全文，读都不问。写只限同一脉的会话的，见 `paths.ts` 的 `scratchDirsOf`。
 	 */
-	if (withinOrIs(scratchHome(), absolute)) return { decision: "allow" };
+	if (options.dataDir && withinOrIs(join(options.dataDir, "scratch"), absolute)) return { decision: "allow" };
 
 	const temp = tmpdir();
 	if (withinOrIs(temp, absolute)) return { decision: "allow" };
@@ -116,7 +145,7 @@ export function assessRead(absolute: string, cwd: string, options: ReadAccessOpt
  */
 export function readGrantRoot(absolute: string, isDirectory: boolean, exists: (path: string) => boolean): string {
 	const start = isDirectory ? absolute : resolve(absolute, "..");
-	const ceiling = resolve(home());
+	const ceiling = resolve(homedir());
 	const root = resolve(start, "/");
 
 	// 家目录和根目录永远不当批准范围：直接放在它们下面的文件，上一级就是它们，「以后不再问」就成了整台机器。
@@ -179,7 +208,7 @@ const REDIRECT_WRITE = /^\d*(>>?|&>)/;
 export type ReadAuthorization = { ok: true; absolute: string } | { ok: false; message: string };
 
 /**
- * 「以后不再问」记在什么名下。加 `read:` 前缀，免得和 bash 记的命令原文撞上。
+ * 「以后不再问」记在什么名下。加 `read:` 前缀，免得和跑命令时记的命令原文撞上。
  */
 function readGrantSubject(grant: string): string {
 	return `read:${grant}`;
@@ -188,10 +217,9 @@ function readGrantSubject(grant: string): string {
 /**
  * 解析一个工具要读的路径，出了工作区就问人。
  *
- * read、ls、grep、glob 都经这里：一个判断，用在每个开始读的地方，哪个工具都不是绕过另一个的捷径。
- * 没有问人的入口时拒绝而不是放行：没人可问，就是没人同意过。
+ * 工具经 `ToolRun.files.read` 读路径都经这里：一个判断，用在每个开始读的地方，哪个工具都不是绕过另一个的捷径。
  */
-export async function authorizeRead(ctx: ToolContext, input: string): Promise<ReadAuthorization> {
+export async function authorizeRead(ctx: ReadScope, input: string): Promise<ReadAuthorization> {
 	// i18n-exempt：发给模型的话。
 	if (!input || typeof input !== "string") return { ok: false, message: "A path is required." };
 	const literal = toAbsolute(ctx.cwd, input);
@@ -199,6 +227,7 @@ export async function authorizeRead(ctx: ToolContext, input: string): Promise<Re
 	const verdict = assessRead(absolute, ctx.cwd, {
 		...(ctx.allowedPaths ? { allowedPaths: ctx.allowedPaths } : {}),
 		projectRoots: await realProjectRoots(ctx),
+		dataDir: ctx.dataDir,
 	});
 	if (verdict.decision === "allow" || !worthAsking(absolute, verdict)) return { ok: true, absolute };
 
@@ -207,7 +236,7 @@ export async function authorizeRead(ctx: ToolContext, input: string): Promise<Re
 }
 
 /** 源目录自身可以是链接；按真实根授权，仍让文件的真实路径先经过密钥判断。 */
-async function realProjectRoots(ctx: ToolContext): Promise<string[]> {
+async function realProjectRoots(ctx: ReadScope): Promise<string[]> {
 	return Promise.all((ctx.projectRoots ?? []).map((root) => realpath(root).catch(() => root)));
 }
 
@@ -232,7 +261,7 @@ async function resolveForReading(cwd: string, absolute: string): Promise<string>
 }
 
 /** 用户拖进来的就是用户给的，哪怕它是一个链接：判定照字面，见 `assessRead` 开头。 */
-function attached(ctx: ToolContext, literal: string): boolean {
+function attached(ctx: ReadScope, literal: string): boolean {
 	return ctx.allowedPaths?.has(literal) ?? false;
 }
 
@@ -256,7 +285,7 @@ function worthAsking(absolute: string, verdict: ReadVerdict): boolean {
  * 一个批准范围只问一次，不是一个路径问一次：`grep -r x ../other/a ../other/b` 写了同一个项目里的两个文件。
  * 返回要报的拒绝，全部放行或批准了是 null。
  */
-export async function authorizeCommandReads(command: string, ctx: ToolContext): Promise<string | null> {
+export async function authorizeCommandReads(ctx: ReadScope, command: string): Promise<string | null> {
 	const asked = new Map<string, { absolute: string; verdict: Extract<ReadVerdict, { decision: "ask" }> }>();
 	const projectRoots = await realProjectRoots(ctx);
 	/*
@@ -270,6 +299,7 @@ export async function authorizeCommandReads(command: string, ctx: ToolContext): 
 		const verdict = assessRead(absolute, ctx.cwd, {
 			...(ctx.allowedPaths ? { allowedPaths: ctx.allowedPaths } : {}),
 			projectRoots,
+			dataDir: ctx.dataDir,
 		});
 		if (verdict.decision === "allow" || !worthAsking(absolute, verdict)) continue;
 		const grant = grantFor(absolute, verdict);
@@ -293,31 +323,20 @@ function grantFor(absolute: string, verdict: Extract<ReadVerdict, { decision: "a
 	return readGrantRoot(absolute, directoryLike(absolute), (path) => existsSync(path));
 }
 
-async function askForRead(
-	ctx: ToolContext,
+function askForRead(
+	ctx: ReadScope,
 	absolute: string,
 	verdict: Extract<ReadVerdict, { decision: "ask" }>,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-	const shown = displayPath(ctx.cwd, absolute);
-	if (!ctx.requestApproval) {
-		// i18n-exempt：交给模型的结果。
-		return { ok: false, message: `${verdict.reason}需要用户批准，而这个会话没有可以询问的人：${shown}` };
-	}
-
 	const grant = grantFor(absolute, verdict);
-	// 标题只给文件名（整条绝对路径会折成两行），正文给那条路径（卡片上是等宽字体），
-	// `reason` 说批准意味着什么，不复述标题。
-	const name = basename(absolute) || shown;
-	const decision = await ctx.requestApproval({
-		kind: "view",
-		title: verdict.scope === "file" ? words().readSecret(name) : words().readOutside(name),
-		detail: absolute,
-		reason: verdict.scope === "file" ? words().readSecretScope : words().readTreeScope(grant),
+	return ctx.confirm({
+		absolute,
+		shown: displayPath(ctx.cwd, absolute),
+		reason: verdict.reason,
+		scope: verdict.scope,
+		grant,
 		subject: readGrantSubject(grant),
 	});
-	if (decision === "once" || decision === "always") return { ok: true };
-	// i18n-exempt：交给模型的结果。
-	return { ok: false, message: `用户拒绝了这次读取：${shown}。${DECLINED}` };
 }
 
 /** 批准时把这个路径当不当目录；不存在的不当。 */

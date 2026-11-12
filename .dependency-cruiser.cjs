@@ -79,6 +79,22 @@ module.exports = {
 		},
 
 		{
+			name: "workspace-below-agent",
+			comment: "workspace 是本体的能力层，只认路径、目录、数据目录，不知道会话和循环：不依赖 agent、llm、sandbox。",
+			severity: "error",
+			from: { path: "^packages/core/workspace/" },
+			to: { path: "^packages/core/(agent|llm|sandbox)/" },
+		},
+
+		{
+			name: "loop-knows-no-workspace",
+			comment: "循环只经 ToolScope 拿到读文件的能力（agent 的 run-files.ts 装配），不直接引用工作区的实现。",
+			severity: "error",
+			from: { path: "^packages/core/agent/src/(loop|stream-turn|recovery|repetition|compaction|session-compaction|tool-run)\\.ts$" },
+			to: { path: "^packages/core/workspace/" },
+		},
+
+		{
 			name: "contract-is-types-only",
 			comment:
 				"contract 只放共享类型，经 import map 和 SDK 给插件：它在别处只拿类型（消息类型来自 core/llm，CallContext 来自 infra/rpc），" +

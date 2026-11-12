@@ -38,7 +38,7 @@ const skill = (): Skill => ({
 const handler = () => skillResource(async () => [skill(), { ...skill(), name: "hidden", manualOnly: true }]);
 const scope = (): ResourceScope => ({ cwd: root, sessionId: "s", scratchDir: join(root, "scratch") });
 
-/** 和服务 `resources` 拆出来的一样。 */
+/** 和本体拆地址拆出来的一样。 */
 function address(raw: string): ResourceAddress {
 	const path = raw.slice("skill://".length);
 	return { scheme: "skill", path, segments: path.split("/").filter(Boolean), raw };

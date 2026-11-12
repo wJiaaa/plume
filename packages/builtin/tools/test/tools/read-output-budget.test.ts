@@ -10,13 +10,14 @@ import { readTool } from "../../src/tools/read.ts";
 import { editTool } from "../../src/tools/edit.ts";
 import { writeTool } from "../../src/tools/write.ts";
 import type { ToolContext } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 it("大的读由工具自己截断，编辑前要等一次窗口读", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "plume-read-budget-"));
 	onTestFinished(() => rm(dir, { recursive: true, force: true }));
 	const file = join(dir, "data.txt");
 	await writeFile(file, Array.from({ length: 2000 }, (_, i) => `line ${i + 1} ${"x".repeat(100)}`).join("\n"), "utf8");
-	const ctx: ToolContext = { cwd: dir, state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd: dir, state: new Map() });
 	const result = await readTool.execute({ path: file } as never, ctx);
 	const text = result.content[0]?.text ?? "";
 	const shown = Number(/showing lines 1-(\d+) of 2000 \(output capped/.exec(text)?.[1]);

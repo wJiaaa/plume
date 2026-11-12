@@ -14,6 +14,7 @@ import { editTool } from "../../src/tools/edit.ts";
 import { outline, outlineFooter } from "../../src/tools/outline.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 /** 有真实结构的文件：声明、文档注释、值得折叠的函数体。 */
 function sourceFile(functions = 24): string {
@@ -30,7 +31,7 @@ async function fixture(name: string, content: string): Promise<{ file: string; c
 	onTestFinished(() => rm(dir, { recursive: true, force: true }));
 	const file = join(dir, name);
 	await writeFile(file, content, "utf8");
-	return { file, ctx: { cwd: dir, state: new Map() } };
+	return { file, ctx: withFiles({ cwd: dir, state: new Map() }) };
 }
 
 const textOf = (res: ToolResult) => res.content[0]?.text ?? "";

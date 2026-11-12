@@ -32,6 +32,8 @@ import type {
 } from "@plume/contract";
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
+import { DECLINED } from "./declined.ts";
+import type { CallFiles } from "./run-files.ts";
 import { text } from "./i18n.ts";
 
 /** 工具执行进度最快多久推一次；界面上也只留最后这么多字符，完整输出在结果里。 */
@@ -49,9 +51,6 @@ const CANCELLED_RUNNING = "Tool execution was cancelled. Anything it had already
 const CANCELLED_WAITING = "Tool call was stopped while it waited for approval, so it never ran.";
 const ARGUMENTS_LOST_REASON =
 	"every call in this reply arrived with empty arguments. That is the provider dropping the arguments of parallel tool calls, not something you left out. Make one tool call per reply from now on";
-/** 用户拒绝之后给模型的话：别原样重试，也别换个工具达到同样效果。和 plume.tools 的拒绝文案用的是同一句，模型在哪看到都认得出。 */
-export const DECLINED =
-	"Do not retry it unchanged or get the same effect another way — another tool, a shell command, a script. Change your approach; if the task cannot go on without it, say so.";
 
 export interface ToolScope {
 	sessionId: string;
@@ -96,6 +95,8 @@ export interface ToolScope {
 	parent?(plugin: string): ParentSession | undefined;
 	/** 这次调用跑命令用的 `ToolRun.shell`、`exec`、`escalate`（`commands.ts`）：沙箱档、提权都在那里，这里只把它们挂到 `run` 上。 */
 	commands(call: CallCommands): Pick<ToolRun, "shell" | "exec" | "escalate">;
+	/** 这次调用读工作区用的 `ToolRun.files`（`run-files.ts`）：读边界、问人都在那里，这里只把它挂到 `run` 上。 */
+	files(call: CallFiles): ToolRun["files"];
 }
 
 /** 造一次调用的 `shell`、`exec`、`escalate` 要的东西，这里按这次调用给，`commands.ts` 用它造。 */
@@ -396,6 +397,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			const ask = (content: ApprovalContent) => approve(input, content, false);
 			const parent = boundParent(scope.parent?.(tool.plugin), alive);
 			const allowedPaths = (await scope.allowedPaths?.()) ?? [];
+			const commands = scope.commands({ cwd: input.cwd, readOnly: Boolean(input.readOnly), permission: async () => (await permission()).mode, ask, alive });
 			const run: ToolRun = {
 				sessionId: input.sessionId,
 				session: structuredClone(scope.session),
@@ -410,7 +412,18 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				ask,
 				request,
 				permissionMode: async () => (await permission()).mode,
-				...scope.commands({ cwd: input.cwd, readOnly: Boolean(input.readOnly), permission: async () => (await permission()).mode, ask, alive }),
+				...commands,
+				files: scope.files({
+					sessionId: input.sessionId,
+					cwd: input.cwd,
+					scratchDir: scope.scratchDir,
+					...(scope.projectRoots ? { projectRoots: scope.projectRoots } : {}),
+					...(allowedPaths.length > 0 ? { allowedPaths } : {}),
+					signal: input.signal,
+					shell: commands.shell,
+					ask,
+					alive,
+				}),
 				tools: () => scope.host.toolOwners(),
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),
 				...(input.readOnly ? { readOnly: true } : {}),

@@ -5,7 +5,7 @@
 
 import type { FileChangesService, RevertPlan } from "./changes.ts";
 import type { BackgroundJobInfo, BackgroundJobOutput, SessionObservation, SessionWakeup } from "./diagnostics.ts";
-import type { ResourcesService } from "./resources.ts";
+import type { PluginResources, Resource } from "./resources.ts";
 import type { AssistantMessage, DeliveredReport, Message, PeerLetter, ThinkingOption, ToolResultMessage, ToolSpec } from "@plume/llm/types";
 import type {
 	ApprovalDecision,
@@ -225,6 +225,11 @@ export interface ToolRun {
 		detail: string;
 	}): Promise<{ granted: true } | { granted: false; message: string }>;
 	/**
+	 * 这次调用经本体读工作区：读边界和问人都在里面，见 `RunFiles`。读文件的工具、要读用户文件的插件工具都经它，
+	 * 不自己判断哪里能读。只在这次调用里用：调用答完以后再调就抛错。
+	 */
+	files: RunFiles;
+	/**
 	 * 调用答完以后还在后台接着跑的事（后台命令、监视）把结果送回这个会话的渠道，见 `BackgroundChannel`。
 	 * 只有顶层会话有：插件的子会话（侧边聊天、子 Agent）没人等它们的后台结果，拿不到就只能让模型自己去读。
 	 */
@@ -265,6 +270,39 @@ export interface ToolRun {
 	 * 别的会话里的调用、别的插件的子会话里都没有。只在这次调用里用：调用答完以后再调它的方法就抛错。
 	 */
 	parent?: ParentSession;
+}
+
+/**
+ * `ToolRun.files`：读边界是本体的，一个路径能不能读、要不要问人，不管哪个工具来读都是同一个答案（两个答案就有一条绕过去的路：
+ * 一个工具拒了的换个工具读得到，模型就学会去绕）。
+ *
+ * 不问的：工作区、项目的其他源码目录（`ToolRun.projectRoots`）、各会话的临时目录、系统临时目录、工具链要读的系统目录（`/usr`、`/etc`……）、
+ * 人拖进来的文件（`ToolRun.allowedPaths`）。要问的：本机的密钥文件（Plume 的设置和凭据、ssh 私钥、云服务凭据、netrc、gh 的登录……，
+ * 在工作区里也问，批准只管这一个文件）；别的地方（批准覆盖它所属的项目，往上走到仓库根，不到家目录）。问人经过闸（`kind` 是 `view`，
+ * `subject` 由本体定），完全访问、「以后不再问」照常生效；人拒绝时 `message` 是交给模型的话。判定前追符号链接：工作区里一个指向外面的
+ * 链接按它指向的地方判。
+ */
+export interface RunFiles {
+	/**
+	 * 要读的路径或资源地址。
+	 * - 路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）：按上面的边界判，过了交回 `path`，读就读它（判定用的绝对路径，
+	 *   工作区自己在链接后面时写成工作区下的路径）。不存在的不问（密钥除外），照样交回，由工具自己报「找不到」。
+	 * - 有人登记了 scheme 的资源地址（见 `PluginResources`）：不问人，落点已由 scheme 限在它自己的地方。交回读到的 `resource`
+	 *   （带行范围的已经切好，`scheme://` 是列表）；没有这样东西、越界时 `ok: false`，`message` 是 scheme 的说明。
+	 *   `scratch://<路径>`（不带行范围）是临时目录里的一个文件，交回它的 `path`，按文件读。
+	 * - `directory: true`：要的是一个目录（列目录），总是交回 `path`。地址交回 scheme 给的磁盘位置（`ResourceHandler.locate`），给不出的照路径判。
+	 * 没人登记的 `foo://` 照路径判。
+	 */
+	read(
+		target: string,
+		options?: { directory?: boolean },
+	): Promise<{ ok: true; path: string; resource?: undefined } | { ok: true; resource: Resource; path?: undefined } | { ok: false; message: string }>;
+	/**
+	 * 一行命令写明要读的路径（照这次调用的 shell 的语法拆，只认字面写的：`$DIR/key`、通配符、替换不猜；重定向的目标、heredoc 的正文不算），
+	 * 按同一个边界判。同一个批准范围只问一次。全部不用问或都批准了是 `ok: true`；问到第一个被拒的就停，`message` 是交给模型的话。
+	 * 跑命令的工具在审批、起命令之前调它：命令改不改东西是另一回事，`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥。
+	 */
+	readCommand(command: string): Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 /**
@@ -1537,6 +1575,10 @@ export interface PluginContext {
 	readonly media: MediaAccess;
 	/** 把插件要存的密钥加密成一段文本、再解回来，见 `PluginSecrets`。本体提供，别的插件换不掉。 */
 	readonly secrets: PluginSecrets;
+	/** 资源地址（`scheme://路径`）：登记自己的 scheme、存大块原文换地址，见 `PluginResources`。本体提供，别的插件换不掉。 */
+	readonly resources: PluginResources;
+	/** 在宿主上读工作区仓库，不执行仓库能控制的程序，见 `PluginWorkspace`。本体提供，别的插件换不掉。 */
+	readonly workspace: PluginWorkspace;
 	/** 读会话，见 `SessionAccess`。 */
 	readonly sessions: SessionAccess;
 	/** 驱动界面入口画的网页（`<webview>`），见 `WebPages`。 */
@@ -1616,13 +1658,7 @@ export interface InstalledPlugin {
  * 仓库外的插件给自己的服务用声明合并加一项：`declare module "@plume/contract" { interface Services { … } }`。
  */
 export interface Services {
-	/** 与内置文件工具共用读取授权、项目根和会话批准记录。 */
-	"file.read": {
-		authorize(run: ToolRun, path: string): Promise<{ ok: true; absolute: string } | { ok: false; message: string }>;
-	};
 	"file.changes": FileChangesService;
-	"project.files": ProjectFilesService;
-	resources: ResourcesService;
 	"session.worktree": SessionWorktreeService;
 	"session.plan": SessionPlanService;
 }
@@ -1653,13 +1689,16 @@ export interface SessionWorktreeService {
 	requestFor(origin: { sessionId: string; toolCallId: string }): () => void;
 }
 
-/** 服务 `project.files`：项目里该看哪些文件。内置插件 plume.tools 提供，它的 glob、grep 用的也是这一份。 */
-export interface ProjectFilesService {
+/**
+ * `ctx.workspace`：在宿主进程里读工作区仓库。工作区是沙箱可写的，仓库的配置（`.git/config`、`.gitattributes`）也是：直接跑 git 会替沙箱里的命令
+ * 执行它写进去的程序（`core.fsmonitor`、过滤器、钩子），所以本体在一个读不到仓库配置的隔离视图里问 git。插件要列项目文件就用它，不自己跑 `git ls-files`。
+ */
+export interface PluginWorkspace {
 	/**
-	 * `root` 之下 git 认为该看的文件（已跟踪且还在磁盘上的，加上未跟踪且没被忽略的），绝对路径，以 `root` 开头。
-	 * 不在 git 仓库里、或 git 答不上来时是 null，由调用方自己走目录。问 git 时不执行仓库能控制的程序（`core.fsmonitor`、过滤器、钩子）。
+	 * `root` 之下 git 认为该看的文件（已跟踪且还在磁盘上的，加上未跟踪且没被忽略的；隐藏的也算），绝对路径，以 `root` 开头。
+	 * 不在 git 仓库里、或 git 答不上来时是 null，由调用方自己走目录。不问人：要不要读 `root` 由调用方先经 `ToolRun.files.read` 判。
 	 */
-	list(root: string): Promise<string[] | null>;
+	files(root: string): Promise<string[] | null>;
 }
 
 /**

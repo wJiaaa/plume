@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { lsTool } from "../../src/tools/ls.ts";
+import { withFiles } from "../files.ts";
 
 const dir = await mkdtemp(join(tmpdir(), "plume-ls-"));
 afterAll(() => rm(dir, { recursive: true, force: true }));
@@ -16,7 +17,7 @@ it("目录在前、按名字排，截到 400 条，显示的文件带大小，�
 	await writeFile(join(dir, ".hidden"), "x");
 	for (let index = 0; index < 401; index++) await writeFile(join(dir, `f${String(index).padStart(3, "0")}.txt`), "a".repeat(index));
 
-	const result = await lsTool.execute({ path: dir }, { cwd: dir, state: new Map() });
+	const result = await lsTool.execute({ path: dir }, withFiles({ cwd: dir, state: new Map() }));
 	const lines = result.content
 		.map((part) => part.text)
 		.join("")

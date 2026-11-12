@@ -6,7 +6,6 @@ import { words } from "../messages.ts";
 import { beginMutation } from "./change-lock.ts";
 import { recordFileChange } from "./file-changes.ts";
 import { withinOrIs } from "@plume/platform";
-import { assessRead } from "./read-access.ts";
 import { openRepo, withRepoView, type HostGit, type HostRepo } from "./host-git.ts";
 import type { ToolContext, ToolResult } from "./types.ts";
 
@@ -22,6 +21,12 @@ interface Observation {
 	read(): Promise<CommandChanges>;
 }
 const KEY = "commandChanges";
+/**
+ * 本体读边界认的本机密钥文件（`@plume/workspace` 的 `read-access.ts`），观测时同样不碰。插件不引用本体的实现，所以抄一份，两边一起改。
+ * 引号写成 `\x27\x22\x60`：直接写的话文案检查会把它当成字符串的开头。
+ */
+const SECRET_PATH =
+	/(?:^|[/\\\s\x27\x22\x60=@:<>(|;&])(?:\.(?:plume[/\\](?:settings\.json|credentials\.json|vault\.key)|ssh[/\\]id_[A-Za-z0-9_]+|aws[/\\]credentials|gnupg\b|netrc|config[/\\]gh[/\\]hosts\.yml))(?=$|[/\\\s\x27\x22\x60;&|<>)])/i;
 
 async function names(git: HostGit, head: string | null): Promise<string[]> {
 	const [tracked, untracked] = await Promise.all([
@@ -39,7 +44,7 @@ async function content(root: string, path: string): Promise<string | null> {
 	const absolute = join(root, path);
 	if (!withinOrIs(root, absolute)) throw new Error(words().changeObserveFailed);
 	// 观测不是用户授权读取密钥；这些文件只说明未覆盖，不保存内容副本。
-	if (assessRead(absolute, root).decision !== "allow" || /^\.env(?:\.|$)/i.test(basename(absolute)) || /\.(?:pem|key|p12|pfx)$/i.test(absolute))
+	if (SECRET_PATH.test(absolute) || /^\.env(?:\.|$)/i.test(basename(absolute)) || /\.(?:pem|key|p12|pfx)$/i.test(absolute))
 		throw new Error(words().changeSecret);
 	try {
 		const stat = await lstat(absolute);

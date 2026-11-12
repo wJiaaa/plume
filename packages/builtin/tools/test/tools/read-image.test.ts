@@ -10,6 +10,7 @@ import type { ToolRun } from "@plume/contract";
 import { readTool } from "../../src/tools/read.ts";
 import { readRecord } from "../../src/tools/read-state.ts";
 import { toDefinition, type ToolContext, type ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "plume-read-image-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -20,7 +21,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 
 it("PNG 原样交给模型，details 记下路径、大小、类型，并记作读过", async () => {
 	writeFileSync(join(dir, "dot.png"), PNG);
-	const ctx: ToolContext = { cwd: dir, state: new Map() };
+	const ctx: ToolContext = withFiles(withFiles({ cwd: dir, state: new Map() }));
 	const result = await readTool.execute({ path: "dot.png" }, ctx);
 	expect(result.isError).toBeUndefined();
 	expect(result.content).toEqual([]);
@@ -40,8 +41,16 @@ it("PNG 原样交给模型，details 记下路径、大小、类型，并记作�
 
 it("经工具表交出去时图跟在结果后面", async () => {
 	writeFileSync(join(dir, "dot.jpg"), PNG);
-	const definition = toDefinition(readTool, { state: () => new Map() });
-	const run = { sessionId: "s", cwd: dir, scratchDir: join(dir, "scratch"), signal: new AbortController().signal, tools: () => [] } as unknown as ToolRun;
+	const { files, projectFiles, resources } = withFiles({ cwd: dir, state: new Map() });
+	const definition = toDefinition(readTool, { state: () => new Map(), resources: resources!, workspace: { files: projectFiles } });
+	const run = {
+		sessionId: "s",
+		cwd: dir,
+		scratchDir: join(dir, "scratch"),
+		signal: new AbortController().signal,
+		tools: () => [],
+		files,
+	} as unknown as ToolRun;
 	const output = await definition.execute({ path: "dot.jpg" }, run);
 	expect(output).toMatchObject({ output: "", images: [{ data: PNG.toString("base64"), mimeType: "image/jpeg" }] });
 });
@@ -50,7 +59,7 @@ it("超过 5 MB 的图不读", async () => {
 	const big = join(dir, "big.png");
 	writeFileSync(big, "");
 	truncateSync(big, 5 * 1024 * 1024 + 1);
-	const result = await readTool.execute({ path: "big.png" }, { cwd: dir, state: new Map() });
+	const result = await readTool.execute({ path: "big.png" }, withFiles({ cwd: dir, state: new Map() }));
 	expect(result.isError).toBe(true);
 	expect(textOf(result)).toBe("Image is 5.0 MB, above the 5 MB limit.");
 	expect(result.images).toBeUndefined();
@@ -59,7 +68,7 @@ it("超过 5 MB 的图不读", async () => {
 it("BMP 和别的图一样交出去", async () => {
 	const bmp = Buffer.from("BM\0\0\0\0");
 	writeFileSync(join(dir, "old.bmp"), bmp);
-	const ctx: ToolContext = { cwd: dir, state: new Map() };
+	const ctx: ToolContext = withFiles(withFiles({ cwd: dir, state: new Map() }));
 	const result = await readTool.execute({ path: "old.bmp" }, ctx);
 	expect(result.isError).toBeUndefined();
 	expect(result.images).toEqual([{ data: bmp.toString("base64"), mimeType: "image/bmp" }]);

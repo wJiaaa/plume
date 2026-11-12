@@ -85,12 +85,16 @@ async function fixture(t: TestContext) {
 			api = value;
 		},
 		effect: (dispose: () => void | Promise<void>) => disposers.push(dispose),
-		use: () => ({
+		use: () => ({}),
+		resources: {
+			// 和宿主一样：停用时替插件撤下它登记的 scheme。
 			register: (handler: ResourceHandler) => {
 				resources.push(handler);
-				return () => void resources.splice(resources.indexOf(handler), 1);
+				const remove = () => void resources.splice(resources.indexOf(handler), 1);
+				disposers.push(remove);
+				return remove;
 			},
-		}),
+		},
 		sessions: {
 			list: async () => [...sessions.values()],
 			models: async () => MODELS,

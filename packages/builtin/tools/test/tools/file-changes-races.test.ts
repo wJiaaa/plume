@@ -7,6 +7,7 @@ import { createFileChangesService } from "../../src/tools/file-changes.ts";
 import { withTextFile } from "../../src/tools/file-write.ts";
 import type { ToolContext } from "../../src/tools/types.ts";
 import { words } from "../../src/messages.ts";
+import { withFiles } from "../files.ts";
 
 vi.mock("node:fs", async (original) => {
 	const fs = await original<typeof import("node:fs")>();
@@ -28,7 +29,7 @@ async function fixture() {
 		dataDir = join(base, "data");
 	await mkdir(cwd);
 	await mkdir(dataDir);
-	const ctx: ToolContext = { cwd, dataDir, sessionId: "session", state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd, dataDir, sessionId: "session", state: new Map() });
 	const service = createFileChangesService(dataDir, { list: async () => [] });
 	const save = (name: string, content: string) => withTextFile(ctx, name, async (file) => (await file.write(content)).changeId!);
 	return { ctx, service, save, base };

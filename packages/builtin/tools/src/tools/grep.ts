@@ -7,10 +7,9 @@ import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { globToRegExp } from "./glob.ts";
-import { gitListedFiles, insideGitWorkTree, SKIP_DIRS } from "./project-files.ts";
+import { insideGitWorkTree, SKIP_DIRS } from "./project-files.ts";
 import { formatMatchWindow, formatMatchWindowAt, utf8ByteOffsetToIndex, type MatchOptions } from "./long-line.ts";
-import { displayPath, looksBinary } from "./paths.ts";
-import { authorizeRead } from "./read-access.ts";
+import { displayPath, looksBinary, toAbsolute } from "./paths.ts";
 import { describeGrep } from "./describe.ts";
 
 const MAX_MATCHES = 200;
@@ -98,9 +97,10 @@ export const grepTool: Tool<GrepArgs> = {
 
 		let root = ctx.cwd;
 		if (normalizedArgs.path) {
-			const authorized = await authorizeRead(ctx, normalizedArgs.path);
+			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
+			const authorized = await ctx.files.read(toAbsolute(ctx.cwd, normalizedArgs.path));
 			if (!authorized.ok) return errorResult(authorized.message);
-			root = authorized.absolute;
+			if (authorized.path) root = authorized.path;
 			/*
 			 * 路径不存在时 ripgrep 退出码 2，stderr 里那句 "No such file or directory" 又被截在 200 字之后，
 			 * 交回去的就成了「No matches」：模型把猜错名字的文件当成搜过了、里面没有。先查一次，答它真正的情况。
@@ -419,7 +419,7 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 
 	if ((await stat(root).catch(() => null))?.isFile()) await scanFile(root);
 	else {
-		const listed = await gitListedFiles(root);
+		const listed = await ctx.projectFiles(root);
 		if (!listed) await walk(root);
 		else
 			for (const full of listed) {

@@ -12,7 +12,7 @@
  *
  * 所以要量两件事，而且分开量：工具找不找得到别名调用点（机制），以及被要求重命名时模型会不会真的去用它、而不是用 grep（行为）。
  * 决定这东西有没有用的是后一个。机制部分直接调 plume.lsp 的工具（`lspTool`，和插件注册的是同一个），读取授权和文件清单用
- * plume.tools 的实现；行为部分经 `evalAgent` 跑真实的一轮，一组装 plume.lsp、一组不装。
+ * 本体的实现（`ToolRun.files`、`ctx.workspace.files`）；行为部分经 `evalAgent` 跑真实的一轮，一组装 plume.lsp、一组不装。
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -20,8 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolRun } from "../../packages/contract/src/index.ts";
 import { grepTool } from "../../packages/builtin/tools/src/tools/grep.ts";
-import { gitListedFiles } from "../../packages/builtin/tools/src/tools/project-files.ts";
-import { authorizeRead } from "../../packages/builtin/tools/src/tools/read-access.ts";
+import { withFiles } from "../../packages/builtin/tools/test/files.ts";
 import { pluginSource } from "../../scripts/plugin-source.ts";
 import { evalAgent } from "./agent.ts";
 import { loadModel } from "./model.ts";
@@ -92,8 +91,12 @@ function runFor(cwd: string): ToolRun {
 function lspWith(manager: InstanceType<typeof CodeIntelManager>) {
 	return lspTool({
 		managerFor: () => manager,
-		listFiles: gitListedFiles,
-		authorizeRead: (run, path) => authorizeRead({ cwd: run.cwd, state: new Map(), projectRoots: run.projectRoots }, path),
+		listFiles: (root: string) => withFiles({ cwd: root, state: new Map() }).projectFiles(root),
+		authorizeRead: async (run: ToolRun, path: string) => {
+			const got = await withFiles({ cwd: run.cwd, state: new Map(), ...(run.projectRoots ? { projectRoots: run.projectRoots } : {}) }).files.read(path);
+			if (!got.ok) return got;
+			return got.path ? { ok: true as const, absolute: got.path } : { ok: false as const, message: `${path} 不是文件` };
+		},
 	});
 }
 
@@ -111,7 +114,7 @@ async function main(): Promise<void> {
 	const lspFoundAlias = /aliased\.ts:4/.test(viaLsp.output);
 	const lspConfidence = (viaLsp.details as { confidence?: string } | undefined)?.confidence ?? "?";
 
-	const viaGrep = await grepTool.execute({ pattern: "parseConfig", path: "." }, { cwd, state: new Map() });
+	const viaGrep = await grepTool.execute({ pattern: "parseConfig", path: "." }, withFiles({ cwd, state: new Map() }));
 	const grepText = viaGrep.content.map((c) => c.text).join("");
 	const grepFoundAlias = /aliased\.ts:4/.test(grepText);
 

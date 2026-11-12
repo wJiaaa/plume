@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { grepTool } from "../packages/builtin/tools/src/tools/grep.ts";
+import { withFiles } from "../packages/builtin/tools/test/files.ts";
 import type { AgentService, ApiFormat, AssistantMessage, Message, Plugin } from "../packages/contract/src/index.ts";
 import { createAgent } from "../packages/core/agent/src/index.ts";
 import { BUILTINS } from "../packages/core/agent/test/builtins.ts";
@@ -174,7 +175,7 @@ try {
 	await writeFile(join(workspace, "catalog.json"), catalog);
 	await writeFile(join(workspace, "note.txt"), "# workspace note\nSECRET=ALPHA-9F3\n");
 
-	const gated = await grepTool.execute({ pattern: name, path: "catalog.json" }, { cwd: workspace, state: new Map() });
+	const gated = await grepTool.execute({ pattern: name, path: "catalog.json" }, withFiles({ cwd: workspace, state: new Map() }));
 	const gatedText = gated.content.map((part) => part.text).join("");
 
 	const catalogTask = await runTask(

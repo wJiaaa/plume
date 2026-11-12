@@ -136,6 +136,10 @@ const run: ToolRun = {
 	track: () => {
 		throw new Error("网页工具不起后台任务");
 	},
+	files: {
+		read: async () => ({ ok: false, message: "网页工具不读文件" }),
+		readCommand: async () => ({ ok: false, message: "网页工具不跑命令" }),
+	},
 	tools: () => [],
 	calls: [],
 };

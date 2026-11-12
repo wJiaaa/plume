@@ -1,15 +1,14 @@
 import type { Stats } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
-import type { FileViewDetails } from "@plume/contract";
+import type { FileViewDetails, Resource } from "@plume/contract";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { charWindow, formatCharWindow, longLineFooter, MAX_LINE_CHARS } from "./long-line.ts";
 import { outline, outlineFooter } from "./outline.ts";
-import { displayPath, imageMimeType, looksBinary } from "./paths.ts";
-import { authorizeRead, toAbsolute } from "./read-access.ts";
+import { displayPath, imageMimeType, looksBinary, toAbsolute } from "./paths.ts";
 import { markRead } from "./read-state.ts";
 import { sameNamed } from "./project-files.ts";
-import { resourceScope, scratchFile } from "./scratch-file.ts";
+import { addressOf } from "./scratch-file.ts";
 import { decodeText } from "./text-layout.ts";
 import { LINE_KEEP_BYTES, readLineWindow, STREAM_ABOVE_BYTES } from "./large-text.ts";
 import { extractDocumentText } from "@plume/document-text";
@@ -64,8 +63,8 @@ function extensionOf(path: string): string {
 }
 
 /** 找不到时附上项目里的同名文件，见 `sameNamed`。 */
-async function notFound(cwd: string, path: string): Promise<string> {
-	const named = await sameNamed(cwd, path).catch(() => []);
+async function notFound(ctx: ToolContext, path: string): Promise<string> {
+	const named = await sameNamed(ctx, ctx.cwd, path).catch(() => []);
 	if (named.length === 0) return `File not found: ${path}`;
 	return `File not found: ${path}. Files with that name in the project:\n${named.map((one) => `  ${one}`).join("\n")}`;
 }
@@ -107,21 +106,28 @@ export const readTool: Tool<ReadArgs> = {
 		 * 先认地址，而且只认有人登记了的 scheme。
 		 *
 		 * 没人认的 `foo://` 照旧当路径，在文件系统那里以「找不到」失败，那是实话；把所有 `://` 都揽过来，会拿地址的报错
-		 * 回答一个从没想用地址的人路径里的笔误。临时文件按文件读，edit 才找得到它要的那次 read；拒绝的话由地址那边说。
+		 * 回答一个从没想用地址的人路径里的笔误。地址经本体读：临时文件按文件交回，edit 才找得到它要的那次 read；拒绝的话由地址那边说。
 		 */
-		const scratch = await scratchFile(ctx, path).catch(() => null);
-		const resourceResult = scratch ? null : await tryResource(path, ctx, { offset: args.offset, limit: args.limit, charOffset });
-		if (resourceResult) return resourceResult;
+		let scratch: string | undefined;
+		if (addressOf(ctx, path)) {
+			const got = await ctx.files.read(path);
+			if (!got.ok) return errorResult(got.message);
+			if (got.resource) return resourceResult(got.resource, { offset: args.offset, limit: args.limit, charOffset });
+			scratch = got.path;
+		}
 		const named = scratch ?? toAbsolute(ctx.cwd, path);
 		const shownPath = scratch ? path : displayPath(ctx.cwd, named);
 
+		/*
+		 * 先看在不在，再经本体判能不能读：不存在的文件说「找不到」，不为它问人。判的是解析过链接的真实路径。
+		 */
 		let absolute: string;
 		try {
 			absolute = await realpath(named);
 		} catch {
-			return errorResult(scratch ? `File not found: ${path}` : await notFound(ctx.cwd, path));
+			return errorResult(scratch ? `File not found: ${path}` : await notFound(ctx, path));
 		}
-		const authorized = await authorizeRead(ctx, absolute);
+		const authorized = await ctx.files.read(absolute);
 		if (!authorized.ok) return errorResult(authorized.message);
 
 		let info: Stats;
@@ -346,17 +352,14 @@ function renderLines(slice: string[], offset: number, totalLines: number, charSt
 }
 
 /**
- * 地址交给拥有它的 scheme 读，结果和读文件一样带头部；内容来自别处的包进 `<resource origin="…">`。
+ * 地址读到的东西（本体交给拥有它的 scheme 读），结果和读文件一样带头部；内容来自别处的包进 `<resource origin="…">`。
  *
  * 窗口参数对地址同样有效，超出单条结果上限的内容也按窗口给：剪枝标记让模型 `read artifact://…` 取回中段，整段返回的话，
  * 它作为新结果又被剪成同样的头尾，中段永远取不回来。
  */
-async function tryResource(path: string, ctx: ToolContext, window: { offset?: number; limit?: number; charOffset: number }): Promise<ToolResult | null> {
-	const router = ctx.resources;
-	if (!router?.canResolve(path)) return null;
-
+function resourceResult(resource: Resource, window: { offset?: number; limit?: number; charOffset: number }): ToolResult {
+	// 读到的东西来自插件登记的 scheme，形状不对时照旧作为错误交给模型。
 	try {
-		const resource = await router.resolve(path, resourceScope(ctx));
 		let content = resource.content;
 		const asked = window.offset !== undefined || window.limit !== undefined || window.charOffset > 1;
 		if (asked || content.length > OUTPUT_BUDGET) {

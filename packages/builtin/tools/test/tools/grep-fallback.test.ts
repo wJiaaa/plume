@@ -10,25 +10,21 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
-import { setDataDir } from "../../src/tools/home.ts";
 import { grepTool } from "../../src/tools/grep.ts";
 import type { ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
-const ctx = (cwd: string) => ({ cwd, state: new Map<string, unknown>() });
+const ctx = (cwd: string) => withFiles({ cwd, state: new Map<string, unknown>() });
 const textOf = (res: ToolResult) => res.content.map((part) => part.text).join("");
 
 async function sandbox(ripgrep: string): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "plume-grep-fb-"));
-	const home = await mkdtemp(join(tmpdir(), "plume-grep-home-"));
 	const saved = process.env.PLUME_RIPGREP;
 	process.env.PLUME_RIPGREP = ripgrep;
-	// 问 git 要经 `host-git.ts` 在 `appHome()` 下建临时视图，不能落到真实的 ~/.plume。
-	setDataDir(home);
 	onTestFinished(async () => {
 		if (saved === undefined) delete process.env.PLUME_RIPGREP;
 		else process.env.PLUME_RIPGREP = saved;
 		await rm(dir, { recursive: true, force: true });
-		await rm(home, { recursive: true, force: true });
 	});
 	return dir;
 }

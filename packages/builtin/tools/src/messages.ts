@@ -4,10 +4,6 @@ import type { Locale } from "@plume/contract";
 
 const zhCN = {
 	escalate: (command: string) => `提权运行：${command}`,
-	readSecret: (name: string) => `读取本机密钥文件：${name}`,
-	readOutside: (name: string) => `读取当前项目之外的位置：${name}`,
-	readSecretScope: "密钥按文件单独批准；同一目录下的其他密钥仍会再问一次。",
-	readTreeScope: (grant: string) => `批准后，这个会话读取 ${grant} 里的文件不再询问。`,
 	undoBusy: "正在撤销改动，请稍后重试。",
 	undoRunning: "仍有任务或命令可能修改文件，请等它们结束后再撤销。",
 	undoEmpty: "没有可撤销的变更。",
@@ -47,10 +43,6 @@ const zhCN = {
 
 const en: typeof zhCN = {
 	escalate: (command) => `Run with wider access: ${command}`,
-	readSecret: (name) => `Read a credential file on this computer: ${name}`,
-	readOutside: (name) => `Read outside the current project: ${name}`,
-	readSecretScope: "Credentials are approved one file at a time; other keys in the same folder will still ask.",
-	readTreeScope: (grant) => `Once approved, this session reads files in ${grant} without asking.`,
 	undoBusy: "Changes are being undone. Please try again shortly.",
 	undoRunning: "A task or command may still modify files. Wait for it to finish before undoing.",
 	undoEmpty: "There are no changes to undo.",

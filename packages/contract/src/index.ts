@@ -1,7 +1,7 @@
 /**
  * 共享类型：跨包、跨进程的约定都在这里，只有类型，没有运行时代码。按用途分文件：
  *
- * - `plugin.ts`：插件逻辑入口的 API（钩子、工具、ctx）；界面入口的在 `ui.ts`（`@plume/contract/ui`）；`resources.ts`：服务 `resources` 的资源地址；
+ * - `plugin.ts`：插件逻辑入口的 API（钩子、工具、ctx）；界面入口的在 `ui.ts`（`@plume/contract/ui`）；`resources.ts`：`ctx.resources` 的资源地址；
  * - `service.ts`：agent 进程给界面的 AgentService、事件和视图；`usage.ts`：存储页和插件读的使用统计数据；
  * - `app.ts`：agent 和装配它的应用之间的约定（待加载的插件、日志）。
  *

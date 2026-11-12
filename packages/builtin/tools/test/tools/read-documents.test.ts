@@ -12,11 +12,12 @@ import { strToU8, zipSync } from "fflate";
 import { afterAll, expect, it } from "vitest";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "plume-read-docs-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-const context = (): ToolContext => ({ cwd: dir, state: new Map() });
+const context = (): ToolContext => withFiles({ cwd: dir, state: new Map() });
 
 const textOf = (result: ToolResult) => result.content[0]?.text ?? "";
 

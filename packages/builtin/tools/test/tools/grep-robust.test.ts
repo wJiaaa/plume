@@ -14,6 +14,7 @@ import { delimiter, join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { grepTool } from "../../src/tools/grep.ts";
 import type { ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const FAKE_RG = `#!/bin/sh
 printf '%s\\n' "$@" >> "$FAKE_RG_ARGV"
@@ -91,7 +92,7 @@ async function withFakeRg(behaviour: FakeRg): Promise<{ dir: string; argv: () =>
 	return { dir, argv: async () => (await readFile(argvLog, "utf8")).split("\n").filter(Boolean) };
 }
 
-const ctx = (cwd: string, signal?: AbortSignal) => ({ cwd, state: new Map<string, unknown>(), signal });
+const ctx = (cwd: string, signal?: AbortSignal) => withFiles({ cwd, state: new Map<string, unknown>(), ...(signal ? { signal } : {}) });
 const textOf = (res: ToolResult) => res.content.map((part) => part.text).join("");
 
 it.skipIf(NO_SHELL_SPAWN)("stderr 写满管道也不会把 rg 卡住", async () => {

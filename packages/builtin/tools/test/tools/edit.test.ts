@@ -12,6 +12,7 @@ import { editTool } from "../../src/tools/edit.ts";
 import { readTool } from "../../src/tools/read.ts";
 import { writeTool } from "../../src/tools/write.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 type ApprovalContent = Parameters<NonNullable<ToolContext["requestApproval"]>>[0];
 
@@ -27,7 +28,7 @@ async function fixture(content = FIVE): Promise<{ dir: string; file: string; ctx
 	const dir = await tempDir(tmpdir(), "plume-edit-");
 	const file = join(dir, "sample.txt");
 	await writeFile(file, content, "utf8");
-	return { dir, file, ctx: { cwd: dir, state: new Map() } };
+	return { dir, file, ctx: withFiles({ cwd: dir, state: new Map() }) };
 }
 
 /** 先读，和模型必须做的一样。 */
@@ -135,8 +136,8 @@ it("工作区外明确交过来的文件读得到，改它照样要问", async (
 	await writeFile(externalFile, FIVE, "utf8");
 
 	const workspaceDir = await tempDir(tmpdir(), "plume-ws-");
-	const ctxWithoutAllowed: ToolContext = { cwd: workspaceDir, state: new Map() };
-	const ctxWithAllowed: ToolContext = { ...ctxWithoutAllowed, allowedPaths: new Set([externalFile]) };
+	const ctxWithoutAllowed: ToolContext = withFiles({ cwd: workspaceDir, state: new Map() });
+	const ctxWithAllowed: ToolContext = withFiles({ ...ctxWithoutAllowed, allowedPaths: [externalFile] });
 
 	// 没有 allowedPaths、也没人可问：拒绝。
 	const deniedRead = await readTool.execute({ path: externalFile } as never, ctxWithoutAllowed);
@@ -150,7 +151,7 @@ it("工作区外明确交过来的文件读得到，改它照样要问", async (
 	const asked: string[] = [];
 	const editRes = await editTool.execute(
 		{ path: externalFile, old_string: "bravo", new_string: "BRAVO_EXTERNAL" },
-		{ ...ctxWithAllowed, requestApproval: async (request) => (asked.push(request.subject ?? ""), "reject") },
+		withFiles({ ...ctxWithAllowed, allowedPaths: [externalFile], requestApproval: async (request) => (asked.push(request.subject ?? ""), "reject") }),
 	);
 	expect(asked.length, "附件给的是读的许可，改它照样要问").toBe(1);
 	expect(editRes.isError).toBe(true);
@@ -164,12 +165,12 @@ it("附件也不是覆写它的许可", async () => {
 	await writeFile(externalFile, FIVE, "utf8");
 	const workspaceDir = await tempDir(tmpdir(), "plume-ws-");
 	const asked: string[] = [];
-	const ctx: ToolContext = {
+	const ctx: ToolContext = withFiles({
 		cwd: workspaceDir,
 		state: new Map(),
-		allowedPaths: new Set([externalFile]),
+		allowedPaths: [externalFile],
 		requestApproval: async (request) => (asked.push(request.subject ?? ""), "reject"),
-	};
+	});
 
 	// 先读：`write` 对已存在的文件要求先读过，不读会撞上另一条规则而不是边界本身。
 	await readTool.execute({ path: externalFile } as never, ctx);
@@ -189,11 +190,11 @@ it("工作区外的写要问，允许后写到那里", async () => {
 	const target = join(externalDir, "notes", "summary.md");
 	const workspaceDir = await tempDir(tmpdir(), "plume-ws-");
 	const requests: ApprovalContent[] = [];
-	const ctx: ToolContext = {
+	const ctx: ToolContext = withFiles({
 		cwd: workspaceDir,
 		state: new Map(),
 		requestApproval: async (request) => (requests.push(request), "once"),
-	};
+	});
 
 	const written = await writeTool.execute({ path: target, content: "hello\n" } as never, ctx);
 	expect(written.isError, JSON.stringify(written.content)).toBeUndefined();
@@ -210,7 +211,7 @@ it("工作区外的写要问，允许后写到那里", async () => {
 
 it("刚写的文件同一轮里能直接编辑，不用先空读一次", async () => {
 	const dir = await tempDir(tmpdir(), "plume-write-edit-");
-	const ctx: ToolContext = { cwd: dir, state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd: dir, state: new Map() });
 	const created = await writeTool.execute({ path: "Sample.ts", content: "export const answer = 1;\n" } as never, ctx);
 	expect(created.isError, textOf(created)).toBeUndefined();
 	const edited = await editTool.execute({ path: "Sample.ts", old_string: "answer = 1", new_string: "answer = 2" }, ctx);

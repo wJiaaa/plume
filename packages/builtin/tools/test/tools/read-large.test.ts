@@ -13,6 +13,7 @@ import { LINE_KEEP_BYTES, readLineWindow, STREAM_ABOVE_BYTES } from "../../src/t
 import { readTool } from "../../src/tools/read.ts";
 import { decodeText } from "../../src/tools/text-layout.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 async function scratch(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "plume-read-large-"));
@@ -27,7 +28,7 @@ function splitLines(text: string): string[] {
 	return lines;
 }
 
-const ctx = (cwd: string): ToolContext => ({ cwd, state: new Map() });
+const ctx = (cwd: string): ToolContext => withFiles({ cwd, state: new Map() });
 const textOf = (res: ToolResult) => res.content.map((part) => part.text).join("");
 
 it("流式读出的窗口就是 split 给的窗口", async () => {

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { JsonSchema, ToolSpec } from "../../packages/core/llm/src/types.ts";
 import { editTool } from "../../packages/builtin/tools/src/tools/edit.ts";
 import { readTool } from "../../packages/builtin/tools/src/tools/read.ts";
+import { withFiles } from "../../packages/builtin/tools/test/files.ts";
 
 export type FormatId = "str-replace" | "production";
 
@@ -116,7 +117,7 @@ const production: EditFormat = {
 		const cwd = await mkdtemp(join(tmpdir(), "plume-edit-eval-"));
 		try {
 			await writeFile(join(cwd, TARGET), current, "utf8");
-			const ctx = { cwd, state: new Map<string, unknown>() };
+			const ctx = withFiles({ cwd, state: new Map<string, unknown>() });
 			// 带上窗口读：模型在提示词里看到的是整个文件，不该因为长文件的大纲视图被 edit 拒掉。
 			const read = await readTool.execute({ path: TARGET, offset: 1, limit: 100_000 }, ctx);
 			if (read.isError) return { ok: false, error: `read failed: ${textOf(read)}` };

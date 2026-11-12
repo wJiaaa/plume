@@ -2,7 +2,7 @@
  * bash 和 bash_output：在会话的工作目录里跑一条 shell 命令，经 `ToolRun.exec` 跑在本体按权限模式定的沙箱里。
  *
  * 不会改动的命令（`isReadOnlyCommand`）不问人，也能和相邻的只读调用同时跑；其余的动手前问。命令写明的路径先按
- * 文件工具的读边界判一遍（`authorizeCommandReads`）。超过默认等待还在跑的命令不杀，转成这个会话的后台任务，
+ * 本体的读边界判一遍（`ToolRun.files.readCommand`）。超过默认等待还在跑的命令不杀，转成这个会话的后台任务，
  * 模型用 bash_output 读、停；顶层会话里任务自己结束时，退出状态和没读过的输出作为一条运行时送达交给模型（`ToolRun.background`）。
  * 完整输出写进会话临时目录的日志（`output-log.ts`），截过的结果里给出它的路径。
  */
@@ -20,7 +20,6 @@ import { commandChangesForJob, withCommandChanges } from "./command-changes.ts";
 import { OutputBuffer } from "./bash-output.ts";
 import { createOutputLog, type OutputLog } from "./output-log.ts";
 import { describeStatus, readExit } from "./exit-status.ts";
-import { authorizeCommandReads } from "./read-access.ts";
 import { declinedResult, errorResult } from "./result.ts";
 import { rerouteShellCommand } from "./reroute.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
@@ -299,8 +298,8 @@ function fullLogHint(buffer: OutputBuffer, path: string | undefined): string {
  * `ask` 只对提权的为 false：那次已经带着更宽的模式问过了。
  */
 export async function authorizeCommand(command: string, title: string | undefined, ctx: ToolContext, ask = true): Promise<ToolResult | undefined> {
-	const refusedRead = await authorizeCommandReads(command, ctx);
-	if (refusedRead) return errorResult(refusedRead);
+	const read = await ctx.files.readCommand(command);
+	if (!read.ok) return errorResult(read.message);
 	if (ask && ctx.requestApproval && !isReadOnlyCommand(command)) {
 		const decision = await ctx.requestApproval({ kind: "command", title: title ?? "Run shell command", detail: command, subject: command });
 		if (decision !== "once" && decision !== "always") return declinedResult("The user rejected this command.");

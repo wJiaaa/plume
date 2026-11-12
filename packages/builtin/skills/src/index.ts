@@ -1,7 +1,7 @@
 /**
  * plume.skills 的逻辑入口，跑在 agent 进程：系统提示词里列出技能（`model.context` 加一段），模型调 `skill` 工具时把那个技能的
  * 正文交回去；技能也进输入框的 `/` 菜单，人点了、或在话里写 `/skill:名字` 就让模型用它。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
- * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经服务 `resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
+ * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经 `ctx.resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
 import { createHash } from "node:crypto";
@@ -50,7 +50,6 @@ interface Settings {
 
 export default {
 	name: "plume.skills",
-	inject: ["resources"],
 	apply(ctx) {
 		const text = () => MESSAGES[ctx.locale()];
 		const settingsFile = join(ctx.dataDir, "settings.json");
@@ -97,7 +96,7 @@ export default {
 		};
 
 		/** 按会话记：上下文里已经有的技能正文（指纹）。 */
-		ctx.effect(ctx.use("resources").register(skillResource(enabledSkills)));
+		ctx.resources.register(skillResource(enabledSkills));
 
 		const injected = new Map<string, Set<string>>();
 		ctx.sessions.onDeleted((sessionId) => injected.delete(sessionId));

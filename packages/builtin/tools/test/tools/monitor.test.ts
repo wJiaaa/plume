@@ -8,6 +8,7 @@ import { backgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool } from "../../src/tools/bash.ts";
 import { monitorTool } from "../../src/tools/monitor.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 interface FakeProcess extends RunProcess {
 	print(chunk: string): void;
@@ -70,7 +71,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const exec: ToolRun["exec"] = async () => process;
-const ctx = (extra: Partial<ToolContext> = {}): ToolContext => ({ cwd: "/tmp", state, exec, background: () => channel.channel, ...extra });
+const ctx = (extra: Partial<ToolContext> = {}): ToolContext => withFiles({ cwd: "/tmp", state, exec, background: () => channel.channel, ...extra });
 const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("\n");
 
 async function start(args: Record<string, unknown> = {}): Promise<string> {

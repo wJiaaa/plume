@@ -1,0 +1,231 @@
+/**
+ * 本体替工具读：`ToolRun.files` 的读边界和问人（卡片画什么、拒绝了怎么告诉模型），`ctx.resources`、`ctx.workspace`。
+ *
+ * 判定本身（哪里不问、批准覆盖多大）在 `packages/core/workspace/test/read-access.test.ts`；这里只看接到过闸上以后。
+ * 外面的目录放在借来的家目录下：临时目录本来可读，放那里测不出「要问」。
+ */
+
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { afterEach, expect, it } from "vitest";
+import type { ApprovalContent, ApprovalDecision, Plugin } from "@plume/contract";
+import { DECLINED } from "../src/declined.ts";
+import { PluginHost } from "../src/host.ts";
+import { type CallFiles, Workspace } from "../src/run-files.ts";
+
+const cleanups: (() => Promise<void>)[] = [];
+afterEach(async () => {
+	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+
+async function setup() {
+	// 家目录下的新目录：临时区本来就允许读，放那里测不到项目边界。
+	const base = await realpath(await mkdtemp(join(homedir(), ".plume-run-files-test-")));
+	cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+	const cwd = join(base, "app"),
+		shared = join(base, "shared"),
+		outside = join(base, "outside"),
+		data = join(base, "data");
+	await Promise.all([cwd, shared, outside, data].map((path) => mkdir(path, { recursive: true })));
+	await mkdir(join(outside, ".git"));
+	for (const dir of [cwd, shared, outside]) await writeFile(join(dir, "core.ts"), "export const value = 1;\n");
+	const workspace = new Workspace(data, { list: async () => [], messages: async () => [] }, () => []);
+	const asked: ApprovalContent[] = [];
+	const answers: ApprovalDecision[] = [];
+	const alive: string[] = [];
+	const call = (extra: Partial<CallFiles> = {}): CallFiles => ({
+		sessionId: "s",
+		cwd,
+		scratchDir: join(data, "scratch", "s"),
+		signal: new AbortController().signal,
+		shell: async () => ({ kind: "posix", label: "bash", sandbox: "workspace-write" }),
+		ask: async (content) => {
+			asked.push(content);
+			return answers.shift() ?? "reject";
+		},
+		alive: (what) => void alive.push(what),
+		...extra,
+	});
+	return { base, cwd, shared, outside, data, workspace, asked, answers, alive, call };
+}
+
+it("工作区里的不问，交回绝对路径；每次读先查调用还在不在", async () => {
+	const { cwd, workspace, asked, alive, call } = await setup();
+	expect(await workspace.files(call()).read("core.ts")).toEqual({ ok: true, path: join(cwd, "core.ts") });
+	expect(asked).toHaveLength(0);
+	expect(alive).toEqual(["ToolRun.files.read"]);
+});
+
+it("项目外的经过闸问，卡片写文件名、路径和批准覆盖的项目；批了才交回", async () => {
+	const { outside, workspace, asked, answers, call } = await setup();
+	const path = join(outside, "core.ts");
+	answers.push("once");
+	expect(await workspace.files(call()).read(path)).toEqual({ ok: true, path });
+	expect(asked).toEqual([
+		{
+			kind: "view",
+			title: "读取当前项目之外的位置：core.ts",
+			detail: path,
+			reason: `批准后，这个会话读取 ${outside} 里的文件不再询问。`,
+			subject: `read:${outside}`,
+		},
+	]);
+});
+
+it("人拒绝了：交给模型的话说清是哪个路径，叫它别绕", async () => {
+	const { outside, workspace, call } = await setup();
+	const path = join(outside, "core.ts");
+	expect(await workspace.files(call()).read(path)).toEqual({ ok: false, message: `用户拒绝了这次读取：${path}。${DECLINED}` });
+});
+
+it("没人可问时拒绝而不是放行", async () => {
+	const { outside, workspace, call } = await setup();
+	const path = join(outside, "core.ts");
+	const { ask: _ask, ...noAsk } = call();
+	expect(await workspace.files(noAsk).read(path)).toEqual({
+		ok: false,
+		message: `读取当前项目之外的位置需要用户批准，而这个会话没有可以询问的人：${path}`,
+	});
+});
+
+it("密钥只批这一个文件，卡片说明同目录的还会再问；经链接也认得出", async () => {
+	const { base, shared, workspace, asked, call } = await setup();
+	const keys = join(shared, ".ssh"),
+		key = join(keys, "id_fixture");
+	await mkdir(keys);
+	await writeFile(key, "test fixture only\n");
+	const alias = join(base, "key-source");
+	await symlink(keys, alias, process.platform === "win32" ? "junction" : "dir");
+	const result = await workspace.files(call({ projectRoots: [alias] })).read(join(alias, "id_fixture"));
+	expect(result.ok).toBe(false);
+	expect(asked).toEqual([
+		{
+			kind: "view",
+			title: "读取本机密钥文件：id_fixture",
+			detail: key,
+			reason: "密钥按文件单独批准；同一目录下的其他密钥仍会再问一次。",
+			subject: `read:${key}`,
+		},
+	]);
+});
+
+it("同一个项目的其他源码目录、拖进来的文件不问；源码目录自身是链接也一样，里面链出去的照问", async () => {
+	const { base, shared, outside, workspace, asked, call } = await setup();
+	const files = workspace.files(call({ projectRoots: [shared], allowedPaths: [join(outside, "core.ts")] }));
+	expect(await files.read("../shared/core.ts")).toEqual({ ok: true, path: join(shared, "core.ts") });
+	expect(await files.read(join(outside, "core.ts"))).toEqual({ ok: true, path: join(outside, "core.ts") });
+
+	const alias = join(base, "source-link");
+	await symlink(shared, alias, process.platform === "win32" ? "junction" : "dir");
+	const viaAlias = workspace.files(call({ projectRoots: [alias] }));
+	expect(await viaAlias.read(join(alias, "core.ts"))).toEqual({ ok: true, path: join(shared, "core.ts") });
+	expect(await viaAlias.readCommand(`cat '${join(alias, "core.ts")}'`)).toEqual({ ok: true });
+	expect(asked).toHaveLength(0);
+
+	await symlink(outside, join(shared, "escape"), process.platform === "win32" ? "junction" : "dir");
+	expect((await viaAlias.read(join(alias, "escape", "core.ts"))).ok).toBe(false);
+	expect(asked.at(-1)).toMatchObject({ kind: "view", subject: `read:${outside}` });
+});
+
+it("一行命令写明的路径按同一个边界判，用这次调用的 shell 拆", async () => {
+	const { outside, workspace, asked, alive, call } = await setup();
+	const refused = await workspace.files(call()).readCommand(`cat '${join(outside, "core.ts")}'`);
+	expect(refused).toEqual({ ok: false, message: `用户拒绝了这次读取：${join(outside, "core.ts")}。${DECLINED}` });
+	expect(asked).toHaveLength(1);
+	expect(alive).toEqual(["ToolRun.files.readCommand"]);
+	expect(await workspace.files(call()).readCommand("cat core.ts && ls")).toEqual({ ok: true });
+});
+
+it("资源地址不问人：scratch:// 交回文件，带行范围、别的 scheme 交回读到的；目录交回位置", async () => {
+	const { data, workspace, asked, call } = await setup();
+	const scratch = join(data, "scratch", "s");
+	await mkdir(join(scratch, "notes"), { recursive: true });
+	await writeFile(join(scratch, "notes", "a.md"), "一\n二\n三\n");
+	const files = workspace.files(call());
+	expect(await files.read("scratch://notes/a.md")).toEqual({ ok: true, path: join(scratch, "notes", "a.md") });
+	expect(await files.read("scratch://notes/a.md:2-3")).toMatchObject({ ok: true, resource: { content: "二\n三" } });
+	expect(await files.read("scratch://notes", { directory: true })).toEqual({ ok: true, path: join(scratch, "notes") });
+	expect(await files.read("scratch://../x")).toMatchObject({ ok: false, message: expect.stringMatching(/临时目录外面/) });
+	// 没人登记的 scheme 照路径判：在工作区里，交回那个（不存在的）路径，由工具报找不到。
+	expect(await files.read("acme://thing")).toMatchObject({ ok: true, path: expect.stringContaining("acme:") });
+
+	const address = workspace.resources.keepArtifact("s", "bash", "完整输出");
+	expect(await files.read(address)).toMatchObject({ ok: true, resource: { content: "完整输出", origin: "bash 的原始输出" } });
+	workspace.forget("s");
+	expect((await files.read(address)).ok).toBe(false);
+	expect(asked).toHaveLength(0);
+});
+
+it("插件登记的 scheme 只读：塞了 write 也不算可写；撤下以后不再认", async () => {
+	const { workspace, call } = await setup();
+	const written: string[] = [];
+	const undo = workspace.resources.register({
+		scheme: "docs",
+		describe: "`docs://<名字>` 一份文档",
+		resolve: async (url: { raw: string }) => ({ url: url.raw, content: "正文", contentType: "text/plain" }),
+		write: async (_url: unknown, content: string) => void written.push(content),
+	} as never);
+	expect(workspace.resources.list().find((entry) => entry.scheme === "docs")).toMatchObject({ writable: false });
+	expect(workspace.resources.list().find((entry) => entry.scheme === "scratch")).toMatchObject({ writable: true });
+	expect(await workspace.files(call()).read("docs://guide")).toMatchObject({ ok: true, resource: { content: "正文" } });
+	undo();
+	expect(workspace.resources.list().map((entry) => entry.scheme)).not.toContain("docs");
+	expect(written).toEqual([]);
+});
+
+it("插件停用时本体替它撤下登记的 scheme", async () => {
+	const dir = await mkdtemp(join(homedir(), ".plume-run-files-host-"));
+	cleanups.push(() => rm(dir, { recursive: true, force: true }));
+	const docs: Plugin = {
+		name: "test.docs",
+		apply(ctx) {
+			ctx.resources.register({ scheme: "docs", describe: "文档", resolve: async (url) => ({ url: url.raw, content: "正文", contentType: "text/plain" }) });
+		},
+	};
+	const host = new PluginHost({
+		dataDir: dir,
+		appDataDir: dir,
+		log: () => {},
+		notice: () => {},
+		model: {
+			complete: async () => "",
+			usage: async () => ({ requests: [], providerNames: {}, archived: [] }),
+			findImageModel: async () => ({ reason: "none", candidates: [] }),
+			image: async () => ({ ok: false, failure: { summary: "" } }),
+		},
+	});
+	cleanups.push(() => host.dispose());
+	await host.load([{ key: "docs", load: async () => docs }]);
+	expect(host.workspace.resources.list().map((entry) => entry.scheme)).toContain("docs");
+	await host.setEnabled(docs.name, false);
+	expect(host.workspace.resources.list().map((entry) => entry.scheme)).not.toContain("docs");
+	// 重新启用能再登记同一个 scheme。
+	await host.setEnabled(docs.name, true);
+	expect(host.workspace.resources.list().map((entry) => entry.scheme)).toContain("docs");
+});
+
+it.skipIf(process.platform === "win32")("ctx.workspace.files：git 认的文件，不执行仓库配置的程序；不是仓库时是 null", async () => {
+	const { base, data, workspace } = await setup();
+	const repo = join(base, "repo");
+	await mkdir(join(repo, "src"), { recursive: true });
+	await writeFile(join(repo, ".gitignore"), "ignored/\n");
+	await writeFile(join(repo, "src", "a.ts"), "a");
+	await mkdir(join(repo, "ignored"));
+	await writeFile(join(repo, "ignored", "b.ts"), "b");
+	execFileSync("git", ["init", "-q"], { cwd: repo });
+	execFileSync("git", ["add", "-A"], { cwd: repo });
+	// 沙箱里的命令能写 `.git/config`：宿主上读 index 时执行 fsmonitor，就是逃出沙箱。
+	const marker = join(base, "fsmonitor-ran");
+	const hook = join(base, "fsmonitor.sh");
+	await writeFile(hook, `#!/bin/sh\ntouch '${marker}'\n`);
+	await chmod(hook, 0o755);
+	execFileSync("git", ["config", "core.fsmonitor", hook], { cwd: repo });
+
+	const listed = await workspace.workspace.files(repo);
+	expect(listed?.map((path) => path.slice(repo.length + 1)).sort()).toEqual([".gitignore", join("src", "a.ts")]);
+	expect(existsSync(marker), "fsmonitor 不该在宿主上跑").toBe(false);
+	expect(await workspace.workspace.files(data)).toBeNull();
+});

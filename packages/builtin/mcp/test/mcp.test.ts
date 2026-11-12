@@ -462,6 +462,10 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 		track: () => {
 			throw new Error("MCP 工具不起后台任务");
 		},
+		files: {
+			read: async () => ({ ok: false, message: "MCP 工具不读文件" }),
+			readCommand: async () => ({ ok: false, message: "MCP 工具不跑命令" }),
+		},
 		tools: () => [],
 		calls: [],
 	};
@@ -717,7 +721,7 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 		appDataDir: dir,
 		locale: () => "zh-CN",
 		secrets: fakeSecrets,
-		use: () => ({ register: () => () => {} }),
+		resources: { register: () => () => {} },
 		log: { warn: () => {}, info: () => {}, error: () => {} },
 		effect: () => {},
 		sessions: { onDeleted: () => {} },

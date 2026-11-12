@@ -1,5 +1,6 @@
 /**
- * 资源地址：解析、路由、plume.tools 自己的几个 scheme，和两道边界。
+ * 资源地址：解析、路由、本体自己的几个 scheme，和两道边界。工具经地址读写（read、write、edit、ls）在 plume.tools 的
+ * `test/tools/addresses.test.ts` 里测。
  *
  * 这个文件大半是为了边界：一条路径出不了它所在的命名空间——包括经软链，字面路径没出去、读却出去了的那种；
  * 几乎什么都不能写，模型不能靠地址改掉约束它的说明。
@@ -10,13 +11,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { Message, ResourceHandler, ResourceScope, SessionSummary } from "@plume/contract";
-import { ArtifactStore, artifactResource, pluginResource, scratchResource, sessionResource } from "../../src/resources/handlers.ts";
-import { parseResourceUrl, readOnly, ResourceRouter } from "../../src/resources/router.ts";
-import { editTool } from "../../src/tools/edit.ts";
-import { lsTool } from "../../src/tools/ls.ts";
-import { readTool } from "../../src/tools/read.ts";
-import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
-import { writeTool } from "../../src/tools/write.ts";
+import { ArtifactStore, artifactResource, pluginResource, scratchResource, sessionResource } from "../src/resources/handlers.ts";
+import { parseResourceUrl, readOnly, ResourceRouter } from "../src/resources/router.ts";
 
 let root: string;
 let scratchDir: string;
@@ -45,8 +41,6 @@ function router(): ResourceRouter {
 }
 
 const scope = (): ResourceScope => ({ cwd: root, sessionId: "s1", scratchDir });
-const toolCtx = (): ToolContext => ({ cwd: root, sessionId: "s1", state: new Map(), resources: router(), scratchDir });
-const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("");
 
 beforeAll(async () => {
 	root = await mkdtemp(join(tmpdir(), "plume-res-"));
@@ -149,75 +143,6 @@ it("插件登记时塞了 write 也写不进去：服务只留读的几样", asy
 	expect((await r.resolve("sneaky://guide", scope())).content).toContain("第一行");
 	expect((await r.resolve("sneaky://", scope())).content).toContain("docs://guide");
 	expect(await r.locate("sneaky://guide", scope())).toBe(join(skillDir, "guide"));
-});
-
-it("read 认地址：别处来的包进 resource 标签；没人认的 scheme 当路径报找不到", async () => {
-	const viaAddress = await readTool.execute({ path: "docs://guide" } as never, toolCtx());
-	expect(textOf(viaAddress)).toBe("[docs://guide]\n第一行\n第二行\n第三行");
-
-	const store = new ArtifactStore();
-	const address = store.keep("s1", "bash", "第一行\n第二行");
-	const r = new ResourceRouter();
-	r.register(artifactResource(store));
-	const artifact = await readTool.execute({ path: address, offset: 2 } as never, { ...toolCtx(), resources: r });
-	expect(textOf(artifact)).toMatch(/^<resource url="artifact:\/\/a[0-9a-f]{12}" origin="bash 的原始输出">\n2→第二行\n<\/resource>$/);
-
-	const unknown = await readTool.execute({ path: "acme://thing" } as never, toolCtx());
-	expect(unknown.isError).toBe(true);
-	expect(textOf(unknown)).toMatch(/File not found/);
-});
-
-it("write 经地址写进临时目录，写别的地址被拒", async () => {
-	const ok = await writeTool.execute({ path: "scratch://from-tool.md", content: "内容" }, toolCtx());
-	expect(ok.isError).toBeUndefined();
-	expect(await readFile(join(scratchDir, "from-tool.md"), "utf8")).toBe("内容");
-	const refused = await writeTool.execute({ path: "docs://guide", content: "改掉" }, toolCtx());
-	expect(refused.isError).toBe(true);
-	expect(textOf(refused)).toMatch(/只读/);
-});
-
-it("edit 认 scratch://：write 或 read 过同一个地址之后能改", async () => {
-	const c = toolCtx();
-	await writeTool.execute({ path: "scratch://probe.ts", content: "const size = 1;\n" }, c);
-	const afterWrite = await editTool.execute({ path: "scratch://probe.ts", old_string: "1", new_string: "2" }, c);
-	expect(afterWrite.isError, textOf(afterWrite)).toBeUndefined();
-	expect(textOf(afterWrite)).toMatch(/^Edited scratch:\/\/probe\.ts:/);
-
-	// 命令写出来的：还没看过，读一遍地址就好。
-	await writeFile(join(scratchDir, "made-by-bash.ts"), "let x = 1;\n");
-	const unread = await editTool.execute({ path: "scratch://made-by-bash.ts", old_string: "1", new_string: "2" }, c);
-	expect(unread.isError).toBe(true);
-	await readTool.execute({ path: "scratch://made-by-bash.ts" } as never, c);
-	const afterRead = await editTool.execute({ path: "scratch://made-by-bash.ts", old_string: "1", new_string: "2" }, c);
-	expect(afterRead.isError, textOf(afterRead)).toBeUndefined();
-	expect(await readFile(join(scratchDir, "made-by-bash.ts"), "utf8")).toBe("let x = 2;\n");
-});
-
-it("ls 认地址给的位置：临时目录、别的 scheme 的目录；经软链出去的报原因", async () => {
-	const c = toolCtx();
-	await writeTool.execute({ path: "scratch://listed/page.html", content: "<h1>hi</h1>" }, c);
-	const top = await lsTool.execute({ path: "scratch://" }, c);
-	expect(top.isError, textOf(top)).toBeUndefined();
-	expect(textOf(top)).toMatch(/^listed\/$/m);
-	expect(textOf(await lsTool.execute({ path: "scratch://listed" }, c))).toMatch(/^page\.html {2}\(/m);
-	expect(textOf(await lsTool.execute({ path: "docs://references" }, c))).toMatch(/03-guide\.md/);
-
-	const target = await mkdtemp(join(tmpdir(), "plume-scratch-ls-out-"));
-	try {
-		await symlink(target, join(scratchDir, "ls-out"));
-		const result = await lsTool.execute({ path: "scratch://ls-out" }, c);
-		expect(result.isError).toBe(true);
-		expect(textOf(result)).toMatch(/临时目录外面/);
-	} finally {
-		await rm(join(scratchDir, "ls-out"), { force: true });
-		await rm(target, { recursive: true, force: true });
-	}
-});
-
-it("没有路由的环境（直接调工具）把地址当普通路径", async () => {
-	const result = await readTool.execute({ path: "scratch://x" } as never, { cwd: root, state: new Map() });
-	expect(result.isError).toBe(true);
-	expect(textOf(result)).toMatch(/File not found/);
 });
 
 it("artifact://：同一段原文换回同一个地址；每个会话最多 30 份，超了丢最旧的；取不到时说是重开过", async () => {

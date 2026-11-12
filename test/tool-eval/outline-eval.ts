@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { streamAssistant } from "../../packages/core/llm/src/ai/index.ts";
 import type { AssistantMessage, JsonSchema, Message, ToolSpec } from "../../packages/core/llm/src/types.ts";
 import { readTool } from "../../packages/builtin/tools/src/tools/read.ts";
+import { withFiles } from "../../packages/builtin/tools/test/files.ts";
 import { loadModel } from "./model.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
 	let bodyProbes = 0;
 
 	for (const probe of PROBES) {
-		const ctx = { cwd: ROOT, state: new Map<string, unknown>() };
+		const ctx = withFiles({ cwd: ROOT, state: new Map<string, unknown>() });
 		const first = await readTool.execute({ path: probe.file }, ctx);
 		if (first.isError || !(first.details as { outlined?: boolean } | undefined)?.outlined) {
 			console.log(`${probe.id.padEnd(20)} ${"—".padEnd(10)} 文件不出结构视图，跳过`);

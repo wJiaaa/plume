@@ -9,6 +9,8 @@ import type {
 	ApprovalContent,
 	ApprovalDecision,
 	BackgroundChannel,
+	PluginResources,
+	PluginWorkspace,
 	SessionAccess,
 	SessionWakeup,
 	ShellInfo,
@@ -17,7 +19,6 @@ import type {
 	ToolOutput,
 	ToolRun,
 } from "@plume/contract";
-import type { ResourceRouter } from "../resources/router.ts";
 
 type ToolContent = { type: "text"; text: string };
 
@@ -43,17 +44,17 @@ export interface ToolContext {
 	scratchDir?: string;
 	/** 同一脉的会话（子会话、分叉、建议开出的新会话）的临时目录（`ToolRun.scratchDirs`），写不用问人；不给时只算 `scratchDir`，见 `scratchDirsOf`。 */
 	scratchDirs?: readonly string[];
-	/** 资源地址（`scratch://` 之类，见 `resources/`）；不给时地址都按普通路径读。 */
-	resources?: ResourceRouter;
+	/** 登记着的资源地址（`scratch://` 之类，`ctx.resources.list()`）：认出一个参数是不是地址。不给时地址都按普通路径读（直接调工具的测试）。 */
+	resources?: Pick<PluginResources, "list">;
+	/** 经本体读（`ToolRun.files`）：路径能不能读、要不要问人，地址读到什么，都在那里。 */
+	files: ToolRun["files"];
+	/** 项目里 git 认为该看的文件（`ctx.workspace.files`）；不在仓库里是 null，工具自己走目录。 */
+	projectFiles: PluginWorkspace["files"];
 	signal?: AbortSignal;
 	/** 按会话记的状态（读过哪些文件之类），会话结束前一直在。 */
 	state: Map<string, unknown>;
-	/** 问人要不要做这件事；不给就是没人可问。 */
+	/** 问人要不要做这件事（写、改、跑命令）；不给就是没人可问。读的问人在 `files` 里。 */
 	requestApproval?: (request: ApprovalContent) => Promise<ApprovalDecision>;
-	/** 这一轮明确交给它看的工作区外的文件（拖进来的附件）。 */
-	allowedPaths?: ReadonlySet<string>;
-	/** 同一个项目的其他源码目录，读它们不用问。 */
-	projectRoots?: readonly string[];
 	/** 命令照哪个 shell 写（`ToolRun.shell()`，会话宣布的那一档）；不给时按这台机器的默认 shell 读（测试里直接调）。 */
 	shell?: Pick<ShellInfo, "kind">;
 	/** 跑命令（`ToolRun.exec`）：沙箱档由本体按权限模式定。不给就跑不了命令。 */
@@ -91,25 +92,25 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	execute(args: TArgs, ctx: ToolContext): Promise<ToolResult>;
 }
 
-/** 工具执行时插件给它的东西：按会话记的状态。 */
+/** 工具执行时插件给它的东西：按会话记的状态，本体给的资源地址和项目文件清单。 */
 export interface ToolEnv {
 	dataDir?: string;
-	resources?: ResourceRouter;
+	resources: Pick<PluginResources, "list">;
+	workspace: PluginWorkspace;
 	state(sessionId: string): Map<string, unknown>;
 	/** 读、取消会话里的唤醒（插件的 `ctx.sessions`）。 */
 	sessions?: Pick<SessionAccess, "wakeups" | "cancelWakeup">;
 }
 
-/** 文件工具和公开读取授权服务使用同一份会话环境，批准入口及状态不能另起一份。 */
-export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
+function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 	return {
 		cwd: run.cwd,
-		projectRoots: run.projectRoots,
-		...(run.allowedPaths ? { allowedPaths: new Set(run.allowedPaths) } : {}),
 		sessionId: run.sessionId,
 		scratchDir: run.scratchDir,
 		...(run.scratchDirs ? { scratchDirs: run.scratchDirs } : {}),
-		...(env.resources ? { resources: env.resources } : {}),
+		resources: env.resources,
+		files: run.files,
+		projectFiles: (root) => env.workspace.files(root),
 		...(env.dataDir ? { dataDir: env.dataDir } : {}),
 		signal: run.signal,
 		state: env.state(run.sessionId),

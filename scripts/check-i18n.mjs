@@ -29,7 +29,7 @@ import { chineseFindings } from "../packages/sdk/plugin-sdk/lib/lint/i18n.mjs";
 const root = resolve(import.meta.dirname, "..");
 
 /** 扫描的目录：所有会把文字放到人眼前的代码。市场插件在插件仓库里，由它自己的检查（插件 SDK 的同一条规则）管。 */
-const SCANNED = ["apps/desktop/src", "packages/client", "packages/core/agent/src", "packages/builtin", "packages/testing"];
+const SCANNED = ["apps/desktop/src", "packages/client", "packages/core/agent/src", "packages/core/workspace/src", "packages/builtin", "packages/testing"];
 
 /**
  * 内容本身就是中文的文件。

@@ -106,6 +106,12 @@ Set zoom (0.25–3) and/or width and height in CSS pixels (240–3840 × 240–2
 
 {"type":"object","properties":{"tabId":{"type":"string"},"zoom":{"type":"number"},"width":{"type":"number"},"height":{"type":"number"},"reset":{"type":"boolean"}},"additionalProperties":false}
 
+## recall
+
+Search this session's full transcript, including what compaction removed: an earlier request's exact wording, a file's earlier contents, a command's exact output. Case-insensitive; every space-separated term must appear in the message. A long message is quoted as its opening, the passages around your terms and its ending — search again with a term from another part to see that part. Images cannot be replayed; ask the user to resend one.
+
+{"type":"object","properties":{"query":{"type":"string","description":"Terms that must all appear. Start with one distinctive word; add terms only if there are too many results."},"limit":{"type":"number","description":"Maximum messages to return (default 8, max 20)."},"offset":{"type":"number","description":"Newest matches to skip, to page backwards. Each answer's footer gives the offset of the next page."}},"required":["query"],"additionalProperties":false}
+
 ## submit_plan
 
 Submit the plan for the user to approve. Available in plan mode only. Submit it only when it is decision complete: whoever carries it out has nothing left to decide. It is not a task list. Approval turns plan mode off. If the user asks for changes, submit a complete replacement.
@@ -219,12 +225,6 @@ Search the web for pages: titles, snippets and URLs. Read one with web_fetch.
 Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.
 
 {"type":"object","properties":{"url":{"type":"string","description":"Absolute http(s) URL."},"format":{"type":"string","enum":["text","raw"],"description":"Output format. Default text."}},"required":["url"],"additionalProperties":false}
-
-## recall
-
-Search this session's full transcript, including what compaction removed: an earlier request's exact wording, a file's earlier contents, a command's exact output. Case-insensitive; every space-separated term must appear in the message. A long message is quoted as its opening, the passages around your terms and its ending — search again with a term from another part to see that part. Images cannot be replayed; ask the user to resend one.
-
-{"type":"object","properties":{"query":{"type":"string","description":"Terms that must all appear. Start with one distinctive word; add terms only if there are too many results."},"limit":{"type":"number","description":"Maximum messages to return (default 8, max 20)."},"offset":{"type":"number","description":"Newest matches to skip, to page backwards. Each answer's footer gives the offset of the next page."}},"required":["query"],"additionalProperties":false}
 
 ## task
 

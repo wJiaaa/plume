@@ -2106,6 +2106,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					// 只有顶层会话的任务算在等：结果经那次调用的送达渠道送回来，渠道作废（人按停、撤回）就不再算。子会话没有渠道。
 					track: (plugin, toolCallId, job) =>
 						jobs.track(sessionId, plugin, job, session.summary.kind === "top" ? background.channel(sessionId, toolCallId, plugin).signal : undefined),
+					files: (call) => host.workspace.files(call),
 					started: (toolCallId) => {
 						const at = Date.now();
 						session.startedAt.set(toolCallId, at);

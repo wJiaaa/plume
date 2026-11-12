@@ -13,6 +13,7 @@ import { findEditMatch } from "../../src/tools/edit-match.ts";
 import { editTool } from "../../src/tools/edit.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("");
 
@@ -21,7 +22,7 @@ async function edited(content: string, oldString: string, newString: string) {
 	onTestFinished(() => rm(dir, { recursive: true, force: true }));
 	const file = join(dir, "sample.txt");
 	await writeFile(file, content, "utf8");
-	const ctx: ToolContext = { cwd: dir, state: new Map() };
+	const ctx: ToolContext = withFiles({ cwd: dir, state: new Map() });
 	await readTool.execute({ path: file } as never, ctx);
 	const result = await editTool.execute({ path: file, old_string: oldString, new_string: newString }, ctx);
 	return { result, text: await readFile(file, "utf8"), file, ctx };

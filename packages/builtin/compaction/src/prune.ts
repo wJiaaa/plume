@@ -86,7 +86,7 @@ export function allowance(sizes: readonly number[], budget: number): number {
 	return Number.POSITIVE_INFINITY;
 }
 
-/** 把剪掉的原文存起来，换回一个地址（服务 `resources` 的 `keepArtifact`）。不给时剪掉的就只在会话里。 */
+/** 把剪掉的原文存起来，换回一个地址（`ctx.resources.keepArtifact`）。不给时剪掉的就只在会话里。 */
 export interface ArtifactSink {
 	keep(tool: string, content: string): string;
 }

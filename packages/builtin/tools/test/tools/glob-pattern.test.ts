@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { globToRegExp, globTool } from "../../src/tools/glob.ts";
+import { withFiles } from "../files.ts";
 
 it("字符类匹配其中一个成员、一个范围，或除它们以外的任意字符", () => {
 	const cases: [pattern: string, path: string, matches: boolean][] = [
@@ -44,7 +45,7 @@ it("glob 经字符类找到文件", async () => {
 	await writeFile(join(dir, "src", "files", "PreviewCard.tsx"), "");
 	await writeFile(join(dir, "src", "files", "Other.tsx"), "");
 
-	const res = await globTool.execute({ pattern: "src/**/*[Pp]review*" }, { cwd: dir, state: new Map() });
+	const res = await globTool.execute({ pattern: "src/**/*[Pp]review*" }, withFiles({ cwd: dir, state: new Map() }));
 	const text = res.content.map((part) => part.text).join("");
 	expect(text).toBe("src/files/PreviewCard.tsx");
 });

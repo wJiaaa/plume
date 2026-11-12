@@ -4,14 +4,14 @@
 
 ## 资源地址
 
-read、ls 除了文件路径，还认 `scheme://路径`（末尾可带 `:10-40` 只要这几行，光写 `scheme://` 列出里面有什么）；地址清单经 `model.context` 写进系统提示词的 `resources` 段。自带四种：
+read、ls 除了文件路径，还认 `scheme://路径`（末尾可带 `:10-40` 只要这几行，光写 `scheme://` 列出里面有什么）；地址清单经 `model.context` 写进系统提示词的 `resources` 段。地址和读边界归本体（`run.files.read`、`ctx.resources`），本体自带四种：
 
 - `scratch://`：会话的临时目录（宿主给的 `run.scratchDir`，会话删掉时一起删）。唯一可写的地址，write、edit 都认；临时目录里指向外面的软链读写都拒。用绝对路径读写这个目录也不问人。
 - `artifact://<id>`：被剪掉的大块输出，按会话存在内存里（最多 30 份），重开应用后就没有了。
 - `session://<id>`：另一次会话的转录，一条消息一行，工具调用只留名字；`session://` 列出最近的会话（不含当前的、归档的和子会话）。
 - `plugin://<插件名>`：插件的 README，没有就给 `package.json` 里的版本和说明；`plugin://<插件名>/<路径>` 读它目录里的文件。
 
-后三种的内容不是这个项目写的，read 把它包进 `<resource origin="…">`。插件提供公开服务 `resources`：`register(handler)` 加只读的 scheme（技能插件的 `skill://`），`keepArtifact(sessionId, tool, content)` 把大块原文存成 `artifact://` 地址。
+后三种的内容不是这个项目写的，read 把它包进 `<resource origin="…">`。别的插件经 `ctx.resources.register(handler)` 加只读的 scheme（技能插件的 `skill://`）。
 
 ## 文件交付记录
 

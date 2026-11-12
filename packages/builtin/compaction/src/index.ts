@@ -20,10 +20,8 @@ const INNER = 1000;
 export default {
 	name: "plume.compaction",
 	// 剪掉的原文经它存起来，占位标记里的 `artifact://` 地址才取得回来。
-	inject: ["resources"],
 	apply(ctx) {
-		const resources = ctx.use("resources");
-		const artifactsFor = (sessionId: string): ArtifactSink => ({ keep: (tool, content) => resources.keepArtifact(sessionId, tool, content) });
+		const artifactsFor = (sessionId: string): ArtifactSink => ({ keep: (tool, content) => ctx.resources.keepArtifact(sessionId, tool, content) });
 		const modelsFor = (sessionId: string): Models => ({
 			complete: (request) => ctx.model.complete({ sessionId, ...request }),
 			// 分叉沿用上一次主请求的系统提示词和模型，这两项宿主不看。

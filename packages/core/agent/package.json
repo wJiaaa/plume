@@ -16,7 +16,8 @@
     "@plume/document-text": "workspace:*",
     "@plume/llm": "workspace:*",
     "@plume/platform": "workspace:*",
-    "@plume/sandbox": "workspace:*"
+    "@plume/sandbox": "workspace:*",
+    "@plume/workspace": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

@@ -48,6 +48,10 @@
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts"],
     },
+    "packages/core/workspace": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+    },
     // 模型调用包保持它自己的写法（见它的 README），它的死代码不归这里管。
     "packages/core/llm": {
       "ignore": ["**"],

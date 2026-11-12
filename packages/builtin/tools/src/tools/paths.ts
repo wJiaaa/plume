@@ -21,7 +21,7 @@ export function scratchDirsOf(ctx: Pick<ToolContext, "scratchDir" | "scratchDirs
  * 一次看起来和别的调用没两样的调用就能改掉自己的权限。工作区本身在这些目录下的照样能写，同一脉的会话的临时目录（`scratchDirs`，见 `scratchDirsOf`）也能写；
  * 别的会话的临时目录不行：那是别的对话的草稿和原始输出。
  *
- * 附件（`ToolContext.allowedPaths`）不算：拖一个文件进来是「看看这个」，不是「可以改它」。
+ * 附件（`ToolRun.allowedPaths`）不算：拖一个文件进来是「看看这个」，不是「可以改它」。
  */
 export function resolveWorkspacePath(cwd: string, input: string, scratchDirs: readonly string[] = []): string {
 	if (!input || typeof input !== "string") throw new Error("A path is required.");
@@ -57,7 +57,7 @@ export function toAbsolute(cwd: string, input: string): string {
  *
  * Pure, with the home and temp directories handed in, so it can be tested on any platform.
  */
-export function windowsSpelling(input: string, homeDir: string, tempDir: string): string {
+function windowsSpelling(input: string, homeDir: string, tempDir: string): string {
 	const drive = /^(?:\/cygdrive)?\/([a-zA-Z])(?=\/|$)(.*)$/.exec(input);
 	if (drive) return `${drive[1]!.toUpperCase()}:\\${drive[2]!.replace(/^[/]/, "").replaceAll("/", "\\")}`;
 	const temp = /^\/tmp(?=\/|$)(.*)$/.exec(input);

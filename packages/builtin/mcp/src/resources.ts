@@ -1,5 +1,5 @@
 /**
- * MCP 服务声明的资源经资源地址 `mcp://` 给模型读（服务 `resources`，见 `@plume/contract` 的 resources.ts）。
+ * MCP 服务声明的资源经资源地址 `mcp://` 给模型读（`ctx.resources`，见 `@plume/contract` 的 resources.ts）。
  *
  * MCP 有 tools 和 resources 两半：一台提供「当前值班表」「昨天的构建日志」的服务，工具能调，资源也该读得到。
  * `mcp://` 列出连着的服务声明的资源，`mcp://<服务>/<资源 uri>` 读其中一个；`<服务>` 是工具名 `mcp__<服务>__<工具>` 里的那一段。

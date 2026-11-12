@@ -9,6 +9,7 @@ import { expect, it } from "vitest";
 import type { SessionWakeup, WakeupInput } from "@plume/contract";
 import { MAX_WAKEUPS, cronListTool, scheduleWakeupTool, wakeupMessage, WAKEUP_TOOLS } from "../../src/tools/wakeups.ts";
 import type { ToolContext } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const cronCreateTool = WAKEUP_TOOLS.find((tool) => tool.name === "cron_create")!;
 const cronDeleteTool = WAKEUP_TOOLS.find((tool) => tool.name === "cron_delete")!;
@@ -18,7 +19,7 @@ const MINUTE = 60_000;
 function fakeCore(options: { never?: boolean } = {}) {
 	const made: WakeupInput[] = [];
 	const table: SessionWakeup[] = [];
-	const ctx: ToolContext = {
+	const ctx: ToolContext = withFiles({
 		cwd: "/",
 		state: new Map(),
 		schedule: (wake) => {
@@ -48,7 +49,7 @@ function fakeCore(options: { never?: boolean } = {}) {
 				return true;
 			},
 		},
-	};
+	});
 	return { ctx, made, table };
 }
 
@@ -77,7 +78,7 @@ it("每个会话最多 10 个；子会话（没有 schedule）里拒绝", async 
 	expect(textOf(full)).toMatch(/already has 10.*cron_delete/);
 	expect(textOf(await cronDeleteTool.execute({ id: "wake-3" }, core.ctx))).toBe("Cancelled wake-3.");
 	expect((await cronDeleteTool.execute({ id: "wake-3" }, core.ctx)).isError).toBe(true);
-	const child = await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: "x", reason: "y" }, { cwd: "/", state: new Map() });
+	const child = await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: "x", reason: "y" }, withFiles({ cwd: "/", state: new Map() }));
 	expect(textOf(child)).toMatch(/Only the conversation itself can schedule wakeups/);
 });
 
@@ -99,7 +100,7 @@ it("cron_list 列出待触发的", async () => {
 	const core = fakeCore();
 	await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: "看 CI", reason: "等 CI" }, core.ctx);
 	expect(textOf(await cronListTool.execute({}, core.ctx))).toMatch(/wake-1: one-time wakeup, next .* — 等 CI/);
-	expect(textOf(await cronListTool.execute({}, { cwd: "/", state: new Map() }))).toBe("No pending wakeups or cron jobs in this conversation.");
+	expect(textOf(await cronListTool.execute({}, withFiles({ cwd: "/", state: new Map() })))).toBe("No pending wakeups or cron jobs in this conversation.");
 });
 
 const base: SessionWakeup = {

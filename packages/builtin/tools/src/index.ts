@@ -2,25 +2,22 @@
  * 工具：read、write、edit、ls、glob、grep、bash、bash_output、monitor（见 `tools.ts`），和定时唤醒 schedule_wakeup、cron_create、cron_list、
  * cron_delete（见 `tools/wakeups.ts`）。monitor 和定时唤醒只列给顶层会话。命令经本体的 `ToolRun.exec` 跑，沙箱档由本体按权限模式定；
  * 后台任务经 `ToolRun.track` 登记进本体，定时唤醒经 `ToolRun.schedule` 交给本体调度。
- * 提供服务 `file.changes`（改动快照和撤销）、`file.read`（读取授权）、`project.files`（项目里该看哪些文件）、`resources`（资源地址，见 `resources/`）；
- * 地址清单经 `model.context` 加成系统提示词的 `resources` 段。
+ * 读文件经本体的 `ToolRun.files`（读边界、问人、资源地址），项目文件清单用本体的 `ctx.workspace.files`。
+ * 提供服务 `file.changes`（改动快照和撤销）；
+ * 本体登记着的资源地址（`ctx.resources.list()`）经 `model.context` 写成系统提示词的 `resources` 段。
  *
  * 状态按会话放在内存里（读过哪些文件、后台任务的输出读到哪了）：会话删掉时清掉。后台任务的进程由本体按登记停（删会话、退出应用、本插件停用）。
  */
 
 import type { Plugin, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
 import { setLocaleSource, words } from "./messages.ts";
-import { ArtifactStore, artifactResource, pluginResource, scratchResource, sessionResource } from "./resources/handlers.ts";
-import { readOnly, ResourceRouter } from "./resources/router.ts";
 import { TOOLS } from "./tools.ts";
 import { WAKEUP_TOOLS } from "./tools/wakeups.ts";
 import { setDataDir } from "./tools/home.ts";
 import { beginPrompt, waitForChangesIdle } from "./tools/change-lock.ts";
 import { createFileChangesService, removeFileChanges } from "./tools/file-changes.ts";
-import { gitListedFiles } from "./tools/project-files.ts";
-import { authorizeRead } from "./tools/read-access.ts";
 import { translatedShellCommand } from "./tools/reroute.ts";
-import { toDefinition, toolContext } from "./tools/types.ts";
+import { toDefinition } from "./tools/types.ts";
 
 /** 只列给顶层会话的工具，见 `model.context` 那一层。 */
 const TOP_LEVEL_ONLY = new Set(["monitor", ...WAKEUP_TOOLS.map((tool) => tool.name)]);
@@ -38,18 +35,9 @@ export default {
 			return found;
 		};
 		ctx.provide("file.changes", createFileChangesService(ctx.dataDir, ctx.sessions));
-		ctx.provide("project.files", { list: gitListedFiles });
 
-		const resources = new ResourceRouter();
-		const artifacts = new ArtifactStore();
-		for (const handler of [scratchResource, artifactResource(artifacts), sessionResource(ctx.sessions), pluginResource(() => ctx.plugins.list())])
-			resources.register(handler);
-		ctx.provide("resources", {
-			register: (handler) => resources.register(readOnly(handler)),
-			keepArtifact: (sessionId, tool, content) => artifacts.keep(sessionId, tool, content),
-		});
 		ctx.hook("model.context", async (input, next) => {
-			const text = addressesSection(resources.schemes());
+			const text = addressesSection(ctx.resources.list());
 			/*
 			 * 子会话和插件的独立会话拿不到后台送达的渠道（`ToolRun.background`），monitor 和定时唤醒在那里送不出任何东西：不列给模型，而不是等它调了再报错——
 			 * 没见过的工具模型不会要，一个错误却要白花一轮才知道此路不通。
@@ -70,15 +58,13 @@ export default {
 			},
 			{ order: -10_000 },
 		);
-		const env = { state, dataDir: ctx.dataDir, resources, sessions: ctx.sessions };
-		ctx.provide("file.read", { authorize: (run, path) => authorizeRead(toolContext(run, env), path) });
+		const env = { state, dataDir: ctx.dataDir, resources: ctx.resources, workspace: ctx.workspace, sessions: ctx.sessions };
 		const own = new Map([...TOOLS, ...WAKEUP_TOOLS].map((tool) => [tool.name, toDefinition(tool, env)]));
 		for (const definition of own.values()) ctx.tools.register(definition.name === "bash" ? withShortcut(definition, own, ctx.name) : definition);
 
 		ctx.sessions.onDeleted(async (sessionId) => {
 			const found = states.get(sessionId);
 			states.delete(sessionId);
-			artifacts.forget(sessionId);
 			await removeFileChanges(ctx.dataDir, sessionId, found);
 		});
 		ctx.effect(async () => {

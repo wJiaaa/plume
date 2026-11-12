@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { grepTool } from "../../src/tools/grep.ts";
 import type { ToolResult } from "../../src/tools/types.ts";
+import { withFiles } from "../files.ts";
 
 const SOURCE = ["const handler = onEvent(event) => run(event);", 'const pattern = "*.ts";', "function runAll() { return handler; }"].join("\n");
 
@@ -33,7 +34,7 @@ function withoutRipgrep(): void {
 	});
 }
 
-const ctx = (cwd: string) => ({ cwd, state: new Map<string, unknown>() });
+const ctx = (cwd: string) => withFiles({ cwd, state: new Map<string, unknown>() });
 const textOf = (res: ToolResult) => res.content.map((part) => part.text).join("");
 
 for (const fallback of [false, true]) {
