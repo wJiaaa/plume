@@ -12,7 +12,7 @@ export default {
 			const words = MESSAGES[ctx.locale()];
 			if (typeof sessionId !== "string" || !sessionId) throw new Error(words.missingSession);
 			if (!Number.isSafeInteger(timestamp) || !Number.isFinite(new Date(timestamp).getTime())) throw new Error(words.missingTurn);
-			const session = (await ctx.sessions.list()).find((entry) => entry.id === sessionId);
+			const session = await ctx.sessions.get(sessionId);
 			if (!session) throw new Error(words.missingSession);
 			const messages = deliveryMessages(await ctx.sessions.messages(sessionId), timestamp, ctx.locale());
 			return { session, messages };

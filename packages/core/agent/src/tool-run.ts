@@ -16,6 +16,7 @@ import type {
 	Log,
 	ParentSession,
 	PermissionMode,
+	SessionScope,
 	ToolExecution,
 	ToolOutput,
 	ToolRun,
@@ -45,6 +46,8 @@ const DECLINED =
 
 export interface ToolScope {
 	sessionId: string;
+	/** 调用所在的会话（`ToolRun.session`、各钩子输入的 `session`），这一轮里不变。 */
+	session: SessionScope;
 	cwd: string;
 	projectRoots?: readonly string[];
 	/** 人拖进来的文件（`ToolRun.allowedPaths`），每个调用执行前读一次：这一轮中途排进来的话带着的附件也算。 */
@@ -245,6 +248,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			"tool.approve",
 			{
 				sessionId: from.sessionId,
+				session: structuredClone(scope.session),
 				cwd: from.cwd,
 				...(scope.scratchDirs ? { scratchDirs: scope.scratchDirs() } : {}),
 				call: from.call,
@@ -266,6 +270,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	};
 	const execution: ToolExecution = {
 		sessionId: scope.sessionId,
+		session: structuredClone(scope.session),
 		cwd: scope.cwd,
 		call: { id: call.id, name: call.name, args: call.arguments },
 		tool: { name: tool.definition.name, mutating: tool.definition.mutating === true, plugin: tool.plugin },
@@ -291,6 +296,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			const allowedPaths = (await scope.allowedPaths?.()) ?? [];
 			const run: ToolRun = {
 				sessionId: input.sessionId,
+				session: structuredClone(scope.session),
 				toolCallId: call.id,
 				cwd: input.cwd,
 				scratchDir: scope.scratchDir,

@@ -86,6 +86,7 @@ export function compactInput(history: Message[], extra: Partial<ContextCompact> 
 	const events: CompactionProgress[] = [];
 	return {
 		sessionId: "s",
+		session: { id: "s", kind: "top" },
 		cwd: "/repo",
 		model: { id: "fake/model", name: "Fake", contextWindow: 10_000, maxOutputTokens: 1000 },
 		history,

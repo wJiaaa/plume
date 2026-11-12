@@ -33,7 +33,7 @@ export const RECENT_LIMIT = 5;
 /** 最近的会话：侧栏里看得到的那些（不含归档的、子会话和插件的独立会话），按最后活动排。 */
 export function recentSessions(sessions: readonly SessionSummary[]): SessionSummary[] {
 	return sessions
-		.filter((session) => !session.archived && !session.parentId && !session.owner)
+		.filter((session) => !session.archived && session.kind === "top")
 		.sort((a, b) => b.updatedAt - a.updatedAt)
 		.slice(0, RECENT_LIMIT);
 }

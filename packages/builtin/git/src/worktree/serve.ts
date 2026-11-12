@@ -89,7 +89,7 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 		return next;
 	};
 
-	const summaryOf = async (sessionId: string) => (await ctx.sessions.list()).find((summary) => summary.id === sessionId);
+	const summaryOf = (sessionId: string) => ctx.sessions.get(sessionId);
 	const running = async (sessionId: string) => (await summaryOf(sessionId))?.running === true;
 
 	/** 自动清理：只在开着时、每建成一棵之后跑；没归档的对话在用的不收。 */
@@ -105,12 +105,12 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 
 	/** 会话第一轮：要工作树、项目是仓库，就开一棵。返回会话该去的目录，不换就是 undefined。 */
 	const open = async (input: PromptSubmit): Promise<string | undefined> => {
-		const summary = await summaryOf(input.sessionId);
-		// 子会话的目录随父会话；不属于项目的聊天没有开关，也不开。
-		if (!summary || summary.parentId || !summary.project) return undefined;
+		const { session } = input;
+		// 子会话的目录随父会话，插件的独立会话不换目录；不属于项目的聊天没有开关，也不开。
+		if (session.kind !== "top" || !session.project) return undefined;
 		const settings = await store.settings();
 		let want: boolean;
-		if (summary.spawnedFrom) want = requested.delete(originKey(summary.spawnedFrom.sessionId, summary.spawnedFrom.toolCallId ?? ""));
+		if (session.spawnedFrom) want = requested.delete(originKey(session.spawnedFrom.sessionId, session.spawnedFrom.toolCallId ?? ""));
 		// 插件开的、没记来处的（定时任务到点开的）：没人替它选过，输入框上的开关也不是给它的。
 		else if (input.launched) want = false;
 		else {

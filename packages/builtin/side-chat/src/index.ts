@@ -152,7 +152,7 @@ export default {
 			}
 			const verdict = await next(input);
 			if (verdict.block) return verdict;
-			const parent = (await ctx.sessions.list()).find((summary) => summary.id === parentId);
+			const parent = await ctx.sessions.get(parentId);
 			// 这一问还没写进去：已有几条就是它的位置。
 			const at = (await ctx.sessions.messages(input.sessionId)).length;
 			const log = marks.get(input.sessionId) ?? [];
@@ -254,7 +254,7 @@ export default {
 						const result = (await ctx.sessions.messages(side)).find((message) => message.role === "toolResult" && message.toolCallId === callId);
 						const details = result?.role === "toolResult" ? result.details : undefined;
 						if (!isDispatchSuggestion(details)) throw new Error(MESSAGES[ctx.locale()].dispatchGone);
-						const parent = (await ctx.sessions.list()).find((summary) => summary.id === parentId);
+						const parent = await ctx.sessions.get(parentId);
 						if (!parent) throw new Error(MESSAGES[ctx.locale()].missing);
 						// 开在主会话的项目里；不在项目里的聊天开在它的目录里。新会话看不到侧边聊天，第一句就是那条自成一体的指令。
 						const { session } = await ctx.sessions.launch({

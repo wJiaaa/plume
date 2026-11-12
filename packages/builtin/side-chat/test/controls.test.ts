@@ -108,6 +108,7 @@ async function fixture(t: TestContext) {
 		serve: (value: SideChatApi) => void (api = value),
 		sessions: {
 			list: async () => structuredClone(summaries),
+			get: async (id: string) => structuredClone(summaries.find((summary) => summary.id === id)),
 			messages: async (id: string) => (id === "side" ? structuredClone(messages) : []),
 			onDeleted() {},
 			async launch(options: SessionLaunch) {

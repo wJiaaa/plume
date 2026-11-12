@@ -30,6 +30,7 @@ import type {
 import type { AssistantContent } from "@plume/llm/types";
 import type { ContextRecord } from "./compaction.ts";
 import { text } from "./i18n.ts";
+import { kindOf } from "./session-scope.ts";
 import { billedParts, diagnoseCache, type PreviousRequest, type SpendNote, TOKEN_PARTS, thinkingMs } from "./usage-record.ts";
 
 /**
@@ -285,7 +286,10 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			const rows = db
 				.prepare("SELECT summary, (SELECT COUNT(*) FROM records r WHERE r.session_id = s.id) AS n FROM sessions s ORDER BY updated_at DESC")
 				.all() as { summary: string; n: number }[];
-			return rows.map((row) => ({ ...(JSON.parse(row.summary) as SessionSummary), messageCount: Number(row.n), running: false }));
+			return rows.map((row) => {
+				const summary = JSON.parse(row.summary) as SessionSummary;
+				return { ...summary, kind: kindOf(summary), messageCount: Number(row.n), running: false };
+			});
 		},
 		queues() {
 			const rows = db.prepare("SELECT session_id, entries FROM queue").all() as { session_id: string; entries: string }[];
@@ -538,9 +542,9 @@ export function protectSource(source: string, destination: string): void {
 	}
 }
 
-/** 存下来的摘要不带 `running`、`background`：重开以后没有在跑的会话，也没有在等的后台运行。 */
+/** 存下来的摘要不带 `running`、`background`：重开以后没有在跑的会话，也没有在等的后台运行；`kind` 读回来时现算。 */
 function stored(summary: SessionSummary): string {
-	const { running: _running, background: _background, ...rest } = summary;
+	const { running: _running, background: _background, kind: _kind, ...rest } = summary;
 	return JSON.stringify(rest);
 }
 

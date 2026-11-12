@@ -430,6 +430,7 @@ test("嵌入资源里的 image/* 按图的规则，别的二进制写一句说�
 function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 	return {
 		sessionId,
+		session: { id: sessionId, kind: "top" },
 		toolCallId: "call",
 		cwd: "/",
 		scratchDir: join(tmpdir(), "plume-mcp-test-scratch", sessionId),

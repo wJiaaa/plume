@@ -64,6 +64,7 @@ async function setup() {
 	let decision: ApprovalDecision = "reject";
 	const run: ToolRun = {
 		sessionId: "session",
+		session: { id: "session", kind: "top" },
 		toolCallId: "call",
 		cwd,
 		projectRoots: [shared],

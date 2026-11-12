@@ -15,6 +15,7 @@ import type {
 	PermissionMode,
 	Personalization,
 	OutgoingMessage,
+	SessionKind,
 	SessionSummary,
 	ThinkingLevel,
 	TurnStop,
@@ -58,12 +59,28 @@ export interface ToolOutput {
 	uneventful?: boolean;
 }
 
+/**
+ * 钩子输入和 `ToolRun` 上的 `session`：这次调用、这一步、这次请求所在的会话是哪一种、挂在哪，本体照实填。
+ * 只想知道「是不是侧栏里的会话、是不是自己的子会话」时看它，不用为此去 `ctx.sessions.list()`。
+ * 字段的意思同 `SessionSummary` 上的同名字段；`id` 就是 `sessionId`。
+ */
+export interface SessionScope {
+	id: string;
+	kind: SessionKind;
+	parentId?: string;
+	owner?: string;
+	spawnedFrom?: { sessionId: string; toolCallId?: string };
+	project?: string;
+}
+
 /** 审批卡上写什么，见 `ApprovalRequest`。`expiresAt` 由本体弹卡时定。 */
 export type ApprovalContent = Omit<ApprovalRequest, "toolCallId" | "tool" | "expiresAt">;
 
 /** 工具执行时拿到的环境。 */
 export interface ToolRun {
 	sessionId: string;
+	/** 调用所在的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	/** 这次调用的 id（和 `calls` 里的、工具结果的 `toolCallId` 是同一个）：从这次调用开出去的会话记在 `SessionLaunch.spawnedFrom` 里。 */
 	toolCallId: string;
 	cwd: string;
@@ -228,6 +245,8 @@ export interface ToolDefinition {
 /** 钩子 tool.execute 的输入。 */
 export interface ToolExecution {
 	sessionId: string;
+	/** 调用所在的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	call: ToolCall;
 	/** `plugin` 是注册它的插件（read、write、edit、ls、glob、grep、bash 是内置插件 plume.tools 的）。 */
@@ -274,6 +293,8 @@ export interface PromptSection {
  */
 export interface ModelContext {
 	sessionId: string;
+	/** 这次请求所在的会话，见 `SessionScope`。下面的 `parentId`、`owner` 和它里面的同名字段是同一件事。 */
+	session: SessionScope;
 	/**
 	 * 这个会话挂在哪个会话下面，和 `SessionSummary.parentId` 同一件事：只有插件建的子会话（侧边聊天、子 Agent）有，
 	 * 顶层会话不带这个键。按会话藏工具、改提示词时看它，不用为此去 `ctx.sessions.list()`。
@@ -322,6 +343,8 @@ export interface StepEnd {
 	 */
 	awaiting?: { nudge: string };
 	sessionId: string;
+	/** 这一步所在的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	/** 这一轮的第几步，从 1 数。 */
 	step: number;
@@ -355,6 +378,8 @@ export type StepVerdict =
 /** 钩子 prompt.submit 的输入：一轮开始时，人发来的这条消息还没写进会话。给的是副本，改了不影响会话。 */
 export interface PromptSubmit {
 	sessionId: string;
+	/** 这条消息要进的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	/** 这条消息的文字（命令发出去的是展开后的那段）。 */
 	text: string;
@@ -389,6 +414,8 @@ export type PromptVerdict = { block: true; reason: string } | { block: false; co
  */
 export interface ContextCompact {
 	sessionId: string;
+	/** 要压的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	/**
 	 * 这个会话现在用的模型。`tierLines` 是它的价格分档线（一次请求的输入越过这么多 token，整次按高一档计），从低到高；
@@ -478,6 +505,8 @@ export type CompactSummary =
  */
 export interface ToolApproval {
 	sessionId: string;
+	/** 调用所在的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	/** 这个会话能当草稿区用的临时目录，同 `ToolRun.scratchDirs`；帮我批准把写进、删掉这些里面的东西算作正当干活。 */
 	scratchDirs?: readonly string[];
@@ -505,6 +534,8 @@ export interface ToolApproval {
  */
 export interface SessionRewind {
 	sessionId: string;
+	/** 要截的会话，见 `SessionScope`。 */
+	session: SessionScope;
 	cwd: string;
 	/** 要截掉的那段：从被撤回、编辑的那条人发的消息起到最后，副本。 */
 	messages: Message[];
@@ -838,8 +869,10 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
 export interface SessionAccess {
 	/** 只读观察请求、工具开始、审批、重试和运行状态；副本不含配置密钥，停用时自动撤下。 */
 	observe(listener: (observation: SessionObservation) => void): void;
-	/** 全部会话的摘要（含归档的、子会话），最近活动的在前。 */
+	/** 全部会话的摘要（含归档的、子会话），最近活动的在前。只为找一个会话时用 `get`。 */
 	list(): Promise<SessionSummary[]>;
+	/** 一个会话的摘要；没有这个会话（删掉了、id 不对）时是 undefined。给钩子之外拿不到 `SessionScope` 的地方（`serve` 的方法、事件回调）用。 */
+	get(sessionId: string): Promise<SessionSummary | undefined>;
 	/** 一个会话存下的全部消息，是会话里的原文，不受压缩影响。没有这个会话时抛错。 */
 	messages(sessionId: string): Promise<Message[]>;
 	/**

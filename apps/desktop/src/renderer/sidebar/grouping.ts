@@ -30,7 +30,7 @@ export interface Grouped {
 
 /** 一个项目里还列在侧栏上的会话（含置顶的）：项目菜单的「归档聊天」数的、归档的都是它们。 */
 export function projectSessions(sessions: readonly SessionSummary[], projectId: string): SessionSummary[] {
-	return sessions.filter((session) => session.project === projectId && session.title && !session.parentId && !session.owner && !session.archived);
+	return sessions.filter((session) => session.project === projectId && session.title && session.kind === "top" && !session.archived);
 }
 
 export function groupSessions(
@@ -49,7 +49,7 @@ export function groupSessions(
 	const archivedIn = new Set<string>();
 	for (const session of sessions) {
 		// 子会话（侧边聊天、子 Agent）画在它父会话的面板和卡片里，插件的独立会话画在插件自己的页面里，都不单独成行。
-		if (!session.title || session.parentId || session.owner) continue;
+		if (!session.title || session.kind !== "top") continue;
 		if (session.archived) {
 			if (session.project) archivedIn.add(session.project);
 			continue;

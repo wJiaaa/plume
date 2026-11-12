@@ -114,7 +114,7 @@ export class Registry implements SubagentsApi {
 	}
 
 	async faces(parentId: string): Promise<Face[]> {
-		const cwd = (await this.ctx.sessions.list()).find((session) => session.id === parentId)?.cwd ?? null;
+		const cwd = (await this.ctx.sessions.get(parentId))?.cwd ?? null;
 		return (await this.definitions.list(cwd)).map(({ definition }) => ({ name: definition.name, ...(definition.avatar ? { avatar: definition.avatar } : {}) }));
 	}
 

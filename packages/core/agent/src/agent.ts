@@ -73,6 +73,7 @@ import { lettersText } from "./letters.ts";
 import { HandedTasks } from "./handed.ts";
 import { SessionQueues, childTask } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
+import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
 import { contextBreakdown, type ContextEstimate, estimateContext } from "./context-breakdown.ts";
@@ -368,6 +369,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		// 给副本：插件改了它手上的那份，不影响会话。没打开过的会话直接从库里读、不留在内存里：插件可能一次读几十个旧会话。
 		sessions: {
 			list: async () => structuredClone(summaries()),
+			get: async (sessionId) => {
+				const session = sessions.get(String(sessionId));
+				return session ? structuredClone(session.summary) : undefined;
+			},
 			messages: async (sessionId) => {
 				const session = find(String(sessionId));
 				return structuredClone(session.messages ?? store.messages(session.summary.id));
@@ -383,7 +388,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			},
 			setArchived: async (sessionId, archived) => {
 				const session = find(String(sessionId));
-				if (session.summary.parentId || session.summary.owner) throw new Error(text("session.childArchive"));
+				if (session.summary.kind !== "top") throw new Error(text("session.childArchive"));
 				archive(session, archived === true);
 			},
 			create: async (owner, options) =>
@@ -608,6 +613,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			thinking,
 			messageCount: 0,
 			...extra,
+			kind: kindOf(extra),
 		};
 		store.create(summary);
 		const session: Session = { summary, messages: [], progress: new Map(), startedAt: new Map(), hiccups: [], repetition: new RepetitionWatch() };
@@ -884,7 +890,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	async function rewindFiles(session: Session, index: number, restore: boolean): Promise<RevertPlan> {
 		const messages = structuredClone((await messagesOf(session)).slice(index));
-		const input = { sessionId: session.summary.id, cwd: session.summary.cwd, messages, restore };
+		const input = { sessionId: session.summary.id, session: sessionScope(session.summary), cwd: session.summary.cwd, messages, restore };
 		try {
 			return await host.run("session.rewind", input, async () => ({ files: [], unrecorded: false }));
 		} catch (error) {
@@ -983,6 +989,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const { model } = resolveModel(settings, modelOf(session));
 		const input: ModelContext = {
 			sessionId: session.summary.id,
+			session: sessionScope(session.summary),
 			...(session.summary.parentId === undefined ? {} : { parentId: session.summary.parentId }),
 			...(session.summary.owner === undefined ? {} : { owner: session.summary.owner }),
 			cwd: session.summary.cwd,
@@ -1240,6 +1247,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			"prompt.submit",
 			{
 				sessionId: session.summary.id,
+				session: sessionScope(session.summary),
 				cwd: session.summary.cwd,
 				text: words,
 				attachments: (prompt.attachments ?? []).map((item) => item.name),
@@ -1264,7 +1272,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 这一轮的工具、提示词都现读 `summary.cwd`，从头到尾在新目录里。子会话的目录随父会话，自己不换；插件的独立会话不是人的对话，不换；不是已有目录就不换。
 	 */
 	async function relocate(session: Session, cwd: string): Promise<void> {
-		if (session.summary.parentId || session.summary.owner || cwd === session.summary.cwd) return;
+		if (session.summary.kind !== "top" || cwd === session.summary.cwd) return;
 		const isDirectory =
 			isAbsolute(cwd) &&
 			(await stat(cwd).then(
@@ -1307,7 +1315,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const from = options?.spawnedFrom;
 		if (from !== undefined) {
 			const source = find(String(from?.sessionId));
-			if (source.summary.parentId || source.summary.owner) throw new Error(text("session.nestedChild"));
+			if (source.summary.kind !== "top") throw new Error(text("session.nestedChild"));
 		}
 		const cwd = await existingCwd(options);
 		const title = typeof options?.title === "string" ? options.title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
@@ -1344,7 +1352,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				if (status !== "done" && status !== "failed") throw new Error(text("session.badReportStatus", { status: String(status) }));
 				if (typeof words !== "string" || !words.trim()) throw new Error(text("session.emptyMessage"));
 				const parent = from ? sessions.get(String(from.sessionId)) : undefined;
-				if (reported || quitting || !parent || parent.summary.parentId || parent.summary.owner || parent.summary.archived) return false;
+				if (reported || quitting || !parent || parent.summary.kind !== "top" || parent.summary.archived) return false;
 				// 来处只是插件填的一个 id：交回之前核对它真是本插件的工具在那个会话里的一次调用，插件不能借交回往随便哪个会话里说话。
 				if (!calledBy(parent, from?.toolCallId, owner)) throw new Error(text("session.badSpawnSource", { id: parent.summary.id }));
 				reported = true;
@@ -1405,7 +1413,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (options?.project !== undefined || options?.cwd !== undefined) throw new Error(text("session.childCwd"));
 		await checkChoice(options);
 		const parent = find(String(options?.parentId));
-		if (parent.summary.parentId || parent.summary.owner) throw new Error(text("session.nestedChild"));
+		if (parent.summary.kind !== "top") throw new Error(text("session.nestedChild"));
 		const now = Date.now();
 		const summary: SessionSummary = {
 			id: randomUUID(),
@@ -1420,6 +1428,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			...(options?.model !== undefined ? { model: options.model } : {}),
 			...(options?.thinking !== undefined ? { thinking: options.thinking } : {}),
 			owner,
+			kind: "child",
 		};
 		store.create(summary);
 		sessions.set(summary.id, { summary, messages: [], progress: new Map(), startedAt: new Map(), hiccups: [], repetition: new RepetitionWatch() });
@@ -1570,7 +1579,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function checkIdle(session: Session): void {
 		if (!isIdle(session)) return;
-		if (!session.summary.parentId && !session.summary.owner && session.summary.stop?.reason === "done" && session.idleStop !== session.summary.stop) {
+		if (session.summary.kind === "top" && session.summary.stop?.reason === "done" && session.idleStop !== session.summary.stop) {
 			session.idleStop = session.summary.stop;
 			emit({ type: "idle", sessionId: session.summary.id });
 		}
@@ -1756,8 +1765,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	function postLetter(from: Session, toId: string, input: LetterInput, owner: string): LetterReceipt {
 		const to = sessions.get(String(toId));
 		if (quitting || !sessions.has(from.summary.id)) throw new Error(text("session.parentStopped"));
-		if (!to || to.summary.parentId || to.summary.owner || from.summary.parentId || from.summary.owner || to === from)
-			throw new Error(text("session.badLetterTarget", { id: String(toId) }));
+		if (!to || to.summary.kind !== "top" || from.summary.kind !== "top" || to === from) throw new Error(text("session.badLetterTarget", { id: String(toId) }));
 		const words = typeof input?.text === "string" ? input.text.trim() : "";
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
@@ -1823,6 +1831,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const steps = () =>
 				runSteps({
 					sessionId,
+					session: sessionScope(session.summary),
 					cwd: session.summary.cwd,
 					projectRoots: projectRootsFor(projects, session.summary.cwd, session.summary.project),
 					allowedPaths: () => attachedPaths(session),
@@ -1860,7 +1869,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						emit({ type: "toolStart", sessionId, toolCallId, startedAt: at });
 					},
 					// 后台结果只回顶层会话：插件的子会话、独立会话没人等它们的后台结果，见 `ToolRun.background`。
-					...(session.summary.parentId || session.summary.owner
+					...(session.summary.kind !== "top"
 						? {}
 						: {
 								background: (toolCallId) => background.channel(sessionId, toolCallId),
@@ -1917,8 +1926,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			!controller.signal.aborted &&
 			!quitting &&
 			session.sent !== undefined &&
-			!session.summary.parentId &&
-			!session.summary.owner;
+			session.summary.kind === "top";
 		// 被一条打断的消息接替了：新的一轮紧接着开始，这里不说「停了」，免得界面闪一下「已暂停」。
 		let orphans: UserMessage[] = [];
 		if (session.controller === controller && !idle) {
@@ -2425,6 +2433,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				running: false,
 				forkedFrom: { sessionId },
 				messageCount: kept.length,
+				kind: "top",
 			};
 			store.copy(summary, kept, record);
 			sessions.set(summary.id, { summary, messages: kept, record, progress: new Map(), startedAt: new Map(), hiccups: [], repetition: new RepetitionWatch() });

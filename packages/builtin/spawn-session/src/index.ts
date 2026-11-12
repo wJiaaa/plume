@@ -27,19 +27,14 @@ export default {
 	apply(ctx) {
 		const worktrees = ctx.use("session.worktree");
 		const followers = new Followers({
-			title: async (sessionId) => (await ctx.sessions.list()).find((summary) => summary.id === sessionId)?.title,
+			title: async (sessionId) => (await ctx.sessions.get(sessionId))?.title,
 			warn: (message) => ctx.log.warn(message),
 		});
 		ctx.sessions.onDeleted((sessionId) => followers.deleted(sessionId));
 
-		/** 子会话和插件的独立会话（`owner`，比如 SSH 的运维助手）都不是侧栏里那段对话：不建议新会话，也不归档自己。 */
-		const isChild = async (sessionId: string) => {
-			const self = (await ctx.sessions.list()).find((summary) => summary.id === sessionId);
-			return Boolean(self?.parentId || self?.owner);
-		};
-
+		// 子会话和插件的独立会话（比如 SSH 的运维助手）都不是侧栏里那段对话（`session.kind` 不是 `top`）：不建议新会话，也不归档自己。
 		ctx.hook("model.context", async (input, next) => {
-			if (input.parentId !== undefined || input.owner !== undefined)
+			if (input.session.kind !== "top")
 				return next({ ...input, tools: input.tools.filter((tool) => tool.name !== SPAWN_SESSION && tool.name !== ARCHIVE_SESSION) });
 			return next(input);
 		});
@@ -50,7 +45,7 @@ export default {
 			parameters: SPAWN_SESSION_PARAMETERS,
 			async execute(args, run) {
 				// i18n-exempt：发给模型的话。
-				if (await isChild(run.sessionId))
+				if (run.session.kind !== "top")
 					return { output: "Only a main conversation can suggest a new session; a sub-agent, side chat or plugin-owned session cannot.", isError: true };
 				const suggestion = checkSuggestion(args);
 				if ("error" in suggestion) return { output: suggestion.error, isError: true };
@@ -65,7 +60,7 @@ export default {
 			async execute(args, run) {
 				// 工具表里已经藏起来了；这里再认一次，挡住别的路子把它放回子会话的工具表。本体也只给顶层会话 `archiveAfterTurn`。
 				// i18n-exempt：发给模型的话。
-				if (!run.archiveAfterTurn || (await isChild(run.sessionId)))
+				if (!run.archiveAfterTurn || run.session.kind !== "top")
 					return { output: "Only the conversation itself can archive itself; a sub-agent or plugin-owned session cannot.", isError: true };
 				const checked = checkArchive(args);
 				if ("error" in checked) return { output: checked.error, isError: true };
@@ -94,7 +89,7 @@ export default {
 				});
 			},
 			async offersWorktree(parentId) {
-				const parent = (await ctx.sessions.list()).find((summary) => summary.id === String(parentId));
+				const parent = await ctx.sessions.get(String(parentId));
 				return parent ? offersWorktree(parent) : false;
 			},
 			start(parentId, callId, choice) {
@@ -105,7 +100,7 @@ export default {
 						const already = await startedFrom(String(parentId), String(callId));
 						if (already) return already;
 						const text = MESSAGES[ctx.locale()];
-						const parent = (await ctx.sessions.list()).find((summary) => summary.id === String(parentId));
+						const parent = await ctx.sessions.get(String(parentId));
 						if (!parent) throw new Error(text.parentGone);
 						// 从记录里读，不信界面交来的：开出来的会话照这段话做事。
 						const result = (await ctx.sessions.messages(parent.id)).find((message) => message.role === "toolResult" && message.toolCallId === callId);

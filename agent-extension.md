@@ -260,6 +260,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 - 某一层抛错时，整个钩子失败，不会跳过这一层继续执行。原因是审批、脱敏这类层一旦被跳过，就等于放行或泄露，所以出错时按最严的方式处理。循环会把这次失败转成交给模型的错误结果，这一轮照常继续。
 - `step.end` 失败或交回认不得的结论（漏了 `return`、`say` 不是一句话、`reason` 不认得）时循环按自然结论走（有工具结果就接着做，否则本体决定续写、催一句还是结束），界面提示出错的插件：它只能让循环多做，退回默认不会放过什么。
 - `context.compact` 失败时转录里那一行写「压缩失败」，这一步照常发全文。
+- 每个钩子的输入和工具的 `ToolRun` 都带着 `session`（`SessionScope`：`id`、`kind`、`parentId?`、`owner?`、`spawnedFrom?`、`project?`），本体照会话摘要填。`kind` 是 `top`（侧栏里的会话）、`child`（插件的子会话）、`standalone`（插件的独立会话），由本体按 `parentId`、`owner` 算出；本体和插件判断「是不是人的那段对话」都只看它，插件不用为找自己那条去 `ctx.sessions.list()`（钩子之外用 `ctx.sessions.get`）。
 
 ### 每个钩子
 
@@ -276,6 +277,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 ```ts
 interface ToolExecution {
 	sessionId: string;
+	session: SessionScope;     // 调用所在的会话：{ id, kind: "top" | "child" | "standalone", parentId?, owner?, spawnedFrom?, project? }
 	cwd: string;
 	call: { id: string; name: string; args: Record<string, unknown> };
 	tool: { name: string; mutating: boolean; plugin: string };
@@ -305,6 +307,7 @@ interface ToolOutput {
 
 interface ModelContext {
 	sessionId: string;
+	session: SessionScope;
 	parentId?: string;         // 插件的子会话挂在哪个会话下面，同 SessionSummary.parentId；顶层会话不带
 	owner?: string;            // 建这个会话的插件，同 SessionSummary.owner；子会话、插件的独立会话才有
 	cwd: string;
@@ -316,6 +319,7 @@ interface ModelContext {
 
 interface StepEnd {
 	sessionId: string;
+	session: SessionScope;
 	cwd: string;
 	step: number;       // 这一轮的第几步，从 1 数
 	stepsLeft: number;  // 是 0 时要接着做也会以「用满步数」结束
@@ -337,7 +341,7 @@ interface ToolDefinition {
 	mutating?: boolean;
 	/** 工具自己在 execute 里经 run.ask 问。 */
 	asks?: boolean;
-	execute(args: Record<string, unknown>, run: { cwd: string; signal: AbortSignal; progress(chunk: string): void }): Promise<ToolOutput>;
+	execute(args: Record<string, unknown>, run: { session: SessionScope; cwd: string; signal: AbortSignal; progress(chunk: string): void }): Promise<ToolOutput>;
 }
 ```
 

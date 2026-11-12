@@ -53,7 +53,7 @@ const NO_MEDIA: MediaAccess = {
 /**
  * 插件的 `ctx.sessions`：会话在 agent 那边，宿主只转交。动子会话的几样多给一个 `owner`（调它的插件），agent 据此只让插件动自己建的。
  */
-export interface HostSessions extends Pick<SessionAccess, "list" | "messages" | "compact" | "setTitle" | "setArchived" | "models"> {
+export interface HostSessions extends Pick<SessionAccess, "list" | "get" | "messages" | "compact" | "setTitle" | "setArchived" | "models"> {
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 只用来记日志：开出来的会话不记在插件名下。 */
 	launch(owner: string, options: Parameters<SessionAccess["launch"]>[0]): ReturnType<SessionAccess["launch"]>;
@@ -150,6 +150,7 @@ const missing = async (sessionId: unknown): Promise<never> => {
 };
 const NO_SESSIONS: HostSessions = {
 	list: async () => [],
+	get: async () => undefined,
 	messages: missing,
 	compact: missing,
 	setTitle: missing,
@@ -665,6 +666,7 @@ export class PluginHost {
 			appDataDir: this.options.appDataDir,
 			sessions: {
 				list: () => sessions.list(),
+				get: (sessionId) => sessions.get(sessionId),
 				messages: (sessionId) => sessions.messages(sessionId),
 				compact: async (sessionId, options) => {
 					live();

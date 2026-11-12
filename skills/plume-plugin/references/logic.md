@@ -34,7 +34,7 @@ export default {
 | `ctx.model.usage()` | 只读的花销：每次计费的模型调用（回复、压缩摘要、插件的 `complete`）按小时、供应商、模型合好（`requests`，最早的在前），带供应商 id 到现在名字的对照（`providerNames`，删掉的供应商不在里面）和已归档的顶层会话 id（`archived`）。会话里一步步发的请求（不含压缩摘要、分叉、`complete`）每格还带：计费 token 按来源分摊的十类（`parts`：系统提示词、项目说明与记忆、技能与智能体、工具定义、用户消息、注入内容、助手消息、工具结果，输出的思考和回复，加起来是这些请求的账单数）、发请求的会话（`sessions`，子会话记成顶层会话，已删的不在，跨格数会话要去重）、轮次、计时（`timedReplies`、`modelMs`、`generateMs`、`thinkingMs`，等首字 = `modelMs − generateMs`）、工具次数、出错和毫秒，以及缓存未命中（`cacheMiss`：和同一会话上一次请求比本该读到却没读到的 token、按当时费率多花的钱、没费率的 token，`byCause` 按原因分：工具定义、系统提示词、改写消息、服务商没读到、分不清、压缩、撤回、换模型）。删会话不影响这些数；读会话库失败时抛错。给画使用统计的插件用，经 `ctx.serve` 转给界面入口 |
 | `ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image({ model, prompt, images?, aspectRatio?, quality?, count?, background?, signal?, onRetry? })` | 生图：按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个；`image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错 |
 | `ctx.media.save({ data, mimeType })` / `read(name)` / `nameOf(path)` | 会话媒体目录：存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；按名字读回 base64；一个路径要是这个目录里的图，交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示 |
-| `ctx.sessions.list()` / `ctx.sessions.messages(sessionId)` | 读会话：全部会话的摘要（含归档的、子会话，最近活动的在前；有 `cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来，或交回的结果还没送进会话），子会话还有 `parentId`、`owner`），一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。给的是副本，改了不影响会话 |
+| `ctx.sessions.list()` / `ctx.sessions.get(sessionId)` / `ctx.sessions.messages(sessionId)` | 读会话：全部会话的摘要（含归档的、子会话，最近活动的在前；有 `kind`、`cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来，或交回的结果还没送进会话），子会话还有 `parentId`、`owner`）；只要一个会话的摘要用 `get`（没有这个会话时是 `undefined`），钩子和工具里直接看输入的 `session`，不用为找自己那条去 `list()`。`kind` 是 `"top"`（侧栏里的会话）、`"child"`（插件的子会话）或 `"standalone"`（插件的独立会话），由本体按 `parentId`、`owner` 算出，判断「是不是人的那段对话」只看它。一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。给的是副本，改了不影响会话 |
 | `ctx.sessions.compact(sessionId, { instructions }?)` | 现在就压缩这个会话（`/compact` 用它）：照常经 `context.compact`（`force` 为真、带 `manual`），转录里画一行 `/compact` 和进度、结果。开始了就返回 `{ done }`，`done` 压完时给出 `{ ok: true, before, after }` 或 `{ ok: false, code, error? }`；会话正在跑、正在压、没有可用模型、没有这个会话时抛错，message 是给人看的话 |
 | `ctx.sessions.setTitle(sessionId, title, { automatic }?)` | 改会话的标题（侧栏和标题栏上那行字），给起标题的插件用；宿主默认取第一条消息的开头。空白压成一个空格、最长 80 个字，空串不起作用；没有这个会话时抛错。自动总结传 `automatic: true`，用户手动命名过就不覆盖；不传仍是显式设置标题 |
 | `ctx.sessions.onDeleted(listener)` | 会话被删掉时调 `listener(sessionId)`：按会话记的东西该清了、按会话起的进程该停了。停用时自动撤下 |
@@ -64,7 +64,7 @@ ctx.tools.register({
 	mutating: false,                 // 会改工作区（写文件、执行命令）就写 true：不和相邻的调用同时跑，宿主在执行前把参数拿给用户看、问一次
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
-		// run.sessionId、run.cwd：哪个会话、工作目录；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
+		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
 		return { output: "交给模型的结果", details: { /* 给卡片用 */ } };
 	},
 });
@@ -97,6 +97,15 @@ ctx.tools.register({
 - `order` 小的在外层，默认 0，相同时按注册先后。
 - 某一层抛错，整个钩子失败，不会跳过这一层继续执行（审批、脱敏被跳过就等于放行、泄露）。所以别吞错，也别在不确定时放行。
 
+每个钩子的输入和工具的 `run` 都带着 `session`：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，本体照会话摘要填（同名字段的意思同 `SessionSummary`）。按会话种类做事（只给侧栏里的会话加工具、子会话里藏起某个工具、认出自己的子会话）看它就够：
+
+```ts
+ctx.hook("model.context", async (input, next) => {
+	if (input.session.kind !== "top") return next({ ...input, tools: input.tools.filter((tool) => tool.name !== "my_tool") });
+	return next(input);
+});
+```
+
 ### `tool.execute`
 
 每个工具调用经过一次。最里层是执行工具。一步里相邻的只读调用（`mutating` 为假）同时跑，所以同一个层可能同时处理好几个调用：按 `call.id` 区分，别把这次调用的状态放进会被下一个调用覆盖的变量里；几个调用同时 `ask` 时审批卡排队，一次弹一张。
@@ -104,6 +113,7 @@ ctx.tools.register({
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 调用所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见上面 |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具，`plugin` 是注册它的插件 |
 | `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权、`userOnly` 和层自己问的除外） |
@@ -122,7 +132,7 @@ ctx.tools.register({
 
 ### `model.context`
 
-每次调模型前经过一次。最里层原样返回。输入输出都是 `{ sessionId, parentId?, owner?, cwd, projectRoots, scratchDir, permissionMode, systemPrompt, sections, messages, tools }`（`parentId`、`owner` 同会话摘要上的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带，按「是不是子会话」藏工具时看它们，不用每次去 `ctx.sessions.list()`；`scratchDir` 同 `run.scratchDir`，`projectRoots` 同 `run.projectRoots`；`permissionMode` 是这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()`，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell；外层要求这一轮的命令都只读时设 `readOnly: true`，宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，plume.prompt 就按只读那档点名 shell），只作用于这一次请求，会话里存的不变。
+每次调模型前经过一次。最里层原样返回。输入输出都是 `{ sessionId, session, parentId?, owner?, cwd, projectRoots, scratchDir, permissionMode, systemPrompt, sections, messages, tools }`（`session` 见「钩子」开头；`parentId`、`owner` 同 `session` 里的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带；按「是不是侧栏里的会话」藏工具时看 `session.kind`，不用每次去 `ctx.sessions.list()`；`scratchDir` 同 `run.scratchDir`，`projectRoots` 同 `run.projectRoots`；`permissionMode` 是这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()`，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell；外层要求这一轮的命令都只读时设 `readOnly: true`，宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，plume.prompt 就按只读那档点名 shell），只作用于这一次请求，会话里存的不变。
 
 系统提示词按段给在 `sections` 里（`{ id, text, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（资源地址的清单）。加自己的说明就加一段，段名用自己的；要换掉或去掉本体的某段，按 `id` 改：
 
@@ -155,6 +165,7 @@ next({ ...input, sections: [...input.sections, { id: "projectMemory", text, file
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见「钩子」开头 |
 | `step` | 这一轮的第几步，从 1 数；是 1 时就是新的一轮，按轮计数的状态在这里清零 |
 | `stepsLeft` | 后面还能跑几步；是 0 时要接着做，这一轮也会以「用满步数」结束 |
 | `reply` | 这一步的回复（`stopReason` 是 `"length"` 时是撞上了输出上限） |
@@ -192,6 +203,7 @@ ctx.hook("step.end", async (input, next) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见「钩子」开头 |
 | `text` | 这条消息的文字；发的是 `/` 命令时是展开后的那段 |
 | `attachments` | 附件的名字，按顺序 |
 | `synthetic` | 是界面替人说的话（「继续」按钮） |
@@ -224,6 +236,7 @@ ctx.hook("prompt.submit", async (input, next) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见「钩子」开头 |
 | `model` | `{ id, name, contextWindow, maxOutputTokens, tierLines? }`：这个会话现在用的模型；`tierLines` 是价格分档线（输入越过就整次按高一档计），从低到高 |
 | `history` | 现在发给模型的历史（插件改之前的那份），副本。压缩过的，前面是上一次换上的那几条（摘要和一句确认，或按条丢弃时的一条说明），之后是边界以后的原文；剪过的工具结果是剪过的那份 |
 | `previous` | 上一次压缩的 `{ head }`：上一次换上的那几条占了 `history` 开头几条，新的 `keep` 要大于它；没压缩过没有。上一份摘要就在 `history` 开头 |
@@ -269,6 +282,7 @@ ctx.hook("context.compact", async (input) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见「钩子」开头 |
 | `scratchDirs` | 同 `run.scratchDirs`：同一脉的会话的临时目录，往里写、删里面的东西算正当干活（plume.approval 这么判） |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具 |
@@ -295,6 +309,7 @@ ctx.hook("tool.approve", async (input, next) => (/\.env\b/.test(JSON.stringify(i
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project? }`，见「钩子」开头 |
 | `messages` | 要截掉的那段：从被撤回、编辑的那条人发的消息起到最后，副本 |
 | `restore` | `true` 是真的写回去，`false` 只演算 |
 
@@ -355,7 +370,7 @@ const reply = (await ctx.sessions.messages(child.id)).findLast((message) => mess
 - 后台用 `start`，它只等运行登记，不等回答；工具先交回子会话 id，后台用 `wait(run.id)` 等结果、`report(run.id, text)` 交给父会话。每次续跑是新的运行句柄，不能按子会话 id 重复交差。所有异步错误都要处理；不要用轮询或直接改会话库模拟送达。
 - 父轮正常结束不取消后台，明确停止父会话会取消后台及待送达结果，不连带停止独立 `send` 的侧边聊天。插件停用、父会话删除或应用退出也会取消。插件自己的排队名额和未启动项经 `onStopped`、`onDeleted`、`ctx.effect` 清理。
 - 续跑复用原子会话，重建该种类的提示词与工具限制后再次 `start`；别创建新会话丢掉上下文。种类、排队状态和模型偏好由插件存到 `ctx.dataDir`，宿主不识别这些业务字段。
-- 子会话用什么提示词、哪些工具，经 `model.context`、`tool.execute` 按 `sessionId` 认出自己的会话来改（建的时候记下 id；重启后从 `list()` 里按 `owner` 找回）。`model.context` 的输入直接带着 `parentId`、`owner`，只想分清子会话和顶层会话时看它们就够。隐藏不等于禁用：藏起的工具在 `tool.execute` 里再拦一次。
+- 子会话用什么提示词、哪些工具，经 `model.context`、`tool.execute` 按 `sessionId` 认出自己的会话来改（建的时候记下 id；重启后从 `list()` 里按 `owner` 找回）。各钩子的输入和 `run` 直接带着 `session`（`kind`、`parentId`、`owner`），只想分清子会话和顶层会话时看它就够。隐藏不等于禁用：藏起的工具在 `tool.execute` 里再拦一次。
 - 子会话要人批准时，审批卡压在主输入框上方，卡上写着子会话的标题；界面入口用 `ui.Conversation` 画它、`ui.useSession` 读它（见 ui.md）。
 - 子会话够得着它的父会话，只此一个：你自己建的子会话里，你自己注册的工具的那次调用拿得到 `run.parent`（别的插件的工具、别人的子会话、顶层会话里都是 `undefined`）。只在这次调用里用：调用答完以后再调它的方法就抛错。
 

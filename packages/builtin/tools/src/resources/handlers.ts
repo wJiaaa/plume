@@ -249,11 +249,11 @@ export function sessionResource(lookup: SessionLookup): ResourceHandler {
 
 		async list(scope): Promise<ResourceEntry[]> {
 			/*
-			 * 归档的、子会话不列：人在侧栏里找得到的才是「最近的会话」。当前这个也不列：读自己的转录是死循环的开头，读回来的内容进上下文，
+			 * 归档的、子会话和插件的独立会话不列：人在侧栏里找得到的才是「最近的会话」。当前这个也不列：读自己的转录是死循环的开头，读回来的内容进上下文，
 			 * 下一轮的转录里又包含了这次读取，而模型看不出这一点。
 			 */
 			const recent = (await lookup.list())
-				.filter((s) => !s.archived && !s.parentId && s.id !== scope.sessionId)
+				.filter((s) => !s.archived && s.kind === "top" && s.id !== scope.sessionId)
 				.sort((a, b) => b.updatedAt - a.updatedAt)
 				.slice(0, 20);
 			// i18n-exempt：交给模型的工具结果。

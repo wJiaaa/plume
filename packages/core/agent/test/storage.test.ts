@@ -10,6 +10,7 @@ const summary = (id: string, updatedAt: number, parentId?: string): SessionSumma
 	createdAt: 0,
 	updatedAt,
 	running: false,
+	kind: parentId ? "child" : "top",
 	...(parentId ? { parentId } : {}),
 });
 

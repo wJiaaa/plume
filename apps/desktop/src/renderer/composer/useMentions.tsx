@@ -124,7 +124,7 @@ export function useMentions({
 			{ id: "action:compact", title: "compact", description: t("mention.compact"), kind: "action", token: "@compact" },
 			...provided,
 			...sessionList
-				.filter((session) => !session.parentId && !session.owner && session.id !== sessionId)
+				.filter((session) => session.kind === "top" && session.id !== sessionId)
 				.map((session): MentionItem => ({
 					id: `session:${session.id}`,
 					title: session.title || t("mention.untitled"),

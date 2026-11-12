@@ -429,6 +429,7 @@ describe("会话内冻结的系统提示词", () => {
 			layer!(
 				{
 					sessionId: "s1",
+					session: { id: "s1", kind: "top" },
 					cwd: dir,
 					scratchDir: join(dir, "scratch"),
 					model: { id: "m", name: "M" },

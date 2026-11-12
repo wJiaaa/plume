@@ -25,6 +25,7 @@ import type { ModelConfig, ProviderConfig, ThinkingLevel, ToolSpec } from "@plum
 import { cacheHotMs } from "@plume/llm/vendors";
 import { type ContextRecord, historyFor, latest, oversized } from "./compaction.ts";
 import { errorText, type PluginHost } from "./host.ts";
+import { sessionScope } from "./session-scope.ts";
 
 /**
  * 上一次真正发出去的主请求：摘要从这里分叉（`ModelCompletion.fork`）。请求头原样记下，分叉只往后接消息：照着主请求
@@ -185,6 +186,7 @@ export function createCompactor(deps: CompactorDeps) {
 		const rewrittenAt = Number.isFinite(rewritten) ? rewritten : undefined;
 		const input: ContextCompact = {
 			sessionId,
+			session: sessionScope(session.summary),
 			cwd: session.summary.cwd,
 			model: {
 				id: model.id,

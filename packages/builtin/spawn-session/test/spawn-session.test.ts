@@ -1,5 +1,16 @@
 import { expect, it } from "vitest";
-import type { LaunchedIdle, LaunchedSession, Message, PluginContext, SessionLaunch, SessionSummary, ToolDefinition, ToolRun, TurnStop } from "@plume/contract";
+import type {
+	LaunchedIdle,
+	LaunchedSession,
+	Message,
+	PluginContext,
+	SessionKind,
+	SessionLaunch,
+	SessionSummary,
+	ToolDefinition,
+	ToolRun,
+	TurnStop,
+} from "@plume/contract";
 import type { SpawnSessionApi } from "../src/api.ts";
 import { checkSuggestion } from "../src/check.ts";
 import { Followers } from "../src/follow.ts";
@@ -128,6 +139,7 @@ function startable(options: { project?: string; cwd?: string; launch: (launch: S
 		createdAt: 0,
 		updatedAt: 0,
 		running: false,
+		kind: "top",
 	} as SessionSummary;
 	const details = { kind: "session_suggestion", title: "拆出去", summary: "s", prompt: "去做", worktree: true };
 	const events: string[] = [];
@@ -140,6 +152,7 @@ function startable(options: { project?: string; cwd?: string; launch: (launch: S
 		tools: { register() {} },
 		sessions: {
 			list: async () => [parent],
+			get: async (id: string) => (id === parent.id ? parent : undefined),
 			messages: async () => [{ role: "toolResult", toolCallId: "c1", isError: false, details } as unknown as Message],
 			observe() {},
 			onDeleted() {},
@@ -201,8 +214,8 @@ it("开始：卡片上选了模型和思考档位才交给 launch，没动过就
 	expect(given[1]).toMatchObject({ model: "p/strong", thinking: "high", message: "去做", title: "拆出去" });
 });
 
-/** 注册下来的 `archive_session`，和它所在会话的摘要。 */
-function archiveTool(sessions: Partial<SessionSummary>[]) {
+/** 注册下来的 `archive_session`。 */
+function archiveTool() {
 	const tools: ToolDefinition[] = [];
 	const ctx = {
 		name: plugin.name,
@@ -210,7 +223,7 @@ function archiveTool(sessions: Partial<SessionSummary>[]) {
 		log: { info() {}, warn() {}, error() {} },
 		hook() {},
 		tools: { register: (tool: ToolDefinition) => void tools.push(tool) },
-		sessions: { list: async () => sessions, messages: async () => [], observe() {}, onDeleted() {} },
+		sessions: { messages: async () => [], observe() {}, onDeleted() {} },
 		use: () => ({}),
 		serve() {},
 	} as unknown as PluginContext;
@@ -219,9 +232,11 @@ function archiveTool(sessions: Partial<SessionSummary>[]) {
 }
 
 it("archive_session：交给本体等这一轮收场再归档、这一轮停在这里；reason 可以不给，给了要像话；子会话、插件的独立会话里拒绝", async () => {
-	const tool = archiveTool([{ id: "main" }, { id: "child", parentId: "main" }, { id: "ops", owner: "plume.ssh" }]);
+	const tool = archiveTool();
+	const kinds: Record<string, SessionKind> = { main: "top", child: "child", ops: "standalone" };
 	let asked = 0;
-	const run = (sessionId: string, offered = true) => ({ sessionId, ...(offered ? { archiveAfterTurn: () => void asked++ } : {}) }) as unknown as ToolRun;
+	const run = (sessionId: string, offered = true) =>
+		({ sessionId, session: { id: sessionId, kind: kinds[sessionId] }, ...(offered ? { archiveAfterTurn: () => void asked++ } : {}) }) as unknown as ToolRun;
 
 	const done = await tool.execute({ reason: " 修好了 " }, run("main"));
 	expect(done).toMatchObject({ terminate: "done", details: { kind: "session_archive", reason: "修好了" } });

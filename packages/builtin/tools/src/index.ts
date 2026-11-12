@@ -71,10 +71,10 @@ export default {
 		ctx.hook("model.context", async (input, next) => {
 			const text = addressesSection(resources.schemes());
 			/*
-			 * 子会话拿不到后台送达的渠道（`ToolRun.background`），monitor 和定时唤醒在那里送不出任何东西：不列给模型，而不是等它调了再报错——
+			 * 子会话和插件的独立会话拿不到后台送达的渠道（`ToolRun.background`），monitor 和定时唤醒在那里送不出任何东西：不列给模型，而不是等它调了再报错——
 			 * 没见过的工具模型不会要，一个错误却要白花一轮才知道此路不通。
 			 */
-			const tools = input.parentId !== undefined ? input.tools.filter((tool) => !TOP_LEVEL_ONLY.has(tool.name)) : input.tools;
+			const tools = input.session.kind !== "top" ? input.tools.filter((tool) => !TOP_LEVEL_ONLY.has(tool.name)) : input.tools;
 			return next({ ...input, tools, ...(text ? { sections: [...input.sections, { id: "resources", text }] } : {}) });
 		});
 		ctx.hook(

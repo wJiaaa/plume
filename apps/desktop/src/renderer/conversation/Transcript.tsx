@@ -428,9 +428,7 @@ export function Transcript({
 									follow.returnToBottom();
 								}}
 							/>
-							{!view.summary.parentId && !view.summary.owner && (
-								<QuoteMenu scrollRef={follow.scrollRef} onQuote={onQuote} sessionId={id} actions={quoteActions} />
-							)}
+							{view.summary.kind === "top" && <QuoteMenu scrollRef={follow.scrollRef} onQuote={onQuote} sessionId={id} actions={quoteActions} />}
 							{questions.length > 1 && <QuestionNav key={id} questions={questions} viewport={follow.scrollRef} onSelect={jumpToQuestion} />}
 						</div>
 					</TranscriptLive.Provider>

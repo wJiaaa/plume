@@ -26,7 +26,7 @@ const reply: AssistantMessage = {
 	durationMs: 20,
 };
 const view = (): SessionView => ({
-	summary: { id: "a", title: "", cwd: "/tmp", running: false, createdAt: 0, updatedAt: 0 },
+	summary: { id: "a", title: "", cwd: "/tmp", running: false, createdAt: 0, updatedAt: 0, kind: "top" },
 	messages: [
 		{ role: "user", content: [{ type: "text", text: "run" }], timestamp: 100 },
 		reply,

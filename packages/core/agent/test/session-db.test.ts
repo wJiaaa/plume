@@ -26,7 +26,7 @@ function open(logs: string[] = []): SessionDb {
 	return db;
 }
 
-const summary = (id: string, updatedAt = 1): SessionSummary => ({ id, title: "", cwd: "/tmp", createdAt: 1, updatedAt, running: false });
+const summary = (id: string, updatedAt = 1): SessionSummary => ({ id, title: "", cwd: "/tmp", createdAt: 1, updatedAt, running: false, kind: "top" });
 const user = (text: string): Message => ({ role: "user", content: [{ type: "text", text }], timestamp: 1 });
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const reply = (content: AssistantMessage["content"], stopReason: AssistantMessage["stopReason"] = "stop"): AssistantMessage => ({

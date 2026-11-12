@@ -17,7 +17,7 @@ import { nestSpawned, withSpawned } from "./grouping.ts";
  * 删掉它改变的是这些会话再也回不到它下面。谁算谁的后续，规则和侧栏的嵌套一样，只是放在一张平铺的列表上。
  */
 function nestedUnder(session: SessionSummary, sessions: readonly SessionSummary[]): SessionSummary[] {
-	const { spawned } = nestSpawned({ pinned: [], projects: [], loose: sessions.filter((each) => !each.parentId && !each.owner) });
+	const { spawned } = nestSpawned({ pinned: [], projects: [], loose: sessions.filter((each) => each.kind === "top") });
 	return withSpawned([session], spawned).slice(1);
 }
 

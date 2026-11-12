@@ -244,7 +244,7 @@ it("artifact://：同一段原文换回同一个地址；每个会话最多 30 �
 });
 
 const summary = (id: string, title: string, extra: Partial<SessionSummary> = {}): SessionSummary =>
-	({ id, title, cwd: "/", createdAt: 1, updatedAt: 1, running: false, ...extra }) as SessionSummary;
+	({ id, title, cwd: "/", createdAt: 1, updatedAt: 1, running: false, kind: extra.parentId ? "child" : "top", ...extra }) as SessionSummary;
 
 it("session:// 读另一次会话：一行一条，越界说一共几条；列表里没有当前会话、归档的和子会话", async () => {
 	const messages: Message[] = [

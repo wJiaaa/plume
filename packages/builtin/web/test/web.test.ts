@@ -119,6 +119,7 @@ async function withServer(handler: Parameters<typeof createServer>[1], run: (bas
 
 const run: ToolRun = {
 	sessionId: "s1",
+	session: { id: "s1", kind: "top" },
 	toolCallId: "call",
 	cwd: "/",
 	scratchDir: "/scratch/s1",

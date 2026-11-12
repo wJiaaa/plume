@@ -156,6 +156,14 @@ export interface SessionSummary {
 	 * 和子会话一样不进侧栏。侧栏里的会话两样都没有。
 	 */
 	owner?: string;
+	/**
+	 * 这是哪一种会话，由本体按 `parentId`、`owner` 算出，不存盘：
+	 * - `top`：侧栏里的会话（人新建的、插件经 `ctx.sessions.launch` 开的、分叉出来的），两样都没有；
+	 * - `child`：插件建的子会话（`SessionAccess.create` 给了 `parentId`），挂在一个 `top` 会话下面；
+	 * - `standalone`：插件的独立会话（`SessionAccess.create` 不给 `parentId`），有 `owner` 没有 `parentId`。
+	 * 只有 `top` 进侧栏、搜索、`@` 引用，收后台结果和会话间的信。判断「是不是人的那段对话」看它，不要自己拼 `parentId`、`owner`。
+	 */
+	kind: SessionKind;
 	/** 插件经 `ctx.sessions.launch` 从哪个会话开出来的（计划交出去执行的那个会话、那次调用）。会话本身独立保存，侧栏同组时嵌套在来源下面。 */
 	spawnedFrom?: { sessionId: string; toolCallId?: string };
 	/** 从哪条会话的消息分叉；来源存在于同一分组时嵌套显示。 */
@@ -163,6 +171,9 @@ export interface SessionSummary {
 	/** 记录里有几条消息（人说的、回复、工具结果都算），给已归档的页和删除前的问题说「多少」。 */
 	messageCount?: number;
 }
+
+/** 会话的种类，见 `SessionSummary.kind`。 */
+export type SessionKind = "top" | "child" | "standalone";
 
 /**
  * 一轮为什么结束：答完了（done）、人按了停（aborted）、出错（error）、用满了步数（max_turns）、

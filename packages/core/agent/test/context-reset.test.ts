@@ -127,7 +127,7 @@ async function compactor(result: CompactSummary | Error) {
 	const messages: Message[] = Array.from({ length: 8 }, (_, timestamp) => ({ role: "user", content: [{ type: "text", text: "消息" }], timestamp }));
 	messages[3] = { role: "toolResult", toolCallId: "call", toolName: "read", content: [{ type: "text", text: "x".repeat(9000) }], isError: false, timestamp: 3 };
 	const record = emptyRecord();
-	const session: CompactingSession = { summary: { id: "s1", title: "会话", cwd: dir, createdAt: 0, updatedAt: 0, running: false }, record };
+	const session: CompactingSession = { summary: { id: "s1", title: "会话", cwd: dir, createdAt: 0, updatedAt: 0, running: false, kind: "top" }, record };
 	const model: ModelConfig = {
 		id: "p/m",
 		providerId: "p",
@@ -162,6 +162,7 @@ async function compactor(result: CompactSummary | Error) {
 	});
 	const context: ModelContext = {
 		sessionId: "s1",
+		session: { id: "s1", kind: "top" },
 		cwd: dir,
 		scratchDir: dir,
 		model,

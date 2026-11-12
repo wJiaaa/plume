@@ -45,7 +45,7 @@ export default {
 		async function parentOf(sessionId: string): Promise<string | null> {
 			const known = parents.get(sessionId);
 			if (known !== undefined) return known;
-			const summary = (await ctx.sessions.list()).find((session) => session.id === sessionId);
+			const summary = await ctx.sessions.get(sessionId);
 			const parent = summary?.parentId ?? null;
 			if (summary) parents.set(sessionId, parent);
 			return parent;
@@ -173,7 +173,7 @@ export default {
 					const model = reply.handoff.model;
 					const handed = { ...details, handoff: true, ...(model ? { model } : {}) } satisfies PlanDetails;
 					try {
-						const origin = (await ctx.sessions.list()).find((session) => session.id === run.sessionId);
+						const origin = await ctx.sessions.get(run.sessionId);
 						if (!origin) throw new Error(MESSAGES[ctx.locale()].handoffGone);
 						await ctx.sessions.launch({
 							...(origin.project ? { project: origin.project } : { cwd: origin.cwd }),

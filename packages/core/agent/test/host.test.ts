@@ -37,6 +37,7 @@ function entry(plugin: unknown): PluginEntry {
 
 const execution = (): ToolExecution => ({
 	sessionId: "s",
+	session: { id: "s", kind: "top" },
 	cwd: dir,
 	call: { id: "c", name: "t", args: {} },
 	tool: { name: "t", mutating: true, plugin: "p" },
@@ -116,6 +117,7 @@ describe("PluginHost", () => {
 		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(["fine_tool"]);
 		const context: ModelContext = {
 			sessionId: "s",
+			session: { id: "s", kind: "top" },
 			cwd: dir,
 			scratchDir: join(dir, "scratch"),
 			model: { id: "m", name: "M" },

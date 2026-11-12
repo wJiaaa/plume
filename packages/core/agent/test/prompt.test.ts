@@ -13,6 +13,7 @@ describe("systemPrompt 跟着 sections 重拼", () => {
 	];
 	const context: ModelContext = {
 		sessionId: "s",
+		session: { id: "s", kind: "top" },
 		cwd: "/",
 		scratchDir: "/scratch/s",
 		model: { id: "m", name: "M" },

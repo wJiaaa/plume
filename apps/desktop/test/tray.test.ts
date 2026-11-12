@@ -11,7 +11,7 @@ import { APP_SCHEME, sessionFromUrl } from "../src/main/deep-link.ts";
 import { RECENT_LIMIT, type TrayItem, trayMenu, trayTitle } from "../src/main/tray-menu.ts";
 
 function session(id: string, updatedAt: number, extra: Partial<SessionSummary> = {}): SessionSummary {
-	return { id, title: id, cwd: "/tmp", createdAt: 0, updatedAt, running: false, ...extra };
+	return { id, title: id, cwd: "/tmp", createdAt: 0, updatedAt, running: false, kind: "top", ...extra };
 }
 
 function recentOf(items: TrayItem[]): TrayItem[] {
@@ -24,7 +24,7 @@ test("最近会话：去掉归档的和子会话，按最后活动排，最多�
 	const sessions = [
 		session("old", 1),
 		session("archived", 50, { archived: true }),
-		session("child", 60, { parentId: "old" }),
+		session("child", 60, { parentId: "old", kind: "child" }),
 		...Array.from({ length: 6 }, (_, i) => session(`s${i}`, 10 + i)),
 	];
 	const recent = recentOf(trayMenu({ windowVisible: true, sessions, launchAtLogin: false, locale: "zh-CN" }));

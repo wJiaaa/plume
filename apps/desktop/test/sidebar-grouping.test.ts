@@ -8,7 +8,7 @@ import type { SessionSummary } from "@plume/contract";
 import { groupSessions, projectSessions, nestSpawned, withSpawned } from "../src/renderer/sidebar/grouping.ts";
 
 function session(id: string, at: number, project?: string): SessionSummary {
-	return { id, title: id, cwd: "/work", createdAt: at, updatedAt: 100 - at, running: false, ...(project ? { project } : {}) };
+	return { id, title: id, cwd: "/work", createdAt: at, updatedAt: 100 - at, running: false, kind: "top", ...(project ? { project } : {}) };
 }
 
 test("按项目 id 归组，不看目录；没有会话的项目也占一行；找不到项目的会话落到聊天", () => {
@@ -69,7 +69,7 @@ test("置顶按最后活动排序，从项目和聊天中移除；空标题、�
 		{ ...session("orphan-pin", 3, "removed"), pinned: true },
 		{ ...session("archived-pin", 2, "a"), pinned: true, archived: true },
 		{ ...session("blank-pin", 0, "a"), pinned: true, title: "" },
-		{ ...session("child-pin", 0, "a"), pinned: true, parentId: "project-pin" },
+		{ ...session("child-pin", 0, "a"), pinned: true, parentId: "project-pin", kind: "child" },
 		session("project", 6, "a"),
 		session("chat", 7),
 	];
@@ -198,7 +198,7 @@ test("项目里还列着的会话：含置顶的，不含归档、子会话和�
 		session("live", 1, "a"),
 		{ ...session("pinned", 2, "a"), pinned: true },
 		{ ...session("archived", 3, "a"), archived: true },
-		{ ...session("child", 4, "a"), parentId: "live" },
+		{ ...session("child", 4, "a"), parentId: "live", kind: "child" },
 		{ ...session("blank", 5, "a"), title: "" },
 		session("other", 6, "b"),
 	];

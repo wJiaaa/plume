@@ -63,6 +63,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 	let requests = 0;
 	const scope: TurnScope = {
 		sessionId: "s",
+		session: { id: "s", kind: "top" },
 		cwd: dir,
 		scratchDir: dir,
 		signal: new AbortController().signal,
@@ -74,6 +75,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 				"model.context",
 				{
 					sessionId: "s",
+					session: { id: "s", kind: "top" },
 					cwd: dir,
 					scratchDir: dir,
 					model: { id: "m", name: "m" },

@@ -56,6 +56,7 @@ async function fixture(t: TestContext) {
 		serve() {},
 		sessions: {
 			list: async () => [...sessions.values()],
+			get: async (id: string) => sessions.get(id),
 			messages: async (id: string) => structuredClone(messages.get(id) ?? []),
 			onDeleted() {},
 		},

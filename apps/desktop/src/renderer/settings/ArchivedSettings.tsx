@@ -52,7 +52,7 @@ export function ArchivedSettings({
 	const confirm = useConfirmer();
 	const searching = query.trim().length > 0;
 
-	const archived = useMemo(() => sessions.filter((session) => session.archived && !session.parentId && !session.owner), [sessions]);
+	const archived = useMemo(() => sessions.filter((session) => session.archived && session.kind === "top"), [sessions]);
 
 	// 按会话记的项目 id 分组，和侧栏一样：同一个文件夹可以登记成几个项目。
 	const filedUnder = useMemo(() => {

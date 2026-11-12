@@ -45,7 +45,7 @@ export function SidebarTools({
 	const projectName = (session: SessionSummary) => projects.find((project) => project.id === session.project)?.name ?? "";
 	const icon = (Icon: typeof Settings) => createElement(Icon, { size: 15, strokeWidth: 1.8 });
 	const sessionCommands = sessions
-		.filter((s) => s.title && !s.parentId && !s.owner && !s.archived)
+		.filter((s) => s.title && s.kind === "top" && !s.archived)
 		.sort((a, b) => b.updatedAt - a.updatedAt)
 		.map((s): PaletteCommand => ({
 			id: `session:${s.id}`,
@@ -162,7 +162,7 @@ export function SidebarTools({
 		},
 	];
 	const sessionNotices: Notice[] = sessions
-		.filter((s) => !s.parentId && !s.owner && !s.archived && s.id !== currentId)
+		.filter((s) => s.kind === "top" && !s.archived && s.id !== currentId)
 		.flatMap((s) => {
 			const state = activityOf(s.id);
 			return state

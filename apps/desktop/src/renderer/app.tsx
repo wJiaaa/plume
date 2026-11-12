@@ -591,7 +591,7 @@ function announceFinished(previous: readonly SessionSummary[], next: readonly Se
 	if (panelWindow || sessionWindow) return;
 	const before = new Map(previous.map((session) => [session.id, session]));
 	for (const session of next) {
-		if (session.running || !before.get(session.id)?.running || session.parentId || session.owner || session.id === state.currentId) continue;
+		if (session.running || !before.get(session.id)?.running || session.kind !== "top" || session.id === state.currentId) continue;
 		const result = outcome(session.stop?.reason);
 		if (!result) continue;
 		const title = session.title || translate("sessionOps.newSession");

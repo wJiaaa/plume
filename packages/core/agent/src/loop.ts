@@ -25,6 +25,7 @@ const MAX_LOST_ROUNDS = 3;
 
 export interface TurnScope {
 	sessionId: string;
+	session: ToolScope["session"];
 	cwd: string;
 	projectRoots?: readonly string[];
 	allowedPaths?: ToolScope["allowedPaths"];
@@ -181,7 +182,13 @@ async function stepEnd(
 	natural: (input: StepEnd) => StepVerdict,
 ): Promise<StepVerdict> {
 	// 给副本：写进会话的那几条不该被插件改掉。
-	const input: StepEnd = { sessionId: scope.sessionId, cwd: scope.cwd, ...structuredClone(step), signal: scope.signal };
+	const input: StepEnd = {
+		sessionId: scope.sessionId,
+		session: structuredClone(scope.session),
+		cwd: scope.cwd,
+		...structuredClone(step),
+		signal: scope.signal,
+	};
 	try {
 		const verdict = verdictOf(await scope.host.run("step.end", input, async (current) => natural(current)));
 		// 层调了 `next` 却忘了把结论交回（返回 undefined）、给了不认得的原因：和抛错一样按自然结论走，不让整轮以出错收场。

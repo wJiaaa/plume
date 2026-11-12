@@ -82,9 +82,10 @@ export default {
 		ctx.hook("prompt.submit", async (input, next) => {
 			const verdict = await next(input);
 			if (!enabled || verdict.block || !input.fresh || input.synthetic || !shouldSummarize(input.text)) return verdict;
-			const session = (await ctx.sessions.list()).find((summary) => summary.id === input.sessionId);
-			// 子会话（侧边聊天、子 Agent）由建它的插件起名；标题不是空的说明已经有人起过了。
-			if (!session || session.parentId || session.title !== "" || running.has(input.sessionId)) return verdict;
+			// 子会话（侧边聊天、子 Agent）和插件的独立会话由建它的插件起名；标题不是空的说明已经有人起过了。
+			if (input.session.kind !== "top" || running.has(input.sessionId)) return verdict;
+			const session = await ctx.sessions.get(input.sessionId);
+			if (!session || session.title !== "") return verdict;
 			const controller = new AbortController();
 			running.set(input.sessionId, controller);
 			void summarize(input.sessionId, input.text, controller);

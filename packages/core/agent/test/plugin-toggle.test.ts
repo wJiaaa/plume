@@ -36,6 +36,7 @@ it("模型说明和只读工具随插件启停，不改变原始消息", async (
 	try {
 		const input: ModelContext = {
 			sessionId: "s",
+			session: { id: "s", kind: "top" },
 			cwd: dir,
 			scratchDir: join(dir, "scratch"),
 			model: { id: "m", name: "M" },

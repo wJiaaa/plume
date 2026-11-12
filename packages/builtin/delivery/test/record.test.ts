@@ -21,7 +21,7 @@ function setup(messages: Message[], sessionId = "session", locale: Locale = "en"
 	let summary: FileChangesSummary = { files: [], warnings: [] };
 	const collect = vi.fn(async (_id: string, _cwd: string, _ids: readonly string[]) => summary);
 	const undo = vi.fn(async (_id: string, _cwd: string, _ids: readonly string[], _path?: string) => {});
-	const sessions: SessionSummary[] = [{ id: sessionId, title: "Test", cwd, createdAt: 1, updatedAt: 10, running: false }];
+	const sessions: SessionSummary[] = [{ id: sessionId, title: "Test", cwd, createdAt: 1, updatedAt: 10, running: false, kind: "top" }];
 	let api!: DeliveryApi;
 	let rewind!: HookLayer<"session.rewind">;
 	const ctx = {
@@ -34,7 +34,7 @@ function setup(messages: Message[], sessionId = "session", locale: Locale = "en"
 			if (name === "session.rewind") rewind = layer;
 		},
 		sessions: {
-			list: vi.fn(async () => sessions),
+			get: vi.fn(async (id: string) => sessions.find((session) => session.id === id)),
 			messages: vi.fn(async () => messages),
 		},
 	} as unknown as PluginContext;
@@ -47,7 +47,10 @@ function setup(messages: Message[], sessionId = "session", locale: Locale = "en"
 		undo,
 		cwd,
 		rewind: (messages: Message[], restore: boolean) =>
-			rewind({ sessionId, cwd, messages, restore }, async () => ({ files: [{ path: "/inner", added: 2, removed: 0, problem: null }], unrecorded: false })),
+			rewind({ sessionId, session: { id: sessionId, kind: "top" }, cwd, messages, restore }, async () => ({
+				files: [{ path: "/inner", added: 2, removed: 0, problem: null }],
+				unrecorded: false,
+			})),
 		setSummary: (value: FileChangesSummary) => {
 			summary = value;
 		},

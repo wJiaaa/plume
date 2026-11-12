@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import type { PluginContext, PromptSubmit, PromptVerdict, SessionSummary, SessionWorktreeService } from "@plume/contract";
+import type { PluginContext, PromptSubmit, PromptVerdict, SessionScope, SessionSummary, SessionWorktreeService } from "@plume/contract";
 import type { GitApi } from "../src/api.ts";
 import type { WorktreeApi } from "../src/worktree/api.ts";
 import plugin from "../src/index.ts";
@@ -60,6 +60,7 @@ async function load() {
 		},
 		sessions: {
 			list: async () => summaries.map((summary) => ({ ...summary })),
+			get: async (id: string) => summaries.find((summary) => summary.id === id),
 			onDeleted: (listener: (id: string) => void) => void (deleted = listener),
 			onArchived: (listener: (id: string, archived: boolean) => void) => void (archived = listener),
 			setArchived: async (id: string, on: boolean) => void archiveCalls.push([id, on]),
@@ -67,13 +68,41 @@ async function load() {
 	} as unknown as PluginContext;
 	await plugin.apply(ctx);
 	const session = (id: string, extra: Partial<SessionSummary> = {}) => {
-		const summary: SessionSummary = { id, title: "", cwd: repo, project: "p1", createdAt: 0, updatedAt: 0, running: false, ...extra };
+		const summary: SessionSummary = {
+			id,
+			title: "",
+			cwd: repo,
+			project: "p1",
+			createdAt: 0,
+			updatedAt: 0,
+			running: false,
+			kind: extra.parentId ? "child" : extra.owner ? "standalone" : "top",
+			...extra,
+		};
 		summaries.push(summary);
 		return summary;
 	};
+	const scopeOf = ({ id, kind, parentId, owner, spawnedFrom, project }: SessionSummary): SessionScope => ({
+		id,
+		kind,
+		...(parentId ? { parentId } : {}),
+		...(owner ? { owner } : {}),
+		...(spawnedFrom ? { spawnedFrom } : {}),
+		...(project ? { project } : {}),
+	});
 	const send = (summary: SessionSummary, fresh: boolean, launched = summary.spawnedFrom !== undefined) =>
 		submit!(
-			{ sessionId: summary.id, cwd: summary.cwd, text: "hi", attachments: [], synthetic: false, fresh, launched, signal: new AbortController().signal },
+			{
+				sessionId: summary.id,
+				session: scopeOf(summary),
+				cwd: summary.cwd,
+				text: "hi",
+				attachments: [],
+				synthetic: false,
+				fresh,
+				launched,
+				signal: new AbortController().signal,
+			},
 			async () => ({ block: false }),
 		);
 	/** 监听里起的活排在会话的队里：排一个什么都不改的调用在后面，等它回来。 */

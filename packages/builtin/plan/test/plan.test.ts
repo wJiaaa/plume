@@ -50,12 +50,13 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 		commands: { provide: (provider: CommandProvider) => void (commands = provider) },
 		serve: (served: PlanApi) => void (api = served),
 		sessions: {
-			list: async () => [
-				{ id: "a1b2c3d4-0000-4000-8000-000000000000", title: "改登录 [草稿]", cwd: "/w", project: "p1" },
-				{ id: "main", title: "", cwd: "/w/app" },
-				{ id: "fresh" },
-				{ id: "child", parentId: "main" },
-			],
+			get: async (id: string) =>
+				[
+					{ id: "a1b2c3d4-0000-4000-8000-000000000000", title: "改登录 [草稿]", cwd: "/w", project: "p1" },
+					{ id: "main", title: "", cwd: "/w/app" },
+					{ id: "fresh" },
+					{ id: "child", parentId: "main" },
+				].find((session) => session.id === id),
 			messages: async () => stored,
 			onDeleted: () => undefined,
 			models: async () => [{ id: "m1", name: "Model One", contextWindow: 1 }],

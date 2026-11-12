@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { AssistantMessage, CompactionMark, Message, SessionSummary, ToolResultMessage, UserMessage } from "@plume/contract";
 import { conversationMarkdown } from "../src/conversation-markdown.ts";
 
-const summary: SessionSummary = { id: "a", title: "修登录", cwd: "/work/app", createdAt: 1, updatedAt: 2, running: false };
+const summary: SessionSummary = { id: "a", title: "修登录", cwd: "/work/app", createdAt: 1, updatedAt: 2, running: false, kind: "top" };
 const exportedAt = new Date(2026, 10, 5, 14, 5);
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const user = (text: string, extra: Partial<UserMessage> = {}): UserMessage => ({ role: "user", content: [{ type: "text", text }], timestamp: 1, ...extra });
