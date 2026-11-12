@@ -36,7 +36,7 @@ export default {
 | `ctx.model.usage()` | 只读的花销：每次计费的模型调用（回复、压缩摘要、插件的 `complete`）按小时、供应商、模型合好（`requests`，最早的在前），带供应商 id 到现在名字的对照（`providerNames`，删掉的供应商不在里面）和已归档的顶层会话 id（`archived`）。会话里一步步发的请求（不含压缩摘要、分叉、`complete`）每格还带：计费 token 按来源分摊的十类（`parts`：系统提示词、项目说明与记忆、技能与智能体、工具定义、用户消息、注入内容、助手消息、工具结果，输出的思考和回复，加起来是这些请求的账单数）、发请求的会话（`sessions`，子会话记成顶层会话，已删的不在，跨格数会话要去重）、轮次、计时（`timedReplies`、`modelMs`、`generateMs`、`thinkingMs`，等首字 = `modelMs − generateMs`）、工具次数、出错和毫秒，以及缓存未命中（`cacheMiss`：和同一会话上一次请求比本该读到却没读到的 token、按当时费率多花的钱、没费率的 token，`byCause` 按原因分：工具定义、系统提示词、改写消息、服务商没读到、分不清、压缩、撤回、换模型）。删会话不影响这些数；读会话库失败时抛错。给画使用统计的插件用，经 `ctx.serve` 转给界面入口 |
 | `ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image({ model, prompt, images?, aspectRatio?, quality?, count?, background?, signal?, onRetry? })` | 生图：按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个；`image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错 |
 | `ctx.media.save({ data, mimeType })` / `read(name)` / `nameOf(path)` | 会话媒体目录：存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；按名字读回 base64；一个路径要是这个目录里的图，交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示 |
-| `ctx.sessions.list()` / `ctx.sessions.get(sessionId)` / `ctx.sessions.messages(sessionId)` | 读会话：全部会话的摘要（含归档的、子会话，最近活动的在前；有 `kind`、`cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来，或交回的结果还没送进会话），子会话还有 `parentId`、`owner`）；只要一个会话的摘要用 `get`（没有这个会话时是 `undefined`），钩子和工具里直接看输入的 `session`，不用为找自己那条去 `list()`。`kind` 是 `"top"`（侧栏里的会话）、`"child"`（插件的子会话）或 `"standalone"`（插件的独立会话），由本体按 `parentId`、`owner` 算出，判断「是不是人的那段对话」只看它。一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。给的是副本，改了不影响会话 |
+| `ctx.sessions.list()` / `ctx.sessions.get(sessionId)` / `ctx.sessions.messages(sessionId)` | 读会话：全部会话的摘要（含归档的、子会话，最近活动的在前；有 `kind`、`cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来、交回的结果还没送进会话，或登记的后台任务还在跑、约好的唤醒还没到点），子会话还有 `parentId`、`owner`）；只要一个会话的摘要用 `get`（没有这个会话时是 `undefined`），钩子和工具里直接看输入的 `session`，不用为找自己那条去 `list()`。`kind` 是 `"top"`（侧栏里的会话）、`"child"`（插件的子会话）或 `"standalone"`（插件的独立会话），由本体按 `parentId`、`owner` 算出，判断「是不是人的那段对话」只看它。一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。给的是副本，改了不影响会话 |
 | `ctx.sessions.compact(sessionId, { instructions }?)` | 现在就压缩这个会话（`/compact` 用它）：照常经 `context.compact`（`force` 为真、带 `manual`），转录里画一行 `/compact` 和进度、结果。开始了就返回 `{ done }`，`done` 压完时给出 `{ ok: true, before, after }` 或 `{ ok: false, code, error? }`；会话正在跑、正在压、没有可用模型、没有这个会话时抛错，message 是给人看的话 |
 | `ctx.sessions.setTitle(sessionId, title, { automatic }?)` | 改会话的标题（侧栏和标题栏上那行字），给起标题的插件用；宿主默认取第一条消息的开头。空白压成一个空格、最长 80 个字，空串不起作用；没有这个会话时抛错。自动总结传 `automatic: true`，用户手动命名过就不覆盖；不传仍是显式设置标题 |
 | `ctx.sessions.onDeleted(listener)` | 会话被删掉时调 `listener(sessionId)`：按会话记的东西该清了、按会话起的进程该停了。停用时自动撤下 |
@@ -57,6 +57,7 @@ export default {
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
 | `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；默认只收和自己有关的会话的，要看全部在默认导出上写 `observe: "all"`。见下文「只读运行观察和后台任务」 |
+| `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒：列出、读输出、停一个、取消一个。见下文「只读运行观察和后台任务」 |
 
 ## 工具
 
@@ -106,6 +107,8 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 - 结果带上 `instructions: true`（载入的技能正文这类要照着做的说明，不是一次观察）：压缩时原样留着，不按大小剪，也不当作被后来的结果顶替的旧观察清掉。例子是 `plume.skills`。
 - 长时间的操作接上 `run.signal`，用户点停止时能停下。
 - 调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型：`channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）——会话闲着时开一轮，忙着时在下一个步骤边界读入。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）；`delivery`（和 `ctx.sessions.report` 同一个形状 `DeliveryInput`）让界面在对话里画一行，宿主只留认得的字段，不给就只有模型看得到；那一行由你经 `ui.agentDelivery` 画（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），标 `inline: true` 的插在一段活中间时并进那段活。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。人按停、删会话、退出应用时渠道作废：`channel.signal` 触发，之后 `report` 返回 `false`、攒着的丢掉；撤回、编辑重发时只作废截掉的那段里的调用拿到的渠道，留下那段里拿到的照常送达。停不停后台的事本身由你定（plume.tools 的后台命令照跑、monitor 跟着停）。之后的调用拿到的是新的一条。子会话没有渠道，结果写进 `output` 叫模型自己去读。
+- 调用答完以后还在跑的任务（后台命令、监视）经 `run.track({ command, description?, pid?, wakes?, output, stop })` 登记进本体，拿回 `{ id, done(exitCode, error?) }`：任务结束时调 `done`（有结果要送就先 `report` 再 `done`，中间才没有一刻算闲）。顶层会话里起它的那次调用的渠道还有效、任务又没 `done` 时，会话不算闲（`launch` 的 `idle`、`ParentStatus`、摘要的 `background`、`idle` 事件都等它，开发服务器也一样）；人按停、撤回截掉那次调用后不再算（本体不替你停它）。本体在删会话、退出应用、你的插件停用时调 `stop(true)`，在子会话经 `sessions.start` 派出去的那次运行结束时调 `stop(true)` 停掉子会话里起的；人在任务面板里停它也走 `stop`。`output()` 给任务面板读输出。子会话里也能登记（列得出、停得掉），只是不算谁在等。
+- 让会话过一会儿接着做：`run.schedule?.({ at?, cron?, recurring?, expiresAt?, prompt, reason?, message })` 登记一次唤醒（`at` 是毫秒时间戳，和 `cron` 二选一），交回 `SessionWakeup`；cron 写错抛错，在 `expiresAt` 之前一次也对不上（第一次至少在一分钟以后）时不登记、返回 `undefined`。到点时本体调 `message(wakeup, { next, skipped })` 要送进去的话和那一行（`{ text, delivery? }`），经这次调用的渠道送，那一行记在你名下；上一次开的那一轮还没收场时跳过、下一次告诉你跳过了几次。还有没触发的唤醒时会话不算闲。上限、下限、措辞归你管（plume.tools 的 `schedule_wakeup`、`cron_create` 做了一份）。只有顶层会话有，子会话里是 `undefined`。
 - 给另一个顶层会话寄一封信：`run.letter(to, { from, text, request?, answer?, re?, chain?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。`guide` 是给收件方模型的处理说明（怎么回），一次送达里一样的只写一遍。返回回执 `{ id, read, answer }`：`read` 兑现成 `{ status: "read", opened }`（`opened` 是这封叫起了对方一轮）、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answer(letter)` 从收件方寄回发件方一封，只能用一次，发件方不在了返回 `undefined`——对方没回、没读到时替它说一句，问的一方才不会一直等下去。请求（`request: true`）有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）：经 `answer` 回了信，或对方读到以后寄回一封带 `answer` 的信（答掉它读到的全部），才算答了；对方删掉、你的插件停用时不再等。对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。限速、去重、链长归你管（plume.sessions 做了一份）。
 - 照人的要求归档这次调用所在的对话（「做完就归档」）：调 `run.archiveAfterTurn()`，结果带上 `terminate: "done"`。本体不当场归档（这一轮还在等你的结果），这一轮以完成收场后才归档，和人在侧栏上点归档一样（界面离开它，`onArchived`、`onEnded` 照常）；这一轮被人停下、出错、卡住收场时不归档、请求作废。只够得着这次调用所在的会话，子会话里是 `undefined`。例子是 plume.spawn-session 的 `archive_session`。
 
@@ -483,7 +486,7 @@ const stop = await ctx.sessions.send(assistant.id, text);
 ```ts
 const { session, done, idle } = await ctx.sessions.launch({ project: task.project, message: task.prompt });
 const stop = await done; // 第一轮为什么结束：done、error、stalled、max_turns、aborted（人按了停止）……
-await idle; // 第一次真闲下来：它派出去的子 Agent、后台命令都回来了，问出去的请求都有了答复，结果唤起的几轮也做完了
+await idle; // 第一次真闲下来：它派出去的子 Agent、后台命令都回来了（还在跑的开发服务器、监视也算没回来），约好的唤醒都到点送过了，问出去的请求都有了答复，结果唤起的几轮也做完了
 ```
 
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`、模型不给就用默认模型。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它，`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
@@ -646,10 +649,9 @@ export default {
 } satisfies Plugin;
 ```
 
-内置 `plume.tools` 提供 `background.jobs`，消费方声明 `inject: ["background.jobs"]`：
+工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒（见「工具」一节），任何插件都经 `ctx.sessions` 读、停、取消，不用声明 `inject`：
 
-- `list(sessionId)` 只返回该会话的任务元数据，包括已结束的任务；表跟随当前进程，历史命令仍在会话消息里。
-- `output(sessionId, jobId)` 读取日志末尾至多 256 KiB，返回 `text`、`done`、`truncated` 和可选 `error`，不消耗模型未读输出、不抑制送达。
-- `stop(sessionId, jobId, force)` 只停止该会话持有的进程句柄，不能传 pid；强制结束前界面应显示命令并确认。
-
-`plume.tools` 还提供 `session.wakeups`（`inject: ["session.wakeups"]`）：模型经 `schedule_wakeup`、`cron_create` 给会话安排、还没触发的定时唤醒。`list(sessionId)` 按下一次触发排好返回 `SessionWakeup[]`（`id`、`kind`、`prompt`、`reason?`、`cron?`、`recurring`、`nextAt`、`expiresAt?`、`fired`），`cancel(sessionId, id)` 取消一个、没有时答 false。唤醒只活在内存里，到点经后台送达（`delivery.kind: "wakeup"`）进会话，人按停、删会话或退出应用时一起取消；撤回、编辑重发只取消截掉的那段里建的。
+- `jobs(sessionId)` 只返回该会话的任务元数据（`BackgroundJobInfo`），包括已结束的任务；表跟随当前进程，历史命令仍在会话消息里。
+- `jobOutput(sessionId, jobId)` 读取登记它的工具给的输出（plume.tools 的后台命令是日志末尾至多 256 KiB），返回 `text`、`done`、`truncated` 和可选 `error`，不消耗模型未读输出、不抑制送达；这个会话里没有这个任务时抛错。
+- `stopJob(sessionId, jobId, force)` 只停该会话里还在跑的任务，交给登记它的工具去停，不能传 pid；强制结束前界面应显示命令并确认。
+- `wakeups(sessionId)` 按下一次触发排好返回 `SessionWakeup[]`（`id`、`kind`、`prompt`、`reason?`、`cron?`、`recurring`、`nextAt`、`expiresAt?`、`fired`），`cancelWakeup(sessionId, id)` 取消一个、没有时答 false。唤醒只活在内存里，到点经约它的那次调用的送达渠道进会话，人按停、删会话、约它的插件停用或退出应用时一起取消；撤回、编辑重发只取消截掉的那段里约的。

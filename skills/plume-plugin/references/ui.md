@@ -601,7 +601,7 @@ Plume 自带的界面侧服务：
 
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
-| `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（服务 `background.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
+| `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（逻辑入口里 `ctx.sessions.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
 
 ## 共享模块
 
