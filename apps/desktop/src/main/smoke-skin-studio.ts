@@ -64,6 +64,17 @@ export async function checkSkinStudio(options: {
 	};
 	// 插件的开关在插件市场的详情页里：回到工作区，从侧栏进市场，详情开着时先回网格，再点工坊那张卡片。
 	const studioSwitch = '[data-plugin-detail="skin-studio"] [role=switch]';
+	/**
+	 * 点工坊的开关，把它拨到 `on`。开关的状态取自界面的市场缓存，要等 agent 发来插件变化才更新，比 `agent.plugins()` 慢一拍：
+	 * 上一次拨动刚在 agent 那边生效就接着点，开关还显示旧状态，这一下又按旧方向拨一次。所以先等界面上它确实在另一边再点。
+	 */
+	const toggleStudio = async (on: boolean) => {
+		await until(
+			`document.querySelector(${JSON.stringify(studioSwitch)})?.getAttribute('aria-checked') === '${!on}'`,
+			on ? "工坊开关显示未启用" : "工坊开关显示已启用",
+		);
+		await click(studioSwitch);
+	};
 	const openStudioDetail = async () => {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
@@ -240,12 +251,12 @@ export async function checkSkinStudio(options: {
 		setModel(undefined);
 	}
 	await openStudioDetail();
-	await click(studioSwitch);
+	await toggleStudio(false);
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "disabled"), "停用工坊");
 	await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "停用恢复原模式");
 	assert.equal(await token("ink"), originalInk);
 	assert.equal(await readFile(join(plumeHome(), "appearance.json"), "utf8"), before, "工坊从未覆盖用户偏好");
-	await click(studioSwitch);
+	await toggleStudio(true);
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重启插件恢复保存的皮肤");
 	await leaveMarket();
 	await button("换肤工坊");
@@ -359,14 +370,14 @@ export async function checkSkinStudio(options: {
 	window.setSize(size[0]!, size[1]!);
 	await until(`innerWidth === ${size[0]}`, "恢复背景验证窗口");
 	await openStudioDetail();
-	await click(studioSwitch);
+	await toggleStudio(false);
 	await wait(async () => !(await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊停用");
 	// 「深色」改的是用户自己的主题偏好，不是工坊的皮肤：停用、再启用工坊都还是深色。
 	assert.equal((await appearance()).theme, "dark", "停用工坊不改用户选的主题");
 	assert.equal(await page<boolean>(`matchMedia('(prefers-color-scheme: dark)').matches`), true);
 	assert.equal((await appearance()).chatBackground, droppedImage, "停用工坊保留背景图");
 	assert.equal((await appearance()).lightForeground, "#263748");
-	await click(studioSwitch);
+	await toggleStudio(true);
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊重新启用");
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重新启用工坊仍是用户选的深色");
 	await leaveMarket();
