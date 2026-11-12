@@ -11,7 +11,7 @@
 
 生图：`images/`（Images API 与 chat 两条路、比例和画质的各家说法、额度用完的判断、读图片头的宽高）、
 `config/image-models.ts`（哪些模型是生图模型、一次调用指的是哪个），以及测试 `test/image-generate.test.ts`。
-`images/types.ts` 后半段的 `ImagePointer`、`ImageGenerateDetails` 这里没人用。
+`images/types.ts` 末尾的 `ImagePointer` 这里没人用。
 
 入口是 `streamAssistant(provider, model, context, options)`：逐个产出流式事件，最后返回完整的助手消息。
 测试连接、拉模型列表要发和对话一样的请求头，所以 `package.json` 另外导出了 `./endpoint`（`USER_AGENT`）和 `./cache-routing`（`sessionHeaders`）；生图从 `./images`（`generateImages`）、

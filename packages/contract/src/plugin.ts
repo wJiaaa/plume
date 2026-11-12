@@ -256,6 +256,11 @@ export interface ToolDefinition {
 	readsOnly?(args: Record<string, unknown>): boolean;
 	/** 工具自己在 execute 里经 `run.ask` 问（能给出 diff、命令原文），宿主不在执行前替它问。 */
 	asks?: boolean;
+	/**
+	 * 导出会话成 Markdown 时这一次调用写成的一行（英文，「Generate image a red fox」）。不给、返回空或抛错时写工具名。
+	 * 导出在 agent 进程，够不着界面入口的 `ui.toolLine`，所以说法跟着工具定义走。
+	 */
+	describe?(args: Record<string, unknown>): string | undefined;
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 
@@ -294,8 +299,13 @@ export interface PromptSection {
 	id: string;
 	text: string;
 	/**
-	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `projectInstructions`、
-	 * `projectMemory` 两段的来源按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；
+	 * 这段是什么，宿主按它分段统计（上下文用量的「记忆」、使用统计 Token 构成里的「指令和记忆」），不认段名。`memory` 是插件记下、
+	 * 每轮带上的记忆（用户的、项目的都算）。不给的段算系统提示词（plume.prompt、plume.skills 给的几段宿主另按段名认）。
+	 */
+	category?: "memory";
+	/**
+	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `projectInstructions` 段和
+	 * `category: "memory"` 的段的来源按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；
 	 * 别的段带了不显示。改了 `text` 的层要么跟着改它，要么去掉它。
 	 */
 	files?: Array<{ path: string; chars: number }>;

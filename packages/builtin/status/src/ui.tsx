@@ -2,7 +2,7 @@
  * plume.status 的界面入口：输入框工具栏右边、模型选择前面的上下文用量。
  *
  * 圆环只回答「快满了吗」；点开回答「为什么」：对话消息、工具表、系统提示词各占多少，真要动手时看的是这个。
- * 项目指令和项目记忆收在「记忆文件」一行里，展开按文件列出：该去删哪份没人再读的 AGENTS.md，看的是这里。
+ * 项目指令和记忆收在「记忆文件」一行里，展开按文件列出：该去删哪份没人再读的 AGENTS.md，看的是这里。
  * 圆环和总数从 `ui.useSession` 的消息里算（format.ts），分段在点开时向宿主要（`ui.contextBreakdown`）。
  */
 
@@ -81,7 +81,7 @@ function Row({ swatch, label, tokens, share }: { swatch: Swatch; label: string; 
 }
 
 /** 收进「记忆文件」那一行的两段，不单独列行；进度条上照样各占一截。 */
-const MEMORY_SEGMENTS: ReadonlySet<ContextSegmentKey> = new Set(["projectInstructions", "projectMemory"]);
+const MEMORY_SEGMENTS: ReadonlySet<ContextSegmentKey> = new Set(["projectInstructions", "memory"]);
 
 /** 「记忆文件」折叠行：右边是两段合计和文件数，展开列出各文件，点一个在文件面板里打开。 */
 function MemoryFiles({ breakdown, onOpen }: { breakdown: ContextBreakdown; onOpen: (path: string) => void }) {

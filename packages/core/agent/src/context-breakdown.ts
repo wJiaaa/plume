@@ -10,10 +10,10 @@
 
 import type { ContextBreakdown, ContextSegmentKey, Message, ModelContext, PromptSection } from "@plume/contract";
 
-/** 项目指令和项目记忆这两段可以按文件列出来源。 */
-type MemoryKey = "projectInstructions" | "projectMemory";
+/** 项目指令和记忆这两段可以按文件列出来源。 */
+type MemoryKey = "projectInstructions" | "memory";
 
-/** 发出去的那份请求每段估了多少 token，以及项目指令、项目记忆里各文件那一截估了多少。 */
+/** 发出去的那份请求每段估了多少 token，以及项目指令、记忆里各文件那一截估了多少。 */
 export interface ContextEstimate {
 	segments: Record<ContextSegmentKey, number>;
 	memoryFiles: Array<{ key: MemoryKey; path: string; tokens: number }>;
@@ -44,15 +44,18 @@ function isMcpTool(name: string): boolean {
 	return name.startsWith("mcp__") || name === "mcp_search" || name === "mcp_call";
 }
 
-/** 系统提示词里单独列出的段，段名是 plume.skills、plume.prompt 和 plume.memory 给的。 */
-const CARVED = ["skills", "projectInstructions", "projectMemory"] as const;
-const MEMORY: readonly MemoryKey[] = ["projectInstructions", "projectMemory"];
+/** 系统提示词里单独列出的段：内置插件 plume.skills、plume.prompt 给的两段按段名认，记忆按插件标的类别认（`PromptSection.category`）。 */
+type Carved = "skills" | MemoryKey;
+function carvedAs(section: PromptSection): Carved | undefined {
+	if (section.category === "memory") return "memory";
+	return section.id === "skills" || section.id === "projectInstructions" ? section.id : undefined;
+}
 
 export function estimateContext(context: Pick<ModelContext, "systemPrompt" | "sections" | "messages" | "tools">): ContextEstimate {
-	const carved = { skills: 0, projectInstructions: 0, projectMemory: 0 };
+	const carved: Record<Carved, number> = { skills: 0, projectInstructions: 0, memory: 0 };
 	for (const section of context.sections) {
-		const id = CARVED.find((key) => key === section.id);
-		if (id) carved[id] += tokensOf(section.text.length);
+		const key = carvedAs(section);
+		if (key) carved[key] += tokensOf(section.text.length);
 	}
 	const schema = (tools: typeof context.tools) => tools.map((tool) => `${tool.name}${tool.description}${JSON.stringify(tool.parameters)}`).join("").length;
 	return {
@@ -61,10 +64,12 @@ export function estimateContext(context: Pick<ModelContext, "systemPrompt" | "se
 			tools: tokensOf(schema(context.tools.filter((tool) => !isMcpTool(tool.name)))),
 			mcpTools: tokensOf(schema(context.tools.filter((tool) => isMcpTool(tool.name)))),
 			// 单独列出的段从系统提示词里扣掉：它们本来就在提示词里，再整份算一遍提示词，总数会比发出去的还大。
-			systemPrompt: Math.max(0, tokensOf(context.systemPrompt.length) - carved.skills - carved.projectInstructions - carved.projectMemory),
+			systemPrompt: Math.max(0, tokensOf(context.systemPrompt.length) - carved.skills - carved.projectInstructions - carved.memory),
 			...carved,
 		},
-		memoryFiles: MEMORY.flatMap((key) => context.sections.filter((section) => section.id === key).flatMap((section) => filesOf(key, section))),
+		memoryFiles: (["projectInstructions", "memory"] as const).flatMap((key) =>
+			context.sections.filter((section) => carvedAs(section) === key).flatMap((section) => filesOf(key, section)),
+		),
 	};
 }
 
@@ -100,7 +105,7 @@ export function contextBreakdown(estimate: ContextEstimate, messages: readonly M
 	const sized = Object.fromEntries(keys.map((key) => [key, scale(guesses[key])])) as Record<ContextSegmentKey, number>;
 	// 各文件是所在那段的一部分，按那段缩放的比例缩放，加起来不超过那段。
 	const inside = (key: MemoryKey) => scaler(guesses[key] > 0 ? sized[key] / guesses[key] : 0);
-	const within = { projectInstructions: inside("projectInstructions"), projectMemory: inside("projectMemory") };
+	const within = { projectInstructions: inside("projectInstructions"), memory: inside("memory") };
 	return {
 		limit,
 		used: keys.reduce((sum, key) => sum + sized[key], 0),

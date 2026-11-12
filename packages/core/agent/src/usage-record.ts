@@ -25,8 +25,8 @@ type InputPart = (typeof INPUT_PARTS)[number];
 export type InputParts = Record<InputPart, number>;
 export const TOKEN_PARTS = [...INPUT_PARTS, "outputThinking", "outputReply"] as const satisfies readonly UsageTokenPart[];
 
-/** 指令和记忆：人写的、记下的，每轮原样进提示词。段名是 plume.prompt 和 plume.memory 给的。 */
-const INSTRUCTION_SECTIONS = new Set(["userInstructions", "projectInstructions", "userMemory", "projectMemory"]);
+/** 指令和记忆：人写的、记下的，每轮原样进提示词。指令的段名是内置插件 plume.prompt 给的；记忆按插件标的类别认（`PromptSection.category`）。 */
+const INSTRUCTION_SECTIONS = new Set(["userInstructions", "projectInstructions"]);
 /** 能力目录：技能、子智能体、延后加载的 MCP 工具。 */
 const SKILL_SECTIONS = new Set(["skills", "subagents", "mcpDeferred"]);
 
@@ -63,7 +63,7 @@ export function estimateParts(context: Pick<ModelContext, "systemPrompt" | "sect
 	for (const section of context.sections) {
 		const tokens = estimateTokens(section.text);
 		sectioned += tokens;
-		if (INSTRUCTION_SECTIONS.has(section.id)) parts.instructions += tokens;
+		if (INSTRUCTION_SECTIONS.has(section.id) || section.category === "memory") parts.instructions += tokens;
 		else if (SKILL_SECTIONS.has(section.id)) parts.skills += tokens;
 		else parts.system += tokens;
 	}

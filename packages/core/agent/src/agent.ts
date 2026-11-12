@@ -2332,6 +2332,15 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						const provider = settings.providers.find((entry) => entry.id === providerId);
 						return `${provider?.name ?? providerId}/${provider?.models.find((entry) => entry.modelId === modelId)?.name ?? modelId}`;
 					},
+					describeTool: (name, args) => {
+						try {
+							const said = host.tool(name)?.definition.describe?.(args);
+							return typeof said === "string" ? said : undefined;
+						} catch (error) {
+							log("agent", "warn", `工具 ${name} 的 describe 出错，导出时写工具名：${errorText(error)}`);
+							return undefined;
+						}
+					},
 				},
 				activeLocale(),
 			);

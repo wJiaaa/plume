@@ -13,6 +13,8 @@ export function conversationMarkdown(
 		compactions: readonly CompactionMark[];
 		exportedAt: Date;
 		modelLabel?: (provider: string, model: string) => string;
+		/** 注册这个工具的插件给的说法（`ToolDefinition.describe`）；没有时用这里认得的几种，再不然写工具名。 */
+		describeTool?: (name: string, args: Record<string, unknown>) => string | undefined;
 	},
 	locale: string,
 ): string {
@@ -108,7 +110,7 @@ export function conversationMarkdown(
 			} else {
 				say("assistant");
 				const routed = routedCall(block.name, block.arguments);
-				const summary = toolSummary(routed.name, routed.args).replace(/\s+/g, " ").trim();
+				const summary = (input.describeTool?.(routed.name, routed.args) || toolSummary(routed.name, routed.args)).replace(/\s+/g, " ").trim();
 				calls.push(
 					`- ${inlineCode(routed.name)}${summary && summary !== routed.name ? ` ${escapeInline(summary)}` : ""}${results.get(block.id)?.isError ? t("failed") : ""}`,
 				);
@@ -230,8 +232,6 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
 			return str("description") ?? "Sub-agent task";
 		case "skill":
 			return `Skill: ${str("name") ?? ""}`.trim();
-		case "image_generate":
-			return str("prompt")?.trim() ? `Generate image ${str("prompt")!.trim().split("\n")[0]!.slice(0, 80)}` : "Generate image";
 		default:
 			return name.startsWith("mcp__") ? `${name.split("__")[1]}: ${name.split("__")[2]}` : name;
 	}

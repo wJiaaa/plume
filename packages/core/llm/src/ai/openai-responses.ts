@@ -707,7 +707,7 @@ async function* streamResponses(
 				 * 回复里只有一个认不出的输出项，是这一轮唯一的「内容」被扔掉了，不是模型没话说。
 				 *
 				 * 实测（2026-10-08）：CLIProxyAPI 的「图像生成行为」为「已启用」时，会往每个 Codex 请求里自己加
-				 * 一个 `image_generation` 内置工具；模型出图时调它而不调 `image_generate`，回来的是一个
+				 * 一个 `image_generation` 内置工具；模型出图时调它而不调插件的生图工具，回来的是一个
 				 * `image_generation_call` 加一条空 message。从前那条空 message 被当成空回复，自动「继续」三次、
 				 * 每次都再出一张图、每次都扔掉，最后才报「连续返回空回复」。
 				 *

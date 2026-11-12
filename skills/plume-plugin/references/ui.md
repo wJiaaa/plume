@@ -92,7 +92,7 @@ export default {
 | `ui.ComposerSend` | 产品的发送／停止按钮，收到 `{ running, disabled?, tip?, onSend, onStop }`；签名与使用见下文。经 `ui` 使用，不从 `@plume/ui` 导入 |
 | `ui.useSession(sessionId)` | React hook：一个会话的视图（摘要、消息、草稿、进度、审批），随它的事件更新；还没读到是 undefined |
 | `ui.useSessionActivity(sessionId)` | React hook：侧栏行首给这个会话的记号：`"waiting"`（它或子会话在等批准）、`"done"`、`"failed"`（人没看着时跑完、没跑完，人打开看过就清掉），没有记号是 undefined；只在内存里，重开应用都算看过。卡片上要「看过就不再提」时用它 |
-| `ui.contextBreakdown(sessionId)` | 这个会话的上下文窗口按段拆开：对话消息、工具、MCP 工具、技能目录、系统提示词、项目指令、项目记忆各多少 token（按最近一次请求估，有服务商的总数时按比例缩放到它），`memoryFiles` 是项目指令和项目记忆按文件的来源（`{ path, tokens }[]`，插件经段的 `files` 标的）；本次启动后还没发过请求是 null。每次现算，要看时再调 |
+| `ui.contextBreakdown(sessionId)` | 这个会话的上下文窗口按段拆开：对话消息、工具、MCP 工具、技能目录、系统提示词、项目指令、记忆（`segments` 的 key 是 `memory`）各多少 token（按最近一次请求估，有服务商的总数时按比例缩放到它），`memoryFiles` 是项目指令和记忆按文件的来源（`{ path, tokens }[]`，插件经段的 `files` 标的）；本次启动后还没发过请求是 null。每次现算，要看时再调 |
 | `ui.listCommands({ cwd? })` | 输入框 `/` 菜单此刻有的命令（`ListedCommand[]`：`SlashCommand` 加 `plugin`），同名去重后的样子：产品自己的 `/clear`（没有 `plugin`）在前，再是各插件经 `ctx.commands` 供的；`cwd` 决定项目里的命令文件、技能列不列。只读，展开、发送仍走输入框；每次现问，要看时再调。命令设置页靠它列「内置」那一段（没有 `source` 的） |
 | `ui.Conversation` | 产品的对话视图组件：画一个会话（插件自己的子会话、独立会话），可选底下一个输入框 |
 | `ui.Markdown` | `{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走 |

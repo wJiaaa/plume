@@ -11,7 +11,7 @@ const zhCN = {
 	used: "上一次请求",
 	remaining: "剩余空间",
 	memoryFiles: "记忆文件",
-	noMemoryFiles: "当前未加载项目指令或项目记忆",
+	noMemoryFiles: "当前未加载项目指令或记忆",
 	/** 工具表在 Plume 都来自插件，MCP 服务的单列一段，其余的不叫「内置工具」。 */
 	segments: {
 		messages: "对话消息",
@@ -20,7 +20,7 @@ const zhCN = {
 		skills: "技能目录",
 		systemPrompt: "系统提示词",
 		projectInstructions: "项目指令",
-		projectMemory: "项目记忆",
+		memory: "记忆",
 	} satisfies Record<ContextSegmentKey, string>,
 };
 
@@ -35,7 +35,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		used: "Last request",
 		remaining: "Room left",
 		memoryFiles: "Memory files",
-		noMemoryFiles: "No project instructions or project memory are loaded",
+		noMemoryFiles: "No project instructions or memory are loaded",
 		segments: {
 			messages: "Messages",
 			tools: "Tools",
@@ -43,7 +43,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 			skills: "Skill catalogue",
 			systemPrompt: "System prompt",
 			projectInstructions: "Project instructions",
-			projectMemory: "Project memory",
+			memory: "Memory",
 		},
 	},
 };

@@ -202,6 +202,34 @@ it("移动项目切换目录且保留身份、消息和状态；移出保留目�
 	expect(agent.service.listSessions()).toHaveLength(2);
 });
 
+it("导出 Markdown 时插件工具的那一行用它注册时给的 describe，出错时写工具名", async () => {
+	const painter: Plugin = {
+		name: "test.painter",
+		apply(ctx) {
+			for (const [name, describe] of [
+				["paint", (args: Record<string, unknown>) => `Paint ${String(args.what)}`],
+				[
+					"broken",
+					() => {
+						throw new Error("坏了");
+					},
+				],
+			] as const)
+				ctx.tools.register({ name, description: name, parameters: { type: "object", properties: {} }, describe, execute: async () => ({ output: "ok" }) });
+		},
+	};
+	const calls = [
+		{ id: "call_paint", name: "paint", args: { what: "a fox" } },
+		{ id: "call_broken", name: "broken", args: {} },
+	];
+	const { service, session, idle } = await start([{ toolCalls: calls }, { text: "画好了" }], [painter]);
+	service.send(session.id, { content: [{ type: "text", text: "画" }] });
+	await idle();
+	const file = join(dir, "exports", "paint.md");
+	await service.exportSession(session.id, file, "markdown");
+	expect(await readFile(file, "utf8")).toContain("- `paint` Paint a fox\n- `broken`\n");
+});
+
 it("单会话导出服务只取目标记录；Markdown 不泄露供应商配置，拒绝覆盖源库和相对路径", async () => {
 	const { service, session, idle } = await start([{ text: "只属于选中会话的回答" }]);
 	service.send(session.id, { content: [{ type: "text", text: "选中会话的问题" }] });
@@ -339,14 +367,17 @@ it("上下文分段：发请求前没有，发过以后按那次请求分段、�
 	expect(breakdown?.memoryFiles).toEqual([]);
 });
 
-it("上下文分段：项目指令和项目记忆按插件标的文件列出来源", async () => {
+it("上下文分段：项目指令和记忆按插件标的文件列出来源", async () => {
 	await writeFile(join(workspace, "AGENTS.md"), "用 pnpm。\n".repeat(200));
 	const memory: Plugin = {
 		name: "test.memory-files",
 		apply(ctx) {
 			ctx.hook("model.context", (input, next) => {
 				const text = "<project_memory>\n- 记下的\n</project_memory>";
-				return next({ ...input, sections: [...input.sections, { id: "projectMemory", text, files: [{ path: "/data/learned.md", chars: text.length }] }] });
+				return next({
+					...input,
+					sections: [...input.sections, { id: "learned", text, category: "memory", files: [{ path: "/data/learned.md", chars: text.length }] }],
+				});
 			});
 		},
 	};
@@ -361,7 +392,7 @@ it("上下文分段：项目指令和项目记忆按插件标的文件列出来�
 	const [instructions, learned] = breakdown?.memoryFiles ?? [];
 	expect(instructions?.tokens).toBeGreaterThan(0);
 	expect(instructions?.tokens).toBeLessThanOrEqual(tokensOf("projectInstructions"));
-	expect(learned?.tokens).toBe(tokensOf("projectMemory"));
+	expect(learned?.tokens).toBe(tokensOf("memory"));
 });
 
 it("记忆文件在会话目录外也能在文件面板里只读打开，只限这个会话最近一次请求标出的那几个", async () => {
@@ -375,7 +406,7 @@ it("记忆文件在会话目录外也能在文件面板里只读打开，只限�
 		apply(ctx) {
 			ctx.hook("model.context", (input, next) => {
 				const text = "<project_memory>\n- 记下的\n</project_memory>";
-				return next({ ...input, sections: [...input.sections, { id: "projectMemory", text, files: [{ path: learned, chars: text.length }] }] });
+				return next({ ...input, sections: [...input.sections, { id: "learned", text, category: "memory", files: [{ path: learned, chars: text.length }] }] });
 			});
 		},
 	};

@@ -226,3 +226,20 @@ it("异步送达仍引用子智能体结论，运行时包装不当成人说的�
 	expect(md).toContain("### 子智能体 explore 的结论：查引用\n\n> 结论二\n>\n> - b.ts");
 	expect(md).not.toMatch(/RUNTIME WRAPPER|subagent_result|## 用户/);
 });
+
+it("插件工具的说法由注册它的插件给（describe），没给时写工具名；本体不认插件的工具名", () => {
+	const messages = [
+		reply([
+			{ type: "toolCall", id: "c1", name: "paint_picture", arguments: { prompt: "a red fox\nin snow" } },
+			{ type: "toolCall", id: "c2", name: "other_tool", arguments: {} },
+			{ type: "toolCall", id: "c3", name: "read", arguments: { path: "a.ts" } },
+		]),
+	];
+	const plain = markdown(messages, "en");
+	expect(plain).toContain("- `paint_picture`\n- `other_tool`\n- `read` Read a.ts");
+	const described = conversationMarkdown(
+		{ summary, messages, compactions: [], exportedAt, describeTool: (name, args) => (name === "paint_picture" ? `Paint ${String(args.prompt)}` : undefined) },
+		"en",
+	);
+	expect(described).toContain("- `paint_picture` Paint a red fox in snow\n- `other_tool`\n- `read` Read a.ts");
+});
