@@ -28,14 +28,22 @@ export function attachmentLabel(position: { index: number; total: number; kind?:
 	return total > 1 ? `Attachment ${index} of ${total}${within}` : kind === "folder" ? "Attached folder" : "Attached file";
 }
 
-/** 文本附件的内容怎么写进提示词：带名字、围起来，模型分得清文件和前后那句话。 */
-export function attachmentBody(name: string, text: string, label = "Attached file"): string {
-	return `\n\n### ${label}: ${name}\n\`\`\`\n${text}\n\`\`\`\n\n`;
+/**
+ * 拖进来、选进来的文件在磁盘上的位置，跟在名字后面。没有它，模型手里只有一份内容的副本：要它改这份文件，
+ * 它只能去工作区里按名字找，找不到就只能把改好的片段贴回来。粘贴的截图没有位置，这一段就不写。
+ */
+function locatedAt(path?: string): string {
+	return path ? ` (at ${JSON.stringify(path)})` : "";
 }
 
-/** 读不出内容的文件写成这样：说清楚没带内容，模型就不会装作读过。 */
-export function attachmentStub(name: string, mimeType?: string, label = "Attached file"): string {
-	return `\n\n[${label}: ${name}${mimeType ? ` (${mimeType})` : ""} — contents not included]\n\n`;
+/** 文本附件的内容怎么写进提示词：带名字、围起来，模型分得清文件和前后那句话。 */
+export function attachmentBody(name: string, text: string, label = "Attached file", path?: string): string {
+	return `\n\n### ${label}: ${name}${locatedAt(path)}\n\`\`\`\n${text}\n\`\`\`\n\n`;
+}
+
+/** 读不出内容的文件写成这样：说清楚没带内容，模型就不会装作读过；有位置时它能自己用工具去读。 */
+export function attachmentStub(name: string, mimeType?: string, label = "Attached file", path?: string): string {
+	return `\n\n[${label}: ${name}${mimeType ? ` (${mimeType})` : ""}${locatedAt(path)} — contents not included]\n\n`;
 }
 
 /** 文件夹只给完整路径，内容由模型自己用工具去读：整个目录既装不下也没必要。 */
@@ -44,8 +52,8 @@ export function attachmentFolder(name: string, path: string, label = "Attached f
 }
 
 /** 图片块前面那一行：图片块里写不了字，三张截图之间唯一的区别就是紧挨着它的这段文字。 */
-export function attachmentImageLabel(name: string, label: string): string {
-	return `\n\n### ${label}: ${name}\n\n`;
+export function attachmentImageLabel(name: string, label: string, path?: string): string {
+	return `\n\n### ${label}: ${name}${locatedAt(path)}\n\n`;
 }
 
 /**

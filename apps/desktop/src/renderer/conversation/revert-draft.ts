@@ -25,10 +25,13 @@ export function editedContent(message: UserMessage, text: string): UserContent[]
 	return [...kept, { type: "text", text }];
 }
 
-/** 附件正文块里围起来的那段原文；按文件名认块（`### 标签: 名字` 那一行）。 */
+/**
+ * 附件正文块里围起来的那段原文；按文件名认块（`### 标签: 名字` 那一行，名字后面可能跟着 ` (at "路径")`，
+ * 见 `attachmentBody`）。标签里没有冒号，所以取第一个 `: `，名字里带冒号也认得出。
+ */
 function bodyOf(bodies: TextBlock[], name: string): string | undefined {
 	for (const block of bodies) {
-		const match = /^\n\n### [^\n]*: ([^\n]*)\n```\n([\s\S]*)\n```\n\n$/.exec(block.text);
+		const match = /^\n\n### [^\n]*?: ([^\n]*?)(?: \(at "[^\n]*"\))?\n```\n([\s\S]*)\n```\n\n$/.exec(block.text);
 		if (match?.[1] === name) return match[2];
 	}
 	return undefined;

@@ -71,12 +71,12 @@ export function spellDraft(text: string, attachments: OutgoingAttachment[]): Use
 		const label = labelFor(file);
 		flush();
 		if (file.isText && file.text) {
-			content.push({ type: "text", text: attachmentBody(file.name, file.text, label) });
+			content.push({ type: "text", text: attachmentBody(file.name, file.text, label, file.path) });
 			return;
 		}
 		if (!file.isText && file.data) {
 			// 图片前面先写一行说它是谁、排第几：图片块里写不了字，三张截图之间唯一的区别就是这一行。
-			content.push({ type: "text", text: attachmentImageLabel(file.name, label) });
+			content.push({ type: "text", text: attachmentImageLabel(file.name, label, file.path) });
 			content.push({ type: "image", data: file.data, mimeType: file.mimeType, ...(file.from ? { from: file.from } : {}) });
 			return;
 		}
@@ -85,7 +85,7 @@ export function spellDraft(text: string, attachments: OutgoingAttachment[]): Use
 			return;
 		}
 		// 只带名字和类型的，说明没带内容，模型就不会装作读过。
-		content.push({ type: "text", text: attachmentStub(file.name, file.mimeType, label) });
+		content.push({ type: "text", text: attachmentStub(file.name, file.mimeType, label, file.path) });
 	};
 
 	for (const file of unplaced) spell(file);

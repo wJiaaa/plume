@@ -14,7 +14,7 @@ const sent: UserMessage = {
 		{ type: "text", text: attachmentImageLabel("shot.png", "Attachment 1 of 2, image") },
 		{ type: "image", data: "AAAA", mimeType: "image/png" },
 		{ type: "text", text: "看看【图片 1】和【notes.md】" },
-		{ type: "text", text: attachmentBody("notes.md", "第一行\n```\n里面的围栏\n```", "Attachment 2 of 2, text") },
+		{ type: "text", text: attachmentBody("notes.md", "第一行\n```\n里面的围栏\n```", "Attachment 2 of 2, text", "/tmp/notes.md") },
 	],
 	displayText: "看看【图片 1】和【notes.md】",
 	attachments: [

@@ -69,20 +69,20 @@ test("改名时句子里的标记跟着改，卸下的拿掉并收干净空白",
 	assert.equal(next, "比 和 【图片 1】");
 });
 
-test("发出去的内容：没标记的附件在前，图片前面一行标签，文件夹给路径，读不出的说明没带内容", () => {
+test("发出去的内容：没标记的附件在前，图片前面一行标签，有磁盘位置的写上路径，读不出的说明没带内容", () => {
 	const image = { name: "shot.png", label: "图片 1", kind: "image", mimeType: "image/png", data: "AAAA", isText: false };
-	const doc = { name: "notes.md", label: "notes.md", kind: "text", mimeType: "text/markdown", text: "# hi", isText: true };
+	const doc = { name: "notes.md", label: "notes.md", kind: "text", mimeType: "text/markdown", text: "# hi", isText: true, path: "/w/notes.md" };
 	const folder = { name: "src", label: "src", kind: "folder", mimeType: "inode/directory", isText: false, path: "/w/src" };
-	const zip = { name: "a.zip", label: "a.zip", kind: "archive", mimeType: "application/zip", isText: false };
+	const zip = { name: "a.zip", label: "a.zip", kind: "archive", mimeType: "application/zip", isText: false, path: "/w/a.zip" };
 	const content = spellDraft("对比【图片 1】和【notes.md】", [image, doc, folder, zip]);
 	assert.deepEqual(content, [
 		{ type: "text", text: '\n\n[Attachment 1 of 4, folder: src — folder at "/w/src"; contents not included, read it with your tools if needed]\n\n' },
-		{ type: "text", text: "\n\n[Attachment 2 of 4, archive: a.zip (application/zip) — contents not included]\n\n" },
+		{ type: "text", text: '\n\n[Attachment 2 of 4, archive: a.zip (application/zip) (at "/w/a.zip") — contents not included]\n\n' },
 		{ type: "text", text: "对比" },
 		{ type: "text", text: "\n\n### Attachment 3 of 4, image: shot.png\n\n" },
 		{ type: "image", data: "AAAA", mimeType: "image/png" },
 		{ type: "text", text: "和" },
-		{ type: "text", text: "\n\n### Attachment 4 of 4, text: notes.md\n```\n# hi\n```\n\n" },
+		{ type: "text", text: '\n\n### Attachment 4 of 4, text: notes.md (at "/w/notes.md")\n```\n# hi\n```\n\n' },
 	]);
 	assert.equal(content.filter((block) => block.type === "text" && isAttachmentBody(block.text)).length, 4);
 	assert.deepEqual(attachmentMeta([image, folder]), [
