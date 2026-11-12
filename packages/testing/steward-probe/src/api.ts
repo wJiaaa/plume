@@ -7,7 +7,8 @@ export const NAME = "example.steward-probe";
 /** 面板看的一个会话：是不是本插件代管着、弹着哪张卡、模型回了什么（都是逻辑入口经 `ctx.sessions.observe` 收到的）。 */
 export interface ProbeView {
 	stewarded: boolean;
-	pending?: PendingRequest;
+	/** 弹着的卡和弹它的会话：代管会话自己，或挂在它下面的子会话（答卡时传这个 id）。 */
+	pending?: { sessionId: string; request: PendingRequest };
 	replies: string[];
 }
 

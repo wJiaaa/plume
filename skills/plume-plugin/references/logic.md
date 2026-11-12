@@ -47,7 +47,7 @@ export default {
 | `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 后台运行立即交回 `{ id, sessionId }`；等待该次结束后，把结果送给它的真实父会话。父忙时安全步骤边界读入，闲时唤起；停止、过期、重复的结果返回 false，不能任意向会话发消息。`frame`（`{ head, tail?() }`）：同一次送达里本插件带 `frame` 的几份合成一段，`head` 写一次，接着各份正文，最后是最后一份的 `tail()`（送出那一刻才取，比如「还在等谁」）。`delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON）写进送达消息，宿主只留这几个字段、记下是哪个插件交的，界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行，没登记就按 `title` 画默认的一行；不给就只有模型看得到 |
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话，空闲时拒绝；明确停止会话时通知插件，清理尚未启动的排队工作，监听随插件卸载 |
 | `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title? })` | 开一个新的顶层会话并发出第一句话（`model`、`thinking` 不给用默认模型、默认推理强度；不认识的模型、档位抛错），返回 `{ session, done, idle, reportBack }`（`done` 是第一轮为什么结束，`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复），`reportBack(text, delivery)` 把结果作为一条运行时送达交回 `spawnedFrom` 那个会话一次（`delivery` 和 `report` 的同一个形状，宿主填上新会话的 id，默认画成「来自新会话」一行、点了过去），来处删了、归档了返回 false；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时抛错）；会话进侧栏、不记在插件名下，人能接着聊，插件之后不能再往里发（`steward: true` 开出来的由你代管，见下一行）。只能开新的，碰不到已有会话。见下文「开新会话」 |
-| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 只对你经 `launch({ …, steward: true })` 开出、人还没停止代管的会话：`post` 往里转一句话（排进和人同一条队，闲着当场开一轮，返回 `{ started }`）；`respond`、`answer` 替人答它弹着的那张卡（审批卡含提权用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答），答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的、人停止了代管、你停用了时抛错。见下文「代管会话」 |
+| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 只对你经 `launch({ …, steward: true })` 开出、人还没停止代管的会话：`post` 往里转一句话（排进和人同一条队，闲着当场开一轮，返回 `{ started }`）；`respond`、`answer` 替人答它和挂在它下面的子会话弹着的那张卡（审批卡含提权用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答；子会话的卡传子会话的 id），答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的、人停止了代管、你停用了时抛错；`post` 不能往子会话里转。见下文「代管会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
 | `ctx.pages` | 驱动界面入口画的网页（`<webview>`）：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`、`chromeLogins`，`onEvent` 收页面的事件。见下文「网页」 |
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见下面「`/` 命令」），停用时撤下 |
@@ -476,20 +476,23 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、后台命令�
 ```ts
 const { session } = await ctx.sessions.launch({ cwd, message: first, steward: true });
 await ctx.sessions.post(session.id, "外面的人又说了一句"); // 排进队；闲着就开一轮，忙着排着，不插话
-ctx.sessions.observe(({ sessionId, event }) => {
-	if (sessionId !== session.id) return;
-	if (event.type === "approval" && event.approval) forward(event.approval); // 弹着的卡（审批或等人给数据）
-	if (event.type === "response") forwardReply(event.reply); // 模型的一段回复
+ctx.sessions.observe(async ({ sessionId, event }) => {
+	// 代管会话自己，或挂在它下面的子会话（子智能体、侧边聊天）
+	const home = sessionId === session.id ? sessionId : (await ctx.sessions.get(sessionId))?.parentId;
+	if (home !== session.id) return;
+	if (event.type === "approval" && event.approval) forward(sessionId, event.approval); // 弹着的卡（审批或等人给数据），记下是哪个会话弹的
+	if (event.type === "response" && sessionId === session.id) forwardReply(event.reply); // 模型的一段回复
 });
-// 外面的人答了：
-await ctx.sessions.respond(session.id, approval.toolCallId, "once"); // 审批卡（含提权）：once 或 reject
-await ctx.sessions.answer(session.id, request.toolCallId, { answer: "先备份" }); // 等人给数据的卡：值由那个工具核
+// 外面的人答了：传弹那张卡的会话（代管会话或它下面的子会话）
+await ctx.sessions.respond(asker, approval.toolCallId, "once"); // 审批卡（含提权）：once 或 reject
+await ctx.sessions.answer(asker, request.toolCallId, { answer: "先备份" }); // 等人给数据的卡：值由那个工具核
 ```
 
 - 会话还是人的顶层会话：进侧栏，人能接着聊，标题旁写着「由 你的显示名 代管」；权限照这个会话的设置，不因话是你转来的而变。钩子里 `session.steward` 是代管它的插件。
 - 转来的话画成人的气泡、标着「你的显示名 转来」，模型读到的前面有一句本体写的来处说明（插件从 Plume 之外转来、发送者 Plume 没核实）；`prompt.submit` 的 `launched` 为 true。
-- 卡只答弹着的那一张（`approval` 事件里的那张），人在桌面上照样能点，谁先到算谁的。「以后不再问」不给插件。你答的那次调用底下写「由 你的显示名 代答」，模型读到的结果里也写明是你转达的。外面答的人是不是该答的人，由你确认，本体不核。
-- 人在会话菜单里点「停止代管」以后，`post`、`respond`、`answer` 都抛错，你转来还排着的话一起拿掉；插件停用后也抛错。只能动自己代管的会话，不能事后认领人已有的会话。
+- 卡只答弹着的那一张（`approval` 事件里的那张），人在桌面上照样能点，谁先到算谁的。「以后不再问」不给插件，只有 `once`、`reject`。你答的那次调用底下写「由 你的显示名 代答」，模型读到的结果里也写明是你转达的。外面答的人是不是该答的人，由你确认，本体不核。
+- 挂在代管会话下面的子会话（模型派的子智能体、人开的侧边聊天，不管是哪个插件建的）弹的卡也归你答：`approval` 事件的 `sessionId` 是那个子会话，`ctx.sessions.get(sessionId)` 的 `parentId` 是你代管的会话；答的时候传子会话的 id，规矩和答代管会话自己的卡一样。往里转话只能转进代管会话自己，`post` 给子会话抛错。
+- 人在会话菜单里点「停止代管」以后，`post`、`respond`、`answer` 都抛错（子会话的卡也一样），你转来还排着的话一起拿掉；插件停用后也抛错。停止代管时已经弹着的卡，之后只能人答。只能动自己代管的会话，不能事后认领人已有的会话。
 - 例子是仓库里的测试插件 `packages/testing/steward-probe`（面板代替外面的人）。
 
 ## 服务：插件给插件用的一组方法

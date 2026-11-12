@@ -99,7 +99,9 @@ function stewardPanel(ui: UiContext, api: Remote<ProbeApi>) {
 		}
 
 		const stewarded = session.summary.steward === NAME;
-		const pending = view?.pending;
+		const pending = view?.pending?.request;
+		// 卡可能是子会话（子智能体、侧边聊天）弹的：答的时候传弹它的那个会话。
+		const asker = view?.pending?.sessionId ?? sessionId;
 		return (
 			<div style={COLUMN} data-steward-probe={sessionId}>
 				<Text as="p" size="detail" tone={stewarded ? "accent" : "faint"} data-probe-stewarded={stewarded ? "yes" : "no"}>
@@ -128,8 +130,18 @@ function stewardPanel(ui: UiContext, api: Remote<ProbeApi>) {
 					{text.pending}
 				</Text>
 				{pending ? (
-					<div style={COLUMN} data-probe-pending={pending.toolCallId} data-probe-pending-type={pending.type ?? "approval"}>
+					<div
+						style={COLUMN}
+						data-probe-pending={pending.toolCallId}
+						data-probe-pending-type={pending.type ?? "approval"}
+						data-probe-pending-child={asker === sessionId ? "no" : "yes"}
+					>
 						<Text size="label">{pending.title}</Text>
+						{asker !== sessionId && (
+							<Text size="caption" tone="faint">
+								{text.fromChild}
+							</Text>
+						)}
 						<Text size="caption" tone="faint" mono>
 							{pending.tool} · {pending.kind}
 						</Text>
@@ -145,15 +157,11 @@ function stewardPanel(ui: UiContext, api: Remote<ProbeApi>) {
 										variant="primary"
 										disabled={!reply.trim()}
 										data-probe-answer=""
-										onClick={() => void run(async () => settled(await api.answer(sessionId, pending.toolCallId, parseAnswer(reply))))}
+										onClick={() => void run(async () => settled(await api.answer(asker, pending.toolCallId, parseAnswer(reply))))}
 									>
 										{text.answer}
 									</Button>
-									<Button
-										size="sm"
-										data-probe-reject=""
-										onClick={() => void run(async () => settled(await api.respond(sessionId, pending.toolCallId, "reject")))}
-									>
+									<Button size="sm" data-probe-reject="" onClick={() => void run(async () => settled(await api.respond(asker, pending.toolCallId, "reject")))}>
 										{text.reject}
 									</Button>
 								</div>
@@ -164,15 +172,11 @@ function stewardPanel(ui: UiContext, api: Remote<ProbeApi>) {
 									size="sm"
 									variant="primary"
 									data-probe-allow=""
-									onClick={() => void run(async () => settled(await api.respond(sessionId, pending.toolCallId, "once")))}
+									onClick={() => void run(async () => settled(await api.respond(asker, pending.toolCallId, "once")))}
 								>
 									{text.allow}
 								</Button>
-								<Button
-									size="sm"
-									data-probe-reject=""
-									onClick={() => void run(async () => settled(await api.respond(sessionId, pending.toolCallId, "reject")))}
-								>
+								<Button size="sm" data-probe-reject="" onClick={() => void run(async () => settled(await api.respond(asker, pending.toolCallId, "reject")))}>
 									{text.reject}
 								</Button>
 							</div>

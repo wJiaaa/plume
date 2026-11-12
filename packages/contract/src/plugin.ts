@@ -920,8 +920,8 @@ export interface SessionLaunch {
 	/** 标题；不给就取第一句话的开头。 */
 	title?: string;
 	/**
-	 * 开出来的会话由本插件代管（记进摘要的 `steward`）：之后本插件能经 `post` 往里转话、经 `respond`、`answer` 替人答它的卡，
-	 * 直到人在会话菜单里停止代管。会话照旧是人的顶层会话：进侧栏，人能接着聊，权限照这个会话的设置。
+	 * 开出来的会话由本插件代管（记进摘要的 `steward`）：之后本插件能经 `post` 往里转话、经 `respond`、`answer` 替人答它和它下面的子会话
+	 * 弹的卡，直到人在会话菜单里停止代管。会话照旧是人的顶层会话：进侧栏，人能接着聊，权限照这个会话的设置。
 	 */
 	steward?: boolean;
 }
@@ -960,7 +960,7 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
  * 不开放任意向用户会话发送消息的能力：插件够得着的会话都从宿主给的句柄来，目标不由插件随手填。
  * - 新开的会话：`launch` 开一个新的顶层会话、发出第一句话，之后它就是人的会话，插件不能再往里发；
  * - 代管的会话：`launch({ steward: true })` 开出来的那些，人没停止代管时，开它的插件能经 `post` 往里转话、经 `respond`、`answer`
- *   替人答它的卡；别的会话（人已有的、别的插件代管的）不行，也不能事后认领；
+ *   替人答它和挂在它下面的子会话弹的卡；别的会话（人已有的、别的插件代管的）不行，也不能事后认领；
  * - 开出它的那个会话：`LaunchedSession.reportBack` 交回一次，来处要是本插件的工具在那里的一次调用；
  * - 调用所在的会话：`ToolRun.background` 送后台结果、`ToolRun.archiveAfterTurn` 收尾后归档；
  * - 子会话的父会话：插件自己建的子会话里，它注册的工具的那次调用拿得到 `ToolRun.parent`（排活、停下、接着做），
@@ -1046,7 +1046,8 @@ export interface SessionAccess {
 	 * 往本插件代管的会话里转一句话（外面的人经插件发来的消息）：排进这个会话的队（和人在输入框里排的同一条，落盘），
 	 * 会话闲着就当场开一轮，正在跑就排着，不插进这一轮。气泡标着来自本插件（`UserMessage.origin` 是 `plugin`，`fromPlugin` 是本插件），
 	 * 模型读到的前面多一句本体写的来处说明：这是代管插件转来的，不是人在 Plume 的输入框里打的。权限、审批照这个会话的设置，不因来处而变。
-	 * `started` 是排上那一刻它就开始了。会话不在、不是本插件代管的（没代管过、人停止了代管）、已归档、话为空时抛错。
+	 * `started` 是排上那一刻它就开始了。会话不在、不是本插件代管的（没代管过、人停止了代管）、是子会话（子会话里的一轮归建它的插件发起）、
+	 * 已归档、话为空时抛错。
 	 * 回复和收场经 `observe`（`response`、`turnEnd`）和 `messages` 读；哪些转出去由插件自己定。
 	 */
 	post(sessionId: string, message: string): Promise<{ started: boolean }>;
@@ -1054,13 +1055,16 @@ export interface SessionAccess {
 	 * 替人答本插件代管的会话里弹着的那张审批卡（`approval` 事件、`SessionView.approval` 里第一张，按 `toolCallId` 认）：`once` 放行这一次，
 	 * `reject` 拒绝；对等人给数据的卡（`HumanRequest`）`reject` 是不答。和人在桌面上点卡同一条路，提权也算：人和插件谁先答算谁的，
 	 * 另一边的卡随之收起。「以后不再问」改的是人的设置，插件答不了。卡上的东西怎么转给外面的人、答的人是不是该答的人，由插件负责确认。
-	 * 答上了返回 true；那张卡已经不在（答过了、过期了、这一轮停了）、不是这一张时返回 false。会话不是本插件代管的时抛错。
+	 * 挂在代管会话下面的子会话（模型派的子智能体、人开的侧边聊天，不管是哪个插件建的）弹的卡也能这样答，`sessionId` 传子会话的 id
+	 * （`approval` 事件带的那个）；看的是父会话此刻是不是本插件代管着。
+	 * 答上了返回 true；那张卡已经不在（答过了、过期了、这一轮停了）、不是这一张时返回 false。会话不是本插件代管的（子会话：父会话不是）时抛错，
+	 * 人停止代管以后也抛错：那时还弹着的卡只能人答。
 	 * 这次调用的结果里记着是哪个插件代答的（`ToolResultMessage.answeredBy`），模型读到的结果后面也写明这一点。
 	 */
 	respond(sessionId: string, toolCallId: string, decision: "once" | "reject"): Promise<boolean>;
 	/**
-	 * 替人交回本插件代管的会话里弹着的那张等人给数据的卡（`ToolRun.request`：提问、表单、计划）要的数据，同 `AgentService.answer`。
-	 * `value` 由工具自己核。返回值、抛错和记下代答者同 `respond`。
+	 * 替人交回本插件代管的会话（或它下面的子会话）里弹着的那张等人给数据的卡（`ToolRun.request`：提问、表单、计划）要的数据，同 `AgentService.answer`。
+	 * `value` 由工具自己核。能答哪些会话、返回值、抛错和记下代答者同 `respond`。
 	 */
 	answer(sessionId: string, toolCallId: string, value: unknown): Promise<boolean>;
 	/** 可用模型目录，只含名称、窗口和思考档位。 */

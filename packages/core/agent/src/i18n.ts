@@ -46,6 +46,8 @@ const zhCN = {
 	"session.running": "这个会话正在运行，等它结束或先停止",
 	"session.notOwned": "会话 {id} 不是插件 {plugin} 建的，只有建它的插件能在里面发起一轮或删掉它",
 	"session.notStewarded": "会话 {id} 不由插件 {plugin} 代管（没有代管过，或人已经停止了代管），插件不能往里转话、替人答卡",
+	"session.stewardChildParent": "会话 {id} 是会话 {parent} 的子会话，那个会话不由插件 {plugin} 代管（没有代管过，或人已经停止了代管），插件不能替人答它的卡",
+	"session.stewardPostChild": "会话 {id} 是子会话，代管插件只能往它代管的顶层会话里转话",
 	"session.stewardArchived": "会话 {id} 已归档，不能再往里转话",
 	"session.badStewardDecision": "插件替人答卡只能是 once 或 reject，不认 {decision}",
 	"session.nestedChild": "子会话、插件的独立会话下面不能再建子会话",
@@ -194,6 +196,9 @@ const en: Record<TextKey, string> = {
 	"session.notOwned": "Session {id} was not created by plugin {plugin}; only the plugin that created it can run a turn in it or delete it",
 	"session.notStewarded":
 		"Session {id} is not stewarded by plugin {plugin} (it never was, or the user stopped the stewardship); the plugin cannot post into it or answer its cards",
+	"session.stewardChildParent":
+		"Session {id} is a child of session {parent}, which is not stewarded by plugin {plugin} (it never was, or the user stopped the stewardship); the plugin cannot answer its cards",
+	"session.stewardPostChild": "Session {id} is a child session; a steward plugin can post only into the top-level session it stewards",
 	"session.stewardArchived": "Session {id} is archived; nothing more can be posted into it",
 	"session.badStewardDecision": "A plugin can answer a card only with once or reject, not {decision}",
 	"session.nestedChild": "Child sessions and plugin-owned sessions cannot have child sessions of their own",

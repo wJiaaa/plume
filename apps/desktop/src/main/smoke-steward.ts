@@ -16,6 +16,11 @@ const QUESTION = "文件写好了，要不要先备份？";
 const PICK = "先备份";
 const FINAL = "按你说的，先备份。";
 const LATE = "冒烟：停止代管以后再转一句";
+const DELEGATE = "冒烟：派个子 Agent 写 steward-child.txt";
+const TASK_TITLE = "写代管子文件";
+const CHILD_DONE = "子 Agent 写好了 steward-child.txt。";
+const WAITING = "子 Agent 在后台写，我等它交回。";
+const DELEGATED = "子 Agent 交回了，steward-child.txt 写好了。";
 
 /** 请求里这次调用的结果的文字；还没有结果时是 undefined。 */
 function toolResult(request: Record<string, unknown>, id: string): string | undefined {
@@ -34,7 +39,9 @@ function toolResult(request: Record<string, unknown>, id: string): string | unde
  * 插件代管会话（`launch({ steward: true })`、`ctx.sessions.post`、`respond`、`answer`），经测试插件「代管探针」（packages/testing/steward-probe）
  * 走一遍真界面：构建、装上它；在它的面板里开一个代管会话，标题栏标着由它代管；面板转进一句话开一轮，气泡标「代管探针 转来」，
  * 模型读到的前面有来处说明；假模型新建文件弹审批卡，面板上「允许这一次」，桌面上的卡跟着收起，那次调用底下写「由 代管探针 代答」；
- * 再调 `ask_user`，面板交回答案，模型拿到的就是它；面板列出模型的回复。最后人在会话菜单里「停止代管」，面板再转话被拒。
+ * 再调 `ask_user`，面板交回答案，模型拿到的就是它；面板列出模型的回复。再转一句让模型派一个子 Agent（plume.subagents 的子会话），
+ * 子 Agent 新建文件弹的审批卡压在桌面的输入框上方，面板也收到、注明是子会话弹的，面板「允许这一次」，桌面的卡收起，
+ * 子 Agent 读到的结果写明由插件转达，交回以后父会话接着说。最后人在会话菜单里「停止代管」，面板再转话被拒。
  */
 export async function checkSteward(options: {
 	window: BrowserWindow;
@@ -81,13 +88,35 @@ export async function checkSteward(options: {
 	const requests: string[] = [];
 	let answered: string | undefined;
 	let approved: string | undefined;
+	let childApproved: string | undefined;
 	// 按整段对话认走到哪一步，越往后的越先认。
 	setModel((request) => {
-		const tools = (request.tools as { name?: string }[] | undefined) ?? [];
-		// 标题这类不带工具的小调用不参与。
-		if (!tools.some((tool) => tool.name === "ask_user")) return { text: "代管" };
+		const tools = new Set(((request.tools as { name?: string }[] | undefined) ?? []).map((tool) => tool.name));
 		const all = JSON.stringify(request.messages ?? []);
+		// 子 Agent 的请求：它有 write、没有派子 Agent 的 task。新建文件要审批，由面板代答。
+		if (tools.has("write") && !tools.has("task")) {
+			const wrote = toolResult(request, "toolu_steward_child_write");
+			if (wrote === undefined)
+				return { toolCalls: [{ id: "toolu_steward_child_write", name: "write", args: { path: "steward-child.txt", content: "child\n" } }] };
+			childApproved = wrote;
+			return { text: CHILD_DONE };
+		}
+		// 标题这类不带工具的小调用不参与。
+		if (!tools.has("ask_user")) return { text: "代管" };
 		requests.push(all);
+		if (all.includes(DELEGATE)) {
+			if (all.includes(CHILD_DONE)) return { text: DELEGATED };
+			if (toolResult(request, "toolu_steward_task") !== undefined) return { text: WAITING };
+			return {
+				toolCalls: [
+					{
+						id: "toolu_steward_task",
+						name: "task",
+						args: { description: TASK_TITLE, prompt: "在 steward-child.txt 里写一行 child", subagent_type: "general" },
+					},
+				],
+			};
+		}
 		const asked = toolResult(request, "toolu_steward_ask");
 		if (asked !== undefined) {
 			answered = asked;
@@ -172,7 +201,28 @@ export async function checkSteward(options: {
 		if (!relayed?.includes("（插件转来）") || !relayed.includes("不是用户在 Plume 的输入框里打的")) throw new Error("模型读到的转来的话前面没有来处说明");
 		await capture("smoke-steward.png");
 
-		// 6. 人在会话菜单里停止代管：标注拿掉，面板再转话被本体拒绝，会话里不多出这句。
+		// 6. 让模型派一个子 Agent：子会话挂在代管会话下面、由 plume.subagents 建；它新建文件弹的审批卡压在桌面的输入框上方，
+		// 面板经 observe 也收到（注明是子会话弹的）并代答，桌面的卡跟着收起；子 Agent 交回以后父会话接着说。
+		await type("[data-probe-input]", DELEGATE);
+		await click(`${probe} [data-probe-post]`);
+		await until(
+			`document.querySelector('[data-approval-from]')?.textContent.includes(${JSON.stringify(TASK_TITLE)}) === true`,
+			"子 Agent 的审批卡压在输入框上方",
+		);
+		// 派出子 Agent 时右栏自己开了子 Agent 面板、换到了它那一格：换回代管探针。
+		await click(`[data-panel-tab="${PANEL}"] [role=tab]`);
+		await until(`document.querySelector('${probe} [data-probe-pending-type=approval][data-probe-pending-child=yes]') !== null`, "面板收到子会话弹的审批卡");
+		await capture("smoke-steward-child-approval.png");
+		await click(`${probe} [data-probe-allow]`);
+		await until(`document.querySelector('[data-approval-from]') === null`, "面板答过以后桌面上子 Agent 的卡收起");
+		await until(chatHas(DELEGATED), "子 Agent 交回以后父会话接着说");
+		if (!childApproved?.includes(`relayed by the plugin "${PROBE}"`))
+			throw new Error(`子 Agent 新建文件的结果里应该写明审批由插件转达，实际是 ${JSON.stringify(childApproved)}`);
+		const child = (await agent.sessions()).find((item) => item.parentId === sessionId);
+		if (!child) throw new Error("代管会话下面没有子 Agent 的子会话");
+		await capture("smoke-steward-child.png");
+
+		// 7. 人在会话菜单里停止代管：标注拿掉，面板再转话被本体拒绝，会话里不多出这句。
 		await click('header button[aria-label="会话操作"]');
 		await click('[role=menu][aria-label="会话选项"] [role=menuitem]', "停止代管");
 		await until(`document.querySelector('header [data-plume-steward]') === null`, "标题栏不再标代管");

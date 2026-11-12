@@ -339,3 +339,62 @@ it("插件停用以后，留着的 ctx 转不了话也答不了卡", async () =>
 	await expect(steward.respond(id, "call", "once")).rejects.toThrow("已停用");
 	await expect(steward.answer(id, "call", 1)).rejects.toThrow("已停用");
 });
+
+it("代管会话下面的子会话（别的插件建的也算）弹的卡，代管插件也能答：审批、提权、等人给数据，都记着代答者；往子会话里转话不行", async () => {
+	const { service, steward, other, launch, card, settledView } = await open();
+	const id = await launch();
+	// 子会话由别的插件建（像子智能体那样）：能不能答看的是父会话的代管关系，不看子会话的 owner。
+	const child = await other.create({ parentId: id });
+	await expect(steward.post(child.id, "往子会话里转")).rejects.toThrow("是子会话");
+
+	void other.send(child.id, "请改一下");
+	const asked = await card(child.id);
+	expect(await steward.respond(child.id, "call_wrong", "once")).toBe(false);
+	expect(await steward.respond(child.id, asked.toolCallId, "once")).toBe(true);
+	let [result] = results((await settledView(child.id)).messages);
+	expect(result).toMatchObject({ toolName: "touch", isError: false, answeredBy: STEWARD });
+	expect(textOf(result)).toContain('relayed by the plugin "test.steward"');
+
+	void other.send(child.id, "请提权");
+	const escalation = await card(child.id, (request) => request.toolCallId !== asked.toolCallId);
+	expect(escalation).toMatchObject({ escalation: "workspace-write" });
+	expect(await steward.respond(child.id, escalation.toolCallId, "once")).toBe(true);
+	[, result] = results((await settledView(child.id)).messages);
+	expect(result).toMatchObject({ answeredBy: STEWARD });
+	expect(textOf(result)).toMatch(/^once/);
+
+	void other.send(child.id, "请问一下");
+	const question = await card(child.id, (request) => request.type === "request");
+	expect(await steward.answer(child.id, question.toolCallId, { pick: "A" })).toBe(true);
+	[, , result] = results((await settledView(child.id)).messages);
+	expect(result).toMatchObject({ answeredBy: STEWARD });
+	expect(textOf(result)).toContain('{"answered":true,"value":{"pick":"A"}}');
+	// 父会话里什么都没多出来：答的是子会话自己的卡。
+	expect(results((await service.getSession(id)).messages)).toHaveLength(0);
+});
+
+it("不在代管会话下面的子会话，代管插件答不了；别的插件也答不了它不代管的会话下面的；人停止代管以后，子会话还弹着的卡只能人答", async () => {
+	const { service, steward, other, launch, card, settledView } = await open();
+	const mine = await service.createSession({ cwd: dir });
+	const human = await other.create({ parentId: mine.id });
+	void other.send(human.id, "请改一下");
+	const asked = await card(human.id);
+	await expect(steward.respond(human.id, asked.toolCallId, "once")).rejects.toThrow(`不由插件 ${STEWARD} 代管`);
+	await expect(steward.answer(human.id, asked.toolCallId, 1)).rejects.toThrow("不能替人答它的卡");
+	service.respond(human.id, asked.toolCallId, "reject");
+	await settledView(human.id);
+
+	const id = await launch();
+	const child = await other.create({ parentId: id });
+	void other.send(child.id, "请改一下");
+	const pending = await card(child.id);
+	// 子会话是 test.other 建的，可代管它父会话的不是 test.other：照样答不了。
+	await expect(other.respond(child.id, pending.toolCallId, "once")).rejects.toThrow("不能替人答它的卡");
+	await service.revokeSteward(id);
+	await expect(steward.respond(child.id, pending.toolCallId, "once")).rejects.toThrow("人已经停止了代管");
+	expect((await service.getSession(child.id)).approval?.toolCallId).toBe(pending.toolCallId);
+	service.respond(child.id, pending.toolCallId, "once");
+	const [result] = results((await settledView(child.id)).messages);
+	expect(result).toMatchObject({ isError: false });
+	expect(result?.answeredBy).toBeUndefined();
+});

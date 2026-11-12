@@ -16,7 +16,7 @@
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
 | 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
 | 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话；会话是哪一种 | `ctx.sessions`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
-| 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它弹着的卡（审批、提权、等人）；只能动自己代管的，人随时在会话菜单里停止代管 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
+| 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它和它下面的子会话弹着的卡（审批、提权、等人，不含「以后不再问」）；只能动自己代管的，人随时在会话菜单里停止代管，那时弹着的卡只能人答 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
 | 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
 | 服务 | 插件之间按名字配合，装一个同名的就换掉实现 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
 
