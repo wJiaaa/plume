@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -62,6 +62,26 @@ test("构建出的产物：逻辑入口能加载，界面入口把共享模块�
 	assert.match(ui, /from\s*"react\/jsx-runtime"/);
 	assert.doesNotMatch(ui, /from\s*"lucide-react"/);
 	assert.doesNotMatch(ui, /from\s*"@plume\/ui\/icons"/);
+});
+
+test("界面入口里 import() 的模块拆到 dist/chunks，不进启动就加载的 ui.mjs；重新构建不留旧文件", async () => {
+	const marker = "plume-split-chunk-marker";
+	const ui = join(dir, "src/ui.tsx");
+	const heavy = join(dir, "src/heavy.ts");
+	const source = readFileSync(ui, "utf8");
+	writeFileSync(heavy, `export const marker = ${JSON.stringify(marker)};\n`);
+	writeFileSync(ui, `${source}\nexport const loadHeavy = () => import("./heavy.ts");\n`);
+	try {
+		await buildPlugin(dir);
+		assert.doesNotMatch(readFileSync(join(dir, "dist/ui.mjs"), "utf8"), new RegExp(marker));
+		const chunks = readdirSync(join(dir, "dist/chunks"));
+		assert.ok(chunks.some((name) => readFileSync(join(dir, "dist/chunks", name), "utf8").includes(marker)));
+	} finally {
+		writeFileSync(ui, source);
+		rmSync(heavy);
+	}
+	await buildPlugin(dir);
+	assert.ok(!existsSync(join(dir, "dist/chunks")));
 });
 
 test("install 复制说明和产物，不带源码", () => {

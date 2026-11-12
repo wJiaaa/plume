@@ -9,6 +9,8 @@
  * - 界面入口：浏览器 ESM；react、react/jsx-runtime、@plume/ui、@plume/styles 留作外部，运行时经宿主的 import map 用产品的实例。
  *   只认这几个模块名本身：@plume/ui/icons 不在 import map 里，指到 SDK 自带的图标库打进插件（只打用到的那几个图标）。
  *   引入的 .css 是一段文字，插件自己挂到页面上（宿主不加载插件的样式表）。
+ *   宿主启动时就加载每个插件的 dist/ui.mjs；`import()` 进来的模块拆到 dist/chunks/，用到时才取，大的预览库不拖慢启动。
+ *   拆出来的文件名带内容哈希，和 ui.mjs 一起经 `plume-plugin://` 读取。
  */
 
 import { existsSync } from "node:fs";
@@ -125,11 +127,16 @@ export async function buildPlugin(target) {
 	await build({ ...common, entryPoints: [logic], outfile: join(dir, "dist/index.mjs"), platform: "node", target: "node24", external: native, banner });
 	await copyDependencies(dir, native);
 	const outputs = [`dist/index.mjs${native.length > 0 ? `（带上 ${native.join("、")}）` : ""}`];
+	await rm(join(dir, "dist/chunks"), { recursive: true, force: true });
 	if (existsSync(ui)) {
 		await build({
 			...common,
 			entryPoints: [ui],
-			outfile: join(dir, "dist/ui.mjs"),
+			outdir: join(dir, "dist"),
+			splitting: true,
+			entryNames: "[name]",
+			chunkNames: "chunks/[name]-[hash]",
+			outExtension: { ".js": ".mjs" },
 			platform: "browser",
 			target: "chrome156",
 			jsx: "automatic",

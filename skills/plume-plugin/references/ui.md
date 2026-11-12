@@ -542,7 +542,7 @@ apply(ui) {
 
 ## 共享模块
 
-`react`、`react/jsx-runtime`、`@plume/ui`、`@plume/styles` 不打包，运行时用产品的那一份；其余（包括 `@plume/ui/icons` 和第三方库）打进 `dist/ui.mjs`。能用哪些组件、各自的签名和用法，见 [components.md](components.md)（从源码生成）；`@plume/ui` 里没列在那里的导出是产品内部用的，引用了 `pnpm check:plugins` 会拦。
+`react`、`react/jsx-runtime`、`@plume/ui`、`@plume/styles` 不打包，运行时用产品的那一份；其余（包括 `@plume/ui/icons` 和第三方库）打进 `dist/ui.mjs`。宿主启动时就加载每个插件的 `ui.mjs`：只在某个操作里才用到的大库（预览、图表、编辑器）写成 `await import("…")`，构建时拆到 `dist/chunks/`，用到时才取。能用哪些组件、各自的签名和用法，见 [components.md](components.md)（从源码生成）；`@plume/ui` 里没列在那里的导出是产品内部用的，引用了 `pnpm check:plugins` 会拦。
 
 ## 运行诊断入口
 
