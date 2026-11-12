@@ -70,10 +70,11 @@ ctx.tools.register({
 	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
 	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
 	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
+	// aliases: { path: ["file", "filePath"] }, // 模型常写错的参数名（规范名 → 别名）：宿主在钩子、审批、转录看到参数之前换成规范名、删掉别名，execute 只读规范名
 	// kind: "view",                            // 对本机文件和命令做的是哪种活："view"、"list"、"find"、"search"、"create"、"modify"、"command"、"watch"、"job"，见「按类别找工具」
 	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"、"delegate"，见「按类别找工具」
 	async execute(args, run) {
-		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
+		// args 是模型给的，没校验过：先自己校验，不对就返回 isError（写了 aliases 的，别名已换成规范名）
 		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
 		return { output: "交给模型的结果", details: { /* 给卡片用 */ } };
 	},

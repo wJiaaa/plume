@@ -45,7 +45,7 @@ class SeenFiles {
 		for (const part of message.content) {
 			if (part.type !== "toolCall") continue;
 			const args = (part.arguments ?? {}) as Record<string, unknown>;
-			const path = (args.path ?? args.file ?? args.filePath) as unknown;
+			const path = args.path;
 			if (typeof path !== "string" || !path) continue;
 			const kind = this.kindOf(part.name);
 			if (kind === "create" || kind === "modify") this.changed.add(path);

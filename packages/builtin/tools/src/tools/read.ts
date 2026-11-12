@@ -1,7 +1,6 @@
 import type { Stats } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import type { FileViewDetails } from "@plume/contract";
-import { textArg } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { charWindow, formatCharWindow, longLineFooter, MAX_LINE_CHARS } from "./long-line.ts";
@@ -17,7 +16,6 @@ import { extractDocumentText } from "@plume/document-text";
 import { describeRead } from "./describe.ts";
 
 const DEFAULT_LIMIT = 2000;
-const PATH_KEYS = ["path", "file", "filePath"];
 /**
  * 正文的字数上限，留出头部路径、页脚和长行提示的余量。一次读给多少字要有个数：读出来的被当成「读过了」，
  * 之后 edit 据此放行，要是读出来的太长被别处剪掉，模型没看见的行也成了读过的。
@@ -76,6 +74,7 @@ export const readTool: Tool<ReadArgs> = {
 	name: "read",
 	describe: describeRead,
 	kind: "view",
+	aliases: { path: ["file", "filePath"], char_offset: ["charOffset"] },
 	description:
 		"Read a file. Text comes back under a `[path]` header as 1-indexed lines, `NNNN→content`; the `NNNN→` prefix is not part of the file. " +
 		"A long source file read without `offset`/`limit` comes back as its STRUCTURE: declarations and doc comments, each body folded to " +
@@ -99,10 +98,10 @@ export const readTool: Tool<ReadArgs> = {
 
 	async execute(args, ctx): Promise<ToolResult> {
 		const raw = args as unknown as Record<string, unknown>;
-		const path = textArg(args, PATH_KEYS);
+		const path = typeof raw.path === "string" ? raw.path : "";
 
 		if (!path) return errorResult("`path` is required.");
-		const charOffset = Math.max(1, numberArg(raw.char_offset ?? raw.charOffset) ?? 1);
+		const charOffset = Math.max(1, numberArg(raw.char_offset) ?? 1);
 
 		/*
 		 * 先认地址，而且只认有人登记了的 scheme。

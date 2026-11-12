@@ -11,13 +11,12 @@ import { writeTool } from "../../src/tools/write.ts";
 /** 本体不认工具名：导出会话的那一行、重复检测按改文件清零，都只看工具定义上的声明。 */
 it("导出会话时每个工具写成的那一行由工具自己给", () => {
 	expect(readTool.describe!({ path: "src/a.ts" })).toBe("Read src/a.ts");
-	expect(readTool.describe!({ file: "b.ts" })).toBe("Read b.ts");
 	expect(readTool.describe!({})).toBe("Read file");
 	expect(writeTool.describe!({ path: "a.ts" })).toBe("Write a.ts");
-	expect(editTool.describe!({ filePath: "a.ts" })).toBe("Edit a.ts");
+	expect(editTool.describe!({ path: "a.ts" })).toBe("Edit a.ts");
 	expect(lsTool.describe!({})).toBe("List .");
 	expect(globTool.describe!({ pattern: "**/*.ts" })).toBe("Find **/*.ts");
-	expect(grepTool.describe!({ query: "foo" })).toBe('Search "foo"');
+	expect(grepTool.describe!({ pattern: "foo" })).toBe('Search "foo"');
 	expect(grepTool.describe!({})).toBe("Search");
 	expect(bashTool.describe!({ command: "pnpm test\necho done" })).toBe("pnpm test");
 	expect(bashTool.describe!({ command: "ls", description: "列文件" })).toBe("列文件");

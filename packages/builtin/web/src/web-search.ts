@@ -10,20 +10,9 @@
 import type { ToolDefinition, ToolOutput } from "@plume/contract";
 import { SearchError, type SearchRegistry } from "./search/index.ts";
 
-const QUERY_KEYS = ["query", "pattern", "search"];
-
 /** 返回几条：够一个有几种可能答案的问题列出来，又只占一段而不是一页。 */
 const MAX_RESULTS = 8;
 const SEARCH_TIMEOUT_MS = 30_000;
-
-/** 模型常在几个名字之间漂（schema 写的是 `query`，它给 `pattern`），认几个别名；取第一个非空的字符串。 */
-function textArg(args: Record<string, unknown>, keys: readonly string[]): string | undefined {
-	for (const key of keys) {
-		const value = args[key];
-		if (typeof value === "string" && value) return value;
-	}
-	return undefined;
-}
 
 function errorResult(output: string): ToolOutput {
 	return { output, isError: true };
@@ -48,10 +37,7 @@ export function webSearchTool(registry: SearchRegistry, configuredProvider: () =
 		// i18n-exempt：发给模型的工具说明
 		description: "Search the web for pages: titles, snippets and URLs. Read one with web_fetch.",
 		// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
-		describe: (args) => {
-			const query = [args.query, args.pattern, args.search].find((value): value is string => typeof value === "string");
-			return query ? `Search ${query}` : "Search the web";
-		},
+		describe: (args) => (typeof args.query === "string" && args.query ? `Search ${args.query}` : "Search the web"),
 		parameters: {
 			type: "object",
 			properties: {
@@ -60,11 +46,13 @@ export function webSearchTool(registry: SearchRegistry, configuredProvider: () =
 			required: ["query"],
 			additionalProperties: true,
 		},
+		// 模型常在几个名字之间漂（schema 写的是 `query`，它给 `pattern`）：宿主在执行前换成 `query`。
+		aliases: { query: ["pattern", "search"] },
 		mutating: false,
 
 		async execute(args, run): Promise<ToolOutput> {
-			const query = textArg(args, QUERY_KEYS);
-			if (!query || query.trim().length === 0) return errorResult("`query` is required.");
+			const query = typeof args.query === "string" ? args.query : "";
+			if (query.trim().length === 0) return errorResult("`query` is required.");
 
 			const cleanedQuery = query.trim();
 			// 后端都是普通的 fetch，一个永远不回的服务会把这次调用一直挂到人按停止。

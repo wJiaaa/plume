@@ -163,11 +163,7 @@ function changedKey(cwd: string, args: Record<string, unknown>): string {
 }
 
 function pathOf(args: Record<string, unknown>): string {
-	for (const key of ["path", "file", "filePath", "file_path"] as const) {
-		const value = args[key];
-		if (typeof value === "string" && value) return value;
-	}
-	return "";
+	return typeof args.path === "string" ? args.path : "";
 }
 
 function pathKey(path: string): string {

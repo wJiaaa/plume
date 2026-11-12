@@ -156,6 +156,7 @@ const zhCN = {
 	"tool.noDescription": "工具 {name} 缺少 description",
 	"tool.noParameters": "工具 {name} 缺少 parameters",
 	"tool.noExecute": "工具 {name} 缺少 execute",
+	"tool.badAliases": "工具 {name} 的 aliases 要是「规范名 → 别名数组」，别名不能是 parameters 里的参数，也不能重复",
 } as const;
 
 export type TextKey = keyof typeof zhCN;
@@ -310,6 +311,7 @@ const en: Record<TextKey, string> = {
 	"tool.noDescription": "Tool {name} has no description",
 	"tool.noParameters": "Tool {name} has no parameters",
 	"tool.noExecute": "Tool {name} has no execute",
+	"tool.badAliases": "The aliases of tool {name} must map a parameter name to an array of aliases; an alias cannot be a parameter or appear twice",
 };
 
 export const CATALOGS: Record<Locale, Record<TextKey, string>> = { "zh-CN": zhCN, en };

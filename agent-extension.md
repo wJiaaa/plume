@@ -353,6 +353,11 @@ interface ToolDefinition {
 	description: string;
 	/** JSON Schema。 */
 	parameters: Record<string, unknown>;
+	/**
+	 * 模型常写错的参数名：规范名 → 别名（`{ path: ["file", "filePath"] }`）。本体在这一步的回复写进会话之前换成规范名、删掉别名，
+	 * 钩子的各层、审批、转录、压缩和工具自己看到的都是同一份参数，按参数拦调用的守卫不会被换个写法绕过。别名不能是参数里的名字。
+	 */
+	aliases?: Record<string, readonly string[]>;
 	/** 会改动工作区（写文件、执行命令）。没写 asks 的，本体据此在执行前问。 */
 	mutating?: boolean;
 	/** 工具自己在 execute 里经 run.ask 问。 */

@@ -61,6 +61,8 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	name: string;
 	description: string;
 	parameters: Record<string, unknown>;
+	/** 模型常写错的参数名，宿主在执行前换成规范名，见 `ToolDefinition.aliases`。 */
+	aliases?: ToolDefinition["aliases"];
 	/** 会改动工作区：相邻的调用不和它同时跑。 */
 	mutating?: boolean;
 	/** mutating 的工具里，这一次调用能证明什么都不改：可以和相邻的只读调用同时跑。 */
@@ -107,6 +109,7 @@ export function toDefinition<TArgs>(tool: Tool<TArgs>, env: ToolEnv): ToolDefini
 		name: tool.name,
 		description: tool.description,
 		parameters: tool.parameters,
+		...(tool.aliases ? { aliases: tool.aliases } : {}),
 		...(tool.mutating ? { mutating: true } : {}),
 		...(tool.readsOnly ? { readsOnly: tool.readsOnly } : {}),
 		...(tool.describe ? { describe: tool.describe } : {}),

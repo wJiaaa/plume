@@ -203,7 +203,7 @@ test("web_search：按 <search> 格式输出，配置错误时说出 code", asyn
 			},
 		)) as unknown as typeof fetch;
 	const tool = webSearchTool(registryWith({ tavily: "k" }, fakeFetch), async () => null);
-	const result = await tool.execute({ pattern: "  hello " }, run);
+	const result = await tool.execute({ query: "  hello " }, run);
 	assert.equal(
 		result.output,
 		`<search query="hello">\nthe answer\n\n1. A\n   https://a.example/x\n   snippet a\n2. b.example\n   https://b.example/\n</search>`,
@@ -252,4 +252,10 @@ test("导出会话时的说法（describe）：搜索写查询词，抓取写地
 	const fetchTool = webFetchTool();
 	assert.equal(fetchTool.describe?.({ url: "https://example.com/a" }), "Fetch https://example.com/a");
 	assert.equal(fetchTool.describe?.({}), "Fetch");
+});
+
+test("模型把查询词写在 pattern、search 上：工具声明成 query 的别名，由宿主在执行前换好，工具自己只读 query", async () => {
+	const search = webSearchTool(registryWith({}), async () => null);
+	assert.deepEqual(search.aliases, { query: ["pattern", "search"] });
+	assert.deepEqual(await search.execute({ pattern: "plume" }, run), { output: "`query` is required.", isError: true });
 });

@@ -21,11 +21,12 @@ import type {
 	ParentSession,
 	PermissionMode,
 	SessionScope,
+	ToolDefinition,
 	ToolExecution,
 	ToolOutput,
 	ToolRun,
 } from "@plume/contract";
-import type { ToolCallContent, ToolResultMessage } from "@plume/llm/types";
+import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { text } from "./i18n.ts";
 
@@ -159,6 +160,39 @@ function storable(details: unknown, call: ToolCallContent, scope: ToolScope): un
 		scope.log("agent", "error", `工具 ${call.name} 的结果 details 存不成 JSON，已丢掉：${errorText(error)}`);
 		return undefined;
 	}
+}
+
+/**
+ * 回复里的调用参数换成规范名（`ToolDefinition.aliases`），在回复写进会话之前：之后每个按参数做判断的地方（tool.execute、tool.approve 的层，
+ * 审批，转录，压缩）和工具自己读的是同一份。只在执行前换的话，层看到的和存下的就是模型写的那份，一条读 `path` 的守卫读不到 `file`，放过去，工具却照样读了。
+ * 换过的调用丢掉流里收到的参数原文（`argumentsText`）：回放时发的、算 token 时数的都该是存下的这一份，模型往后在历史里看到的也是规范的写法。
+ */
+export function canonicalCalls(reply: AssistantMessage, host: PluginHost): AssistantMessage {
+	let changed = false;
+	const content = reply.content.map((block) => {
+		if (block.type !== "toolCall") return block;
+		const args = canonicalArgs(block.arguments, host.tool(block.name)?.definition.aliases);
+		if (args === block.arguments) return block;
+		changed = true;
+		const { argumentsText, ...call } = block;
+		return { ...call, arguments: args };
+	});
+	return changed ? { ...reply, content } : reply;
+}
+
+/** 规范名没给（或是 null）时取第一个给了的别名；别名都删掉，规范名给了时也删，免得层读一个、工具读另一个。没有别名时原样返回。 */
+function canonicalArgs(args: Record<string, unknown>, aliases: ToolDefinition["aliases"]): Record<string, unknown> {
+	if (!aliases || !args || typeof args !== "object") return args;
+	let result: Record<string, unknown> | undefined;
+	for (const [name, names] of Object.entries(aliases)) {
+		for (const alias of names) {
+			if (!Object.hasOwn(args, alias)) continue;
+			result ??= { ...args };
+			if (result[name] == null && result[alias] != null) result[name] = result[alias];
+			delete result[alias];
+		}
+	}
+	return result ?? args;
 }
 
 /**

@@ -338,8 +338,8 @@ export function fallbackSummary(messages: readonly Message[], kindOf: KindOf): s
 				if (part.type !== "toolCall") continue;
 				const name = part.name;
 				const args = (part.arguments ?? {}) as Record<string, unknown>;
-				const path = (args.path ?? args.file ?? args.filePath) as string | undefined;
-				if (path && typeof path === "string") touchedFiles.add(path);
+				const path = typeof args.path === "string" ? args.path : undefined;
+				if (path) touchedFiles.add(path);
 				// 动过东西的才算关键动作：写、改文件和跑命令（注册它的插件声明的 `ToolDefinition.kind`）。
 				const kind = kindOf(name);
 				if (kind === "create" || kind === "modify" || kind === "command") {

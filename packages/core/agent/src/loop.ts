@@ -15,7 +15,7 @@ import { errorText, type PluginHost } from "./host.ts";
 import { text } from "./i18n.ts";
 import { Recovery } from "./recovery.ts";
 import type { RepetitionWatch } from "./repetition.ts";
-import { CUT_WHILE_ARRIVING, failCalls, isArgumentsLost, runTools, STOPPED_BEFORE_RUN, type ToolScope, TRUNCATED_CALL } from "./tool-run.ts";
+import { canonicalCalls, CUT_WHILE_ARRIVING, failCalls, isArgumentsLost, runTools, STOPPED_BEFORE_RUN, type ToolScope, TRUNCATED_CALL } from "./tool-run.ts";
 
 /** 一轮里最多调几次模型，防止模型陷在工具调用里停不下来。 */
 const MAX_STEPS = 200;
@@ -71,7 +71,8 @@ export async function runSteps(scope: TurnScope): Promise<TurnStop> {
 		if (scope.signal.aborted) return { reason: "aborted" };
 		await scope.boundary();
 		if (scope.signal.aborted) return { reason: "aborted" };
-		const reply = await requestReply(scope);
+		// 写进会话之前把参数换成规范名：存下的、层看到的、工具读的是同一份，见 `canonicalCalls`。
+		const reply = canonicalCalls(await requestReply(scope), scope.host);
 		await scope.commit(reply);
 		const calls = reply.content.filter((block): block is ToolCallContent => block.type === "toolCall");
 

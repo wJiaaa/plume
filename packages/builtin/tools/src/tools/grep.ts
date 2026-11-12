@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { Readable } from "node:stream";
-import { PATTERN_KEYS, ROOT_KEYS, textArg } from "./args.ts";
+import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { globToRegExp } from "./glob.ts";
@@ -63,6 +63,7 @@ export const grepTool: Tool<GrepArgs> = {
 	name: "grep",
 	describe: describeGrep,
 	kind: "search",
+	aliases: SEARCH_ALIASES,
 	description:
 		"Search file contents with a regular expression. A matching line over 2000 characters comes back as a window around the hit, " +
 		"with the `char_offset` that lets `read` open more of it. " +
@@ -83,7 +84,7 @@ export const grepTool: Tool<GrepArgs> = {
 	},
 
 	async execute(args, ctx): Promise<ToolResult> {
-		const pattern = textArg(args, PATTERN_KEYS);
+		const pattern = typeof args.pattern === "string" ? args.pattern : "";
 
 		if (!pattern)
 			return errorResult(
@@ -92,7 +93,7 @@ export const grepTool: Tool<GrepArgs> = {
 		const normalizedArgs: GrepArgs = {
 			...args,
 			pattern,
-			path: textArg(args, ROOT_KEYS),
+			path: typeof args.path === "string" && args.path ? args.path : undefined,
 		};
 
 		let root = ctx.cwd;

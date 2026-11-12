@@ -1,7 +1,7 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { PATTERN_KEYS, ROOT_KEYS, textArg } from "./args.ts";
+import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolResult } from "./types.ts";
 import { displayPath } from "./paths.ts";
@@ -27,6 +27,7 @@ export const globTool: Tool<GlobArgs> = {
 	name: "glob",
 	describe: describeGlob,
 	kind: "find",
+	aliases: SEARCH_ALIASES,
 	description:
 		"Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. " +
 		"Skips files git ignores (outside a git repository: build and dependency directories). " +
@@ -44,8 +45,8 @@ export const globTool: Tool<GlobArgs> = {
 	},
 
 	async execute(args, ctx): Promise<ToolResult> {
-		const pattern = textArg(args, PATTERN_KEYS);
-		const path = textArg(args, ROOT_KEYS);
+		const pattern = typeof args.pattern === "string" ? args.pattern : "";
+		const path = typeof args.path === "string" ? args.path : "";
 
 		let root = ctx.cwd;
 		if (path) {

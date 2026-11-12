@@ -1033,6 +1033,22 @@ function checkTool(tool: ToolDefinition): void {
 	if (typeof tool.description !== "string") throw new Error(text("tool.noDescription", { name: tool.name }));
 	if (typeof tool.parameters !== "object" || tool.parameters === null) throw new Error(text("tool.noParameters", { name: tool.name }));
 	if (typeof tool.execute !== "function") throw new Error(text("tool.noExecute", { name: tool.name }));
+	if (tool.aliases !== undefined && !validAliases(tool.aliases, tool.parameters)) throw new Error(text("tool.badAliases", { name: tool.name }));
+}
+
+/** 别名是参数里没有的名字，各只出现一次：不然换的时候会把一个真参数当别名删掉，或者一个别名不知道该换成哪个。 */
+function validAliases(aliases: unknown, parameters: Record<string, unknown>): boolean {
+	if (typeof aliases !== "object" || aliases === null || Array.isArray(aliases)) return false;
+	const properties = (parameters.properties ?? {}) as Record<string, unknown>;
+	const seen = new Set<string>();
+	for (const names of Object.values(aliases)) {
+		if (!Array.isArray(names)) return false;
+		for (const alias of names) {
+			if (typeof alias !== "string" || !alias || Object.hasOwn(properties, alias) || seen.has(alias)) return false;
+			seen.add(alias);
+		}
+	}
+	return true;
 }
 
 export function errorText(error: unknown): string {
