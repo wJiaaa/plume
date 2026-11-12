@@ -82,21 +82,17 @@ test("deliver：认 steer、followUp，prompt 等于没写；写错的照默认�
 test("/commands 打开设置里的命令管理，不发消息；带了话不吞；同名的命令文件被它遮住", async (t) => {
 	const home = await mkdtemp(join(tmpdir(), "plume-commands-manage-"));
 	t.after(() => rm(home, { recursive: true, force: true }));
-	const prior = { plume: process.env.PLUME_HOME, claude: process.env.CLAUDE_CONFIG_DIR };
-	process.env.PLUME_HOME = join(home, "plume");
+	const prior = process.env.CLAUDE_CONFIG_DIR;
 	process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
 	t.after(() => {
-		for (const [key, value] of [
-			["PLUME_HOME", prior.plume],
-			["CLAUDE_CONFIG_DIR", prior.claude],
-		] as const)
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
+		if (prior === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+		else process.env.CLAUDE_CONFIG_DIR = prior;
 	});
 	await mkdir(join(home, "plume", "commands"), { recursive: true });
 	await writeFile(join(home, "plume", "commands", "commands.md"), "自己写的同名命令\n");
 	let provider: CommandProvider | undefined;
 	plugin.apply({
+		appDataDir: join(home, "plume"),
 		locale: () => "zh-CN",
 		commands: { provide: (given: CommandProvider) => (provider = given) },
 		serve() {},
@@ -111,16 +107,11 @@ test("/commands 打开设置里的命令管理，不发消息；带了话不吞�
 test("设置页切到项目：列出项目和个人两层；项目的文件只在看着那个项目时认；没选项目不能建项目命令", async (t) => {
 	const home = await mkdtemp(join(tmpdir(), "plume-commands-scope-"));
 	t.after(() => rm(home, { recursive: true, force: true }));
-	const prior = { plume: process.env.PLUME_HOME, claude: process.env.CLAUDE_CONFIG_DIR };
-	process.env.PLUME_HOME = join(home, "plume");
+	const prior = process.env.CLAUDE_CONFIG_DIR;
 	process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
 	t.after(() => {
-		for (const [key, value] of [
-			["PLUME_HOME", prior.plume],
-			["CLAUDE_CONFIG_DIR", prior.claude],
-		] as const)
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
+		if (prior === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+		else process.env.CLAUDE_CONFIG_DIR = prior;
 	});
 	const project = join(home, "repo");
 	await mkdir(join(home, "plume", "commands"), { recursive: true });
@@ -130,6 +121,7 @@ test("设置页切到项目：列出项目和个人两层；项目的文件只�
 	let api: CommandsApi | undefined;
 	const trashed: string[] = [];
 	plugin.apply({
+		appDataDir: join(home, "plume"),
 		locale: () => "zh-CN",
 		commands: { provide() {} },
 		serve: (given: CommandsApi) => (api = given),

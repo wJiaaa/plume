@@ -80,12 +80,12 @@ test("插件带来的技能：排在个人的后面、共用目录的前面，�
 	const root = await mkdtemp(join(tmpdir(), "plume-skills-plugin-"));
 	try {
 		const plugin = { label: "Git", root: join(root, "git") };
-		const sources = skillSources(undefined, [plugin]);
+		const sources = skillSources(join(root, "home"), undefined, [plugin]);
 		assert.deepEqual(
 			sources.map((source) => source.scope),
 			["user", "plugin", "user"],
 		);
-		assert.equal(sources[0]?.dir, personalDir());
+		assert.equal(sources[0]?.dir, personalDir(join(root, "home")));
 		assert.equal(sources[1]?.dir, join(plugin.root, "skills"));
 
 		await mkdir(join(plugin.root, "skills", "commit"), { recursive: true });

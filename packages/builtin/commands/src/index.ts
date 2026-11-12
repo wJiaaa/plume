@@ -47,7 +47,7 @@ export default {
 			 * `/commands` 排在最前：同名的命令文件被它遮住（宿主按名字去重，先列的赢），和别的内置命令一样，名字是这条命令的。
 			 */
 			async list({ cwd }) {
-				const { commands } = await loadCommands(commandSources(cwd));
+				const { commands } = await loadCommands(commandSources(ctx.appDataDir, cwd));
 				return [
 					{ name: MANAGE, description: text().manageCommand },
 					...commands.map((command): SlashCommand => ({
@@ -66,7 +66,7 @@ export default {
 					if (rest) throw new Error(text().manageNoArgs);
 					return { handled: true, openSettings: SETTINGS_SECTION };
 				}
-				const command = (await loadCommands(commandSources(cwd))).commands.find((candidate) => candidate.name === name);
+				const command = (await loadCommands(commandSources(ctx.appDataDir, cwd))).commands.find((candidate) => candidate.name === name);
 				if (!command) throw new Error(text().readFailed(`/${name}`));
 				return { text: expandTemplate(command.content, rest), ...(command.deliver === "steer" ? { deliver: "steer" as const } : {}) };
 			},
@@ -78,7 +78,7 @@ export default {
 		const projectOf = (cwd: unknown): string | undefined => (typeof cwd === "string" && isAbsolute(cwd) ? cwd : undefined);
 		const listed = async (cwd: unknown): Promise<{ view: CommandsView; files: Set<string> }> => {
 			const project = projectOf(cwd);
-			const { commands, diagnostics } = await loadCommands(commandSources(project));
+			const { commands, diagnostics } = await loadCommands(commandSources(ctx.appDataDir, project));
 			const rows = commands.map((command): CommandRow => ({
 				name: command.name,
 				description: command.description,
@@ -88,7 +88,7 @@ export default {
 				...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
 			}));
 			return {
-				view: { commands: rows, diagnostics, dir: personalDir(), ...(project ? { projectDir: projectDir(project) } : {}) },
+				view: { commands: rows, diagnostics, dir: personalDir(ctx.appDataDir), ...(project ? { projectDir: projectDir(project) } : {}) },
 				files: new Set([...commands.map((command) => command.path), ...diagnostics.map((item) => item.path)]),
 			};
 		};
@@ -99,7 +99,7 @@ export default {
 		};
 		/** 个人或项目的命令目录；要项目的却没选项目时报错。 */
 		const dirOf = (scope: unknown, cwd: unknown): string => {
-			if (scope !== "workspace") return personalDir();
+			if (scope !== "workspace") return personalDir(ctx.appDataDir);
 			const project = projectOf(cwd);
 			if (!project) throw new Error(text().scopeNeedsProject);
 			return projectDir(project);

@@ -8,7 +8,6 @@
  */
 
 import { execFile } from "node:child_process";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Plugin, SlashCommand } from "@plume/contract";
 import type { McpApi, McpView, ServerView, VarView } from "./api.ts";
@@ -65,11 +64,6 @@ function openUrl(url: string): Promise<void> {
 				? ["rundll32.exe", ["url.dll,FileProtocolHandler", url]]
 				: ["xdg-open", [url]];
 	return new Promise((resolve, reject) => execFile(command as string, args as string[], (error) => (error ? reject(error) : resolve())));
-}
-
-/** Magpie 资源库把 MCP 服务写在 Plume 数据目录下的这个文件里；设了 `PLUME_HOME` 时整个数据目录在那里。 */
-function magpieFile(): string {
-	return join(process.env.PLUME_HOME || join(homedir(), ".plume"), "magpie", "mcp.json");
 }
 
 /** `/` 菜单里的 prompt 命令：`mcp:<服务>:<prompt>`，折过以后撞名的加编号。 */
@@ -163,7 +157,7 @@ export default {
 			if (result.error) ctx.log.warn(`${file} 读不懂：${result.error}`);
 			const own = await openServers(result.servers, secrets);
 			const states = await openStates(result.plugins, secrets);
-			const magpie = await readMagpieServers(magpieFile(), own, ctx.log);
+			const magpie = await readMagpieServers(join(ctx.appDataDir, "magpie", "mcp.json"), own, ctx.log);
 			const fromPlugins = await readPluginServers(ctx.plugins.list(), [...own, ...(magpie ?? [])], states, ctx.log);
 			return { ...result, own, states, servers: [...own, ...(magpie ?? []), ...fromPlugins], magpieRead: magpie !== null };
 		};

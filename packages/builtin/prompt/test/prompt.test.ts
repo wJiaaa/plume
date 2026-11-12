@@ -24,6 +24,7 @@ let dir: string;
 /** 工具表里跑命令的那件按声明的种类认（`kind: "command"`），叫什么都行。 */
 const fakeContext = () => ({
 	dataDir: join(dir, "data"),
+	appDataDir: dir,
 	log: { warn() {} },
 	sessions: { onDeleted() {} },
 	tools: { list: () => [{ name: "bash", plugin: "test.files", kind: "command" }] },
@@ -224,14 +225,7 @@ describe("项目指令", () => {
 });
 
 describe("Magpie 共享指令", () => {
-	const realHome = process.env.PLUME_HOME;
-	afterEach(() => {
-		if (realHome === undefined) delete process.env.PLUME_HOME;
-		else process.env.PLUME_HOME = realHome;
-	});
-
 	it("每轮现读、去掉 BOM，和人自己的全局指令合成一段；删掉后只剩自己的；过长的只放开头", async () => {
-		process.env.PLUME_HOME = dir;
 		let layer: HookLayer<"model.context"> | undefined;
 		const warnings: string[] = [];
 		plugin.apply({
@@ -267,7 +261,7 @@ describe("Magpie 共享指令", () => {
 		expect(own).not.toContain("共享规则");
 		expect(own).toContain("个人规则");
 		await writeFile(path, "x".repeat(110 * 1024));
-		expect((await loadMagpieInstructions({ warn: (message) => void warnings.push(message) })).length).toBe(100 * 1024);
+		expect((await loadMagpieInstructions(dir, { warn: (message) => void warnings.push(message) })).length).toBe(100 * 1024);
 		expect(warnings).toHaveLength(1);
 	});
 });

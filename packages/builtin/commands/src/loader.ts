@@ -48,17 +48,13 @@ const DELIVERIES = new Set(["prompt", "steer", "followUp"]);
 /** 往下最多找三层子目录。 */
 const MAX_DEPTH = 3;
 
-/** Plume 自己的目录：设了 `PLUME_HOME` 就整个换到那里（冒烟验证用一个一次性的目录）。 */
-function plumeHome(): string {
-	return process.env.PLUME_HOME || join(homedir(), ".plume");
-}
-
 function claudeHome(): string {
 	return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 }
 
-export function personalDir(): string {
-	return join(plumeHome(), "commands");
+/** 个人命令目录：Plume 自己的数据目录（`ctx.appDataDir`）下的 `commands/`。 */
+export function personalDir(appDataDir: string): string {
+	return join(appDataDir, "commands");
 }
 
 /** 项目里新建的命令放在这里。只写 Plume 自己的目录，不往 `.claude` 里写。 */
@@ -66,10 +62,10 @@ export function projectDir(cwd: string): string {
 	return join(cwd, ".plume", "commands");
 }
 
-export function commandSources(cwd: string | undefined): CommandSource[] {
+export function commandSources(appDataDir: string, cwd: string | undefined): CommandSource[] {
 	const sources: CommandSource[] = [];
 	if (cwd) sources.push({ dir: projectDir(cwd), scope: "workspace", origin: "plume" });
-	sources.push({ dir: personalDir(), scope: "user", origin: "plume" });
+	sources.push({ dir: personalDir(appDataDir), scope: "user", origin: "plume" });
 	if (cwd) sources.push({ dir: join(cwd, ".claude", "commands"), scope: "workspace", origin: "claude" });
 	sources.push({ dir: join(claudeHome(), "commands"), scope: "user", origin: "claude" });
 	return sources;

@@ -102,7 +102,7 @@ export default {
 		const load = async (cwd: string | undefined) => {
 			const settings = await readSettings();
 			const plugins = await bundles();
-			const loaded = await loadSkills(skillSources(cwd || undefined, plugins), { preferred: settings.preferred });
+			const loaded = await loadSkills(skillSources(ctx.appDataDir, cwd || undefined, plugins), { preferred: settings.preferred });
 			return { ...loaded, settings, builtins: new Set(plugins.filter((plugin) => plugin.builtin).map((plugin) => plugin.root)) };
 		};
 		const enabledSkills = async (cwd: string | undefined): Promise<Skill[]> => {
@@ -228,7 +228,7 @@ export default {
 			const plugins = (await bundles())
 				.filter((bundle) => !bundle.builtin)
 				.map((bundle) => ({ name: bundle.label, description: bundle.description, key: basename(bundle.root) }));
-			return { view: { skills: rows, diagnostics, dir: tilde(personalDir()), bundles: plugins }, files };
+			return { view: { skills: rows, diagnostics, dir: tilde(personalDir(ctx.appDataDir)), bundles: plugins }, files };
 		};
 		/** 只认读到过的技能：界面传来的路径不能指到别处去。 */
 		const known = async (path: unknown, cwd: unknown) => {
@@ -252,7 +252,7 @@ export default {
 			async reveal(path, cwd) {
 				// 一组的目录就是它里面一个技能的上上级（`<目录>/<技能>/SKILL.md`），按读到过的技能认，指不到别处。
 				if (path !== null) return openWith(dirname(dirname(await known(path, cwd))));
-				const dir = personalDir();
+				const dir = personalDir(ctx.appDataDir);
 				await mkdir(dir, { recursive: true });
 				await openWith(dir);
 			},

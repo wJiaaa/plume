@@ -702,12 +702,11 @@ test("服务中途要人填表：恰好一个调用在跑时经它的 run.reques
 
 test("设置页同时存两张卡片：一个接一个写，两处改动都留下；写完不留临时文件", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-save-"));
-	const home = process.env.PLUME_HOME;
-	// Magpie 的文件按 PLUME_HOME 找，指到空目录，不读跑测试那个人的。
-	process.env.PLUME_HOME = dir;
 	let api: McpApi | undefined;
 	const ctx = {
 		dataDir: dir,
+		// Magpie 的文件在 Plume 数据目录下找，指到空目录，不读跑测试那个人的。
+		appDataDir: dir,
 		locale: () => "zh-CN",
 		secrets: fakeSecrets,
 		use: () => ({ register: () => () => {} }),
@@ -742,8 +741,6 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 			[],
 		);
 	} finally {
-		if (home === undefined) delete process.env.PLUME_HOME;
-		else process.env.PLUME_HOME = home;
 		await rm(dir, { recursive: true, force: true });
 	}
 });

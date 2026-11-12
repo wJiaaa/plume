@@ -47,7 +47,7 @@ export default {
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
 					findRepoRoot(input.cwd).then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
-					loadMagpieInstructions(ctx.log),
+					loadMagpieInstructions(ctx.appDataDir, ctx.log),
 				]);
 				const sections = buildPromptSections({
 					cwd: input.cwd,

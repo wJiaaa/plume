@@ -3,7 +3,6 @@
  */
 
 import { access, lstat, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export interface ProjectInstructions {
@@ -50,8 +49,8 @@ const MAGPIE_CHAR_LIMIT = 100 * 1024;
  * 一起放进提示词，不抄进设置，撤回后不留副本。没有就是没分发过；读不了只留一句诊断，不拖垮这一轮。
  * shortcut：最多放 102400 个字符，超过的只放开头；需要更长时改成截断后告诉模型去读全文。
  */
-export async function loadMagpieInstructions(log: { warn(message: string): void }): Promise<string> {
-	const path = join(process.env.PLUME_HOME || join(homedir(), ".plume"), "magpie", "AGENTS.md");
+export async function loadMagpieInstructions(appDataDir: string, log: { warn(message: string): void }): Promise<string> {
+	const path = join(appDataDir, "magpie", "AGENTS.md");
 	const text = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
 		if (error.code !== "ENOENT") log.warn(`无法读取 ${path}`);
 		return "";

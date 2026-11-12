@@ -65,13 +65,9 @@ const MAX_DESCRIPTION = 1024;
 /** 短于这个数的描述通常说不清什么时候该用：技能照常加载，模型却很少选它。 */
 const MIN_DESCRIPTION = 40;
 
-/** Plume 自己的目录：设了 `PLUME_HOME` 就整个换到那里（冒烟验证用一个一次性的目录）。 */
-function plumeHome(): string {
-	return process.env.PLUME_HOME || join(homedir(), ".plume");
-}
-
-export function personalDir(): string {
-	return join(plumeHome(), "skills");
+/** 个人技能目录：Plume 自己的数据目录（`ctx.appDataDir`）下的 `skills/`。 */
+export function personalDir(appDataDir: string): string {
+	return join(appDataDir, "skills");
 }
 
 /**
@@ -80,14 +76,14 @@ export function personalDir(): string {
  * 插件带来的（插件目录下的 `skills/`）排在个人的后面：自己写的同名技能是有意盖过它的；装了插件就是要它，所以先于
  * 几家共用的 `~/.agents/skills`。
  */
-export function skillSources(cwd: string | undefined, plugins: readonly PluginBundle[] = []): SkillSource[] {
+export function skillSources(appDataDir: string, cwd: string | undefined, plugins: readonly PluginBundle[] = []): SkillSource[] {
 	const sources: SkillSource[] = [];
 	if (cwd) {
 		sources.push({ dir: join(cwd, ".plume", "skills"), scope: "workspace" });
 		sources.push({ dir: join(cwd, ".claude", "skills"), scope: "workspace" });
 		sources.push({ dir: join(cwd, ".agents", "skills"), scope: "workspace" });
 	}
-	sources.push({ dir: personalDir(), scope: "user" });
+	sources.push({ dir: personalDir(appDataDir), scope: "user" });
 	for (const plugin of plugins) sources.push({ dir: join(plugin.root, "skills"), scope: "plugin", plugin });
 	sources.push({ dir: join(homedir(), ".agents", "skills"), scope: "user" });
 	return sources;
