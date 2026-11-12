@@ -78,6 +78,7 @@ test("英文里数数的句子有单数形式", () => {
 	// 例外：这些句子里的数不会是 1，原因写在旁边。
 	const exempt: Record<string, string> = {
 		"modelSettings.catalogStatus": "数的是整份模型目录，上千条，不会是 1",
+		"contextMeter.usedOfLimit": "后面的数是模型的上下文窗口，成千上万个 token，不会是 1",
 	};
 	const source = MESSAGE_CATALOGS["zh-CN"] as Record<MessageKey, string>;
 	const measured = /\{(\w+)\} ?(?:个|次|条|项|行|列|处|份|张|篇|位|台|页|组|轮|天|小时|分钟|秒|字|名|件|段|层|步|遍|场|批|封|token)/g;

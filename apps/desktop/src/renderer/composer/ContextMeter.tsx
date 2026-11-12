@@ -42,33 +42,30 @@ function Ring({ ratio, tight }: { ratio: number; tight: boolean }) {
 }
 
 /**
- * 色块：已用的各段是同一个强调色由深到浅（按大小排，第几段就是第几档），剩余空间是线色，接近上限时已用的都是危险色。
- * 故意只用一种颜色：这几段是同一个量的几部分，换成五种颜色读起来像五件不相干的事。
+ * 色块：一段一种颜色，按段定死、不按大小排第几——同一段在哪个会话里都是同一个颜色，认颜色就认出是哪一段。
+ * 项目指令和记忆收在「记忆文件」一行里，两段取相邻的绿和青。对话消息用字色：它是唯一一直在长的一段，压在最显眼的那一档。
+ * `used` 是分段还没到（或给不出）时已用的那一整段，`free` 是剩余空间。
  */
-type Swatch = number | "tight" | "free";
+type Swatch = ContextSegmentKey | "used" | "free";
 
-/** 一档比一档浅（1 - 0.16 × 第几段，最浅 24%）。 */
-const SHADES = ["bg-accent", "bg-accent/84", "bg-accent/68", "bg-accent/52", "bg-accent/36", "bg-accent/24"] as const;
+const SWATCHES: Record<Swatch, string> = {
+	systemPrompt: "bg-accent",
+	projectInstructions: "bg-ok",
+	memory: "bg-chart-2",
+	tools: "bg-violet",
+	mcpTools: "bg-chart-5",
+	skills: "bg-chart-3",
+	messages: "bg-ink",
+	used: "bg-accent",
+	free: "bg-line",
+};
 
-function swatchClass(swatch: Swatch): string {
-	if (swatch === "tight") return "bg-danger";
-	if (swatch === "free") return "bg-line";
-	return SHADES[Math.min(swatch, SHADES.length - 1)] ?? "bg-accent";
-}
-
-function Row({ swatch, label, tokens, share }: { swatch: Swatch; label: string; tokens: number; share: number }) {
+function Row({ swatch, label, tokens }: { swatch: Swatch; label: string; tokens: number }) {
 	return (
-		<div className="flex items-center gap-2 px-1 py-0.5">
-			<span className={`size-2 shrink-0 ${swatchClass(swatch)}`} />
-			<Text size="detail" tone="muted" className="min-w-0 flex-1 truncate">
-				{label}
-			</Text>
-			<Text size="detail" tone="muted" numeric>
-				{formatTokens(tokens)}
-			</Text>
-			<Text size="detail" tone="faint" numeric className="w-11 shrink-0 text-right">
-				{(share * 100).toFixed(1)}%
-			</Text>
+		<div className="flex items-center gap-2.5 py-0.5">
+			<span className={`size-2 shrink-0 rounded-full ${SWATCHES[swatch]}`} />
+			<Text className="min-w-0 flex-1 truncate">{label}</Text>
+			<Text numeric>{formatTokens(tokens)}</Text>
 		</div>
 	);
 }
@@ -86,15 +83,9 @@ function MemoryFiles({ breakdown, onOpen }: { breakdown: ContextBreakdown; onOpe
 			variant="compact"
 			title={t("contextMeter.memoryFiles")}
 			trailing={
-				// 和上面各行的数字、占比两列对齐。
-				<span className="flex gap-2 pr-1">
-					<Text size="detail" tone="faint" numeric>
-						{formatTokens(tokens)}
-					</Text>
-					<Text size="detail" tone="faint" numeric className="w-11 shrink-0 text-right">
-						{files.length}
-					</Text>
-				</span>
+				<Text size="detail" tone="faint" numeric>
+					{t("contextMeter.fileCount", { n: files.length })} · {formatTokens(tokens)}
+				</Text>
 			}
 		>
 			{files.map((file) => (
@@ -161,48 +152,55 @@ function Detail({
 	return (
 		<div className="px-3.5 py-3">
 			<div className="flex items-baseline justify-between gap-4">
-				<Text>{t("contextMeter.window")}</Text>
+				<Text weight="medium">{t("contextMeter.window")}</Text>
 				<Text tone={tight ? "danger" : "muted"} numeric>
-					{t("contextMeter.usedOfLimit", { used: formatTokens(used), limit: formatTokens(limit), percent: reading.percent })}
+					{t("contextMeter.percentUsed", { percent: reading.percent })}
 				</Text>
 			</div>
-			<div className="mt-2 flex h-1.25 overflow-hidden rounded-item bg-line">
+			{/* 各段是轨道上一颗一颗的胶囊，中间留缝：颜色相近的两段靠缝分开。再小的一段也留 3px，不然在条上找不到。 */}
+			<div className="mt-2.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-line">
 				{segments.length === 0 ? (
 					// 分段还没到时，条上也先画出已经知道的总数。
-					<div className={`h-full ${swatchClass(tight ? "tight" : 0)}`} style={{ width: `${Math.max(1, Math.min(1, used / limit) * 100)}%` }} />
+					<div className={`h-full min-w-0.75 rounded-full ${SWATCHES.used}`} style={{ width: `${Math.min(1, used / limit) * 100}%` }} />
 				) : (
-					segments.map((segment, index) => (
-						<div key={segment.key} className={`h-full ${swatchClass(tight ? "tight" : index)}`} style={{ width: `${(segment.tokens / limit) * 100}%` }} />
+					segments.map((segment) => (
+						<div
+							key={segment.key}
+							className={`h-full min-w-0.75 rounded-full ${SWATCHES[segment.key]}`}
+							style={{ width: `${(segment.tokens / limit) * 100}%` }}
+						/>
 					))
 				)}
 			</div>
-			{tight && (
-				// 接近上限的提醒：另起一段，上面一道细线隔开。
-				<Text as="p" size="detail" tone="faint" className="mt-2.5 border-t border-line-soft pt-2">
-					{t("contextMeter.nearLimit")}
-				</Text>
-			)}
+			<Text as="p" size="detail" tone="faint" numeric className="mt-1.5">
+				{t("contextMeter.usedOfLimit", { used: formatTokens(used), limit: formatTokens(limit) })}
+			</Text>
 			{current && (
-				<div className="mt-2.5 flex flex-col gap-0.75">
+				<div className="mt-3 flex flex-col gap-0.5">
 					{segments.length > 0 ? (
-						segments.map((segment, index) =>
+						segments.map((segment) =>
 							MEMORY_SEGMENTS.has(segment.key) ? null : (
 								<Row
 									key={segment.key}
-									swatch={tight ? "tight" : index}
+									swatch={segment.key}
 									// 工具表在 Plume 都来自插件，MCP 服务的单列一段，其余的不叫「内置工具」。
 									label={t(`contextMeter.segment.${segment.key}` satisfies MessageKey)}
 									tokens={segment.tokens}
-									share={segment.tokens / limit}
 								/>
 							),
 						)
 					) : (
-						<Row swatch={tight ? "tight" : 0} label={t("contextMeter.used")} tokens={used} share={Math.min(1, used / limit)} />
+						<Row swatch="used" label={t("contextMeter.used")} tokens={used} />
 					)}
-					<Row swatch="free" label={t("contextMeter.remaining")} tokens={free} share={free / limit} />
+					<Row swatch="free" label={t("contextMeter.remaining")} tokens={free} />
 					{current.breakdown && <MemoryFiles breakdown={current.breakdown} onOpen={onOpen} />}
 				</div>
+			)}
+			{tight && (
+				// 接近上限的提醒：放在最后，上面一道细线隔开。占比已经红了，各段保持自己的颜色，才看得出是哪一段撑满的。
+				<Text as="p" size="detail" tone="faint" className="mt-2.5 border-t border-line-float pt-2.5">
+					{t("contextMeter.nearLimit")}
+				</Text>
 			)}
 		</div>
 	);

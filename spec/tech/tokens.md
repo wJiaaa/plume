@@ -36,7 +36,7 @@
 | | `accent-dim` | 共享强调弱底（如 ComposerToggle 开启态），默认强调色 10% 透明底，数据皮肤可直接指定 |
 | | `ok` / `danger` / `warning` | 状态；浅底写 `/10`、描边写 `/40` |
 | | `violet`、`on-accent` | 呼吸灯的第二色相、强调色实底上的字 |
-| | `chart-2` … `chart-6` | 图表里排在 accent、violet、ok 之后的系列色（使用统计），不表示状态 |
+| | `chart-2` … `chart-6` | 图表里排在 accent、violet、ok 之后的系列色（使用统计、上下文用量的分段），不表示状态 |
 | 代码 | `code-bg`、`code-fg`、`diff-add`、`diff-remove` | 代码的底色、字色与 diff 两种行底，跟随代码主题 |
 | | `inline-code-bg`、`inline-code-fg`、`inline-code-ring` | 行内代码底色、字色、可选描边，app / syntax / custom 三档 |
 | | `code-line-height`、`code-tracking` | 代码行高和字距，默认 1.6 / 0em |

@@ -1848,7 +1848,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(
 			`(() => {
 			const text = document.querySelector('[data-plume-popover][role=group]')?.textContent ?? '';
-			return /上下文窗口.+ \\/ .+（\\d+%）/.test(text) && ['对话消息', '工具', '系统提示词', '剩余空间'].every((label) => text.includes(label));
+			return /上下文窗口已用 \\d+%.+ \\/ .+ 个 token/.test(text) && ['对话消息', '工具', '系统提示词', '剩余空间'].every((label) => text.includes(label));
 		})()`,
 			"点开圆环写出上下文窗口占用和各段",
 		);
