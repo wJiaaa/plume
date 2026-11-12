@@ -862,8 +862,15 @@ export interface UiContext {
 	 * order 小的生效，默认 0；同一 order 后注册的生效。精确工具名优先于 match: "prefix" 的前缀匹配，撤下后恢复前一个。
 	 * 登记了卡片的调用在转录里单独一行；`inline: true` 的卡片只在通用卡片上补东西（多半直接返回 `fallback`），调用照常按归类
 	 * 并进一段活，它那一行（单独一次时、展开一段活后）由这张卡画。
+	 *
+	 * 卡片只对一部分调用画大东西、其余调用只画 `fallback` 时，`inline` 传函数逐次判断：返回 true 的那次并进一段活。
+	 * 参数还在写时 `args` 是空对象，只有 `argumentsText` 在长；只看这一次调用自己的参数，参数写完后答案不能再变——一次调用从头到尾是转录里的同一行。
 	 */
-	toolCard(tool: string, component: ComponentType<ToolCardProps>, options?: { order?: number; match?: "tool" | "prefix"; inline?: boolean }): void;
+	toolCard(
+		tool: string,
+		component: ComponentType<ToolCardProps>,
+		options?: { order?: number; match?: "tool" | "prefix"; inline?: boolean | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean) },
+	): void;
 	/**
 	 * 转录里怎么说自己的工具：通用卡片那一行、合成一段活的那一行、运行行，见 `ToolLine`。只改说法和归类，画法照通用卡片；
 	 * 同时登记了 `toolCard` 的，卡片单独一行（`inline` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复；插件登记的

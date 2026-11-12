@@ -111,8 +111,8 @@ const codeBlocks = new Map<string, Entry<CodeBlockProps>[]>();
 const codeCopies = new WeakMap<Entry<CodeBlockProps>, NonNullable<NonNullable<Parameters<UiContext["codeBlock"]>[2]>["copyText"]>>();
 const toolCards = new Map<string, Entry<ToolCardProps>[]>();
 const toolPrefixes = new Map<string, Entry<ToolCardProps>[]>();
-/** `ui.toolCard(…, { inline: true })`：只在通用卡片上补东西的卡片，调用照常并进一段活。 */
-const inlineCards = new WeakSet<Entry<ToolCardProps>>();
+/** `ui.toolCard(…, { inline })`：只在通用卡片上补东西的卡片，调用照常并进一段活；给的是函数时逐次调用问它。 */
+const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean)>();
 const approvalCards = new Map<string, Entry<ApprovalCardProps>[]>();
 /** `ui.approvalCard(kind, …, { match: "kind" })`：按 `ApprovalRequest.kind` 认的审批卡。 */
 const approvalKinds = new Map<string, Entry<ApprovalCardProps>[]>();
@@ -1373,7 +1373,8 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		toolCard: (tool, component, options) => {
 			const entry = register(options?.match === "prefix" ? toolPrefixes : toolCards, "工具卡片", name, tool, component, options);
-			if (options?.inline === true) inlineCards.add(entry);
+			const inline = options?.inline;
+			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
 		},
 		toolLine: (tool, line) => registerToolLine(name, tool, line),
 		approvalCard: (tool, component, options) => register(options?.match === "kind" ? approvalKinds : approvalCards, "审批卡", name, tool, component, options),
@@ -1677,9 +1678,18 @@ export function hasToolCard(tool: string): boolean {
 	return matchingToolCards(tool, toolCards, toolPrefixes).length > 0;
 }
 
-/** 这个工具的调用在转录里单独一行，不和别的调用合成一段：登记了不是 `inline` 的卡片。 */
-export function ownsToolRow(tool: string): boolean {
-	return matchingToolCards(tool, toolCards, toolPrefixes).some((entry) => !inlineCards.has(entry));
+/** 这次调用在转录里单独一行，不和别的调用合成一段：登记了不是 `inline` 的卡片，或者 `inline` 的函数对这次说了 false。 */
+export function ownsToolRow(call: { name: string; arguments: Record<string, unknown>; argumentsText?: string }): boolean {
+	return matchingToolCards(call.name, toolCards, toolPrefixes).some((entry) => {
+		const inline = inlineCards.get(entry);
+		if (typeof inline !== "function") return !inline;
+		// 插件的判断出错时按没说 inline 算：单独一行，卡片照常画出来。
+		try {
+			return !inline(call.arguments, call.argumentsText);
+		} catch {
+			return true;
+		}
+	});
 }
 
 // 登记变了就从头再试一遍注册者：key 换成新的修订号，Chain 里记的「试到第几个」跟着清掉。

@@ -147,7 +147,8 @@ export interface RunsOptions {
 	settledCount?: number;
 	hiccups?: readonly Hiccup[];
 	compactionRuns?: readonly CompactionRun[];
-	ownCard?: (toolName: string) => boolean;
+	/** 这次调用单独一行（插件给它登记了自己的卡片），见 `Run` 的 `own`。 */
+	ownCard?: (call: ToolCallBlock) => boolean;
 }
 
 /** 插进转录的一个标记，连同它来自的那条压缩记录或连接记录：接着走时按它认前面消费掉的是不是同一批。 */
@@ -196,7 +197,7 @@ export function walkRuns(
 	const work = (calls: Call[]) => {
 		for (const call of calls) {
 			const last = out[out.length - 1];
-			if (ownCard(call.block.name)) out.push({ kind: "tools", calls: [call], own: true });
+			if (ownCard(call.block)) out.push({ kind: "tools", calls: [call], own: true });
 			else if (last?.kind === "tools" && !last.own) last.calls.push(call);
 			else out.push({ kind: "tools", calls: [call] });
 		}
@@ -325,7 +326,7 @@ export function walkRuns(
 		let from = think;
 		for (let at = think; at < own; at++) {
 			const block = message.content[at];
-			if (block?.type !== "toolCall" || !ownCard(block.name)) continue;
+			if (block?.type !== "toolCall" || !ownCard(block)) continue;
 			if (at > from) out.push({ kind: "message", message, index, upTo: at, from, lead: true, key: `part-${at}-${message.timestamp}-${index}` });
 			work([{ block, stopReason: message.stopReason }]);
 			from = at + 1;

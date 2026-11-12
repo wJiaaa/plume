@@ -25,7 +25,7 @@ export default {
 | `ui.name` | 插件名 |
 | `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，详见下文 |
-| `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活 |
+| `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
 | `ui.approvalCard(tool, Component, { order, match })` | 给自己的工具画审批卡；`match: "kind"` 按 `request.kind` 认 |
 | `ui.toolLine(tool, { verb, subject, like, group, times, callOnly, icon })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标；画法还是通用卡片 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
@@ -179,7 +179,7 @@ ui.toolCard("my_tool", MyCard);
 - 工具卡片收到 `call`（`{ id, name, args }`）、`status`（`"approval" | "running" | "done" | "failed"`）、`progress`（执行中的输出）、`result`（执行完才有，含 `details`）、`fallback`（通用卡片）、`sessionId`（这张卡所在的会话）；卡片在子会话里（侧边聊天）时还有 `handToParent(instruction)`：人点了按钮时把一件事排进那个子会话的父会话的队列，和 `run.parent.enqueue` 一样。
 - **先校验再画**：`details` 可能来自旧版本存下的会话，认不出就返回 `fallback`，不画半成品。
 - **动态工具名**：例如 MCP 可用 `ui.toolCard("mcp__", Card, { match: "prefix" })`。精确工具名的卡片优先于前缀卡片；所有匹配前缀按 order、注册先后排序。不匹配结果仍返回 fallback，停用后撤销前缀注册。
-- **只补东西的卡片**：登记了卡片的调用默认单独一行，不和前后的调用合成一段活。卡片只是在通用卡片下面补一点（认不出时直接返回 `fallback`）、调用本身该和同类的合在一起时，加 `inline: true`：调用照常按归类并进一段活，单独一次时那一行、展开一段活后的那一行由这张卡画。例子是 `plume.mcp` 的文档预览。
+- **只补东西的卡片**：登记了卡片的调用默认单独一行，不和前后的调用合成一段活。卡片只是在通用卡片下面补一点（认不出时直接返回 `fallback`）、调用本身该和同类的合在一起时，加 `inline: true`：调用照常按归类并进一段活，单独一次时那一行、展开一段活后的那一行由这张卡画。例子是 `plume.mcp` 的文档预览。只有一部分调用画大东西、其余只画 `fallback` 时，`inline` 传函数逐次判断，返回 true 的那次并进一段活：参数还在写时 `args` 是空对象，只有 `argumentsText` 在长；只看这次调用自己的参数，参数写完后答案不能再变（一次调用从头到尾是转录里的同一行），不能等结果或后面的调用再定。例子是网页预览：截图检查只画一行，并进前后的活，发布的那次单独一行画网页。
 - **崩溃让位**：每张卡片外面有错误边界，渲染出错时让给同一工具的下一个注册者，都不行用通用卡片。组件里不用自己 try/catch。
 - **后注册的生效**：同一工具 `order` 小的在前；`order` 相同时后注册的在前，它撤下后前一个恢复。卡片的 `order` 默认是 0，写更小的 `order` 也能排到前面。
 - 外框用 `@plume/ui` 的 `Card`（`title`、`subtitle` 放命令或路径、`status`）；输出用 `CodeBlock`，改动用 `ui.FileDiff`。

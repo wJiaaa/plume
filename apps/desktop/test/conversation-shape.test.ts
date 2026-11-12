@@ -95,7 +95,7 @@ test("插件自己画卡的调用单独一行，不并进前后的活", () => {
 		result("b", "read"),
 		reply([text("done")], "stop"),
 	];
-	const list = runs(messages, { ownCard: (name) => name === "todo_write" });
+	const list = runs(messages, { ownCard: (block) => block.name === "todo_write" });
 	assert.deepEqual(
 		list.map((run) => (run.kind === "tools" ? `tools${run.own ? "!" : ""}:${run.calls.length}` : run.kind)),
 		["message", "tools!:1", "tools:2", "message"],
@@ -104,6 +104,19 @@ test("插件自己画卡的调用单独一行，不并进前后的活", () => {
 	assert.deepEqual(
 		items.map((item) => item.kind),
 		["run", "step", "run"],
+	);
+});
+
+test("同一个工具的调用逐次判断单独一行：只画一行的那几次照常并进一段活", () => {
+	const messages: Message[] = [
+		user("go"),
+		reply([call("a", "edit"), call("b", "preview", { check: true }), call("c", "preview", { check: true }), call("d", "preview")]),
+		reply([text("done")], "stop"),
+	];
+	const list = runs(messages, { ownCard: (block) => block.name === "preview" && block.arguments.check !== true });
+	assert.deepEqual(
+		list.map((run) => (run.kind === "tools" ? `tools${run.own ? "!" : ""}:${run.calls.map((one) => one.block.id).join("")}` : run.kind)),
+		["message", "tools:abc", "tools!:d", "message"],
 	);
 });
 

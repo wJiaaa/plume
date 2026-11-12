@@ -30,7 +30,7 @@ type Assistant = Extract<Message, { role: "assistant" }>;
 type Block = Assistant["content"][number];
 
 /** 插件自己画卡的工具：单独一行，不并进一段活。 */
-const ownCard = (name: string) => name === "note";
+const ownCard = (call: { name: string }) => call.name === "note";
 
 interface Session {
 	/** 落了盘的消息；`draft` 是还在写的那条回复。 */
