@@ -16,11 +16,12 @@
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
 | 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
 | 跑命令 | 在权限模式对应的那一档沙箱里起命令、申请这次调用更宽的一档（提权，经过闸只认人答、批了才换档）；外层设 `readOnly` 时一律只读，写、改文件的工具（`kind` 是 `create`、`modify`）不往里交。档位、shell 由本体选，插件换不掉 | `run.exec`、`run.escalate`、`run.shell`，`ToolExecution.readOnly`，`ModelContext.shell` |
+| 读文件 | 替模型读这台机器：路径能不能读、要不要问人（工作区、项目目录、临时目录、附件不问，密钥按文件问、别处按项目问，经过闸），资源地址读到什么，一行命令写明要读的路径；列项目文件时在隔离视图里问 git。边界由本体守，所有读文件的工具是同一个答案，插件换不掉 | `run.files.read`、`run.files.readCommand`，`ctx.resources`（登记只读的 scheme、`keepArtifact`），`ctx.workspace.files` |
 | 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话，观察会话的运行（默认只看和自己有关的会话，看全部要声明）；会话是哪一种 | `ctx.sessions`，`ctx.sessions.observe` 和 `Plugin.observe: "all"`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
 | 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它和它下面的子会话弹着的卡（审批、提权、等人，不含「以后不再问」）；只能动自己代管的，人随时在会话菜单里停止代管，那时弹着的卡只能人答 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
 | 寄信 | 顶层会话的一次工具调用给另一个顶层会话寄一封信（请求、答复、通知）。插件定写什么、发不发（地址、限速、链长）；请求和答复的配对、收件方没答（读到那一轮收场、没读到、删掉）时的代答归本体，发件方等的答复不靠哪个插件装着 | `ToolRun.letter`、`LetterInput`（`recipient` 是代答署的名）、`LetterReceipt`（`answered`、`answer`） |
 | 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
-| 本体能力 | 本体替插件做、插件换不掉的事：挂在 `ctx`（工具调用里是 `run`）上，不借服务的壳。能被插件换掉的话，界面和文档对它的保证就不再成立 | `ctx.secrets`（加解密插件的密钥，钥匙由本体按插件名派生）、`ctx.fetch`、`ctx.media`、`ctx.trash`、`run.exec`（见「跑命令」）、`run.track` 和 `run.schedule`（后台任务、约好的唤醒登记进本体：会话闲没闲算上它们，删会话、退出时停掉、取消；`ctx.sessions` 的 `jobs`、`jobOutput`、`stopJob`、`wakeups`、`cancelWakeup` 读、停、取消） |
+| 本体能力 | 本体替插件做、插件换不掉的事：挂在 `ctx`（工具调用里是 `run`）上，不借服务的壳。能被插件换掉的话，界面和文档对它的保证就不再成立 | `ctx.secrets`（加解密插件的密钥，钥匙由本体按插件名派生）、`ctx.fetch`、`ctx.media`、`ctx.trash`、`run.exec`（见「跑命令」）、`run.files`、`ctx.resources`、`ctx.workspace`（见「读文件」）、`run.track` 和 `run.schedule`（后台任务、约好的唤醒登记进本体：会话闲没闲算上它们，删会话、退出时停掉、取消；`ctx.sessions` 的 `jobs`、`jobOutput`、`stopJob`、`wakeups`、`cancelWakeup` 读、停、取消） |
 | 服务 | 插件之间按名字配合，装一个同名的就换掉实现；只留给插件之间，本体给的能力不做成服务 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
 
 界面侧（界面入口的 `ui`）：

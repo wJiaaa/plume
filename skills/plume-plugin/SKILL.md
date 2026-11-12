@@ -63,8 +63,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 - 画网页：界面入口在面板里放 `<webview>`，逻辑入口经 `ctx.pages` 驱动它（加载、读、点按、输入、截图、缩放、视口、应答对话框）；`ctx.pages.inspect(url, options)` 可在独立临时沙箱中检查页面，返回异常、控制台错误、高度和可选分段截图，不需要挂面板。面板设 `keepAlive`，标签在统一扁平常驻层，换会话、去设置页都不重挂，后台仍收到归属会话；`shown` 按是否正在显示所属会话的当前标签计算，`available` 按目录和有无会话分别计算、只控制新开列表，不卸载已有标签；设 `detachable`，弹出去的窗口里仍重新挂上。工具结果带图（`images`）给模型看；把字连同图片附件接进输入框（`ui.draftInSession`，不给会话就是眼前的输入框）；回复里的网址、文件签多一种打开方式（`ui.linkOpener`）；主输入框排队条上，排着的消息「更多」菜单里多一项、把这条拿到别处去发（`ui.queueAction`）。
 - 工具答完以后在后台接着跑的事，结束或有新进展时经 `run.background()` 的渠道送回这个会话（`report`，闲时开一轮、忙时在步骤边界读入，人按停后作废；只有顶层会话有）。还在跑的任务经 `run.track` 登记进本体（会话闲没闲算上它，删会话、退出时本体经你给的 `stop` 停掉），约会话过一会儿接着做经 `run.schedule`（到点经渠道送你给的话）；别的插件经 `ctx.sessions.jobs` / `wakeups` 列出、停掉、取消。
 - 会话之间递话：顶层会话里，工具那次调用经 `run.letter(to, letter)` 给另一个顶层会话寄一封信（请求、答复或通知，本体照实填发件方、在前面说明不是用户的话），回执的 `read` 告诉你读到没有；请求的答复由本体配对，收件方没答、没读到、删掉了时本体代答，你不用记账。`run.letter`、`run.parent` 只在这次调用里能用，调用答完再用就抛错。
-- 读磁盘文件前可用 `file.read` 服务的 `authorize(run, path)`，与内置文件工具共用项目目录、符号链接和密钥审批规则，只授予读取；通过 `inject` 声明依赖，成功后使用返回的绝对路径。
-- 把只为这次答案写的文件放进会话的临时目录（`run.scratchDir`，会话删掉时一起删）：太大不值得交给模型的图写在这里、`output` 给路径、图放进结果的 `shownImages` 只给人看；经服务 `resources` 加一种资源地址（`scheme://路径`，模型用 read、ls 读它），或把大块原文存成 `artifact://` 地址（`keepArtifact`）。
+- 工具里读用户的文件经 `run.files.read(path)`（路径或资源地址）：本体守读的边界（工作区、项目目录、符号链接、密钥按文件问），和内置文件工具共用批准记录，只授予读取，成功后读交回的 `path`；跑命令的工具起命令前经 `run.files.readCommand(command)` 判命令写明要读的路径。列项目文件经 `ctx.workspace.files(root)`（git 认为该看的，不执行仓库配置的程序），不自己跑 `git ls-files`。
+- 把只为这次答案写的文件放进会话的临时目录（`run.scratchDir`，会话删掉时一起删）：太大不值得交给模型的图写在这里、`output` 给路径、图放进结果的 `shownImages` 只给人看；经 `ctx.resources.register` 加一种资源地址（`scheme://路径`，模型用 read、ls 读它），或经 `ctx.resources.keepArtifact` 把大块原文存成 `artifact://` 地址。
 
 插件做不到的：替换模型调用或 agent 循环、换掉别的工具（本体的、别的插件的）的审批卡、改模型回复（存下的那份；显示时拿掉标记见 `ui.replyText`）、在没有用户停止操作时让本来要接着做的一轮停下（`step.end` 只能多做或给结束换原因，`ui.stopSession` 只接受真实点击）、任意往会话里写东西或发起一轮（只允许自己的子会话和独立会话、钩子 `say` / `context`、宿主校验过的后台运行结果 `report`、工具经 `run.background()` 送回本会话的后台结果、工具经 `run.letter` 寄给另一个顶层会话的信（标着来自哪个会话）、`launch` 开出来的新会话的第一句话，以及自己的子会话里经 `run.parent` / `handToParent` 排进它父会话的任务；不能往别的已有会话里发、不能指定任意父会话或冒充用户授权）、没人点按钮时替人发送、绕过公开草稿接口操纵输入框、新增钩子或界面扩展点。
 
@@ -141,7 +141,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | `commands` | `ctx.commands.provide` 供 `/` 命令（每次现读磁盘）；设置分区经 `ui.remote()` 新建、打开、删除文件 |
 | `hooks` | 四个钩子一起用：`prompt.submit` 拦消息、补上下文，`tool.execute` 预先放行、要确认（`input.ask`）、改参数、接结果，`tool.approve`（order 2000）替人答审批，`step.end` 让它接着干；`ctx.sessions.observe` 的 `turnEnd`（默认导出写 `observe: "all"`，看每个会话）和 `ctx.sessions.onEnded` 接一轮失败、会话结束；逻辑入口跑子进程，项目钩子读 `.plume/config.json` 的 `hooks`、按内容指纹信任；运行记录存在 `ctx.dataDir`、`watch` 推变化，`ui.replyAction` 在回复底下看、`ui.composerAbove` 提示待审核、`ui.openSettings` 去设置分区；设置分区里 `ui.useProjects` 切范围、表单弹窗 |
 | `im` | 不给 `page` 的设置分区：画进插件详情的「设置」一节，不占设置导航；密钥经 `ui.remote()` 交给逻辑入口存进 `ctx.dataDir`，界面只知道存没存 |
-| `index` | `inject` 服务 `project.files` 列项目文件；按会话缓存工具要用的数据、会话删掉时丢掉；设置分区用 `ui.useProjects` 列项目、经 `ui.remote()` 看状态、触发重建 |
+| `index` | `ctx.workspace.files` 列项目文件；按会话缓存工具要用的数据、会话删掉时丢掉；设置分区用 `ui.useProjects` 列项目、经 `ui.remote()` 看状态、触发重建 |
 | `web` | 只读的工具（不弹审批卡）、`ctx.dataDir` 存 API key、key 不经界面（界面只知道填没填） |
 | `mcp` | 运行中途增减工具：`ctx.tools.register` 返回的函数撤下单个工具；逻辑入口连外部服务、调用前 `run.ask`；大图存进 `ctx.media`、放进结果的 `shownImages` 由通用卡片画；服务要人填表时 `run.request` 带一句 `waiting`、卡片经 `ui.requestCard` 按 `kind` 登记；`model.context` 按估算的大小藏起工具、换成搜索入口；`ctx.sessions.onDeleted` 关按会话起的连接；`ctx.dataDir` 存配置和令牌，密钥不经界面；设置分区里的卡片（就地编辑、失焦保存）、弹窗和 `Popover` 菜单 |
 | `skills` | `model.context` 按磁盘现状加一段、没东西时藏起自己的工具；`tool.execute` 的一层按会话状态拒掉调用；`prompt.submit` 的 `context` 给模型补一句；`ctx.commands.provide` 把技能放进 `/` 菜单、`displayText` 只给人看；设置分区里用 `ui.FileDiff` 画差异 |

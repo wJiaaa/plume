@@ -54,6 +54,8 @@ export default {
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见下面「`/` 命令」），停用时撤下 |
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
 | `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
+| `ctx.resources.register(handler)` / `list()` / `keepArtifact(sessionId, tool, content)` | 资源地址 `scheme://路径[:行-行]`，本体给、换不掉，解析统一走 `run.files.read`（见「工具」），类型在 `@plume/contract` 的 `ResourceHandler` 等。`register` 加一个只读的 scheme（`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置），返回撤下的函数，停用时本体替你撤下；塞了 `write` 也写不进去。内容不是你写的（第三方文档、外部服务）时给 `origin`，plume.tools 的 read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。`list()` 是现在登记着的（`{ scheme, describe, writable }`，只有 `scratch://` 可写）。`keepArtifact` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；按会话在内存里，最多 30 份，会话删掉时丢掉）。本体自带 `scratch://`（会话的临时目录）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://` |
+| `ctx.workspace.files(root)` | `root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里、git 答不上来时是 null，自己走目录。本体在隔离视图里问 git，不执行仓库能控制的程序（`core.fsmonitor`、过滤器、钩子：沙箱里的命令写得到 `.git/config`），插件要列项目文件就用它，不要自己跑 `git ls-files` |
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
 | `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；默认只收和自己有关的会话的，要看全部在默认导出上写 `observe: "all"`。见下文「只读运行观察和后台任务」 |
@@ -97,6 +99,8 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 `run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
 
 跑 shell 命令用 `run.exec(command, { cwd?, env? })`，不要自己起进程：本体按权限模式选沙箱档（请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错），用用户的 shell、向登录 shell 要的环境起命令，返回 `RunProcess`（`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像不像被沙箱拒了）。`run.shell()` 告诉你这次调用的命令跑在哪个 shell（`{ kind: "posix" | "powershell", label, sandbox }`），照它的写法拼命令。问不问人不归 `exec`：要问的自己先经 `run.ask` 问。命令被沙箱拒了、要更宽的一档时调 `run.escalate({ mode, justification, title, detail })`（`mode` 是 `"workspace-write"` 或 `"danger-full-access"`，`justification` 是模型给的理由、原样给人看，`title`、`detail` 是卡上的标题和正文）：本体查申请合不合规矩（只读下、没理由、不比当前宽的直接拒），弹提权卡、只认人答（或代管插件转达），批了这次调用之后的 `run.exec` 才跑在那一档，返回 `{ granted: true }`；不批返回 `{ granted: false, message }`，把 `message` 原样交给模型。批准只管这一次调用，调用答完 `exec`、`escalate` 都不能再用。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。
+
+读用户的文件经 `run.files`，不要自己判能不能读：本体守读的边界，和 read、ls、grep、glob、bash 是同一个答案、同一份批准记录。`run.files.read(target, { directory? })` 收路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）或资源地址：工作区、同一个项目的其他源码目录（`run.projectRoots`）、各会话的临时目录、系统临时目录和工具链的系统目录、人拖进来的文件（`run.allowedPaths`）不问；密钥文件（`~/.ssh/id_*`、`~/.aws/credentials`、Plume 自己的设置和钥匙……）在哪都问、只批这一个；别处按所在的项目问（过闸，卡片 `kind` 是 `view`，「以后不再问」记在 `read:<项目>` 名下）。判定前顺着符号链接走到真实位置，源码目录内指向外面的链接照问。过了交回 `{ ok: true, path }`，实际读就读这个 `path`；不存在的普通路径不问、照样交回，由你报「找不到」。人拒绝了、没人可问时交回 `{ ok: false, message }`，把 `message` 原样交给模型，不要改用别的路径或工具去读。有人登记了 scheme 的地址不问人：交回读到的 `resource`（`url`、`content`、`label?`、`origin?`，带行范围的已经切好，`scheme://` 是清单），`scratch://<路径>`（不带行范围）交回临时目录里那个文件的 `path`；`directory: true` 时要的是一个目录（列目录），地址交回 scheme 给的磁盘位置。没人登记的 `foo://` 照路径判。`run.files.readCommand(command)` 把一行命令写明要读的路径（照 `run.shell()` 的语法拆，只认字面写的）按同一个边界判，同一个批准范围只问一次：跑命令的工具在审批、起命令之前调它（`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥）。只管能不能读，不授予写，也不把文件记作「模型已读过」；调用答完再用就抛错。plume.tools 的 read、ls、grep、glob、bash 就是这么用的。
 
 - `output` 发给模型；`details` 存进会话、不发给模型，给工具卡片和插件自己用。会话重新打开时卡片还能从 `details` 画出来。
 - 要让模型看图（截图）时带上 `images: [{ data, mimeType }]`：`data` 是 base64、不带 `data:` 前缀，`mimeType` 是 png、jpeg、webp、gif、bmp 之一，跟在 `output` 后面交给模型（bmp 模型不收：照样存下、画给人看，发请求时换成一句 `[unsupported image: image/bmp]`）；大图由本体存进会话的媒体目录。格式不对的整个结果判失败。
@@ -176,7 +180,7 @@ ctx.hook("model.context", async (input, next) => {
 
 每次调模型前经过一次。最里层原样返回。输入输出都是 `{ sessionId, session, parentId?, owner?, cwd, projectRoots, scratchDir, permissionMode, systemPrompt, sections, messages, tools }`（`session` 见「钩子」开头；`parentId`、`owner` 同 `session` 里的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带；按「是不是侧栏里的会话」藏工具时看 `session.kind`，不用每次去 `ctx.sessions.list()`；`scratchDir` 同 `run.scratchDir`，`projectRoots` 同 `run.projectRoots`；`permissionMode` 是这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()`；`shell` 是这一轮命令跑在哪个 shell、哪一档沙箱（`{ kind, label, sandbox }`，同 `run.shell()`），本体按 `permissionMode` 和 `readOnly` 算、每层交接时重算，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell；外层要求这一轮的命令都只读时设 `readOnly: true`，宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，交给 plume.prompt 时 `shell` 已经是只读那档的），只作用于这一次请求，会话里存的不变。
 
-系统提示词按段给在 `sections` 里（`{ id, text, category?, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（资源地址的清单）。加自己的说明就加一段，段名用自己的。段名是提供它的插件自己的：要换掉或补充别的插件的某一类段（身份、准则），按段上的 `category` 找，不认段名：
+系统提示词按段给在 `sections` 里（`{ id, text, category?, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（`ctx.resources.list()` 的地址清单）。加自己的说明就加一段，段名用自己的。段名是提供它的插件自己的：要换掉或补充别的插件的某一类段（身份、准则），按段上的 `category` 找，不认段名：
 
 ```ts
 // 加一段
@@ -525,7 +529,7 @@ await ctx.sessions.answer(asker, request.toolCallId, { answer: "先备份" }); /
 
 ## 服务：插件给插件用的一组方法
 
-一个插件提供实现，别的插件按名字用；依赖的是服务名，不是某个插件，所以谁提供都行，能整个换掉。服务只在插件之间：本体给的能力（`ctx.secrets`、`ctx.fetch`、`ctx.media`……）挂在 `ctx` 上，不是服务，换不掉。
+一个插件提供实现，别的插件按名字用；依赖的是服务名，不是某个插件，所以谁提供都行，能整个换掉。服务只在插件之间：本体给的能力（`ctx.secrets`、`ctx.fetch`、`ctx.media`、`ctx.resources`、`ctx.workspace`……）挂在 `ctx` 上，不是服务，换不掉。
 
 ```ts
 // 提供的一方
@@ -557,23 +561,8 @@ Plume 自带的服务：
 
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
-| `resources` | 内置插件 plume.tools（它的 read、ls 认这些地址，write、edit 认 `scratch://`） | 资源地址 `scheme://路径[:行-行]`，类型在 `@plume/contract` 的 `ResourceHandler` 等。`register(handler)` 加一个只读的 scheme（`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置），返回撤下的函数，用 `ctx.effect` 撤；内容不是你写的（第三方文档、外部服务）时给 `origin`，read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。`keepArtifact(sessionId, tool, content)` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；按会话在内存里，最多 30 份）。plume.tools 自己有 `scratch://`（唯一可写）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://` |
-| `file.read` | 内置插件 plume.tools | `authorize(run, path)` 与文件工具共用读取授权，返回 `{ ok: true, absolute }` 或 `{ ok: false, message }`。消费方声明 `inject: ["file.read"]`，用当前工具的 `ToolRun` 调用，成功后实际读取必须使用返回的 `absolute`；详见下文 |
-| `project.files` | 内置插件 plume.tools（它的 glob、grep 也用这一份） | `list(root)`：`root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里时是 null，自己走目录。问 git 时不执行仓库能控制的程序，插件要列项目文件就用它，不要自己跑 `git ls-files` |
 | `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。建、收回、合并回去都归 plume.git |
 | `session.plan` | 内置插件 plume.plan | `approved(sessionId)`：这个会话照着做的、人批准过的计划（正文连同批准时附的注意事项），没有是 null。会话自己最后批准、没交给新会话执行的那份；会话是计划「在新会话里执行」开出来的，就是交给它的那份。要读计划的插件用它，不认 `submit_plan` 的结果 |
-
-### 文件读取授权
-
-`Services["file.read"]` 只决定能不能读，不读取文件、不授予写权限，也不把文件记作“模型已读过”。插件先校验自己的参数，再调用服务；拒绝时把 `message` 作为错误结果交回，不能改用其他路径或工具读取。
-
-```ts
-const access = await ctx.use("file.read").authorize(run, path);
-if (!access.ok) return { output: access.message, isError: true };
-const content = await readFile(access.absolute, "utf8");
-```
-
-服务解析相对路径和符号链接，复用工作目录、项目源文件夹、临时目录、人拖进来的文件（`run.allowedPaths`）及会话已有的批准记录；源目录内指向外部的链接按实际目标判断。工作区外或密钥文件照现有审批规则处理，项目里的密钥也不因项目授权直接放行。普通不存在路径可能返回 `ok: true`，读取错误仍由调用方处理；密钥路径即使不存在也会经过审批。不要自行把 `run.projectRoots` 当成写入白名单，也不要用授权结果绕过文件工具的读前检查。
 
 ### 文件变更服务
 
