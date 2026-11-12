@@ -65,15 +65,32 @@ function enforcementOf(runner: Exclude<Runner, "none">): SandboxEnforcement {
 // 我们自己的 runner 进程
 // ---------------------------------------------------------------------------------------------
 
+/** 应用告诉的 runner 脚本，见 `useSandboxRunner`。 */
+let configuredRunner: string | undefined;
+
+/**
+ * 打包好的应用里 runner 脚本在哪（`runner-entry.ts` 打成的那个入口）。应用启动时、跑第一条命令之前调一次。
+ *
+ * 由应用告诉，不由这里猜：这个包被打进 agent 进程的入口，`import.meta.url` 指向的是那个入口或它的某个分块，和 runner
+ * 打在哪没有关系。没告诉时，从源码跑（测试）用旁边的 `runner-entry.ts`；打包后没告诉就没有 runner，Windows 上探测失败、
+ * 受约束的命令不跑（fail-closed）。
+ */
+export function useSandboxRunner(entry: string): void {
+	configuredRunner = entry;
+	resetProbeCache();
+}
+
 /**
  * 起 runner 的脚本，见 `runner-entry.ts`。
  *
- * 发出去的插件只有一个打包好的逻辑入口，runner 就是它本身（`import.meta.url` 指向它）；从源码跑（测试）时是旁边的 `runner-entry.ts`。
  * 由这个文件自己的位置算出来，而不是写成 `new URL(…, import.meta.url)` 字面量：打包器会把那当成资源复制，却不带它导入的模块。
  */
 function sandboxRunnerEntry(): string {
+	if (configuredRunner) return configuredRunner;
 	const self = fileURLToPath(import.meta.url);
-	return self.endsWith(".ts") ? join(dirname(self), "runner-entry.ts") : self;
+	// i18n-exempt：runner 起不来的原因，作为探测失败的原因写进发给模型的报错。
+	if (!self.endsWith(".ts")) throw new Error("sandbox-runner: 应用没有告诉沙箱 runner 在哪（useSandboxRunner）");
+	return join(dirname(self), "runner-entry.ts");
 }
 
 /**

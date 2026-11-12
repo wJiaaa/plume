@@ -58,7 +58,7 @@ describe("选后端与包装", () => {
 		 */
 		const wrap = confine({ mode: "workspace-write", workspaceRoot: "C:\\work" }, win);
 		if (!wrap) throw new Error("受限模式必须有包装");
-		const script = wrap.args.findIndex((arg) => /runner-entry\.ts$|index\.mjs$/.test(arg));
+		const script = wrap.args.findIndex((arg) => arg.endsWith("runner-entry.ts"));
 		expect(script, wrap.args.join(" ")).toBeGreaterThanOrEqual(0);
 		expect(script, "脚本得在旗标前面").toBeLessThan(wrap.args.indexOf(SANDBOX_RUNNER_FLAG));
 		if (process.platform !== "win32") {

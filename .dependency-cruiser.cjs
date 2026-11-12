@@ -63,6 +63,22 @@ module.exports = {
 		},
 
 		{
+			name: "sandbox-below-agent",
+			comment: "sandbox 是本体的能力层，只认命令、目录、档位，不知道会话和循环：不依赖 agent、llm。",
+			severity: "error",
+			from: { path: "^packages/core/sandbox/" },
+			to: { path: "^packages/core/(agent|llm)/" },
+		},
+
+		{
+			name: "loop-knows-no-sandbox",
+			comment: "循环只经 ToolScope 拿到跑命令的能力（agent 的 commands.ts 装配），不直接引用沙箱的实现。",
+			severity: "error",
+			from: { path: "^packages/core/agent/src/(loop|stream-turn|recovery|repetition|compaction|session-compaction|tool-run)\\.ts$" },
+			to: { path: "^packages/core/sandbox/" },
+		},
+
+		{
 			name: "contract-is-types-only",
 			comment:
 				"contract 只放共享类型，经 import map 和 SDK 给插件：它在别处只拿类型（消息类型来自 core/llm，CallContext 来自 infra/rpc），" +

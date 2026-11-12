@@ -1,0 +1,23 @@
+{
+  "name": "@plume/sandbox",
+  "version": "0.1.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runner": "./src/runner-entry.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@plume/contract": "workspace:*",
+    "@plume/platform": "workspace:*",
+    "koffi": "^3.3.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "vitest": "^5.1.0"
+  }
+}

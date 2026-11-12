@@ -103,7 +103,7 @@ describe("Seatbelt profile", () => {
 				expect(denial, `${mode}: ${profile}`).toContain(name);
 			}
 		}
-		// 完全访问就是没有沙箱，服务也不拦。
+		// 完全访问就是没有沙箱，守护进程也不拦。
 		expect(profileOf(seatbeltArgs({ mode: "danger-full-access", workspaceRoot: "/p" }))).not.toContain("mach-lookup");
 	});
 

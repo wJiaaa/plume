@@ -155,7 +155,7 @@ const ALLOWED = [
 		reason: "shell 程序名（`bash -c …`、`curl … | bash` 里的那个程序），不是工具",
 	},
 	{
-		file: "packages/builtin/sandbox/src/login-path.ts",
+		file: "packages/core/sandbox/src/login-path.ts",
 		name: "bash",
 		reason: "同上：问 PATH 时起的登录 shell 的程序名",
 	},

@@ -1,6 +1,6 @@
 # 沙箱
 
-在这台机器能给的约束里跑 shell 命令，作为服务 `sandbox` 给别的插件用（内置插件 plume.tools 的 bash 就用它）。随应用发，不能停用。
+在这台机器能给的约束里跑 shell 命令（`@plume/sandbox`）。本体的一部分，插件换不掉：权限模式对应哪一档、提权怎么问人在 `@plume/agent`（`src/commands.ts`），插件的工具经 `ToolRun.exec` 跑命令、经 `ToolRun.escalate` 申请提权。这个包只认「命令、目录、档位」，不认会话、不认插件。
 
 ## 它做了什么
 
@@ -9,6 +9,6 @@
 - **环境**：命令用用户的 shell 跑，环境向登录 shell 要一份，从图标启动时也找得到用户装的工具（Windows 的 `PATH` 来自注册表，不问）；分页器、颜色、交互提示都关掉。
 - **停得干净**：命令自成一个进程组，停的时候连它起的子进程一起停；Windows 上用 `taskkill /T /F` 停整棵进程树，起命令不弹控制台窗口。
 
-## 换成自己的
+## Windows 的 runner
 
-装一个提供服务 `sandbox` 的插件（`ctx.provide("sandbox", { run, looksDenied })`，接口见 `@plume/contract` 的 `SandboxService`）：非内置的提供方优先，用它的插件会按新的重新加载。
+受限令牌由单独的 runner 脚本造（`src/runner-entry.ts`，包导出 `@plume/sandbox/runner`）。桌面应用把它打成 agent 进程旁边的一个入口（`apps/desktop/src/main/sandbox-runner.ts`），启动时经 `useSandboxRunner` 告诉后端；koffi 是 `apps/desktop` 的生产依赖，只有 runner 进程加载它。从源码跑（测试）时后端直接起 `src/runner-entry.ts`。
