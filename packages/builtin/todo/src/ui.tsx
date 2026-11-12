@@ -277,7 +277,7 @@ export default {
 	apply(ui) {
 		mountStyles();
 		ui.conversationCard("todo", TodoCard);
-		// 转录里那一行：「更新清单 3/5 · 在做的那一项」。`checklist` 让宿主把它当成一段活的记账：并进旁边的活、不单独占一行。
-		ui.toolLine("todo_write", { verb: (locale) => MESSAGES[locale].toolVerb, subject: progressOf, icon: ListTodo, checklist: true });
+		// 转录里那一行：「更新清单 3/5 · 在做的那一项」。工具定义上的 `category: "checklist"` 让宿主把它当成一段活的记账：并进旁边的活、不单独占一行。
+		ui.toolLine("todo_write", { verb: (locale) => MESSAGES[locale].toolVerb, subject: progressOf, icon: ListTodo });
 	},
 } satisfies UiPlugin;

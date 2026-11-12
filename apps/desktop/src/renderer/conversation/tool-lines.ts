@@ -1,6 +1,6 @@
 /**
- * 转录怎么认一个工具：工具定义上声明的种类（`ToolDefinition.kind`，agent 进程经 `listTools` 和 `tools` 事件给），和插件经
- * `ui.toolLine` 给自己的工具登记的说法：动作、对象、对着哪个文件、归哪一类、图标。
+ * 转录怎么认一个工具：工具定义上声明的种类和是不是记进度清单（`ToolDefinition.kind`、`category`，agent 进程经 `listTools` 和
+ * `tools` 事件给），和插件经 `ui.toolLine` 给自己的工具登记的说法：动作、对象、对着哪个文件、归哪一类、图标。
  *
  * 说法（`call-words.ts`）、归类（`tool-category.ts`）、图标（`tool-icons.tsx`）、运行行（`thinking-words.ts`）、回复里的文件签
  * （`files/scope.ts`）都只查这里，本体不认工具名：读文件、跑命令这些基本工具也是 plume.tools 在定义上声明、在这里登记的。
@@ -14,13 +14,24 @@ const KINDS: ReadonlySet<string> = new Set<ToolKind>(["view", "list", "find", "s
 
 /** 工具名 → 工具定义上声明的种类。认不出的值当作没声明。 */
 let kinds = new Map<string, ToolKind>();
+/** 记进度清单的工具：工具定义上声明 `category: "checklist"` 的。 */
+let checklists = new Set<string>();
 
-/** 换上 agent 进程给的工具表。返回种类有没有变（变了转录要重新分组）。 */
+/** 换上 agent 进程给的工具表。返回种类、记清单的工具有没有变（变了转录要重新分组）。 */
 export function setToolTable(tools: readonly RegisteredToolInfo[]): boolean {
 	const next = new Map<string, ToolKind>();
-	for (const tool of tools) if (typeof tool.kind === "string" && KINDS.has(tool.kind)) next.set(tool.name, tool.kind);
-	const same = next.size === kinds.size && [...next].every(([name, kind]) => kinds.get(name) === kind);
+	const lists = new Set<string>();
+	for (const tool of tools) {
+		if (typeof tool.kind === "string" && KINDS.has(tool.kind)) next.set(tool.name, tool.kind);
+		if (tool.category === "checklist") lists.add(tool.name);
+	}
+	const same =
+		next.size === kinds.size &&
+		[...next].every(([name, kind]) => kinds.get(name) === kind) &&
+		lists.size === checklists.size &&
+		[...lists].every((name) => checklists.has(name));
 	kinds = next;
+	checklists = lists;
 	return !same;
 }
 
@@ -68,9 +79,12 @@ export function toolLine(tool: string): ToolLine | undefined {
 	return best === undefined ? undefined : prefixes.get(best)?.at(-1)?.line;
 }
 
-/** 记进度清单的工具（`ToolLine.checklist`）。 */
+/**
+ * 记进度清单的工具（工具定义上的 `category: "checklist"`）。清单是一段活的记账，不是一件单独的事：它跟旁边那段活接成一段、
+ * 不自己占一行，一段里有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。
+ */
 export function checklistTool(tool: string): boolean {
-	return toolLine(tool)?.checklist === true;
+	return checklists.has(tool);
 }
 
 /** 插件给的动作，按当前语言取；插件的函数出错或不给字时是空串，由调用方退回工具名。没给 `verb` 的照没登记说法的工具说，不走到这里（见 `call-words.ts` 的 `spokenLine`）。 */

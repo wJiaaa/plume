@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Message } from "@plume/contract";
-import { addToolLine, removeToolLines } from "../src/renderer/conversation/tool-lines.ts";
+import { setToolTable } from "../src/renderer/conversation/tool-lines.ts";
 import { latestFooterTimestamp } from "../src/renderer/conversation/turn-footer.ts";
 
 const user = (synthetic = false): Message => ({
@@ -25,9 +25,9 @@ test("只有最新已结束回复有页脚，新消息和运行中不借用旧�
 });
 
 test("补勾清单不抢走最后回复的页脚，普通工具未结束不能挂", (t) => {
-	// 哪个工具记清单由插件在界面入口说（`ToolLine.checklist`）。
-	addToolLine("example.todo", "todo_write", { verb: "更新清单", checklist: true });
-	t.after(() => removeToolLines("example.todo"));
+	// 哪个工具记清单由插件在工具定义上说（`category: "checklist"`），界面从工具表里读。
+	setToolTable([{ name: "todo_write", plugin: "example.todo", category: "checklist" }]);
+	t.after(() => setToolTable([]));
 	const tick = answer(4, "toolUse", [{ type: "toolCall", id: "call", name: "todo_write", arguments: {} }]);
 	assert.equal(latestFooterTimestamp([user(), answer(2), user(true), tick, result("todo_write")], false), 2);
 	assert.equal(latestFooterTimestamp([user(), tick, result("todo_write")], false), null);

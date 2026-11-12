@@ -79,6 +79,7 @@ export interface ToolFile {
  * 做的是哪种活不在这里说，在工具定义上（`ToolDefinition.kind`，见 `@plume/contract` 的 `ToolKind`），本体从工具表里读：
  * 本体按它给默认的说法、图标、运行行，并归类——`view`、`list`、`find`、`search` 归「探索」，`create`、`modify` 归「改文件」，
  * `command`、`watch`、`job` 归「跑命令」，这几类连着做时并进同一段活。没声明种类的工具自成一类：只有连着调这个工具才合成一段，图标是终端那枚。
+ * 是不是记进度清单也在工具定义上说（`ToolDefinition.category` 是 `checklist`）。
  * 这里只补种类说不出来的：自己的说法和图标，以及从参数里取哪个值。
  *
  * 下面几个从参数里取值的函数（`subject`、`file`、`note`、`command`、`job`）拿到的参数是模型给的、没校验过：取不出就返回 undefined。
@@ -119,12 +120,6 @@ export interface ToolLine {
 	 * `group` 这一类自成一段：只和同一类的接，不和读、跑命令、改文件那几类接（MCP 服务的工具：不管哪台服务都是一类，和本地的活分开）。
 	 */
 	apart?: true;
-	/**
-	 * 这个工具记的是进度清单（结果的 `details` 带 `checklist`，见 `@plume/contract` 的 `ChecklistDetails`）。清单是一段活的记账，
-	 * 不是一件单独的事：它跟旁边那段活接成一段，不自己占一行；一段里有别的活时，总的那句不数它；回答之后被替人追问、只更新了清单的
-	 * 那一步不画（勾到哪了清单卡片上看得到）；运行行说在排步骤。
-	 */
-	checklist?: true;
 	/** 几次合在一起时数次数，不数个数：「操作网页 4 次」，不是读着像四张网页的「操作网页 4 个」。 */
 	times?: true;
 	/**

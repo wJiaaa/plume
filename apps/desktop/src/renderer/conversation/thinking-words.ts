@@ -9,7 +9,7 @@
  */
 
 import type { ToolKind } from "@plume/contract";
-import { toolKind, toolLine } from "./tool-lines.ts";
+import { checklistTool, toolKind } from "./tool-lines.ts";
 
 /**
  * 值得区分的几种等待：
@@ -68,7 +68,7 @@ export function moodFor(toolName: string | undefined, summary: string | undefine
 	if (summary && TEST_HINT.test(summary)) return "solving";
 	if (toolName) {
 		// 按工具声明的种类说；记清单的在排步骤；什么都没说的当成在想。
-		if (toolLine(toolName)?.checklist) return "weaving";
+		if (checklistTool(toolName)) return "weaving";
 		const kind = toolKind(toolName);
 		return kind ? BY_KIND[kind] : "breathing";
 	}

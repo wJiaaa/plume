@@ -78,7 +78,7 @@ export interface ChecklistItem {
 /**
  * 工具结果的 `details` 带上 `checklist`，就是声明「这是这件事最新的一份进度清单」：每次给的都是整张，会话里最新一条成功的那份算数。
  * 宿主按它决定一轮收尾时要不要提醒还有没做完的（转录底下的「继续」）；`details` 里别的字段照旧归插件。
- * 转录里怎么画这次调用另由界面入口经 `ui.toolLine` 的 `checklist` 说。
+ * 哪个工具记清单由工具定义上的 `category: "checklist"` 说，转录据它把这次调用当成一段活的记账（见 `ToolDefinition.category`）。
  */
 export interface ChecklistDetails {
 	checklist: ChecklistItem[];
@@ -340,7 +340,9 @@ export interface ToolDefinition {
 	/**
 	 * 这是哪一类能力，宿主和别的插件按它认，不认工具名（`run.tools()`、`ctx.tools.list()` 带着它）：
 	 * - `mcp`：MCP 服务的工具（连同按需搜索、调用它们的总入口）。上下文用量里单独算「MCP 工具」一段。
-	 * - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`。别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
+	 * - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`。转录把它的调用当成一段活的记账：跟旁边那段活接成一段、
+	 *   不自己占一行，一段里有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。
+	 *   别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
 	 * - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`）。别的插件要对模型说「拿不准就问人」时同样按这一类找。
 	 * - `web`：只读地查网页的工具（搜索网页、把网址读成文字），不碰工作区。给模型一套收窄的工具表的插件按这一类留下它们。
 	 *

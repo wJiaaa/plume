@@ -110,7 +110,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 `details` 归插件，宿主不看里面，只认两个通用声明（类型在 `@plume/contract`）。宿主不认工具名：换一个插件提供同类能力，照样声明就行。
 
-- `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。转录里怎么画这次调用另在界面入口经 `ui.toolLine` 的 `checklist: true` 说（见 ui.md）。例子是 `plume.todo`。
+- `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。记清单的工具在定义上标 `category: "checklist"`（见下面「按类别找工具」），转录据它把这次调用并进一段活。例子是 `plume.todo`。
 - `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
 
 ```ts
@@ -193,7 +193,7 @@ ctx.hook("model.context", (input, next) =>
 工具也一样标类别，在 `ctx.tools.register` 的定义上写 `category`。宿主和别的插件按类别认，不认工具名：
 
 - `mcp`：MCP 服务的工具（连同按需搜索、调用它们的总入口）。上下文用量把它们的定义单独算成「MCP 工具」一段。
-- `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`（`plume.todo` 的 `todo_write`）。
+- `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`（`plume.todo` 的 `todo_write`）。转录把它的调用当一段活的记账（见 ui.md 的 `ui.toolLine`），界面入口不用再说一遍。
 - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`；`plume.ask-user` 的 `ask_user`）。
 - `web`：只读地查网页的工具（搜索网页、把网址读成文字，`plume.web` 的两件）。
 

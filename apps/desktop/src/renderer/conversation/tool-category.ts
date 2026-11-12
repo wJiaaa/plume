@@ -11,7 +11,7 @@
 
 import type { ToolKind } from "@plume/contract";
 import { isShellRead } from "./shell-reads.ts";
-import { lineCommand, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
+import { checklistTool, lineCommand, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
 
 const CATEGORY: Record<ToolKind, string> = {
 	view: "explore",
@@ -30,7 +30,7 @@ const GROUP = "group:";
 /** 自成一段的那几类（`ToolLine.apart`）：前缀和 `GROUP` 分开，它们不和读、跑命令、改文件接。 */
 const APART = "apart:";
 
-/** 记进度清单的那一类（`ToolLine.checklist`）：它跟着旁边那段活走，见 `turn-blocks.ts` 的 `joins`。 */
+/** 记进度清单的那一类（工具定义上的 `category: "checklist"`）：它跟着旁边那段活走，见 `turn-blocks.ts` 的 `joins`。 */
 export const CHECKLIST = "checklist";
 
 /** 这一类是不是插件起名的一类活：它们和读、跑命令、改文件互相接成一段（见 `turn-blocks.ts` 的 `joins`）。 */
@@ -39,8 +39,8 @@ export function isPluginGroup(category: string): boolean {
 }
 
 export function toolCategory(toolName: string, args?: unknown): string {
+	if (checklistTool(toolName)) return CHECKLIST;
 	const line = toolLine(toolName);
-	if (line?.checklist) return CHECKLIST;
 	if (line?.group) return (line.apart ? APART : GROUP) + line.group;
 	const kind = toolKind(toolName);
 	if (runsCommand(kind)) {

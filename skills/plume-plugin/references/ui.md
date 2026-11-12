@@ -28,7 +28,7 @@ export default {
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
 | `ui.approvalCard(tool, Component, { order })` | 给自己的工具画审批卡，按 `request.tool` 认 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
-| `ui.toolLine(tool, { verb, subject, file, note, command, job, group, apart, times, callOnly, checklist, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、对着哪个文件、归哪一类、怎么数、图标、是不是记清单；做的是哪种活看工具定义上的 `kind`；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
+| `ui.toolLine(tool, { verb, subject, file, note, command, job, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、对着哪个文件、归哪一类、怎么数、图标；做的是哪种活看工具定义上的 `kind`，是不是记清单看定义上的 `category: "checklist"`；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；name 与 mode 都提供时管理配色和深浅模式 |
@@ -171,7 +171,7 @@ ui.toolLine("symbol", {
 - `create` 的参数要生成好一阵（整个文件的正文）：还在生成时那一行先带上 `file` 取到的路径，行尾说写了几行。
 - `group` 是插件自己起名的一类活（浏览器的五个工具都写 `"browser"`）：同一类的连着做合成一段，和读、跑命令、改文件那几类也接成一段——边改边在页面上验是一件事。给了就不按工具定义上的 `kind` 归类，`kind` 照旧管说法、运行行和图标；不碰本机文件和命令、没有 `kind` 的工具（`plume.compaction` 的 `recall` 搜会话转录）也可以只给 `group` 和 `icon`。只该给「一段活里的一步」，要人单独看见的事（问人、派活）别给。
 - `apart: true`（要和 `group` 一起给）：这一类自成一段，只和同一类的接，不和读、跑命令、改文件接。例子是 `plume.mcp`：不管哪台服务的工具都是一类，和本地的活分开。
-- `checklist: true`：这个工具记进度清单，结果的 `details` 带 `checklist`（`@plume/contract` 的 `ChecklistDetails`，见 logic.md「工具结果里的通用声明」）。宿主把它当一段活的记账：跟旁边那段活接成一段、不单独占一行，有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。例子是 `plume.todo` 的 `todo_write`。
+- 记进度清单的工具不在这里写，在工具定义上写 `category: "checklist"`（见 logic.md「按类别找工具」），结果的 `details` 带 `checklist`（`@plume/contract` 的 `ChecklistDetails`）。宿主从工具表里认出它，当一段活的记账：跟旁边那段活接成一段、不单独占一行，有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。例子是 `plume.todo` 的 `todo_write`。
 - `verb` 可以不给：按 `kind` 的说法说；也没有 `kind` 时只登记归类和图标，说法照没登记的工具（一次说工具名，合在一起说「使用工具」）。
 - 工具名不固定时按前缀登记：`ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" })`。精确工具名登记的优先，几个前缀都对得上时取最长的。
 - `times: true`：几次合在一起时数次数（「操作网页 4 次」），不数个数。

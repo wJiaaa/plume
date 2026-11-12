@@ -33,7 +33,7 @@ export function howItStopped(summary: SessionSummary, messages: readonly Message
 
 /**
  * 去掉回答之后补勾清单的那一段：[回答] [替人追问清单（记清单的插件在收尾时问的）] [只调记清单的工具] [它的结果]。
- * 哪个工具记清单由插件在界面入口说（`ToolLine.checklist`），本体不认工具名。
+ * 哪个工具记清单由插件在工具定义上说（`category: "checklist"`），本体不认工具名。
  *
  * 这一轮停在工具结果上，却不是没说完：回答在它前面已经说完了，补勾之后有意不再要一段正文。
  * 只认这一种形状：同样停在清单工具的结果上、前面却没有那句替人说的话，仍是真被打断（比如勾完清单

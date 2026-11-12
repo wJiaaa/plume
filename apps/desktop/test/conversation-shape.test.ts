@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AssistantMessage, Hiccup, Message, ToolKind } from "@plume/contract";
+import type { AssistantMessage, Hiccup, Message, RegisteredToolInfo, ToolKind } from "@plume/contract";
 import type { ToolLine } from "@plume/contract/ui";
 import { runKey, runs } from "../src/renderer/conversation/grouping.ts";
 import { isShellRead } from "../src/renderer/conversation/shell-reads.ts";
@@ -37,15 +37,17 @@ const result = (id: string, name: string): Message =>
 const thinking = (text: string) => ({ type: "thinking" as const, thinking: text });
 
 /**
- * 假装装了记清单、连 MCP 服务的插件：本体不认它们的工具名，只认它们在界面入口登记的说法（`ui.toolLine`）。
- * 跑完撤下，别的测试看到的是没装它们的样子。
+ * 假装装了记清单、连 MCP 服务的插件：本体不认它们的工具名，只认记清单的那件在工具定义上声明的类别（工具表里的 `category`）
+ * 和它们在界面入口登记的说法（`ui.toolLine`）。跑完撤下，别的测试看到的是没装它们的样子。
  */
 function withPluginLines(body: () => void): void {
-	addToolLine("example.todo", "todo_write", { verb: "更新清单", checklist: true });
+	toolTable({}, [{ name: "todo_write", plugin: "example.todo", category: "checklist" }]);
+	addToolLine("example.todo", "todo_write", { verb: "更新清单" });
 	addToolLine("example.mcp", "mcp__", { group: "mcp", apart: true }, "prefix");
 	try {
 		body();
 	} finally {
+		toolTable();
 		removeToolLines("example.todo");
 		removeToolLines("example.mcp");
 	}
@@ -78,9 +80,9 @@ const BASIC_TOOLS: Record<string, ToolLine> = {
 	bash: { note: described, command: (args) => (typeof args.command === "string" ? args.command : undefined) },
 	bash_output: { job: (args) => ({ ...(typeof args.id === "string" ? { id: args.id } : {}), stop: args.kill === true }) },
 };
-/** 工具表：基本工具加上这次另装的几件。 */
-const toolTable = (extra: Record<string, ToolKind> = {}) =>
-	setToolTable(Object.entries({ ...BASIC_KINDS, ...extra }).map(([name, kind]) => ({ name, plugin: "example.tools", kind })));
+/** 工具表：基本工具加上这次另装的几件（`others` 是别的插件的，照原样放进去）。 */
+const toolTable = (extra: Record<string, ToolKind> = {}, others: RegisteredToolInfo[] = []) =>
+	setToolTable([...Object.entries({ ...BASIC_KINDS, ...extra }).map(([name, kind]) => ({ name, plugin: "example.tools", kind })), ...others]);
 toolTable();
 for (const [tool, line] of Object.entries(BASIC_TOOLS)) addToolLine("example.tools", tool, line);
 

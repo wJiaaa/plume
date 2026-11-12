@@ -189,7 +189,6 @@ function registerToolLine(plugin: string, tool: unknown, line: unknown, options:
 	if (candidate.callOnly !== undefined && candidate.callOnly !== true) throw new Error(`工具说法 ${tool} 的 callOnly 只能是 true`);
 	if (candidate.apart !== undefined && (candidate.apart !== true || candidate.group === undefined))
 		throw new Error(`工具说法 ${tool} 的 apart 只能是 true，且要给 group`);
-	if (candidate.checklist !== undefined && candidate.checklist !== true) throw new Error(`工具说法 ${tool} 的 checklist 只能是 true`);
 	if (candidate.icon !== undefined && typeof candidate.icon !== "function" && typeof candidate.icon !== "object")
 		throw new Error(`工具说法 ${tool} 的 icon 必须是组件`);
 	addToolLine(plugin, tool, candidate as ToolLine, match === "prefix" ? "prefix" : "tool");
