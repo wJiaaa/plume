@@ -88,11 +88,11 @@ it("按路径发文件：只给工作目录里的文件，给的是解析过软�
 });
 
 it("找文件：按原样拼得上的直接给，裸文件名在目录里按结尾找，跳过 node_modules", async () => {
-	expect(await locateSessionFiles(cwd, "readme.md")).toEqual([join(cwd, "readme.md")]);
-	expect(await locateSessionFiles(cwd, "approvals.ts")).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
-	expect(await locateSessionFiles(cwd, "deep/approvals.ts")).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
-	expect(await locateSessionFiles(cwd, "src/")).toEqual([`${join(cwd, "src")}/`]);
-	expect(await locateSessionFiles(cwd, "nothing.ts")).toEqual([]);
+	expect(await locateSessionFiles(cwd, "readme.md", join(dir, "data"))).toEqual([join(cwd, "readme.md")]);
+	expect(await locateSessionFiles(cwd, "approvals.ts", join(dir, "data"))).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
+	expect(await locateSessionFiles(cwd, "deep/approvals.ts", join(dir, "data"))).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
+	expect(await locateSessionFiles(cwd, "src/", join(dir, "data"))).toEqual([`${join(cwd, "src")}/`]);
+	expect(await locateSessionFiles(cwd, "nothing.ts", join(dir, "data"))).toEqual([]);
 });
 
 // 程序写成 sh 脚本，Windows 上起不来，测不出有没有被执行。
@@ -109,14 +109,14 @@ it.skipIf(process.platform === "win32")("找文件时不执行仓库配置里的
 	for (const hook of ["post-index-change", "post-checkout", "reference-transaction"])
 		await writeFile(join(dir, hook), `#!/bin/sh\necho hook >> '${trace}'\n`, { mode: 0o755 });
 
-	expect(await locateSessionFiles(cwd, "approvals.ts")).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
+	expect(await locateSessionFiles(cwd, "approvals.ts", join(dir, "data"))).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
 	expect(await readFile(trace, "utf8").catch(() => null)).toBeNull();
 });
 
 it("找文件：通配符、走出目录的 `..`、绝对路径都不找", async () => {
-	expect(await locateSessionFiles(cwd, "*.ts")).toEqual([]);
-	expect(await locateSessionFiles(cwd, "../secret.txt")).toEqual([]);
-	expect(await locateSessionFiles(cwd, join(dir, "secret.txt"))).toEqual([]);
+	expect(await locateSessionFiles(cwd, "*.ts", join(dir, "data"))).toEqual([]);
+	expect(await locateSessionFiles(cwd, "../secret.txt", join(dir, "data"))).toEqual([]);
+	expect(await locateSessionFiles(cwd, join(dir, "secret.txt"), join(dir, "data"))).toEqual([]);
 });
 
 it("服务按会话的工作目录读和找；没有这个会话时什么都不给", async () => {

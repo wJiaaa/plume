@@ -2774,7 +2774,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const session = sessions.get(sessionId);
 			if (!session) return [];
 			const roots = [...new Set([session.summary.cwd, ...projectRootsFor(projects, session.summary.cwd, session.summary.project)])];
-			return [...new Set((await Promise.all(roots.map((root) => locateSessionFiles(root, relative)))).flat())].sort();
+			return [...new Set((await Promise.all(roots.map((root) => locateSessionFiles(root, relative, dataDir)))).flat())].sort();
 		},
 		stop(sessionId) {
 			stopSession(find(sessionId));

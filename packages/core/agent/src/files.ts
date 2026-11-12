@@ -5,13 +5,12 @@
  * 才读，读的就是检查过的那个路径——检查和打开之间不换字符串。
  */
 
-import { execFile } from "node:child_process";
 import { constants, type Dirent } from "node:fs";
 import { mkdtemp, open, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { tmpdir } from "node:os";
 import { backup, DatabaseSync } from "node:sqlite";
-import { promisify } from "node:util";
+import { openRepo, withRepoView } from "@plume/workspace";
 import { text } from "./i18n.ts";
 import type { FileContents, FileEntry } from "@plume/contract";
 
@@ -49,21 +48,6 @@ const SKIP_DIRS: ReadonlySet<string> = new Set([
 	".gradle",
 	".expo",
 ]);
-
-/** 会把 git 指到别的仓库去的环境变量：从别处继承来的 `GIT_DIR` 会让它列出另一个仓库的文件。 */
-const REDIRECTING = [
-	"GIT_DIR",
-	"GIT_WORK_TREE",
-	"GIT_COMMON_DIR",
-	"GIT_INDEX_FILE",
-	"GIT_OBJECT_DIRECTORY",
-	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
-	"GIT_NAMESPACE",
-	"GIT_CEILING_DIRECTORIES",
-	"GIT_PREFIX",
-];
-
-const execFileAsync = promisify(execFile);
 
 /** 网络共享和设备路径：`\\server\…`、`//server/…`、`\\?\…`。 */
 const isRemoteOrDevicePath = (path: string) => /^[\\/]{2}/.test(path);
@@ -229,8 +213,9 @@ async function readHead(path: string, limit: number): Promise<Buffer | null> {
  * 模型常把文件写成 `approvals.ts:125`、`scripts/check.mjs`——前者只有名字，后者相对的是某个子包而不是
  * 工作目录。按工作目录直接拼，点开的是一个不存在的文件。这里先按原样找，找不到再在目录的文件里按结尾
  * 匹配，由调用方决定只有一个匹配时才认。文件夹带着结尾的 `/` 交回去，界面凭它画文件夹图标。
+ * `dataDir` 是 Plume 的数据目录：问 git 用的隔离视图建在它下面，见 `git`。
  */
-export async function locateSessionFiles(cwd: string, written: string): Promise<string[]> {
+export async function locateSessionFiles(cwd: string, written: string, dataDir: string): Promise<string[]> {
 	if (typeof written !== "string") return [];
 	const clean = written.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
 	// 通配符、走出目录的 `..`，都不是「回复里提到的一个文件」。
@@ -245,10 +230,10 @@ export async function locateSessionFiles(cwd: string, written: string): Promise<
 	if (there?.isFile()) return back([clean]);
 	if (there?.isDirectory()) return back([`${clean}/`]);
 
-	const files = await projectFiles(root);
+	const files = await projectFiles(root, dataDir);
 	if (files === null) {
 		// 仓库大到列不完：只问这一个名字，让 git 按 pathspec 找，仍然认 .gitignore。文件夹这时只认按原样拼得上的。
-		const listed = await git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", `:(glob)**/${clean}`]).catch(() => "");
+		const listed = await git(root, dataDir, ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", `:(glob)**/${clean}`]).catch(() => "");
 		return back([...new Set(listed.split("\0").filter(Boolean))].sort().slice(0, LOCATE_LIMIT));
 	}
 	const named = files.filter((path) => path === clean || path.endsWith(`/${clean}`));
@@ -272,10 +257,10 @@ function foldersNamed(files: readonly string[], name: string): string[] {
  */
 const listing = new Map<string, Promise<string[] | null>>();
 
-function projectFiles(root: string): Promise<string[] | null> {
+function projectFiles(root: string, dataDir: string): Promise<string[] | null> {
 	let list = listing.get(root);
 	if (!list) {
-		list = listFiles(root).finally(() => listing.delete(root));
+		list = listFiles(root, dataDir).finally(() => listing.delete(root));
 		listing.set(root, list);
 	}
 	return list;
@@ -286,36 +271,23 @@ function projectFiles(root: string): Promise<string[] | null> {
  *
  * `null`：清单超出了输出上限（几十万个文件）。这时不退回走目录——那不认 .gitignore——由调用方逐个名字去问 git。
  */
-async function listFiles(root: string): Promise<string[] | null> {
+async function listFiles(root: string, dataDir: string): Promise<string[] | null> {
 	try {
-		return (await git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])).split("\0").filter(Boolean);
+		return (await git(root, dataDir, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])).split("\0").filter(Boolean);
 	} catch (error) {
 		return (error as { code?: unknown }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? null : walkFiles(root);
 	}
 }
 
 /**
- * 宿主进程里对工作区仓库跑 git。工作区是沙箱可写的，`.git/config` 里写的程序 git 会替它在宿主上执行，而这里
- * 是回复一画出来就自动调的，不用人点。
- *
- * 临时做法：只压住这里用到的两条命令（`ls-files --cached --others --exclude-standard`，带或不带 pathspec）
- * 碰得到的执行点。完整的办法是 plume.tools 的 `host-git.ts` 那种隔离视图（git 读不到仓库配置），等它收进本体后换掉这里。
- *
- * - `core.fsmonitor`：任何一次读 index 都会执行，这两条命令都读 index。`-c` 的优先级高于仓库配置和它 include 的文件。
- * - 钩子：`ls-files` 不写 index，不触发 `post-index-change`；`core.hooksPath` 指空仍然压上，防以后改了命令。
- * - 惰性拉取（partial clone 的 promisor 远端，会经 `core.sshCommand`、`remote.*.uploadpack` 起程序）：
- *   `--exclude-standard` 遇到 skip-worktree 的 `.gitignore` 会从 index 里的 blob 读，sparse index 展开要读树，
- *   对象缺了就去拉。`GIT_NO_LAZY_FETCH`（git 2.44 起）关掉它，更老的 git 不认这个变量，这一点压不住。
- * - `filter.<名>.*`、`diff.<名>.textconv`、`diff.external`：驱动名由仓库自取，`-c` 压不住；但这两条命令只列
- *   index 里的路径和没跟踪的文件名，不算工作区文件的哈希、不生成补丁、不读属性，碰不到它们。
- * - 分页器：输出不是终端，git 不起分页器。
+ * 宿主进程里对工作区仓库跑 git。工作区是沙箱可写的，`.git/config` 里写的程序（`core.fsmonitor`、过滤器、钩子、惰性拉取）git 会替它
+ * 在宿主上执行，而这里是回复一画出来就自动调的，不用人点。所以在 `@plume/workspace` 的隔离视图里跑：git 读不到仓库的配置，
+ * 在 `root` 这个目录里跑，路径和 pathspec 照旧相对它。不在仓库里时抛错，调用方当作 git 答不上来。
  */
-async function git(cwd: string, args: string[]): Promise<string> {
-	const env: NodeJS.ProcessEnv = { ...process.env, GIT_NO_LAZY_FETCH: "1" };
-	for (const name of REDIRECTING) delete env[name];
-	const guarded = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", ...args];
-	const { stdout } = await execFileAsync("git", guarded, { cwd, env, maxBuffer: 32 * 1024 * 1024, timeout: 10_000 });
-	return stdout;
+async function git(root: string, dataDir: string, args: string[]): Promise<string> {
+	const repo = await openRepo(root);
+	if (!repo) throw new Error(`not a git repository: ${root}`);
+	return withRepoView(repo, dataDir, (run) => run(args), { cwd: root, maxBuffer: 32 * 1024 * 1024, timeout: 10_000 });
 }
 
 /** `root` 之下的文件，相对 `root`、用 `/` 分隔。不跟软链：一个指回上层的链接会让它绕不出来。 */
