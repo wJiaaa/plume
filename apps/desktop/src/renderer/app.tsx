@@ -136,6 +136,7 @@ import {
 	registerHostPanel,
 	setPanelScope,
 	SessionToolbar,
+	toolTableChanged,
 	usePluginUis,
 	useQueueActions,
 } from "./plugins.tsx";
@@ -459,6 +460,9 @@ function apply(event: AgentEvent): void {
 			return;
 		case "plugins":
 			pluginsChanged(event.plugins);
+			return;
+		case "tools":
+			toolTableChanged(event.tools);
 	}
 }
 
@@ -473,7 +477,9 @@ async function refresh(): Promise<void> {
 	reasking = undefined;
 	reloadLive();
 	try {
-		const [sessions, projects] = await Promise.all([agent.listSessions(), agent.listProjects(), refreshModels()]);
+		// 工具表也重拿一份：断流期间的 `tools` 事件丢了，转录会按旧的种类分组。
+		const [sessions, projects, tools] = await Promise.all([agent.listSessions(), agent.listProjects(), agent.listTools(), refreshModels()]);
+		toolTableChanged(tools);
 		update({ sessions, projects });
 		if (state.currentId) await select(state.currentId, true);
 	} finally {

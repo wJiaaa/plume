@@ -3,13 +3,16 @@
  * 或按条丢弃时的一条说明。宿主把它原样存下，以后每次照发：前缀缓存和「重开会话后模型看到的和当时一样」都靠这个。
  */
 
-import type { AssistantMessage, Message } from "@plume/contract";
+import type { AssistantMessage, Message, ToolKind } from "@plume/contract";
 import { type CompactionContext, copyTaskContext, foldTaskContext, formatTaskContext, USER_WORDS_CHARS } from "./task-context.ts";
 
 /** 按条丢弃时，前面那条说明里用户原话的摘录合计最多占窗口多少，见 `droppedMessage`。 */
 const DROPPED_EXCERPT_SHARE = 0.15;
 /** 摘要里最多列几个文件——再多就从「一眼能扫完的清单」变成「又一段要读的正文」。 */
 const SEEN_FILES_CAP = 20;
+
+/** 某个工具干的是哪类活（注册它的插件在 `ToolDefinition.kind` 上声明的），不认工具名。 */
+export type KindOf = (tool: string) => ToolKind | undefined;
 
 /** 确认回复记的来历：照着历史里最近一条回复填，它和后面留下的回复是同一个服务商。 */
 export interface ReplyOrigin {
@@ -29,6 +32,8 @@ class SeenFiles {
 	private readonly read = new Set<string>();
 	private readonly changed = new Set<string>();
 
+	constructor(private readonly kindOf: KindOf) {}
+
 	add(message: Message): void {
 		if (message.role === "user" && message.synthetic && message.compactionFiles) {
 			for (const path of message.compactionFiles.read) this.read.add(path);
@@ -40,8 +45,9 @@ class SeenFiles {
 			const args = (part.arguments ?? {}) as Record<string, unknown>;
 			const path = (args.path ?? args.file ?? args.filePath) as unknown;
 			if (typeof path !== "string" || !path) continue;
-			if (part.name === "write" || part.name === "edit") this.changed.add(path);
-			else if (part.name === "read") this.read.add(path);
+			const kind = this.kindOf(part.name);
+			if (kind === "create" || kind === "modify") this.changed.add(path);
+			else if (kind === "view") this.read.add(path);
 		}
 	}
 
@@ -172,7 +178,11 @@ export function droppedMessage(
  */
 export class RetiredHistory {
 	private context: CompactionContext = {};
-	private readonly seen = new SeenFiles();
+	private readonly seen: SeenFiles;
+
+	constructor(kindOf: KindOf) {
+		this.seen = new SeenFiles(kindOf);
+	}
 
 	add(message: Message): void {
 		this.context = foldTaskContext(this.context, message);

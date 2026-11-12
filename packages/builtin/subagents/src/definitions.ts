@@ -12,7 +12,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { BUILTIN_AGENTS, type AgentDefinition } from "./agents.ts";
+import type { RegisteredToolInfo } from "@plume/contract";
+import { BUILTIN_AGENTS, builtinAgents, type AgentDefinition } from "./agents.ts";
 import type { Messages } from "./messages.ts";
 import type { JsonSchema } from "./yield.ts";
 
@@ -96,15 +97,18 @@ export class AgentDefinitions {
 	private readonly home: string;
 	private readonly text: () => Messages;
 	private readonly trash: (path: string) => Promise<void>;
+	private readonly tools: () => readonly RegisteredToolInfo[];
 
 	/**
 	 * `home` 是 Plume 自己的目录（`ctx.appDataDir`）；`text` 给出当前语言的文案，报错是给人看的；
-	 * `trash` 把文件移到系统的废纸篓（回收站），插件里是 `ctx.trash`。
+	 * `trash` 把文件移到系统的废纸篓（回收站），插件里是 `ctx.trash`；`tools` 是这一刻的工具表（`ctx.tools.list()`），
+	 * 内置的几种按它挑工具（`builtinAgents`），不给就是一件也没有。
 	 */
-	constructor(home: string, text: () => Messages, trash: (path: string) => Promise<void>) {
+	constructor(home: string, text: () => Messages, trash: (path: string) => Promise<void>, tools: () => readonly RegisteredToolInfo[] = () => []) {
 		this.home = home;
 		this.text = text;
 		this.trash = trash;
+		this.tools = tools;
 	}
 
 	private directory(scope: "user" | "project", cwd: string | null): string {
@@ -120,7 +124,7 @@ export class AgentDefinitions {
 
 	private async located(cwd: string | null): Promise<Located[]> {
 		const winners = new Map<string, Located>();
-		for (const agent of BUILTIN_AGENTS) {
+		for (const agent of builtinAgents(this.tools())) {
 			const raw = JSON.stringify(agent);
 			winners.set(agent.name, {
 				record: { id: hash(`builtin:${agent.name}`), scope: "builtin", definition: agent, customized: false, revision: hash(raw) },

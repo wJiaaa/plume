@@ -11,7 +11,7 @@ const result = (id: string, output = "一样", isError = false): ToolResultMessa
 	isError,
 	timestamp: 0,
 });
-/** 假装注册了两个改文件的工具（`ToolDefinition.category` 是 `files`）：本体不认工具名，只认这个声明。 */
+/** 假装注册了两个写、改文件的工具（`ToolDefinition.kind` 是 `create`、`modify`）：本体不认工具名，只认这个声明。 */
 const editsFiles = (tool: string) => tool === "save_file" || tool === "patch_file";
 const observe = (watch: RepetitionWatch, name: string, args: unknown, id: string, output = "一样", isError = false) => {
 	watch.observe([{ name, arguments: args }], [result(id, output, isError)], editsFiles);

@@ -1,6 +1,6 @@
 /**
  * 同工具、同参数、同结果：第三次纠正、第十次停止；翻页只提醒，不据此停下真实工作。
- * 一步里改文件的工具（`ToolDefinition.category` 是 `files`）成功了先统一清零；人工新消息和压缩后也清零，「继续」沿用计数。
+ * 一步里写、改文件的工具（`ToolDefinition.kind` 是 `create`、`modify`）成功了先统一清零；人工新消息和压缩后也清零，「继续」沿用计数。
  * 替换仅作用于模型上下文，会话和卡片保留原文；旧替换不随清零撤销，保持请求前缀稳定。
  */
 
@@ -20,8 +20,8 @@ export class RepetitionWatch {
 	private hint: string | undefined;
 
 	/**
-	 * 整步一起观察：同一步有真实改动时，旧观察先作废，再数这一批调用。`editsFiles` 查某个工具是不是改文件的
-	 * （注册它的插件标的 `ToolDefinition.category`），不认工具名。
+	 * 整步一起观察：同一步有真实改动时，旧观察先作废，再数这一批调用。`editsFiles` 查某个工具是不是写、改文件的
+	 * （注册它的插件标的 `ToolDefinition.kind`），不认工具名。
 	 */
 	observe(calls: { name: string; arguments: unknown }[], results: ToolResultMessage[], editsFiles: (tool: string) => boolean): void {
 		if (calls.some((call, index) => editsFiles(call.name) && results[index]?.role === "toolResult" && !results[index].isError)) this.reset();

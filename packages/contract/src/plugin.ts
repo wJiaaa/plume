@@ -281,12 +281,24 @@ export interface ParentSession {
 	status(): ParentStatus;
 }
 
-/** 工具表里生效的一件工具：名字、注册它的插件、它声明的类别。见 `ToolRun.tools()`、`ctx.tools.list()`。 */
+/** 工具表里生效的一件工具：名字、注册它的插件、它声明的种类和类别。见 `ToolRun.tools()`、`ctx.tools.list()`、`AgentService.listTools()`。 */
 export interface RegisteredToolInfo {
 	name: string;
 	plugin: string;
+	kind?: ToolKind;
 	category?: ToolDefinition["category"];
 }
+
+/**
+ * 一个工具对本机的文件和命令做的是哪种活，见 `ToolDefinition.kind`：
+ * - `view` 读一个文件，`list` 列一个目录，`find` 按名字找文件，`search` 按内容搜文件；
+ * - `create` 写出一个文件（整个正文就在参数里），`modify` 改一个已有的文件；
+ * - `command` 跑一条命令，`watch` 起一条长跑的命令、边跑边把新输出送回会话，`job` 查看或停掉一个后台任务（起它的那次结果带着
+ *   `BackgroundJobDetails`）。
+ *
+ * 不碰本机文件和命令的工具（查网页、搜会话转录、问人）不在这几种里：别的插件按种类挑「能读、能改、能跑命令」的工具时不该挑到它们。
+ */
+export type ToolKind = "view" | "list" | "find" | "search" | "create" | "modify" | "command" | "watch" | "job";
 
 export interface ToolDefinition {
 	name: string;
@@ -315,16 +327,26 @@ export interface ToolDefinition {
 	 */
 	forwards?(args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined;
 	/**
-	 * 这是哪一类工具，宿主和别的插件按它认，不认工具名（`run.tools()`、`ctx.tools.list()` 带着它）：
+	 * 做的是哪种活（见 `ToolKind`）。一个工具做什么只在这里声明一次，宿主、界面和别的插件都从这里认，不认工具名
+	 * （`run.tools()`、`ctx.tools.list()`、`AgentService.listTools()` 带着它）：
+	 * - 转录按它给默认的说法、图标、运行行和归类，回复里的文件签按 `view`、`create`、`modify` 的调用认读写过的文件（从参数里取什么见 `ui.toolLine`）。
+	 * - `create`、`modify` 成功一次就是工作区有了实打实的进展：重复检测从头数，同样的调用之前反复得到同样的结果不再算原地打转。
+	 * - 给模型一套收窄的工具表的插件按它留下工具（侧边聊天留读、搜、改、跑命令的，只读的子智能体留读和搜的），提示词要点名
+	 *   「读文件的那个」「跑命令的那个」时按它在工具表里找它叫什么。
+	 *
+	 * 不给的不算这几种活：转录照没登记说法的工具说，自成一类。
+	 */
+	kind?: ToolKind;
+	/**
+	 * 这是哪一类能力，宿主和别的插件按它认，不认工具名（`run.tools()`、`ctx.tools.list()` 带着它）：
 	 * - `mcp`：MCP 服务的工具（连同按需搜索、调用它们的总入口）。上下文用量里单独算「MCP 工具」一段。
 	 * - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`。别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
 	 * - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`）。别的插件要对模型说「拿不准就问人」时同样按这一类找。
 	 * - `web`：只读地查网页的工具（搜索网页、把网址读成文字），不碰工作区。给模型一套收窄的工具表的插件按这一类留下它们。
-	 * - `files`：写、改本机文件的工具。成功一次就是工作区有了实打实的进展：重复检测从头数，同样的调用之前反复得到同样的结果不再算原地打转。
 	 *
-	 * 不给的算普通工具。
+	 * 不给的算普通工具。做的是哪种活（读、改文件、跑命令）用 `kind`，不在这里。
 	 */
-	category?: "mcp" | "checklist" | "question" | "web" | "files";
+	category?: "mcp" | "checklist" | "question" | "web";
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 

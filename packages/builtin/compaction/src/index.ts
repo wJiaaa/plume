@@ -41,6 +41,7 @@ export default {
 					models: modelsFor(input.sessionId),
 					artifacts: artifactsFor(input.sessionId),
 					words: { tooBig: words.tooBig, cancelled: words.cancelled, empty: words.empty },
+					kindOf: (tool) => ctx.tools.list().find((info) => info.name === tool)?.kind,
 				});
 			},
 			{ order: INNER },

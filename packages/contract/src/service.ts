@@ -7,7 +7,7 @@ import type { RetryPolicy } from "@plume/llm/retry-policy";
 import type { ApiFormat, AssistantMessage, Message, MessageAttachment, ModelPricing, ThinkingLevel, ThinkingOption, UserContent } from "@plume/llm/types";
 import type { CallContext } from "@plume/rpc";
 import type { RevertPlan } from "./changes.ts";
-import type { CommandContext, CommandResult, Locale, SlashCommand } from "./plugin.ts";
+import type { CommandContext, CommandResult, Locale, RegisteredToolInfo, SlashCommand } from "./plugin.ts";
 import type { ClearRange, ClearResult, StorageUse, UsageRequestBucket } from "./usage.ts";
 
 /**
@@ -283,7 +283,7 @@ export interface ApprovalRequest {
 	toolCallId: string;
 	tool: string;
 	/**
-	 * 要做的是哪一类事，卡片按它写一个小标签：是 `ToolKind` 里的 `command`、`create`、`modify`、`view` 时写「执行命令」「写入文件」
+	 * 要做的是哪一类事，卡片按它写一个小标签：是 `ToolKind`（工具做的是哪种活）里的 `command`、`create`、`modify`、`view` 时写「执行命令」「写入文件」
 	 * 「修改文件」「读取文件」，别的（插件的工具常写自己的名字）照原样写。
 	 */
 	kind: string;
@@ -556,7 +556,9 @@ export type AgentEvent =
 	/** 有 `level` 的进提示条（插件经 `ctx.notice` 说的、循环在压缩或重发）；没有的是这一轮出了错，写在输入框上面。 */
 	| { type: "notice"; sessionId: string; text: string; level?: NoticeLevel }
 	/** 插件装上、卸下、启用或停用了：全部插件的最新状态。 */
-	| { type: "plugins"; plugins: PluginStatus[] };
+	| { type: "plugins"; plugins: PluginStatus[] }
+	/** 工具表变了（插件装卸、启停，插件运行中登记、撤下工具）：全部生效的工具，同 `listTools`。 */
+	| { type: "tools"; tools: RegisteredToolInfo[] };
 
 /**
  * 上下文窗口按来源拆开：对话消息、工具表（`ToolDefinition.category` 是 `mcp` 的工具 `mcpTools` 单独一段，其余是 `tools`）、系统提示词，
@@ -744,6 +746,11 @@ export interface AgentService {
 	/** 让供它的插件把 `/name rest` 展开；插件已经撤下了或不再认这个名字时报错。 */
 	expandCommand(plugin: string, name: string, rest: string, context: CommandContext): Promise<CommandResult>;
 	listPlugins(): PluginStatus[];
+	/**
+	 * 工具表里生效的工具和它们的声明（种类、类别），同 `ctx.tools.list()`。界面按工具的种类（`ToolDefinition.kind`）给转录里的说法、归类、
+	 * 图标和回复里的文件签，不认工具名；变了推 `tools` 事件。
+	 */
+	listTools(): RegisteredToolInfo[];
 	/** 启用或停用一个插件（按插件名），写进 plugins.json，立即生效。 */
 	setPluginEnabled(name: string, enabled: boolean): Promise<PluginStatus[]>;
 	/** 界面语言变了：agent 进程之后给人看的报错、提示用这种语言。发给模型的文字不跟着变。 */

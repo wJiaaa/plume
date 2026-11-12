@@ -21,7 +21,13 @@ const joinSections = (sections: { text: string }[]) =>
 let dir: string;
 
 /** 插件要的 ctx 里，这几个测试用不到、但 apply 时要有的几样。 */
-const fakeContext = () => ({ dataDir: join(dir, "data"), log: { warn() {} }, sessions: { onDeleted() {} } });
+/** 工具表里跑命令的那件按声明的种类认（`kind: "command"`），叫什么都行。 */
+const fakeContext = () => ({
+	dataDir: join(dir, "data"),
+	log: { warn() {} },
+	sessions: { onDeleted() {} },
+	tools: { list: () => [{ name: "bash", plugin: "test.files", kind: "command" }] },
+});
 
 beforeEach(async () => {
 	dir = await mkdtemp(join(tmpdir(), "plume-prompt-"));
@@ -53,10 +59,10 @@ describe("系统提示词的段", () => {
 		expect(prompt).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 	});
 
-	it("Windows 的 shell 连写法一起说，只在 bash 在工具表里时", () => {
+	it('Windows 的 shell 连写法一起说，只在工具表里有跑命令的工具（`kind: "command"`）时，不认它叫什么', () => {
 		const environment = (input: Partial<SystemPromptInput>) =>
 			buildPromptSections({ ...base, platform: "win32", ...input }).find((section) => section.id === "environment")?.text;
-		const bash = [{ name: "bash" }];
+		const bash = [{ name: "sh", kind: "command" as const }];
 		// Windows PowerShell 5.1 没有 `&&`：不说的话模型写的第一条 `cd x && npm i` 就是语法错误。
 		const legacy = environment({ shell: { kind: "powershell", label: "Windows PowerShell 5.1" }, tools: bash });
 		expect(legacy).toContain("- Shell: Windows PowerShell 5.1\n- Commands run in Windows PowerShell 5.1, not bash: write PowerShell.");
@@ -65,9 +71,25 @@ describe("系统提示词的段", () => {
 		expect(seven).toContain("Commands run in PowerShell 7, not bash");
 		expect(seven).not.toContain("do not exist in this version");
 		expect(environment({ shell: { kind: "posix", label: "Git Bash" }, tools: bash })).toContain("write paths with forward slashes");
-		// 没有 bash 工具时只点名，不教写法；Unix 的 shell 什么都不用多说。
+		// 没有跑命令的工具时只点名，不教写法；Unix 的 shell 什么都不用多说。
 		expect(environment({ shell: { kind: "powershell", label: "PowerShell 7" }, tools: [] })).not.toContain("Commands run in");
+		expect(environment({ shell: { kind: "powershell", label: "PowerShell 7" }, tools: [{ name: "bash" }] })).not.toContain("Commands run in");
 		expect(buildPromptSections({ ...base, tools: bash }).find((section) => section.id === "environment")?.text).not.toContain("Commands run in");
+	});
+
+	it("项目的别的源码目录：写、改文件要先问人，按种类点名这一轮写、改文件的工具，没有就不点名", () => {
+		const workspace = (tools: SystemPromptInput["tools"]) =>
+			buildPromptSections({ ...base, projectRoots: ["/work/app", "/work/lib"], tools }).find((section) => section.id === "workspace")?.text;
+		const basic = [
+			{ name: "read", kind: "view" as const },
+			{ name: "write", kind: "create" as const },
+			{ name: "edit", kind: "modify" as const },
+		];
+		expect(workspace(basic)).toContain(
+			"This project also covers these folders — read, search and list them without asking:\n- /work/lib\nUse absolute paths there; a relative path resolves against the working directory. Writing there is not free: write and edit ask the user first, as for any path outside the working directory.",
+		);
+		expect(workspace([{ name: "patch", kind: "modify" }])).toContain("Writing there is not free: patch asks the user first,");
+		expect(workspace([{ name: "read", kind: "view" }])).toContain("Writing there is not free: writing or editing a file there asks the user first,");
 	});
 
 	it("取证用的改动去哪改，跟着工作区走", () => {

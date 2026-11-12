@@ -6,6 +6,7 @@
  * 三十轮后模型顺手改一个错字是常事。
  */
 
+import type { ToolKind } from "@plume/contract";
 import { renderPlan, SUBMIT_PLAN, type ApprovedPlan } from "./plan.ts";
 
 /**
@@ -42,14 +43,13 @@ export function planSection(tools: PlanTools): string {
 }
 
 /**
- * 计划模式下拒绝这次调用的原因；不拒绝时是 undefined。只拦写文件这一件事：联网、调别的插件的工具都放行，
- * 命令不按文本猜，交给只读沙箱（`readOnly`）；只拒命令申请离开沙箱。
+ * 计划模式下拒绝这次调用的原因；不拒绝时是 undefined。只拦写文件这一件事：按工具声明的种类（`ToolDefinition.kind` 是 `create`、
+ * `modify`）认，不认工具名；联网、调别的插件的工具都放行，命令不按文本猜，交给只读沙箱（`readOnly`）——命令申请离开沙箱由跑命令的
+ * 工具自己拒，`ToolRun.readOnly` 说的就是它。
  */
 // i18n-exempt：发给模型的工具结果。
-export function editsFiles(name: string, args: Record<string, unknown>): string | undefined {
-	if (name === "write" || name === "edit") return "it edits files";
-	if (name === "bash" && args.escalate !== undefined) return "commands run in a read-only sandbox and may not leave it";
-	return undefined;
+export function editsFiles(kind: ToolKind | undefined): string | undefined {
+	return kind === "create" || kind === "modify" ? "it edits files" : undefined;
 }
 
 /** `child`：被拦的是计划模式会话底下的子会话（子 Agent、侧边聊天），它交不了计划。 */

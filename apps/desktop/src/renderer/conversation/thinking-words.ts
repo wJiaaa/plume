@@ -8,8 +8,8 @@
  * 这是程序在屏幕角落自言自语，不是给谁的进度汇报。
  */
 
-import type { ToolKind } from "@plume/contract/ui";
-import { toolLine } from "./tool-lines.ts";
+import type { ToolKind } from "@plume/contract";
+import { toolKind, toolLine } from "./tool-lines.ts";
 
 /**
  * 值得区分的几种等待：
@@ -43,12 +43,14 @@ const WORDS: Record<Mood, string[]> = {
 const PATIENCE_MS = 45_000;
 const LONG_WORDS = ["Still at it", "This one's stubborn", "Taking its time", "Nearly there", "Wrestling with it"];
 
-/** 每种活（`ToolLine.kind`）在等的是哪一种。 */
+/** 每种活（`ToolDefinition.kind`）在等的是哪一种。查后台任务的输出不算一件活，当成在想。 */
 const BY_KIND: Record<ToolKind, Mood> = {
 	view: "listening",
 	create: "composing",
 	modify: "shaping",
 	command: "working",
+	watch: "working",
+	job: "breathing",
 	find: "searching",
 	search: "searching",
 	list: "searching",
@@ -65,10 +67,10 @@ export function moodFor(toolName: string | undefined, summary: string | undefine
 	if (retrying) return "connecting";
 	if (summary && TEST_HINT.test(summary)) return "solving";
 	if (toolName) {
-		// 按插件登记的种类说；记清单的在排步骤；什么都没说的当成在想。
-		const line = toolLine(toolName);
-		if (line?.checklist) return "weaving";
-		return line?.kind ? BY_KIND[line.kind] : "breathing";
+		// 按工具声明的种类说；记清单的在排步骤；什么都没说的当成在想。
+		if (toolLine(toolName)?.checklist) return "weaving";
+		const kind = toolKind(toolName);
+		return kind ? BY_KIND[kind] : "breathing";
 	}
 	return writing ? "composing" : "breathing";
 }

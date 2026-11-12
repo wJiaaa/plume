@@ -26,6 +26,7 @@ interface GlobArgs {
 export const globTool: Tool<GlobArgs> = {
 	name: "glob",
 	describe: describeGlob,
+	kind: "find",
 	description:
 		"Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. " +
 		"Skips files git ignores (outside a git repository: build and dependency directories). " +

@@ -23,7 +23,7 @@ import type { Call, ToolCallBlock } from "./grouping.ts";
 import { formatElapsed } from "./running-line.ts";
 import { streamedLines, streamedStrings } from "./streamed-arguments.ts";
 import { ToolIcon } from "./tool-icons.tsx";
-import { toolLine } from "./tool-lines.ts";
+import { toolKind } from "./tool-lines.ts";
 import { polledJob, pollOutput } from "./turn-blocks.ts";
 import {
 	type BackgroundJobInfo,
@@ -50,10 +50,10 @@ const SLOT_STATUS: Record<CallStatus, ToolCardProps["status"]> = {
 };
 
 /**
- * 还在写的文件（`ToolLine.kind` 是 `create`）：标题带上路径，行尾说写了几行。开跑之后交还给参数本身。
+ * 还在写的文件（种类是 `create`，见 `ToolDefinition.kind`）：标题带上路径，行尾说写了几行。开跑之后交还给参数本身。
  */
 export function writeDraft(block: ToolCallBlock, status: CallStatus): { block: ToolCallBlock; lines?: string } {
-	const raw = status === "pending" && toolLine(block.name)?.kind === "create" ? block.argumentsText : undefined;
+	const raw = status === "pending" && toolKind(block.name) === "create" ? block.argumentsText : undefined;
 	if (!raw) return { block };
 	const lines = streamedLines(raw);
 	return {

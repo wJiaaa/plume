@@ -8,8 +8,7 @@
  * 同一格也摆等人给数据的卡（`run.request`，提问卡、计划卡、表单）：插件按 `kind` 登记（`ui.requestCard`），没有时退回一张只能「不答」的通用卡。
  */
 
-import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest } from "@plume/contract";
-import type { ToolKind } from "@plume/contract/ui";
+import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest, ToolKind } from "@plume/contract";
 import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } from "@plume/ui";
 import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";

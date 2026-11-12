@@ -27,8 +27,3 @@ it("导出会话时每个工具写成的那一行由工具自己给", () => {
 	expect(bashOutputTool.describe!({ id: "j" })).toBe("Check job");
 	expect(bashOutputTool.describe!({ id: "j", kill: true })).toBe("Stop job");
 });
-
-it("写、改文件的两个工具标成改文件的一类，别的不标", () => {
-	expect([writeTool, editTool].map((tool) => tool.category)).toEqual(["files", "files"]);
-	expect([readTool, lsTool, globTool, grepTool, bashTool, bashOutputTool, monitorTool].map((tool) => tool.category)).toEqual(Array(7).fill(undefined));
-});

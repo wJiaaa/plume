@@ -19,7 +19,7 @@ export const writeTool: Tool<WriteArgs> = {
 	name: "write",
 	describe: describeWrite,
 	// 改文件：成功一次就是工作区有了实打实的进展，本体的重复检测从头数。
-	category: "files",
+	kind: "create",
 	description: "Write a whole file, creating parent directories. To change part of an existing file use `edit`; read an existing file before overwriting it.",
 	parameters: {
 		type: "object",

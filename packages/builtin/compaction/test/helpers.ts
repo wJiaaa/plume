@@ -1,10 +1,14 @@
-import type { AssistantMessage, CompactionProgress, ContextCompact, Message, ToolResultMessage } from "@plume/contract";
+import type { AssistantMessage, CompactionProgress, ContextCompact, Message, ToolKind, ToolResultMessage } from "@plume/contract";
 import type { CompactionRequest } from "../src/compaction.ts";
 import type { Models, SummaryRequest } from "../src/models.ts";
 
 type ForkRequest = Parameters<Models["fork"]>[0];
 
 export const words = { tooBig: "TOO_BIG", cancelled: "CANCELLED", empty: "EMPTY" };
+
+/** 假的工具表：测试里用的这几个工具各自声明的活（插件在 `ToolDefinition.kind` 上标的）。 */
+const KINDS: Record<string, ToolKind> = { read: "view", write: "create", edit: "modify", bash: "command" };
+export const kindOf = (tool: string): ToolKind | undefined => KINDS[tool];
 
 export function usage(input = 0): AssistantMessage["usage"] {
 	return { input, output: 0, cacheRead: 0, cacheWrite: 0, total: input, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -77,6 +81,7 @@ export function request(
 		force: false,
 		floor: 0,
 		cwd: "/repo",
+		kindOf,
 		...rest,
 	};
 }

@@ -1,11 +1,14 @@
-import type { CallContext, SessionMessage, SessionModel } from "@plume/contract";
+import type { CallContext, SessionMessage, SessionModel, ToolKind } from "@plume/contract";
 import type { AgentRecord, AgentSave } from "./definitions.ts";
 import type { AgentSettings, Face, ModelChoice, TaskRecord } from "./types.ts";
 
-/** 设置页一次要的全部：`project` 那一层（为空是个人）生效的名单、能挑的工具、模型偏好、关掉的种类和模型目录。 */
+/**
+ * 设置页一次要的全部：`project` 那一层（为空是个人）生效的名单、能挑的工具（和它们声明做的是哪种活：新建时默认勾哪些、
+ * 哪些标成能改文件跑命令，按它定）、模型偏好、关掉的种类和模型目录。
+ */
 export interface AgentCatalog {
 	records: AgentRecord[];
-	tools: string[];
+	tools: Array<{ name: string; kind?: ToolKind }>;
 	choices: AgentSettings;
 	disabled: string[];
 	models: SessionModel[];

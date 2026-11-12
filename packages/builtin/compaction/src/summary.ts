@@ -4,7 +4,7 @@
 
 import type { Message } from "@plume/contract";
 import { type BudgetModel, SUMMARY_INPUT, summaryReplyTokens } from "./budget.ts";
-import type { ReplyOrigin } from "./head.ts";
+import type { KindOf, ReplyOrigin } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
 import { FIRST_SUMMARY, focusNote, hasSummary, SUMMARY_SYSTEM, UPDATE_SUMMARY } from "./prompts.ts";
 import { allowance } from "./prune.ts";
@@ -314,7 +314,7 @@ function clip(text: string, limit: number): string {
  * 这条路恰好在摘要模型够不着时走，那正是会话最经不起再丢掉目的的时候。所以上一份摘要原样带过来——它已经是要的格式，也写着模型还看得见时
  * 记下的目标。
  */
-export function fallbackSummary(messages: readonly Message[]): string {
+export function fallbackSummary(messages: readonly Message[], kindOf: KindOf): string {
 	const userPrompts: string[] = [];
 	const touchedFiles = new Set<string>();
 	const keyActions: string[] = [];
@@ -338,7 +338,9 @@ export function fallbackSummary(messages: readonly Message[]): string {
 				const args = (part.arguments ?? {}) as Record<string, unknown>;
 				const path = (args.path ?? args.file ?? args.filePath) as string | undefined;
 				if (path && typeof path === "string") touchedFiles.add(path);
-				if (name === "write" || name === "edit" || name === "bash") {
+				// 动过东西的才算关键动作：写、改文件和跑命令（注册它的插件声明的 `ToolDefinition.kind`）。
+				const kind = kindOf(name);
+				if (kind === "create" || kind === "modify" || kind === "command") {
 					const desc = (args.description as string | undefined) ?? (args.command as string | undefined)?.split("\n")[0];
 					const line = desc ? `${name}: ${desc}` : path ? `${name} ${path}` : name;
 					if (!keyActions.includes(line)) keyActions.push(line);

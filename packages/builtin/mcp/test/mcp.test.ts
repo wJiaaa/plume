@@ -399,7 +399,8 @@ test("小图直接交给模型；200 KiB 以上存进临时目录给路径、记
 		assert.equal(mcpResult({ content: [{ type: "image", data: small, mimeType: "image/png" }] }, dir).output, "");
 
 		const big = imageOf(300 * 1024);
-		const parked = mcpResult({ content: [{ type: "image", data: big, mimeType: "image/jpeg" }] }, dir);
+		// 读文件的工具叫什么按工具表里 `kind: "view"` 的那个现查，连接器不认名字。
+		const parked = mcpResult({ content: [{ type: "image", data: big, mimeType: "image/jpeg" }] }, dir, undefined, "view_file");
 		assert.deepEqual(parked.images, []);
 		assert.deepEqual(parked.shown, [{ data: big, mimeType: "image/jpeg" }]);
 		const [saved] = await readdir(join(dir, "mcp-images"));
@@ -407,8 +408,10 @@ test("小图直接交给模型；200 KiB 以上存进临时目录给路径、记
 		const path = join(dir, "mcp-images", saved);
 		assert.equal(
 			parked.output,
-			`[image (image/jpeg, 300 KiB) not attached inline to save context; it is shown to the user and saved at ${path} — \`read\` that path if you need to look at it]`,
+			`[image (image/jpeg, 300 KiB) not attached inline to save context; it is shown to the user and saved at ${path} — \`view_file\` that path if you need to look at it]`,
 		);
+		// 工具表里没有读文件的工具时只说去打开那个文件。
+		assert.match(mcpResult({ content: [{ type: "image", data: big, mimeType: "image/jpeg" }] }, dir).output, /— open that file if you need to look at it\]$/);
 		assert.deepEqual(await readFile(path), Buffer.from(big, "base64"));
 
 		// 没有临时目录（设置页探测）时不存，照样给人看。

@@ -50,6 +50,10 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 			list: () => [
 				{ name: "ask_question", plugin: "test.ask", category: "question" },
 				{ name: "track", plugin: "test.list", category: "checklist" },
+				// 写、改文件的按声明的种类认，叫什么都行。
+				{ name: "write", plugin: "test.files", kind: "create" },
+				{ name: "edit", plugin: "test.files", kind: "modify" },
+				{ name: "bash", plugin: "test.files", kind: "command" },
 				...[...tools.keys()].map((name) => ({ name, plugin: "plume.plan" })),
 			],
 		},
@@ -177,7 +181,8 @@ test("关着时什么都不管；开着时写文件被拒，别的调用带着 r
 	assert.equal(edit.output.isError, true);
 	assert.match(edit.output.output, /^Plan mode: it edits files, so "edit" did not run/);
 	assert.equal((await plan.execute("main", "bash", { command: "ls" })).reached?.readOnly, true);
-	assert.equal((await plan.execute("main", "bash", { command: "touch x", escalate: "workspace-write" })).output.isError, true);
+	// 申请离开只读沙箱不在这里拦：照样带着 readOnly 交下去，由跑命令的工具自己拒。
+	assert.equal((await plan.execute("main", "bash", { command: "touch x", escalate: "workspace-write" })).reached?.readOnly, true);
 	assert.match((await plan.execute("child", "write")).output.output, /^The conversation that started you is in plan mode/);
 	assert.equal((await plan.execute("child", "read")).reached?.readOnly, true);
 	assert.equal((await plan.execute("fresh", "write")).reached?.readOnly, undefined);

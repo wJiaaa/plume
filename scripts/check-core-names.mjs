@@ -149,6 +149,26 @@ const ALLOWED = [
 		name: "edit",
 		reason: "项目菜单里的模式（编辑项目），不是工具",
 	},
+	{
+		file: "packages/builtin/approval/src/risk-tables.ts",
+		name: "bash",
+		reason: "shell 程序名（`bash -c …`、`curl … | bash` 里的那个程序），不是工具",
+	},
+	{
+		file: "packages/builtin/sandbox/src/login-path.ts",
+		name: "bash",
+		reason: "同上：问 PATH 时起的登录 shell 的程序名",
+	},
+	{
+		file: "packages/builtin/browser/src/tools.ts",
+		name: "read",
+		reason: 'browser_act 自己的动作（action: "read" 读当前页），和读文件的工具同字',
+	},
+	{
+		file: "packages/builtin/browser/skills/browser/SKILL.md",
+		name: "read",
+		reason: "同上：技能里说的是 browser_act 的 read 动作",
+	},
 ];
 
 /** 内置插件目录：带给模型的技能在这下面（`skills/<名字>/SKILL.md`），规则 6 也查。 */

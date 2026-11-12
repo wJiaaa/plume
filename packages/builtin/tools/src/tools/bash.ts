@@ -34,6 +34,9 @@ const MAX_OUTPUT_CHARS = 60_000;
  * 吃掉一大块上下文；超过的部分按整行省略，省略了哪几行写在标记里。
  */
 const MODEL_OUTPUT_CHARS = 35_400;
+// i18n-exempt：工具结果是发给模型的，不随界面语言变。
+const ESCALATION_READ_ONLY =
+	"Not run: this conversation may not change files right now, so commands run in a read-only sandbox and may not leave it. Run it without `escalate`.";
 
 interface BashArgs {
 	command: string;
@@ -49,6 +52,7 @@ interface BashArgs {
 export const bashTool: Tool<BashArgs> = {
 	name: "bash",
 	describe: describeCommand,
+	kind: "command",
 	/*
 	 * shell 本身要模型知道的（是哪个 shell、怎么写）不写在这里，写在系统提示词的环境一段：同一个工具给所有会话用，
 	 * 而那取决于这台机器和会话的权限模式（Windows 上受约束的命令跑在 PowerShell 里，见 `commandShell`）。
@@ -112,6 +116,11 @@ export const bashTool: Tool<BashArgs> = {
 		 * 提权只能由人答：它要的是放宽沙箱，外层的放行和「以后不再问」都不是对这件事的回答（见 tool-run.ts）。
 		 */
 		let mode = ctx.sandboxMode;
+		/*
+		 * 外层要求这次不改工作区（计划模式）时命令一律在只读沙箱里跑，提权就是要离开它：不到人面前，直接拒。
+		 * 这一条归跑命令的工具自己守，`ToolRun.readOnly` 说的就是它；外层不按参数名猜哪次调用在提权。
+		 */
+		if (ctx.readOnly && args.escalate !== undefined) return errorResult(ESCALATION_READ_ONLY);
 		try {
 			validateEscalationArgs(args.escalate, args.justification);
 			if (args.escalate !== undefined) {
@@ -480,6 +489,7 @@ interface BashOutputArgs {
 export const bashOutputTool: Tool<BashOutputArgs> = {
 	name: "bash_output",
 	describe: describeJobRead,
+	kind: "job",
 	description:
 		"Read a background job's new output since your last bash_output call (the first call returns everything so far), and optionally kill it. " +
 		"While it runs, a call within 30s of your last read waits until it ends or those 30s are up, and returns everything printed meanwhile.",

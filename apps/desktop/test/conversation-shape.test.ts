@@ -4,13 +4,13 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AssistantMessage, Hiccup, Message } from "@plume/contract";
+import type { AssistantMessage, Hiccup, Message, ToolKind } from "@plume/contract";
 import type { ToolLine } from "@plume/contract/ui";
 import { runKey, runs } from "../src/renderer/conversation/grouping.ts";
 import { isShellRead } from "../src/renderer/conversation/shell-reads.ts";
 import { foldPolls, pollOutput, turnBlocks, withoutThinking } from "../src/renderer/conversation/turn-blocks.ts";
 import { moodFor } from "../src/renderer/conversation/thinking-words.ts";
-import { addToolLine, removeToolLines } from "../src/renderer/conversation/tool-lines.ts";
+import { addToolLine, removeToolLines, setToolTable } from "../src/renderer/conversation/tool-lines.ts";
 import { restated } from "../src/renderer/conversation/reply-segments.ts";
 import { CARRY_ON_PROMPTS, carryOnPrompt, howItStopped, isPlanTick, unfinishedTodos } from "../src/renderer/conversation/turn-stop.ts";
 import { liveTurnMeter, resumesTurn } from "../src/renderer/conversation/turns.ts";
@@ -53,20 +53,35 @@ function withPluginLines(body: () => void): void {
 const text = (value: string) => ({ type: "text" as const, text: value });
 
 /**
- * 假装装了提供读写文件、跑命令的插件（随应用发的是 plume.tools）：本体不认 read、bash 这些名字，只认它登记的种类。整个文件都装着。
+ * 假装装了提供读写文件、跑命令的插件（随应用发的是 plume.tools）：本体不认 read、bash 这些名字，只认它在工具定义上声明的种类
+ * （agent 进程给的工具表）和它登记的说法。整个文件都装着。
  */
 const described = (args: Record<string, unknown>) => (typeof args.description === "string" ? args.description : undefined);
 const fileOf = (args: Record<string, unknown>) => (typeof args.path === "string" ? { path: args.path } : undefined);
+const BASIC_KINDS: Record<string, ToolKind> = {
+	read: "view",
+	ls: "list",
+	glob: "find",
+	grep: "search",
+	write: "create",
+	edit: "modify",
+	bash: "command",
+	bash_output: "job",
+};
 const BASIC_TOOLS: Record<string, ToolLine> = {
-	read: { kind: "view", file: fileOf },
-	ls: { kind: "list", file: (args) => ({ path: typeof args.path === "string" ? args.path : "" }) },
-	glob: { kind: "find", note: described },
-	grep: { kind: "search", note: described },
-	write: { kind: "create", file: fileOf },
-	edit: { kind: "modify", file: fileOf },
-	bash: { kind: "command", note: described, command: (args) => (typeof args.command === "string" ? args.command : undefined) },
+	read: { file: fileOf },
+	ls: { file: (args) => ({ path: typeof args.path === "string" ? args.path : "" }) },
+	glob: { note: described },
+	grep: { note: described },
+	write: { file: fileOf },
+	edit: { file: fileOf },
+	bash: { note: described, command: (args) => (typeof args.command === "string" ? args.command : undefined) },
 	bash_output: { job: (args) => ({ ...(typeof args.id === "string" ? { id: args.id } : {}), stop: args.kill === true }) },
 };
+/** 工具表：基本工具加上这次另装的几件。 */
+const toolTable = (extra: Record<string, ToolKind> = {}) =>
+	setToolTable(Object.entries({ ...BASIC_KINDS, ...extra }).map(([name, kind]) => ({ name, plugin: "example.tools", kind })));
+toolTable();
 for (const [tool, line] of Object.entries(BASIC_TOOLS)) addToolLine("example.tools", tool, line);
 
 test("先后几条回复里同类的调用合成一段活，推理落在它后面那段里，回答单独一行", () => {
@@ -206,7 +221,7 @@ test("连接岔子按发生时的消息条数插进去，数到末尾的排在�
 	assert.deepEqual(list.map(runKey), ["user-1-0", "hiccup-h1", "assistant-2-1", "assistant-9-2", "hiccup-h2"]);
 });
 
-test('插件登记了读一类的工具（`kind: "view"`）并进探索那一段；撤下后回到自成一类', () => {
+test('插件的工具声明了读一类（`kind: "view"`）就并进探索那一段；撤下后回到自成一类', () => {
 	const messages: Message[] = [
 		user("go"),
 		reply([call("a", "read"), call("b", "symbol", { name: "runAgent" }), call("c", "grep")]),
@@ -217,12 +232,14 @@ test('插件登记了读一类的工具（`kind: "view"`）并进探索那一段
 	];
 	const steps = () =>
 		turnBlocks(runs(messages))[1]!.items.map((item) => (item.kind === "step" ? item.step.calls.map((one) => one.block.id).join("") : item.run.kind));
-	addToolLine("example.index", "symbol", { verb: "查找符号", kind: "view" });
+	addToolLine("example.index", "symbol", { verb: "查找符号" });
+	toolTable({ symbol: "view" });
 	try {
 		assert.deepEqual(steps(), ["abc", "message"]);
 		assert.equal(moodFor("symbol", undefined), "listening");
 	} finally {
 		removeToolLines("example.index");
+		toolTable();
 	}
 	assert.deepEqual(steps(), ["a", "b", "c", "message"]);
 	assert.equal(moodFor("symbol", undefined), "breathing");

@@ -87,12 +87,14 @@ type SaveDocument = (uri: string, mime: string | undefined, blob: string) => Doc
 /**
  * 服务器的结果换成交给模型的样子。每种内容块都有去处，一种都不悄悄丢：文字照给；图按大小直接给、存进临时目录给路径，或只说一声；
  * 音频、认不出的写一句说明。`structuredContent` 在正文里没有同样内容时接在后面。`scratchDir` 是会话的临时目录，
- * 大图和超长结果的全文落在那里，read 不用问人就能读回来；没有（设置页探测）时不存。
+ * 大图和超长结果的全文落在那里，读文件的工具不用问人就能读回来；没有（设置页探测）时不存。`reader` 是这次能用的读文件工具
+ * （工具表里 `kind: "view"` 的那个）叫什么，告诉模型拿它去读；没有就只说去读那个文件。
  */
 export function mcpResult(
 	response: { content?: unknown; structuredContent?: unknown; toolResult?: unknown },
 	scratchDir?: string,
 	saveDocument?: SaveDocument,
+	reader?: string,
 ): McpResult {
 	const raw = response.content ?? (response.toolResult !== undefined ? [{ type: "text", text: JSON.stringify(response.toolResult) }] : undefined);
 	const parts: string[] = [];
@@ -101,11 +103,11 @@ export function mcpResult(
 		if (!isRecord(block)) continue;
 		const type = block.type;
 		if (type === "text" && typeof block.text === "string") parts.push(block.text);
-		else if (type === "image" && typeof block.data === "string") image(block.data, String(block.mimeType ?? "image/png"), scratchDir, result, parts);
+		else if (type === "image" && typeof block.data === "string") image(block.data, String(block.mimeType ?? "image/png"), scratchDir, result, parts, reader);
 		// i18n-exempt：以下都是交给模型的结果。
 		else if (type === "audio")
 			parts.push(`[audio (${String(block.mimeType ?? "audio")}, ${size(block.data)}) omitted: Plume does not pass audio to the model]`);
-		else if (type === "resource") embedded(isRecord(block.resource) ? block.resource : undefined, scratchDir, result, parts, saveDocument);
+		else if (type === "resource") embedded(isRecord(block.resource) ? block.resource : undefined, scratchDir, result, parts, saveDocument, reader);
 		else if (type === "resource_link" && typeof block.uri === "string") parts.push(resourceLink(block));
 		else parts.push(`[content of type "${String(type)}" omitted: Plume does not understand it]`);
 	}
@@ -121,12 +123,12 @@ export function mcpResult(
 		if (!present) parts.push(`structuredContent: ${JSON.stringify(response.structuredContent)}`);
 	}
 	const text = parts.join("\n\n");
-	result.output = bound(text || (result.images.length > 0 ? "" : "(the server returned no content)"), scratchDir && join(scratchDir, "mcp-results"));
+	result.output = bound(text || (result.images.length > 0 ? "" : "(the server returned no content)"), scratchDir && join(scratchDir, "mcp-results"), reader);
 	return result;
 }
 
 /** 一张图：小的原样给模型；大的存进临时目录、给人看、给模型路径；超过 5 MB 的只说一声。 */
-function image(data: string, mimeType: string, scratchDir: string | undefined, result: McpResult, parts: string[]): void {
+function image(data: string, mimeType: string, scratchDir: string | undefined, result: McpResult, parts: string[], reader: string | undefined): void {
 	const bytes = Math.floor((data.length * 3) / 4);
 	// i18n-exempt：以下都是交给模型的结果。
 	if (bytes > MAX_IMAGE_BYTES) {
@@ -145,7 +147,7 @@ function image(data: string, mimeType: string, scratchDir: string | undefined, r
 	const saved = scratchDir ? saveImage(data, mimeType, join(scratchDir, "mcp-images")) : undefined;
 	parts.push(
 		saved
-			? `[image (${mimeType}, ${formatSize(bytes)}) not attached inline to save context; it is shown to the user and saved at ${saved} — \`read\` that path if you need to look at it]`
+			? `[image (${mimeType}, ${formatSize(bytes)}) not attached inline to save context; it is shown to the user and saved at ${saved} — ${reader ? `\`${reader}\` that path` : "open that file"} if you need to look at it]`
 			: `[image (${mimeType}, ${formatSize(bytes)}) not attached inline to save context; it is shown to the user]`,
 	);
 }
@@ -169,7 +171,8 @@ function embedded(
 	scratchDir: string | undefined,
 	result: McpResult,
 	parts: string[],
-	saveDocument?: SaveDocument,
+	saveDocument: SaveDocument | undefined,
+	reader: string | undefined,
 ): void {
 	if (!resource) {
 		parts.push("[resource]");
@@ -178,7 +181,7 @@ function embedded(
 	const uri = String(resource.uri ?? "");
 	const mime = typeof resource.mimeType === "string" ? resource.mimeType : undefined;
 	if (typeof resource.text === "string") parts.push(`[resource ${uri}${mime ? ` (${mime})` : ""}]\n${resource.text}`);
-	else if (typeof resource.blob === "string" && mime?.startsWith("image/")) image(resource.blob, mime, scratchDir, result, parts);
+	else if (typeof resource.blob === "string" && mime?.startsWith("image/")) image(resource.blob, mime, scratchDir, result, parts, reader);
 	else if (typeof resource.blob === "string") {
 		const documents = result.documents ?? [];
 		// shortcut: 每次结果最多 16 份、合计 64 MiB；有大批量资料需求时改为分页接收。
@@ -216,12 +219,12 @@ function stable(value: unknown): string {
 }
 
 /** 截掉中间之前把全文存进 `saveDir`（临时目录的 `mcp-results/`），告诉模型去哪读；存不下就让它向工具要少一点。 */
-function bound(text: string, saveDir: string | undefined): string {
+function bound(text: string, saveDir: string | undefined, reader: string | undefined): string {
 	const points = [...text];
 	if (points.length <= RESULT_CHARS) return text;
 	const saved = saveDir ? saveFull(text, saveDir) : undefined;
 	const where = saved
-		? `the full result is saved at ${saved} — \`read\` it with offset if you need the middle`
+		? `the full result is saved at ${saved} — ${reader ? `\`${reader}\` it with offset` : "read that file"} if you need the middle`
 		: "ask the tool for less — a narrower query or a page — if you need the middle";
 	const note = (omitted: number) =>
 		`\n\n… [${omitted.toLocaleString("en-US")} of ${points.length.toLocaleString("en-US")} characters omitted by Plume (limit ${RESULT_CHARS.toLocaleString("en-US")}); ${where}.] …\n\n`;

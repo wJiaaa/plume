@@ -1,9 +1,11 @@
 import { expect, it } from "vitest";
+import { TOOLS } from "../src/tools.ts";
+import { WAKEUP_TOOLS } from "../src/tools/wakeups.ts";
 import { TOOL_LINES } from "../src/tool-lines.ts";
 
-/** 本体不认工具名：转录里的说法、归类、文件签都只看这张表，这里钉住每个工具声明了什么。 */
-it("每个工具声明它做的是哪种活，读写的文件、命令、说明和后台任务从参数里取", () => {
-	expect(Object.fromEntries(Object.entries(TOOL_LINES).map(([tool, line]) => [tool, line.kind]))).toEqual({
+/** 本体不认工具名：转录里的说法、归类、文件签只看工具定义上的种类和这张表，这里钉住每个工具声明了什么。 */
+it("每个工具在定义上声明它做的是哪种活，读写的文件、命令、说明和后台任务从参数里取", () => {
+	expect(Object.fromEntries([...TOOLS, ...WAKEUP_TOOLS].map((tool) => [tool.name, tool.kind]))).toEqual({
 		read: "view",
 		ls: "list",
 		glob: "find",
@@ -11,9 +13,14 @@ it("每个工具声明它做的是哪种活，读写的文件、命令、说明�
 		write: "create",
 		edit: "modify",
 		bash: "command",
-		bash_output: undefined,
-		monitor: "command",
+		bash_output: "job",
+		monitor: "watch",
+		schedule_wakeup: undefined,
+		cron_create: undefined,
+		cron_list: undefined,
+		cron_delete: undefined,
 	});
+	expect(Object.keys(TOOL_LINES)).toEqual(["read", "ls", "glob", "grep", "write", "edit", "bash", "bash_output", "monitor"]);
 	const { read, ls, write, bash, bash_output: output, grep } = TOOL_LINES;
 	expect(read!.file!({ path: "a.ts" })).toEqual({ path: "a.ts" });
 	expect(read!.file!({ path: "a.ts", offset: 10, limit: 20 })).toEqual({ path: "a.ts", lines: { from: 10, to: 29 } });

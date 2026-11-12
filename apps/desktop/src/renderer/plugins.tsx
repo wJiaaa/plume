@@ -16,7 +16,7 @@
  * - 截图浮层、钉图窗口的组件同一时间各只有一个，后注册的生效。插件停用时连同它的全局快捷键一起撤掉。
  */
 
-import type { AgentService, Locale, OutgoingMessage, PluginStatus, SessionView } from "@plume/contract";
+import type { AgentService, Locale, OutgoingMessage, PluginStatus, RegisteredToolInfo, SessionView } from "@plume/contract";
 import type {
 	ApprovalCardProps,
 	CodeBlockProps,
@@ -56,7 +56,6 @@ import type {
 	SessionMarkProps,
 	SettingsSectionOptions,
 	ToolCardProps,
-	ToolKind,
 	ToolLine,
 	TurnFooterProps,
 	ReplyActionProps,
@@ -82,7 +81,7 @@ import { findFile, openFile } from "./files/open-file.ts";
 import { droppedPaths } from "./files/paths.ts";
 import { usePathMenu } from "./markdown/PathMenu.tsx";
 import { PluginMarkdown } from "./markdown/PluginMarkdown.tsx";
-import { addToolLine, removeToolLines } from "./conversation/tool-lines.ts";
+import { addToolLine, removeToolLines, setToolTable } from "./conversation/tool-lines.ts";
 import { externalWebUrl } from "./plugin-navigation.ts";
 import { openViewer } from "./image/index.ts";
 import { copyImage, saveImage } from "./image/image-out.ts";
@@ -150,7 +149,6 @@ export function copyCodeBlock(language: string, code: string, sessionId: string)
 	}
 }
 
-const TOOL_KINDS = new Set<string>(["view", "list", "find", "search", "create", "modify", "command"] satisfies ToolKind[]);
 /** `ui.draftInSession` 收的图：模型认得的几种。 */
 const COMPOSER_IMAGES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 /** 会话媒体目录里的名字，和 `plume-media://` 认的一样。 */
@@ -182,7 +180,6 @@ function registerToolLine(plugin: string, tool: unknown, line: unknown, options:
 	if (match !== undefined && match !== "tool" && match !== "prefix") throw new Error(`工具说法 ${tool} 的 match 只能是 tool 或 prefix`);
 	if (candidate.verb !== undefined && !validTitle(candidate.verb)) throw new Error(`工具说法 ${tool} 的 verb 必须是文字或按语言取文字的函数`);
 	if (candidate.subject !== undefined && typeof candidate.subject !== "function") throw new Error(`工具说法 ${tool} 的 subject 必须是函数`);
-	if (candidate.kind !== undefined && !TOOL_KINDS.has(candidate.kind)) throw new Error(`工具说法 ${tool} 的 kind 只能是 ${[...TOOL_KINDS].join("、")}`);
 	for (const key of ["file", "note", "command", "job"] as const) {
 		if (candidate[key] !== undefined && typeof candidate[key] !== "function") throw new Error(`工具说法 ${tool} 的 ${key} 必须是函数`);
 	}
@@ -1689,6 +1686,11 @@ async function syncPluginUis(plugins: PluginStatus[], agent: Remote<AgentService
 function notifyPluginUis(): void {
 	revision += 1;
 	for (const listener of subscribers) listener();
+}
+
+/** agent 进程给的工具表（`AgentService.listTools`、`tools` 事件）：工具的种类变了，转录按新的种类重新分组、换说法。 */
+export function toolTableChanged(tools: RegisteredToolInfo[]): void {
+	if (setToolTable(tools)) notifyPluginUis();
 }
 
 function notifyPluginSignals(): void {

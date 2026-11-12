@@ -11,6 +11,7 @@
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, posix, resolve } from "node:path";
 import type { Message, ToolResultMessage } from "@plume/contract";
+import type { KindOf } from "./head.ts";
 import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS } from "./prune.ts";
 
 /** read 对一行最多给多少字（超过的给一个窗口，用 `char_offset` 接着读），和 plume.tools 的 read 一致。 */
@@ -21,7 +22,7 @@ interface StaleCut {
 	notice: string;
 }
 
-function staleCuts(messages: Message[], cwd: string): StaleCut[] {
+function staleCuts(messages: Message[], cwd: string, kindOf: KindOf): StaleCut[] {
 	const calls = callsById(messages);
 	const latestReads = new Map<string, Window[]>();
 	const mutated = new Set<string>();
@@ -38,7 +39,8 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 		const path = pathOf(call.arguments);
 		const key = path ? resolvedKey(cwd, path) : "";
 		const fingerprint = `${call.name} ${stable(call.arguments)}`;
-		const isRead = call.name === "read";
+		const kind = kindOf(call.name);
+		const isRead = kind === "view";
 		/*
 		 * 一次读盖住的是它返回的那些，不是它要的那些：不带范围读一个长源文件，返回的可能是只有大纲的版本；宽的窗口也可能停在输出上限上。
 		 * 按参数判断会清掉模型读过、之后再没见过的正文。也只认原样发出去的结果：剪过头尾的那份，`details` 说的范围还是剪之前的，
@@ -60,7 +62,7 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 		 * 失败，模型就以为改动从没落地。
 		 */
 		if (!message.isError) seenExact.add(fingerprint);
-		if (key && (call.name === "write" || call.name === "edit") && !message.isError) mutated.add(key);
+		if (key && (kind === "create" || kind === "modify") && !message.isError) mutated.add(key);
 		if (key && returned) {
 			const list = latestReads.get(key) ?? [];
 			list.push(returned);
@@ -71,9 +73,9 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 	return cuts;
 }
 
-/** `cwd`：工具调用里的相对路径按它解析。 */
-export function dropStaleResults(messages: Message[], cwd: string): Message[] {
-	const cuts = staleCuts(messages, cwd);
+/** `cwd`：工具调用里的相对路径按它解析。`kindOf`：哪个工具是读文件、写改文件的。 */
+export function dropStaleResults(messages: Message[], cwd: string, kindOf: KindOf): Message[] {
+	const cuts = staleCuts(messages, cwd, kindOf);
 	if (cuts.length === 0) return messages;
 	const byIndex = new Map(cuts.map((cut) => [cut.index, cut.notice]));
 	return messages.map((message, index) => {

@@ -105,7 +105,10 @@ test("内置插件里点名别的内置插件、它的工具算；自己的、�
 			"packages/builtin/plan/src/index.ts 第 3 行按名字认了别的插件的 todo_write",
 			"packages/builtin/plan/src/index.ts 第 4 行认了插件 plume.todo",
 		]);
-		const skill = nameProblems(root).filter(({ file }: { file: string }) => file.endsWith("SKILL.md"));
+		// 临时根下没有 ALLOWED 里登记的那些文件（浏览器的技能也在其中），它们报的「例外过时」不算。
+		const skill = nameProblems(root).filter(
+			({ file, message }: { file: string; message: string }) => file.endsWith("SKILL.md") && !message.startsWith("例外过时"),
+		);
 		assert.equal(skill.length, 1);
 		assert.match(skill[0].message, /todo_write/);
 	} finally {

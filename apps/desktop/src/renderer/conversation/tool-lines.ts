@@ -1,13 +1,38 @@
 /**
- * 插件经 `ui.toolLine` 给自己的工具登记的说法：动作、对象、做的是哪种活、对着哪个文件、归哪一类、图标。
+ * 转录怎么认一个工具：工具定义上声明的种类（`ToolDefinition.kind`，agent 进程经 `listTools` 和 `tools` 事件给），和插件经
+ * `ui.toolLine` 给自己的工具登记的说法：动作、对象、对着哪个文件、归哪一类、图标。
  *
  * 说法（`call-words.ts`）、归类（`tool-category.ts`）、图标（`tool-icons.tsx`）、运行行（`thinking-words.ts`）、回复里的文件签
- * （`files/scope.ts`）都只查这里，本体不认工具名：读文件、跑命令这些基本工具也是 plume.tools 在这里登记的。
+ * （`files/scope.ts`）都只查这里，本体不认工具名：读文件、跑命令这些基本工具也是 plume.tools 在定义上声明、在这里登记的。
  * 单独一个模块、不碰界面：分组要在测试里直接跑。
  */
 
-import type { Locale } from "@plume/contract";
+import type { Locale, RegisteredToolInfo, ToolKind } from "@plume/contract";
 import type { ToolFile, ToolLine } from "@plume/contract/ui";
+
+const KINDS: ReadonlySet<string> = new Set<ToolKind>(["view", "list", "find", "search", "create", "modify", "command", "watch", "job"]);
+
+/** 工具名 → 工具定义上声明的种类。认不出的值当作没声明。 */
+let kinds = new Map<string, ToolKind>();
+
+/** 换上 agent 进程给的工具表。返回种类有没有变（变了转录要重新分组）。 */
+export function setToolTable(tools: readonly RegisteredToolInfo[]): boolean {
+	const next = new Map<string, ToolKind>();
+	for (const tool of tools) if (typeof tool.kind === "string" && KINDS.has(tool.kind)) next.set(tool.name, tool.kind);
+	const same = next.size === kinds.size && [...next].every(([name, kind]) => kinds.get(name) === kind);
+	kinds = next;
+	return !same;
+}
+
+/** 这个工具做的是哪种活（`ToolDefinition.kind`）；没声明、不在工具表里的是 undefined。 */
+export function toolKind(tool: string): ToolKind | undefined {
+	return kinds.get(tool);
+}
+
+/** 跑命令的两种：一次跑完的、长跑着边跑边送输出的。说法、归类、运行行一样，命令原文从 `ToolLine.command` 取。 */
+export function runsCommand(kind: ToolKind | undefined): boolean {
+	return kind === "command" || kind === "watch";
+}
 
 interface Entry {
 	plugin: string;
@@ -102,11 +127,10 @@ export function lineCommand(tool: string, args: unknown): string | undefined {
 	return typeof command === "string" ? command : undefined;
 }
 
-/** 这次调用查看或停掉的后台任务（`ToolLine.job`）；不是这类调用时是 undefined。 */
+/** 这次调用查看或停掉的后台任务（种类是 `job`，任务从 `ToolLine.job` 取）；不是这类调用时是 undefined，认不出任务时 `id` 是 undefined。 */
 export function lineJob(tool: string, args: unknown): { id: string | undefined; stop: boolean } | undefined {
-	const line = toolLine(tool);
-	if (!line?.job) return undefined;
-	const job = fromArgs(line.job, args);
-	if (!job || typeof job !== "object") return undefined;
+	if (toolKind(tool) !== "job") return undefined;
+	const job = fromArgs(toolLine(tool)?.job, args);
+	if (!job || typeof job !== "object") return { id: undefined, stop: false };
 	return { id: typeof job.id === "string" ? job.id : undefined, stop: job.stop === true };
 }

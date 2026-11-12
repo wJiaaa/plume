@@ -74,6 +74,20 @@ it("提权的命令换更宽的沙箱，shell 仍按会话宣布的模式选", a
 	]);
 });
 
+it("外层要求不改工作区（readOnly）时不许提权：不问人，直接拒，命令不跑", async () => {
+	const asked: unknown[] = [];
+	const ran: unknown[] = [];
+	const sandbox: SandboxService = { ...localSandbox, run: (command, options) => (ran.push(command), localSandbox.run(command, options)) };
+	const result = await bashTool.execute(
+		{ command: "echo hi", escalate: "danger-full-access", justification: "要写缓存" },
+		ctx({ sandbox, sandboxMode: "read-only", readOnly: true, requestApproval: async (request) => (asked.push(request), "once") }),
+	);
+	expect(result.isError).toBe(true);
+	expect(textOf(result)).toMatch(/read-only sandbox and may not leave it/);
+	expect(asked).toEqual([]);
+	expect(ran).toEqual([]);
+});
+
 it("给了 timeout 到点就杀", async () => {
 	const result = await bashTool.execute({ command: "echo before; sleep 5", timeout: 300 }, ctx());
 	expect(result.isError).toBe(true);

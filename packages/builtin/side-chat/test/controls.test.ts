@@ -105,8 +105,10 @@ async function fixture(t: TestContext) {
 		hook: (name: string, layer: unknown) => void layers.set(name, layer),
 		tools: {
 			register: (tool: ToolDefinition) => (tools.push(tool.name), () => {}),
-			// 查网页的工具按声明的类别留下，叫什么都行。
+			// 查网页的、读写文件跑命令的工具按声明的类别、种类留下，叫什么都行；长跑的命令（`watch`）不给侧边聊天。
 			list: () => [
+				{ name: "view_file", plugin: "test.files", kind: "view" },
+				{ name: "follow_log", plugin: "test.files", kind: "watch" },
 				{ name: "look_up", plugin: "test.web", category: "web" },
 				{ name: "track", plugin: "test.todo", category: "checklist" },
 			],
@@ -165,18 +167,18 @@ test("普通会话的工具表里没有侧边聊天专用的三件", async (t) =
 	assert.deepEqual(seen, ["read"]);
 });
 
-test("侧边聊天里身份、准则两段按类别换成自己的，段名和位置照旧；查网页的工具按类别留下", async (t) => {
+test("侧边聊天里身份、准则两段按类别换成自己的，段名和位置照旧；读文件、查网页的工具按种类、类别留下", async (t) => {
 	const f = await fixture(t);
 	const sections = [
 		{ id: "who", text: "主会话的身份", category: "identity" as const },
 		{ id: "rules", text: "主会话的准则", category: "guidelines" as const },
 		{ id: "boundaries", text: "边界" },
 	];
-	const tools = ["read", "look_up", "track", "read_main_chat"].map((name) => ({ name }));
+	const tools = ["view_file", "follow_log", "look_up", "track", "read_main_chat"].map((name) => ({ name }));
 	const built = await f.context({ sessionId: "side", tools, sections } as never, async (input) => input);
 	assert.deepEqual(
 		built.tools.map((tool) => tool.name),
-		["read", "look_up", "read_main_chat"],
+		["view_file", "look_up", "read_main_chat"],
 	);
 	assert.deepEqual(
 		built.sections.map((section) => section.id),

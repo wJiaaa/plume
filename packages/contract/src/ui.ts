@@ -65,13 +65,7 @@ export interface ToolCardProps {
 	fallback: ReactNode;
 }
 
-/**
- * 一次调用做的是哪种活，见 `ToolLine.kind`：`view` 读文件，`list` 列目录，`find` 按名字找文件，`search` 按内容搜，`create` 写出一个文件，
- * `modify` 改已有的文件，`command` 跑一条命令。
- */
-export type ToolKind = "view" | "list" | "find" | "search" | "create" | "modify" | "command";
-
-/** `ToolLine.file`：一次调用对着的本机文件，列目录（`kind: "list"`）的是目录。 */
+/** `ToolLine.file`：一次调用对着的本机文件，列目录（`ToolDefinition.kind` 是 `list`）的是目录。 */
 export interface ToolFile {
 	/** 模型给的样子：绝对路径，或相对会话的工作目录。列目录的空串是工作目录本身。 */
 	path: string;
@@ -82,44 +76,43 @@ export interface ToolFile {
 /**
  * `ui.toolLine`：转录里怎么说一个工具。
  *
+ * 做的是哪种活不在这里说，在工具定义上（`ToolDefinition.kind`，见 `@plume/contract` 的 `ToolKind`），本体从工具表里读：
+ * 本体按它给默认的说法、图标、运行行，并归类——`view`、`list`、`find`、`search` 归「探索」，`create`、`modify` 归「改文件」，
+ * `command`、`watch`、`job` 归「跑命令」，这几类连着做时并进同一段活。没声明种类的工具自成一类：只有连着调这个工具才合成一段，图标是终端那枚。
+ * 这里只补种类说不出来的：自己的说法和图标，以及从参数里取哪个值。
+ *
  * 下面几个从参数里取值的函数（`subject`、`file`、`note`、`command`、`job`）拿到的参数是模型给的、没校验过：取不出就返回 undefined。
  */
 export interface ToolLine {
 	/**
 	 * 做的事，一个动词短语（「查找符号」）。一次调用说成「动作 对象」（「查找符号 runAgent」），一段活里几次合在一起数个数
-	 * （「查找符号 3 个」）。不给就照 `kind` 的说法说（「读取文件」）；也没有 `kind` 时一次说工具名，合在一起说「使用工具」，只用这里的归类和图标。
+	 * （「查找符号 3 个」）。不给就照种类的说法说（「读取文件」）；也没有种类时一次说工具名，合在一起说「使用工具」，只用这里的归类和图标。
 	 */
 	verb?: LocalizedText;
 	/** 这一次要点名的对象，从参数里取；取不出就只说动作。 */
 	subject?(args: Record<string, unknown>): string | undefined;
 	/**
-	 * 做的是哪种活，本体按它给默认的说法、图标、运行行，并归类：`view`、`list`、`find`、`search` 归「探索」，`create`、`modify` 归「改文件」，
-	 * `command` 归「跑命令」，这几类连着做时并进同一段活。`command` 的算命令：一段活里有它时，查后台任务输出的那几次（`job`）不另数。
-	 * `create` 的参数要生成好一阵（整个文件的正文）：还在生成时，那一行先带上已经写出来的路径（`file`），行尾说已经写了几行。
-	 * 不给就自成一类：只有连着调这个工具才合成一段，图标是终端那枚。
-	 */
-	kind?: ToolKind;
-	/**
 	 * 这次调用对着的本机文件（列目录的是目录）。没给 `verb` 时，读文件、列目录的那一行说它相对工作区的路径（读了几行的带上行号，
 	 * 目录带 `/`），别的说文件名，几次合在一起时说名字；不是列目录、调用成功了的，回复里写到这个文件时直接画成文件签，不用再去磁盘上找。
+	 * 种类是 `create` 的调用参数要生成好一阵（整个文件的正文）：还在生成时，那一行先带上已经写出来的路径，行尾说已经写了几行。
 	 */
 	file?(args: Record<string, unknown>): ToolFile | undefined;
 	/** 模型在参数里写给人看的一句说明（命令、正则一眼读不出在干什么）：有就整行说它，不再说动作和对象。 */
 	note?(args: Record<string, unknown>): string | undefined;
 	/**
-	 * 这次跑的命令原文（`kind: "command"`）。只是在读的命令（`rg`、`sed -n`、`git log`）归「探索」；参数还在生成、命令还没写出来时，
+	 * 这次跑的命令原文（种类是 `command`、`watch` 的）。只是在读的命令（`rg`、`sed -n`、`git log`）归「探索」；参数还在生成、命令还没写出来时，
 	 * 这次调用先不画，命令到齐时直接出现在它该在的那一段里。
 	 */
 	command?(args: Record<string, unknown>): string | undefined;
 	/**
-	 * 这次调用查看或停掉的后台任务：`id` 对得上起它那次结果的 `details.job.id`（见 `@plume/contract` 的 `BackgroundJobDetails`），`stop` 是停掉它。
-	 * 查看的那一行说是哪个任务的输出（起它那次调用的说明），连着查同一个任务的几次合成一行、展开是这几次读到的全部输出；停掉的那一行说停止命令。
-	 * 这类调用归「跑命令」；一段活里有命令时不另数，只有查看时一个任务记一次。参数里认不出任务时返回 `{}`：仍是这类调用，只是不知道是哪个任务。
+	 * 种类是 `job` 的这次调用查看或停掉的是哪个后台任务：`id` 对得上起它那次结果的 `details.job.id`（见 `@plume/contract` 的 `BackgroundJobDetails`），
+	 * `stop` 是停掉它。查看的那一行说是哪个任务的输出（起它那次调用的说明），连着查同一个任务的几次合成一行、展开是这几次读到的全部输出；
+	 * 停掉的那一行说停止命令。一段活里有命令时不另数，只有查看时一个任务记一次。不给或取不出时仍是这类调用，只是不知道是哪个任务。
 	 */
 	job?(args: Record<string, unknown>): { id?: string; stop?: boolean } | undefined;
 	/**
 	 * 归哪一类活，名字插件自己起（`"browser"`）：同一类的几个工具连着做时合成一段，和读、跑命令、改文件那几类也接成一段——
-	 * 边改边在页面上验是一件事（`apart` 时不接）。给了就不按 `kind` 归类，`kind` 照旧管说法、运行行和图标。
+	 * 边改边在页面上验是一件事（`apart` 时不接）。给了就不按种类归类，种类照旧管说法、运行行和图标。
 	 */
 	group?: string;
 	/**

@@ -74,7 +74,11 @@ async function fixture(t: TestContext) {
 			},
 			names: () => ["read", "write", "bash", ...tools.keys()],
 			list: () => [
-				...["read", "write", "bash"].map((name) => ({ name, plugin: "plume.tools" })),
+				...(["read", "write", "bash"] as const).map((name) => ({
+					name,
+					plugin: "plume.tools",
+					kind: ({ read: "view", write: "create", bash: "command" } as const)[name],
+				})),
 				...others,
 				...[...tools.keys()].map((name) => ({ name, plugin: "plume.subagents" })),
 			],

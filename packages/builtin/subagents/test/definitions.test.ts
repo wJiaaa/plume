@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { BUILTIN_AGENTS } from "../src/agents.ts";
+import { BUILTIN_AGENTS, builtinAgents } from "../src/agents.ts";
 import { AgentDefinitions, parseAgent, renderAgent } from "../src/definitions.ts";
 import { MESSAGES } from "../src/messages.ts";
 
@@ -145,4 +145,34 @@ test("新建、编辑、改内置、删除都落在文件上；过期的修订�
 	const restored = (await f.definitions.list(null)).find((entry) => entry.definition.name === "explore")!;
 	assert.equal(restored.scope, "builtin");
 	await assert.rejects(f.definitions.remove(null, restored.id, restored.revision), new RegExp(text.defCannotRemove));
+});
+
+test("内置的几种按工具声明的种类挑工具，不点名：名字跟着工具表走，没有那种活的就少一样", () => {
+	const tools = (names: Record<string, string>) => Object.entries(names).map(([name, kind]) => ({ name, plugin: "example.files", kind: kind as "view" }));
+	const toolsOf = (table: ReturnType<typeof tools>) => Object.fromEntries(builtinAgents(table).map((agent) => [agent.name, agent.tools]));
+	const basic = tools({
+		read: "view",
+		write: "create",
+		edit: "modify",
+		ls: "list",
+		glob: "find",
+		grep: "search",
+		bash: "command",
+		bash_output: "job",
+		monitor: "watch",
+	});
+	assert.deepEqual(toolsOf(basic), {
+		general: "*",
+		explore: ["read", "glob", "grep", "ls", "bash", "bash_output"],
+		review: ["read", "glob", "grep", "ls", "bash", "bash_output"],
+		verify: ["read", "bash", "bash_output"],
+		plan: ["read", "glob", "grep", "ls"],
+		"plan-review": ["read", "glob", "grep", "ls", "bash"],
+		simple: "*",
+		reason: "*",
+	});
+	// 换一个插件提供读文件、跑命令：名字跟着它走；没有按名字找文件的，那一样就没有。
+	const other = toolsOf(tools({ open_file: "view", rg: "search", sh: "command" }));
+	assert.deepEqual(other.explore, ["open_file", "rg", "sh"]);
+	assert.deepEqual(other.plan, ["open_file", "rg"]);
 });

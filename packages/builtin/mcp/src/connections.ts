@@ -647,7 +647,12 @@ export class Connections implements McpResources {
 			});
 			// 大图和太长的全文存进这个会话的临时目录：随会话删掉，read 读它不用问人。
 			run.signal.throwIfAborted();
-			const result = mcpResult(response, run.scratchDir, (uri, mime, blob) => this.host.documents?.save(run.sessionId, uri, mime, blob) ?? null);
+			const result = mcpResult(
+				response,
+				run.scratchDir,
+				(uri, mime, blob) => this.host.documents?.save(run.sessionId, uri, mime, blob) ?? null,
+				run.tools().find((tool) => tool.kind === "view")?.name,
+			);
 			return {
 				output: result.output,
 				...(result.images.length > 0 ? { images: result.images } : {}),

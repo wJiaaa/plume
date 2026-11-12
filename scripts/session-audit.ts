@@ -372,7 +372,7 @@ let correctedChars = 0;
 let wouldStop = 0;
 
 /**
- * 回放时没有插件宿主，循环里查的是工具定义上的 `category: "files"`；记录里的改文件调用都出自 plume.tools 标了它的 write、edit
+ * 回放时没有插件宿主，循环里查的是工具定义上的 `kind`（`create`、`modify`）；记录里的写、改文件调用都出自 plume.tools 这样标的 write、edit
  * （`packages/builtin/tools/src/tools/{write,edit}.ts`）。不直接 import 那两个工具：它们连带的模块用了 strip-only 不支持的写法。
  */
 const FILE_EDITORS = new Set(["write", "edit"]);

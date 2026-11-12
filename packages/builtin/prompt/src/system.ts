@@ -6,7 +6,7 @@
  * 顺序按变化频率排：不变的在前，随机器、项目、会话变的在后，服务商的前缀缓存能命中得越长越好。
  */
 
-import type { PromptSection, Tone } from "@plume/contract";
+import type { PromptSection, Tone, ToolKind } from "@plume/contract";
 import type { CommandShell } from "@plume/platform";
 import type { ProjectInstructions } from "./instructions.ts";
 import { shellGuidance } from "./shell-guidance.ts";
@@ -16,13 +16,17 @@ export interface SystemPromptInput {
 	projectRoots?: readonly string[];
 	platform: string;
 	/**
-	 * `bash` 跑命令用的 shell，在环境里点名（「zsh」「Git Bash」「Windows PowerShell 5.1」），`bash` 在工具表里时连写法一起说：
+	 * 跑命令用的 shell，在环境里点名（「zsh」「Git Bash」「Windows PowerShell 5.1」），这一轮有跑命令的工具时连写法一起说：
 	 * 只写 `Platform: win32`，模型要在三种语法里猜，猜的总是 bash。调用方给的是这个会话的模式下跑的那个（`commandShell`）：
 	 * Windows 上受约束时是 PowerShell，不受约束时是 Git Bash。
 	 */
 	shell?: Pick<CommandShell, "kind" | "label">;
-	/** 这一轮的工具表，只看有没有 `bash`。 */
-	tools?: readonly { name: string }[];
+	/**
+	 * 这一轮工具表里的工具和它们声明做的是哪种活（`ToolDefinition.kind`，调用方按 `ctx.tools.list()` 对上 `input.tools`）。
+	 * 提示词要说到跑命令、写文件的工具时按种类在这里找，不认工具名：有跑命令的（`command`）才说 shell 的写法，写、改文件的
+	 * （`create`、`modify`）找到了就点名它们。
+	 */
+	tools?: readonly { name: string; kind?: ToolKind }[];
 	modelName: string;
 	isGitRepo: boolean;
 	/**
@@ -115,8 +119,8 @@ const bullets = (lines: readonly string[]) => lines.map((line) => `- ${line}`).j
 
 export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 	const cwd = input.cwd.replace(/\\/g, "/");
-	// shell 的写法是环境的一部分，不是能被换掉的偏好；只在 `bash` 在工具表里时才说。
-	const shellRules = input.shell && input.tools?.some((tool) => tool.name === "bash") ? shellGuidance(input.shell) : [];
+	// shell 的写法是环境的一部分，不是能被换掉的偏好；只在这一轮有跑命令的工具时才说。
+	const shellRules = input.shell && input.tools?.some((tool) => tool.kind === "command") ? shellGuidance(input.shell) : [];
 	const sections: PromptSection[] = [
 		// 身份、准则两段标上类别：要换身份、换准则或往准则里补几条的插件按类别找，不认段名。
 		{ id: "identity", text: IDENTITY, category: "identity" },
@@ -162,10 +166,19 @@ Files that exist only to get this answer — a script to check a hypothesis, dow
 		: "";
 	const otherRoots = (input.projectRoots ?? []).map((root) => root.replace(/\\/g, "/")).filter((root) => root !== cwd);
 	const sources = otherRoots.length
-		? `\n\nThis project also covers these folders — read, search and list them without asking:\n${otherRoots.map((root) => `- ${root}`).join("\n")}\nUse absolute paths there; a relative path resolves against the working directory. Writing there is not free: write and edit ask the user first, as for any path outside the working directory.`
+		? `\n\nThis project also covers these folders — read, search and list them without asking:\n${otherRoots.map((root) => `- ${root}`).join("\n")}\nUse absolute paths there; a relative path resolves against the working directory. Writing there is not free: ${writersAsk(input.tools)}, as for any path outside the working directory.`
 		: "";
 	sections.push({ id: "workspace", text: `Current working directory: ${cwd}${sources}${scratch}` });
 	return sections;
+}
+
+/**
+ * 「写、改文件要先问人」那半句：点名这一轮写文件、改文件的工具（按种类找，先写后改），没有就不点名。
+ */
+function writersAsk(tools: SystemPromptInput["tools"]): string {
+	const names = (["create", "modify"] as const).flatMap((kind) => (tools ?? []).flatMap((tool) => (tool.kind === kind ? [tool.name] : [])));
+	if (names.length === 0) return "writing or editing a file there asks the user first";
+	return `${names.length === 1 ? `${names[0]} asks` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} ask`} the user first`;
 }
 
 function escapeXml(text: string): string {

@@ -20,7 +20,7 @@ import { applyFontSmoothing, readFontSmoothing } from "./appearance.ts";
 import { applyAppearance } from "./appearance-settings.ts";
 import { useLocaleSetting } from "./locale.ts";
 import { installChipCopy } from "./markdown/copy-chips.ts";
-import { loadPluginUis, usePluginUis } from "./plugins.tsx";
+import { loadPluginUis, toolTableChanged, usePluginUis } from "./plugins.tsx";
 import { PinnedShotHost, ScreenOverlayHost, screenWindow } from "./screen.tsx";
 
 declare global {
@@ -182,8 +182,9 @@ async function boot(): Promise<void> {
 		},
 	});
 	const agent = remote<AgentService>(channel);
-	// 先装好插件卡片再画，免得已有会话先画成通用卡片再跳成插件卡片。
+	// 先装好插件卡片、拿到工具的种类再画，免得已有会话先画成通用卡片、不分组的调用，再跳成插件卡片、合好的段。
 	await loadPluginUis(await agent.listPlugins(), agent);
+	toolTableChanged(await agent.listTools());
 	const root = createRoot(document.getElementById("root") as HTMLElement);
 	// 截屏浮层和钉图窗口也是这一页，只画插件注册的那一个组件。
 	const kind = screenWindow();

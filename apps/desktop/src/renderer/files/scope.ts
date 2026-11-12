@@ -7,7 +7,7 @@
 
 import type { Message } from "@plume/contract";
 import { createContext, useContext } from "react";
-import { lineFile, toolLine } from "../conversation/tool-lines.ts";
+import { lineFile, toolKind } from "../conversation/tool-lines.ts";
 
 export interface FileScopeValue {
 	sessionId: string;
@@ -34,7 +34,7 @@ export function touchedPaths(messages: readonly Message[]): string[] {
 	for (const message of messages) {
 		if (message.role !== "assistant") continue;
 		for (const block of message.content) {
-			if (block.type !== "toolCall" || !answered.has(block.id) || failed.has(block.id) || toolLine(block.name)?.kind === "list") continue;
+			if (block.type !== "toolCall" || !answered.has(block.id) || failed.has(block.id) || toolKind(block.name) === "list") continue;
 			const file = lineFile(block.name, block.arguments);
 			if (file) paths.add(file.path);
 		}

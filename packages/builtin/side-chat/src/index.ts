@@ -35,7 +35,7 @@ import {
 	withMark,
 } from "./main-chat.ts";
 import { MESSAGES } from "./messages.ts";
-import { GUIDELINES_TEXT, IDENTITY, READ_MAIN_CHAT_DESCRIPTION, SIDE_ONLY, TOOLS } from "./profile.ts";
+import { GUIDELINES_TEXT, IDENTITY, KINDS, READ_MAIN_CHAT_DESCRIPTION, SIDE_ONLY } from "./profile.ts";
 
 export default {
 	name: "plume.side-chat",
@@ -162,10 +162,10 @@ export default {
 			return { block: false, context: verdict.context ? `${verdict.context}\n\n${context.text}` : context.text };
 		});
 
-		/** 侧边聊天能用的工具：`TOOLS` 里的，加上查网页的（`category: "web"`，不认工具名）。 */
+		/** 侧边聊天能用的工具：自己的（`SIDE_ONLY`），加上按种类（`KINDS`）、类别（`category: "web"`）挑的别的插件的，不认工具名。 */
 		function usable(): (name: string) => boolean {
-			const web = new Set(ctx.tools.list().flatMap((tool) => (tool.category === "web" ? [tool.name] : [])));
-			return (name) => TOOLS.has(name) || web.has(name);
+			const picked = new Set(ctx.tools.list().flatMap((tool) => ((tool.kind && KINDS.has(tool.kind)) || tool.category === "web" ? [tool.name] : [])));
+			return (name) => SIDE_ONLY.has(name) || picked.has(name);
 		}
 
 		ctx.hook("model.context", async (input, next) => {

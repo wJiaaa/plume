@@ -5,7 +5,7 @@
  * 页头和「会话」那一组是产品的；这里只画名单。名单、编辑、删除都经逻辑入口读写定义文件，见 `definitions.ts`。
  */
 
-import type { SessionModel } from "@plume/contract";
+import type { SessionModel, ToolKind } from "@plume/contract";
 import type { ProjectInfo, Remote, UiContext } from "@plume/contract/ui";
 import {
 	ActionSpinner,
@@ -605,9 +605,10 @@ function ProjectScope({
 
 /** 离开设置页再回来，没存的字还在；关掉应用就没了，指令不往浏览器的存储里写。 */
 const drafts = new Map<string, { draft: AgentDraft; scope: "user" | "project" }>();
-const DEFAULT_TOOLS = ["read", "glob", "grep", "ls"];
-/** 能改文件、跑命令的几样：勾选格右边一个红点。 */
-const RISKY_TOOLS = new Set(["bash", "edit", "write"]);
+/** 新建时默认勾上的：读、按名字找、按内容搜、列目录（按工具声明做的是哪种活挑，不点名工具）。 */
+const STARTER_KINDS: readonly ToolKind[] = ["view", "find", "search", "list"];
+/** 能改文件、跑命令的几种活：勾选格右边一个红点。 */
+const RISKY_KINDS: ReadonlySet<ToolKind> = new Set<ToolKind>(["command", "create", "modify"]);
 
 /*
  * 新建、复制、编辑都在弹窗里：删除在左下，取消、保存在右下。
@@ -631,7 +632,7 @@ function AgentEditor({
 	copy?: boolean;
 	project: string | null;
 	projectName?: string;
-	tools: string[];
+	tools: AgentCatalog["tools"];
 	avatarOf: (name: string) => Avatar;
 	/** 除了正在编辑的这一个之外，每个人和他在用的脸。 */
 	taken: { name: string; avatar: Avatar }[];
@@ -641,6 +642,8 @@ function AgentEditor({
 }) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const definition = record?.definition;
+	const starter = STARTER_KINDS.flatMap((kind) => tools.flatMap((tool) => (tool.kind === kind ? [tool.name] : [])));
+	const risky = new Set(tools.flatMap((tool) => (tool.kind && RISKY_KINDS.has(tool.kind) ? [tool.name] : [])));
 	const draftKey = JSON.stringify([project, record?.id ?? "new", Boolean(copy)]);
 	const remembered = drafts.get(draftKey);
 	// 新建和复制一张新脸（复制出来的是另一个人）；编辑沿用它现在那张。只在第一次渲染时定下来。
@@ -651,7 +654,7 @@ function AgentEditor({
 		name: copy ? `${definition?.name ?? "agent"}-copy` : (definition?.name ?? ""),
 		description: definition?.description ?? "",
 		prompt: definition?.prompt ?? "",
-		tools: definition ? (definition.tools === "*" ? "*" : [...definition.tools]) : DEFAULT_TOOLS,
+		tools: definition ? (definition.tools === "*" ? "*" : [...definition.tools]) : starter,
 		avatar: initialAvatar,
 	};
 	const [draft, setDraft] = useState(remembered?.draft ?? original);
@@ -865,16 +868,17 @@ function AgentEditor({
 										{ value: "all", label: text.allToolsOption },
 										{ value: "custom", label: text.customTools },
 									]}
-									onChange={(value) => patch({ tools: value === "all" ? "*" : selected === "*" ? DEFAULT_TOOLS : selected })}
+									onChange={(value) => patch({ tools: value === "all" ? "*" : selected === "*" ? starter : selected })}
 								/>
 							</span>
 							{selected !== "*" && (
 								<div className="subagents-tools">
 									<div className="subagents-tools-grid">
-										{[...new Set([...tools, ...selected])].map((name) => (
+										{[...new Set([...tools.map((tool) => tool.name), ...selected])].map((name) => (
 											<ToolCheckbox
 												key={name}
 												name={name}
+												risky={risky.has(name)}
 												checked={selected.includes(name)}
 												onChange={(checked) => patch({ tools: checked ? [...selected, name] : selected.filter((tool) => tool !== name) })}
 											/>
@@ -936,7 +940,7 @@ function Field({ label, htmlFor, hint, children }: { label: React.ReactNode; htm
 }
 
 /** 工具勾选：整格是按钮，勾上是前景色实底。能改文件、跑命令的几样右边一个红点。 */
-function ToolCheckbox({ name, checked, onChange }: { name: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function ToolCheckbox({ name, risky, checked, onChange }: { name: string; risky: boolean; checked: boolean; onChange: (checked: boolean) => void }) {
 	return (
 		<button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(!checked)} className="subagents-tool">
 			<span className="subagents-tool-box" data-checked={checked || undefined}>
@@ -945,7 +949,7 @@ function ToolCheckbox({ name, checked, onChange }: { name: string; checked: bool
 			<Text size="label" weight="medium" className="subagents-truncate subagents-tool-name">
 				{name}
 			</Text>
-			{RISKY_TOOLS.has(name) && <span aria-hidden className="subagents-tool-risk" />}
+			{risky && <span aria-hidden className="subagents-tool-risk" />}
 		</button>
 	);
 }

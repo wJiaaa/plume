@@ -41,6 +41,7 @@ export default {
 		ctx.hook(
 			"model.context",
 			async (input, next) => {
+				const kinds = new Map(ctx.tools.list().flatMap((tool) => (tool.kind ? [[tool.name, tool.kind] as const] : [])));
 				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions] = await Promise.all([
 					loadProjectInstructions(input.cwd),
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
@@ -54,7 +55,8 @@ export default {
 					platform: process.platform,
 					// 外层（计划模式）要求只读时命令跑在只读沙箱里，按那一档点名。
 					shell: commandShell(input.readOnly ? "read-only" : SANDBOX_BY_PERMISSION[input.permissionMode]),
-					tools: input.tools,
+					// 工具做的是哪种活按注册它的插件的声明（`ToolDefinition.kind`）认，只看这一轮真给模型的那些。
+					tools: input.tools.map((tool) => ({ name: tool.name, kind: kinds.get(tool.name) })),
 					modelName: input.model.name,
 					isGitRepo: gitRepo,
 					isolatedWorktree,

@@ -3,7 +3,8 @@
  *
  * - 开关按会话记（`store.ts`），输入框上的开关和 `/plan` 拨它；新对话的开关在第一句话（`prompt.submit`）时交给建出来的会话。
  * - 不改文件靠执行期拒绝（`tool.execute`），工具表一字不改：工具定义排在请求最前面，批准后要把写工具还给模型，
- *   表一变整段前缀缓存就作废。`write`、`edit` 直接拒绝；别的调用都带上 `readOnly`，命令压进只读沙箱，申请离开沙箱的拒绝。
+ *   表一变整段前缀缓存就作废。写、改文件的工具（按 `ToolDefinition.kind` 认）直接拒绝；别的调用都带上 `readOnly`，命令压进只读沙箱，
+ *   申请离开沙箱的由跑命令的工具自己拒。
  *   计划模式会话底下的子会话（子 Agent、侧边聊天）受同一道线。
  * - `submit_plan` 交计划：经 `run.request` 等人拍板，不是权限，完全访问也不替人批——计划模式的全部意义是「动手之前人看一眼」。
  *   卡片是界面入口画的计划卡，回答连同附言一起交回来：接受带评论时评论是执行时的注意事项，计划照批；
@@ -80,7 +81,7 @@ export default {
 		ctx.hook("tool.execute", async (input, next) => {
 			const mode = await planning(input.sessionId);
 			if (!mode) return next(input);
-			const why = editsFiles(input.call.name, input.call.args);
+			const why = editsFiles(ctx.tools.list().find((tool) => tool.name === input.call.name)?.kind);
 			if (why) return { output: refusal(input.call.name, why, mode === "parent"), isError: true };
 			return next({ ...input, readOnly: true });
 		});

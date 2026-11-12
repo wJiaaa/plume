@@ -3,11 +3,11 @@
  * 和它只有一次调用时那一行是同一枚——从一次长到两次，行首不换。
  */
 
-import type { ToolKind } from "@plume/contract/ui";
+import type { ToolKind } from "@plume/contract";
 import { FileCode, FilePlus, FileText, FolderTree, Search, Terminal } from "@plume/ui/icons";
-import { toolLine } from "./tool-lines.ts";
+import { toolKind, toolLine } from "./tool-lines.ts";
 
-/** 每种活（`ToolLine.kind`）默认的图标。 */
+/** 每种活（`ToolDefinition.kind`）默认的图标。 */
 const ICONS: Record<ToolKind, typeof FileText> = {
 	view: FileText,
 	create: FilePlus,
@@ -16,12 +16,14 @@ const ICONS: Record<ToolKind, typeof FileText> = {
 	find: Search,
 	search: Search,
 	command: Terminal,
+	watch: Terminal,
+	job: Terminal,
 };
 
 export function ToolIcon({ name }: { name: string }) {
 	// 插件给的图标，没给就按它做的那种活。不认得的工具用终端那枚（查后台命令的输出也是这枚，和起它的那条命令同一枚）：
 	// 一个工具调用读起来就是「跑了一件事」，扳手说的是设置。
-	const line = toolLine(name);
-	const Icon = line?.icon ?? (line?.kind ? ICONS[line.kind] : undefined) ?? Terminal;
+	const kind = toolKind(name);
+	const Icon = toolLine(name)?.icon ?? (kind ? ICONS[kind] : undefined) ?? Terminal;
 	return <Icon size={13} strokeWidth={1.8} className="shrink-0" />;
 }

@@ -3,8 +3,10 @@
  * `tools` 是它能用的工具（`*` 是主会话的全部，`task` 除外：子智能体不再派子智能体），`output` 是它交回的对象长什么样。
  *
  * 这里是内置的几种；人自己写的放在 `~/.plume/agents/*.md` 和项目的 `.plume/agents/*.md`，同名时盖住内置的，见 `definitions.ts`。
+ * 人写的按工具名列它能用的工具；内置的不点名别的插件的工具，按种类（`ToolDefinition.kind`）在工具表里挑，见 `builtinAgents`。
  */
 
+import type { RegisteredToolInfo, ToolKind } from "@plume/contract";
 import type { JsonSchema, SchemaMode } from "./yield.ts";
 
 export interface AgentDefinition {
@@ -31,10 +33,15 @@ export interface AgentDefinition {
 	source: "builtin" | "user" | "workspace";
 }
 
-const READ_AND_SHELL = ["read", "glob", "grep", "ls", "bash", "bash_output"];
+/** 内置的一种：能用的工具是 `*`（全部），或者几种活（`ToolKind`），按这里的顺序在工具表里挑出名字。 */
+export type BuiltinAgent = Omit<AgentDefinition, "tools"> & { tools: "*" | readonly ToolKind[] };
+
+/** 读、按名字找、按内容搜、列目录，跑命令、看后台命令的输出。 */
+const READ_AND_SHELL: readonly ToolKind[] = ["view", "find", "search", "list", "command", "job"];
+const READ_ONLY: readonly ToolKind[] = ["view", "find", "search", "list"];
 
 // i18n-exempt：下面都是发给模型的话，名单里的说明也是。
-export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
+export const BUILTIN_AGENTS: readonly BuiltinAgent[] = [
 	{
 		name: "general",
 		avatar: "circle-blue",
@@ -128,7 +135,7 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
 			"underlying command directly. Each entry in `failures` takes its `name` from the runner's own failure line " +
 			"(the `✖` line, the `FAIL` line, the `FAILED` line) — the test's name as the runner printed it, not your " +
 			"paraphrase of it.",
-		tools: ["read", "bash", "bash_output"],
+		tools: ["view", "command", "job"],
 		output: {
 			type: "object",
 			required: ["passed", "summary", "failures"],
@@ -162,7 +169,7 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
 			"complete enough that whoever carries it out has nothing left to decide: a title, a brief summary, the key changes grouped " +
 			"by behaviour or subsystem (name a path only where it prevents a mistake), the test plan, and the assumptions you made where " +
 			"the code could not settle a question. Usually three to five short sections. Do not write or edit anything. Do not pad.",
-		tools: ["read", "glob", "grep", "ls"],
+		tools: READ_ONLY,
 		output: {
 			type: "object",
 			required: ["plan"],
@@ -190,7 +197,7 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
 			"it. Anything less goes in `notes`. Do not rewrite the plan, and propose a different approach only when this one cannot work. " +
 			"If you are told which blockers an earlier review raised, check those first and say for each whether it is resolved, then " +
 			"reuse what is already settled rather than verifying it again. Never modify files.",
-		tools: ["read", "glob", "grep", "ls", "bash"],
+		tools: [...READ_ONLY, "command"],
 		output: {
 			type: "object",
 			required: ["approved", "summary", "blockers"],
@@ -232,6 +239,17 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
 		tools: "*",
 	},
 ];
+
+/**
+ * 内置的几种按这一刻的工具表定下能用的工具：每种活挑出声明了它的工具，按种类的顺序、同一种里按工具表的顺序列名字。
+ * 工具表里没有哪种活，那一种就少一样；名字跟着提供它的插件走，换了插件不用改这里。
+ */
+export function builtinAgents(tools: readonly RegisteredToolInfo[]): AgentDefinition[] {
+	return BUILTIN_AGENTS.map((agent) => ({
+		...agent,
+		tools: agent.tools === "*" ? "*" : agent.tools.flatMap((kind) => tools.flatMap((tool) => (tool.kind === kind ? [tool.name] : []))),
+	}));
+}
 
 export const DEFAULT_AGENT = "general";
 

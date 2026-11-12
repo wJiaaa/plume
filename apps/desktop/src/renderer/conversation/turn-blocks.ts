@@ -8,7 +8,7 @@
 import type { DeliveredReport } from "@plume/contract";
 import { runKey, type Call, type Run, type ToolCallBlock } from "./grouping.ts";
 import { CHECKLIST, isPluginGroup, toolCategory } from "./tool-category.ts";
-import { lineCommand, lineJob, toolLine } from "./tool-lines.ts";
+import { lineCommand, lineJob, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
 import { opensTurn, settled } from "./turns.ts";
 
 type MessageRun = Extract<Run, { kind: "message" }>;
@@ -226,9 +226,11 @@ export function blocksFrom(list: Run[], live = false, from?: BlockStart, prefix:
  * 几百毫秒后再并进上面的探索。代价是生成一条长命令的那几秒里，这条调用还不在转录上，底部运行指示的计时照走。
  */
 function unclassified(call: Call): boolean {
-	const line = toolLine(call.block.name);
 	return (
-		line?.kind === "command" && line.command !== undefined && call.stopReason === "pending" && lineCommand(call.block.name, call.block.arguments) === undefined
+		runsCommand(toolKind(call.block.name)) &&
+		toolLine(call.block.name)?.command !== undefined &&
+		call.stopReason === "pending" &&
+		lineCommand(call.block.name, call.block.arguments) === undefined
 	);
 }
 
@@ -285,7 +287,7 @@ function itemsOf(body: Run[]): TurnItem[] {
 	return items;
 }
 
-/** 一次查后台任务的调用（`ToolLine.job`）查的是哪个任务。停掉它的那一次不是在看输出，不和查看合在一起。 */
+/** 一次查后台任务的调用（种类是 `job`，任务从 `ToolLine.job` 取）查的是哪个任务。停掉它的那一次不是在看输出，不和查看合在一起。 */
 export function polledJob(block: ToolCallBlock): string | undefined {
 	const job = lineJob(block.name, block.arguments);
 	return job && !job.stop ? job.id : undefined;

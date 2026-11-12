@@ -4,6 +4,8 @@
  * 不给，大活经 `dispatch_task` 交给主会话。
  */
 
+import type { ToolKind } from "@plume/contract";
+
 // i18n-exempt：这个文件里的字都是发给模型的。
 
 export const IDENTITY =
@@ -24,26 +26,14 @@ const GUIDELINES = [
 
 export const GUIDELINES_TEXT = `Guidelines:\n${GUIDELINES.map((line) => `- ${line}`).join("\n")}`;
 
-/**
- * 侧边聊天能用的工具：读主会话、交出去、控制主会话，加上读、搜、改、跑命令。查网页的不在这里点名：按声明的类别
- * （`category: "web"`）留下，没装的自然不在。
- */
-export const TOOLS: ReadonlySet<string> = new Set([
-	"read_main_chat",
-	"dispatch_task",
-	"control_main",
-	"read",
-	"ls",
-	"glob",
-	"grep",
-	"edit",
-	"write",
-	"bash",
-	"bash_output",
-]);
-
-/** 只在侧边聊天里有用的几件：普通会话的工具表里藏起来。 */
+/** 只在侧边聊天里有用的几件：普通会话的工具表里藏起来。侧边聊天自己能用的就是它们，加上 `KINDS`、查网页的。 */
 export const SIDE_ONLY: ReadonlySet<string> = new Set(["read_main_chat", "dispatch_task", "control_main"]);
+
+/**
+ * 侧边聊天能用的别的插件的工具，按它们声明的种类（`ToolDefinition.kind`）挑：读、搜、改文件，跑一条命令、看它在后台的输出。
+ * 长跑着往回送输出的命令（`watch`）不在内：那是主会话里盯着一件事的做法。查网页的按类别（`category: "web"`）留下。都不点名工具。
+ */
+export const KINDS: ReadonlySet<ToolKind> = new Set<ToolKind>(["view", "list", "find", "search", "create", "modify", "command", "job"]);
 
 export const READ_MAIN_CHAT_DESCRIPTION =
 	"Read the main session's full record as it is right now, including tool calls and tool results, and messages from before any compaction. " +

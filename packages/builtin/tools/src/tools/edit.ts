@@ -31,7 +31,7 @@ export const editTool: Tool<EditArgs> = {
 	name: "edit",
 	describe: describeEdit,
 	// 改文件：成功一次就是工作区有了实打实的进展，本体的重复检测从头数。
-	category: "files",
+	kind: "modify",
 	description:
 		"Replace exact text in a file. `old_string` must match the file exactly, whitespace and indentation included, and be unique unless `replace_all` is set. " +
 		"Keep `old_string` as small as possible while still unique: when only a word changes, a few words around it are enough, even on a long line. " +

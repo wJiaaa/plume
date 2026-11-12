@@ -25,7 +25,7 @@ export default {
 | `ctx.secrets.seal(value)` / `unseal(sealed)` / `isSealed(value)` | 插件要存的密钥（令牌、密码、请求头里的凭据）不要明文写进配置：`seal` 加密成带 `plume-sealed:v1:` 前缀的文本，写回你自己的配置；`unseal` 解回来，不是密文、不是你这个插件封的、钥匙打不开时是 null（当成没填、让人重新填），钥匙文件读不出来时抛错（这时别把空值写回去盖掉密文）；`isSealed` 分出手写的明文和密文。本体给、换不掉，钥匙是本体的 `vault.key` 按插件名派生的，别的插件解不开你的密文。只加解密、不替你存，删配置就是删密钥。挡的是配置被同步、拷走时带出明文，挡不住同一用户的程序 |
 | `ctx.tools.register(tool)` | 注册工具，停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
 | `ctx.tools.names()` | 现在登记着的工具名（各插件的，同名只算一个，停用的不算），给「让人挑工具」的设置用 |
-| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、它声明的类别（`category`）。在钩子里按类别找别的插件的工具（「记清单的那件叫什么」）时用，见「按类别找工具」 |
+| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、它声明的种类（`kind`）和类别（`category`）。在钩子里按种类、类别找别的插件的工具（「记清单的那件叫什么」「读文件的那件叫什么」）时用，见「按类别找工具」 |
 | `ctx.hook(name, layer, { order })` | 往钩子里加一层，停用时自动移除 |
 | `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
 | `ctx.serve(api)` | 把一个对象开给自己的界面入口；一个插件只能开一个，停用时收回 |
@@ -70,7 +70,8 @@ ctx.tools.register({
 	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
 	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
 	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
-	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"、"files"，见「按类别找工具」
+	// kind: "view",                            // 对本机文件和命令做的是哪种活："view"、"list"、"find"、"search"、"create"、"modify"、"command"、"watch"、"job"，见「按类别找工具」
+	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"，见「按类别找工具」
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
 		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
@@ -90,8 +91,8 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 `run.projectRoots` 是宿主从会话所属项目推导出的源文件夹（只授予读取）；工作目录已移入独立工作树时为空，插件不能据此放宽写入权限。`run.allowedPaths` 是人在这个会话里（子会话连同它的上级会话）拖进来的文件的绝对路径，取自用户消息的附件，没有附件时不给：只授予读取这几个文件本身，不能据此改它们，也不能扩大到所在目录。
 
-`run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的类别（`{ name, plugin, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
-`run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的类别（`{ name, plugin, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
+`run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑、也不申请离开它；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
+`run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑、也不申请离开它。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
 
 - `output` 发给模型；`details` 存进会话、不发给模型，给工具卡片和插件自己用。会话重新打开时卡片还能从 `details` 画出来。
 - 要让模型看图（截图）时带上 `images: [{ data, mimeType }]`：`data` 是 base64、不带 `data:` 前缀，`mimeType` 是 png、jpeg、webp、gif、bmp 之一，跟在 `output` 后面交给模型（bmp 模型不收：照样存下、画给人看，发请求时换成一句 `[unsupported image: image/bmp]`）；大图由本体存进会话的媒体目录。格式不对的整个结果判失败。
@@ -145,7 +146,7 @@ ctx.hook("model.context", async (input, next) => {
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具，`plugin` 是注册它的插件 |
 | `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权和层自己问的除外；`run.request` 不是审批，不受它管） |
-| `readOnly` | 外层要求这次调用不改动工作区，交给工具的 `run.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，一律在只读沙箱里跑，给不了只读沙箱时不跑。只能收紧，里层不去掉它 |
+| `readOnly` | 外层要求这次调用不改动工作区，交给工具的 `run.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，一律在只读沙箱里跑，给不了只读沙箱时不跑，申请离开沙箱（`escalate`）的也不跑。只能收紧，里层不去掉它 |
 | `signal` | 用户停止这一轮时中止 |
 | `ask(reason)` | 弹审批卡等用户决定，卡上是这次调用的参数和 `reason`，只能答这一次；返回是否允许，用户停止这一轮时得到 `false`。完全访问下本体直接允许，其余经过钩子 `tool.approve`（`byLayer` 为真） |
 | `progress(chunk)` | 执行中的输出推给界面 |
@@ -195,9 +196,15 @@ ctx.hook("model.context", (input, next) =>
 - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`（`plume.todo` 的 `todo_write`）。
 - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`；`plume.ask-user` 的 `ask_user`）。
 - `web`：只读地查网页的工具（搜索网页、把网址读成文字，`plume.web` 的两件）。
-- `files`：写、改本机文件的工具（`plume.tools` 的 `write`、`edit`）。它成功一次就是工作区有了进展，重复检测从头数；不标的话，改完文件再读同一个文件、得到同样的结果，会被当成原地打转。
 
-插件的提示词要点名别的插件的工具（「用它记下步骤」「拿不准就用它问人」）时，不写死名字：按类别在 `ctx.tools.list()`（工具里用 `run.tools()`）找它这会儿叫什么，`model.context` 里再和这一轮的 `input.tools` 对一下，找不到就换一种不靠那件工具的说法。那个插件被换掉、停用时提示词照样是对的：
+对本机文件和命令干活的工具另标种类，写在定义的 `kind` 上，只写一处：宿主、界面入口（转录、审批卡、文件签）和别的插件都从工具表里读这同一份（`run.tools()`、`ctx.tools.list()`、界面那边的工具表），`ui.toolLine` 上不再写一遍。基本工具（`plume.tools`）也这样标：
+
+- `view` 读一个文件（`read`），`list` 列一个目录（`ls`），`find` 按名字找文件（`glob`），`search` 按内容搜文件（`grep`）：转录里归「探索」，子智能体、侧边聊天按它挑只读的工具。
+- `create` 写出一个文件，整个正文就在参数里（`write`）；`modify` 改一个已有的文件（`edit`）。成功一次就是工作区有了进展，重复检测从头数；计划模式、只读的子智能体按它拒绝或不给。不标的话，改完文件再读同一个文件、得到同样的结果，会被当成原地打转。
+- `command` 跑一条命令（`bash`）；`watch` 起一条长跑的命令、边跑边把新输出送回会话（`monitor`）；`job` 查看或停掉一个后台任务（`bash_output`），起它的那次结果带着 `BackgroundJobDetails`。
+- 不碰本机文件和命令的（查网页、搜会话转录、问人）不标：别的插件按种类挑「能读、能改、能跑命令」的工具时不该挑到它们。
+
+插件的提示词要点名别的插件的工具（「用它记下步骤」「拿不准就用它问人」「用它读这个文件」）时，不写死名字：按类别、种类在 `ctx.tools.list()`（工具里用 `run.tools()`）找它这会儿叫什么，`model.context` 里再和这一轮的 `input.tools` 对一下，找不到就换一种不靠那件工具的说法。那个插件被换掉、停用时提示词照样是对的：
 
 ```ts
 ctx.hook("model.context", (input, next) => {

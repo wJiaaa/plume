@@ -102,7 +102,10 @@ export async function runSteps(scope: TurnScope): Promise<TurnStop> {
 			lostRounds = lost ? lostRounds + 1 : 0;
 			if (lostRounds >= MAX_LOST_ROUNDS) return { reason: "error", error: text("loop.argumentsLost") };
 			if (!lost) {
-				scope.repetition.observe(calls, results, (tool) => scope.host.tool(tool)?.definition.category === "files");
+				scope.repetition.observe(calls, results, (tool) => {
+					const kind = scope.host.tool(tool)?.definition.kind;
+					return kind === "create" || kind === "modify";
+				});
 				if (scope.repetition.exhausted()) {
 					scope.notice(text("loop.stalled"), "warn");
 					return { reason: "stalled" };

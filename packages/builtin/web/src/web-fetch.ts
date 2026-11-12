@@ -148,8 +148,12 @@ export function webFetchTool(): ToolDefinition {
 			// 外壳里的 URL 和 content-type 长短由对方定，跳转后的地址也不受 MAX_URL_LENGTH 约束；外壳超出余量时从正文里扣，整条仍不越线。
 			const room = Math.min(MAX_TEXT, RESULT_MAX_CHARS - open.length - close.length - TRUNCATED.length);
 			const saved = text.length > room ? await saveFull(text, run.scratchDir) : undefined;
+			// 去读全文用的工具按工具表里的声明现查（读文件 `kind: "view"`、搜内容 `kind: "search"`），不认名字；一个都没有就只说去那个文件里找。
+			const tools = run.tools();
+			const readers = (["view", "search"] as const).flatMap((kind) => tools.find((tool) => tool.kind === kind)?.name ?? []);
 			// i18n-exempt：发给模型的工具结果
-			const hint = saved ? `\n\n[full text: ${saved} (${text.length} characters) — read or grep it for the part after the cut]` : "";
+			const how = readers.length > 0 ? `${readers.join(" or ")} it` : "look in that file";
+			const hint = saved ? `\n\n[full text: ${saved} (${text.length} characters) — ${how} for the part after the cut]` : "";
 			const limit = room - hint.length;
 			const clipped = text.length > limit ? `${text.slice(0, limit)}${TRUNCATED}` : text;
 

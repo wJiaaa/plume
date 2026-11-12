@@ -70,6 +70,7 @@ export const monitorTool: Tool<MonitorArgs> = {
 	name: "monitor",
 	// 导出会话成 Markdown 时的一行，和 bash 那一行一样：模型写的说明，没有就是命令的第一行。
 	describe: describeCommand,
+	kind: "watch",
 	/*
 	 * 每次请求都发，所以只写决定要不要调、怎么调的。凑批的数、上限、怎么停，调过以后在结果里说。
 	 */

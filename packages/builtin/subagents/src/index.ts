@@ -3,7 +3,7 @@
  * 子代理交回的结果经资源地址 `agent://<id>` 读（`resource.ts`），一次只取要的那个字段。
  */
 
-import type { CallContext, Plugin, PromptSection, SessionMessage, StepEnd, StepVerdict, ToolOutput } from "@plume/contract";
+import type { CallContext, Plugin, PromptSection, SessionMessage, StepEnd, StepVerdict, ToolKind, ToolOutput } from "@plume/contract";
 import type { SubagentsApi } from "./api.ts";
 import { allows, DEFAULT_AGENT, YIELD_TOOL, type AgentDefinition } from "./agents.ts";
 import { awaitingEmptyNudge, AwaitWatch } from "./awaiting.ts";
@@ -51,14 +51,15 @@ const PARAMETERS = {
 /**
  * 子会话的系统提示词末尾那一段。检查点按轮算、每一轮都要把整段上下文再发一遍，说清这对它意味着什么，「独立的调用放在
  * 同一条回复里」才压得住——夹在系统提示词十几条准则中间时，一轮只调一个工具的模型照样个个撞上检查点。清单那句只在它的
- * 工具表里有记清单的工具（`checklist`，按 `category: "checklist"` 找到的名字）时说。最后两句写给派它来的那一方：它交回的是材料，
- * 改了什么、验证到哪一步要说清。
+ * 工具表里有记清单的工具（`checklist`，按 `category: "checklist"` 找到的名字）时说。`searches` 是它工具表里按内容搜、按名字找文件的工具
+ * （按 `kind` 找到的名字），点名它们；没有就说「几次搜索」。最后两句写给派它来的那一方：它交回的是材料，改了什么、验证到哪一步要说清。
  */
 // i18n-exempt：发给模型的话。
-function workingNote(rounds: number, checklist: string | undefined): string {
+function workingNote(rounds: number, checklist: string | undefined, searches: readonly string[]): string {
+	const search = searches.length > 0 ? `要跑的几条 ${searches.join(" / ")}` : "要跑的几次搜索";
 	return [
 		`你是被派出来做一件事的子代理，按轮计：每一轮都要把整段上下文再发一遍，每跑 ${rounds} 轮会停下来检查一次进度。`,
-		"所以每一轮都把能同时做的事一起做——要读的几个文件、要跑的几条 grep / glob，放在同一条回复里一起发出去；只有后一步确实要用前一步的结果时才分开。一轮只调一个工具，会让你在做完之前就耗光这一段的轮数。",
+		`所以每一轮都把能同时做的事一起做——要读的几个文件、${search}，放在同一条回复里一起发出去；只有后一步确实要用前一步的结果时才分开。一轮只调一个工具，会让你在做完之前就耗光这一段的轮数。`,
 		checklist ? `活有三步以上，就用 \`${checklist}\` 记下步骤、做完一项勾一项：到检查点时，清单在往前推就会让你接着跑。` : "",
 		"你交回的东西是给派你来的 Agent 读的材料：结论先行、关键事实带 `path:line`，不要复述过程。",
 		"改了文件的，列出改了哪些；跑过什么验证、结果如何，没验证的明说没验证。读到的事实和你的推断分开写——派你来的 Agent 据此决定哪些要自己再核对。",
@@ -111,6 +112,7 @@ export default {
 				ctx.appDataDir,
 				() => MESSAGES[ctx.locale()],
 				(path) => ctx.trash(path),
+				() => ctx.tools.list(),
 			),
 		);
 		await registry.restore();
@@ -186,9 +188,13 @@ export default {
 			const tools = context.tools
 				.filter((tool) => allows(record.identity, tool.name, lists))
 				.map((tool) => (tool.name === YIELD_TOOL && output ? { ...tool, description: YIELD_DESCRIPTION, parameters: output } : tool));
+			const registered = ctx.tools.list();
+			const offered = (kind: ToolKind) =>
+				registered.flatMap((tool) => (tool.kind === kind && tools.some((given) => given.name === tool.name) ? [tool.name] : []));
 			const note = workingNote(
 				segmentRounds(record.identity.maxTurns),
 				lists.find((name) => tools.some((tool) => tool.name === name)),
+				[...offered("search"), ...offered("find")],
 			);
 			return {
 				...context,

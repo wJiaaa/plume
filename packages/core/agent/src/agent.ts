@@ -361,6 +361,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const answerWaiters = new Map<string, Array<() => void>>();
 	/** 插件发的话（经 `launch` 发的第一句、代管插件经 `post` 转来的）：`prompt.submit` 据此告诉插件这句不是人在输入框里发的（`PromptSubmit.launched`）。 */
 	const launchedPrompts = new WeakSet<UserMessage>();
+	/** 工具表的变化已经排着告诉界面了，见 `toolsChanged`。 */
+	let toolsPending = false;
 	const host = new PluginHost({
 		// 不叫 plugins：数据目录下的 plugins/ 是插件市场装插件的地方。
 		dataDir: join(dataDir, "plugin-data"),
@@ -392,6 +394,15 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		...(options.pages ? { pages: options.pages } : {}),
 		...(options.fetch ? { fetch: options.fetch } : {}),
 		...(options.trash ? { trash: options.trash } : {}),
+		toolsChanged: () => {
+			// 一个插件加载时一件件登记，攒到这一刻结束再告诉界面一次。
+			if (toolsPending) return;
+			toolsPending = true;
+			queueMicrotask(() => {
+				toolsPending = false;
+				emit({ type: "tools", tools: host.toolOwners() });
+			});
+		},
 		// 给副本：插件改了它手上的那份，不影响会话。没打开过的会话直接从库里读、不留在内存里：插件可能一次读几十个旧会话。
 		sessions: {
 			list: async () => structuredClone(summaries()),
@@ -2656,6 +2667,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		expandCommand: (plugin, name, rest, context) =>
 			host.expandCommand(String(plugin), String(name), typeof rest === "string" ? rest : "", commandContext(context)),
 		listPlugins: () => host.status(),
+		listTools: () => host.toolOwners(),
 		async setPluginEnabled(name, enabled) {
 			const disabled = await host.setEnabled(name, enabled === true);
 			await files.write(pluginsFile, { ...(await files.read<object>(pluginsFile)), disabled });

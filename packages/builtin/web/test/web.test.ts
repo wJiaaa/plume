@@ -160,12 +160,19 @@ test("web_fetch：正文超过上限时整份存进会话临时目录，结果�
 		await withServer(
 			(_req, res) => res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(body),
 			async (base) => {
-				const result = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir });
+				// 读全文的工具按工具表里的种类现查，不认名字。
+				const tools = () => [
+					{ name: "search_files", plugin: "p", kind: "search" as const },
+					{ name: "view_file", plugin: "p", kind: "view" as const },
+				];
+				const result = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir, tools });
 				const saved = (result.details as { outputPath?: string }).outputPath!;
 				assert.ok(saved.startsWith(join(scratchDir, "tool-output")));
 				assert.equal(await readFile(saved, "utf8"), body);
 				assert.equal((await stat(saved)).mode & 0o777, 0o600);
-				assert.ok(result.output.endsWith(`[full text: ${saved} (${body.length} characters) — read or grep it for the part after the cut]`));
+				assert.ok(result.output.endsWith(`[full text: ${saved} (${body.length} characters) — view_file or search_files it for the part after the cut]`));
+				const bare = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir });
+				assert.ok(bare.output.endsWith(" characters) — look in that file for the part after the cut]"));
 				assert.ok(!result.output.includes("TAIL_AFTER_CUT"));
 				assert.ok(result.output.length <= 37_400);
 			},

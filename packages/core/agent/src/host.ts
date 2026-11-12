@@ -263,6 +263,8 @@ export class PluginHost {
 			trash?: (path: string) => Promise<void>;
 			/** 非内置插件的 `apply` 最多等多久，缺省 15 秒。只为测试能传短的。 */
 			applyTimeoutMs?: number;
+			/** 工具表变了（登记、撤下了一件工具）：agent 据此告诉界面，见 `AgentService.listTools`。 */
+			toolsChanged?(): void;
 		},
 	) {
 		this.disabled = new Set(options.disabled);
@@ -440,11 +442,16 @@ export class PluginHost {
 		return this.tools.get(name)?.at(-1);
 	}
 
-	/** 工具表里生效的工具、注册它们的插件和它们声明的类别。 */
+	/** 工具表里生效的工具、注册它们的插件和它们声明的种类、类别。 */
 	toolOwners(): RegisteredToolInfo[] {
 		return [...this.tools.values()]
 			.flatMap((list) => list.slice(-1))
-			.map(({ definition, plugin }) => ({ name: definition.name, plugin, ...(definition.category ? { category: definition.category } : {}) }));
+			.map(({ definition, plugin }) => ({
+				name: definition.name,
+				plugin,
+				...(definition.kind ? { kind: definition.kind } : {}),
+				...(definition.category ? { category: definition.category } : {}),
+			}));
 	}
 
 	/**
@@ -844,9 +851,11 @@ export class PluginHost {
 						const rest = (this.tools.get(tool.name) ?? []).filter((entry) => entry !== registered);
 						if (rest.length > 0) this.tools.set(tool.name, rest);
 						else this.tools.delete(tool.name);
+						this.options.toolsChanged?.();
 					};
 					own(unregister);
 					this.tools.set(tool.name, [...list, registered]);
+					this.options.toolsChanged?.();
 					return unregister;
 				},
 				names: () => [...this.tools.keys()],

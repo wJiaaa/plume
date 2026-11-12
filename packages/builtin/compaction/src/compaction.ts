@@ -15,7 +15,7 @@
 import type { CompactSummary, ContextCompact, Message, ToolResultView } from "@plume/contract";
 import { type BudgetModel, type CompactionBudget, compactionBudget, KEEP_MIN } from "./budget.ts";
 import { forkable, forkSummary } from "./fork.ts";
-import { droppedMessage, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
+import { droppedMessage, type KindOf, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
 import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, pruneToolResults } from "./prune.ts";
 import { dropStaleResults } from "./stale-results.ts";
@@ -38,6 +38,8 @@ export interface CompactDeps {
 	artifacts?: ArtifactSink;
 	/** 手动压缩失败时报给人的话。 */
 	words: ManualWords;
+	/** 哪个工具读文件、写改文件、跑命令：按工具表里的声明认，见 `KindOf`。 */
+	kindOf: KindOf;
 }
 
 /**
@@ -71,6 +73,7 @@ export async function compact(input: ContextCompact, deps: CompactDeps): Promise
 		observer,
 		...(input.lineage ? { lineage: input.lineage } : {}),
 		cwd: input.cwd,
+		kindOf: deps.kindOf,
 		modelId: input.model.id,
 	});
 	if (!result || input.signal.aborted) return undefined;
@@ -145,6 +148,8 @@ export interface CompactionRequest {
 	lineage?: ContextCompact["lineage"];
 	/** 工具调用里的相对路径按它解析：判断一次读取是否被后来的读写覆盖要知道两个路径是不是同一个文件。 */
 	cwd: string;
+	/** 见 `CompactDeps.kindOf`。 */
+	kindOf: KindOf;
 }
 
 export async function compactIfNeeded(request: CompactionRequest): Promise<Compacted | null> {
@@ -167,7 +172,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 * 这里清：会话中途不改写已经发出去的内容，压缩本来就要重写前缀。
 	 */
 	const tidied = dropUneventful(messages);
-	const stale = dropStaleResults(tidied, request.cwd);
+	const stale = dropStaleResults(tidied, request.cwd, request.kindOf);
 	/*
 	 * 模型还没看过的新结果（最后一条回复之后）只剪炸开的那种，和发送路径第一次发出前的那条线相同。`read` 把输出控制在这条线以内、
 	 * 并把返回的行记成读过；这里照常剪到 8k 的话，它记下的多于模型看到的，`edit` 会放行没见过的行。
@@ -239,7 +244,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	const fit = (text: string, from: Message[]) => {
 		let start = messages.length - from.length;
 		// 删尾部可能又折进去一句请求、一次计划更新；它们的事实也要留在摘要外面。
-		const retired = new RetiredHistory();
+		const retired = new RetiredHistory(request.kindOf);
 		let tailChars = 0;
 		for (let at = 0; at < messages.length; at++) {
 			if (at < start) retired.add(messages[at] as Message);
@@ -315,7 +320,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 				if (observer?.signal?.aborted) return null;
 			}
 			if (!written) {
-				written = fallbackSummary(summarised);
+				written = fallbackSummary(summarised, request.kindOf);
 				via = "fallback";
 			}
 			summary = written;
@@ -324,7 +329,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			tail = fitted;
 		}
 	}
-	if (!summary) return dropOldest(messages, model, budget, scale, floor);
+	if (!summary) return dropOldest(messages, model, budget, scale, floor, request.kindOf);
 	const text = summary;
 
 	// 摘要写好了，按它的实际长度再收一次尾部：分叉那份覆盖整段，删多少都在摘要里；独立的那份已经按最长留过位置。
@@ -342,7 +347,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 */
 	const { room } = budget;
 	if (room > 0 && scaled(compacted) >= room) {
-		const dropped = dropOldest(messages, model, budget, scale, floor);
+		const dropped = dropOldest(messages, model, budget, scale, floor, request.kindOf);
 		if (dropped && scaled(dropped.messages) < room) return dropped;
 		if (dropped && scaled(dropped.messages) < scaled(result?.messages ?? messages)) result = dropped;
 		if (result && scaled(result.messages) + overhead > model.contextWindow) return null;
@@ -357,14 +362,14 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
  *
  * `floor`：上一次换上的头占了开头几条，丢要丢过它们。
  */
-function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionBudget, scale: number, floor: number): Compacted | null {
+function dropOldest(messages: Message[], model: BudgetModel, budget: CompactionBudget, scale: number, floor: number, kindOf: KindOf): Compacted | null {
 	const target = budget.dropped;
 	const weight = (list: Message[]) => estimateTokens(list) * scale;
 
 	if (weight(messages) <= target) return null;
 	// 预算的是交出去的整份：前面那条说明带着最新请求和任务上下文，中文下能有好几千 token。丢掉的那段和留下的字符数逐条增减，同 `fit`。
 	const chars = messages.map(estimateChars);
-	const older = new RetiredHistory();
+	const older = new RetiredHistory(kindOf);
 	let rest = chars.reduce((sum, value) => sum + value, 0);
 	let head: Message | undefined;
 	let start = 0;

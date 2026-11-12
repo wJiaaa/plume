@@ -13,6 +13,7 @@ import type {
 	SandboxMode,
 	SandboxService,
 	ToolDefinition,
+	ToolKind,
 	ToolOutput,
 	ToolRun,
 } from "@plume/contract";
@@ -55,6 +56,8 @@ export interface ToolContext {
 	projectRoots?: readonly string[];
 	/** 命令跑在哪个沙箱模式里；不给就是不进沙箱（测试里直接调）。 */
 	sandboxMode?: SandboxMode;
+	/** 外层要求这次调用不改动工作区（`ToolRun.readOnly`，计划模式）：命令只能在只读沙箱里跑，不许申请离开。 */
+	readOnly?: true;
 	/** 跑命令用的服务 `sandbox`。 */
 	sandbox?: SandboxService;
 	/** 这个会话现在有哪些工具：改道只建议真有的；不给就是不改道。 */
@@ -75,8 +78,8 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	readsOnly?(args: Record<string, unknown>): boolean;
 	/** 导出会话成 Markdown 时这一次调用写成的一行，见 `ToolDefinition.describe`。 */
 	describe?(args: Record<string, unknown>): string | undefined;
-	/** 是哪一类工具，见 `ToolDefinition.category`。 */
-	category?: ToolDefinition["category"];
+	/** 做的是哪种活，见 `ToolDefinition.kind`。 */
+	kind?: ToolKind;
 	execute(args: TArgs, ctx: ToolContext): Promise<ToolResult>;
 }
 
@@ -105,6 +108,7 @@ export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		cwd: run.cwd,
 		projectRoots: run.projectRoots,
 		...(run.allowedPaths ? { allowedPaths: new Set(run.allowedPaths) } : {}),
+		...(run.readOnly ? { readOnly: true as const } : {}),
 		sessionId: run.sessionId,
 		scratchDir: run.scratchDir,
 		...(run.scratchDirs ? { scratchDirs: run.scratchDirs } : {}),
@@ -129,7 +133,7 @@ export function toDefinition<TArgs>(tool: Tool<TArgs>, env: ToolEnv): ToolDefini
 		...(tool.mutating ? { mutating: true } : {}),
 		...(tool.readsOnly ? { readsOnly: tool.readsOnly } : {}),
 		...(tool.describe ? { describe: tool.describe } : {}),
-		...(tool.category ? { category: tool.category } : {}),
+		...(tool.kind ? { kind: tool.kind } : {}),
 		asks: true,
 		async execute(args, run: ToolRun): Promise<ToolOutput> {
 			// 沙箱只管跑命令的那个（bash），它会改动工作区；只读的工具在进程里读文件，不用它。

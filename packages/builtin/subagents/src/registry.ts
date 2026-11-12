@@ -1,4 +1,4 @@
-import type { CallContext, PluginContext, SessionMessage, ToolOutput, TurnStop } from "@plume/contract";
+import type { CallContext, PluginContext, RegisteredToolInfo, SessionMessage, ToolOutput, TurnStop } from "@plume/contract";
 import type { AgentDefinition } from "./agents.ts";
 import type { AgentCatalog, SubagentsApi } from "./api.ts";
 import type { AgentDefinitions, AgentRecord, AgentSave } from "./definitions.ts";
@@ -121,7 +121,7 @@ export class Registry implements SubagentsApi {
 	async catalog(project: string | null): Promise<AgentCatalog> {
 		return {
 			records: await this.definitions.list(project),
-			tools: this.tools(),
+			tools: this.tools().map(({ name, kind }) => ({ name, ...(kind ? { kind } : {}) })),
 			choices: structuredClone(this.store.choices),
 			disabled: [...this.store.disabled],
 			models: await this.ctx.sessions.models(),
@@ -133,7 +133,11 @@ export class Registry implements SubagentsApi {
 	}
 
 	async save(project: string | null, input: AgentSave): Promise<void> {
-		await this.definitions.save(project, input, this.tools());
+		await this.definitions.save(
+			project,
+			input,
+			this.tools().map((tool) => tool.name),
+		);
 		this.changed();
 	}
 
@@ -150,8 +154,8 @@ export class Registry implements SubagentsApi {
 	}
 
 	/** 定义里能挑的工具：派发和停止子智能体的两样子智能体本来就用不了，交差用的 `yield` 每一种都有，都不列。 */
-	private tools(): string[] {
-		return this.ctx.tools.names().filter((name) => name !== "task" && name !== "stop_subagent" && name !== "yield");
+	private tools(): RegisteredToolInfo[] {
+		return this.ctx.tools.list().filter(({ name }) => name !== "task" && name !== "stop_subagent" && name !== "yield");
 	}
 
 	async dispatch(parentId: string, cwd: string, description: string, prompt: string, agent: string, resume?: string): Promise<Dispatch> {
