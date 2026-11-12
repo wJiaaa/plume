@@ -30,7 +30,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 /** 本体的目录（相对仓库根）。 */
 const CORE_DIRS = ["packages/core", "packages/contract", "packages/client", "apps/desktop/src"];
@@ -126,6 +126,8 @@ const ALLOWED = [
 
 /** 内置插件目录：带给模型的技能在这下面（`skills/<名字>/SKILL.md`），规则 6 也查。 */
 const BUILTIN_SKILLS = "skills";
+/** `pnpm build:plugins` 把仓库根的 skills/plume-plugin 拷到这里随应用发，见 scripts/build-plugins.mjs。 */
+const GENERATED_SKILL = "packages/builtin/skills/skills/plume-plugin/";
 
 /** 把注释换成空白，行号不变。行注释只认行首或空白后的 `//`，字符串里的 URL 不受影响。 */
 function blankComments(text) {
@@ -286,7 +288,11 @@ export function nameProblems(root) {
 				? `第 ${hit.line} 行认了插件 ${hit.name}：内置插件不按名字找别的插件，要用它的能力走服务（ctx.provide / inject）`
 				: `第 ${hit.line} 行按名字认了别的插件的 ${hit.name}：按声明认（ToolDefinition.category、PromptSection.category、details 的通用形状），提示词里要点名工具就按类别在工具表里找它叫什么`;
 		for (const file of sourceFiles(join(builtinDir, dir, "src"))) check(file, scanCode(readFileSync(file, "utf8"), others), explain);
-		for (const file of textFiles(join(builtinDir, dir, BUILTIN_SKILLS))) check(file, scanText(readFileSync(file, "utf8"), others), explain);
+		for (const file of textFiles(join(builtinDir, dir, BUILTIN_SKILLS))) {
+			// 构建时拷进来的那份写插件的 skill（scripts/build-plugins.mjs，不进仓库）是给插件作者看的文档，本来就要点名各个插件，不查。
+			if (file.split(sep).join("/").includes(GENERATED_SKILL)) continue;
+			check(file, scanText(readFileSync(file, "utf8"), others), explain);
+		}
 	}
 
 	ALLOWED.forEach((entry, index) => {
