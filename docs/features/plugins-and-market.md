@@ -46,7 +46,7 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 
 ## 内置插件
 
-随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、用量与状态（`plume.status`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、密钥加密（`plume.secrets`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、会话环境（`plume.environment`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）。
+随应用提供、不能停用：工具（`plume.tools`）、沙箱（`plume.sandbox`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、用量与状态（`plume.status`）、智能标题（`plume.title`）、建议新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、会话环境（`plume.environment`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）。
 
 ## 市场插件
 
@@ -54,8 +54,8 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 
 ### IM 机器人
 
-插件 `plume.im`：在详情页的「设置」一节保存微信（iLink 服务地址、Bot Type、登录令牌）、飞书（App ID、App Secret、服务地域）、Telegram（Bot Token）的配置，每个平台可单独启用或停用。只保存配置，不连接平台、不收发消息、不创建会话。凭据经 `plume.secrets` 加密，界面只显示是否已保存，文本框失焦时保存，清除按钮删除已存密钥。
+插件 `plume.im`：在详情页的「设置」一节保存微信（iLink 服务地址、Bot Type、登录令牌）、飞书（App ID、App Secret、服务地域）、Telegram（Bot Token）的配置，每个平台可单独启用或停用。只保存配置，不连接平台、不收发消息、不创建会话。凭据经本体的 `ctx.secrets` 加密，界面只显示是否已保存，文本框失焦时保存，清除按钮删除已存密钥。
 
 ## 密钥加密
 
-内置插件 `plume.secrets` 给插件提供加解密服务：密钥（MCP 令牌和请求头、OAuth 令牌、网页搜索的 API key、Git 平台令牌、SSH 主机库、IM 凭据）用 AES-256-GCM 加密成 `plume-sealed:v1:` 开头的文本，写回各插件自己的配置；钥匙存在 `plugin-data/plume.secrets/vault.key`（只有本人可读），第一次加密时生成。钥匙丢了时之前的值当作没填、需要重填；钥匙在却读不出时报错，不会换新钥匙覆盖。不使用系统钥匙串。它防的是配置文件被同步、拷走时带出明文，挡不住本机以同一用户身份运行的程序。
+本体给每个插件提供加解密（`ctx.secrets`，插件换不掉）：密钥（MCP 令牌和请求头、OAuth 令牌、网页搜索的 API key、Git 平台令牌、SSH 主机库、IM 凭据）用 AES-256-GCM 加密成 `plume-sealed:v1:` 开头的文本，写回各插件自己的配置；钥匙是数据目录里和供应商 key 共用的 `vault.key`（只有本人可读），第一次加密时生成，每个插件用按插件名派生的子钥，一个插件的密文另一个插件解不开。钥匙丢了时之前的值当作没填、需要重填；钥匙在却读不出时报错，不会换新钥匙覆盖。不使用系统钥匙串。它防的是配置文件被同步、拷走时带出明文，挡不住本机以同一用户身份运行的程序。
