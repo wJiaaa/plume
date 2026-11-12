@@ -196,6 +196,7 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 	const words = MESSAGES[useI18n().resolvedLocale];
 	const { hidden } = usePrefs();
 	const data = runtime.state.useSnapshot(session.summary.id, true, true);
+	const displayName = runtime.ui.usePluginDisplayName();
 	const [busy, setBusy] = useState<string>();
 	const [allReferences, setAllReferences] = useState(false);
 	const id = session.summary.id;
@@ -204,7 +205,8 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 		.filter((child) => child.title.trim() !== "")
 		.sort((a, b) => Number(b.running) - Number(a.running) || a.createdAt - b.createdAt);
 	/*
-	 * 按建它的插件分节，节名是插件名：界面入口拿不到别的插件的显示名（市场目录只在本体里），这里也不认哪个插件是做什么的。
+	 * 按建它的插件分节，节名是那个插件的显示名（`ui.usePluginDisplayName`），查不到时是通用的「子会话」：插件名不给人看，
+	 * 这里也不认哪个插件是做什么的。
 	 * 先出现的插件在前（各节内部的顺序同上：在跑的在前，再按建的先后）。
 	 */
 	const owners = new Map<string, typeof children>();
@@ -293,7 +295,7 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 		children: owners.size > 0 && (
 			<>
 				{[...owners].map(([owner, rows]) => (
-					<Section key={owner} name={`children:${owner}`} label={owner || words.childSessions}>
+					<Section key={owner} name={`children:${owner}`} label={(owner && displayName(owner)) || words.childSessions}>
 						{childRows(rows)}
 						{rows.length > 5 && (
 							<button type="button" className="plume-diagnostics-row" onClick={() => runtime.ui.openPanel("children", id)}>

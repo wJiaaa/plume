@@ -1111,6 +1111,8 @@ export interface PluginHost {
 	Conversation: ComponentType<ConversationProps>;
 	/** `ui.useProjects`：侧栏登记的项目。React hook。 */
 	useProjects(): readonly ProjectInfo[];
+	/** `ui.usePluginDisplayName`：市场目录在 market/store.ts，它引用这个文件，所以经 host 接进来。React hook。 */
+	usePluginDisplayName(): (plugin: string) => string | undefined;
 	/** 当前打开的会话选过的模型；没打开会话、没选过时为空。React hook。 */
 	useSessionModel(): string | undefined;
 	/** 模型菜单里「还没有模型」那一行：去设置 › 模型。 */
@@ -1128,6 +1130,7 @@ function HostConversation(props: ConversationProps) {
 let host: PluginHost | undefined;
 
 const NO_PROJECTS: readonly ProjectInfo[] = [];
+const NO_DISPLAY_NAME = (): undefined => undefined;
 
 /** `ui.ModelSelect`：产品的模型下拉，「还没有模型」那一行去设置 › 模型。 */
 function PluginModelSelect(props: ModelSelectProps) {
@@ -1588,6 +1591,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		ModelControls: PluginModelControls,
 		useModelDefaults,
 		useProjects: () => (host ? host.useProjects() : NO_PROJECTS),
+		usePluginDisplayName: () => (host ? host.usePluginDisplayName() : NO_DISPLAY_NAME),
 		remote: () => pluginRemote(agent, name),
 	};
 }

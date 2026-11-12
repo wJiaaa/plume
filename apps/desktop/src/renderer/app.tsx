@@ -163,7 +163,7 @@ import { ChildConversation, type ChildTaskActions } from "./conversation/ChildCo
 import { dropChildDraft, flushChildDrafts, seedChildQuote } from "./conversation/child-drafts.ts";
 import { publishSessionChanges } from "./plugin-session-changes.ts";
 import { EMPTY_HISTORY, type NavEntry, type NavHistory, record, type Screen, sameEntry, step } from "./nav-history.ts";
-import { pluginsChanged, startMarket } from "./market/store.ts";
+import { pluginsChanged, startMarket, usePluginDisplayName } from "./market/store.ts";
 import { PageHeader } from "./settings/layout.tsx";
 import { ModelSettings } from "./settings/models/ModelSettings.tsx";
 import { ArchivedSettings } from "./settings/ArchivedSettings.tsx";
@@ -911,6 +911,7 @@ export function start(service: Remote<AgentService>): void {
 		openPage: (key) => update({ screen: `page:${key}`, drawerOpen: false }),
 		Conversation: PluginConversation,
 		useProjects: () => useAppPick((current) => current.projects),
+		usePluginDisplayName,
 		useSessionModel: () => {
 			const { currentId, sessions } = useChrome();
 			return sessions.find((summary) => summary.id === currentId)?.model;

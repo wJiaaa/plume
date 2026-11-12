@@ -1806,6 +1806,17 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			throw new Error("操控区插话没有送进子会话");
 		if (toolNames(sideRequest).includes("task")) throw new Error("侧边聊天不该拿到 task");
 		if (!JSON.stringify(sideRequest.messages).includes("派个子 Agent 写一份说明")) throw new Error("侧边聊天的提问里没有主对话的内容");
+		// 环境卡片里子会话按建它的插件分节：节名是插件的显示名，不把 plume.xxx 这种插件名露给人。
+		if (!(await page(`document.querySelector('[data-environment]') !== null`))) await click("[data-environment-toggle]");
+		await until(`document.querySelector('[data-environment-section^="children:"] .plume-diagnostics-section-label') !== null`, "环境卡片列出子会话");
+		const childSections = (await page(
+			`[...document.querySelectorAll('[data-environment-section^="children:"] .plume-diagnostics-section-label')].map((label) => label.textContent.trim())`,
+		)) as string[];
+		if (childSections.some((label) => !label || label.startsWith("plume.")))
+			throw new Error(`环境卡片子会话的节名应是插件的显示名，实际是 ${childSections.join()}`);
+		await capture(window, join(outDir, "smoke-environment-children.png"));
+		await click("[data-environment-toggle]");
+		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 		childrenPhase = false;
 		// 排队消息、划词侧聊在单独的 queue、quote-side-chat 段。
 

@@ -85,6 +85,7 @@ export default {
 | `ui.ModelControls` | 输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片），选的再交给 `ctx.sessions.launch` |
 | `ui.useModelDefaults()` | React hook：`{ defaultModel?, sessionModel?, thinking }`——新会话的默认模型、当前会话的模型、默认思考档位，「跟随」时写哪个模型名用它 |
 | `ui.useProjects()` | React hook：侧栏里的项目 `{ id, name, path }[]`，随增删更新；几个项目可能登记在同一个目录上 |
+| `ui.usePluginDisplayName()` | React hook：返回 `(plugin) => string \| undefined`，按插件名（`owner`、`fromPlugin` 里的那种）查人看到的显示名，和侧栏会话卡片、「来自…」同一份；停用、卸载了或还没读到时是 undefined，退回一个通用的词，不把 `plume.xxx` 这种插件名画给人 |
 | `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、选文件夹 |
 | `ui.screenOverlay(Component)` | 截图浮层里画的组件 |
 | `ui.pinnedShot(Component)` | 钉在桌面上的截图窗口里画的组件 |
@@ -568,7 +569,7 @@ apply(ui) {
 - `ui.jobViewer((sessionId, jobId) => ...)` 登记后台任务（服务 `background.jobs` 列出的那些）的查看入口，只在人点击时调用；后登记的生效，撤下恢复前一个，不改变送达或命令状态。画后台任务那一行的插件用 `ui.useJobViewer()` 拿到它（没人登记时是 `undefined`，那一行就不给点）：两边都不用知道对方是谁。
 - `ui.agentDelivery(Component)` 画本插件交回的结果在对话里的那一行（`ctx.sessions.report`、`channel.report`、`reportBack` 带了 `delivery` 的）：收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给（连着几次只带 `inline` 的送达并成一次），画成一行（子 Agent 的「消息来自 @explore」、plume.tools 的「后台命令完成」，用 `FlowRow`）。每份的 `details` 是你交的时候给的自己的数据，宿主不读，原样带回来。宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下；没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（新会话交回）画成「来自新会话」、点了过去；组件出错时只丢这一行。
 - `ui.ProjectOpener` 以 `{ path }` 显示目录的打开方式，复用文件预览的默认应用与选择菜单；只有用户点击才调用系统打开。
-- `ui.environmentSection(id, Component, { label, order?, attention? })` 往环境卡片里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。没东西时返回 null。order 排进卡片自己的几节之间：打开方式 0、后台任务 10、子 Agent 20、计划 30、定时唤醒 50、侧边聊天 70、压缩记录 85、引用 90。卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。`attention` 是一个 React hook（规则同 hook），这一节有事等人回来决定时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时，标题栏的环境开关上挂一个圆点，这句话接在开关的说明后面。只为「等人决定」，不为「有东西在跑」。例子：内置的 `plume.spawn-session` 用 40 放「建议的新会话」，还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」。
+- `ui.environmentSection(id, Component, { label, order?, attention? })` 往环境卡片里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。没东西时返回 null。order 排进卡片自己的几节之间：打开方式 0、后台任务 10、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、计划 30、定时唤醒 50、压缩记录 85、引用 90。卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。`attention` 是一个 React hook（规则同 hook），这一节有事等人回来决定时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时，标题栏的环境开关上挂一个圆点，这句话接在开关的说明后面。只为「等人决定」，不为「有东西在跑」。例子：内置的 `plume.spawn-session` 用 40 放「建议的新会话」，还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」。
 - `ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`、`label`、`order`、已包好错误边界的 `component`），按 order 排好。
 
 内置 `plume.diagnostics` 用以上入口和 `ui.panel`、`ui.conversationCard` 提供任务、轨迹与环境卡。工具结果和历史正文读 `SessionView`，观察数据与后台任务经自己的 `remote` 读取。

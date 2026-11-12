@@ -1182,6 +1182,12 @@ export interface UiContext {
 	/** React hook：登记过的项目，按侧栏的顺序；增删改跟着变。只在组件里调。 */
 	useProjects(): readonly ProjectInfo[];
 	/**
+	 * React hook：返回一个按插件名（`SessionSummary.owner`、`UserMessage.fromPlugin` 里的那种）查显示名的函数，和侧栏会话卡片、
+	 * 「来自<插件名>」用的是同一份；插件停用、卸载了或还没读到时查不到（undefined），自己退回一个通用的词，别把插件名露给人。
+	 * 装、停用插件时跟着变。只在组件里调。
+	 */
+	usePluginDisplayName(): (plugin: string) => string | undefined;
+	/**
 	 * 自己逻辑入口经 `ctx.serve` 开出来的对象。apply 时拿到，存起来给组件用；逻辑入口没开或停用了，调用以错误结束。
 	 * T 写逻辑入口那边的接口，末尾的 CallContext 参数这边不传。
 	 */
