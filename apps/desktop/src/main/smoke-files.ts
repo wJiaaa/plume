@@ -75,6 +75,55 @@ export async function checkFiles({
 			),
 		}),
 	);
+	await writeFile(join(folder, "sample.key"), new Uint8Array([0, 1, 2, 3, 0, 255]));
+	// 两页的演示文稿：第一页带一条外链，看链接画成 <a> 但不被直接打开；第二页看滚到附近才画。
+	const ns =
+		'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+	const rel = (type: string, target: string, id = "rId1", external = false) =>
+		`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"${external ? ' TargetMode="External"' : ""}/>`;
+	const rels = (...items: string[]) =>
+		xml(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.join("")}</Relationships>`);
+	const tree = (shapes = "") => `<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${shapes}</p:spTree>`;
+	const box = (id: number, y: number, paragraphs: string) =>
+		`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="914400" y="${y}"/><a:ext cx="10363200" cy="1371600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:schemeClr val="accent1"><a:lumMod val="20000"/><a:lumOff val="80000"/></a:schemeClr></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
+	const run = (text: string, size: number, extra = "") => `<a:p><a:r><a:rPr lang="en-US" sz="${size}">${extra}</a:rPr><a:t>${text}</a:t></a:r></a:p>`;
+	const scheme = (name: string, value: string) => `<a:${name}><a:srgbClr val="${value}"/></a:${name}>`;
+	const three = (item: string) => item.repeat(3);
+	const solid = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+	const part = (path: string, type: string) => `<Override PartName="/ppt/${path}" ContentType="application/vnd.openxmlformats-officedocument.${type}+xml"/>`;
+	await writeFile(
+		join(folder, "sample.pptx"),
+		zipSync({
+			"[Content_Types].xml": xml(
+				`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${part("presentation.xml", "presentationml.presentation.main")}${part("slides/slide1.xml", "presentationml.slide")}${part("slides/slide2.xml", "presentationml.slide")}${part("slideLayouts/slideLayout1.xml", "presentationml.slideLayout")}${part("slideMasters/slideMaster1.xml", "presentationml.slideMaster")}${part("theme/theme1.xml", "theme")}</Types>`,
+			),
+			"_rels/.rels": rels(rel("officeDocument", "ppt/presentation.xml")),
+			"ppt/presentation.xml": xml(
+				`<p:presentation ${ns}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId3"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+			),
+			"ppt/_rels/presentation.xml.rels": rels(
+				rel("slideMaster", "slideMasters/slideMaster1.xml"),
+				rel("slide", "slides/slide1.xml", "rId2"),
+				rel("slide", "slides/slide2.xml", "rId3"),
+				rel("theme", "theme/theme1.xml", "rId4"),
+			),
+			"ppt/slides/slide1.xml": xml(
+				`<p:sld ${ns}><p:cSld>${tree(box(2, 914400, run("Slide preview", 4000) + run("Linked text", 2000, '<a:hlinkClick r:id="rId2"/>')))}</p:cSld></p:sld>`,
+			),
+			"ppt/slides/_rels/slide1.xml.rels": rels(rel("slideLayout", "../slideLayouts/slideLayout1.xml"), rel("hyperlink", "https://example.com/", "rId2", true)),
+			"ppt/slides/slide2.xml": xml(`<p:sld ${ns}><p:cSld>${tree(box(2, 2743200, run("Second slide", 3600)))}</p:cSld></p:sld>`),
+			"ppt/slides/_rels/slide2.xml.rels": rels(rel("slideLayout", "../slideLayouts/slideLayout1.xml")),
+			"ppt/slideLayouts/slideLayout1.xml": xml(`<p:sldLayout ${ns} type="blank"><p:cSld name="Blank">${tree()}</p:cSld></p:sldLayout>`),
+			"ppt/slideLayouts/_rels/slideLayout1.xml.rels": rels(rel("slideMaster", "../slideMasters/slideMaster1.xml")),
+			"ppt/slideMasters/slideMaster1.xml": xml(
+				`<p:sldMaster ${ns}><p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>${tree()}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`,
+			),
+			"ppt/slideMasters/_rels/slideMaster1.xml.rels": rels(rel("slideLayout", "../slideLayouts/slideLayout1.xml"), rel("theme", "../theme/theme1.xml", "rId2")),
+			"ppt/theme/theme1.xml": xml(
+				`<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Smoke"><a:themeElements><a:clrScheme name="Smoke">${scheme("dk1", "000000")}${scheme("lt1", "FFFFFF")}${scheme("dk2", "1F2937")}${scheme("lt2", "F3F4F6")}${["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"].map((name) => scheme(name, "2563EB")).join("")}${scheme("hlink", "2563EB")}${scheme("folHlink", "7C3AED")}</a:clrScheme><a:fontScheme name="Smoke"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Smoke"><a:fillStyleLst>${three(solid)}</a:fillStyleLst><a:lnStyleLst>${three(`<a:ln w="6350">${solid}</a:ln>`)}</a:lnStyleLst><a:effectStyleLst>${three("<a:effectStyle><a:effectLst/></a:effectStyle>")}</a:effectStyleLst><a:bgFillStyleLst>${three(solid)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+			),
+		}),
+	);
 	const pick = async (selector: string) => {
 		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `文件入口 ${selector}`);
 		await click(selector);
@@ -151,12 +200,39 @@ export async function checkFiles({
 	await wordPainted();
 	await capture(window, join(outDir, "smoke-files-word-compact.png"));
 	window.setContentSize(size[0]!, size[1]!);
+	await open("sample.pptx");
+	const slide = (n: number) => `${shown} [data-document-slides] [data-document-slide="${n}"]`;
+	await until(`document.querySelector('${slide(1)}')?.textContent.includes('Slide preview')`, "演示文稿第一页画出");
+	if (!(await page(`document.querySelector('${slide(1)} a')?.getAttribute('href') === 'https://example.com/'`))) throw new Error("演示文稿的文字链接没画出来");
+	await capture(window, join(outDir, "smoke-files-slides-light.png"));
+	await page(`document.querySelector('${slide(2)}').scrollIntoView()`);
+	await until(`document.querySelector('${slide(2)}')?.textContent.includes('Second slide')`, "演示文稿第二页滚到附近才画");
+	await page(`window.plume.saveAppearance({ theme: 'dark' })`);
+	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "演示文稿切深色");
+	await capture(window, join(outDir, "smoke-files-slides-dark.png"));
+	await page(`window.plume.saveAppearance({ theme: 'light' })`);
+	await until(`matchMedia('(prefers-color-scheme: light)').matches`, "演示文稿切浅色");
+	await open("sample.key");
+	await until(
+		`document.querySelector('${shown}')?.textContent.includes('二进制文件') && [...document.querySelectorAll('${shown} button')].some(button => button.textContent.includes('用默认应用打开'))`,
+		"预览不了的二进制文件给出默认应用入口",
+	);
 	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
 	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "关闭文档测试标签");
 	await checkPlugins?.(folder);
 	await rm(folder, { recursive: true, force: true });
 	console.log(
 		"PLUME_FILES_SMOKE",
-		JSON.stringify({ tree: true, rename: true, readOnly: true, sqlite: true, workbook: true, word: true, themes: ["light", "dark"] }),
+		JSON.stringify({
+			tree: true,
+			rename: true,
+			readOnly: true,
+			sqlite: true,
+			workbook: true,
+			word: true,
+			slides: true,
+			binary: true,
+			themes: ["light", "dark"],
+		}),
 	);
 }

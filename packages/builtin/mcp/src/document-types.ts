@@ -1,6 +1,8 @@
 export const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
 export const MAX_DOCUMENTS = 16;
-export const DOCUMENT_ID = /^[a-f0-9]{64}\.(docx|xlsx|xlsm|xlsb|xls|ods|sqlite|sqlite3|db)$/;
+/** 统一文档预览（plume.documents）认得的扩展名。 */
+export const DOCUMENT_EXTENSION = /\.(docx|docm|dotx|dotm|xlsx|xlsm|xltx|xltm|xlsb|xls|ods|pptx|pptm|ppsx|ppsm|potx|potm|sqlite|sqlite3|db)$/;
+export const DOCUMENT_ID = new RegExp(`^[a-f0-9]{64}${DOCUMENT_EXTENSION.source}`);
 
 export interface DocumentRef {
 	id: string;

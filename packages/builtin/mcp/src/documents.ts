@@ -2,15 +2,26 @@ import { createHash } from "node:crypto";
 import { constants, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
-import { DOCUMENT_ID, MAX_DOCUMENT_BYTES, type DocumentRef } from "./document-types.ts";
+import { DOCUMENT_EXTENSION, DOCUMENT_ID, MAX_DOCUMENT_BYTES, type DocumentRef } from "./document-types.ts";
 
 const MIME_EXTENSIONS: Record<string, string> = {
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+	"application/vnd.ms-word.document.macroenabled.12": "docm",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.template": "dotx",
+	"application/vnd.ms-word.template.macroenabled.12": "dotm",
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
 	"application/vnd.ms-excel.sheet.macroenabled.12": "xlsm",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.template": "xltx",
+	"application/vnd.ms-excel.template.macroenabled.12": "xltm",
 	"application/vnd.ms-excel.sheet.binary.macroenabled.12": "xlsb",
 	"application/vnd.ms-excel": "xls",
 	"application/vnd.oasis.opendocument.spreadsheet": "ods",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+	"application/vnd.ms-powerpoint.presentation.macroenabled.12": "pptm",
+	"application/vnd.openxmlformats-officedocument.presentationml.slideshow": "ppsx",
+	"application/vnd.ms-powerpoint.slideshow.macroenabled.12": "ppsm",
+	"application/vnd.openxmlformats-officedocument.presentationml.template": "potx",
+	"application/vnd.ms-powerpoint.template.macroenabled.12": "potm",
 	"application/vnd.sqlite3": "sqlite",
 	"application/x-sqlite3": "sqlite",
 };
@@ -23,7 +34,7 @@ function documentName(uri: string, mime: string | undefined): string | null {
 		return null;
 	}
 	const name = (path.split(/[/\\]/).pop() ?? "").replace(/[\x00-\x1f\x7f]/g, "").slice(-230);
-	if (/\.(docx|xlsx|xlsm|xlsb|xls|ods|sqlite|sqlite3|db)$/i.test(name)) return name;
+	if (DOCUMENT_EXTENSION.test(name.toLowerCase())) return name;
 	const type = mime?.split(";")[0]?.trim().toLowerCase() ?? "";
 	const extension = Object.hasOwn(MIME_EXTENSIONS, type) ? MIME_EXTENSIONS[type] : undefined;
 	return extension ? `${name || "document"}.${extension}` : null;

@@ -1,8 +1,8 @@
 /**
  * 按文件的种类画它的内容：Markdown 渲染出来（或看源码），文本和 JSON 用只读代码视图，图片可缩放，PDF 用 Chromium
- * 自带的阅读器，音视频用播放器，二进制只说一声。
+ * 自带的阅读器，音视频用播放器，二进制只说一声、给一个用默认应用打开的按钮。
  *
- * 图片、PDF、音视频经 `plume-media://f/…` 取（见 `mediaUrl`）。表格、数据库和 Word 经统一文档预览插件展示。
+ * 图片、PDF、音视频经 `plume-media://f/…` 取（见 `mediaUrl`）。表格、数据库、Word 和演示文稿经统一文档预览插件展示。
  */
 
 import type { FileContents } from "@plume/contract";
@@ -21,8 +21,12 @@ import { mediaUrl, readFileBytes, useReading, type OpenFile } from "./open-file.
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "svg"]);
 const VIDEO = new Set(["mp4", "webm", "mov", "mkv", "m4v"]);
 const AUDIO = new Set(["mp3", "wav", "flac", "ogg", "m4a", "aac"]);
-/** 表格、数据库、Word：由文档预览插件处理，不能按普通二进制展示。 */
-const DOCUMENT = new Set(["xlsx", "xlsm", "xlsb", "xls", "ods", "sqlite", "sqlite3", "db", "docx"]);
+/** 表格、数据库、Word、演示文稿：由文档预览插件处理，不能按普通二进制展示。 */
+const DOCUMENT = new Set([
+	...["xlsx", "xlsm", "xltx", "xltm", "xlsb", "xls", "ods", "sqlite", "sqlite3", "db"],
+	...["docx", "docm", "dotx", "dotm"],
+	...["pptx", "pptm", "ppsx", "ppsm", "potx", "potm"],
+]);
 
 export type FileKind = "image" | "video" | "audio" | "pdf" | "document" | "markdown" | "json" | "text" | "binary";
 
@@ -107,6 +111,15 @@ export function FileViewer({
 					<FileWarning size={26} strokeWidth={1.4} className="text-ink-faint" />
 					<p className="text-label text-ink-muted">{translate("fileViewer.binary")}</p>
 					<p className="text-detail text-ink-faint">{formatBytes(contents.bytes)}</p>
+					<Button
+						size="sm"
+						variant="soft"
+						className="mt-1"
+						icon={<ExternalLink size={13} strokeWidth={1.9} />}
+						onClick={() => attachmentActions.openDefault({ name, path })}
+					>
+						{translate("openTarget.defaultApp")}
+					</Button>
 				</div>
 			) : kind === "markdown" && !showSource ? (
 				<Scroller className="flex-1" contentClassName="px-3">
