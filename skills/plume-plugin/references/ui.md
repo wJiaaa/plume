@@ -151,7 +151,7 @@ ui.codeBlock("my-language", ({ code, complete, send, fallback }) => {
 
 ```tsx
 // 逻辑入口：做的是哪种活写在工具定义上，只写这一处（见 logic.md「按类别找工具」）
-ctx.tools.register({ name: "symbol", kind: "view", /* … */ });
+ctx.tools.register({ name: "symbol", kind: "search", /* … */ });
 
 // 界面入口：怎么说
 ui.toolLine("symbol", {
