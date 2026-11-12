@@ -18,6 +18,7 @@ describe("systemPrompt 跟着 sections 重拼", () => {
 		scratchDir: "/scratch/s",
 		model: { id: "m", name: "M" },
 		permissionMode: "auto",
+		shell: { kind: "posix", label: "zsh", sandbox: "workspace-write" },
 		personalization: { tone: "professional", customInstructions: "" },
 		systemPrompt: "I\n\nW",
 		sections,

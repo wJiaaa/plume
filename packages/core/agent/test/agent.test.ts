@@ -1901,7 +1901,7 @@ it.skipIf(process.platform !== "darwin")("tool.execute 的层要求只读时，�
 	const readOnly: Plugin = {
 		name: "test.read-only",
 		apply(ctx) {
-			ctx.hook("tool.execute", (input, next) => next({ ...input, readOnly: true }));
+			ctx.hook("tool.execute", (input, next) => next({ ...input, readOnly: { refusal: "只读" } }));
 		},
 	};
 	const write = { id: "call_write", name: "bash", args: { command: "echo x > made.txt" } };

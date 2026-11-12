@@ -5,6 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import type { AssistantMessage, Message, ModelContext, Plugin } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
 import todo from "../../../builtin/todo/src/index.ts";
+import { commandAccess } from "../src/commands.ts";
 import { PluginHost, type HostSessions } from "../src/host.ts";
 import { runSteps, type TurnScope } from "../src/loop.ts";
 import { RepetitionWatch } from "../src/repetition.ts";
@@ -82,6 +83,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 					scratchDir: dir,
 					model: { id: "m", name: "m" },
 					permissionMode: "auto",
+					shell: { kind: "posix", label: "zsh", sandbox: "workspace-write" },
 					personalization: { customInstructions: "", tone: "professional" },
 					systemPrompt: "",
 					sections: [],
@@ -107,6 +109,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 		permission: async () => ({ mode: "full", alwaysAllow: [] }),
 		ask: async () => "once",
 		requestHuman: async () => ({ answered: false, reason: "declined" }),
+		commands: commandAccess,
 		started: () => {},
 		progress: () => {},
 	};

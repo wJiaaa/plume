@@ -128,6 +128,11 @@ const run: ToolRun = {
 	request: async () => ({ answered: false, reason: "declined" }),
 	ask: async () => "once",
 	permissionMode: async () => "ask",
+	shell: async () => ({ kind: "posix", label: "zsh", sandbox: "read-only" }),
+	exec: async () => {
+		throw new Error("网页工具不跑命令");
+	},
+	escalate: async () => ({ granted: false, message: "网页工具不跑命令" }),
 	tools: () => [],
 	calls: [],
 };

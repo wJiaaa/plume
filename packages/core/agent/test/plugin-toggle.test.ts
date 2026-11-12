@@ -41,6 +41,7 @@ it("模型说明和只读工具随插件启停，不改变原始消息", async (
 			scratchDir: join(dir, "scratch"),
 			model: { id: "m", name: "M" },
 			permissionMode: "auto",
+			shell: { kind: "posix", label: "zsh", sandbox: "workspace-write" },
 			personalization: { tone: "professional", customInstructions: "" },
 			systemPrompt: "base",
 			sections: [{ id: "identity", text: "base" }],

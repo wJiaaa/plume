@@ -122,6 +122,7 @@ describe("PluginHost", () => {
 			scratchDir: join(dir, "scratch"),
 			model: { id: "m", name: "M" },
 			permissionMode: "auto",
+			shell: { kind: "posix", label: "zsh", sandbox: "workspace-write" },
 			personalization: { tone: "professional", customInstructions: "" },
 			systemPrompt: "原样",
 			sections: [{ id: "identity", text: "原样" }],

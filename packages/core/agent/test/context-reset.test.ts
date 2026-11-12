@@ -167,6 +167,7 @@ async function compactor(result: CompactSummary | Error) {
 		scratchDir: dir,
 		model,
 		permissionMode: "auto",
+		shell: { kind: "posix", label: "zsh", sandbox: "workspace-write" },
 		personalization: { tone: "friendly", customInstructions: "" },
 		systemPrompt: "",
 		sections: [],

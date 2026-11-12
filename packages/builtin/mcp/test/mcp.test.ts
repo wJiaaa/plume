@@ -454,6 +454,11 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 		},
 		request: async () => ({ answered: false, reason: "declined" }),
 		permissionMode: async () => "auto",
+		shell: async () => ({ kind: "posix", label: "zsh", sandbox: "workspace-write" }),
+		exec: async () => {
+			throw new Error("MCP 工具不跑命令");
+		},
+		escalate: async () => ({ granted: false, message: "MCP 工具不跑命令" }),
 		tools: () => [],
 		calls: [],
 	};
