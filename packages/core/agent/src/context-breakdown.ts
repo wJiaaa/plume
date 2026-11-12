@@ -9,7 +9,7 @@
  */
 
 import type { ContextBreakdown, ContextSegmentKey, Message, ModelContext, PromptSection, ToolDefinition } from "@plume/contract";
-import { charsToTokens, contextUsage, messageTokens, textTokens, toolTokens } from "./token-estimate.ts";
+import { contextUsage, messageTokens, textTokens, toolTokens } from "./token-estimate.ts";
 
 /** 项目指令和记忆这两段可以按文件列出来源。 */
 type MemoryKey = "conventions" | "memory";
@@ -56,12 +56,16 @@ export function estimateContext(
 	};
 }
 
-/** 一段标的来源。`files` 是插件交来的，形状不对的条目跳过。 */
+/**
+ * 一段标的来源。`files` 是插件交来的，形状不对的条目跳过。插件只给了每个文件那一截的字数，不给原文：按字数占全段的比例分全段的估算，
+ * 中文多的段一字也就按全段的密度算。
+ */
 function filesOf(key: MemoryKey, section: PromptSection): ContextEstimate["memoryFiles"] {
-	if (!Array.isArray(section.files)) return [];
+	if (!Array.isArray(section.files) || section.text.length === 0) return [];
+	const perChar = textTokens(section.text) / section.text.length;
 	return section.files
 		.filter((file) => typeof file?.path === "string" && Number.isFinite(file.chars) && file.chars > 0)
-		.map((file) => ({ key, path: file.path, tokens: Math.ceil(charsToTokens(file.chars)) }));
+		.map((file) => ({ key, path: file.path, tokens: Math.ceil(file.chars * perChar) }));
 }
 
 export function contextBreakdown(estimate: ContextEstimate, messages: readonly Message[], limit: number): ContextBreakdown {

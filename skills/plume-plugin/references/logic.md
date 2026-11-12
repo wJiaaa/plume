@@ -315,7 +315,7 @@ ctx.hook("prompt.submit", async (input, next) => {
 | `rewrittenAt` | 历史上一次被改写（压缩、只剪枝）的时刻，之前（含）落定的回复的用量不能拿来量现在有多满；没改写过没有 |
 | `request` | 这一次真正要发出去的 `{ systemPrompt, messages, tools }`；只读，别改 |
 | `usage` | `request` 有多满 `{ tokens, measured }`，本体按和上下文用量圆环同一套算法算好：最近一条落定回复服务商量的数加上它之后消息的估算（`rewrittenAt` 之前落定的不算）；没有可用的时 `measured` 为假，`tokens` 是整份请求（系统提示词、工具表、消息）的估算。判断要不要压用它，不要自己量 |
-| `estimate` | 本体估 token 的那一份：`messages(list)`、`text(s)`、`tools(list)`，按字数折算（约 3.5 个字符一个，图片按定数），中文和密集 JSON 会低估；不取整，逐条估的能直接相加。决定从哪切、摘要请求放不放得下时用它，可以拿 `usage` 按比例校准，不要自己再写一份 |
+| `estimate` | 本体估 token 的那一份：`messages(list)`、`text(s)`、`tools(list)`，按字数折算、按文字分别计（ASCII 约 3.5 个字符一个，中文等非 ASCII 字符一个一个，图片按定数），满是数字的命令输出会低估；不取整，逐条估的能直接相加。决定从哪切、摘要请求放不放得下时用它，可以拿 `usage` 按比例校准，不要自己再写一份 |
 | `force` | 服务商说超长了，或人敲了 `/compact`：不管量出来多满都该压 |
 | `manual` | 人敲的 `/compact`：`{ instructions }` 是命令后面的话（希望摘要保留的内容，可以是空串） |
 | `idle` | 一轮收尾以后问的：只在能从主请求分叉时值得压，否则留给下一轮开头 |

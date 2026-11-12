@@ -121,13 +121,14 @@ it("还没有写完的回复时用估算，measured 为假", () => {
 
 it("项目指令和记忆按文件列出来源：先指令后记忆，形状不对的跳过，别的段标了也不列", () => {
 	const instructions = "i".repeat(350);
-	const memory = "m".repeat(70);
+	// 插件只给每个文件的字数：按所在那段的密度折，中文的记忆一字一个 token。
+	const memory = "记".repeat(20);
 	const estimate = estimateContext(
 		{
 			systemPrompt: "",
 			sections: [
 				{ id: "identity", text: "s", files: [{ path: "/x/identity.md", chars: 1 }] },
-				{ id: "learned", text: memory, category: "memory", files: [{ path: "/data/learned.md", chars: 70 }] },
+				{ id: "learned", text: memory, category: "memory", files: [{ path: "/data/learned.md", chars: 20 }] },
 				{
 					id: "agents-md",
 					text: instructions,

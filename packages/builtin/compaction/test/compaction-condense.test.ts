@@ -38,10 +38,10 @@ it("截短的工具调用参数两份同源：只读参数对象的协议也看�
 it("摘要请求的预算按实测比例校正", async () => {
 	const history: Message[] = [];
 	for (let i = 0; i < 60; i++) {
-		history.push(user(`需求${i}${"中文说明".repeat(750)}`));
-		history.push(say(`回复${i}${"处理结果".repeat(750)}`));
+		history.push(user(`需求${i}${"0123456789".repeat(300)}`));
+		history.push(say(`回复${i}${"9876543210".repeat(300)}`));
 	}
-	// 服务商量出来的比字符除以 3.5 多得多，中文上就是这样。
+	// 服务商量出来的比估算多得多：满是数字的命令输出就是这样，约 2 个字符一个 token，估算按 3.5 个。
 	history[history.length - 1] = say("最后", 190_000);
 	const scale = 190_000 / estimate.messages(history);
 	expect(scale).toBeGreaterThan(1.5);

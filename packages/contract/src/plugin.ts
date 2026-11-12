@@ -654,7 +654,8 @@ export interface ContextCompact {
 }
 
 /**
- * 本体按字数估 token（约 3.5 个字符一个，图片按定数）：中文和密集的 JSON 会低估，所以能用服务商量的数（`ContextCompact.usage`）就用它，
+ * 本体按字数估 token，按文字分别计：ASCII 约 3.5 个字符一个，其余字符（中日韩文字为主）一个一个，图片按定数。各家分词器不同，
+ * 一类文本上差个两三成常见（满是数字的命令输出会低估到一半），所以能用服务商量的数（`ContextCompact.usage`）就用它，
  * 估算拿来补位、分比例、按比例校准。估出来的不取整，逐条、逐段估的可以直接相加。
  */
 export interface TokenEstimate {

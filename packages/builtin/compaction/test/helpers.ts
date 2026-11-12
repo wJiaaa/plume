@@ -10,20 +10,28 @@ export const words = { tooBig: "TOO_BIG", cancelled: "CANCELLED", empty: "EMPTY"
 const KINDS: Record<string, ToolKind> = { read: "view", write: "create", edit: "modify", bash: "command" };
 export const kindOf = (tool: string): ToolKind | undefined => KINDS[tool];
 
-/** 宿主估 token 的那一份（`ContextCompact.estimate`）的替身，和本体同一个算法：约 3.5 个字符一个 token，一张图按 6000 个字符。 */
+/**
+ * 宿主估 token 的那一份（`ContextCompact.estimate`）的替身，和本体同一个算法：ASCII 约 3.5 个字符一个 token，其余字符一个一个，
+ * 一张图按 6000 个 ASCII 字符。
+ */
+const textTokens = (text: string) => {
+	let wide = 0;
+	for (let index = 0; index < text.length; index++) if (text.charCodeAt(index) > 0x7f) wide++;
+	return (text.length - wide) / 3.5 + wide;
+};
 export const estimate: TokenEstimate = {
-	text: (text) => text.length / 3.5,
-	tools: (tools) => tools.reduce((sum, tool) => sum + `${tool.name}${tool.description}${JSON.stringify(tool.parameters)}`.length / 3.5, 0),
+	text: textTokens,
+	tools: (tools) => tools.reduce((sum, tool) => sum + textTokens(`${tool.name}${tool.description}${JSON.stringify(tool.parameters)}`), 0),
 	messages: (messages) => {
-		let chars = 0;
+		let tokens = 0;
 		for (const message of messages)
 			for (const block of message.content) {
-				if (block.type === "text") chars += block.text.length;
-				else if (block.type === "thinking") chars += block.thinking.length;
-				else if (block.type === "toolCall") chars += (block.argumentsText ?? JSON.stringify(block.arguments ?? {})).length + block.name.length;
-				else chars += 6000;
+				if (block.type === "text") tokens += textTokens(block.text);
+				else if (block.type === "thinking") tokens += textTokens(block.thinking);
+				else if (block.type === "toolCall") tokens += textTokens(block.argumentsText ?? JSON.stringify(block.arguments ?? {})) + textTokens(block.name);
+				else tokens += 6000 / 3.5;
 			}
-		return chars / 3.5;
+		return tokens;
 	},
 };
 
