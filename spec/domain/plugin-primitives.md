@@ -49,6 +49,7 @@
 下面这些不算违规，也不能拿来类推出新的例外；要加新的，先改这一节、说出理由。
 
 - **只有一个插件在用、但按能力命名的接口。** `ToolRun.parent` / `ParentSession`、`AgentService` 的 `queueTask` / `retryTask` / `dismissTask`、`ToolCardProps.handToParent`、`ui.queueAction`、`ui.quoteAction` 现在只有侧边聊天用。可以留，条件是：名字、注释、类型说的是能力（「子会话够得着它的父会话」「排队消息的菜单项」），不提用它的插件；本体不知道是谁在用；换一个插件来用不用改接口。哪一条不满足，就回到上一节按违规处理。
+- **钩子插件把 Claude Code 的工具名对到基本工具的名字。** 插件仓库的 plume.hooks 兼容 Claude Code 的钩子写法：人写在配置里的 matcher（`Bash`、`Read`、`Edit|Write`）本身就是工具名，所以它留着一张 Plume 工具名（`bash`、`read`、`edit`……）→ Claude Code 工具名的对照表（`hooks/src/runner.ts` 的 `CLAUDE_CODE_TOOLS`，连同参数名的对照）。不改成按 `kind`、`category` 对照，因为对不准：matcher 指的是一件参数形状固定的工具，钩子脚本读的是 `tool_input.command`、`tool_input.pattern` 这些字段，`kind` 只说做哪种活、管不住参数形状——`Grep` 按 `search` 会落到参数不同的符号搜索、语言服务工具上，一条拦「读 `.env`」的守卫读到空值就放行了，比没对上更糟；`WebFetch`、`WebSearch` 都是 `category: "web"`，分不开。也不做成服务：这些工具分属 plume.tools、plume.web 两个提供方，一项服务只有一个生效的提供方。表的键是人在 Plume 里写 matcher 时本来就会写的工具名，认它不是按名字找别的插件。出现第二个要翻译外部产品工具名的插件（导入 Claude Code 的智能体 `tools:`、技能的 `allowed-tools`）时，改由工具的主人在定义上声明别名，删掉这张表。插件仓库没有名字检查，这一条靠评审。
 - **代管先由测试插件验证。** 真实需求是插件仓库里的 plume.im（它的 README 写着缺「创建或映射 Plume 会话」），但这一轮只做了本体接口，plume.im 还没接上；接口由测试插件 `packages/testing/steward-probe`（不随应用发，冒烟 `steward` 段装它）和 `packages/core/agent/test/session-steward.test.ts` 验证。plume.im 接上时发现不够用，按上一节改接口，不在插件里绕。
 
 ### 插件之间怎么互相用
