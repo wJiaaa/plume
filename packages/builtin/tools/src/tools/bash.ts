@@ -117,7 +117,7 @@ export const bashTool: Tool<BashArgs> = {
 			if (args.escalate !== undefined) {
 				const target = escalationTarget(args.escalate, mode ?? "danger-full-access") as Exclude<SandboxMode, "read-only">;
 				const title = words().escalate(args.description ?? (args.command.split("\n")[0] ?? "").slice(0, 60));
-				const decision = await ctx.requestApproval?.({ kind: "bash", title, detail: args.command, reason: args.justification!, escalation: target });
+				const decision = await ctx.requestApproval?.({ kind: "command", title, detail: args.command, reason: args.justification!, escalation: target });
 				// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 				if (decision === "reject") return errorResult(escalationDeclined("命令", target));
 				mode = target;
@@ -300,7 +300,7 @@ export async function authorizeCommand(command: string, title: string | undefine
 	const refusedRead = await authorizeCommandReads(command, ctx);
 	if (refusedRead) return errorResult(refusedRead);
 	if (ask && ctx.requestApproval && !isReadOnlyCommand(command)) {
-		const decision = await ctx.requestApproval({ kind: "bash", title: title ?? "Run shell command", detail: command, subject: command });
+		const decision = await ctx.requestApproval({ kind: "command", title: title ?? "Run shell command", detail: command, subject: command });
 		if (decision !== "once" && decision !== "always") return declinedResult("The user rejected this command.");
 	}
 	return undefined;

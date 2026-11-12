@@ -15,9 +15,10 @@ export interface AssessVerdict {
 	params?: RiskParams;
 }
 
+/** `kind` 是审批请求说的那一类事（`ApprovalRequest.kind`）：跑命令、写出或改文件、读文件，不认是哪个工具问的。 */
 export function assess(kind: string, subject: string, cwd: string): AssessVerdict {
-	if (kind === "bash") return assessCommand(subject, cwd);
-	if (kind === "edit" || kind === "write") return assessWrite(subject, cwd);
+	if (kind === "command") return assessCommand(subject, cwd);
+	if (kind === "create" || kind === "modify") return assessWrite(subject, cwd);
 	/*
 	 * 读走到这里，已经被读的工具自己判过了（`assessRead`）。
 	 *
@@ -25,9 +26,9 @@ export function assess(kind: string, subject: string, cwd: string): AssessVerdic
 	 * 而 `risky: false` 意味着问题拟好了、没给任何人看，就被本该发问的这一方答了「行」。
 	 *
 	 * 下面兜底的那一行本来也会这么答。单写出来，是因为两者一致是巧合而不是设计：兜底说的是「这个判断没听说过的种类」，
-	 * 而 read 是它认识的。以后有人收窄兜底时，得是有意删掉这一行才行。
+	 * 而读是它认识的。以后有人收窄兜底时，得是有意删掉这一行才行。
 	 */
-	if (kind === "read") return { risky: true };
+	if (kind === "view") return { risky: true };
 	// 没见过的种类，这个判断不是为它写的，交给人。
 	return { risky: true };
 }

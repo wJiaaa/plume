@@ -282,7 +282,10 @@ export interface ApprovalRequest {
 	type?: "approval";
 	toolCallId: string;
 	tool: string;
-	/** 要做的是哪一类事：本体工具是 `bash`、`write`、`edit`，插件的工具是它的名字。卡片按它写一个小标签。 */
+	/**
+	 * 要做的是哪一类事，卡片按它写一个小标签：是 `ToolKind` 里的 `command`、`create`、`modify`、`view` 时写「执行命令」「写入文件」
+	 * 「修改文件」「读取文件」，别的（插件的工具常写自己的名字）照原样写。
+	 */
 	kind: string;
 	title: string;
 	/** 卡片正文：命令、diff，插件的工具是它的参数。 */

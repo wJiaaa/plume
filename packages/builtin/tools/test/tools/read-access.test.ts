@@ -72,7 +72,7 @@ const textOf = (result: ToolResult) => result.content.map((part) => part.text).j
 
 /** 只看读的审批。 */
 function readsAsked(seen: ApprovalContent[]): ApprovalContent[] {
-	return seen.filter((request) => request.kind === "read");
+	return seen.filter((request) => request.kind === "view");
 }
 
 /** 一个真目录当工作区，放在借来的家目录下（理由同 `WS`）。 */
@@ -371,7 +371,7 @@ it("经 bash 读密钥也要问，哪怕只读表说 cat 只读", async () => {
 		const approvals = { decisions: ["reject" as Decision], seen: [] as ApprovalContent[] };
 		const result = await bashTool.execute({ command }, ctxFor(WS, approvals));
 		expect(approvals.seen).toHaveLength(1);
-		expect(approvals.seen[0]).toMatchObject({ kind: "read", subject: command.startsWith("cat") ? `read:${keyFile}` : expect.any(String) });
+		expect(approvals.seen[0]).toMatchObject({ kind: "view", subject: command.startsWith("cat") ? `read:${keyFile}` : expect.any(String) });
 		expect(result.isError).toBe(true);
 		expect(textOf(result)).not.toMatch(/BEGIN .* PRIVATE KEY/);
 	}

@@ -66,7 +66,7 @@ test("子会话审批去重、点击打开父会话，下一条通知即时使�
 	const approval: AgentEvent = {
 		type: "approval",
 		sessionId: "child",
-		approval: { toolCallId: "a", kind: "bash", tool: "bash", title: "执行命令", detail: "" },
+		approval: { toolCallId: "a", kind: "command", tool: "bash", title: "执行命令", detail: "" },
 	};
 	state.event(approval);
 	state.event(approval);

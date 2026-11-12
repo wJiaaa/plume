@@ -9,18 +9,19 @@
  */
 
 import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest } from "@plume/contract";
+import type { ToolKind } from "@plume/contract/ui";
 import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } from "@plume/ui";
 import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";
 import { ApprovalCardSlot, RequestCardSlot } from "../plugins.tsx";
 
-/** 卡片右上角的小标签：要做的是哪一类事。插件的工具没有，直接写工具名。 */
-const KIND_LABEL: Record<string, MessageKey> = {
-	bash: "approval.bash",
-	write: "approval.write",
-	edit: "approval.edit",
-	read: "approval.read",
-};
+/** 卡片右上角的小标签：要做的是哪一类事（`ApprovalRequest.kind` 是 `ToolKind` 里这几种时）；别的照原样写。 */
+const KIND_LABEL: Partial<Record<string, MessageKey>> = {
+	command: "approval.command",
+	create: "approval.create",
+	modify: "approval.modify",
+	view: "approval.view",
+} satisfies Partial<Record<ToolKind, MessageKey>>;
 
 /** 理由和正文只差空白时不再重复一遍。 */
 function approvalReason(reason: string | undefined, detail: string): string | undefined {

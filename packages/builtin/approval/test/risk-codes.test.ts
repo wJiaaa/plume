@@ -58,11 +58,11 @@ it("规则表里的每一项都是一个有两种说法的代码", () => {
 
 it("assess 按种类分派", () => {
 	const cwd = "/work/app";
-	expect(assess("bash", "git push --force", cwd)).toEqual({ risky: true, code: "force-push" });
-	expect(assess("bash", "ls -la", cwd)).toEqual({ risky: false });
-	expect(assess("edit", "/work/app/src/a.ts", cwd)).toEqual({ risky: false });
-	expect(assess("write", "/etc/hosts", cwd)).toEqual({ risky: true, code: "write-sensitive-path" });
+	expect(assess("command", "git push --force", cwd)).toEqual({ risky: true, code: "force-push" });
+	expect(assess("command", "ls -la", cwd)).toEqual({ risky: false });
+	expect(assess("modify", "/work/app/src/a.ts", cwd)).toEqual({ risky: false });
+	expect(assess("create", "/etc/hosts", cwd)).toEqual({ risky: true, code: "write-sensitive-path" });
 	// 读走到这里已经出了工作区，一律问人；没见过的种类也问人。
-	expect(assess("read", "/work/app/src/a.ts", cwd)).toEqual({ risky: true });
+	expect(assess("view", "/work/app/src/a.ts", cwd)).toEqual({ risky: true });
 	expect(assess("network", "https://example.com", cwd)).toEqual({ risky: true });
 });

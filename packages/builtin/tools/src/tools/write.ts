@@ -74,7 +74,7 @@ export const writeTool: Tool<WriteArgs> = {
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({
-						kind: "write",
+						kind: "create",
 						title: alreadyExists ? `Overwrite ${shown}` : `Create ${shown}`,
 						detail: formatDiff(diff, shown),
 						subject: absolute,

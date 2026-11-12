@@ -309,7 +309,7 @@ async function askForRead(
 	// `reason` 说批准意味着什么，不复述标题。
 	const name = basename(absolute) || shown;
 	const decision = await ctx.requestApproval({
-		kind: "read",
+		kind: "view",
 		title: verdict.scope === "file" ? words().readSecret(name) : words().readOutside(name),
 		detail: absolute,
 		reason: verdict.scope === "file" ? words().readSecretScope : words().readTreeScope(grant),

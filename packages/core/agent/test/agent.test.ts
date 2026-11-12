@@ -295,7 +295,7 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 	expect(asked.approval).toMatchObject({
 		toolCallId: "call_edit",
 		tool: "edit",
-		kind: "edit",
+		kind: "modify",
 		title: "Edit hello.txt",
 		subject: await realpath(join(workspace, "hello.txt")),
 	});
@@ -1925,7 +1925,7 @@ it("答「以后不再问」记进设置，同一条命令下次不再问", asyn
 	service.send(session.id, { content: [{ type: "text", text: "记两次" }] });
 	const asked = await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
 	// 标题是模型写的那句用途，正文才是命令。
-	expect(asked.approval).toMatchObject({ kind: "bash", title: "记一行日志", subject: "echo one >> log.txt", detail: "echo one >> log.txt" });
+	expect(asked.approval).toMatchObject({ kind: "command", title: "记一行日志", subject: "echo one >> log.txt", detail: "echo one >> log.txt" });
 	service.respond(session.id, "call_one", "always");
 	await done;
 
@@ -1947,7 +1947,7 @@ it.skipIf(process.platform !== "darwin")("请求批准下命令跑在只读沙�
 	const escalation = await until(
 		(event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval?.toolCallId === "call_retry",
 	);
-	expect(escalation.approval).toMatchObject({ kind: "bash", reason: "要写测试文件", escalation: "workspace-write" });
+	expect(escalation.approval).toMatchObject({ kind: "command", reason: "要写测试文件", escalation: "workspace-write" });
 	expect((escalation.approval as ApprovalRequest | undefined)?.subject).toBeUndefined();
 	service.respond(session.id, "call_retry", "once");
 	await done;
@@ -1970,7 +1970,7 @@ it.skipIf(process.platform !== "darwin")("帮我批准下看不出风险的命�
 	const asked = await until(
 		(event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval?.toolCallId === "call_risky",
 	);
-	expect(asked.approval).toMatchObject({ kind: "bash", subject: "git push --force origin main", reason: "强制推送会覆盖远程历史" });
+	expect(asked.approval).toMatchObject({ kind: "command", subject: "git push --force origin main", reason: "强制推送会覆盖远程历史" });
 	service.respond(session.id, "call_risky", "reject");
 	await done;
 

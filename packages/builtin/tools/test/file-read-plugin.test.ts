@@ -107,7 +107,7 @@ it("别的插件经 file.read 读附加源目录、read 也放行，写入和工
 	expect(seen).toHaveLength(0);
 	const written = await execute("write", { path, content: "changed" });
 	expect(written.isError).toBe(true);
-	expect(seen.at(-1)?.kind).toBe("write");
+	expect(seen.at(-1)?.kind).toBe("create");
 	expect(await readFile(path, "utf8")).toBe("export const value = 1;\n");
 	seen.length = 0;
 	run.projectRoots = [];
@@ -136,7 +136,7 @@ it("附加根自身是软链仍可读，根内软链逃逸要问人，指向密�
 	expect(seen).toHaveLength(0);
 	await symlink(outside, join(shared, "escape"), process.platform === "win32" ? "junction" : "dir");
 	expect((await execute("probe", { path: join(alias, "escape", "core.ts") })).isError).toBe(true);
-	expect(seen.at(-1)).toMatchObject({ kind: "read", subject: `read:${outside}` });
+	expect(seen.at(-1)).toMatchObject({ kind: "view", subject: `read:${outside}` });
 	expect(touched).toHaveLength(1);
 	const keys = join(shared, ".ssh"),
 		key = join(keys, "id_fixture");
@@ -146,7 +146,7 @@ it("附加根自身是软链仍可读，根内软链逃逸要问人，指向密�
 	await symlink(keys, keyAlias, process.platform === "win32" ? "junction" : "dir");
 	run.projectRoots = [keyAlias];
 	expect((await reads.authorize(run, join(keyAlias, "id_fixture"))).ok).toBe(false);
-	expect(seen.at(-1)).toMatchObject({ kind: "read", subject: `read:${key}`, detail: key });
+	expect(seen.at(-1)).toMatchObject({ kind: "view", subject: `read:${key}`, detail: key });
 });
 
 it("项目外的文件批准后才读，别的插件和 read 问的是同一种 read 授权，拒绝时不碰文件", async () => {

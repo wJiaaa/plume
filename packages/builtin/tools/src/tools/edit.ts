@@ -104,7 +104,7 @@ export const editTool: Tool<EditArgs> = {
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({
-						kind: "edit",
+						kind: "modify",
 						title: `Edit ${shown}`,
 						detail: formatDiff(diff, shown),
 						subject: absolute,
