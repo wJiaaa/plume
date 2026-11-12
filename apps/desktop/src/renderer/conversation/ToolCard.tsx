@@ -11,6 +11,7 @@ import { Collapse, FlowRow, RollWords, Scroller, translate, useI18n, useNow } fr
 import { Ban, CircleX } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { openFromEvent } from "../image/index.ts";
+import { AnsweredBy } from "./AnsweredBy.tsx";
 import { hasToolCard, queueTask, ToolCardSlot, usePluginRegistrations } from "../plugins.tsx";
 import { describeOne, describePolls, diffOf } from "./call-words.ts";
 import { CodeText } from "./detail/CodeText.tsx";
@@ -152,6 +153,7 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 	return (
 		<div ref={root} data-tool={block.name} data-tool-call={block.id} data-status={props.status}>
 			<ToolCardSlot {...props} />
+			{result?.answeredBy && <AnsweredBy plugins={[result.answeredBy]} />}
 		</div>
 	);
 }
@@ -255,6 +257,7 @@ export function ToolCard({
 				open={expandable ? open : undefined}
 				onToggle={expandable ? () => setOpen((value) => !value) : undefined}
 			/>
+			{result?.answeredBy && <AnsweredBy plugins={[result.answeredBy]} />}
 			{expandable && (
 				<Collapse open={open} bodyClassName="flex flex-col gap-2.5 pt-1.5 pl-[22px]">
 					<div className="overflow-hidden rounded-lg border border-line-soft bg-card/45">

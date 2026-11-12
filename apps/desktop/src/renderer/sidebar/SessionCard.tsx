@@ -1,5 +1,5 @@
 import { translate, hoverLayersSuppressed, onHoverLayersDismissed, chromeTop, portal, useI18n, type ResolvedUiLocale } from "@plume/ui";
-import { ArrowDownToLine, ArrowUpFromLine, Bot, FolderOpen, MessageSquare, MessagesSquare } from "@plume/ui/icons";
+import { ArrowDownToLine, ArrowUpFromLine, Bot, FolderOpen, MessageSquare, MessagesSquare, Plug } from "@plume/ui/icons";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SessionStats, SessionSummary, SessionUsage } from "@plume/contract";
 import { usePluginDisplayName } from "../market/store.ts";
@@ -171,8 +171,13 @@ export function SessionCard({
 				<p className="line-clamp-3 min-w-0 flex-1 text-label leading-snug text-ink">{session.title}</p>
 				<span className="mt-[1px] shrink-0 text-caption text-ink-faint tabular-nums">{when(session.updatedAt, resolvedLocale)}</span>
 			</div>
-			<div className="px-3 py-2">
+			<div className="flex flex-col gap-1 px-3 py-2">
 				<Row icon={<FolderOpen size={11.5} strokeWidth={1.9} />}>{project ?? folderName(session.cwd)}</Row>
+				{session.steward && (
+					<Row icon={<Plug size={11.5} strokeWidth={1.9} />}>
+						{translate("sessionCard.stewardedBy", { name: displayName(session.steward) ?? session.steward })}
+					</Row>
+				)}
 			</div>
 			<div className="flex items-baseline justify-between gap-2 px-3 pt-1.5 pb-0.5">
 				<span data-plume-session-cost="" className={cost.priced ? "text-heading font-semibold text-ink tabular-nums" : "text-body text-ink-faint"}>

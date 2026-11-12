@@ -58,6 +58,7 @@ import {
 	PanelRight,
 	Pin,
 	PinOff,
+	Plug,
 	Plus,
 	SquarePen,
 } from "@plume/ui/icons";
@@ -737,6 +738,9 @@ const sidebarActions: SidebarActions = {
 		notify(translate(markdown ? "sessionMenu.markdownExported" : "sessionMenu.recordsExported"), "info", { reveal: file });
 	},
 	newWindow: openInNewWindow,
+	revokeSteward: async (sessionId) => {
+		await agent.revokeSteward(sessionId);
+	},
 };
 
 function openInNewWindow(sessionId: string): void {
@@ -2388,6 +2392,7 @@ function SessionTitle({ session }: { session: SessionSummary }) {
 			<span data-plume-screen-title className="min-w-0 shrink-[1000] truncate text-label text-ink select-none">
 				{session.title || t("sessionOps.newSession")}
 			</span>
+			{session.steward && <StewardMark plugin={session.steward} />}
 			<div className={`flex shrink-0 ${NO_DRAG}`}>
 				<ToolbarButton label={t("sessionMenu.actions")} onClick={menu.toggle} active={menu.open} menu={menu.open}>
 					<MoreHorizontal size={15} strokeWidth={2} />
@@ -2406,6 +2411,17 @@ function SessionTitle({ session }: { session: SessionSummary }) {
 			)}
 			{confirm.element}
 		</>
+	);
+}
+
+/** 标题旁的「由某插件代管」：人一眼看得出这个会话里会有插件转来的话、插件替人答的卡；收回在会话菜单里。 */
+function StewardMark({ plugin }: { plugin: string }) {
+	const name = usePluginDisplayName()(plugin) ?? plugin;
+	return (
+		<span data-plume-steward={plugin} className="flex min-w-0 shrink items-center gap-1 truncate text-caption text-ink-faint select-none">
+			<Plug size={12} strokeWidth={1.9} aria-hidden className="shrink-0" />
+			<span className="truncate">{translate("sessionCard.stewardedBy", { name })}</span>
+		</span>
 	);
 }
 

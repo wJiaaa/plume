@@ -15,6 +15,7 @@
 import { Collapse, FlowRow, RollWords, translate, useHeldKey } from "@plume/ui";
 import { CircleX, Layers } from "@plume/ui/icons";
 import { Fragment, memo, type ReactNode, useRef } from "react";
+import { AnsweredBy } from "./AnsweredBy.tsx";
 import { describeCalls, describeOne, diffOf } from "./call-words.ts";
 import { DiffCount } from "./DiffCount.tsx";
 import type { Call, Run } from "./grouping.ts";
@@ -106,6 +107,8 @@ function StepGroup({
 	const statuses = useCalls((all) => calls.map((call) => callStatus(all, call.block.id, call.stopReason)), sameItems);
 	const added = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "added"), 0));
 	const removed = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "removed"), 0));
+	// 这一段里由代管插件替人答的卡：收着时在这一行底下说一句，点开后由各次调用自己的那一行说。
+	const answeredBy = useCalls((all) => calls.flatMap(({ block }) => all.results.get(block.id)?.answeredBy ?? []), sameItems);
 	// 查后台任务输出的那几次说的是哪个任务：按说明比，每来一条消息任务表都重建一遍。
 	const jobs = useCalls((all) => calls.map(({ block }) => jobDescription(all, block)), sameItems);
 	// 后台命令回来时失败了也算：启动它的那次 bash 早就以「已放到后台」跑完了，记录上不会是错。
@@ -163,6 +166,7 @@ function StepGroup({
 				onToggle={() => setOpen((value) => !value)}
 				label={translate("tools.run")}
 			/>
+			{!open && <AnsweredBy plugins={answeredBy} />}
 			{/* 竖线在行首图标的正下方，挂在上面的每一行读起来都属于这一行。 */}
 			<Collapse open={open} bodyClassName="pt-2.5">
 				<div data-plume-step-rail="" className="ml-[7px] flex flex-col gap-2.5 border-l border-line-soft pl-[14px]">

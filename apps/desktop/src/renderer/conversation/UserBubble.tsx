@@ -152,6 +152,8 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 			)}
 			{/* 子会话（比如侧边聊天）写下、交过来的话：用的是人的气泡，不说清楚的话，人回头看到的是一句自己不记得说过的话。一直显示，不藏到悬停里。 */}
 			{message.origin === "child" && <FromChild plugin={message.fromPlugin} />}
+			{/* 代管这个会话的插件从 Plume 之外转进来的话：同样用人的气泡，标出是哪个插件转来的，不让人以为是自己打的。 */}
+			{message.origin === "plugin" && <FromChild plugin={message.fromPlugin} relayed />}
 			{pictures.length > 0 && (
 				<AttachmentStrip
 					files={pictures}
@@ -221,13 +223,17 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 }
 
 /** 气泡上方「来自 …」那一行：标出交来这件事的子会话所属插件的显示名，查不到（插件停用、卸载了，或消息没记插件）时用通用的「来自子会话」。 */
-function FromChild({ plugin }: { plugin: string | undefined }) {
+function FromChild({ plugin, relayed = false }: { plugin: string | undefined; relayed?: boolean }) {
 	const { t } = useI18n();
-	const name = usePluginDisplayName()(plugin ?? "");
+	const name = usePluginDisplayName()(plugin ?? "") ?? plugin;
+	const label = relayed ? t("userMessage.relayedBy", { name: name ?? "" }) : name ? t("userMessage.fromPlugin", { name }) : t("userMessage.fromChild");
 	return (
-		<span className="mb-1 flex items-center gap-1 pr-1 text-caption text-ink-faint" data-from-child="">
+		<span
+			className="mb-1 flex items-center gap-1 pr-1 text-caption text-ink-faint"
+			{...(relayed ? { "data-relayed-by": plugin ?? "" } : { "data-from-child": "" })}
+		>
 			<MessageSquarePlus size={11} strokeWidth={1.9} aria-hidden />
-			{name ? t("userMessage.fromPlugin", { name }) : t("userMessage.fromChild")}
+			{label}
 		</span>
 	);
 }

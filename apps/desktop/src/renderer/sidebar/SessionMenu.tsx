@@ -18,6 +18,7 @@ import {
 	Pin,
 	PinOff,
 	Trash2,
+	Unplug,
 	X,
 } from "@plume/ui/icons";
 import { useEffect, useId, useRef, useState } from "react";
@@ -37,6 +38,8 @@ export interface SessionMenuActions {
 	move(sessionId: string, projectId: string | undefined): Promise<void>;
 	export(sessionId: string, format: "database" | "markdown"): Promise<void>;
 	newWindow(sessionId: string): void;
+	/** 停止插件代管这个会话（`AgentService.revokeSteward`）。 */
+	revokeSteward(sessionId: string): Promise<void>;
 }
 
 export function SessionMenu({
@@ -233,6 +236,12 @@ export function SessionMenu({
 						}
 					>
 						{t(session.unread ? "sessionMenu.markRead" : "sessionMenu.markUnread")}
+					</MenuItem>
+				)}
+				{/* 代管着的会话随时能收回：插件之后再往里转话、答卡都会被拒。 */}
+				{session.steward && (
+					<MenuItem icon={<Unplug {...ICON} />} onClick={() => void perform(() => actions.revokeSteward(session.id), t("sessionMenu.stewardRevoked"))}>
+						{t("sessionMenu.revokeSteward")}
 					</MenuItem>
 				)}
 				{session.archived && onRequestDelete && (
