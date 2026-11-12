@@ -4,7 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { clickVisibleScript, waitFor } from "./smoke-kit.ts";
+import { clickVisible, waitFor } from "./smoke-kit.ts";
 import { runPluginCli } from "./smoke-plugin-cli.ts";
 
 const PROBE = "example.steward-probe";
@@ -53,10 +53,7 @@ export async function checkSteward(options: {
 	const { window, agent, plugin, outDir, setModel } = options;
 	const page = <T>(code: string) => window.webContents.executeJavaScript(code) as Promise<T>;
 	const until = (code: string, label: string) => waitFor(() => page<boolean>(code), `代管会话：${label}`);
-	const click = async (selector: string, text?: string) => {
-		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `等到 ${text ?? selector}`);
-		if (!(await page<boolean>(clickVisibleScript(selector, text)))) throw new Error(`点不到 ${text ?? selector}`);
-	};
+	const click = (selector: string, text?: string) => clickVisible(page, selector, text);
 	const capture = async (name: string) => {
 		await page(`new Promise(resolve => setTimeout(resolve, 500))`);
 		await writeFile(join(outDir, name), (await window.webContents.capturePage()).toPNG());

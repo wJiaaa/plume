@@ -71,7 +71,7 @@ import { checkSessionWindow } from "./smoke-session-window.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { recentSessions } from "./tray-menu.ts";
-import { clickVisibleScript, waitFor } from "./smoke-kit.ts";
+import { clickVisible, waitFor } from "./smoke-kit.ts";
 
 export function smokeOutput(): { file: string; dir: string; workspace: string } | undefined {
 	const file = process.env.PLUME_SMOKE_OUT;
@@ -201,10 +201,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		const page = (code: string) => window.webContents.executeJavaScript(code) as Promise<unknown>;
 		const until = (code: string, label: string) => waitFor(async () => Boolean(await page(code)), label);
-		// 找不到时把原因带回来：页面里抛的错到这边只剩一句「Script failed to execute」。
-		const click = async (selector: string, text?: string) => {
-			if (!(await page(clickVisibleScript(selector, text)))) throw new Error(`找不到 ${selector} ${text ?? ""}`);
-		};
+		const click = (selector: string, text?: string) => clickVisible(page, selector, text);
 		const type = (selector: string, value: string) =>
 			page(`(() => {
 				const input = document.querySelector(${JSON.stringify(selector)});
@@ -1862,11 +1859,15 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (await page(`document.querySelector('[data-screen=chat] [data-plume-transcript-rows]')?.textContent.includes(':followup[')`))
 			throw new Error("回复里的 :followup 标记不该画出来");
 		await until(`document.querySelector('[data-screen=chat] .cm-placeholder')?.textContent === ${JSON.stringify(FOLLOWUP_HINT)}`, "下一步建议成了输入框的灰字");
+		// 侧边聊天的面板区还开着，对话列窄，输入框底下那一排为放下模型名按设计让出了圆环（`composer/fit.ts`，display: none）：
+		// 把窗口放宽给它地方，看它回来、点得到；看完放回原来的大小。
+		const meterWindowSize = window.getSize();
+		window.setSize(1600, meterWindowSize[1]!);
 		await until(
 			`(() => {
 			const meter = document.querySelector('[data-screen=chat] [data-plume-context-meter]');
 			const model = document.querySelector('[data-screen=chat] [data-model-trigger]');
-			return Boolean(meter && model && /^上下文占用 \\d+%$/.test(meter.getAttribute('aria-label') ?? '') && meter.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING);
+			return Boolean(meter && model && meter.checkVisibility() && /^上下文占用 \\d+%$/.test(meter.getAttribute('aria-label') ?? '') && meter.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING);
 		})()`,
 			"模型选择左边出现上下文用量的圆环",
 		);
@@ -1881,6 +1882,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await capture(window, join(outDir, "smoke-context-meter.png"));
 		await click("[data-screen=chat] [data-plume-context-meter]");
 		await until(`document.querySelector('[data-plume-popover][role=group]') === null`, "再点一次收起上下文用量");
+		window.setSize(meterWindowSize[0]!, meterWindowSize[1]!);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-followups.png"));
 		await page(`document.querySelector('[data-screen=chat] .cm-content').focus()`);

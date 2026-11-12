@@ -95,7 +95,8 @@ export async function checkNavigation({
 		await until(`document.querySelector('main .cm-content')?.textContent.includes('@"')`, "文件引用加引号");
 		await clear();
 		await window.webContents.insertText("@");
-		await until(`document.querySelector('[data-mention-kind=session]') !== null`, "再次打开引用菜单");
+		// 收起的菜单还画着上一份条目（inert）：只认开着的菜单里的，不然菜单还没重开这一步就判过了。
+		await until(`document.querySelector('[data-mention-kind=session]')?.closest('[data-open]')?.getAttribute('data-open') === 'true'`, "再次打开引用菜单");
 		await click("[data-mention-kind=session]");
 		await until(`document.querySelector('.plume-composer-dock [data-session-references] button') !== null`, "会话引用变成可移除签");
 		await window.webContents.insertText("参考它问我一个问题");
