@@ -34,6 +34,19 @@ const call = (id: string, name: string, args: Record<string, unknown> = {}) => (
 const result = (id: string, name: string): Message =>
 	({ role: "toolResult", toolCallId: id, toolName: name, content: [{ type: "text", text: "ok" }], isError: false, timestamp: 3 }) as Message;
 const thinking = (text: string) => ({ type: "thinking" as const, thinking: text });
+
+/**
+ * 假装装了连 MCP 服务的插件：本体不认它的工具名，只认它在界面入口登记的说法（`ui.toolLine`）。
+ * 跑完撤下，别的测试看到的是没装它的样子。
+ */
+function withPluginLines(body: () => void): void {
+	addToolLine("example.mcp", "mcp__", { group: "mcp", apart: true }, "prefix");
+	try {
+		body();
+	} finally {
+		removeToolLines("example.mcp");
+	}
+}
 const text = (value: string) => ({ type: "text" as const, text: value });
 
 test("先后几条回复里同类的调用合成一段活，推理落在它后面那段里，回答单独一行", () => {
@@ -400,7 +413,11 @@ test("一轮正常收尾、最新那份清单还有没勾的：「继续」说�
 	assert.equal(carryOnPrompt("interrupt", 2), CARRY_ON_PROMPTS[1]);
 });
 
-test("MCP 的工具不分服务器合成一段；mcp_call 只和自己接", () => {
+test("插件说自成一类的工具（MCP 的不分服务器）合成一段，不和别的接；mcp_call 只和自己接", () => {
+	withPluginLines(mcpSteps);
+});
+
+function mcpSteps() {
 	const messages: Message[] = [
 		user("go"),
 		reply([call("a", "mcp__github__search"), call("b", "mcp__linear__list_issues")]),
@@ -410,14 +427,18 @@ test("MCP 的工具不分服务器合成一段；mcp_call 只和自己接", () =
 		result("c", "mcp__github__get"),
 		reply([call("d", "mcp_call")]),
 		result("d", "mcp_call"),
+		reply([call("e", "read")]),
+		result("e", "read"),
+		reply([call("f", "mcp__github__get")]),
+		result("f", "mcp__github__get"),
 		reply([text("好了")], "stop"),
 	];
 	const items = turnBlocks(runs(messages))[1]!.items;
 	assert.deepEqual(
 		items.map((item) => (item.kind === "step" ? `step:${item.step.calls.map((one) => one.block.id).join("")}` : item.run.kind)),
-		["step:abc", "step:d", "message"],
+		["step:abc", "step:d", "step:e", "step:f", "message"],
 	);
-});
+}
 
 const jobDelivery = (id: string, status: "done" | "failed" = "done") =>
 	user("", { synthetic: true, delivery: [{ id, plugin: "plume.tools", title: id, status, inline: true }] } as never);

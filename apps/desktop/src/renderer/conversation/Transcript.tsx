@@ -104,12 +104,13 @@ export function Transcript({
 			}
 			if (message.role !== "toolResult") continue;
 			map.set(message.toolCallId, message);
-			const details = message.details as { kind?: unknown; id?: unknown; command?: unknown } | undefined;
-			if ((details?.kind === "bash_background" || details?.kind === "monitor") && typeof details.id === "string") {
+			// 在后台起了任务的调用，插件在结果里声明（`BackgroundJobDetails`），不认是哪个工具。
+			const job = (message.details as { job?: { id?: unknown; command?: unknown } } | undefined)?.job;
+			if (job && typeof job.id === "string") {
 				const description = described.get(message.toolCallId);
-				started.set(details.id, {
+				started.set(job.id, {
 					...(description ? { description } : {}),
-					...(typeof details.command === "string" ? { command: details.command } : {}),
+					...(typeof job.command === "string" ? { command: job.command } : {}),
 				});
 			}
 		}

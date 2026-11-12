@@ -19,12 +19,17 @@ const KIND: Record<string, MessageKey> = {
 	read: "tools.read",
 	bash: "tools.bash",
 	bash_output: "tools.output",
-	monitor: "tools.monitor",
 	glob: "tools.find",
 	grep: "tools.grep",
 	ls: "tools.ls",
 	todo_write: "tools.todo",
 };
+
+/** 插件登记了动作的说法；只登记了归类、图标（没给 `verb`）的照没登记说法的工具说。 */
+function spokenLine(tool: string) {
+	const line = toolLine(tool);
+	return line?.verb === undefined ? undefined : line;
+}
 
 /**
  * 一串调用做了什么，用事后描述它时会用的话说。
@@ -35,7 +40,7 @@ const KIND: Record<string, MessageKey> = {
 function describeRun(calls: { toolName: string; subject?: string | undefined }[], step = false): string {
 	const counts = new Map<string, { count: number; subjects: string[]; times: boolean }>();
 	for (const call of calls) {
-		const registered = toolLine(call.toolName);
+		const registered = spokenLine(call.toolName);
 		const line = step && registered?.callOnly ? undefined : registered;
 		const key = KIND[call.toolName];
 		const kind = line ? lineVerb(line, activeLocale()) || call.toolName : key ? translate(key) : translate("tools.using");
@@ -60,7 +65,7 @@ function describeRun(calls: { toolName: string; subject?: string | undefined }[]
  * 一段调用做了什么，一段活那一行和收起的那一行说的那一句。
  *
  * 清单并在一段活里时不点名：那一行说的是干了什么活，勾到哪一项清单上看得到。只有清单时照旧说它。
- * 查输出是那条后台命令的一部分：这一段里有命令时不另记；只有查看时，一个任务记一次。按调用数的话，一条命令被查了九次，
+ * 查输出是那条后台命令的一部分：这一段里有命令（`bash` 和像它的）时不另记；只有查看时，一个任务记一次。按调用数的话，一条命令被查了九次，
  * 这一行就说「执行命令 1 个、查看输出 9 个」。
  */
 export function describeCalls(calls: Call[]): string {
@@ -72,7 +77,7 @@ export function describeCalls(calls: Call[]): string {
 
 function counted(calls: Call[]): Call[] {
 	const work = calls.some(({ block }) => block.name !== "todo_write");
-	const commands = calls.some(({ block }) => block.name === "bash" || block.name === "monitor");
+	const commands = calls.some(({ block }) => block.name === "bash" || toolLine(block.name)?.like === "bash");
 	const jobs = new Set<unknown>();
 	return calls.filter(({ block }) => {
 		if (work && block.name === "todo_write") return false;
@@ -91,10 +96,10 @@ export function describePolls(what: string | undefined, times: number): string {
 }
 
 /**
- * 模型给人写了一句说明就用它的那几个：命令人一眼读不出在干什么，正则和通配也是。参数里没给 `pattern` 时那里是
- * 模型错放的式子，照样只当说明用模型自己写的那句。
+ * 模型给人写了一句说明就用它的那几个（插件的工具说像它们的也算，见 `ToolLine.like`）：命令人一眼读不出在干什么，正则和通配也是。
+ * 参数里没给 `pattern` 时那里是模型错放的式子，照样只当说明用模型自己写的那句。
  */
-const DESCRIBED = new Set(["grep", "glob", "bash", "monitor"]);
+const DESCRIBED = new Set(["grep", "glob", "bash"]);
 
 /**
  * 读文件、列目录那一行说的对象：相对工作区的完整路径。
@@ -130,13 +135,14 @@ export function describeOne(block: ToolCallBlock, root?: string, job?: string): 
 	if (polledJob(block)) return describePolls(job, 1);
 	if (block.name === "bash_output") return translate("tools.stopJob");
 	const line = toolLine(block.name);
-	if (line) return describeRun([{ toolName: block.name, subject: lineSubject(line, block.arguments) }]);
+	const { description } = (block.arguments ?? {}) as { description?: unknown };
+	const said = typeof description === "string" ? description.trim() : "";
+	if (said && DESCRIBED.has((line ? line.like : block.name) ?? "")) return said;
+	const spoken = spokenLine(block.name);
+	if (spoken) return describeRun([{ toolName: block.name, subject: lineSubject(spoken, block.arguments) }]);
 	if (block.name === "todo_write") return describeTodos(block.arguments);
 	const location = locationOf(block, root);
 	if (location) return describeRun([{ toolName: block.name, subject: location }]);
-	const { description } = (block.arguments ?? {}) as { description?: unknown };
-	const said = typeof description === "string" ? description.trim() : "";
-	if (said && DESCRIBED.has(block.name)) return said;
 	if (KIND[block.name]) return describeRun([{ toolName: block.name, subject: subjectOf(block) }]);
 	// 不认得的工具（没登记说法的插件工具）照原名说：「使用工具」读不出是哪一个。
 	return block.name;
@@ -160,7 +166,7 @@ function tildeHome(path: string): string {
 
 /** 一次调用在一段活的总说法里点名的对象：插件登记了说法的按它取，其余见 `subjectOf`。 */
 function subjectFor(block: ToolCallBlock): string | undefined {
-	const line = toolLine(block.name);
+	const line = spokenLine(block.name);
 	return line ? lineSubject(line, block.arguments) : subjectOf(block);
 }
 

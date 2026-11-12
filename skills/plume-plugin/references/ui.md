@@ -28,7 +28,7 @@ export default {
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
 | `ui.approvalCard(tool, Component, { order })` | 给自己的工具画审批卡，按 `request.tool` 认 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
-| `ui.toolLine(tool, { verb, subject, like, group, times, callOnly, icon })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标；画法还是通用卡片 |
+| `ui.toolLine(tool, { verb, subject, like, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、归哪一类、怎么数、图标；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；name 与 mode 都提供时管理配色和深浅模式 |
@@ -158,12 +158,15 @@ ui.toolLine("symbol", {
 
 - 一次调用说成「动作 对象」（「查找符号 runAgent」），一段活里几次合在一起数个数（「查找符号 3 个」）。`verb` 写成事后描述的动词短语，和内置的「读取文件」「搜索内容」一个口吻。
 - `subject` 收到的参数是模型给的、没校验过：取不出就返回 undefined，只说动作；抛错也按没有对象处理。
-- `like` 是做的事像哪个内置工具（`read`、`grep`、`edit`、`write`、`bash`）：读和搜索归「探索」、改和写归「改文件」、`bash` 归「跑命令」，连着做时并进同一段活；运行行用同一种说法；没给 `icon` 时用它的图标。不给就自成一类。
+- `like` 是做的事像哪个内置工具（`read`、`grep`、`edit`、`write`、`bash`）：读和搜索归「探索」、改和写归「改文件」、`bash` 归「跑命令」，连着做时并进同一段活；运行行用同一种说法；没给 `icon` 时用它的图标。像 `bash`、`grep` 的，模型在参数里写了给人看的 `description` 时那一行就说它；像 `bash` 的算命令，一段活里有它时查后台任务输出的那几次不另数（`plume.tools` 的 `monitor`）。不给就自成一类。
 - `group` 是插件自己起名的一类活（浏览器的五个工具都写 `"browser"`）：同一类的连着做合成一段，和读、跑命令、改文件那几类也接成一段——边改边在页面上验是一件事。给了就不按 `like` 归类，`like` 照旧管运行行和图标。只该给「一段活里的一步」，要人单独看见的事（问人、派活）别给。
+- `apart: true`（要和 `group` 一起给）：这一类自成一段，只和同一类的接，不和读、跑命令、改文件接。例子是 `plume.mcp`：不管哪台服务的工具都是一类，和本地的活分开。
+- `verb` 可以不给：只登记归类和图标，说法照没登记的工具（一次说工具名，合在一起说「使用工具」）。
+- 工具名不固定时按前缀登记：`ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" })`。精确工具名登记的优先，几个前缀都对得上时取最长的。
 - `times: true`：几次合在一起时数次数（「操作网页 4 次」），不数个数。
 - `callOnly: true`：`verb` 只说这一次调用（跑着时那一行、展开后那一行），一段活收起后照没登记说法的工具说「使用工具」。给不算一件活、只是收尾手续的工具（子智能体交结果的 `yield`）。
 - `icon` 是 `@plume/ui/icons` 里的图标，13px。
-- 同时登记了 `toolCard` 的工具单独一行画卡片（`inline: true` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复；插件登记的优先于产品给内置工具的说法。
+- 同时登记了 `toolCard` 的工具单独一行画卡片（`inline: true` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复；插件登记的优先于产品给内置工具的说法。宿主不认插件的工具名：转录里怎么说、怎么归类只看这里登记的。
 
 ## 工具卡片
 

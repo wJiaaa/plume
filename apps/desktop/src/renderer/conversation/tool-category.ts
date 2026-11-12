@@ -20,11 +20,12 @@ const CATEGORY: Record<string, string> = {
 	glob: "explore",
 	grep: "explore",
 	bash_output: "terminal",
-	monitor: "terminal",
 };
 
 /** 插件起名的一类活（`ToolLine.group`）带这个前缀：和工具名、内置的几类分开，叫 browser 的工具不会和 group 为 browser 的那几个算成一类。 */
 const GROUP = "group:";
+/** 自成一段的那几类（`ToolLine.apart`）：前缀和 `GROUP` 分开，它们不和读、跑命令、改文件接。 */
+const APART = "apart:";
 
 /** 这一类是不是插件起名的一类活：它们和读、跑命令、改文件互相接成一段（见 `turn-blocks.ts` 的 `joins`）。 */
 export function isPluginGroup(category: string): boolean {
@@ -33,7 +34,7 @@ export function isPluginGroup(category: string): boolean {
 
 export function toolCategory(toolName: string, args?: unknown): string {
 	const line = toolLine(toolName);
-	if (line?.group) return GROUP + line.group;
+	if (line?.group) return (line.apart ? APART : GROUP) + line.group;
 	// 像 bash 的插件工具没有 `command`，归跑命令；不像哪个的自成一类。
 	if (line) return line.like ? toolCategory(line.like, args) : toolName;
 	if (toolName === "bash") {

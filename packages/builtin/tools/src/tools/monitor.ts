@@ -133,7 +133,7 @@ export const monitorTool: Tool<MonitorArgs> = {
 						`stop it with bash_output({ id: "${id}", kill: true }) as soon as you no longer need it.`,
 				},
 			],
-			details: { kind: "monitor", id, command: args.command, ...(outputPath ? { outputPath } : {}) },
+			details: { kind: "monitor", id, command: args.command, job: { id, command: args.command }, ...(outputPath ? { outputPath } : {}) },
 		};
 	},
 };

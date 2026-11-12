@@ -42,6 +42,8 @@ const zhCN = {
 	monitorMaxEvents: "达到行数上限",
 	jobsUpdated: (n: number) => `${n} 个后台命令有新输出`,
 	wakeupFired: "定时唤醒",
+	/** 转录里 monitor 那一行的动作。 */
+	monitorVerb: "监视命令",
 };
 
 const en: typeof zhCN = {
@@ -84,6 +86,7 @@ const en: typeof zhCN = {
 	monitorMaxEvents: "line limit reached",
 	jobsUpdated: (n) => (n === 1 ? `New output from ${n} background command` : `New output from ${n} background commands`),
 	wakeupFired: "Scheduled wakeup",
+	monitorVerb: "Watched commands",
 };
 
 /** 界面入口按 `useI18n().resolvedLocale` 取；逻辑入口用 `words()`。 */

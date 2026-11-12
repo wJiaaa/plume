@@ -16,7 +16,6 @@ const ICONS: Record<string, typeof FileText> = {
 	bash: Terminal,
 	// 查后台命令的输出，和起它的那条命令同一枚。
 	bash_output: Terminal,
-	monitor: Terminal,
 	todo_write: ListTodo,
 };
 

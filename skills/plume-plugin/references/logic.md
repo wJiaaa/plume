@@ -100,6 +100,16 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 - 给另一个顶层会话寄一封信：`run.letter(to, { from, text, request?, answer?, re?, chain?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。`guide` 是给收件方模型的处理说明（怎么回），一次送达里一样的只写一遍。返回回执 `{ id, read, answer }`：`read` 兑现成 `{ status: "read", opened }`（`opened` 是这封叫起了对方一轮）、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answer(letter)` 从收件方寄回发件方一封，只能用一次，发件方不在了返回 `undefined`——对方没回、没读到时替它说一句，问的一方才不会一直等下去。请求（`request: true`）有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）：经 `answer` 回了信，或对方读到以后寄回一封带 `answer` 的信（答掉它读到的全部），才算答了；对方删掉、你的插件停用时不再等。对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。限速、去重、链长归你管（plume.sessions 做了一份）。
 - 照人的要求归档这次调用所在的对话（「做完就归档」）：调 `run.archiveAfterTurn()`，结果带上 `terminate: "done"`。本体不当场归档（这一轮还在等你的结果），这一轮以完成收场后才归档，和人在侧栏上点归档一样（界面离开它，`onArchived`、`onEnded` 照常）；这一轮被人停下、出错、卡住收场时不归档、请求作废。只够得着这次调用所在的会话，子会话里是 `undefined`。例子是 plume.spawn-session 的 `archive_session`。
 
+### 工具结果里的通用声明
+
+`details` 归插件，宿主不看里面，只认通用声明（类型在 `@plume/contract`）。宿主不认工具名：换一个插件提供同类能力，照样声明就行。
+
+- `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
+
+```ts
+return { output: `Started background job ${id}.`, details: { job: { id, command } } satisfies BackgroundJobDetails };
+```
+
 ## 钩子
 
 每一层的形状是 `(input, next) => Promise<output>`，像洋葱一样套起来：

@@ -171,20 +171,24 @@ function composerImages(images: unknown): { data: string; mimeType: string; name
 }
 
 /** `ui.toolLine`：先校验，坏的登记在注册时报错，不等到转录里画出来才出问题。 */
-function registerToolLine(plugin: string, tool: unknown, line: unknown): void {
+function registerToolLine(plugin: string, tool: unknown, line: unknown, options: unknown): void {
 	const candidate = (line ?? {}) as Partial<ToolLine>;
+	const match = (options as { match?: unknown } | undefined)?.match;
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof tool !== "string" || tool === "") throw new Error("工具说法需要工具名");
-	if (!validTitle(candidate.verb)) throw new Error(`工具说法 ${tool} 需要 verb`);
+	if (match !== undefined && match !== "tool" && match !== "prefix") throw new Error(`工具说法 ${tool} 的 match 只能是 tool 或 prefix`);
+	if (candidate.verb !== undefined && !validTitle(candidate.verb)) throw new Error(`工具说法 ${tool} 的 verb 必须是文字或按语言取文字的函数`);
 	if (candidate.subject !== undefined && typeof candidate.subject !== "function") throw new Error(`工具说法 ${tool} 的 subject 必须是函数`);
 	if (candidate.like !== undefined && !TOOL_LIKES.has(candidate.like)) throw new Error(`工具说法 ${tool} 的 like 只能是 ${[...TOOL_LIKES].join("、")}`);
 	if (candidate.group !== undefined && (typeof candidate.group !== "string" || candidate.group === ""))
 		throw new Error(`工具说法 ${tool} 的 group 必须是非空字符串`);
 	if (candidate.times !== undefined && candidate.times !== true) throw new Error(`工具说法 ${tool} 的 times 只能是 true`);
 	if (candidate.callOnly !== undefined && candidate.callOnly !== true) throw new Error(`工具说法 ${tool} 的 callOnly 只能是 true`);
+	if (candidate.apart !== undefined && (candidate.apart !== true || candidate.group === undefined))
+		throw new Error(`工具说法 ${tool} 的 apart 只能是 true，且要给 group`);
 	if (candidate.icon !== undefined && typeof candidate.icon !== "function" && typeof candidate.icon !== "object")
 		throw new Error(`工具说法 ${tool} 的 icon 必须是组件`);
-	addToolLine(plugin, tool, candidate as ToolLine);
+	addToolLine(plugin, tool, candidate as ToolLine, match === "prefix" ? "prefix" : "tool");
 }
 
 export interface PanelEntry {
@@ -1389,7 +1393,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			const inline = options?.inline;
 			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
 		},
-		toolLine: (tool, line) => registerToolLine(name, tool, line),
+		toolLine: (tool, line, options) => registerToolLine(name, tool, line, options),
 		approvalCard: (tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options),
 		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options),
 		panel: (id, component, options) => registerPanel(name, id, component, options),

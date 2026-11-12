@@ -961,6 +961,8 @@ export default {
 		const Documents = documentCard(ui, api);
 		// 文档预览只在通用卡片下面补一段：MCP 的调用照常合成一段活，不因为这张卡各占一行。
 		ui.toolCard("mcp__", Documents, { match: "prefix", inline: true });
+		// 不管哪台服务的工具都是一类：连着调时合成一段，不和读、跑命令、改文件接；说法照没登记的工具（工具名、「使用工具」）。
+		ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" });
 		ui.toolCard("mcp_call", Documents, { inline: true });
 		const notify = ui.notify.bind(ui);
 		ui.settingsSection("mcp", (props) => <McpSettings api={api} notify={notify} {...props} />, {

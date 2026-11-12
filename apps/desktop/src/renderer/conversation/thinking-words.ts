@@ -47,7 +47,6 @@ const BY_TOOL: Record<string, Mood> = {
 	write: "composing",
 	edit: "shaping",
 	bash: "working",
-	monitor: "working",
 	glob: "searching",
 	grep: "searching",
 	ls: "searching",

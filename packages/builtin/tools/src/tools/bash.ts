@@ -464,7 +464,8 @@ async function startBackground(args: BashArgs, ctx: ToolContext, mode: SandboxMo
 	const { id, outputPath } = started.job;
 	return {
 		content: [{ type: "text", text: `Started background job ${id}. ${followUp(ctx, id)}` }],
-		details: { kind: "bash_background", id, command: args.command, ...(outputPath ? { outputPath } : {}) },
+		// `job` 是给宿主看的通用声明（`BackgroundJobDetails`）：转录据此把查它输出的那几行说成起它那次调用写的说明。
+		details: { kind: "bash_background", id, command: args.command, job: { id, command: args.command }, ...(outputPath ? { outputPath } : {}) },
 	};
 }
 

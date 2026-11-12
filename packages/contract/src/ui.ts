@@ -72,21 +72,26 @@ export type ToolLike = "read" | "grep" | "edit" | "write" | "bash";
 export interface ToolLine {
 	/**
 	 * 做的事，一个动词短语（「查找符号」）。一次调用说成「动作 对象」（「查找符号 runAgent」），一段活里几次合在一起数个数
-	 * （「查找符号 3 个」）。
+	 * （「查找符号 3 个」）。不给就照没登记说法的工具说（一次说工具名，合在一起说「使用工具」），只用这里的归类和图标。
 	 */
-	verb: LocalizedText;
+	verb?: LocalizedText;
 	/** 这一次要点名的对象，从参数里取；参数是模型给的、没校验过，取不出就返回 undefined，只说动作。 */
 	subject?(args: Record<string, unknown>): string | undefined;
 	/**
 	 * 做的事像哪个内置工具：和它归成一类（读、搜索归「探索」，改、写归「改文件」，`bash` 归「跑命令」），连着做时并进同一段活；
-	 * 运行行用同一种说法；没给 `icon` 时用它的图标。不给就自成一类：只有连着调这个工具才合成一段，图标是终端那枚。
+	 * 运行行用同一种说法；没给 `icon` 时用它的图标。像 `bash`、`grep` 的，模型在参数里写了一句给人看的说明（`description`）时，
+	 * 那一行就说它；像 `bash` 的算命令：一段活里有它时，查后台任务输出的那几次不另数。不给就自成一类：只有连着调这个工具才合成一段，图标是终端那枚。
 	 */
 	like?: ToolLike;
 	/**
 	 * 归哪一类活，名字插件自己起（`"browser"`）：同一类的几个工具连着做时合成一段，和读、跑命令、改文件那几类也接成一段——
-	 * 边改边在页面上验是一件事。给了就不按 `like` 归类，`like` 照旧管运行行和图标。
+	 * 边改边在页面上验是一件事（`apart` 时不接）。给了就不按 `like` 归类，`like` 照旧管运行行和图标。
 	 */
 	group?: string;
+	/**
+	 * `group` 这一类自成一段：只和同一类的接，不和读、跑命令、改文件那几类接（MCP 服务的工具：不管哪台服务都是一类，和本地的活分开）。
+	 */
+	apart?: true;
 	/** 几次合在一起时数次数，不数个数：「操作网页 4 次」，不是读着像四张网页的「操作网页 4 个」。 */
 	times?: true;
 	/**
@@ -931,9 +936,9 @@ export interface UiContext {
 	/**
 	 * 转录里怎么说自己的工具：通用卡片那一行、合成一段活的那一行、运行行，见 `ToolLine`。只改说法和归类，画法照通用卡片；
 	 * 同时登记了 `toolCard` 的，卡片单独一行（`inline` 的照常并进一段活），`fallback` 用这里的说法。同一工具后登记的生效，它撤下后前一个恢复；插件登记的
-	 * 优先于产品给内置工具的说法。
+	 * 优先于产品给内置工具的说法。工具名不固定（MCP 的 `mcp__服务__工具`）时用 `match: "prefix"` 按前缀登记，精确工具名的优先于前缀的。
 	 */
-	toolLine(tool: string, line: ToolLine): void;
+	toolLine(tool: string, line: ToolLine, options?: { match?: "tool" | "prefix" }): void;
 	/**
 	 * 给自己的工具画审批卡，见 `ApprovalCardProps`。`tool` 是 `ApprovalRequest.tool`；order 和让位规则同 `toolCard`：
 	 * 渲染出错时让给下一个，都不行用产品的通用卡。

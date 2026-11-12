@@ -729,7 +729,6 @@ export const en = {
 	"tools.edit": "Edited files",
 	"tools.read": "Read files",
 	"tools.bash": "Ran commands",
-	"tools.monitor": "Watched commands",
 	"tools.output": "Read output",
 	"tools.outputOf": "Read output of “{what}”",
 	"tools.outputOfTimes": { one: "Read output of “{what}” {n} time", other: "Read output of “{what}” {n} times" },

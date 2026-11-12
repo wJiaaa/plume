@@ -117,22 +117,18 @@ function merges(category: string): boolean {
 }
 
 /**
- * MCP 的工具不论哪个服务器都算一类。名字是 `mcp__<服务器>__<工具>`，超长的会截短加哈希，从名字里拆不出可靠的服务器。
- */
-function kindOf(category: string): string {
-	return category.startsWith("mcp__") ? "mcp" : category;
-}
-
-/**
  * 更新清单是这段活的记账，不是一件单独的事：它跟 `MERGES` 那几类接成一段，不自己占一行——勾到哪一项清单上看得到，
  * 转录里每勾一次就横一行，一段连着的活被切成好几截。
  */
 const TODO = "todo_write";
 
-/** 这次调用接不接在这一段后面：`MERGES` 里的几类和清单互相接，其余的只和同一种接（MCP 不分服务器）。 */
+/**
+ * 这次调用接不接在这一段后面：`MERGES` 里的几类和清单互相接，其余的只和同一类接（插件说自成一段的那一类，
+ * 比如 MCP 服务的工具不分服务器，见 `ToolLine.apart`）。
+ */
 function joins(step: Step, category: string): boolean {
 	const work = (one: string) => merges(one) || one === TODO;
-	return (work(step.category) && work(category)) || kindOf(step.category) === kindOf(category);
+	return (work(step.category) && work(category)) || step.category === category;
 }
 
 /**

@@ -46,7 +46,10 @@ export interface ToolOutput {
 	 * 本体照 `images` 把大图挪进媒体目录，通用卡片把它画在 `images` 后面。
 	 */
 	shownImages?: ToolOutput["images"];
-	/** 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面。 */
+	/**
+	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认一个通用声明：
+	 * 带 `job`（`BackgroundJobDetails`）是在后台起了一个任务。
+	 */
 	details?: unknown;
 	/**
 	 * 这一步的结果都写进会话以后，这一轮就此结束，不再把结果交给模型：`done` 是完成，`stalled` 是卡住了。
@@ -58,6 +61,14 @@ export interface ToolOutput {
 	 * 不占后面每一轮的上下文。给人看的卡片照旧是原文。
 	 */
 	uneventful?: boolean;
+}
+
+/**
+ * 工具结果的 `details` 带上 `job`，就是声明「这次调用在后台起了一个任务」：之后查它输出、停下它的调用按 `id` 找回是哪一件，
+ * 转录里那一行说的是起它那次调用写的说明。`command` 是它跑的命令。`details` 里别的字段照旧归插件。
+ */
+export interface BackgroundJobDetails {
+	job: { id: string; command?: string };
 }
 
 /**

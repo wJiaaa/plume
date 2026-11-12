@@ -706,7 +706,6 @@ export const zhCN = {
 	"tools.edit": "修改文件",
 	"tools.read": "读取文件",
 	"tools.bash": "执行命令",
-	"tools.monitor": "监视命令",
 	"tools.output": "查看输出",
 	"tools.outputOf": "查看「{what}」的输出",
 	"tools.outputOfTimes": "查看「{what}」的输出 {n} 次",
