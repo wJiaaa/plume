@@ -237,7 +237,7 @@ export interface ToolRun {
 	/**
 	 * 登记一项调用答完以后还在跑的后台任务（后台命令、监视），见 `BackgroundJobInput`。本体据此：算会话闲没闲——顶层会话里
 	 * 登记着、没结束、这次调用的送达渠道（`background`）还没作废的任务，在它结束之前会话都不算闲（`LaunchedSession.idle`、
-	 * `ParentStatus`、`SessionSummary.background`）；删会话、退出应用、登记它的插件停用时调 `stop(true)` 停掉；
+	 * `ParentStatus`、`SessionSummary.background`），挂着的除外（`wakes` 的监视、经 `TrackedJob.stand` 标成长跑服务的）；删会话、退出应用、登记它的插件停用时调 `stop(true)` 停掉；
 	 * 子会话经 `ctx.sessions.start` 派出的那一次运行结束时停掉它还在跑的；经 `ctx.sessions.jobs` 列给界面（环境卡片、任务面板）。
 	 * 人按停、撤回截掉这次调用时本体不停它（渠道作废，它不再算在等），停不停由工具定。只在这次调用里用：调用答完以后再调就抛错，
 	 * 交回的 `TrackedJob` 不受影响。
@@ -245,7 +245,7 @@ export interface ToolRun {
 	track(job: BackgroundJobInput): TrackedJob;
 	/**
 	 * 让这个会话以后再接着做：到点经这次调用的送达渠道送一条运行时送达进来（闲着开一轮，忙着在下一个步骤边界读到），那一行记在
-	 * 注册这个工具的插件名下（`DeliveredReport.plugin`）。见 `WakeupInput`。没触发的唤醒在的时候会话不算闲。
+	 * 注册这个工具的插件名下（`DeliveredReport.plugin`）。见 `WakeupInput`。没触发的唤醒不挡会话闲下来：它是挂着的，到点照样叫醒会话。
 	 * 人按停止时全部取消（本体跟人说一声取消了几个），撤回、编辑重发截掉这次调用时取消它约的，删会话、退出应用、注册工具的插件停用时取消。
 	 * 只有顶层会话有（同 `background`）。cron 表达式写错时抛错（message 说哪一段不对，给模型看）；在 `expiresAt` 之前一次也对不上时
 	 * 不登记，返回 `undefined`。只在这次调用里用。
@@ -328,7 +328,10 @@ export interface BackgroundJobInput {
 	/** 这条命令是干什么的，人读的是它。 */
 	description?: string;
 	pid?: number;
-	/** 每有新输出就叫醒会话开一轮（监视命令），界面据此标出来，见 `BackgroundJobInfo.wakes`。 */
+	/**
+	 * 每有新输出就叫醒会话开一轮（监视命令），界面据此标出来，见 `BackgroundJobInfo.wakes`。这样的任务是挂着的：它的事随每次输出
+	 * 送回会话，没有「做完」的那一刻，不挡会话闲下来（同 `TrackedJob.stand`）。
+	 */
 	wakes?: boolean;
 	/** 给人看的尾部输出（任务面板、环境卡片找端口）：不能算成模型读过，也不能消费它的送达。 */
 	output(): Promise<BackgroundJobOutput>;
@@ -342,6 +345,11 @@ export interface TrackedJob {
 	readonly id: string;
 	/** 它结束了（退出，或起不来：`error`）；不再算在等。可以再调，以最后一次的退出码为准。 */
 	done(exitCode: number | null, error?: string): void;
+	/**
+	 * 它是挂着的：起来以后才认得出是长跑的服务（开发服务器监听上了端口），不会自己做完，不再挡会话闲下来。只能标上、不能撤回；
+	 * 照旧登记、列出、结束时照样可以送达、照样被本体停掉。
+	 */
+	stand(): void;
 }
 
 /**
@@ -425,9 +433,9 @@ export interface LetterReceipt {
 /** 父会话此刻在做什么，见 `ParentSession.status`。 */
 export interface ParentStatus {
 	/**
-	 * `running` 正在跑一轮；`background` 这一轮收了尾，还有后台的事没完：派出去的后台运行没都回来、交回的结果还没送进去，
-	 * 登记着的后台任务（`ToolRun.track`，开发服务器这种不退出的也算）没结束，约好的唤醒（`ToolRun.schedule`）还没触发；`idle` 真闲着。
-	 * 被人停掉、撤回而作废的（不会再把结果送回会话的）不算。
+	 * `running` 正在跑一轮；`background` 这一轮收了尾，还在等会自己结束、结束后要叫醒它的事：派出去的后台运行没都回来、交回的结果还没送进去，
+	 * 登记着的一次性后台任务（`ToolRun.track`）没结束；`idle` 闲着。挂着的不算：监视、开发服务器这类长跑的任务（`BackgroundJobInput.wakes`、
+	 * `TrackedJob.stand`），约好的唤醒和 cron（`ToolRun.schedule`），它们到点、有输出照样叫醒会话。被人停掉、撤回而作废的（不会再把结果送回会话的）不算。
 	 */
 	state: "running" | "background" | "idle";
 	/** 队里还排着几条（人排的和交过来的都算）。 */
@@ -1195,8 +1203,8 @@ export interface LaunchedSession {
 	/** 第一轮结束时给出它为什么结束。 */
 	done: Promise<TurnStop>;
 	/**
-	 * 它第一次真闲下来时兑现，见 `SessionAccess.launch`；带上那时的收场和最后一段回复，交回用它。它起着不退出的后台任务（开发服务器）、
-	 * 约着还没触发的唤醒（循环的最长几天）时一直不兑现，直到它们结束、被人停掉或取消。
+	 * 它第一次真闲下来时兑现，见 `SessionAccess.launch`；带上那时的收场和最后一段回复，交回用它。还在等一次性的后台命令时不兑现；
+	 * 挂着的监视、认出来的开发服务器、约着还没触发的唤醒不挡它（见 `ParentStatus`），之后它们叫醒会话做的几轮不算进这一次。
 	 */
 	idle: Promise<LaunchedIdle>;
 	/**
@@ -1316,8 +1324,8 @@ export interface SessionAccess {
 	 * 本插件能往里转话、替人答卡，见 `SessionLaunch.steward`）。第一句话照常经
 	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的；对已有会话只有 `reportBack` 往开出它的那个会话交回一次。
 	 * 建好就返回：`session` 是新会话的摘要，`done` 在这第一轮结束时给出它为什么结束（之后人接着聊的几轮不算）。
-	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的后台任务
-	 * 都结束了、约好的唤醒都触发或取消了（被人停掉、撤回而作废的不算在等），它经 `ToolRun.letter`
+	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的一次性后台任务
+	 * 都结束了（被人停掉、撤回而作废的不算在等；挂着的监视、开发服务器、约好的唤醒和 cron 不等，见 `ParentStatus`），它经 `ToolRun.letter`
 	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求总会有答复（见 `LetterReceipt`）：对方答了，
 	 * 或者本体在对方没答时代答。
 	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。

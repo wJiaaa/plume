@@ -63,7 +63,7 @@ test("control_main：暂停、废清单、接着做、看状态当场生效，�
 	assert.deepEqual(running.calls, ["stop", "stop:discard", `carryOn:${CARRY_ON}`]);
 
 	const idle = fakeParent("idle");
-	assert.equal((await exec(CONTROL_MAIN, { action: "pause" }, idle.parent)).output, "主会话现在没有在执行任何东西，不需要暂停。");
+	assert.match((await exec(CONTROL_MAIN, { action: "pause" }, idle.parent)).output as string, /^主会话现在闲着，不需要暂停。.*环境卡片/);
 	assert.equal((await exec(CONTROL_MAIN, { action: "resume" }, idle.parent)).output, "已经让主会话接着做了。");
 	assert.equal((await exec(CONTROL_MAIN, { action: "status" }, idle.parent)).output, "主会话当前空闲。");
 	const background = fakeParent("background");

@@ -4,7 +4,7 @@
  * 到点经约它的那次调用的送达渠道（`BackgroundRuns.channel`）往会话送一条运行时送达：闲着开一轮，忙着排到下一个步骤边界；
  * 那一行记在约它的插件名下，送进去的话由那个插件给（`WakeupInput.message`），本体只管什么时候送、送不送。只活在内存里：
  * 人按停（`cancelSession`，按停是不想再被它叫醒）、撤回或编辑重发截掉约它的那次调用（`cancelCalls`）、删会话（`forget`）、
- * 约它的插件停用（`cancelOwner`）、退出应用（`clear`）都取消。还有没触发的，会话就不算闲（`pending`）。
+ * 约它的插件停用（`cancelOwner`）、退出应用（`clear`）都取消。没触发的唤醒不挡会话闲下来：它是挂着的，不是在等一件会自己做完的事。
  *
  * 每次开一个**新**会话的「定时任务」是另一件事，那是插件的，存在磁盘上。
  */
@@ -66,9 +66,7 @@ export class SessionWakeups {
 	private readonly counters = new Map<string, number>();
 	private timer: unknown = null;
 
-	/** `changed`：某个会话待触发的唤醒变了（加、取消、最后一次触发），`pending` 可能变了。 */
 	constructor(
-		private readonly changed: (sessionId: string) => void,
 		private readonly log: (message: string) => void,
 		private readonly clock: WakeupClock = realClock,
 	) {}
@@ -106,11 +104,6 @@ export class SessionWakeups {
 	/** 按下一次触发的先后。 */
 	list(sessionId: string): SessionWakeup[] {
 		return [...(this.sessions.get(sessionId)?.values() ?? [])].map((entry) => ({ ...entry.wakeup })).sort((a, b) => a.nextAt - b.nextAt);
-	}
-
-	/** 还有没触发的：会话不算闲。 */
-	pending(sessionId: string): boolean {
-		return (this.sessions.get(sessionId)?.size ?? 0) > 0;
 	}
 
 	cancel(sessionId: string, id: string): boolean {
@@ -187,11 +180,10 @@ export class SessionWakeups {
 		return { ...entry.wakeup };
 	}
 
-	/** 某个会话的表变了：空了就拿掉，重新定时，告诉会话。 */
+	/** 某个会话的表变了：空了就拿掉，重新定时。 */
 	private settle(sessionId: string): void {
 		if (this.sessions.get(sessionId)?.size === 0) this.sessions.delete(sessionId);
 		this.arm();
-		this.changed(sessionId);
 	}
 
 	private *entries(): Iterable<Entry> {
@@ -216,7 +208,6 @@ export class SessionWakeups {
 		const due = [...this.entries()].filter((entry) => entry.wakeup.nextAt <= now).sort((a, b) => a.wakeup.nextAt - b.wakeup.nextAt);
 		const touched = new Set<string>();
 		for (const entry of due) if (this.fire(entry, now)) touched.add(entry.sessionId);
-		// 最后一次送出去（攒进了送达）之后再告诉会话：中间没有一刻是「什么都不剩」。
 		for (const sessionId of touched) this.settle(sessionId);
 		this.arm();
 	}

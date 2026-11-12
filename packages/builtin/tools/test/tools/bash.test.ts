@@ -178,7 +178,7 @@ it("后台任务登记进本体：id 是本体给的，结束了告诉本体，�
 	const done: (number | null)[] = [];
 	const track: ToolRun["track"] = (job) => {
 		registered.push(job);
-		return { id: `core-${registered.length}`, done: (code) => void done.push(code) };
+		return { id: `core-${registered.length}`, done: (code) => void done.push(code), stand: () => undefined };
 	};
 	const context = ctx({ track });
 	const started = await bashTool.execute({ command: "echo first; sleep 30", description: "起个服务", run_in_background: true }, context);
@@ -191,6 +191,24 @@ it("后台任务登记进本体：id 是本体给的，结束了告诉本体，�
 	await vi.waitFor(() => expect(done).toHaveLength(1));
 	expect(backgroundJobs(context.state).get("core-1")).toMatchObject({ status: "exited" });
 	expect(await registered[0]!.output()).toMatchObject({ done: true });
+});
+
+it("后台命令打印出本机带端口的地址时告诉本体它是挂着的服务；别的输出、监视都不标", async () => {
+	const stood: string[] = [];
+	const track: ToolRun["track"] = (job) => {
+		const id = job.command;
+		return { id, done: () => undefined, stand: () => void stood.push(id) };
+	};
+	const context = ctx({ track });
+	// 端口单独染色、地址被切在两段输出之间也认得出。
+	const server = "printf '  Local:   http://local'; sleep 0.1; printf 'host:\\033[1m5173\\033[22m/\\n'; sleep 30";
+	const plain = "echo 'see https://example.com:8443/ and localhost without a url'; sleep 30";
+	await bashTool.execute({ command: server, run_in_background: true }, context);
+	await bashTool.execute({ command: plain, run_in_background: true }, context);
+	await vi.waitFor(() => expect(stood).toEqual([server]));
+	await vi.waitFor(async () => expect(textOf(await bashOutputTool.execute({ id: plain }, context))).toContain("see https"));
+	expect(stood).toEqual([server]);
+	for (const id of [server, plain]) await bashOutputTool.execute({ id, kill: true }, context);
 });
 
 const ended = (context: ToolContext, id: string) => vi.waitFor(() => expect(backgroundJobs(context.state).get(id)?.finishedAt).toBeDefined());

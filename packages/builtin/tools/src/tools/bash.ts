@@ -22,6 +22,7 @@ import { createOutputLog, type OutputLog } from "./output-log.ts";
 import { describeStatus, readExit } from "./exit-status.ts";
 import { declinedResult, errorResult } from "./result.ts";
 import { rerouteShellCommand } from "./reroute.ts";
+import { advertisesLocalUrl } from "./serving.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { describeCommand, describeJobRead } from "./describe.ts";
 
@@ -367,6 +368,30 @@ function newJob(
 	return { job, ...(tracked ? { tracked } : {}) };
 }
 
+/**
+ * 一条普通后台命令打印出本机地址时，告诉本体它是挂着的服务（`TrackedJob.stand`，见 `serving.ts`）：会话不再等它结束才算闲。
+ * 监视登记时已经是挂着的（`wakes`）。返回喂输出的函数；不用看的（监视、没有本体、已经认出来了）返回 undefined。
+ */
+function watchServing(job: BackgroundJob, tracked: TrackedJob | undefined, seen: OutputBuffer | undefined): ((chunk: string) => void) | undefined {
+	if (!tracked || job.kind === "monitor") return undefined;
+	// 超时转后台的命令，地址多半在转之前就打印过了。
+	if (seen && advertisesLocalUrl(seen.render(MAX_OUTPUT_CHARS))) {
+		tracked.stand();
+		return undefined;
+	}
+	let stood = false;
+	// 带上一段的结尾一起看：地址可能正好被切在两段之间。
+	let carry = "";
+	return (chunk) => {
+		if (stood) return;
+		const text = carry + chunk;
+		carry = text.slice(-256);
+		if (!advertisesLocalUrl(text)) return;
+		stood = true;
+		tracked.stand();
+	};
+}
+
 /** 跟着一个任务的输出和退出，不管是谁起的；它自己结束时告诉模型（`reportEnd`）和本体（`tracked`）。 */
 function track(
 	job: BackgroundJob,
@@ -385,12 +410,14 @@ function track(
 	Object.defineProperty(job, "output", { get: () => all.render(MAX_OUTPUT_CHARS), enumerable: true, configurable: true });
 	const jobs = backgroundJobs(ctx.state);
 	const closeLog = () => void outputLog?.close().then((record) => Object.assign(job, record));
+	const serving = watchServing(job, tracked, seen);
 	const follow = (process: SandboxProcess, channel: BackgroundChannel | undefined) => {
 		jobs.add(job, process, channel);
 		process.onOutput((chunk) => {
 			outputLog?.append(chunk);
 			stream.all.append(chunk);
 			stream.unread.append(chunk);
+			serving?.(chunk);
 			news();
 		});
 		process.onExit((code, _signal, lingering) => {

@@ -5,8 +5,9 @@
  * 删会话、退出应用、登记它的插件停用、子会话派出去的那次运行结束时停掉（它们的进程组是分离的，agent 进程退出不会带走它们），
  * 列给界面（`ctx.sessions.jobs`）。
  *
- * 「没闲」只算顶层会话里送达渠道还有效的：人按停、撤回截掉了起它的那次调用，渠道作废，它再结束也叫不醒会话，就不算在等
- * （和 `BackgroundRuns` 里停掉、撤回的派发不算一样）。子会话没有送达渠道，它的任务不算。
+ * 「没闲」只算顶层会话里送达渠道还有效、会自己结束的：人按停、撤回截掉了起它的那次调用，渠道作废，它再结束也叫不醒会话，就不算在等
+ * （和 `BackgroundRuns` 里停掉、撤回的派发不算一样）。子会话没有送达渠道，它的任务不算。挂着的也不算：有输出就叫醒会话的监视
+ * （`wakes`），起来以后被登记它的工具认出是长跑服务的（`TrackedJob.stand`）——它们没有「做完」的那一刻。
  */
 
 import { randomUUID } from "node:crypto";
@@ -21,6 +22,8 @@ interface Job {
 	input: BackgroundJobInput;
 	/** 起它的那次调用的送达渠道作废时触发；没有就是不会把结果送回会话（子会话）。 */
 	signal?: AbortSignal;
+	/** 挂着的：不挡会话闲下来，见文件头。 */
+	standing: boolean;
 }
 
 export class BackgroundJobs {
@@ -51,6 +54,7 @@ export class BackgroundJobs {
 			},
 			input: { command, output, stop },
 			...(signal ? { signal } : {}),
+			standing: wakes === true,
 		};
 		this.jobs.set(id, job);
 		signal?.addEventListener("abort", () => this.changed(sessionId), { once: true });
@@ -66,6 +70,11 @@ export class BackgroundJobs {
 				info.status = info.error !== undefined || (info.exitCode !== null && info.exitCode !== 0) ? "failed" : "exited";
 				if (first && this.jobs.get(id) === job) this.changed(sessionId);
 			},
+			stand: () => {
+				if (job.standing) return;
+				job.standing = true;
+				if (job.info.finishedAt === undefined && this.jobs.get(id) === job) this.changed(sessionId);
+			},
 		};
 	}
 
@@ -74,10 +83,10 @@ export class BackgroundJobs {
 		return [...this.jobs.values()].filter((job) => job.sessionId === sessionId).map((job) => ({ ...job.info }));
 	}
 
-	/** 还有没结束、结果还会送回会话的：会话不算闲。 */
+	/** 还有没结束、结果还会送回会话、不是挂着的：会话不算闲。 */
 	pending(sessionId: string): boolean {
 		for (const job of this.jobs.values())
-			if (job.sessionId === sessionId && job.info.finishedAt === undefined && job.signal && !job.signal.aborted) return true;
+			if (job.sessionId === sessionId && !job.standing && job.info.finishedAt === undefined && job.signal && !job.signal.aborted) return true;
 		return false;
 	}
 

@@ -360,9 +360,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const parent = sessions.get(parentId);
 		if (parent) wakeReports(parent);
 	}, backgroundChanged);
-	/** 工具登记的后台任务（`ToolRun.track`）和约好的唤醒（`ToolRun.schedule`），见 `waiting`。 */
+	/** 工具登记的后台任务（`ToolRun.track`，在等结果的算进 `waiting`）和约好的唤醒（`ToolRun.schedule`，挂着的，不算）。 */
 	const jobs = new BackgroundJobs(backgroundChanged, (message) => log("agent", "warn", message));
-	const wakeups = new SessionWakeups(backgroundChanged, (message) => log("agent", "warn", message));
+	const wakeups = new SessionWakeups((message) => log("agent", "warn", message));
 	/** 等着某个会话真闲下来的（`launch` 的 `idle`），见 `checkIdle`。 */
 	const idleWaiters = new Map<string, Array<() => void>>();
 	/**
@@ -1735,11 +1735,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 会话还在等后台的事：派出去的后台运行没都回来、交回的结果攒着待送（`BackgroundRuns`），登记着的后台任务没结束（`BackgroundJobs`），
-	 * 约好的唤醒还没触发（`SessionWakeups`）。被人停掉、撤回而作废的都不算。
+	 * 会话还在等结果：只算会自己结束、结束后要叫醒会话的——派出去的后台运行没都回来、交回的结果攒着待送（`BackgroundRuns`），
+	 * 登记着的一次性后台任务没结束（`BackgroundJobs.pending`）。挂着的不算：监视、开发服务器这类长跑的任务（`BackgroundJobInput.wakes`、
+	 * `TrackedJob.stand`），约好的唤醒和 cron（`SessionWakeups`）——它们照旧登记、列出、叫醒会话、被本体停掉，只是不挡会话闲下来。
+	 * 被人停掉、撤回而作废的都不算。
 	 */
 	function waiting(sessionId: string): boolean {
-		return background.pending(sessionId) || background.hasReady(sessionId) || jobs.pending(sessionId) || wakeups.pending(sessionId);
+		return background.pending(sessionId) || background.hasReady(sessionId) || jobs.pending(sessionId);
 	}
 
 	/** 真闲着：没在跑，后台没有在等的（`waiting`）。 */
@@ -2846,7 +2848,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		busy() {
 			// 列表里删掉了、还没收尾的也算（`active`）。后台看 `waiting`：没跑完的派发、交回了没送达的、刚跑完还在聚合窗口里的，
-			// 没结束的后台任务，没触发的唤醒。
+			// 没结束的一次性后台任务；挂着的监视、服务、唤醒不算。
 			const running = [...sessions.values(), ...active].some((session) => session.turn !== undefined);
 			return running || [...sessions.keys()].some((id) => waiting(id));
 		},

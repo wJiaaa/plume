@@ -82,18 +82,13 @@ const read = (text: string) => JSON.parse(text) as { id: string; fired: number; 
 
 function harness() {
 	const clock = fakeClock();
-	const changed: string[] = [];
-	const wakeups = new SessionWakeups(
-		(sessionId) => changed.push(sessionId),
-		() => undefined,
-		clock,
-	);
+	const wakeups = new SessionWakeups(() => undefined, clock);
 	const channel = fakeChannel();
 	const at = (ms: number, reason = "r", call = "call") =>
 		wakeups.schedule("s", "test.plugin", call, channel.channel, { at: START + ms, prompt: "p", reason, message });
 	const cron = (expression: string, recurring = true, expiresAt: number | undefined = START + 3 * DAY, call = "call") =>
 		wakeups.schedule("s", "test.plugin", call, channel.channel, { cron: expression, recurring, expiresAt, prompt: "p", message });
-	return { clock, wakeups, changed, at, cron, ...channel };
+	return { clock, wakeups, at, cron, ...channel };
 }
 
 it("cron：步长、范围、列表、星期名字，写错时说清哪一处", () => {
@@ -114,12 +109,12 @@ it("cron：下一次严格在之后、按本地时间，日和星期都写了是
 	expect(nextCronTime(parseCron("0 0 30 2 *"), local(2026, 1, 1))).toBeNull();
 });
 
-it("一次性唤醒：到点送一次，用约它的一方给的话和那一行，送完就从表里没了；在的时候算在等", () => {
+it("一次性唤醒：到点送一次，用约它的一方给的话和那一行，送完就从表里没了", () => {
 	const h = harness();
 	const wakeup = h.at(10 * MINUTE, "等 CI")!;
 	expect(wakeup).toMatchObject({ id: "wake-1", kind: "wakeup", reason: "等 CI", recurring: false, nextAt: START + 10 * MINUTE, fired: 0 });
-	expect(h.wakeups.pending("s")).toBe(true);
-	expect(h.wakeups.pending("other")).toBe(false);
+	expect(h.wakeups.list("s")).toHaveLength(1);
+	expect(h.wakeups.list("other")).toEqual([]);
 	h.clock.advance(10 * MINUTE - 1);
 	expect(h.queued).toHaveLength(0);
 	h.clock.advance(1);
@@ -128,7 +123,6 @@ it("一次性唤醒：到点送一次，用约它的一方给的话和那一行�
 	expect(read(h.sent[0]!.text)).toEqual({ id: "wake-1", fired: 1, next: null, skipped: 0 });
 	expect(h.sent[0]!.delivery).toEqual({ id: "wake-1", title: "等 CI", status: "done" });
 	expect(h.wakeups.list("s")).toEqual([]);
-	expect(h.wakeups.pending("s")).toBe(false);
 	expect(h.clock.pending()).toBe(0);
 });
 
@@ -188,12 +182,11 @@ it("人按停取消这个会话的全部、数得出几个；撤回只取消截�
 	// 编号接着数：模型手里的旧 id 不会指到新的。
 	expect(h.at(10 * MINUTE)?.id).toBe("wake-5");
 	h.wakeups.cancelOwner("other.plugin");
-	expect(h.wakeups.pending("s")).toBe(true);
+	expect(h.wakeups.list("s")).toHaveLength(1);
 	h.wakeups.cancelOwner("test.plugin");
-	expect(h.wakeups.pending("s")).toBe(false);
+	expect(h.wakeups.list("s")).toEqual([]);
 	h.wakeups.forget("s");
 	expect(h.at(10 * MINUTE)?.id).toBe("wake-1");
-	expect(h.changed.every((id) => id === "s")).toBe(true);
 });
 
 it("合盖睡过了几次触发：醒来只送一次；睡过了过期时刻不再开一轮", () => {
