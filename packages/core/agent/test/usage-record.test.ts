@@ -27,16 +27,19 @@ it("提示词按插件标的类别分到系统、说明与记忆、技能与智�
 			{ role: "user", content: [{ type: "text", text: "e".repeat(8) }], timestamp: 1, synthetic: true },
 		],
 	});
-	expect(parts).toEqual({
-		system: 10 + 4 + 2 + 1 + 4,
-		instructions: 20 + 3 + 5,
-		skills: 30 + 10,
+	// 按字数估（和上下文用量圆环、压缩同一份），这里按字数写：段与段之间八处空行算系统提示词。
+	const chars = {
+		system: 40 + 4 + 16 + 8 + 2 * 8,
+		instructions: 80 + 12 + 5,
+		skills: 120 + 40,
 		toolDefs: 0,
 		user: 3,
-		injected: 2,
+		injected: 8,
 		assistant: 0,
 		toolResults: 0,
-	});
+	};
+	expect(Object.keys(parts).sort()).toEqual(Object.keys(chars).sort());
+	for (const [part, count] of Object.entries(chars)) expect(parts[part as keyof typeof parts], part).toBeCloseTo(count / 3.5);
 });
 
 it("缓存诊断：没量到前缀分不清，前缀没变是服务商，参数变了不归到服务商头上，没报过缓存的不计", () => {

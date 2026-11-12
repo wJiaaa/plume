@@ -10,7 +10,6 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { AgentEvent, ContextCompact, Plugin } from "@plume/contract";
 import { compactionTriggerTokens } from "../../../builtin/compaction/src/budget.ts";
-import { measureTotal } from "../../../builtin/compaction/src/tokens.ts";
 import { type Agent, createAgent } from "../src/index.ts";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";
@@ -119,7 +118,7 @@ function squeezeWhenIdle(times = Number.POSITIVE_INFINITY): Plugin {
 }
 
 function squeezed(input: ContextCompact): ContextCompact {
-	const used = measureTotal(input.request.messages).tokens;
+	const used = input.usage.tokens;
 	let window = used;
 	while (compactionTriggerTokens(window + 500) < used) window += 500;
 	// 触发线在 used 以下，窗口比 used 多出一份摘要回复再加分叉指令的位置。

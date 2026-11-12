@@ -81,7 +81,8 @@ it("有服务商的总数时各段按比例缩放，加起来正好是总数；�
 		segments: { messages: 100, tools: 300, mcpTools: 0, skills: 0, systemPrompt: 50, conventions: 50, memory: 0 },
 		memoryFiles: [],
 	};
-	const messages: Message[] = [reply(900, 100), reply(999, 0, { stopReason: "pending" })];
+	// 还在写的那条回复报的数不算；它还没写出字，估算也是 0。
+	const messages: Message[] = [reply(900, 100), reply(999, 0, { stopReason: "pending", content: [] })];
 	const breakdown = contextBreakdown(estimate, messages, 200_000);
 	expect(breakdown).toMatchObject({ limit: 200_000, used: 1000, measured: true });
 	expect(breakdown.segments).toEqual([
@@ -90,6 +91,19 @@ it("有服务商的总数时各段按比例缩放，加起来正好是总数；�
 		{ key: "systemPrompt", tokens: 100 },
 		{ key: "conventions", tokens: 100 },
 	]);
+});
+
+it("最近一条量过的回复之后进来的消息按估算加上：和压缩判断有多满用的是同一个数", () => {
+	const segments = { messages: 10, tools: 0, mcpTools: 0, skills: 0, systemPrompt: 0, conventions: 0, memory: 0 };
+	const result: Message = {
+		role: "toolResult",
+		toolCallId: "c",
+		toolName: "t",
+		content: [{ type: "text", text: "r".repeat(350) }],
+		isError: false,
+		timestamp: 0,
+	};
+	expect(contextBreakdown({ segments, memoryFiles: [] }, [reply(900, 100), result], 200_000)).toMatchObject({ used: 1100, measured: true });
 });
 
 it("还没有写完的回复时用估算，measured 为假", () => {

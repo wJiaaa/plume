@@ -273,7 +273,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 | `model.context` | 每次调模型前 | `ModelContext` → `ModelContext` | 原样返回 | 按段加、换、删系统提示词，裁剪或改写消息，隐藏工具；每层交接时宿主按 `sections` 重拼 `systemPrompt` | 这一轮结束，界面显示错误 |
 | `prompt.submit` | 每一轮开始，人的消息写进会话之前 | `PromptSubmit` → `PromptVerdict` | 放行 | 按内容拦下消息、给模型补上下文（会话开始时的说明、提交时的检查结果）、第一轮把会话挪进它自己的工作树（`cwd`） | 这一轮结束，界面显示错误，消息不写进会话 |
 | `step.end` | 每一步收尾，回复出错、被停下的那步除外 | `StepEnd` → `StepVerdict` | 本体的自然结论：有工具结果接着做；没有的截断了接着写、空回复催一句，否则结束；够到重复警告线时带一句提醒 | 换掉本体的续写和催促、以出错或卡住结束 | 按自然结论走，界面显示错误 |
-| `context.compact` | 每次发请求前（过完 `model.context`）；服务商说超长时再一次（`force`）；人敲 `/compact` 时（`force`、`manual`）；一轮干净收尾、有可分叉的主请求时（`idle`，宿主为它再经一遍 `model.context`） | `ContextCompact` → `CompactSummary` | 不压；紧挨着它的 plume.compaction 快满时先剪工具结果，不够再把较早的换成摘要 | 换一种压法（留多少、摘要怎么写、用什么模型） | 那一行写压缩失败，照常发全文 |
+| `context.compact` | 每次发请求前（过完 `model.context`）；服务商说超长时再一次（`force`）；人敲 `/compact` 时（`force`、`manual`）；一轮干净收尾、有可分叉的主请求时（`idle`，宿主为它再经一遍 `model.context`） | `ContextCompact` → `CompactSummary`；有多满（`usage`）和估 token 的算法（`estimate`）由本体给，和上下文用量圆环是同一份 | 不压；紧挨着它的 plume.compaction 快满时先剪工具结果，不够再把较早的换成摘要 | 换一种压法（留多少、摘要怎么写、用什么模型） | 那一行写压缩失败，照常发全文 |
 | `tool.approve` | 一个调用要问人时（工具的 `run.ask`、会改动的工具执行前、层的 `ask`） | `ToolApproval` → `ApprovalDecision` | 把审批卡弹给人、等人答；紧挨着它的 plume.approval 按帮我批准的风险规则放行（完全访问、`approved`、「以后不再问」本体已放行，到不了这里） | 放行自己的工具、按参数拒绝、换一套风险规则；提权只能拒绝，放行本体不认 | 这次调用以错误结果交给模型 |
 | `session.rewind` | 撤回、编辑重发要截掉一段对话前：先只演算（`restore: false`），人选了连文件一起退时在截断前再写回（`restore: true`）；只动对话时不问 | `SessionRewind` → `RevertPlan` | 没有要退回的 `{ files: [], unrecorded: false }`；plume.delivery 退回那段里文件工具记下了快照的改动 | 撤回时把插件自己记着的改动一起退回 | 演算失败时界面只问要不要撤回对话；写回失败时不截对话，插件的原话弹给人 |
 

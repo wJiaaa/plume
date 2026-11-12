@@ -581,6 +581,14 @@ export interface ContextCompact {
 	rewrittenAt?: number;
 	/** 这一次真正要发出去的请求（经过 model.context），量有多满用它。就是要发的那一份，只读，别改。 */
 	request: { systemPrompt: string; messages: Message[]; tools: ToolSpec[] };
+	/**
+	 * `request` 有多满，本体按和上下文用量圆环同一套算法算好：最近一条落定回复服务商量的数（整份请求，含系统提示词和工具表）加上它之后
+	 * 的消息的估算；`rewrittenAt` 之前（含）落定的回复不算。没有可用的时 `measured` 为假，`tokens` 是整份请求（系统提示词、工具表、
+	 * 消息）的估算。
+	 */
+	usage: { tokens: number; measured: boolean };
+	/** 本体估 token 的那一份算法，量一截历史、一段文字有多大（决定从哪切、摘要请求放不放得下）时用，不要自己再写一份。 */
+	estimate: TokenEstimate;
 	/** 服务商说超长了，或人敲了 `/compact`：不管量出来多满都该压。 */
 	force: boolean;
 	/** 人敲的 `/compact`：`instructions` 是命令后面的话（希望摘要保留的内容，可以是空串）。 */
@@ -598,6 +606,17 @@ export interface ContextCompact {
 	signal: AbortSignal;
 	/** 压缩走到哪一步了，界面上那一行跟着变：写摘要、等重试、摘要没拿到正在本地整理。 */
 	progress(event: CompactionProgress): void;
+}
+
+/**
+ * 本体按字数估 token（约 3.5 个字符一个，图片按定数）：中文和密集的 JSON 会低估，所以能用服务商量的数（`ContextCompact.usage`）就用它，
+ * 估算拿来补位、分比例、按比例校准。估出来的不取整，逐条、逐段估的可以直接相加。
+ */
+export interface TokenEstimate {
+	messages(messages: readonly Message[]): number;
+	text(text: string): number;
+	/** 工具表：名字、说明、参数表。 */
+	tools(tools: readonly ToolSpec[]): number;
 }
 
 /** `ContextCompact.progress` 的一步。 */

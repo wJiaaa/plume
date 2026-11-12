@@ -4,11 +4,13 @@
  * 在发请求、记账的那一刻算好存下，不事后从会话记录回放：发出去的那份请求（经过 model.context 各层、压缩之后）只有那一刻见过，
  * 系统提示词各段由插件拼，回放拿不到；记下来以后读使用统计就是一条 SQL。
  *
- * 构成按字数估比例，再把这次实际计费的输入（含缓存读写）按比例分下去，输出按思考和正文分，所以各部分加起来就是账单上的数。
+ * 构成按字数估比例（`token-estimate.ts`，和上下文用量圆环、压缩同一份），再把这次实际计费的输入（含缓存读写）按比例分下去，
+ * 输出按思考和正文分，所以各部分加起来就是账单上的数。
  */
 
 import type { AssistantMessage, Message, ModelContext, PromptSection, UsageCacheMissCause, UsageTokenPart } from "@plume/contract";
 import { requestUsage, type RequestPrefix } from "@plume/llm/types";
+import { blockTokens, textTokens, toolTokens } from "./token-estimate.ts";
 
 /** 送进去的按来源分的几类。系统提示词按段的类别（`PromptSection.category`）拆成前三类。 */
 const INPUT_PARTS = [
@@ -28,28 +30,15 @@ export const TOKEN_PARTS = [...INPUT_PARTS, "outputThinking", "outputReply"] as 
 /** 指令和记忆：人写的全局指令、项目里的指令文件、插件记下的记忆，每轮原样进提示词。按插件标的类别认（`PromptSection.category`）。 */
 const INSTRUCTION_CATEGORIES = new Set<PromptSection["category"]>(["instructions", "conventions", "memory"]);
 
-/** 图片按一个固定数算：各家算法不同，它在比例里只是一个量级。 */
-const IMAGE_TOKENS = 1600;
-
-/** 粗估：ASCII 四个字符一个 token，其余（中文等）一个字符一个。只拿来算比例。 */
-function estimateTokens(text: string): number {
-	let wide = 0;
-	for (let index = 0; index < text.length; index++) if (text.charCodeAt(index) > 0x7f) wide++;
-	return (text.length - wide) / 4 + wide;
-}
-
 function messagePart(message: Message): { part: "user" | "injected" | "assistant" | "toolResults"; tokens: number } {
 	if (message.role === "assistant") {
 		// 之前的思考块大多不回传给模型，不算。
 		let tokens = 0;
-		for (const block of message.content) {
-			if (block.type === "text") tokens += estimateTokens(block.text);
-			else if (block.type === "toolCall") tokens += estimateTokens(block.name) + estimateTokens(JSON.stringify(block.arguments ?? {}));
-		}
+		for (const block of message.content) if (block.type !== "thinking") tokens += blockTokens(block);
 		return { part: "assistant", tokens };
 	}
 	let tokens = 0;
-	for (const block of message.content) tokens += block.type === "text" ? estimateTokens(block.text) : IMAGE_TOKENS;
+	for (const block of message.content) tokens += blockTokens(block);
 	if (message.role === "toolResult") return { part: "toolResults", tokens };
 	return { part: message.synthetic ? "injected" : "user", tokens };
 }
@@ -59,7 +48,7 @@ export function estimateParts(context: Pick<ModelContext, "systemPrompt" | "sect
 	const parts: InputParts = { system: 0, instructions: 0, skills: 0, toolDefs: 0, user: 0, injected: 0, assistant: 0, toolResults: 0 };
 	let sectioned = 0;
 	for (const section of context.sections) {
-		const tokens = estimateTokens(section.text);
+		const tokens = textTokens(section.text);
 		sectioned += tokens;
 		if (INSTRUCTION_CATEGORIES.has(section.category)) parts.instructions += tokens;
 		// 能力目录：技能，和可以派的智能体、没放进工具表的工具这类按需取用的目录，按插件标的类别认。
@@ -67,8 +56,8 @@ export function estimateParts(context: Pick<ModelContext, "systemPrompt" | "sect
 		else parts.system += tokens;
 	}
 	// 段与段之间的空行，以及没拆成段的提示词，算系统提示词。
-	parts.system += Math.max(0, estimateTokens(context.systemPrompt) - sectioned);
-	if (context.tools.length > 0) parts.toolDefs = estimateTokens(JSON.stringify(context.tools));
+	parts.system += Math.max(0, textTokens(context.systemPrompt) - sectioned);
+	parts.toolDefs = toolTokens(context.tools);
 	for (const message of context.messages) {
 		const { part, tokens } = messagePart(message);
 		parts[part] += tokens;
@@ -179,7 +168,7 @@ export function billedParts(reply: AssistantMessage, parts: InputParts): Record<
 	if (usage.output > 0) {
 		let thinking = usage.reasoning ?? 0;
 		if (!thinking) {
-			const thought = reply.content.reduce((sum, block) => sum + (block.type === "thinking" ? estimateTokens(block.thinking) : 0), 0);
+			const thought = reply.content.reduce((sum, block) => sum + (block.type === "thinking" ? textTokens(block.thinking) : 0), 0);
 			const said = messagePart(reply).tokens;
 			thinking = thought + said > 0 ? (thought / (thought + said)) * usage.output : 0;
 		}
