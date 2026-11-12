@@ -3,9 +3,11 @@
  * 或按条丢弃时的一条说明。宿主把它原样存下，以后每次照发：前缀缓存和「重开会话后模型看到的和当时一样」都靠这个。
  */
 
-import type { AssistantMessage, Message, ToolKind } from "@plume/contract";
+import type { AssistantMessage, Message, TokenEstimate, ToolKind } from "@plume/contract";
 import { type CompactionContext, copyTaskContext, foldTaskContext, formatTaskContext, USER_WORDS_CHARS } from "./task-context.ts";
 
+/** 摘要头里中间那些请求的原话合计最多占窗口多少（按 token 算），见 `wordsBudget`。 */
+const SUMMARY_WORDS_SHARE = 0.05;
 /** 按条丢弃时，前面那条说明里用户原话的摘录合计最多占窗口多少，见 `droppedMessage`。 */
 const DROPPED_EXCERPT_SHARE = 0.15;
 /** 摘要里最多列几个文件——再多就从「一眼能扫完的清单」变成「又一段要读的正文」。 */
@@ -67,6 +69,7 @@ export function summaryMessages(
 	summary: string,
 	origin: ReplyOrigin,
 	model: { contextWindow: number },
+	estimate: TokenEstimate,
 	seen?: { read: string[]; changed: string[] },
 	taskContext?: CompactionContext,
 ): Message[] {
@@ -90,7 +93,7 @@ export function summaryMessages(
 		 * 上一次的摘要按标签原样取出来续写。
 		 */
 		`<session-summary>\n${summary}\n</session-summary>\n${SUMMARY_IS_RECORD}`,
-		taskContext ? formatTaskContext(taskContext, Math.min(USER_WORDS_CHARS, Math.floor(model.contextWindow * 0.05 * 3.5))) : null,
+		taskContext ? formatTaskContext(taskContext, Math.min(USER_WORDS_CHARS, wordsBudget(taskContext, model, estimate))) : null,
 		standing ? standingBlock(standing) : null,
 		seenBlock,
 		RECALL_NOTE,
@@ -116,6 +119,16 @@ export function summaryMessages(
 		timestamp: Date.now(),
 	};
 	return [head, acknowledgement];
+}
+
+/**
+ * 窗口的 `SUMMARY_WORDS_SHARE` 折成多少字给原话：原话按字截（`formatTaskContext`），预算按 token 定，按这些原话自己的密度（本体的估算）
+ * 折算。中文一字约一个 token，英文约 3.5 个字符一个；按英文的密度折，中文的原话会多占三倍多的窗口。
+ */
+function wordsBudget(context: CompactionContext, model: { contextWindow: number }, estimate: TokenEstimate): number {
+	const words = context.requests?.map((request) => request.text).join("") ?? "";
+	const perChar = words.length > 0 ? estimate.text(words) / words.length : 1;
+	return Math.floor((model.contextWindow * SUMMARY_WORDS_SHARE) / perChar);
 }
 
 function standingBlock(standing: string): string {

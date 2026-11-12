@@ -5,6 +5,7 @@
 import { expect, it } from "vitest";
 import type { Message } from "@plume/contract";
 import { compactIfNeeded } from "../src/compaction.ts";
+import { summaryMessages } from "../src/head.ts";
 import type { SummaryRequest } from "../src/models.ts";
 import { estimate, recorder, reply, request, say, textOf, toolResult, user } from "./helpers.ts";
 
@@ -133,4 +134,16 @@ it("独立摘要之后尾部又让出去的，在摘要里，不会两头都没�
 		.map((message) => /记号[MUBR]\d+/.exec(JSON.stringify(message))?.[0])
 		.filter((mark): mark is string => Boolean(mark) && !summarised.includes(mark!) && !kept.includes(mark!));
 	expect(lost).toEqual([]);
+});
+
+it("摘要头里中间那些请求的原话最多占窗口的 5%，按原话自己的密度折成字数：同样的字数，英文整条带上、中文截短", () => {
+	const context = (fill: string) => {
+		const requests = [1, 2, 3, 4, 5].map((ordinal) => ({ ordinal, text: fill.repeat(2000), timestamp: ordinal }));
+		return { requests, originalRequest: requests[0]!.text, latestRequest: requests[4]!.text };
+	};
+	const origin = { api: "anthropic-messages" as const, provider: "fake", model: "model" };
+	const head = (fill: string) => textOf(summaryMessages("摘要", origin, { contextWindow: 100_000 }, estimate, undefined, context(fill))[0]!);
+	// 中间三条各 2000 字：英文约 1700 个 token，在 5000 以内；中文 6000 个，超了。
+	expect(head("e")).not.toMatch(/\[Excerpt; use recall/);
+	expect(head("中")).toMatch(/\[Excerpt; use recall/);
 });

@@ -251,7 +251,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			if (at < start) retired.add(messages[at] as Message);
 			else tailCost += costs[at] as number;
 		}
-		const withHead = () => summaryMessages(text, origin, model, retired.files(), retired.taskContext());
+		const withHead = () => summaryMessages(text, origin, model, estimate, retired.files(), retired.taskContext());
 		const weight = (head: Message[]) => (estimate.messages(head) + tailCost) * scale;
 		let head = withHead();
 		while (weight(head) > target && messages.length - start > 1) {
