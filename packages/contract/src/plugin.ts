@@ -170,18 +170,20 @@ export interface ToolRun {
 export interface BackgroundChannel {
 	/**
 	 * 送一段给模型读的话，可以送多次。给函数时到真要送出那一刻才取：返回 `undefined` 就不送了（这期间模型已经自己读过）。
-	 * `delivery` 给界面把这条送达画成对话里的一行（「后台命令完成」），不是一个人发的气泡。渠道已作废时返回 false。
+	 * `delivery` 给界面把这条送达画成对话里的一行（「后台命令完成」），不是一个人发的气泡，见 `DeliveryInput`。渠道已作废时返回 false。
 	 */
-	report(text: string | (() => string | undefined), delivery?: ChannelDelivery): boolean;
+	report(text: string | (() => string | undefined), delivery?: DeliveryInput): boolean;
 	/** 渠道作废时触发。 */
 	readonly signal: AbortSignal;
 }
 
 /**
- * `BackgroundChannel.report` 在对话里画的那一行：后台命令结束、监视送来一批输出（`job`），定时唤醒到点（`wakeup`）。
- * 宿主只留这几个字段、拷一份；`session` 那一行只由宿主在交回时写，插件写不了。
+ * 一份后台结果在对话里画成的那一行，`BackgroundChannel.report`、`ReportOptions.delivery`、`LaunchedSession.reportBack` 给的都是它。
+ * 宿主只留这几个字段、拷一份（`details` 要能存成 JSON），记下是哪个插件交的（`DeliveredReport.plugin`），那一行交给这个插件经
+ * `ui.agentDelivery` 登记的组件画，没登记就画成宿主默认的一行（`title` 和收场）。`sessionId`（点了去哪个会话）插件写不了，
+ * 只有新会话交回时宿主填上。
  */
-export type ChannelDelivery = Omit<DeliveredReport, "kind" | "plugin" | "incomplete"> & { kind: "job" | "wakeup" };
+export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "incomplete" | "inline" | "details">;
 
 /**
  * 一封信写什么（`ToolRun.letter`）。字段的意思见 `PeerLetter`：`from` 是发件方的地址，收件方回信时原样当作收件人；
@@ -803,11 +805,8 @@ export interface SessionRun {
 export interface ReportOptions {
 	/** 和本插件同一次送达里别的几份合成一段，见 `ReportFrame`。 */
 	frame?: ReportFrame;
-	/**
-	 * 给界面把这份结果画成对话里的一行（「消息来自 @explore」），不是一个人发的气泡。不带 `kind`：那一行由本插件经
-	 * `ui.agentDelivery` 画（宿主记下是哪个插件交的）。不给就只有模型看得到。
-	 */
-	delivery?: Omit<DeliveredReport, "kind" | "command" | "exitCode" | "monitor" | "plugin">;
+	/** 给界面把这份结果画成对话里的一行（「消息来自 @explore」），不是一个人发的气泡，见 `DeliveryInput`。不给就只有模型看得到。 */
+	delivery?: DeliveryInput;
 }
 
 /**
@@ -861,12 +860,13 @@ export interface LaunchedSession {
 	idle: Promise<LaunchedIdle>;
 	/**
 	 * 把它做出来的结果交回开出它的那个会话（`spawnedFrom`），只能交一次：`text` 是写给模型的话，作为一条运行时送达写进那个会话
-	 * （前面带着「不是用户说的话」的抬头），界面上画成「来自新会话 · 标题」一行，点了到这个会话；`status` 是它做成了没有。
+	 * （前面带着「不是用户说的话」的抬头）；`delivery` 是对话里那一行（见 `DeliveryInput`），宿主给它填上这个会话的 id
+	 * （`DeliveredReport.sessionId`），默认画成「来自新会话 · 标题」，点了到这个会话。
 	 * 那个会话闲着（人按停过也算，这是一件新的事）就为它开一轮，忙着在两步之间读到。
 	 * 没有 `spawnedFrom`、那个会话删了或归档了、已经交过、正在退出时不送，返回 false。
 	 * `spawnedFrom.toolCallId` 不是本插件的工具在那个会话里的一次调用（或撤回时被截掉了）、插件已经停用时抛错。
 	 */
-	reportBack(text: string, status: "done" | "failed"): boolean;
+	reportBack(text: string, delivery: DeliveryInput): boolean;
 }
 
 /** `LaunchedSession.idle` 兑现时的样子。 */

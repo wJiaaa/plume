@@ -64,7 +64,8 @@ export class Followers {
 			if (!stop || !this.entries.has(id) || stop.reason === "aborted") return;
 			const status = stop.reason === "done" ? "done" : "failed";
 			const title = (await this.deps.title(id)) || options.title;
-			launched.reportBack(reportText({ sessionId: id, title, status, reply }), status);
+			// 对话里那一行由宿主画成「来自新会话 · 标题」，点了到这个会话（宿主填它的 id）。
+			launched.reportBack(reportText({ sessionId: id, title, status, reply }), { id, title, status });
 		};
 		// i18n-exempt：日志
 		void report().catch((error: unknown) => this.deps.warn(`新会话 ${id} 没交回去：${String(error)}`));

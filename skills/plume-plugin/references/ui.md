@@ -565,8 +565,8 @@ apply(ui) {
 
 - `ui.sessionToolbar(id, Component)` 在有会话的标题栏放局部控件，收到 `{ session }`；新会话不画，不能接管标题与布局。使用 `IconButton`，停用自动撤下。
 - `ui.sessionMenuItem(id, { label, icon?, run })` 在会话操作菜单加一项。`run` 收到被点的会话摘要，异步操作固定使用它的 id，不跟随焦点；报错由宿主提示。同插件同 id 替换。
-- `ui.deliveryAction("job", (sessionId, id) => ...)` 接后台送达行的查看入口，只在人点击时调用。后注册的生效，撤下恢复前一个；不改变送达或命令状态。
-- `ui.agentDelivery(Component)` 画本插件的子会话交回的那一行（`ctx.sessions.report` 带了 `delivery` 的）：收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给，画成一行（子 Agent 的「消息来自 @explore」，用 `FlowRow`）。宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下，没登记时不画，组件出错时只丢这一行。
+- `ui.jobViewer((sessionId, jobId) => ...)` 登记后台任务（服务 `background.jobs` 列出的那些）的查看入口，只在人点击时调用；后登记的生效，撤下恢复前一个，不改变送达或命令状态。画后台任务那一行的插件用 `ui.useJobViewer()` 拿到它（没人登记时是 `undefined`，那一行就不给点）：两边都不用知道对方是谁。
+- `ui.agentDelivery(Component)` 画本插件交回的结果在对话里的那一行（`ctx.sessions.report`、`channel.report`、`reportBack` 带了 `delivery` 的）：收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给（连着几次只带 `inline` 的送达并成一次），画成一行（子 Agent 的「消息来自 @explore」、plume.tools 的「后台命令完成」，用 `FlowRow`）。每份的 `details` 是你交的时候给的自己的数据，宿主不读，原样带回来。宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下；没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（新会话交回）画成「来自新会话」、点了过去；组件出错时只丢这一行。
 - `ui.ProjectOpener` 以 `{ path }` 显示目录的打开方式，复用文件预览的默认应用与选择菜单；只有用户点击才调用系统打开。
 - `ui.environmentSection(id, Component, { label, order?, attention? })` 往环境卡片里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。没东西时返回 null。order 排进卡片自己的几节之间：打开方式 0、后台任务 10、子 Agent 20、计划 30、定时唤醒 50、侧边聊天 70、压缩记录 85、引用 90。卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。`attention` 是一个 React hook（规则同 hook），这一节有事等人回来决定时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时，标题栏的环境开关上挂一个圆点，这句话接在开关的说明后面。只为「等人决定」，不为「有东西在跑」。例子：内置的 `plume.spawn-session` 用 40 放「建议的新会话」，还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」。
 - `ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`、`label`、`order`、已包好错误边界的 `component`），按 order 排好。

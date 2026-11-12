@@ -281,7 +281,7 @@ test("收尾那句后面还跟着这一轮的调用时，页脚单独成一行�
 });
 
 test("一轮中间说完的一句后面插进送达时标 pauses，有自己的页脚；后面跟着调用、页脚另起一行时不留", () => {
-	const delivery = (id: string) => user("", { synthetic: true, delivery: [{ id, agent: "explore", description: "看看", status: "done" }] } as never);
+	const delivery = (id: string) => user("", { synthetic: true, delivery: [{ id, plugin: "plume.subagents", title: "看看", status: "done" }] } as never);
 	const messages: Message[] = [
 		user("go"),
 		reply([text("派出去了"), call("a", "task")]),
@@ -420,7 +420,7 @@ test("MCP 的工具不分服务器合成一段；mcp_call 只和自己接", () =
 });
 
 const jobDelivery = (id: string, status: "done" | "failed" = "done") =>
-	user("", { synthetic: true, delivery: [{ id, kind: "job", agent: "", description: id, status }] } as never);
+	user("", { synthetic: true, delivery: [{ id, plugin: "plume.tools", title: id, status, inline: true }] } as never);
 const describe = (items: ReturnType<typeof turnBlocks>[number]["items"]) =>
 	items.map((item) =>
 		item.kind === "step"
@@ -442,7 +442,7 @@ test("一段读、跑、改的活中间回来的后台命令结果挂在这一�
 		result("c", "edit"),
 		reply([text("改好了")], "stop"),
 	];
-	assert.deepEqual(describe(turnBlocks(runs(messages))[1]!.items), ["step:a,b,job,c", "message"]);
+	assert.deepEqual(describe(turnBlocks(runs(messages))[1]!.items), ["step:a,b,delivery,c", "message"]);
 });
 
 test("说完话、清单后面、这一轮已经停了时回来的结果自己一行，挨着的几份并成一行", () => {
@@ -457,8 +457,8 @@ test("说完话、清单后面、这一轮已经停了时回来的结果自己�
 	// 最后那条回复已经停了（被按停）：结果是把会话叫醒了，不是插在这段活中间。
 	const stopped = turnBlocks(runs([user("go"), reply([call("a", "read")], "aborted"), result("a", "read"), jobDelivery("j4")]));
 	assert.deepEqual(describe(stopped[1]!.items), ["step:a", "jobs:j4"]);
-	// 子会话交回的结果不挂：接下来那段话是就着它说的。
-	const agent = user("", { synthetic: true, delivery: [{ id: "s1", agent: "explore", description: "看看", status: "done" }] } as never);
+	// 不标 `inline` 的（子会话交回的结果）不挂：接下来那段话是就着它说的。
+	const agent = user("", { synthetic: true, delivery: [{ id: "s1", plugin: "plume.subagents", title: "看看", status: "done" }] } as never);
 	const returned = turnBlocks(runs([user("go"), reply([call("a", "read")]), result("a", "read"), agent]));
 	assert.deepEqual(describe(returned[1]!.items), ["step:a", "jobs:s1"]);
 });

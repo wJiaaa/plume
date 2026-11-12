@@ -112,7 +112,7 @@ function StepGroup({
 	const failed =
 		statuses.includes("error") ||
 		step.members.some(
-			(member) => member.kind === "job" && member.run.message.role === "user" && member.run.message.delivery?.some((report) => report.status === "failed"),
+			(member) => member.kind === "delivery" && member.run.message.role === "user" && member.run.message.delivery?.some((report) => report.status === "failed"),
 		);
 
 	/*

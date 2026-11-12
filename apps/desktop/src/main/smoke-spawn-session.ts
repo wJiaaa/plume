@@ -161,7 +161,7 @@ export async function checkSpawnSession(options: {
 		await until(`document.querySelector('[data-screen=chat] [data-spawn-suggestion=started]') !== null`, "卡片缩成一行「新会话」");
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') === null`, "开始以后圆点撤下");
 
-		const delivery = "[data-screen=chat] [data-delivery-kind=session]";
+		const delivery = "[data-screen=chat] [data-delivery-row][data-delivery-session]";
 		await until(
 			`document.querySelector(${JSON.stringify(delivery)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`,
 			"原对话里有「来自新会话」那一行",

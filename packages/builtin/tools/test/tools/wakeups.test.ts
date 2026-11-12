@@ -6,7 +6,7 @@
 process.env.TZ = "Asia/Shanghai";
 
 import { expect, it } from "vitest";
-import type { BackgroundChannel, DeliveredReport } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput } from "@plume/contract";
 import { nextCronTime, parseCron } from "../../src/tools/cron.ts";
 import { CRON_MAX_AGE_MS, MAX_WAKEUPS, SessionWakeups, cronListTool, scheduleWakeupTool, type WakeupClock } from "../../src/tools/wakeups.ts";
 
@@ -52,8 +52,8 @@ function fakeClock(start = START) {
 /** 送达渠道：攒着报上来的，`take` 是会话真把它读进去的那一刻。 */
 function fakeChannel() {
 	const controller = new AbortController();
-	const queued: { text: () => string | undefined; delivery?: DeliveredReport }[] = [];
-	const sent: { text: string; delivery?: DeliveredReport }[] = [];
+	const queued: { text: () => string | undefined; delivery?: DeliveryInput }[] = [];
+	const sent: { text: string; delivery?: DeliveryInput }[] = [];
 	const channel: BackgroundChannel = {
 		signal: controller.signal,
 		report(text, delivery) {
@@ -105,7 +105,7 @@ it("一次性唤醒：到点送一次，带着 id 和理由，送完就从表里
 	h.clock.advance(1);
 	h.take();
 	expect(h.sent).toHaveLength(1);
-	expect(h.sent[0]!.delivery).toEqual({ id: wakeup.id, kind: "wakeup", agent: "", description: "等 PR 482 的 CI", status: "done" });
+	expect(h.sent[0]!.delivery).toEqual({ id: wakeup.id, title: "等 PR 482 的 CI", status: "done", details: { kind: "wakeup" } });
 	expect(h.sent[0]!.text).toMatch(new RegExp(`schedule_wakeup.*id="${wakeup.id}".*等 PR 482 的 CI`));
 	expect(h.sent[0]!.text).toMatch(/一次性的，之后不会再唤醒你/);
 	expect(h.sent[0]!.text).toMatch(/<wakeup id="wake-1">\n看 CI 结果\n<\/wakeup>/);

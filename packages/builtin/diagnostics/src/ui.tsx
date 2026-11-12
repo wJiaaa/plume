@@ -145,6 +145,6 @@ export default {
 				runtime.openTrace(session.id);
 			},
 		});
-		ui.deliveryAction("job", runtime.openJob);
+		ui.jobViewer(runtime.openJob);
 	},
 } satisfies UiPlugin;

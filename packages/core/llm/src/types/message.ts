@@ -374,36 +374,29 @@ export interface UserMessage {
 	attachments?: MessageAttachment[];
 }
 
-/** 送达消息里的一份报告是谁的、怎么收场的。 */
+/**
+ * 送达消息里的一份：谁交的、说的是什么事、怎么收场的。界面画成对话里的一行，不是一个人发的气泡；
+ * 怎么画由交它的插件定，宿主只认这几个通用字段。
+ */
 export interface DeliveredReport {
-	/** 登记簿里的 id；后台命令是它的任务 id。 */
+	/** 交它的那一方定的 id（子代理的任务 id、后台命令的任务 id……），界面拿它找回自己那一份。 */
 	id: string;
-	/**
-	 * 后台命令结束了，而不是子代理跑完了。这时 `agent` 为空，`description` 是模型起任务时写的那句
-	 * 说明（没写就是命令本身），`command` 是完整命令，`exitCode` 为 null 表示被信号终止。
-	 */
-	kind?: "job" | "session" | "wakeup";
-	/*
-	 * `session`：一个从建议卡片上开出来的会话交回了第一轮的回复。`id` 是那个会话的 id，`description` 是它的
-	 * 标题，`agent` 为空。
-	 *
-	 * `wakeup`：模型自己安排的定时唤醒到点了（`session-wakeups.ts`）。`id` 是那个任务的 id，`description`
-	 * 是给人看的那句（唤醒的理由，cron 的 prompt 第一行），`command` 是 cron 表达式，一次性唤醒没有。
-	 */
-	command?: string;
-	exitCode?: number | null;
-	agent: string;
-	description: string;
+	/** 交这份的插件，宿主照实填：界面交给它登记的那一行画，导出时按 `title` 写。 */
+	plugin: string;
+	/** 一句话说是什么事；没人接管时界面的默认那一行、导出的 Markdown 都写它。 */
+	title: string;
 	status: "done" | "failed" | "aborted";
 	/** 没做完就停下了（检查点、原地打转、上游出错）——报告是阶段性的。 */
 	incomplete?: boolean;
-	/** 不带 `kind` 时：交回这份的插件，宿主照实填，界面交给这个插件登记的那一行（`ui.agentDelivery`）画。 */
-	plugin?: string;
+	/** 点了去哪个会话。只有宿主写得出：新会话交回开出它的会话时（`LaunchedSession.reportBack`）填它的 id。 */
+	sessionId?: string;
 	/**
-	 * `kind` 为 `job` 时，这不是命令结束，是 `monitor` 送来的一批新输出：`lines` 行，`exitCode` 不设。
-	 * 达到上限自己停了的，最后一批带着 `stopped`。
+	 * 插在一轮中间、并进正在做的那段活里，挨着的几份并成一行：后台命令的结果——放到后台的那次调用当场就跑完了，
+	 * 结果单独一行等于把同一件事说两遍。不带的照旧自己一行：接下来那段话是就着它说的。
 	 */
-	monitor?: { lines: number; stopped?: "max_events" | "idle" };
+	inline?: boolean;
+	/** 交它的插件自己的数据，宿主不读，原样留着给它画那一行。 */
+	details?: unknown;
 }
 
 /**

@@ -1,6 +1,7 @@
 /** 给人读的会话导出：保留正文和工具摘要，省略思考与普通工具输出；附件只列名称，不读取或复制内容。 */
 import type { AssistantMessage, CompactionMark, Message, SessionSummary, UserMessage } from "@plume/contract";
 
+import { DELIVERED_HEADER } from "./background.ts";
 import { text, type TextKey } from "./i18n.ts";
 
 type ExportKey = Extract<TextKey, `export.${string}`> extends `export.${infer Key}` ? Key : never;
@@ -156,30 +157,21 @@ function attachmentNames(message: UserMessage, t: Translate): string[] {
 	return names;
 }
 
-const REPORT = /^<(subagent_result|session_result)\b[^>]*>\n([\s\S]*)\n<\/\1>$/;
+/**
+ * 一条运行时送达：宿主自己的外壳——每份按通用字段写一行（`title` 和收场），下面引出送给模型的原文。各份怎么写、带什么标签
+ * 是交它的插件的事，这里不拆；宿主自己的抬头（`DELIVERED_HEADER`）不是正文，不写。
+ */
 function delivered(message: UserMessage, t: Translate): string[] {
-	const out: string[] = [];
-	const reports = { subagent_result: [] as string[], session_result: [] as string[] };
-	for (const block of message.content) {
-		const match = block.type === "text" ? REPORT.exec(block.text.trim()) : null;
-		if (match) reports[match[1] as keyof typeof reports].push(match[2]!.trim());
-	}
-	let agents = 0;
-	let sessions = 0;
-	for (const report of message.delivery ?? []) {
-		if (report.kind === "job") {
-			const key = !report.monitor ? "job" : report.monitor.stopped ? "monitorStopped" : "monitor";
-			out.push(`- ${t(key, { command: escapeInline(report.description || report.command || ""), n: report.monitor?.lines ?? 0 })}`);
-		} else if (report.kind === "wakeup") out.push(`- ${t("wakeup", { reason: escapeInline(report.description) })}`);
-		else {
-			const text = report.kind === "session" ? reports.session_result[sessions++] : reports.subagent_result[agents++];
-			out.push(
-				`### ${report.kind === "session" ? t("session", { title: escapeInline(report.description) }) : t("agent", { agent: escapeInline(report.agent || "agent"), task: escapeInline(report.description) })}`,
-			);
-			if (text) out.push(quote(text));
-		}
-	}
-	return out;
+	const lines = (message.delivery ?? []).map((report) => {
+		const outcome = report.status === "failed" ? t("failed") : report.status === "aborted" ? t("aborted") : report.incomplete ? t("incomplete") : "";
+		return `- ${escapeInline(report.title.replace(/\s+/g, " ").trim() || report.id)}${outcome}`;
+	});
+	const words = message.content
+		.flatMap((block) => (block.type === "text" ? [block.text] : []))
+		.join("\n\n")
+		.trim();
+	const body = (words.startsWith(DELIVERED_HEADER) ? words.slice(DELIVERED_HEADER.length) : words).trim();
+	return [`### ${t("delivered")}`, lines.join("\n"), ...(body ? [quote(body)] : [])];
 }
 
 function restated(block: AssistantMessage["content"][number], content: AssistantMessage["content"]): boolean {

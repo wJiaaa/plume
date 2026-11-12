@@ -9,6 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { commandShell } from "@plume/platform";
+import type { DeliveryDetails } from "../delivery.ts";
 import { escalationDeclined, escalationHint, ESCALATION_TARGETS, escalationTarget, sandboxDenialMarker, validateEscalationArgs } from "../escalation.ts";
 import { words } from "../messages.ts";
 import { isReadOnlyCommand } from "../read-only-command.ts";
@@ -407,12 +408,10 @@ function reportEnd(job: BackgroundJob, jobs: BackgroundJobs): void {
 		},
 		{
 			id: job.id,
-			kind: "job",
-			agent: "",
-			description: job.description || job.command,
-			command: job.command,
-			exitCode: job.exitCode,
+			title: job.description || job.command,
 			status: job.status === "failed" ? "failed" : "done",
+			inline: true,
+			details: { kind: "job", command: job.command, exitCode: job.exitCode } satisfies DeliveryDetails,
 		},
 	);
 }

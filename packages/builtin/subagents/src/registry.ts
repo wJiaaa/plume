@@ -3,7 +3,7 @@ import type { AgentDefinition } from "./agents.ts";
 import type { AgentCatalog, SubagentsApi } from "./api.ts";
 import type { AgentDefinitions, AgentRecord, AgentSave } from "./definitions.ts";
 import { atCheckpoint, completed, latestTodos, openSegment, planDemand, SALVAGE_STEPS, segmentRounds, type Segment } from "./checkpoint.ts";
-import { DELIVERY_HEAD, deliveryBlock, deliveryTail } from "./delivery.ts";
+import { DELIVERY_HEAD, deliveryBlock, deliveryTail, type DeliveryDetails } from "./delivery.ts";
 import { MESSAGES } from "./messages.ts";
 import { Store } from "./store.ts";
 import { isActive, lastProse, type Dispatch, type Face, type ModelChoice, type TaskRecord } from "./types.ts";
@@ -426,10 +426,10 @@ export class Registry implements SubagentsApi {
 			// 对话里那一行「消息来自 @谁」：点了翻到面板里它那一页，所以 id 是任务的 id。
 			delivery: {
 				id: task.id,
-				agent: task.agent,
-				description: task.description,
+				title: task.description,
 				status: task.state === "failed" ? "failed" : "done",
 				...(task.incomplete ? { incomplete: true } : {}),
+				details: { agent: task.agent } satisfies DeliveryDetails,
 			},
 		});
 		this.changed();

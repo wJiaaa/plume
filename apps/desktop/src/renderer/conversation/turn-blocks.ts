@@ -33,8 +33,8 @@ export interface TurnBlock {
 type TurnItem = { kind: "run"; key: string; run: Run } | { kind: "step"; key: string; step: Step };
 
 /**
- * 一段连着做的活，连同夹在中间、跟在后面的推理——画出来是一行。插在这样一段中间回来的后台命令结果挂在这一段上（`job`，
- * 见 `jobReturn`），不另起一行。
+ * 一段连着做的活，连同夹在中间、跟在后面的推理——画出来是一行。插在这样一段中间回来的后台命令结果挂在这一段上（`delivery`，
+ * 见 `inlineReturn`），不另起一行。
  *
  * 推理落在哪一段就算哪一段，放下就不再挪：挂在一段活后面的推理就是那一段的，下一次调用换了一类也不跟过去——
  * 跟过去的话上一行的「思考 N 次」会少一次，数往回跳。前面还没有活的推理（一轮开头、说完一句话之后）等下一次调用，
@@ -49,7 +49,7 @@ export interface Step {
 	members: StepMember[];
 }
 
-export type StepMember = { kind: "call"; call: Call } | { kind: "thinking" | "job"; run: MessageRun };
+export type StepMember = { kind: "call"; call: Call } | { kind: "thinking" | "delivery"; run: MessageRun };
 
 /**
  * 一段活有没有要重画的东西——`WorkStep` 的 memo 比较。分块每次转录变了都整个重做，不比内容的话，
@@ -111,7 +111,7 @@ export function thinkingLive(run: MessageRun): boolean {
  */
 const MERGES = new Set(["explore", "terminal", "files"]);
 
-/** 这一类是不是读、跑、改、插件起名的那几类活：它们互相接成一段，后台命令的结果挂得上来（`jobReturn`）。 */
+/** 这一类是不是读、跑、改、插件起名的那几类活：它们互相接成一段，后台命令的结果挂得上来（`inlineReturn`）。 */
 function merges(category: string): boolean {
 	return MERGES.has(category) || isPluginGroup(category);
 }
@@ -136,26 +136,26 @@ function joins(step: Step, category: string): boolean {
 }
 
 /**
- * 插在一轮中间、只带着后台命令结果的送达。
+ * 插在一轮中间、每份都标着 `inline` 的送达（后台命令的结果这样标，由交它的插件定，见 `DeliveredReport.inline`）。
  *
  * 回来时正在做的是 `MERGES` 那一段，就挂在它上面：放到后台的那次 `bash` 当场就以「已放到后台」跑完了，结果单独一行等于
  * 把同一条命令说两遍，还把这一段切成两截。别的时候（刚说完话、在清单这类调用后面、这一轮已经停了）照旧自己一行：挂到问人、
- * 清单那一行上就成了不相干的两件事，等下一次调用再挂又会先冒一行再收走。子会话交回的结果、定时唤醒、别的会话的信不在此列：
- * 接下来那段话是就着它们说的。
+ * 清单那一行上就成了不相干的两件事，等下一次调用再挂又会先冒一行再收走。不标的（子会话交回的结果、定时唤醒）、别的会话的信
+ * 不在此列：接下来那段话是就着它们说的。
  */
-function jobReturn(run: Run): run is MessageRun {
+function inlineReturn(run: Run): run is MessageRun {
 	if (run.kind !== "message" || run.message.role !== "user" || !run.message.synthetic || run.message.peer?.length) return false;
 	const reports = run.message.delivery ?? [];
-	return reports.length > 0 && reports.every((report) => report.kind === "job");
+	return reports.length > 0 && reports.every((report) => report.inline === true);
 }
 
-/** 只带后台命令结果的那条送达里的几条结果；别的 run 是 `null`。 */
-function jobsOf(run: Run): DeliveredReport[] | null {
-	return jobReturn(run) && run.message.role === "user" ? (run.message.delivery ?? []) : null;
+/** 只带 `inline` 结果的那条送达里的几条结果；别的 run 是 `null`。 */
+function inlineOf(run: Run): DeliveredReport[] | null {
+	return inlineReturn(run) && run.message.role === "user" ? (run.message.delivery ?? []) : null;
 }
 
 /** 这条送达再添上几条结果。是一份新的 run：原来那条还是转录里的那条。 */
-function withJobs(run: Run, more: DeliveredReport[]): Run {
+function withDelivery(run: Run, more: DeliveredReport[]): Run {
 	if (run.kind !== "message" || run.message.role !== "user") return run;
 	return { ...run, message: { ...run.message, delivery: [...(run.message.delivery ?? []), ...more] } };
 }
@@ -253,7 +253,7 @@ function itemsOf(body: Run[]): TurnItem[] {
 				const before = thoughts.map((thought) => ({ kind: "thinking" as const, run: thought }));
 				thoughts = [];
 				if (step && joins(step, category)) {
-					// 清单开的头、接着来了活：这一段从此是那一类活，后台命令的结果也挂得上来（`jobReturn`）。
+					// 清单开的头、接着来了活：这一段从此是那一类活，后台命令的结果也挂得上来（`inlineReturn`）。
 					if (step.category === TODO) step.category = category;
 					step.calls.push(call);
 					step.members.push(...before, { kind: "call", call });
@@ -269,17 +269,17 @@ function itemsOf(body: Run[]): TurnItem[] {
 			else thoughts.push(run);
 			continue;
 		}
-		if (step && merges(step.category) && stillWorking(step) && jobReturn(run)) {
-			step.members.push({ kind: "job", run });
+		if (step && merges(step.category) && stillWorking(step) && inlineReturn(run)) {
+			step.members.push({ kind: "delivery", run });
 			continue;
 		}
 		settle();
 		step = null;
 		const last = items[items.length - 1];
-		// 挨着自己一行的后台命令结果并成一行（`DeliveryRow` 本来就会说「N 个后台命令结束」），key 跟第一条走。
-		const jobs = jobsOf(run);
-		if (jobs && last?.kind === "run" && jobsOf(last.run)) {
-			last.run = withJobs(last.run, jobs);
+		// 挨着自己一行的 `inline` 结果并成一行（交它的插件一次拿到几份，「N 个后台命令结束」），key 跟第一条走。
+		const more = inlineOf(run);
+		if (more && last?.kind === "run" && inlineOf(last.run)) {
+			last.run = withDelivery(last.run, more);
 			continue;
 		}
 		items.push({ kind: "run", key: runKey(run), run });

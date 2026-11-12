@@ -149,14 +149,15 @@ async function withSuggestion(replies: FakeReply[]) {
 	return { ...opened, source };
 }
 
-it("reportBack 把结果交回开出它的会话：画成「来自新会话」的送达，叫起那个会话一轮，只交一次", async () => {
+it("reportBack 把结果交回开出它的会话：送达那一行带着新会话的 id（插件给的不算），叫起那个会话一轮，只交一次", async () => {
 	const { service, sessions, source } = await withSuggestion([{ text: "新会话做完了" }, { text: "收到交回的结果" }]);
 	const launched = await sessions().launch({ cwd: dir, message: "去做", title: "清理死代码", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
 	expect(await launched.idle).toEqual({ stop: { reason: "done" }, reply: "新会话做完了" });
 	// 人按停过的会话也为交回开一轮：这是一件新的事。
 	service.stop(source.id);
-	expect(launched.reportBack("它说：做完了", "failed")).toBe(true);
-	expect(launched.reportBack("再交一次", "done")).toBe(false);
+	const line = { id: "suggestion-1", title: "清理死代码", status: "failed" as const };
+	expect(launched.reportBack("它说：做完了", { ...line, sessionId: "somewhere-else" } as typeof line)).toBe(true);
+	expect(launched.reportBack("再交一次", { ...line, status: "done" })).toBe(false);
 	await vi.waitFor(
 		async () => {
 			const view = await service.getSession(source.id);
@@ -169,45 +170,47 @@ it("reportBack 把结果交回开出它的会话：画成「来自新会话」�
 	expect(delivered).toMatchObject({
 		role: "user",
 		synthetic: true,
-		delivery: [{ id: launched.session.id, kind: "session", agent: "", description: "清理死代码", status: "failed" }],
+		delivery: [{ ...line, plugin: "test.launcher", sessionId: launched.session.id }],
 	});
 	const words = JSON.stringify(delivered?.content);
 	expect(words).toContain("不是用户说的话");
 	expect(words).toContain("它说：做完了");
 });
 
+const done = { id: "r", title: "结果", status: "done" as const };
+
 it("reportBack 只认本插件工具的调用当来处：填别的会话、别的调用 id 抛错，停用以后也抛错", async () => {
 	const { service, sessions, source } = await withSuggestion([{ text: "a" }, { text: "b" }]);
 	const other = await service.createSession({ cwd: dir });
 	const forged = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: other.id, toolCallId: "call_1" } });
 	await forged.idle;
-	expect(() => forged.reportBack("结果", "done")).toThrow("不是本插件的工具");
+	expect(() => forged.reportBack("结果", done)).toThrow("不是本插件的工具");
 	const legit = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
 	await legit.idle;
 	await service.setPluginEnabled("test.launcher", false);
-	expect(() => legit.reportBack("结果", "done")).toThrow("已停用");
+	expect(() => legit.reportBack("结果", done)).toThrow("已停用");
 	expect((await service.getSession(other.id)).messages).toEqual([]);
 });
 
-it("reportBack 不送：没有来处、来处归档了或删了，空话和不认识的 status 抛错", async () => {
+it("reportBack 不送：没有来处、来处归档了或删了，空话和没给那一行抛错", async () => {
 	const { service, sessions } = await open([{ text: "a" }, { text: "b" }, { text: "c" }]);
 	const plain = await sessions().launch({ cwd: dir, message: "做" });
 	await plain.done;
-	expect(plain.reportBack("结果", "done")).toBe(false);
+	expect(plain.reportBack("结果", done)).toBe(false);
 
 	const archived = await service.createSession({ cwd: dir });
 	const fromArchived = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: archived.id } });
 	await fromArchived.done;
 	await sessions().setArchived(archived.id, true);
-	expect(() => fromArchived.reportBack("  ", "done")).toThrow("消息不能为空");
-	expect(() => fromArchived.reportBack("结果", "aborted" as "done")).toThrow("done 或 failed");
-	expect(fromArchived.reportBack("结果", "done")).toBe(false);
+	expect(() => fromArchived.reportBack("  ", done)).toThrow("消息不能为空");
+	expect(() => fromArchived.reportBack("结果", "done" as never)).toThrow("要是一个对象");
+	expect(fromArchived.reportBack("结果", done)).toBe(false);
 
 	const deleted = await service.createSession({ cwd: dir });
 	const fromDeleted = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: deleted.id } });
 	await fromDeleted.done;
 	await service.deleteSession(deleted.id);
-	expect(fromDeleted.reportBack("结果", "done")).toBe(false);
+	expect(fromDeleted.reportBack("结果", done)).toBe(false);
 	expect((await service.getSession(archived.id)).messages).toEqual([]);
 });
 

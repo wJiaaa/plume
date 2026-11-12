@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { BackgroundChannel, DeliveredReport, SandboxProcess, SandboxService } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, SandboxProcess, SandboxService } from "@plume/contract";
 import { backgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool } from "../../src/tools/bash.ts";
 import { monitorTool } from "../../src/tools/monitor.ts";
@@ -33,7 +33,7 @@ function fakeProcess(): FakeProcess {
 
 interface Sent {
 	text: string | (() => string | undefined);
-	delivery?: DeliveredReport;
+	delivery?: DeliveryInput;
 }
 
 function fakeChannel() {
@@ -97,12 +97,10 @@ it("第一行之后等一秒凑齐同一阵；说明里写清怎么送、怎么�
 	expect(channel.sent).toHaveLength(1);
 	expect(channel.sent[0]!.delivery).toEqual({
 		id,
-		kind: "job",
-		agent: "",
-		description: "tail -f app.log",
-		command: "tail -f app.log",
+		title: "tail -f app.log",
 		status: "done",
-		monitor: { lines: 2 },
+		inline: true,
+		details: { kind: "job", command: "tail -f app.log", monitor: { lines: 2 } },
 	});
 	expect(channel.take(0)).toContain(`<monitor_events id="${id}" command="tail -f app.log" lines="2" status="running">\nfirst\nsecond\n</monitor_events>`);
 });
@@ -127,7 +125,7 @@ it("满了 max_events 当场送最后一批、说明为什么停，进程停掉�
 	const id = await start({ max_events: 3, description: "盯着日志" });
 	process.print("1\n2\n3\n4\n");
 	expect(channel.sent).toHaveLength(1);
-	expect(channel.sent[0]!.delivery).toMatchObject({ description: "盯着日志", monitor: { lines: 3, stopped: "max_events" } });
+	expect(channel.sent[0]!.delivery).toMatchObject({ title: "盯着日志", details: { monitor: { lines: 3, stopped: "max_events" } } });
 	const text = channel.take(0)!;
 	expect(text).toContain('lines="3" status="stopped">\n1\n2\n3\n[监视已停止：输出满了 max_events 的 3 行，进程已结束]');
 	expect(process.kills).toEqual(["SIGTERM"]);
@@ -145,7 +143,7 @@ it("太久没输出就自己停，最后一批只说为什么停", async () => {
 	expect(channel.sent).toHaveLength(0);
 	await vi.advanceTimersByTimeAsync(1);
 	expect(channel.sent).toHaveLength(1);
-	expect(channel.sent[0]!.delivery?.monitor).toEqual({ lines: 0, stopped: "idle" });
+	expect(channel.sent[0]!.delivery?.details).toMatchObject({ monitor: { lines: 0, stopped: "idle" } });
 	expect(channel.take(0)).toContain('lines="0" status="stopped">\n[监视已停止：5 秒没有新输出（idle_timeout），进程已结束]');
 	expect(process.kills).toEqual(["SIGTERM"]);
 });
@@ -174,8 +172,8 @@ it("自己结束的命令和别的后台任务一样送一次结束，带上上�
 	process.print("bye\n");
 	process.exit(0);
 	expect(channel.sent).toHaveLength(2);
-	expect(channel.sent[1]!.delivery).toMatchObject({ id, kind: "job", exitCode: 0, status: "done" });
-	expect(channel.sent[1]!.delivery?.monitor).toBeUndefined();
+	expect(channel.sent[1]!.delivery).toMatchObject({ id, status: "done", details: { kind: "job", exitCode: 0 } });
+	expect(channel.sent[1]!.delivery?.details).not.toHaveProperty("monitor");
 	expect(channel.take(1)).toContain(`<background_job id="${id}" command="tail -f app.log" status="exited with code 0">\nbye\n\n</background_job>`);
 });
 

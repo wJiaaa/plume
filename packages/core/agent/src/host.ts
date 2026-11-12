@@ -684,9 +684,9 @@ export class PluginHost {
 					return {
 						...launched,
 						// 停用、重载以后不再替它交回：交回会给来处开一轮，那是一个已经不在的插件的意思。
-						reportBack: (words, status) => {
+						reportBack: (words, delivery) => {
 							live();
-							return launched.reportBack(words, status);
+							return launched.reportBack(words, delivery);
 						},
 					};
 				},

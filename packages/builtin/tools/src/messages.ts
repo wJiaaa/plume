@@ -30,6 +30,18 @@ const zhCN = {
 	changeBackground: "命令仍在后台运行，文件差异会在进程结束后记录。",
 	changeObserveFailed: "无法安全读取 Git 工作区。",
 	wakeupsCancelled: (n: number) => `已停止，${n} 个定时唤醒一并取消。`,
+	jobDone: "后台命令完成",
+	jobFailed: "后台命令失败",
+	jobExitCode: (code: number) => `退出码 ${code}`,
+	jobKilled: "被终止",
+	jobsEnded: (n: number) => `${n} 个后台命令结束`,
+	jobsFailed: (n: number) => `${n} 个失败`,
+	monitorLines: (n: number) => `监视到 ${n} 行新输出`,
+	monitorStopped: "监视已停止",
+	monitorIdle: "长时间没有输出",
+	monitorMaxEvents: "达到行数上限",
+	jobsUpdated: (n: number) => `${n} 个后台命令有新输出`,
+	wakeupFired: "定时唤醒",
 };
 
 const en: typeof zhCN = {
@@ -60,9 +72,22 @@ const en: typeof zhCN = {
 	changeBackground: "The command is still running in the background. File changes will be recorded when the process exits.",
 	changeObserveFailed: "The Git workspace could not be read safely.",
 	wakeupsCancelled: (n) => (n === 1 ? `Stopped. ${n} scheduled wakeup was cancelled too.` : `Stopped. ${n} scheduled wakeups were cancelled too.`),
+	jobDone: "Background command done",
+	jobFailed: "Background command failed",
+	jobExitCode: (code) => `exit code ${code}`,
+	jobKilled: "killed",
+	jobsEnded: (n) => (n === 1 ? `${n} background command ended` : `${n} background commands ended`),
+	jobsFailed: (n) => `${n} failed`,
+	monitorLines: (n) => (n === 1 ? `${n} new line from a monitor` : `${n} new lines from a monitor`),
+	monitorStopped: "Monitor stopped",
+	monitorIdle: "no output for a while",
+	monitorMaxEvents: "line limit reached",
+	jobsUpdated: (n) => (n === 1 ? `New output from ${n} background command` : `New output from ${n} background commands`),
+	wakeupFired: "Scheduled wakeup",
 };
 
-const MESSAGES: Record<Locale, typeof zhCN> = { "zh-CN": zhCN, en };
+/** 界面入口按 `useI18n().resolvedLocale` 取；逻辑入口用 `words()`。 */
+export const MESSAGES: Record<Locale, typeof zhCN> = { "zh-CN": zhCN, en };
 
 /** 现在的界面语言，插件加载时换成 `ctx.locale`；测试里直接调工具时是中文。 */
 let locale: () => Locale = () => "zh-CN";

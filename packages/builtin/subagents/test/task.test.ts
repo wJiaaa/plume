@@ -224,7 +224,7 @@ test("task immediately returns an ID; persists final report before delivery", as
 	f.finish(0, "done", "src/a.ts:12");
 	await until(() => f.reports.length === 1);
 	assert.match(f.reports[0]!.text, /src\/a.ts:12/);
-	assert.deepEqual(f.reports[0]!.delivery, { id: f.api().list("main")[0]!.id, agent: "explore", description: "Find entry", status: "done" });
+	assert.deepEqual(f.reports[0]!.delivery, { id: f.api().list("main")[0]!.id, title: "Find entry", status: "done", details: { agent: "explore" } });
 	assert.equal(f.api().list("main")[0]!.answer, "src/a.ts:12");
 });
 

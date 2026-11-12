@@ -17,7 +17,8 @@
  * 说明写给模型，用英文，和别的工具一致；到点送进去的那条消息是运行时送达，不是人说的话。
  */
 
-import type { BackgroundChannel, ChannelDelivery, SessionWakeup } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, SessionWakeup } from "@plume/contract";
+import type { DeliveryDetails } from "../delivery.ts";
 import { nextCronTime, parseCron, type CronSchedule } from "./cron.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
@@ -90,7 +91,7 @@ function wakeupLabel(wakeup: Pick<SessionWakeup, "reason" | "prompt">): string {
  * 模型不知道这是最后一次，就会接着等一个不会再来的唤醒；不知道还会再来，就会自己再排一个，一件事被盯两遍。
  * `next` 是下一次触发，null 表示这是最后一次；`skipped` 是上一次送达之后因为那一轮还没结束而跳过的次数。
  */
-function wakeupMessage(wakeup: SessionWakeup, info: { next: number | null; skipped: number }): { text: string; delivery: ChannelDelivery } {
+function wakeupMessage(wakeup: SessionWakeup, info: { next: number | null; skipped: number }): { text: string; delivery: DeliveryInput } {
 	// i18n-exempt：送给模型的运行时消息。
 	const lead =
 		wakeup.kind === "wakeup"
@@ -110,7 +111,12 @@ function wakeupMessage(wakeup: SessionWakeup, info: { next: number | null; skipp
 			: `下一次在 ${localTime(info.next)}；它在 ${localTime(wakeup.expiresAt ?? info.next)} 过期，之后不再触发。要等的事办完了就用 cron_delete 删掉它，不要让它空转。`;
 	return {
 		text: `${[lead, own, skipped, after].filter(Boolean).join("")}\n\n<wakeup id="${wakeup.id}">\n${wakeup.prompt}\n</wakeup>`,
-		delivery: { id: wakeup.id, kind: "wakeup", agent: "", description: wakeupLabel(wakeup), status: "done", ...(wakeup.cron ? { command: wakeup.cron } : {}) },
+		delivery: {
+			id: wakeup.id,
+			title: wakeupLabel(wakeup),
+			status: "done",
+			details: { kind: "wakeup", ...(wakeup.cron ? { cron: wakeup.cron } : {}) } satisfies DeliveryDetails,
+		},
 	};
 }
 

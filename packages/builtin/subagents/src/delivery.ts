@@ -5,6 +5,11 @@
 
 import type { TaskRecord } from "./types.ts";
 
+/** 对话里那一行（`DeliveredReport.details`）带的：哪个子智能体交的。宿主不读，界面入口拿它找脸。 */
+export interface DeliveryDetails {
+	agent: string;
+}
+
 type Delivered = Pick<TaskRecord, "id" | "agent" | "description" | "state" | "answer" | "error" | "incomplete">;
 
 /** 标签属性里的值：引号换掉，换行压平，免得一句描述把标签撑破。 */

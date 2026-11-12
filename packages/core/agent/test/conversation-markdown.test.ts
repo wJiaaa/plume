@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import type { AssistantMessage, CompactionMark, Message, SessionSummary, ToolResultMessage, UserMessage } from "@plume/contract";
+import { DELIVERED_HEADER } from "../src/background.ts";
 import { conversationMarkdown } from "../src/conversation-markdown.ts";
 
 const summary: SessionSummary = { id: "a", title: "修登录", cwd: "/work/app", createdAt: 1, updatedAt: 2, running: false, kind: "top" };
@@ -212,19 +213,20 @@ it("同步 task 只引用成功结论，不导出失败结果、后台派发确�
 	expect(md).not.toMatch(/PRIVATE|工具结果|<details>/);
 });
 
-it("异步送达仍引用子智能体结论，运行时包装不当成人说的话", () => {
+it("运行时送达套宿主自己的外壳：每份按标题和收场写一行，下面引出送给模型的原文，宿主的抬头不写", () => {
 	const md = markdown([
 		user("", {
 			synthetic: true,
-			delivery: [{ id: "s", agent: "explore", description: "查引用", status: "done" }],
-			content: [
-				{ type: "text", text: "RUNTIME WRAPPER" },
-				{ type: "text", text: '<subagent_result id="s">\n结论二\n\n- b.ts\n</subagent_result>' },
+			delivery: [
+				{ id: "s", plugin: "plume.subagents", title: "查引用", status: "done", details: { agent: "explore" } },
+				{ id: "j", plugin: "plume.tools", title: "npm test", status: "failed", inline: true },
+				{ id: "k", plugin: "plume.tools", title: "部署", status: "done", incomplete: true },
 			],
+			content: [{ type: "text", text: `${DELIVERED_HEADER}\n\n<subagent_result id="s">\n结论二\n</subagent_result>` }],
 		}),
 	]);
-	expect(md).toContain("### 子智能体 explore 的结论：查引用\n\n> 结论二\n>\n> - b.ts");
-	expect(md).not.toMatch(/RUNTIME WRAPPER|subagent_result|## 用户/);
+	expect(md).toContain('### 后台送达\n\n- 查引用\n- npm test（失败）\n- 部署（没做完）\n\n> <subagent_result id="s">\n> 结论二\n> </subagent_result>');
+	expect(md).not.toMatch(/运行时送达|## 用户|explore/);
 });
 
 it("插件工具的说法由注册它的插件给（describe），没给时写工具名；本体不认插件的工具名", () => {

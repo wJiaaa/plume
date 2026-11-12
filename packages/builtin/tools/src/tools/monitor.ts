@@ -8,6 +8,7 @@
  * 所以行要凑成批、批与批隔开、每批有上限，说明里叫模型在命令里先滤一遍。下面的数就是这笔预算，各自写着在为什么付钱。
  */
 
+import type { DeliveryDetails } from "../delivery.ts";
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
 import { attribute, authorizeCommand, launchJob, markJobRead } from "./bash.ts";
 import { errorResult } from "./result.ts";
@@ -177,12 +178,14 @@ function follow(job: BackgroundJob, process: SandboxProcess, jobs: BackgroundJob
 		 */
 		channel.report(() => (selfStopped || !jobs.wasStopped(job.id) ? monitorBlock(job, batch) : undefined), {
 			id: job.id,
-			kind: "job",
-			agent: "",
-			description: job.description || job.command,
-			command: job.command,
+			title: job.description || job.command,
 			status: "done",
-			monitor: { lines: batch.lines, ...(stopped ? { stopped: stopped.reason } : {}) },
+			inline: true,
+			details: {
+				kind: "job",
+				command: job.command,
+				monitor: { lines: batch.lines, ...(stopped ? { stopped: stopped.reason } : {}) },
+			} satisfies DeliveryDetails,
 		});
 	};
 	const schedule = () => {

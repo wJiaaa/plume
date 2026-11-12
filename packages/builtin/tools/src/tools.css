@@ -1,0 +1,7 @@
+/* 对话里本插件那一行的图标：不被挤窄；失败时只染图标。 */
+.plume-tools-icon {
+	flex-shrink: 0;
+}
+.plume-tools-danger {
+	color: var(--plume-danger);
+}

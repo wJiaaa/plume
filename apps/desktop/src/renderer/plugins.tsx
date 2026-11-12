@@ -615,7 +615,7 @@ let conversationCards: ConversationCardEntry[] = [];
 
 const sessionToolbar = new Map<string, Entry<{ session: SessionView }>[]>();
 let sessionMenuItems: Array<{ key: string; plugin: string; item: Parameters<UiContext["sessionMenuItem"]>[1] }> = [];
-let deliveryActions: Array<{ plugin: string; kind: "job"; run: Parameters<UiContext["deliveryAction"]>[1] }> = [];
+let jobViewers: Array<{ plugin: string; view: Parameters<UiContext["jobViewer"]>[0] }> = [];
 let agentDeliveries: Array<{ plugin: string; component: ComponentType<AgentDeliveryProps> }> = [];
 
 export function SessionToolbar({ session }: { session: SessionView }) {
@@ -658,27 +658,31 @@ export function SessionMenuItems({ session, onClose }: { session: SessionView["s
 	);
 }
 
-export function useDeliveryAction(kind: "job") {
+/** 后台任务的查看入口（`ui.jobViewer`）：后登记的生效，撤下恢复前一个。 */
+function useJobViewer(): Parameters<UiContext["jobViewer"]>[0] | undefined {
 	usePluginUis();
-	return deliveryActions.findLast((entry) => entry.kind === kind)?.run;
+	return jobViewers.at(-1)?.view;
 }
 
 /**
- * 子会话交回的那一行（`ui.agentDelivery`）：按交回它的插件（`DeliveredReport.plugin`）分开，各交给那个插件登记的组件；
- * 那个插件没登记（停用了）时不画。插件的组件出错时也不画，不拖垮整段转录。
+ * 交给插件画的那几份（`ui.agentDelivery`）：按交它的插件（`DeliveredReport.plugin`）分开，各交给那个插件登记的组件。
+ * 插件的组件出错时不画，不拖垮整段转录。
  */
-export function AgentDeliverySlot({ sessionId, reports }: AgentDeliveryProps) {
+export function AgentDeliverySlot({ sessionId, reports, plugin }: AgentDeliveryProps & { plugin: string }) {
 	const version = usePluginRegistrations();
-	const plugins = [...new Set(reports.flatMap((report) => (report.plugin ? [report.plugin] : [])))];
-	return plugins.map((plugin) => {
-		const entry = agentDeliveries.find((each) => each.plugin === plugin);
-		if (!entry) return null;
-		return (
-			<Isolated key={`${version}:${plugin}`} plugin={plugin}>
-				<entry.component sessionId={sessionId} reports={reports.filter((report) => report.plugin === plugin)} />
-			</Isolated>
-		);
-	});
+	const entry = agentDeliveries.find((each) => each.plugin === plugin);
+	if (!entry) return null;
+	return (
+		<Isolated key={`${version}:${plugin}`} plugin={plugin}>
+			<entry.component sessionId={sessionId} reports={reports} />
+		</Isolated>
+	);
+}
+
+/** 这个插件登记了自己的送达行（`ui.agentDelivery`）；没登记、停用了的，送达画成宿主默认的一行。 */
+export function useDeliveryPlugins(): ReadonlySet<string> {
+	usePluginRegistrations();
+	return new Set(agentDeliveries.map((entry) => entry.plugin));
 }
 
 function registerConversationCard(plugin: string, id: unknown, component: unknown, options: unknown): void {
@@ -1408,10 +1412,11 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			const key = `${name}/${id}`;
 			sessionMenuItems = [...sessionMenuItems.filter((entry) => entry.key !== key), { key, plugin: name, item }];
 		},
-		deliveryAction: (kind, run) => {
-			if (kind !== "job" || typeof run !== "function") throw new Error("Invalid deliveryAction");
-			deliveryActions = [...deliveryActions.filter((entry) => entry.plugin !== name || entry.kind !== kind), { plugin: name, kind, run }];
+		jobViewer: (view) => {
+			if (typeof view !== "function") throw new Error("Invalid jobViewer");
+			jobViewers = [...jobViewers.filter((entry) => entry.plugin !== name), { plugin: name, view }];
 		},
+		useJobViewer,
 		agentDelivery: (component) => {
 			if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error("Invalid agentDelivery");
 			agentDeliveries = [...agentDeliveries.filter((entry) => entry.plugin !== name), { plugin: name, component }];
@@ -1610,7 +1615,7 @@ function unloadPluginUi(name: string): void {
 	environmentSections = environmentSections.filter((entry) => !entry.key.startsWith(`${name}/`));
 	for (const [key, entries] of sessionToolbar) if (entries.some((entry) => entry.plugin === name)) sessionToolbar.delete(key);
 	sessionMenuItems = sessionMenuItems.filter((entry) => entry.plugin !== name);
-	deliveryActions = deliveryActions.filter((entry) => entry.plugin !== name);
+	jobViewers = jobViewers.filter((entry) => entry.plugin !== name);
 	agentDeliveries = agentDeliveries.filter((entry) => entry.plugin !== name);
 	turnFooters = turnFooters.filter((entry) => entry.plugin !== name);
 	replyActions = replyActions.filter((entry) => entry.plugin !== name);

@@ -71,8 +71,8 @@ export interface ToolScope {
 	started(toolCallId: string): void;
 	/** 执行中的输出：记下最新的一份，按节奏推给界面；`undefined` 表示这个调用跑完了。 */
 	progress(toolCallId: string, output: string | undefined, push: boolean): void;
-	/** `toolCallId` 那次调用把后台结果送回这个会话的渠道（`ToolRun.background`）；子会话没有。 */
-	background?(toolCallId: string): BackgroundChannel;
+	/** `plugin` 的工具在 `toolCallId` 那次调用把后台结果送回这个会话的渠道（`ToolRun.background`）；子会话没有。 */
+	background?(plugin: string, toolCallId: string): BackgroundChannel;
 	/** 注册这个工具的插件给另一个顶层会话寄信（`ToolRun.letter`）；子会话没有。 */
 	letter?(plugin: string, to: string, letter: LetterInput): LetterReceipt;
 	/** 这一轮以完成收场后归档这个会话（`ToolRun.archiveAfterTurn`）；子会话没有。 */
@@ -334,7 +334,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				tools: () => scope.host.toolOwners(),
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),
 				...(input.readOnly ? { readOnly: true } : {}),
-				...(scope.background ? { background: () => scope.background!(call.id) } : {}),
+				...(scope.background ? { background: () => scope.background!(tool.plugin, call.id) } : {}),
 				...(scope.letter
 					? {
 							letter: (to: string, letter: LetterInput) => {

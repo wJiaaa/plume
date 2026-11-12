@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { BackgroundChannel, DeliveredReport, SandboxService } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, SandboxService } from "@plume/contract";
 import { backgroundJobs, disposeBackgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool, bashTool } from "../../src/tools/bash.ts";
 import { readTool } from "../../src/tools/read.ts";
@@ -142,7 +142,7 @@ it("停下这一轮时命令被杀，结果说是停下的", async () => {
 /** 记下送了什么的假渠道；`take` 是宿主送出那一刻取的那份。 */
 function fakeChannel() {
 	const controller = new AbortController();
-	const sent: { text: string | (() => string | undefined); delivery?: DeliveredReport }[] = [];
+	const sent: { text: string | (() => string | undefined); delivery?: DeliveryInput }[] = [];
 	const channel: BackgroundChannel = {
 		signal: controller.signal,
 		report: (text, delivery) => {
@@ -171,7 +171,13 @@ it("有送达渠道时，后台任务自己结束就把退出状态和没读过�
 	);
 	await ended(context, id);
 	expect(sent).toHaveLength(1);
-	expect(sent[0]!.delivery).toEqual({ id, kind: "job", agent: "", description: "跑一下", command: "echo done; exit 2", exitCode: 2, status: "failed" });
+	expect(sent[0]!.delivery).toEqual({
+		id,
+		title: "跑一下",
+		status: "failed",
+		inline: true,
+		details: { kind: "job", command: "echo done; exit 2", exitCode: 2 },
+	});
 	expect(take(0)).toBe(
 		"你之前放到后台的命令结束了。下面是它的退出状态和你上次读取之后的输出，不用再拿 bash_output 去查：\n\n" +
 			`<background_job id="${id}" command="echo done; exit 2" status="exited with code 2">\ndone\n\n</background_job>`,

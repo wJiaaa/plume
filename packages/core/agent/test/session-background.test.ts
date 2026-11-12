@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import type { BackgroundChannel, ChannelDelivery, Message, Plugin, PluginContext, SessionAccess, SessionRun } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, Message, Plugin, PluginContext, SessionAccess, SessionRun } from "@plume/contract";
 import { createAgent, type Agent } from "../src/agent.ts";
 import { fakeAnthropic, type FakeModel, type FakeReply } from "../src/testing.ts";
 
@@ -116,12 +116,13 @@ it("同一插件带 frame 的几份合成一段：开头一次、各份正文、
 	await owner.wait(two.id);
 	let tails = 0;
 	const frame = (tail: string) => ({ head: "HEAD", tail: () => (tails++, tail) });
-	const delivery = { id: "task-one", agent: "explore", description: "查一下", status: "done" as const, incomplete: true };
-	expect(await owner.report(one.id, "RESULT_ONE", { frame: frame("TAIL_ONE"), delivery })).toBe(true);
+	const delivery = { id: "task-one", title: "查一下", status: "done" as const, incomplete: true, details: { agent: "explore" } };
+	// 插件给的 sessionId（点了跳去哪个会话）丢掉：只有新会话交回时宿主写得出。
+	expect(await owner.report(one.id, "RESULT_ONE", { frame: frame("TAIL_ONE"), delivery: { ...delivery, sessionId: parent.id } as DeliveryInput })).toBe(true);
 	expect(await owner.report(two.id, "RESULT_TWO", { frame: frame("TAIL_TWO") })).toBe(true);
 	await done(parent.id, 1);
 	const message = (await service.getSession(parent.id)).messages[0]!;
-	expect(message).toMatchObject({ synthetic: true, delivery: [delivery] });
+	expect(message.role === "user" && message.delivery).toEqual([{ ...delivery, plugin: "test.owner" }]);
 	const text = words(message);
 	expect(text).toContain("HEAD\n\nRESULT_ONE\n\nRESULT_TWO\n\nTAIL_TWO");
 	expect(text.match(/HEAD/g)).toHaveLength(1);
@@ -661,7 +662,7 @@ function channelTools(ctx: PluginContext, kept: Array<BackgroundChannel | null>)
 	});
 }
 
-const jobDelivery: ChannelDelivery = { id: "job-1", kind: "job", agent: "", description: "跑测试", command: "pnpm test", exitCode: 0, status: "done" };
+const jobDelivery: DeliveryInput = { id: "job-1", title: "跑测试", status: "done", inline: true, details: { command: "pnpm test", exitCode: 0 } };
 
 it("工具的后台渠道：会话闲着时聚合后开一轮，送达带界面那一行，抬头说明不是用户的话", async () => {
 	const kept: Array<BackgroundChannel | null> = [];
@@ -673,15 +674,16 @@ it("工具的后台渠道：会话闲着时聚合后开一轮，送达带界面�
 	await done(parent.id, 2);
 	const channel = kept[0]!;
 	expect(channel.signal.aborted).toBe(false);
-	expect(channel.report("JOB_ONE", { ...jobDelivery, extra: "不认得的字段" } as ChannelDelivery)).toBe(true);
-	// 冒充「新会话交回」那一行（点了会跳去别的会话）不行：渠道只画后台命令和定时唤醒。
-	expect(
-		channel.report(() => "JOB_LAZY", { id: "other-session", kind: "session", agent: "", description: "假的", status: "done" } as unknown as ChannelDelivery),
-	).toBe(true);
+	expect(channel.report("JOB_ONE", { ...jobDelivery, extra: "不认得的字段" } as DeliveryInput)).toBe(true);
+	// 冒充「新会话交回」那一行（点了会跳去别的会话）不行：插件给的 sessionId 丢掉，界面画的是交它的插件的那一行。
+	expect(channel.report(() => "JOB_LAZY", { id: "lazy", title: "假的", status: "done", sessionId: "other-session" } as DeliveryInput)).toBe(true);
 	await done(parent.id, 3);
 	const delivered = (await service.getSession(parent.id)).messages[4]!;
 	expect(delivered).toMatchObject({ role: "user", synthetic: true });
-	expect(delivered.role === "user" && delivered.delivery).toEqual([jobDelivery]);
+	expect(delivered.role === "user" && delivered.delivery).toEqual([
+		{ ...jobDelivery, plugin: "test.owner" },
+		{ id: "lazy", title: "假的", status: "done", plugin: "test.owner" },
+	]);
 	expect(words(delivered)).toContain("不是用户说的话");
 	expect(words(delivered)).toContain("JOB_ONE\n\nJOB_LAZY");
 	expect(model?.requests).toHaveLength(3);

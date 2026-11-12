@@ -53,13 +53,13 @@ function deferred<T>() {
 function launched(id: string) {
 	const done = deferred<TurnStop>();
 	const idle = deferred<LaunchedIdle>();
-	const reports: Array<{ text: string; status: string }> = [];
+	const reports: Array<{ text: string; status: string; title: string }> = [];
 	const session: LaunchedSession = {
 		session: { id } as LaunchedSession["session"],
 		done: done.promise,
 		idle: idle.promise,
-		reportBack(text, status) {
-			reports.push({ text, status });
+		reportBack(text, delivery) {
+			reports.push({ text, status: delivery.status, title: delivery.title });
 			return true;
 		},
 	};
@@ -90,6 +90,7 @@ it("交回：等第一轮结束、再等闲下来，送最后那一轮的话，�
 	expect(one.reports[0]!.status).toBe("failed");
 	expect(one.reports[0]!.text).toContain("最后的结论");
 	expect(one.reports[0]!.text).toContain('title="起好的标题"');
+	expect(one.reports[0]!.title).toBe("起好的标题");
 });
 
 it("不交：没要求的、被人停下的、会话删掉了的；第一轮结束以后改不了主意", async () => {

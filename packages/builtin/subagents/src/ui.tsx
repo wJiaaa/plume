@@ -33,6 +33,7 @@ import {
 } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type { SubagentsApi } from "./api.ts";
+import type { DeliveryDetails } from "./delivery.ts";
 import { callCount, elapsed, ordered } from "./format.ts";
 import { fill, MESSAGES } from "./messages.ts";
 import { AgentsSection, connectSettings } from "./settings.tsx";
@@ -172,11 +173,12 @@ function AgentDelivery({ sessionId, reports }: AgentDeliveryProps) {
 	const avatars = useAvatars(sessionId);
 	const roster = useRoster(sessionId);
 	if (reports.length === 0) return null;
+	const agentOf = (report: DeliveredReport) => (report.details as DeliveryDetails | undefined)?.agent ?? "";
 	const one = reports.length === 1 ? reports[0] : undefined;
 	const failed = reports.filter((report) => report.status === "failed").length;
 	const outcome = (report: DeliveredReport) => (report.status === "failed" ? text.returnFailed : report.incomplete ? text.returnPartial : text.returnDone);
 	const tip = reports
-		.map((report) => fill(text.returnTip, { name: report.description || report.agent, agent: report.agent, outcome: outcome(report) }))
+		.map((report) => fill(text.returnTip, { name: report.title || agentOf(report), agent: agentOf(report), outcome: outcome(report) }))
 		.join("\n");
 	const first = roster.tasks.find((task) => task.id === reports[0]!.id);
 	return (
@@ -184,18 +186,18 @@ function AgentDelivery({ sessionId, reports }: AgentDeliveryProps) {
 			<FlowRow
 				icon={
 					one ? (
-						<AgentAvatar avatar={avatarOf(avatars, one.agent)} size={14} mood={returnMood(one)} seed={one.agent} host="[data-plume-avatar-host]" />
+						<AgentAvatar avatar={avatarOf(avatars, agentOf(one))} size={14} mood={returnMood(one)} seed={agentOf(one)} host="[data-plume-avatar-host]" />
 					) : (
 						<AvatarPile
-							faces={reports.map((report) => ({ key: report.id, avatar: avatarOf(avatars, report.agent), mood: returnMood(report), seed: report.agent }))}
+							faces={reports.map((report) => ({ key: report.id, avatar: avatarOf(avatars, agentOf(report)), mood: returnMood(report), seed: agentOf(report) }))}
 							size={14}
 							max={4}
 						/>
 					)
 				}
 				// 装的是名字，和来信那一行一样不加粗。
-				title={<span className="subagents-plain">{one ? fill(text.fromOne, { agent: one.agent }) : fill(text.fromMany, { n: reports.length })}</span>}
-				summary={one ? one.description : reports.map((report) => `@${report.agent}`).join(" · ")}
+				title={<span className="subagents-plain">{one ? fill(text.fromOne, { agent: agentOf(one) }) : fill(text.fromMany, { n: reports.length })}</span>}
+				summary={one ? one.title : reports.map((report) => `@${agentOf(report)}`).join(" · ")}
 				trailing={
 					<>
 						{failed > 0 && <Text tone="danger">{one ? text.returnFailed : fill(text.returnFailedCount, { n: failed })}</Text>}

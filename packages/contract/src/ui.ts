@@ -424,7 +424,7 @@ export interface ComposerAboveProps {
 	session: SessionView;
 }
 
-/** `ui.agentDelivery` 的组件收到的：送达所在的会话，和这一次送达里本插件的子会话交回的几份。 */
+/** `ui.agentDelivery` 的组件收到的：送达所在的会话，和这一次送达里本插件交的几份（连着的几次只带 `inline` 的送达并成一次）。 */
 export interface AgentDeliveryProps {
 	sessionId: string;
 	reports: DeliveredReport[];
@@ -860,11 +860,17 @@ export interface UiContext {
 		id: string,
 		item: { label: LocalizedText; icon?: ComponentType<{ size?: number }>; run(session: SessionSummary): void | Promise<void> },
 	): void;
-	/** 运行时送达行的查看入口；后注册者生效，停用时恢复前一个。 */
-	deliveryAction(kind: "job", run: (sessionId: string, id: string) => void): void;
 	/**
-	 * 本插件的子会话交回的结果（`ctx.sessions.report` 带了 `delivery` 的）在对话里画成哪一行：一次送达里本插件交的几份一起交给它，
-	 * 画成一行。只画自己交的那几份，别的插件交的由它们自己登记的组件画；同一插件再登记换掉前一个，停用时撤下，没登记时不画。
+	 * 后台任务（服务 `background.jobs` 列出的那些）的查看入口：人点了对话里某个后台任务那一行时打开它。后注册者生效，停用时恢复前一个。
+	 * 画那一行的插件经 `useJobViewer` 拿到它，两边都不用知道对方是谁。
+	 */
+	jobViewer(view: (sessionId: string, jobId: string) => void): void;
+	/** 现在生效的后台任务查看入口，没人登记时是 `undefined`（那一行就不给点）；登记换了跟着重画。 */
+	useJobViewer(): ((sessionId: string, jobId: string) => void) | undefined;
+	/**
+	 * 本插件交回的结果（`ctx.sessions.report`、`BackgroundChannel.report`、`LaunchedSession.reportBack` 带了 `delivery` 的）在对话里
+	 * 画成哪一行：一次送达里本插件交的几份一起交给它。只画自己交的那几份，别的插件交的由它们自己登记的组件画；同一插件再登记换掉前一个，
+	 * 停用时撤下。没登记（或停用了）时宿主按 `DeliveredReport` 的通用字段画默认的一行。
 	 */
 	agentDelivery(component: ComponentType<AgentDeliveryProps>): void;
 	/** 当前项目的系统打开方式；复用文件预览的默认目标和菜单。 */
