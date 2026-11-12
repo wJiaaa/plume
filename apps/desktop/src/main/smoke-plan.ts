@@ -21,6 +21,7 @@ const PLAN_ON = "Plan mode is on";
  *
  * 1. 新对话里点输入框底下的计划模式开关，发第一句话，开关跟着建出来的会话；假模型先试 `edit`，被拒（「Plan mode: it edits files」），
  *    文件不变，再交计划：输入框上方出现计划卡（运行行说在等回答、卡上没有「允许一次」），右栏自动打开计划面板。
+ *    卡在右栏开着（窄）和收起（宽）时，主按钮都不被单独挤到第二行；后面几张卡也量一次。
  * 2. 点「修改…」写意见、修订：模型收到的是没批准和这句意见，开关还开着，它改完再交；这一次点「拒绝」：这一轮停下，开关不动。
  * 3. 权限切到完全访问再发一句：`edit` 照样被拒，命令跑在只读沙箱里写不出文件，申请离开沙箱的被拒；计划卡照样出来、停着不被自动放行。
  *    点「接受」：卡收起、开关关掉，同一轮里模型接着读、改 hello.txt，改成了；模型收到的批准结果说计划模式已关。
@@ -66,6 +67,24 @@ export async function checkPlan(options: {
 		await until(`document.querySelector('[data-plan-body]')?.textContent.includes(${JSON.stringify(title)}) === true`, `${label}：右栏的计划面板读的是这份`);
 		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-region] button')].some(button => button.textContent.includes('允许一次'))`))
 			throw new Error("计划卡上不该有审批的「允许一次」");
+	};
+	/**
+	 * 卡上的主按钮（接受那一组的最后一颗）不单独占一行：和别的按钮至少一颗在同一行上。收起、展开右栏时等卡片宽度停下来再量。
+	 */
+	const mainNotAlone = async (label: string) => {
+		const width = () => page<number>(`document.querySelector('${card}')?.getBoundingClientRect().width ?? 0`);
+		for (let last = -1, now = await width(); now !== last; last = now, now = await width()) await new Promise((resolve) => setTimeout(resolve, 250));
+		const rows = await page<{ main: number; others: number[] } | null>(`(() => {
+			const main = document.querySelector('${card} .plume-plan-main > button:last-child');
+			if (!main) return null;
+			const others = [...document.querySelectorAll('${card} [data-approval-plan-actions] button')].filter((button) => button !== main);
+			return { main: main.getBoundingClientRect().top, others: others.map((button) => button.getBoundingClientRect().top) };
+		})()`);
+		if (!rows) throw new Error(`${label}：计划卡上找不到接受那一组`);
+		if (!rows.others.some((top) => Math.abs(top - rows.main) < 4)) {
+			await capture("smoke-plan-actions-wrapped.png");
+			throw new Error(`${label}：主按钮被单独挤到一行（${JSON.stringify(rows)}）`);
+		}
 	};
 	const turnEnded = `document.querySelector('${card}') === null && document.querySelector('[data-plume-running]') === null`;
 
@@ -149,7 +168,18 @@ export async function checkPlan(options: {
 			throw new Error(`计划模式下 edit 应该被拒，模型收到的是 ${JSON.stringify(seen.toolu_plan_edit)}`);
 		if ((await readFile(join(workspace, "hello.txt"), "utf8")) !== "hello\n") throw new Error("计划模式下 hello.txt 被改了");
 		if (!(await page<boolean>(toggleOn))) throw new Error("建出来的会话没接上新对话的计划模式开关");
+		await mainNotAlone("右栏开着、卡片窄");
 		await capture("smoke-plan-card.png");
+		// 收起右栏看宽的那一种，再打开：后面每份新计划还要在面板里读到。
+		await page(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]').click()`);
+		await until(
+			`document.querySelector('[data-panel-area]:not([inert])') === null && document.querySelector('[data-panel-toggle] button') !== null`,
+			"收起右栏",
+		);
+		await mainNotAlone("右栏收着、卡片宽");
+		await capture("smoke-plan-card-wide.png");
+		await page(`document.querySelector('[data-panel-toggle] button').click()`);
+		await until(`document.querySelector('[data-panel-area]:not([inert])') !== null`, "再打开右栏");
 
 		// 2. 修改：写下意见、修订，模型收到的是没批准和这句意见，开关不动，它改完再交。
 		await page(`document.querySelector('${card} [data-plan-action=revise]').click()`);
@@ -157,6 +187,7 @@ export async function checkPlan(options: {
 		await page(`document.querySelector('${card} [data-plan-revise-input]').focus()`);
 		await window.webContents.insertText(FEEDBACK);
 		await until(`document.querySelector('${card} [data-plan-send-revision]')?.disabled === false`, "写了意见可以修订");
+		await mainNotAlone("写修改意见时");
 		await capture("smoke-plan-revise.png");
 		await page(`document.querySelector('${card} [data-plan-send-revision]').click()`);
 		await planCard("改 hello.txt（先读再改）", "改过的计划再弹出计划卡");
@@ -197,6 +228,7 @@ export async function checkPlan(options: {
 			throw new Error("完全访问下计划卡被自动放行了");
 		if (await page<boolean>(`document.querySelector('${card} [data-plan-action=accept-auto]') !== null`))
 			throw new Error("完全访问下不该有「接受并开启自动模式」");
+		await mainNotAlone("完全访问下");
 		await capture("smoke-plan-full-access.png");
 
 		// 接受：卡收起、开关关掉，同一轮里模型接着改。

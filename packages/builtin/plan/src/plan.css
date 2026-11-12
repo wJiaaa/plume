@@ -114,12 +114,26 @@
 	width: 100%;
 }
 
+/*
+ * 一排动作：左边拒绝、修改，弹簧，再是「在新会话里执行」和接受的那一组。放不下时换行，接受的那一组整个下去、靠右，
+ * 主按钮总有接受陪着，不会一个人落在第二行。四百多像素宽（右栏开着）时收起键帽，常见的一排（拒绝、修改、交给新会话、接受）
+ * 就放得下一行；键帽只是提示，快捷键照样能用。
+ */
 .plume-plan-actions {
 	display: flex;
 	flex-shrink: 0;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
+	container: plume-plan-actions / inline-size;
+}
+
+/* 一行里弹簧把空处吃掉，这里的 auto 只在它换到下一行、独占一行时把它推到右边。 */
+.plume-plan-main {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
 }
 
 /* 「在新会话里执行」和贴着它的模型箭头：一颗分体按钮。 */
@@ -143,9 +157,10 @@
 	opacity: 0.7;
 }
 
-/* 键帽的框取字色的三成：主按钮反色底上也看得见。 */
-.plume-plan-key {
+/* 键帽的字和框都跟着按钮的字色（框取三成）：主按钮反色底上也看得见。`Text` 自带正文色，主按钮上会和底色一样，这里盖掉。 */
+.plume-plan-keys > .plume-plan-key {
 	display: inline-flex;
+	color: inherit;
 	height: 18px;
 	min-width: 18px;
 	align-items: center;
@@ -153,6 +168,13 @@
 	padding: 0 4px;
 	border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 	border-radius: var(--plume-radius-item);
+}
+
+/* 卡窄时收起键帽，见 `.plume-plan-actions`；写在 `.plume-plan-keys` 后面才盖得住它的 `display`。 */
+@container plume-plan-actions (max-width: 520px) {
+	.plume-plan-keys {
+		display: none;
+	}
 }
 
 /* 面板。 */

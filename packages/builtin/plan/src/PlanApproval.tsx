@@ -3,7 +3,8 @@
  *
  * 计划本身在右栏的计划面板里读、划线评论（`PlanPanel.tsx`），评论落在这张卡上——序号和面板里那段字末尾的那枚一样，对得上号。
  * 四个动作各是一个按钮，键盘直达：Esc 修改，⌘↵ 主按钮，⇧⌘↵ 接受。窄窗口的面板区一次只摆一格，开面板会盖住这张卡，
- * 所以那时正文画在卡里。
+ * 所以那时正文画在卡里。右栏开着时卡只有四百多像素宽：接受的那一组（接受和主按钮）连在一起换行、靠右，不把主按钮单独挤下去；
+ * 再窄就收起键帽（快捷键照样能用），见 `plan.css` 的 `.plume-plan-actions`。
  *
  * 回答经 `answer` 交回 `run.request`（`PlanReply`）：接受连同评论，修改是带着意见的拒绝，回给模型改；什么都没说的拒绝是
  * `decline`，让这一轮停下。「在新会话里执行」也是接受，多一个 `handoff`（连同卡上给新会话挑的模型），逻辑入口开新会话、让这一轮停下。
@@ -253,14 +254,16 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 							)}
 							<span className="plume-plan-spacer" />
 							{handoffButton}
-							<Button variant="soft" disabled={pending} onClick={accept} {...(notesTip ? { label: notesTip } : {})} data-plan-action="accept">
-								{t.accept}
-								<Keys keys={["⌘", "↩"]} />
-							</Button>
-							<Button type="submit" variant="primary" disabled={pending || !feedback} data-plan-send-revision="">
-								{t.sendRevision}
-								<Keys keys={["↩"]} />
-							</Button>
+							<span className="plume-plan-main">
+								<Button variant="soft" disabled={pending} onClick={accept} {...(notesTip ? { label: notesTip } : {})} data-plan-action="accept">
+									{t.accept}
+									<Keys keys={["⌘", "↩"]} />
+								</Button>
+								<Button type="submit" variant="primary" disabled={pending || !feedback} data-plan-send-revision="">
+									{t.sendRevision}
+									<Keys keys={["↩"]} />
+								</Button>
+							</span>
 						</div>
 					</form>
 				) : (
@@ -274,16 +277,18 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 						</Button>
 						<span className="plume-plan-spacer" />
 						{handoffButton}
-						<Button variant={offerAuto ? "soft" : "primary"} disabled={pending} onClick={accept} data-plan-action="accept">
-							{t.accept}
-							<Keys keys={offerAuto ? ["⇧", "⌘", "↩"] : ["⌘", "↩"]} />
-						</Button>
-						{offerAuto && (
-							<Button variant="primary" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
-								{t.acceptAuto}
-								<Keys keys={["⌘", "↩"]} />
+						<span className="plume-plan-main">
+							<Button variant={offerAuto ? "soft" : "primary"} disabled={pending} onClick={accept} data-plan-action="accept">
+								{t.accept}
+								<Keys keys={offerAuto ? ["⇧", "⌘", "↩"] : ["⌘", "↩"]} />
 							</Button>
-						)}
+							{offerAuto && (
+								<Button variant="primary" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
+									{t.acceptAuto}
+									<Keys keys={["⌘", "↩"]} />
+								</Button>
+							)}
+						</span>
 					</div>
 				)}
 			</div>
