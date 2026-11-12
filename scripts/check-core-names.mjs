@@ -35,11 +35,7 @@ import { join, relative, sep } from "node:path";
 /** 本体的目录（相对仓库根）。 */
 const CORE_DIRS = ["packages/core", "packages/contract", "packages/client", "apps/desktop/src"];
 
-/**
- * 内置插件目录 → 它注册的工具。`mcp__` 是 plume.mcp 登记 MCP 工具时的名字前缀。
- * plume.tools 的 read、write、edit、ls、glob、grep、bash、bash_output 是本体认的基本工具，故意不在这里
- * （见 spec/domain/plugin-primitives.md「已定的例外」）。
- */
+/** 内置插件目录 → 它注册的工具。`mcp__` 是 plume.mcp 登记 MCP 工具时的名字前缀。 */
 const BUILTIN_TOOLS = {
 	"ask-user": ["ask_user"],
 	browser: ["browser_open", "browser_act", "browser_tabs", "browser_screenshot", "browser_viewport"],
@@ -51,7 +47,7 @@ const BUILTIN_TOOLS = {
 	"spawn-session": ["spawn_session", "archive_session"],
 	subagents: ["task", "stop_subagent", "yield"],
 	todo: ["todo_write"],
-	tools: ["monitor", "schedule_wakeup", "cron_create", "cron_list", "cron_delete"],
+	tools: ["read", "write", "edit", "ls", "glob", "grep", "bash", "bash_output", "monitor", "schedule_wakeup", "cron_create", "cron_list", "cron_delete"],
 	web: ["web_search", "web_fetch"],
 };
 
@@ -122,6 +118,36 @@ const ALLOWED = [
 		file: "apps/desktop/src/renderer/market/detail.tsx",
 		name: "skill",
 		reason: "同上：插件市场按插件包的种类分页",
+	},
+	{
+		file: "packages/core/agent/src/agent.ts",
+		name: "read",
+		reason: "会话互发的信的下落（LetterFate.status：对方读到了），和读文件的工具同字",
+	},
+	{
+		file: "apps/desktop/src/main/security-policy.ts",
+		name: "bash",
+		reason: "打开文件时当成可执行脚本的扩展名（.bash），不是工具",
+	},
+	{
+		file: "apps/desktop/src/renderer/conversation/shell-reads.ts",
+		name: "ls",
+		reason: "shell 命令里只读的程序名（判断一条命令是不是只在读），不是工具",
+	},
+	{
+		file: "apps/desktop/src/renderer/conversation/shell-reads.ts",
+		name: "grep",
+		reason: "同上：shell 程序名和 git 的只读子命令",
+	},
+	{
+		file: "apps/desktop/src/renderer/markdown/shell-command.ts",
+		name: "bash",
+		reason: "Markdown 代码块的语言标签（```bash），不是工具",
+	},
+	{
+		file: "apps/desktop/src/renderer/sidebar/ProjectDialog.tsx",
+		name: "edit",
+		reason: "项目菜单里的模式（编辑项目），不是工具",
 	},
 ];
 

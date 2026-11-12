@@ -172,7 +172,7 @@ export function ToolCard({
 	polls,
 }: {
 	call: Call;
-	/** 这一行代表连着查同一个后台任务的几次 `bash_output`，第一个就是 `call`。见 `foldPolls`。 */
+	/** 这一行代表连着查同一个后台任务的几次调用（`ToolLine.job`），第一个就是 `call`。见 `foldPolls`。 */
 	polls?: Call[];
 	/** 跟在这次调用后面、还在写的那段推理：接在句尾说「正在思考」，句子本身不动。见 `WorkStep`。 */
 	thinking?: ReactNode;

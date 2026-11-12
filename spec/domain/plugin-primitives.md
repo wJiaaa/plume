@@ -41,13 +41,12 @@
   - 审批的 `userOnly`：提问、计划、表单借审批卡，关掉审批语义，答案走旁路，`tool.approve` 的每一层都收到不是审批的请求。现在是单独的原语「等人」。
   - 送达的 `kind: "job" | "session" | "wakeup"`：后台命令、新会话交回、定时唤醒各占一个值，本体按值分支画。现在本体只认通用字段，那一行由交它的插件画。
   - 侧边聊天借排队消息（`origin: "child"`）把活交给主会话，本体随后为它长出回执条、`HandedTask`、`mainChat`。现在留下的 `QueuedMessage.origin`、`UserMessage.fromPlugin` 只是来处标注（安全边界，模型据此知道这不是用户的话），交过去的事走到哪是通用的 `ChildTask`，画成什么样归建子会话的插件。
-- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。插件要的范围比默认大时也靠声明，不按名字放行：看全部会话的运行观察写 `Plugin.observe: "all"`，内置插件（plume.diagnostics、plume.tools）和市场插件写的是同一个字段。
+- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`），界面的 `ui.toolLine`（`kind`、`file`、`note`、`command`、`job`、`checklist`、`apart`、`group`）。读文件、跑命令这些基本工具也一样，由 plume.tools 声明。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。插件要的范围比默认大时也靠声明，不按名字放行：看全部会话的运行观察写 `Plugin.observe: "all"`，内置插件（plume.diagnostics、plume.tools）和市场插件写的是同一个字段。
 
 ### 已定的例外
 
 下面这些不算违规，也不能拿来类推出新的例外；要加新的，先改这一节、说出理由。
 
-- **基本文件和命令工具的名字。** 本体认 plume.tools 的 `read`、`write`、`edit`、`ls`、`glob`、`grep`、`bash`、`bash_output`：转录里的说法、分类和图标，回复里的文件签按读写过的路径认文件，重复检测，导出会话，以及 `ToolLike`（`ui.toolLine` 的 `like`）。它们是本体界面骨架的一部分，抽成声明的代价大于收益；插件注册同名工具覆盖它们时，本体照样按这几个名字认。别的工具（`monitor`、定时唤醒、`todo_write`……）不在内。
 - **只有一个插件在用、但按能力命名的接口。** `ToolRun.parent` / `ParentSession`、`AgentService` 的 `queueTask` / `retryTask` / `dismissTask`、`ToolCardProps.handToParent`、`ui.queueAction`、`ui.quoteAction` 现在只有侧边聊天用。可以留，条件是：名字、注释、类型说的是能力（「子会话够得着它的父会话」「排队消息的菜单项」），不提用它的插件；本体不知道是谁在用；换一个插件来用不用改接口。哪一条不满足，就回到上一节按违规处理。
 - **代管先由测试插件验证。** 真实需求是插件仓库里的 plume.im（它的 README 写着缺「创建或映射 Plume 会话」），但这一轮只做了本体接口，plume.im 还没接上；接口由测试插件 `packages/testing/steward-probe`（不随应用发，冒烟 `steward` 段装它）和 `packages/core/agent/test/session-steward.test.ts` 验证。plume.im 接上时发现不够用，按上一节改接口，不在插件里绕。
 
@@ -63,7 +62,7 @@
 
 - `pnpm check:plugins`（[`scripts/check-plugins.mjs`](../../scripts/check-plugins.mjs) 的规则 4、5、6，名单和匹配方式在 [`scripts/check-core-names.mjs`](../../scripts/check-core-names.mjs)）：
   - 本体代码里不出现插件名：内置插件名从源码读，市场插件名登记在脚本里；以插件名打头的面板 id 也算。注释不查。
-  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具不在名单里。提示词字面量里用反引号括着的名字（`` `task` ``）也算。
+  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，plume.tools 的基本工具和 plume.prompt 的段名也在名单里。提示词字面量里用反引号括着的名字（`` `task` ``）也算。
   - 内置插件的源码（不含测试）和它带给模型的技能（`skills/**/*.md`）里不出现别的内置插件、市场插件的插件名，和登记在它们名下的工具名、段名、标签；自己的不算。
   - 正当的命中登记进脚本的 `ALLOWED`，写明理由；不放宽规则。
 - 检查查不到的，评审时对一遍：
@@ -77,6 +76,5 @@
 ## 事实来源
 
 - 接口：`packages/contract/src/plugin.ts`（`PluginContext`、`ToolRun`、`ToolDefinition`、`PromptSection`、`Services`）、`packages/contract/src/ui.ts`（`UiContext`）、`packages/contract/src/service.ts`（`AgentService`、`QueuedMessage`、`ChildTask`）
-- 本体认基本工具的地方：`apps/desktop/src/renderer/conversation/call-words.ts`、`tool-category.ts`、`turn-blocks.ts`，`apps/desktop/src/renderer/files/scope.ts`，`packages/core/agent/src/conversation-markdown.ts`、`repetition.ts`
 - 检查：`scripts/check-core-names.mjs`、`scripts/test/check-core-names.test.ts`
 - 按类别找别的插件的工具的例子：plume.plan（`packages/builtin/plan/src/index.ts` 的 `toolOf`）、plume.subagents、plume.browser

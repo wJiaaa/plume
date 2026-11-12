@@ -47,7 +47,7 @@ test("带下划线、大写字母的名字出现在哪个字面量里都算", ()
 	assert.deepEqual(found("const tool = `mcp__${server}__${name}`;"), ["name mcp__"]);
 });
 
-test("全小写的单个词不在比较里时不算，名单外的基本工具不算", () => {
+test("全小写的单个词不在比较里时不算，名单外的名字不算", () => {
 	const code = [
 		'export type PluginKind = "plugin" | "skill" | "connector";',
 		'const row = { kind: "task", label: t("monitor") };',
