@@ -162,17 +162,25 @@ export default {
 			return { block: false, context: verdict.context ? `${verdict.context}\n\n${context.text}` : context.text };
 		});
 
+		/** 侧边聊天能用的工具：`TOOLS` 里的，加上查网页的（`category: "web"`，不认工具名）。 */
+		function usable(): (name: string) => boolean {
+			const web = new Set(ctx.tools.list().flatMap((tool) => (tool.category === "web" ? [tool.name] : [])));
+			return (name) => TOOLS.has(name) || web.has(name);
+		}
+
 		ctx.hook("model.context", async (input, next) => {
 			if (!sides.has(input.sessionId)) return next({ ...input, tools: input.tools.filter((tool) => !SIDE_ONLY.has(tool.name)) });
+			// 身份、准则两段按类别（`PromptSection.category`）换成侧边聊天自己的，不认提供它们的插件定的段名；段名和位置照旧。
 			const sections: PromptSection[] = input.sections.map((section) =>
-				section.id === "identity" ? { id: "identity", text: IDENTITY } : section.id === "guidelines" ? { id: "guidelines", text: GUIDELINES_TEXT } : section,
+				section.category === "identity" ? { ...section, text: IDENTITY } : section.category === "guidelines" ? { ...section, text: GUIDELINES_TEXT } : section,
 			);
-			return next({ ...input, sections, tools: input.tools.filter((tool) => TOOLS.has(tool.name)) });
+			const allowed = usable();
+			return next({ ...input, sections, tools: input.tools.filter((tool) => allowed(tool.name)) });
 		});
 
 		ctx.hook("tool.execute", async (input, next) => {
 			// i18n-exempt：发给模型的工具结果。
-			if (sides.has(input.sessionId) && !TOOLS.has(input.call.name))
+			if (sides.has(input.sessionId) && !usable()(input.call.name))
 				return { output: `The "${input.call.name}" tool is not available in a side chat.`, isError: true };
 			return next(input);
 		});

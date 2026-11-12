@@ -24,6 +24,7 @@ import type {
 import type { PlanApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
 import { approvedPlans, currentPlan, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
+import { planSection, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "../src/prompt.ts";
 
 /**
  * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`。`launch` 记下开过的新会话，`fail` 给了就让它抛这个错。
@@ -43,7 +44,15 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 		notice: (_sessionId: string, text: string) => void notices.push(text),
 		log: { info() {}, warn() {}, error() {} },
 		locale: () => "zh-CN",
-		tools: { register: (tool: ToolDefinition) => void tools.set(tool.name, tool) },
+		tools: {
+			register: (tool: ToolDefinition) => void tools.set(tool.name, tool),
+			// 别的插件的工具按声明的类别认：问人的、记清单的叫什么都行。
+			list: () => [
+				{ name: "ask_question", plugin: "test.ask", category: "question" },
+				{ name: "track", plugin: "test.list", category: "checklist" },
+				...[...tools.keys()].map((name) => ({ name, plugin: "plume.plan" })),
+			],
+		},
 		// 同一个钩子挂了不止一层时按 order 分开存：`model.context@-1001` 是 plume.prompt 外面的那层。
 		hook: (name: string, layer: unknown, options?: { order?: number }) =>
 			void layers.set(options?.order === undefined ? name : `${name}@${options.order}`, layer),
@@ -226,6 +235,18 @@ test("/plan 不带话是开关，带话先开再发后半句；新对话的开�
 	assert.deepEqual(await plan.sections("fresh"), ["plan"]);
 });
 
+test("提示词点名的记清单、问人的工具按声明的类别找，工具表里没有就不点名", () => {
+	const named = planSection({ checklist: "track", question: "ask_question" });
+	assert.match(named, /A plan is not a task list; `track` is for tracking the work once the plan is approved\./);
+	assert.match(named, /ask with `ask_question` before you submit/);
+	const bare = planSection({});
+	assert.match(bare, /A plan is not a task list\.\n/);
+	assert.match(bare, /ask the user before you submit/);
+	assert.match(SUBMIT_PLAN_RESULTS.approved("# 计划", false, "track"), /break it into a task list with `track` alongside your first action\./);
+	assert.doesNotMatch(SUBMIT_PLAN_RESULTS.approved("# 计划", false, undefined), /task list/);
+	assert.match(unsubmittedPlanNote(undefined), /还缺用户的决定，就直接问用户。/);
+});
+
 test("查过东西、以正文收尾却没交计划：提醒一次；没调过工具、交过计划、问过人的不提醒", async () => {
 	const plan = await fakeContext();
 	plan.api.set("main", true);
@@ -234,12 +255,13 @@ test("查过东西、以正文收尾却没交计划：提醒一次；没调过�
 	await plan.end(1, ["read"], { continue: true });
 	const reminded = await plan.end(2, []);
 	assert.equal(reminded.continue, true);
+	assert.match(reminded.continue ? (reminded.say ?? "") : "", /还缺用户的决定，就用 `ask_question` 问/);
 	assert.deepEqual(await plan.end(3, []), { continue: false });
 
 	await plan.end(1, ["read", SUBMIT_PLAN], { continue: true });
 	assert.deepEqual(await plan.end(2, []), { continue: false });
 
-	await plan.end(1, ["read", "ask_user"], { continue: true });
+	await plan.end(1, ["read", "ask_question"], { continue: true });
 	assert.deepEqual(await plan.end(2, []), { continue: false });
 });
 

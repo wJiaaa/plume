@@ -35,6 +35,7 @@ import type {
 	SessionAccess,
 	SessionEndReason,
 	SessionObservation,
+	RegisteredToolInfo,
 	ToolDefinition,
 	ToolSpec,
 	WebPageEvent,
@@ -420,9 +421,11 @@ export class PluginHost {
 		return this.tools.get(name)?.at(-1);
 	}
 
-	/** 工具表里生效的工具和注册它们的插件。 */
-	toolOwners(): { name: string; plugin: string }[] {
-		return [...this.tools.values()].flatMap((list) => list.slice(-1)).map(({ definition, plugin }) => ({ name: definition.name, plugin }));
+	/** 工具表里生效的工具、注册它们的插件和它们声明的类别。 */
+	toolOwners(): RegisteredToolInfo[] {
+		return [...this.tools.values()]
+			.flatMap((list) => list.slice(-1))
+			.map(({ definition, plugin }) => ({ name: definition.name, plugin, ...(definition.category ? { category: definition.category } : {}) }));
 	}
 
 	/**
@@ -826,6 +829,7 @@ export class PluginHost {
 					return unregister;
 				},
 				names: () => [...this.tools.keys()],
+				list: () => this.toolOwners(),
 			},
 			plugins: {
 				list: () =>

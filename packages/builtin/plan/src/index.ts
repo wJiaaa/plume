@@ -17,12 +17,12 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Plugin } from "@plume/contract";
+import type { Plugin, ToolDefinition } from "@plume/contract";
 import type { PlanApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { handoffPrompt } from "./handoff.ts";
 import { approvedPlans, planTitle, readPlanReply, renderPlan, SUBMIT_PLAN, type PlanDetails } from "./plan.ts";
-import { ASK_USER, approvedPlanNote, editsFiles, planSection, refusal, SUBMIT_PLAN_DESCRIPTION, SUBMIT_PLAN_RESULTS, UNSUBMITTED_PLAN_NOTE } from "./prompt.ts";
+import { approvedPlanNote, editsFiles, planSection, refusal, SUBMIT_PLAN_DESCRIPTION, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "./prompt.ts";
 import { PlanStore } from "./store.ts";
 
 /** 一轮里漏交计划的提醒：这一轮调过工具没有、交过计划没有、提醒过没有。每轮第一步收尾时重来。 */
@@ -39,6 +39,14 @@ export default {
 		/** 子会话 → 父会话；顶层会话记 null。父子关系建了就不变，查过就记下。 */
 		const parents = new Map<string, string | null>();
 		const turns = new Map<string, Turn>();
+
+		/**
+		 * 工具表里声明了这一类（`ToolDefinition.category`）的那件工具叫什么：提示词按它点名记清单、问人的工具，不认别的插件的工具名。
+		 * `offered` 给了就只在这一轮真交给模型的那些里找；没有就是 undefined，提示词不点名。
+		 */
+		function toolOf(category: ToolDefinition["category"], offered?: readonly { name: string }[]): string | undefined {
+			return ctx.tools.list().find((tool) => tool.category === category && (!offered || offered.some((given) => given.name === tool.name)))?.name;
+		}
 
 		async function parentOf(sessionId: string): Promise<string | null> {
 			const known = parents.get(sessionId);
@@ -83,8 +91,8 @@ export default {
 
 		ctx.hook("model.context", (input, next) => {
 			if (!store.has(input.sessionId)) return next(input);
-			const hasTodo = input.tools.some((tool) => tool.name === "todo_write");
-			return next({ ...input, sections: [...input.sections, { id: "plan", text: planSection(hasTodo) }] });
+			const tools = { checklist: toolOf("checklist", input.tools), question: toolOf("question", input.tools) };
+			return next({ ...input, sections: [...input.sections, { id: "plan", text: planSection(tools) }] });
 		});
 
 		ctx.hook("step.end", async (input, next) => {
@@ -93,10 +101,11 @@ export default {
 			if (!store.has(input.sessionId)) return verdict;
 			const turn = turns.get(input.sessionId) ?? { worked: false, submitted: false, reminded: false };
 			turns.set(input.sessionId, turn);
+			const tools = ctx.tools.list();
 			for (const result of input.toolResults) {
 				turn.worked = true;
-				// 调过 `ask_user` 的也不提醒：它在等人回答，或者已经照人的回答收住了。
-				if (result.toolName === SUBMIT_PLAN || result.toolName === ASK_USER) turn.submitted = true;
+				// 问过人的（`category: "question"` 的工具）也不提醒：它在等人回答，或者已经照人的回答收住了。
+				if (result.toolName === SUBMIT_PLAN || tools.some((tool) => tool.category === "question" && tool.name === result.toolName)) turn.submitted = true;
 			}
 			/*
 			 * 只在这一轮自然收尾时说：查过东西（一个工具都没调的「你好」「现在是计划模式吗」不问）、没交过计划、没提醒过。
@@ -104,7 +113,7 @@ export default {
 			 */
 			if (verdict.continue || verdict.reason !== undefined || !turn.worked || turn.submitted || turn.reminded) return verdict;
 			turn.reminded = true;
-			return { continue: true, say: UNSUBMITTED_PLAN_NOTE };
+			return { continue: true, say: unsubmittedPlanNote(toolOf("question")) };
 		});
 
 		/*
@@ -187,8 +196,8 @@ export default {
 					}
 					return { output: SUBMIT_PLAN_RESULTS.handedOff(file), details: handed, terminate: "done" };
 				}
-				const hasTodo = run.tools().some((tool) => tool.name === "todo_write");
-				return { output: SUBMIT_PLAN_RESULTS.approved(renderPlan(plan, notes), Boolean(notes), hasTodo, file), details };
+				const checklist = run.tools().find((tool) => tool.category === "checklist")?.name;
+				return { output: SUBMIT_PLAN_RESULTS.approved(renderPlan(plan, notes), Boolean(notes), checklist, file), details };
 			},
 		});
 

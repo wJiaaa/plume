@@ -318,7 +318,7 @@ interface ModelContext {
 	owner?: string;            // 建这个会话的插件，同 SessionSummary.owner；子会话、插件的独立会话才有
 	cwd: string;
 	systemPrompt: string;      // 就是 sections 用空行连起来
-	sections: PromptSection[]; // { id, text, files? }：identity、guidelines、boundaries、environment、tone、userInstructions、projectInstructions、workspace，插件按 id 改
+	sections: PromptSection[]; // { id, text, category?, files? }：identity、guidelines、boundaries、environment、tone、userInstructions、projectInstructions、workspace；提供它的插件按 id 改自己的，别的插件按 category（identity、guidelines……）找
 	messages: Message[];
 	tools: ToolSpec[];
 }
@@ -353,8 +353,11 @@ interface ToolDefinition {
 	exportResult?(result: ToolResultMessage): string | undefined;
 	/** 这次调用是替哪个工具调的（按需加载时的总入口）：导出时这一行按被调的写。 */
 	forwards?(args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined;
-	/** 哪一类工具：`mcp` 的上下文用量单独算一段。本体不认工具名，只认这几样声明。 */
-	category?: "mcp";
+	/**
+	 * 哪一类工具：`mcp` 的上下文用量单独算一段；`checklist` 记进度清单，`question` 停下来问人，`web` 只读地查网页。
+	 * 本体和别的插件不认工具名，只认这几样声明：别的插件按类别在 `ctx.tools.list()` / `run.tools()` 里找它这会儿叫什么。
+	 */
+	category?: "mcp" | "checklist" | "question" | "web";
 	execute(
 		args: Record<string, unknown>,
 		run: {

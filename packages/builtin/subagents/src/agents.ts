@@ -238,7 +238,10 @@ export const DEFAULT_AGENT = "general";
 /** 子智能体交差用的工具：每一种都有（参数随定义换），主会话和别的会话看不到。 */
 export const YIELD_TOOL = "yield";
 
-/** 这个子智能体能不能用这个工具。`todo_write` 是它自己的记事本、`yield` 是它交差的路，不算能力，总是在。 */
-export function allows(agent: Pick<AgentDefinition, "tools">, tool: string): boolean {
-	return tool !== "task" && tool !== "stop_subagent" && (tool === "todo_write" || tool === YIELD_TOOL || agent.tools === "*" || agent.tools.includes(tool));
+/**
+ * 这个子智能体能不能用这个工具。`checklists` 是工具表里记进度清单的工具（`category: "checklist"`）：那是它自己的记事本，
+ * `yield` 是它交差的路，都不算能力，总是在。
+ */
+export function allows(agent: Pick<AgentDefinition, "tools">, tool: string, checklists: readonly string[]): boolean {
+	return tool !== "task" && tool !== "stop_subagent" && (checklists.includes(tool) || tool === YIELD_TOOL || agent.tools === "*" || agent.tools.includes(tool));
 }

@@ -10,6 +10,7 @@ import type {
 	Message,
 	ModelContext,
 	PluginContext,
+	RegisteredToolInfo,
 	ReportOptions,
 	ResourceAddress,
 	ResourceHandler,
@@ -40,6 +41,8 @@ async function until(predicate: () => boolean) {
 async function fixture(t: TestContext) {
 	const directory = mkdtempSync(join(tmpdir(), "plume-subagents-"));
 	const tools = new Map<string, ToolDefinition>();
+	/** 别的插件的工具：记清单的那件按声明的类别认，叫什么都行。 */
+	const others: RegisteredToolInfo[] = [{ name: "todo_write", plugin: "test.todo", category: "checklist" }];
 	const layers = new Map<string, HookLayer<"model.context"> | HookLayer<"tool.execute"> | HookLayer<"step.end">>();
 	const messages = new Map<string, Message[]>();
 	const sessions = new Map<string, SessionSummary>([["main", { id: "main", title: "Main", cwd: "/work", running: false, createdAt: 0, updatedAt: 0 }]]);
@@ -70,6 +73,11 @@ async function fixture(t: TestContext) {
 				return () => void tools.delete(tool.name);
 			},
 			names: () => ["read", "write", "bash", ...tools.keys()],
+			list: () => [
+				...["read", "write", "bash"].map((name) => ({ name, plugin: "plume.tools" })),
+				...others,
+				...[...tools.keys()].map((name) => ({ name, plugin: "plume.subagents" })),
+			],
 		},
 		hook: (name: string, layer: never) => void layers.set(name, layer),
 		serve: (value: SubagentsApi) => {
@@ -179,6 +187,7 @@ async function fixture(t: TestContext) {
 	};
 	return {
 		run,
+		others,
 		starts,
 		reports,
 		stopped,
@@ -216,7 +225,8 @@ const context = (sessionId: string, kind?: SessionKind): ModelContext => ({
 	model: { id: "provider/model", name: "Model" },
 	personalization: { customInstructions: "", tone: "professional" },
 	systemPrompt: "",
-	sections: [{ id: "identity", text: "Plume" }],
+	// 身份那一段按类别认，段名是提供它的插件定的。
+	sections: [{ id: "who", text: "Plume", category: "identity" }],
 	messages: [],
 	tools: ["read", "write", "task", "stop_subagent", "todo_write"].map((name) => ({ name, description: name, parameters: {} })),
 });
@@ -312,6 +322,8 @@ test("resume preserves session, agent identity and tool limits, including after 
 	const layer = f.layers.get("model.context") as HookLayer<"model.context">;
 	const built = await layer(context("child-1"), async (value) => value);
 	assert.match(built.sections[0]!.text, /read-only exploration/);
+	assert.equal(built.sections.filter((section) => section.category === "identity").length, 1);
+	assert.ok(!built.sections.some((section) => section.text === "Plume"));
 	assert.deepEqual(
 		built.tools.map((tool) => tool.name),
 		["read", "todo_write"],
@@ -670,7 +682,7 @@ test("every 60 steps a checkpoint: an advancing list carries on, two stalled seg
 	assert.match(((await end(120)) as { say: string }).say, /这一段的 60 轮已经用完/);
 });
 
-test("a checkpoint with no list asks once to write one when todo_write exists, otherwise asks for the handoff; a finished list stops", async (t) => {
+test("a checkpoint with no list asks once to write one when a checklist tool exists, otherwise asks for the handoff; a finished list stops", async (t) => {
 	const f = await fixture(t);
 	await Promise.all([f.run({ description: "A", prompt: "a" }), f.run({ description: "B", prompt: "b" })]);
 	await until(
@@ -682,8 +694,9 @@ test("a checkpoint with no list asks once to write one when todo_write exists, o
 				.every((task) => task.runId),
 	);
 	// 没有清单工具：说「列清单」是一句做不到的话，直接讨交接。
+	f.others.length = 0;
 	assert.match(((await stepEnder(f, "child-1").end(60)) as { say: string }).say, /只能调用 `yield`/);
-	f.tools.set("todo_write", { name: "todo_write" } as ToolDefinition);
+	f.others.push({ name: "todo_write", plugin: "test.todo", category: "checklist" });
 	const b = stepEnder(f, "child-2");
 	assert.match(((await b.end(60)) as { say: string }).say, /先用 `todo_write` 把剩下的步骤列出来/);
 	// 只给一次：还是没写，讨交接。
@@ -721,6 +734,8 @@ test("maxTurns in the definition sets the segment, capped at the host's 200 step
 	const layer = f.layers.get("model.context") as HookLayer<"model.context">;
 	const note = async (agent: string) => (await layer(context(session(agent)), async (input) => input)).sections.at(-1)!.text;
 	assert.match(await note("short"), /每跑 10 轮[\s\S]*`todo_write` 记下步骤/);
+	// 检查点这里只看段长：没有记清单的工具，到点直接讨交接。
+	f.others.length = 0;
 	assert.deepEqual(await stepEnder(f, session("short")).end(9), { continue: true });
 	assert.match(((await stepEnder(f, session("short")).end(10)) as { say: string }).say, /这一段的 10 轮已经用完/);
 	// 一段比宿主一轮还长：按一轮的 200 步说，只剩两步时讨交接。

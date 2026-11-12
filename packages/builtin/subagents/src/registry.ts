@@ -292,9 +292,11 @@ export class Registry implements SubagentsApi {
 			segment.start = step;
 			const todos = latestTodos(await this.ctx.sessions.messages(task.session));
 			if (this.cancelled.has(task.id)) return undefined;
-			const next = atCheckpoint(segment, todos, this.ctx.tools.names().includes("todo_write"));
+			// 记进度清单的工具按声明的类别找（`category: "checklist"`），没有时让它列清单是一句做不到的话。
+			const checklist = this.ctx.tools.list().find((tool) => tool.category === "checklist")?.name;
+			const next = atCheckpoint(segment, todos, checklist !== undefined);
 			if (next === "continue") return undefined;
-			if (next === "plan") return planDemand(segment.rounds);
+			if (next === "plan" && checklist !== undefined) return planDemand(segment.rounds, checklist);
 		}
 		segment.salvage = 0;
 		return finalDemand(segment.rounds);

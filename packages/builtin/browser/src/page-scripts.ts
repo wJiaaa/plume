@@ -49,6 +49,8 @@ export interface ReadOptions {
 	/** 从正文第几个字开始，接着上一次的 nextOffset 读。不为 0 时不再列元素：它们随第一段给过了。 */
 	offset?: number;
 	maxChars?: number;
+	/** 工具表里问人的那件工具（`category: "question"`）：页面要人登录、过验证时提示里点名它；没有就只说「请用户」。 */
+	question?: string;
 }
 
 export interface PageSnapshot {
@@ -111,6 +113,7 @@ export async function snapshotPage(pages: WebPages, id: string, next: number, op
 		selector: options.selector ?? null,
 		offset: Math.max(0, Math.floor(options.offset ?? 0)),
 		maxChars: Math.max(1, Math.min(Math.floor(options.maxChars ?? READ_DEFAULT_CHARS), READ_MAX_CHARS)),
+		question: options.question ?? null,
 	};
 	const page = (await evaluate(
 		pages,
@@ -173,8 +176,9 @@ export async function snapshotPage(pages: WebPages, id: string, next: number, op
 		const hints = [];
 		const wall = ${WALL};
 		if (wall) page.wall = wall;
-		if (wall === 'verification') hints.push('This page shows a CAPTCHA or bot check, which is for the user to pass: ask them (ask_user) to complete it in the browser panel, then read the page again. Do not try to solve it or keep reloading.');
-		if (wall === 'sign-in') hints.push('This page asks for a password or a one-time code. Unless the user gave you credentials for this site, do not type any: ask them (ask_user) to sign in in the browser panel, then read the page again.');
+		const asking = spec.question ? ' (' + spec.question + ')' : '';
+		if (wall === 'verification') hints.push('This page shows a CAPTCHA or bot check, which is for the user to pass: ask them' + asking + ' to complete it in the browser panel, then read the page again. Do not try to solve it or keep reloading.');
+		if (wall === 'sign-in') hints.push('This page asks for a password or a one-time code. Unless the user gave you credentials for this site, do not type any: ask them' + asking + ' to sign in in the browser panel, then read the page again.');
 		if (unmatched) hints.push('selector ' + JSON.stringify(spec.selector) + ' matched nothing; this is the whole page.');
 		if (page.moreElements) hints.push('Only the first ${MAX_ELEMENTS} interactive elements are listed; read with a selector to list the ones in one region.');
 		if (page.truncated) hints.push('The text is cut at ' + end + ' of ' + whole.length + ' characters; read with offset ' + end + ' for the rest.');

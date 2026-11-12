@@ -54,12 +54,13 @@ export function createDialogs(web: WebPages, workspace: Workspace): Dialogs {
 	};
 }
 
-export function describeNotices(met: Call["met"]): string {
+/** `question` 是工具表里问人的那件工具（`category: "question"`），开了登录、付款窗口时点名它；没有就只说「请用户」。 */
+export function describeNotices(met: Call["met"], question?: string): string {
 	return met
 		.map((dialog) => {
 			if (dialog.type === "popup")
 				return dialog.window
-					? `The page opened a separate window for ${new URL(dialog.url).host || dialog.url}, most likely to sign in or pay. It is for the user and cannot be operated from here: ask the user (ask_user) to finish it there, then read this page again.`
+					? `The page opened a separate window for ${new URL(dialog.url).host || dialog.url}, most likely to sign in or pay. It is for the user and cannot be operated from here: ask the user${question ? ` (${question})` : ""} to finish it there, then read this page again.`
 					: `The page opened ${dialog.url} in a new background tab; find it with browser_tabs.`;
 			if (dialog.dialog === "alert") return `The page raised an alert "${dialog.message}"; acknowledged.`;
 			// 离开页面的提示网页写不了字，所以照它的意思说。

@@ -7,7 +7,7 @@
 // i18n-exempt：发给模型的话。
 export const SPAWN_SESSION_DESCRIPTION =
 	"Suggest a new, separate conversation for follow-up work that deserves its own session: something you noticed that is worth doing but would bloat the current change — dead code, stale docs, missing tests, a TODO you confirmed, a security problem spotted in passing. " +
-	"How it differs from a sub-agent (`task`): the person sees it as a card and decides whether it starts; once started it is a conversation in their sidebar they can open, talk to and stop, with its own clean context, and it stays afterwards to be continued. " +
+	"How it differs from a sub-agent: the person sees it as a card and decides whether it starts; once started it is a conversation in their sidebar they can open, talk to and stop, with its own clean context, and it stays afterwards to be continued. " +
 	"A sub-agent is yours: it runs at once, the person cannot see or steer it, and it only hands its conclusion back to you. Work you need done now to finish the current task, that nobody has to watch, is a sub-agent's. " +
 	"Not for vague code smells, low-confidence guesses, small fixes you can make inline, or the current task itself — unless the person asks you to split their task across separate sessions; then each part is a spawn_session with report_back true, and edits_in_parallel true when the parts change the same repository. " +
 	"Returns immediately and starts nothing. Keep working on the current task afterwards. " +

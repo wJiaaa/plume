@@ -50,15 +50,16 @@ const PARAMETERS = {
 
 /**
  * 子会话的系统提示词末尾那一段。检查点按轮算、每一轮都要把整段上下文再发一遍，说清这对它意味着什么，「独立的调用放在
- * 同一条回复里」才压得住——夹在系统提示词十几条准则中间时，一轮只调一个工具的模型照样个个撞上检查点。清单那句只在有
- * `todo_write` 时说。最后两句写给派它来的那一方：它交回的是材料，改了什么、验证到哪一步要说清。
+ * 同一条回复里」才压得住——夹在系统提示词十几条准则中间时，一轮只调一个工具的模型照样个个撞上检查点。清单那句只在它的
+ * 工具表里有记清单的工具（`checklist`，按 `category: "checklist"` 找到的名字）时说。最后两句写给派它来的那一方：它交回的是材料，
+ * 改了什么、验证到哪一步要说清。
  */
 // i18n-exempt：发给模型的话。
-function workingNote(rounds: number, todos: boolean): string {
+function workingNote(rounds: number, checklist: string | undefined): string {
 	return [
 		`你是被派出来做一件事的子代理，按轮计：每一轮都要把整段上下文再发一遍，每跑 ${rounds} 轮会停下来检查一次进度。`,
 		"所以每一轮都把能同时做的事一起做——要读的几个文件、要跑的几条 grep / glob，放在同一条回复里一起发出去；只有后一步确实要用前一步的结果时才分开。一轮只调一个工具，会让你在做完之前就耗光这一段的轮数。",
-		todos ? "活有三步以上，就用 `todo_write` 记下步骤、做完一项勾一项：到检查点时，清单在往前推就会让你接着跑。" : "",
+		checklist ? `活有三步以上，就用 \`${checklist}\` 记下步骤、做完一项勾一项：到检查点时，清单在往前推就会让你接着跑。` : "",
 		"你交回的东西是给派你来的 Agent 读的材料：结论先行、关键事实带 `path:line`，不要复述过程。",
 		"改了文件的，列出改了哪些；跑过什么验证、结果如何，没验证的明说没验证。读到的事实和你的推断分开写——派你来的 Agent 据此决定哪些要自己再核对。",
 	]
@@ -114,6 +115,9 @@ export default {
 		);
 		await registry.restore();
 		ctx.effect(ctx.use("resources").register(agentResource((sessionId) => registry.list(sessionId))));
+
+		/** 工具表里记进度清单的工具（`category: "checklist"`），不认别的插件的工具名。 */
+		const checklists = () => ctx.tools.list().flatMap((tool) => (tool.category === "checklist" ? [tool.name] : []));
 
 		ctx.tools.register({
 			name: "task",
@@ -175,19 +179,21 @@ export default {
 			}
 			registry.model(input.sessionId, input.model);
 			const context = await next(input);
-			const sections: PromptSection[] = context.sections.filter((section) => section.id !== "identity" && section.id !== "subagents");
+			// 身份那一段按类别（`PromptSection.category`）换成这种子智能体自己的，不认提供它的插件定的段名。
+			const sections: PromptSection[] = context.sections.filter((section) => section.category !== "identity" && section.id !== "subagents");
 			const output = record.identity.output;
+			const lists = checklists();
 			const tools = context.tools
-				.filter((tool) => allows(record.identity, tool.name))
+				.filter((tool) => allows(record.identity, tool.name, lists))
 				.map((tool) => (tool.name === YIELD_TOOL && output ? { ...tool, description: YIELD_DESCRIPTION, parameters: output } : tool));
 			const note = workingNote(
 				segmentRounds(record.identity.maxTurns),
-				tools.some((tool) => tool.name === "todo_write"),
+				lists.find((name) => tools.some((tool) => tool.name === name)),
 			);
 			return {
 				...context,
 				sections: [
-					{ id: "identity", text: record.identity.prompt },
+					{ id: "subagent-identity", text: record.identity.prompt, category: "identity" },
 					...sections,
 					{ id: "subagent", text: output ? `${note}\n\n${yieldInstruction(output)}` : note },
 				],
@@ -200,7 +206,8 @@ export default {
 			if (!record) return input.call.name === YIELD_TOOL ? failed("`yield` only works in a sub-agent.") : next(input);
 			const salvage = registry.salvage(input.sessionId);
 			let output: ToolOutput;
-			if (!allows(record.identity, input.call.name)) output = failed(`The "${input.call.name}" tool is not available to the ${record.agent} sub-agent.`);
+			if (!allows(record.identity, input.call.name, checklists()))
+				output = failed(`The "${input.call.name}" tool is not available to the ${record.agent} sub-agent.`);
 			// 讨交接的那两步：工具表原样留着（换了它前缀缓存从头作废），拒绝放在执行这一下。
 			else if (salvage !== undefined && input.call.name !== YIELD_TOOL) output = failed(yieldOnly(input.call.name));
 			else output = await next(input);

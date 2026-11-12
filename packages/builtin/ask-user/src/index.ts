@@ -48,6 +48,8 @@ export default {
 		ctx.tools.register({
 			name: ASK_USER,
 			description: DESCRIPTION,
+			// 别的插件要让模型「拿不准就问人」时按这一类找到它，不认工具名。
+			category: "question",
 			parameters: {
 				type: "object",
 				properties: {

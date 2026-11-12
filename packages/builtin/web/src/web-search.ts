@@ -43,6 +43,8 @@ function hostOf(url: string): string {
 export function webSearchTool(registry: SearchRegistry, configuredProvider: () => Promise<string | null>): ToolDefinition {
 	return {
 		name: "web_search",
+		// 只读地查网页的工具：要给模型一套收窄的工具（侧边聊天）的插件按这一类留下它，不认工具名。
+		category: "web",
 		// i18n-exempt：发给模型的工具说明
 		description: "Search the web for pages: titles, snippets and URLs. Read one with web_fetch.",
 		// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。

@@ -1,7 +1,7 @@
 /**
  * 内置插件：todo 清单的逻辑入口。
  *
- * - 工具 todo_write：每次传完整的清单，整表替换，同一时刻最多一项在做；清单放进结果的 details（宿主认的 `ChecklistDetails`），
+ * - 工具 todo_write（`category: "checklist"`）：每次传完整的清单，整表替换，同一时刻最多一项在做；清单放进结果的 details（宿主认的 `ChecklistDetails`），
  *   界面入口的卡片从这里读出最新的一份，宿主据此在收尾时提醒没做完的。转录里怎么说这次调用由界面入口登记（`ui.toolLine` 的 `checklist`）。
  *   怎么用写在工具描述里，不另往系统提示词里加段。
  * 清单跟着事走，循环里和清单有关的三句话（都只问不停）：
@@ -81,6 +81,8 @@ export default {
 		ctx.tools.register({
 			name: "todo_write",
 			description: DESCRIPTION,
+			// 别的插件要让模型「用它记下步骤」时按这一类找到它，不认工具名。
+			category: "checklist",
 			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
 			describe: () => "Update task list",
 			parameters: {

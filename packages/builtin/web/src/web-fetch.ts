@@ -41,6 +41,8 @@ function errorResult(output: string): ToolOutput {
 export function webFetchTool(): ToolDefinition {
 	return {
 		name: "web_fetch",
+		// 只读地查网页的工具：要给模型一套收窄的工具（侧边聊天）的插件按这一类留下它，不认工具名。
+		category: "web",
 		// i18n-exempt：发给模型的工具说明
 		description:
 			"Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.",

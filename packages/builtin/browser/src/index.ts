@@ -91,7 +91,8 @@ export default {
 		const workspace = createWorkspace(web, async () => (await loadSettings()).defaultZoom);
 		ctx.pages.onEvent((event) => workspace.event(event));
 		const dialogs = createDialogs(web, workspace);
-		for (const tool of browserTools(web, workspace, dialogs, local, () => ctx.locale())) ctx.tools.register(tool);
+		const question = () => ctx.tools.list().find((tool) => tool.category === "question")?.name;
+		for (const tool of browserTools(web, workspace, dialogs, local, () => ctx.locale(), question)) ctx.tools.register(tool);
 		// 会话删了，它的网页也关掉。
 		ctx.sessions.onDeleted((sessionId) => {
 			workspace.release(sessionId);

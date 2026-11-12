@@ -24,6 +24,7 @@ export default {
 | `ctx.appDataDir` | Plume 自己的数据目录（设置、会话、插件都在这里）。给模型用的工具不要写这里：写得到设置，就改得了自己的权限 |
 | `ctx.tools.register(tool)` | 注册工具，停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
 | `ctx.tools.names()` | 现在登记着的工具名（各插件的，同名只算一个，停用的不算），给「让人挑工具」的设置用 |
+| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、它声明的类别（`category`）。在钩子里按类别找别的插件的工具（「记清单的那件叫什么」）时用，见「按类别找工具」 |
 | `ctx.hook(name, layer, { order })` | 往钩子里加一层，停用时自动移除 |
 | `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
 | `ctx.serve(api)` | 把一个对象开给自己的界面入口；一个插件只能开一个，停用时收回 |
@@ -67,7 +68,7 @@ ctx.tools.register({
 	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
 	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
 	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
-	// category: "mcp",                         // MCP 服务的工具（连同总入口）：上下文用量单独算「MCP 工具」一段
+	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"，见「按类别找工具」
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError
 		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
@@ -87,8 +88,8 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 `run.projectRoots` 是宿主从会话所属项目推导出的源文件夹（只授予读取）；工作目录已移入独立工作树时为空，插件不能据此放宽写入权限。`run.allowedPaths` 是人在这个会话里（子会话连同它的上级会话）拖进来的文件的绝对路径，取自用户消息的附件，没有附件时不给：只授予读取这几个文件本身，不能据此改它们，也不能扩大到所在目录。
 
-`run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具和注册它们的插件；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
-`run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具和注册它们的插件；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
+`run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的类别（`{ name, plugin, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
+`run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的类别（`{ name, plugin, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），跑命令的工具只在只读沙箱里跑。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
 
 - `output` 发给模型；`details` 存进会话、不发给模型，给工具卡片和插件自己用。会话重新打开时卡片还能从 `details` 画出来。
 - 要让模型看图（截图）时带上 `images: [{ data, mimeType }]`：`data` 是 base64、不带 `data:` 前缀，`mimeType` 是 png、jpeg、webp、gif、bmp 之一，跟在 `output` 后面交给模型（bmp 模型不收：照样存下、画给人看，发请求时换成一句 `[unsupported image: image/bmp]`）；大图由本体存进会话的媒体目录。格式不对的整个结果判失败。
@@ -159,14 +160,14 @@ ctx.hook("model.context", async (input, next) => {
 
 每次调模型前经过一次。最里层原样返回。输入输出都是 `{ sessionId, session, parentId?, owner?, cwd, projectRoots, scratchDir, permissionMode, systemPrompt, sections, messages, tools }`（`session` 见「钩子」开头；`parentId`、`owner` 同 `session` 里的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带；按「是不是侧栏里的会话」藏工具时看 `session.kind`，不用每次去 `ctx.sessions.list()`；`scratchDir` 同 `run.scratchDir`，`projectRoots` 同 `run.projectRoots`；`permissionMode` 是这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()`，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell；外层要求这一轮的命令都只读时设 `readOnly: true`，宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，plume.prompt 就按只读那档点名 shell），只作用于这一次请求，会话里存的不变。
 
-系统提示词按段给在 `sections` 里（`{ id, text, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（资源地址的清单）。加自己的说明就加一段，段名用自己的；要换掉或去掉本体的某段，按 `id` 改：
+系统提示词按段给在 `sections` 里（`{ id, text, category?, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（资源地址的清单）。加自己的说明就加一段，段名用自己的。段名是提供它的插件自己的：要换掉或补充别的插件的某一类段（身份、准则），按段上的 `category` 找，不认段名：
 
 ```ts
 // 加一段
 ctx.hook("model.context", (input, next) => next({ ...input, sections: [...input.sections, { id: "todo", text: HINT }] }));
-// 换掉本体的身份段
+// 换掉身份那一段（plume.prompt 的 identity 段标着 category: "identity"）
 ctx.hook("model.context", (input, next) =>
-	next({ ...input, sections: input.sections.map((section) => (section.id === "identity" ? { ...section, text: "You are …" } : section)) }),
+	next({ ...input, sections: input.sections.map((section) => (section.category === "identity" ? { ...section, text: "You are …" } : section)) }),
 );
 ```
 
@@ -179,8 +180,27 @@ ctx.hook("model.context", (input, next) =>
 - `memory`：插件记下、每轮带上的记忆（用户的、项目的）。上下文用量算进「记忆」一段，使用统计的 Token 构成算进「指令和记忆」。
 - `skills`：技能目录。上下文用量算进「技能」一段，Token 构成算进「技能与智能体」。
 - `catalog`：别的按需取用的能力目录（可以派的智能体名单、没放进工具表的工具目录）。上下文用量算系统提示词，Token 构成算进「技能与智能体」。
+- `identity`：agent 是谁的那一段（plume.prompt 的 `identity`）。子会话要换一个身份（子智能体、侧边聊天）时换掉它。宿主算系统提示词。
+- `guidelines`：做事的通用准则（plume.prompt 的 `guidelines`）。要换一套准则或往里补几条时按它找。宿主算系统提示词。
 
-工具也一样：MCP 服务的工具（连同按需搜索、调用它们的总入口）在 `ctx.tools.register` 的定义上标 `category: "mcp"`，上下文用量把它们的定义单独算成「MCP 工具」一段。
+#### 按类别找工具
+
+工具也一样标类别，在 `ctx.tools.register` 的定义上写 `category`。宿主和别的插件按类别认，不认工具名：
+
+- `mcp`：MCP 服务的工具（连同按需搜索、调用它们的总入口）。上下文用量把它们的定义单独算成「MCP 工具」一段。
+- `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`（`plume.todo` 的 `todo_write`）。
+- `question`：停下来问人一个问题、等人回答的工具（经 `run.request`；`plume.ask-user` 的 `ask_user`）。
+- `web`：只读地查网页的工具（搜索网页、把网址读成文字，`plume.web` 的两件）。
+
+插件的提示词要点名别的插件的工具（「用它记下步骤」「拿不准就用它问人」）时，不写死名字：按类别在 `ctx.tools.list()`（工具里用 `run.tools()`）找它这会儿叫什么，`model.context` 里再和这一轮的 `input.tools` 对一下，找不到就换一种不靠那件工具的说法。那个插件被换掉、停用时提示词照样是对的：
+
+```ts
+ctx.hook("model.context", (input, next) => {
+	const checklist = ctx.tools.list().find((tool) => tool.category === "checklist" && input.tools.some((given) => given.name === tool.name))?.name;
+	const note = checklist ? `Track steps of three or more with \`${checklist}\`.` : "";
+	return next(note ? { ...input, sections: [...input.sections, { id: "my-note", text: note }] } : input);
+});
+```
 
 段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：`projectInstructions` 段和标了 `category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
 

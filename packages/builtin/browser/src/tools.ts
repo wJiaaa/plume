@@ -41,9 +41,17 @@ function fail(error: unknown): ToolOutput {
 	return { output: error instanceof Error ? error.message : String(error), isError: true };
 }
 
-export function browserTools(web: WebPages, workspace: Workspace, dialogs: Dialogs, local: LocalPages, locale: () => Locale): ToolDefinition[] {
+/** `question` 查工具表里问人的那件工具叫什么（`category: "question"`）：要人登录、过验证、操作别的窗口时结果里点名它。 */
+export function browserTools(
+	web: WebPages,
+	workspace: Workspace,
+	dialogs: Dialogs,
+	local: LocalPages,
+	locale: () => Locale,
+	question: () => string | undefined,
+): ToolDefinition[] {
 	const read = async (id: string, options: ReadOptions = {}) => {
-		const page = await snapshotPage(web, id, workspace.refs(id), options);
+		const page = await snapshotPage(web, id, workspace.refs(id), { ...options, question: question() });
 		workspace.setRefs(id, page.next);
 		const { next: _next, ...rest } = page;
 		return rest;
@@ -345,7 +353,7 @@ export function browserTools(web: WebPages, workspace: Workspace, dialogs: Dialo
 			workspace.engage(run.sessionId);
 			const { value, met } = await dialogs.answering(run.sessionId, args.dialog === "accept", () => tool.execute(args, run).catch(fail));
 			if (value.isError) failedSteps.set(run.sessionId, { step, tool: tool.name });
-			return met.length === 0 ? value : { ...value, output: `${value.output}\n${describeNotices(met)}` };
+			return met.length === 0 ? value : { ...value, output: `${value.output}\n${describeNotices(met, question())}` };
 		},
 	}));
 }

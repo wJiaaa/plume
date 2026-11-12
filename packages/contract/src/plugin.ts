@@ -163,8 +163,8 @@ export interface ToolRun {
 	request<T = unknown>(input: HumanRequestInput): Promise<HumanAnswer<T>>;
 	/** 设置里现在的权限模式，用到才读：中途改了，下一个调用就照新的来。 */
 	permissionMode(): Promise<PermissionMode>;
-	/** 现在工具表里有哪些工具、各是哪个插件注册的（同名的只列生效的那个）。 */
-	tools(): { name: string; plugin: string }[];
+	/** 现在工具表里有哪些工具、各是哪个插件注册的、是哪一类（`ToolDefinition.category`；同名的只列生效的那个）。 */
+	tools(): RegisteredToolInfo[];
 	/** 这一步回复里的全部调用（含这一次），按回复里的顺序。工具要知道这一步是不是只做了它这一件事时看它（todo 清单收尾）。 */
 	calls: readonly ToolCall[];
 	/** 钩子 tool.execute 的外层要求这次调用不改动工作区（见 `ToolExecution.readOnly`）：跑命令的工具只在只读沙箱里跑。 */
@@ -281,6 +281,13 @@ export interface ParentSession {
 	status(): ParentStatus;
 }
 
+/** 工具表里生效的一件工具：名字、注册它的插件、它声明的类别。见 `ToolRun.tools()`、`ctx.tools.list()`。 */
+export interface RegisteredToolInfo {
+	name: string;
+	plugin: string;
+	category?: ToolDefinition["category"];
+}
+
 export interface ToolDefinition {
 	name: string;
 	description: string;
@@ -308,10 +315,15 @@ export interface ToolDefinition {
 	 */
 	forwards?(args: Record<string, unknown>): { name: string; args: Record<string, unknown> } | undefined;
 	/**
-	 * 这是哪一类工具，宿主按它分段统计，不认工具名。`mcp` 是 MCP 服务的工具（连同按需搜索、调用它们的总入口），
-	 * 上下文用量里单独算「MCP 工具」一段。不给的算普通工具。
+	 * 这是哪一类工具，宿主和别的插件按它认，不认工具名（`run.tools()`、`ctx.tools.list()` 带着它）：
+	 * - `mcp`：MCP 服务的工具（连同按需搜索、调用它们的总入口）。上下文用量里单独算「MCP 工具」一段。
+	 * - `checklist`：记进度清单的工具，结果的 `details` 带 `ChecklistDetails`。别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
+	 * - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`）。别的插件要对模型说「拿不准就问人」时同样按这一类找。
+	 * - `web`：只读地查网页的工具（搜索网页、把网址读成文字），不碰工作区。给模型一套收窄的工具表的插件按这一类留下它们。
+	 *
+	 * 不给的算普通工具。
 	 */
-	category?: "mcp";
+	category?: "mcp" | "checklist" | "question" | "web";
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 
@@ -344,9 +356,10 @@ export interface ToolExecution {
  * 系统提示词的一段。plume.prompt 给的段（按顺序）：`identity`（身份）、`guidelines`（做事的准则）、`boundaries`（边界）、
  * `environment`（平台、shell、是不是 git 仓库、模型）、`tone`（语气）、`userInstructions`（全局指令）、
  * `projectInstructions`（项目里的 AGENTS.md 等）、`workspace`（工作目录和会话的临时目录）。plume.tools 再加一段 `resources`（资源地址的清单）。
+ * 段名是提供它的插件自己的：别的插件要找某一类段（身份、准则）时按 `category` 找，不认段名。
  */
 export interface PromptSection {
-	/** 段的名字，插件按它替换、删除，或把自己的段插在它前后。插件自己的段用自己的名字。 */
+	/** 段的名字，提供它的插件按它替换、删除自己的段。插件自己的段用自己的名字。 */
 	id: string;
 	text: string;
 	/**
@@ -354,10 +367,12 @@ export interface PromptSection {
 	 * - `memory`：插件记下、每轮带上的记忆（用户的、项目的都算）。上下文用量的「记忆」，使用统计 Token 构成里的「指令和记忆」。
 	 * - `skills`：技能目录（有哪些技能、各自什么时候用）。上下文用量的「技能」，Token 构成里的「技能与智能体」。
 	 * - `catalog`：别的按需取用的能力目录（可以派的智能体、没放进工具表的工具）。上下文用量里算系统提示词，Token 构成里算「技能与智能体」。
+	 * - `identity`：agent 是谁的那一段。子会话要换一个身份（子智能体、侧边聊天）时换掉带这一类的段，不认段名。宿主算系统提示词。
+	 * - `guidelines`：做事的通用准则。要换一套准则、或往准则里补几条的插件按这一类找它。宿主算系统提示词。
 	 *
 	 * 不给的段算系统提示词（plume.prompt 的 `userInstructions`、`projectInstructions` 两段宿主另按段名认）。
 	 */
-	category?: "memory" | "skills" | "catalog";
+	category?: "memory" | "skills" | "catalog" | "identity" | "guidelines";
 	/**
 	 * 这段里哪几截来自哪个文件：`chars` 是那一截在 `text` 里的字数（连同包着它的标签）。宿主把 `projectInstructions` 段和
 	 * `category: "memory"` 的段的来源按文件列进上下文用量的「记忆文件」，这些文件在会话边界外也能在文件面板里只读打开（`path` 给绝对路径）；
@@ -1252,6 +1267,8 @@ export interface PluginContext {
 		register(tool: ToolDefinition): () => void;
 		/** 现在登记着的全部工具名（各插件的，同名只算一个），按登记先后。给要让人挑工具的插件用。 */
 		names(): string[];
+		/** 同 `ToolRun.tools()`：生效的工具、注册它的插件、它声明的类别。在钩子里按类别找工具（「记清单的那个叫什么」）时用。 */
+		list(): RegisteredToolInfo[];
 	};
 	/** order 小的在外层，默认 0；相同时按注册先后。 */
 	hook<N extends HookName>(name: N, layer: HookLayer<N>, options?: { order?: number }): void;

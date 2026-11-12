@@ -75,7 +75,7 @@ export function latestTodos(messages: readonly Message[]): Todo[] {
 
 /**
  * 到了检查点怎么走：`continue` 接着跑，`plan` 让它把剩下的列成清单再跑（只给一次），`stop` 停下讨交接。
- * `planless` 是有没有清单可写：没有 `todo_write` 时让它列清单是一句做不到的话。
+ * `planless` 是有没有清单可写：工具表里没有记清单的工具时让它列清单是一句做不到的话。
  *
  * 清单是空的和清单做完了是两件事：做完了还撞上检查点，说明它在清单之外还在忙，该停；一份都没写，只说明它没记账。
  * 打勾数变少（重写了整张清单）按没推进算：推翻自己计划的那一段，正是最不该无条件再给它一段的。
@@ -98,13 +98,13 @@ export function atCheckpoint(segment: Segment, todos: readonly Todo[], planless:
 }
 
 /**
- * 没写清单就撞上检查点时对它说的话。两条路都给：只给「列清单」，一个其实已经查够了的会为了有清单硬凑几项再跑一段；
+ * 没写清单就撞上检查点时对它说的话。`checklist` 是工具表里记清单的那件工具。两条路都给：只给「列清单」，一个其实已经查够了的会为了有清单硬凑几项再跑一段；
  * 只给「收尾」，就退回到了一到点就停。
  */
 // i18n-exempt：发给模型的话。
-export function planDemand(rounds: number): string {
+export function planDemand(rounds: number, checklist: string): string {
 	return (
-		`（自动追加）这一段的 ${rounds} 轮用完了。还没做完的话，先用 \`todo_write\` 把剩下的步骤列出来再接着做——` +
+		`（自动追加）这一段的 ${rounds} 轮用完了。还没做完的话，先用 \`${checklist}\` 把剩下的步骤列出来再接着做——` +
 		"之后每到检查点，清单在往前推就会让你继续；手上的信息已经够了，就现在收尾交付。" +
 		"接下来把互不依赖的读取和搜索放在同一条回复里一起发。"
 	);

@@ -8,24 +8,30 @@
 
 import { renderPlan, SUBMIT_PLAN, type ApprovedPlan } from "./plan.ts";
 
-/** 问人的工具（内置插件 plume.ask-user）。 */
-export const ASK_USER = "ask_user";
+/**
+ * 这一轮工具表里别的插件提供的、提示词要点名的工具（按 `ToolDefinition.category` 找到的名字）：`checklist` 记进度清单，
+ * `question` 停下来问人。没有就不点名，说法退回不靠那件工具的那一种。
+ */
+export interface PlanTools {
+	checklist?: string;
+	question?: string;
+}
 
 /**
  * 计划模式开着时系统提示词末尾多的一段。提问那一段必须明说通用准则（「有合理理解就照做」）在这里不适用：
- * 不说的话两条一起读，模型把拿不准的地方当成假设直接交，计划模式从来不问。问人用内置插件 plume.ask-user 的 `ask_user`。
+ * 不说的话两条一起读，模型把拿不准的地方当成假设直接交，计划模式从来不问。
  */
 // i18n-exempt：发给模型的提示词。
-export function planSection(hasTodo: boolean): string {
+export function planSection(tools: PlanTools): string {
 	return (
 		"Plan mode is on. You are planning a change, not making it: files stay unchanged until the user approves a plan. " +
 		"Tools that edit files refuse, and shell commands run in a read-only sandbox where any write fails; everything else, " +
 		"including the network, works as usual. A request to do the work while plan mode is on is a request to plan it. " +
-		`A plan is not a task list${hasTodo ? "; `todo_write` is for tracking the work once the plan is approved" : ""}.\n\n` +
+		`A plan is not a task list${tools.checklist ? `; \`${tools.checklist}\` is for tracking the work once the plan is approved` : ""}.\n\n` +
 		"Explore before you ask. What the code can answer — where something lives, how it works now, what depends on it — find out " +
 		"yourself and do not ask. Planning is when asking is cheapest, so the general rule to take a reasonable reading and state the " +
 		"assumption does not apply here: for every choice about intent, scope or a trade-off that would change the plan and that the " +
-		`code cannot settle, ask with \`${ASK_USER}\` before you submit, giving the real options and the one you recommend. If the user ` +
+		`code cannot settle, ask ${tools.question ? `with \`${tools.question}\`` : "the user"} before you submit, giving the real options and the one you recommend. If the user ` +
 		"skips a question, go with your recommendation and record it as an assumption.\n\n" +
 		`Submit only when the plan is decision complete: whoever carries it out has nothing left to decide. Call \`${SUBMIT_PLAN}\` with ` +
 		"the plan as Markdown — a title, a brief summary, the key changes, the test plan, and the assumptions and defaults you chose; " +
@@ -70,9 +76,10 @@ export const SUBMIT_PLAN_RESULTS = {
 	declined: "The plan was not approved and no feedback was given. Plan mode stays on; wait for the user.",
 	revise: (feedback: string) =>
 		`The user did not approve the plan. Feedback: ${feedback}\n\nPlan mode stays on. Revise the plan and call \`${SUBMIT_PLAN}\` again.`,
-	approved: (plan: string, notes: boolean, hasTodo: boolean, file?: string) =>
+	/** `checklist` 是工具表里记进度清单的那件工具（`PlanTools.checklist`）。 */
+	approved: (plan: string, notes: boolean, checklist: string | undefined, file?: string) =>
 		`The user approved the plan${notes ? " with notes" : ""}. Plan mode is off; every tool is available again.${file ? ` The plan is saved at ${file}.` : ""}\n\n${plan}\n\nCarry it out now.` +
-		(hasTodo ? " If it takes three or more steps, break it into a task list with `todo_write` alongside your first action." : "") +
+		(checklist ? ` If it takes three or more steps, break it into a task list with \`${checklist}\` alongside your first action.` : "") +
 		(notes ? " The notes are the user's comments on this plan: follow them as you carry it out." : ""),
 	handedOff: (file: string) =>
 		`The user approved the plan and handed it to a new session, which carries it out from ${file}. Do not carry it out here. That session may message you about intent or trade-offs the plan leaves open; answer from this conversation.`,
@@ -94,10 +101,13 @@ export function approvedPlanNote(plan: ApprovedPlan): string {
 
 /**
  * 计划模式的一轮查过东西、以正文收尾、却没交计划时，说一次的那句：方案写在正文里人批不了，审批卡不会出现。
- * 还缺人的决定的，让它用 `ask_user` 问；只是答问题的，让它直接收住，不再要一段正文。
+ * 还缺人的决定的，让它问（`question` 是工具表里问人的那件工具）；只是答问题的，让它直接收住，不再要一段正文。
  */
 // i18n-exempt：发给模型的话。
-export const UNSUBMITTED_PLAN_NOTE =
-	`（自动提示）现在是计划模式：计划只有通过 \`${SUBMIT_PLAN}\` 提交，用户才看得到审批卡、才能批准，写在回复正文里的方案批不了。` +
-	`如果上面的回复就是方案，现在把它完整地用 \`${SUBMIT_PLAN}\` 交上来，不要再把正文写一遍；还缺用户的决定，就用 \`${ASK_USER}\` 问。` +
-	"如果这一轮只是回答问题、用户并没有要改东西，就直接结束，不要写任何正文——上面的回答用户已经看到了。";
+export function unsubmittedPlanNote(question: string | undefined): string {
+	return (
+		`（自动提示）现在是计划模式：计划只有通过 \`${SUBMIT_PLAN}\` 提交，用户才看得到审批卡、才能批准，写在回复正文里的方案批不了。` +
+		`如果上面的回复就是方案，现在把它完整地用 \`${SUBMIT_PLAN}\` 交上来，不要再把正文写一遍；还缺用户的决定，就${question ? `用 \`${question}\` 问` : "直接问用户"}。` +
+		"如果这一轮只是回答问题、用户并没有要改东西，就直接结束，不要写任何正文——上面的回答用户已经看到了。"
+	);
+}

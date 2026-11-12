@@ -24,7 +24,10 @@ const GUIDELINES = [
 
 export const GUIDELINES_TEXT = `Guidelines:\n${GUIDELINES.map((line) => `- ${line}`).join("\n")}`;
 
-/** 侧边聊天能用的工具：读主会话、交出去、控制主会话，加上读、搜、改、跑命令、查网页。没装的（web_search）自然不在。 */
+/**
+ * 侧边聊天能用的工具：读主会话、交出去、控制主会话，加上读、搜、改、跑命令。查网页的不在这里点名：按声明的类别
+ * （`category: "web"`）留下，没装的自然不在。
+ */
 export const TOOLS: ReadonlySet<string> = new Set([
 	"read_main_chat",
 	"dispatch_task",
@@ -37,8 +40,6 @@ export const TOOLS: ReadonlySet<string> = new Set([
 	"write",
 	"bash",
 	"bash_output",
-	"web_search",
-	"web_fetch",
 ]);
 
 /** 只在侧边聊天里有用的几件：普通会话的工具表里藏起来。 */

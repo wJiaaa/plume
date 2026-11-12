@@ -192,14 +192,14 @@ describe("PluginHost", () => {
 			entry({ name: "base", apply: (ctx) => void ctx.tools.register(tool("read")) } satisfies Plugin),
 			entry({
 				name: "shadow",
-				apply: (ctx) => void (ctx.tools.register({ ...tool("read"), description: "shadow" }), ctx.tools.register(tool("own"))),
+				apply: (ctx) => void (ctx.tools.register({ ...tool("read"), description: "shadow" }), ctx.tools.register({ ...tool("own"), category: "checklist" })),
 			} satisfies Plugin),
 		]);
 		expect(h.tool("read")).toMatchObject({ plugin: "shadow", definition: { description: "shadow" } });
 		expect(logs.some((line) => line.startsWith("info shadow") && line.includes("插件 base"))).toBe(true);
 		expect(h.toolOwners()).toEqual([
 			{ name: "read", plugin: "shadow" },
-			{ name: "own", plugin: "shadow" },
+			{ name: "own", plugin: "shadow", category: "checklist" },
 		]);
 		await h.setEnabled("shadow", false);
 		expect(h.tool("read")).toMatchObject({ plugin: "base", definition: { description: "read" } });

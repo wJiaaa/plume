@@ -118,8 +118,9 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 	// shell 的写法是环境的一部分，不是能被换掉的偏好；只在 `bash` 在工具表里时才说。
 	const shellRules = input.shell && input.tools?.some((tool) => tool.name === "bash") ? shellGuidance(input.shell) : [];
 	const sections: PromptSection[] = [
-		{ id: "identity", text: IDENTITY },
-		{ id: "guidelines", text: `Guidelines:\n${bullets([...BASE_GUIDELINES, isolationGuideline(input)])}` },
+		// 身份、准则两段标上类别：要换身份、换准则或往准则里补几条的插件按类别找，不认段名。
+		{ id: "identity", text: IDENTITY, category: "identity" },
+		{ id: "guidelines", text: `Guidelines:\n${bullets([...BASE_GUIDELINES, isolationGuideline(input)])}`, category: "guidelines" },
 		{ id: "boundaries", text: `Boundaries:\n${bullets(BOUNDARIES)}` },
 		{
 			id: "environment",

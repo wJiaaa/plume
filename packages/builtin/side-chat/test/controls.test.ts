@@ -103,7 +103,14 @@ async function fixture(t: TestContext) {
 		log: { info() {}, warn() {}, error() {} },
 		use: () => ({}),
 		hook: (name: string, layer: unknown) => void layers.set(name, layer),
-		tools: { register: (tool: ToolDefinition) => (tools.push(tool.name), () => {}) },
+		tools: {
+			register: (tool: ToolDefinition) => (tools.push(tool.name), () => {}),
+			// 查网页的工具按声明的类别留下，叫什么都行。
+			list: () => [
+				{ name: "look_up", plugin: "test.web", category: "web" },
+				{ name: "track", plugin: "test.todo", category: "checklist" },
+			],
+		},
 		commands: { provide() {} },
 		serve: (value: SideChatApi) => void (api = value),
 		sessions: {
@@ -156,4 +163,26 @@ test("普通会话的工具表里没有侧边聊天专用的三件", async (t) =
 		return input;
 	});
 	assert.deepEqual(seen, ["read"]);
+});
+
+test("侧边聊天里身份、准则两段按类别换成自己的，段名和位置照旧；查网页的工具按类别留下", async (t) => {
+	const f = await fixture(t);
+	const sections = [
+		{ id: "who", text: "主会话的身份", category: "identity" as const },
+		{ id: "rules", text: "主会话的准则", category: "guidelines" as const },
+		{ id: "boundaries", text: "边界" },
+	];
+	const tools = ["read", "look_up", "track", "read_main_chat"].map((name) => ({ name }));
+	const built = await f.context({ sessionId: "side", tools, sections } as never, async (input) => input);
+	assert.deepEqual(
+		built.tools.map((tool) => tool.name),
+		["read", "look_up", "read_main_chat"],
+	);
+	assert.deepEqual(
+		built.sections.map((section) => section.id),
+		["who", "rules", "boundaries"],
+	);
+	assert.match(built.sections[0]!.text, /^You are Plume's side assistant/);
+	assert.match(built.sections[1]!.text, /^Guidelines:\n- Answer in the user's language/);
+	assert.equal(built.sections[2]!.text, "边界");
 });
