@@ -4,7 +4,7 @@
  * 改的这两样记在 `servers.json` 的 `plugins` 里。
  *
  * 环境变量和请求头里常有密钥，所以界面只拿得到不像密钥的值；像密钥的只告诉它「填了」，改的时候不填就是留着原来的
- * （`VarDraft.value` 为 undefined）。密钥只在 agent 进程里用，写进文件时经服务 `secrets` 加密，
+ * （`VarDraft.value` 为 undefined）。密钥只在 agent 进程里用，写进文件时经 `ctx.secrets` 加密，
  * 读出来时解开（`sealed.ts`）。
  */
 

@@ -91,7 +91,6 @@ it("凭据被读也要问，不只是被写", () => {
 	risky("cat ~/.plume/settings.json");
 	risky("cat /Users/me/.plume/settings.json");
 	risky("cat ~/.plume/vault.key");
-	risky("cat ~/.plume/plugin-data/plume.secrets/vault.key");
 	risky("cp ~/.plume/credentials.json /tmp/c.json");
 	risky("cp ~/.ssh/id_ed25519 /tmp/k");
 	risky("cat ~/.aws/credentials");

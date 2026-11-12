@@ -90,6 +90,7 @@ const zhCN = {
 	"model.cannotDraw": "{model} 所在的供应商用的是 Anthropic 协议，画不了图",
 	"media.badType": "只能存 PNG、JPEG、WebP、GIF 图片",
 	"media.unavailable": "没有会话的媒体目录",
+	"secrets.unavailable": "没有加密密钥用的钥匙",
 	"model.none": "还没有可用的模型，先在「设置 → 模型」里添加供应商和模型。",
 	"model.failed": "模型没有回答",
 	"loop.truncatedCalls": "回复连续多次在工具参数写到一半时达到输出长度上限，已停下。可以让它把内容拆小，或换一个输出上限更大的模型。",
@@ -242,6 +243,7 @@ const en: Record<TextKey, string> = {
 	"model.cannotDraw": "{model} is on a provider that speaks the Anthropic API, which cannot draw",
 	"media.badType": "Only PNG, JPEG, WebP and GIF images can be saved",
 	"media.unavailable": "There is no session media directory",
+	"secrets.unavailable": "There is no key to encrypt secrets with",
 	"model.none": "No model is available yet. Add a provider and a model in Settings → Models first.",
 	"model.failed": "The model did not answer",
 	"loop.truncatedCalls":

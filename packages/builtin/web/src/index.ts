@@ -1,7 +1,7 @@
 /**
  * plume.web 的逻辑入口，跑在 agent 进程：注册 `web_search`、`web_fetch` 两个工具，搜索设置经 ctx.serve 开给设置分区。
  *
- * 设置（选哪家、各家的 key）在插件数据目录的 `search.json`，每次搜索现读；key 经服务 `secrets` 加密后落盘，
+ * 设置（选哪家、各家的 key）在插件数据目录的 `search.json`，每次搜索现读；key 经 `ctx.secrets` 加密后落盘，
  * 只在这个进程里解开用，界面只知道填没填。
  */
 
@@ -43,9 +43,8 @@ const isKeyId = (value: unknown): value is KeyId => typeof value === "string" &&
 
 export default {
 	name: "plume.web",
-	inject: ["secrets"],
 	apply(ctx) {
-		const settings = settingsFile(join(ctx.dataDir, "search.json"), ctx.use("secrets"));
+		const settings = settingsFile(join(ctx.dataDir, "search.json"), ctx.secrets);
 
 		// 要 key 的后端读这一份；每次搜索前从文件现读、换成最新的。
 		let keys: SearchKeys = {};

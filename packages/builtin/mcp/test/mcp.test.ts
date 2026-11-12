@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { HumanAnswer, HumanRequestInput, PluginContext, SecretsService, ToolDefinition, ToolRun } from "@plume/contract";
+import type { HumanAnswer, HumanRequestInput, PluginContext, PluginSecrets, ToolDefinition, ToolRun } from "@plume/contract";
 import type { McpApi } from "../src/api.ts";
 import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
@@ -21,9 +21,9 @@ import mcpPlugin from "../src/index.ts";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/echo-server.mjs", import.meta.url));
 
-/** 服务 `secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把该加密的交给它。 */
+/** `ctx.secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把该加密的交给它。 */
 const SEALED = "plume-sealed:v1:";
-const fakeSecrets: SecretsService = {
+const fakeSecrets: PluginSecrets = {
 	seal: async (value) => SEALED + Buffer.from(value).toString("base64"),
 	unseal: async (sealed) =>
 		sealed.startsWith(`${SEALED}lost`) ? null : sealed.startsWith(SEALED) ? Buffer.from(sealed.slice(SEALED.length), "base64").toString() : null,
@@ -706,7 +706,8 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 	const ctx = {
 		dataDir: dir,
 		locale: () => "zh-CN",
-		use: (name: string) => (name === "secrets" ? fakeSecrets : { register: () => () => {} }),
+		secrets: fakeSecrets,
+		use: () => ({ register: () => () => {} }),
 		log: { warn: () => {}, info: () => {}, error: () => {} },
 		effect: () => {},
 		sessions: { onDeleted: () => {} },

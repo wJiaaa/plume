@@ -146,9 +146,8 @@ export const PLACES_FILES = new Set([
  * 是某样东西的钥匙的文件，从哪里读都算。
  *
  * 写的一侧 `PROTECTED_PATH` 管着（它包括 `~/.ssh`），读的一侧以前没人管，而对凭据来说要紧的正是读：钥匙不会被读坏，
- * 读了就是交出去了。Plume 的供应商 key 加密存在 `~/.plume/credentials.json`，钥匙就在旁边的 `vault.key`，读走这两个就是拿走了全部 key；模型设置
- * `~/.plume/settings.json` 里还明文写着 Magpie 网关的 key；插件的密钥由 plume.secrets 加密，钥匙是 `~/.plume/plugin-data/plume.secrets/vault.key`
-（插件数据目录下别的 `vault.key` 也算：自己加密的第三方插件多半这样叫）。所以单独点名这几个；`~/.plume` 里别的
+ * 读了就是交出去了。Plume 的供应商 key 加密存在 `~/.plume/credentials.json`，钥匙就在旁边的 `vault.key`，读走这两个就是拿走了全部 key
+ * （插件经 `ctx.secrets` 加密的密钥也由这把钥匙派生）；模型设置 `~/.plume/settings.json` 里还明文写着 Magpie 网关的 key。所以单独点名这几个；`~/.plume` 里别的
  * （会话等）不算，规则宽到包住它们会让 agent 连自己的配置都读不了。
  *
  * 两边的边界是命令行里任何能结束一个词的字符，不只是分隔符或字符串结尾：这条既拿来匹配单个路径，也拿来匹配整条命令，
@@ -157,7 +156,7 @@ export const PLACES_FILES = new Set([
  * 引号写成 `\x27\x22\x60`：直接写的话，文案检查会把它当成字符串的开头。
  */
 export const SECRET_PATH =
-	/(?:^|[/\\\s\x27\x22\x60=@:<>(|;&])(?:\.(?:plume[/\\](?:settings\.json|credentials\.json|(?:plugin-data[/\\][^/\\\s]+[/\\])?vault\.key)|ssh[/\\]id_[A-Za-z0-9_]+|aws[/\\]credentials|gnupg\b|netrc|config[/\\]gh[/\\]hosts\.yml))(?=$|[/\\\s\x27\x22\x60;&|<>)])/i;
+	/(?:^|[/\\\s\x27\x22\x60=@:<>(|;&])(?:\.(?:plume[/\\](?:settings\.json|credentials\.json|vault\.key)|ssh[/\\]id_[A-Za-z0-9_]+|aws[/\\]credentials|gnupg\b|netrc|config[/\\]gh[/\\]hosts\.yml))(?=$|[/\\\s\x27\x22\x60;&|<>)])/i;
 
 /**
  * shell：给它什么字符串就跑什么。

@@ -1,12 +1,12 @@
 /**
- * 搜索设置的读写：插件数据目录里的 `search.json`，权限 0600。API key 写盘前经服务 `secrets` 加密，读出来时解开；
+ * 搜索设置的读写：插件数据目录里的 `search.json`，权限 0600。API key 写盘前经 `ctx.secrets` 加密，读出来时解开；
  * 解不开的（钥匙换过）当成没填，要人重新填。
  *
  * 工具每次调用都现读一遍，设置页改了下一次搜索就生效，不用重启。
  */
 
 import { chmod, readFile, rename, writeFile } from "node:fs/promises";
-import type { SecretsService } from "@plume/contract";
+import type { PluginSecrets } from "@plume/contract";
 import { KEY_IDS, type KeyId, type SearchKeys, type SearchSettings, type SearchSettingsView } from "./api.ts";
 
 export interface SettingsFile {
@@ -38,7 +38,7 @@ async function mapKeys(keys: SearchKeys, map: (value: string) => Promise<string 
 	return out;
 }
 
-export function settingsFile(path: string, secrets: SecretsService): SettingsFile {
+export function settingsFile(path: string, secrets: PluginSecrets): SettingsFile {
 	let queue: Promise<unknown> = Promise.resolve();
 
 	async function read(): Promise<SearchSettings> {

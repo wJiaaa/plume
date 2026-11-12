@@ -298,7 +298,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		catalogTimer.unref();
 	}
 	const files = jsonFiles();
-	const keys = providerKeys(createVault(dataDir));
+	const vault = createVault(dataDir);
+	const keys = providerKeys(vault);
 	// 会话、消息、压缩记录都在这个库里，见 `session-db.ts`；打不开就启动失败，日志里有路径和原因。
 	const store = openSessionDb(join(dataDir, "sessions", "sessions.db"), (message) => log("agent", "warn", message));
 	const mediaDir = join(dataDir, "session-media");
@@ -387,6 +388,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			read: (name) => readImage(mediaDir, String(name)),
 			nameOf: (path) => imageNameOf(mediaDir, String(path)),
 		},
+		secrets: (plugin) => vault.pluginSecrets(plugin),
 		...(options.pages ? { pages: options.pages } : {}),
 		...(options.fetch ? { fetch: options.fetch } : {}),
 		...(options.trash ? { trash: options.trash } : {}),

@@ -9,7 +9,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import type { Locale, SecretsService, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
+import type { Locale, PluginSecrets, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -108,7 +108,7 @@ export interface ConnectionsHost {
 	/** 插件数据目录：OAuth 令牌存在这里。 */
 	dataDir: string;
 	/** 加密 OAuth 令牌。 */
-	secrets: SecretsService;
+	secrets: PluginSecrets;
 	documents?: Documents;
 	/** 界面语言：表单在等人时那句状态按它说。 */
 	locale?: () => Locale;

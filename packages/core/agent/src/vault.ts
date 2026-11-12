@@ -1,6 +1,6 @@
 /**
  * 供应商的 API key 存在哪：数据目录的 `credentials.json`（加密），密钥是同目录的 `vault.key`，两个文件都是 0600。
- * `settings.json` 里不再有 key。
+ * `settings.json` 里不再有 key。插件的 `ctx.secrets` 也用这把钥匙（按插件名派生子钥，见 `pluginSecrets`），密文由插件写回它自己的配置。
  *
  * 为什么不用系统钥匙串（Electron 的 safeStorage）：macOS 的安装包是 ad-hoc 签的，钥匙串条目的访问控制认的是
  * 可执行文件的哈希，每个新版本都是一个新哈希，在 macOS 看来就是另一个应用来要别人的密钥——每次更新都要重新
@@ -14,17 +14,21 @@
  * 以后用开发者证书签名了，钥匙串就稳定了，值得换回去：那只是 `key()` 从哪拿字节的事，下面的格式不用变。
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { renameWithRetry } from "./atomic-write.ts";
 import { text } from "./i18n.ts";
 import type { StoredSettings } from "./models.ts";
+import type { PluginSecrets } from "@plume/contract";
 
 /** AES-256-GCM：32 字节的密钥，12 字节的 nonce，16 字节的 tag。 */
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
+/** 插件密文的前缀：它会和明文混在插件的配置里，前缀要认得出来；带版本号，以后换格式时分得开。 */
+const PLUGIN_PREFIX = "plume-sealed:v1:";
+const PLUGIN_SEALED = /^plume-sealed:v1:[A-Za-z0-9+/]+={0,2}$/;
 
 export interface Vault {
 	/** `id` 下存的密钥；没有，或者这把钥匙打不开时是 null。钥匙文件读不出来时抛错（见 `unseal`）。 */
@@ -33,6 +37,8 @@ export interface Vault {
 	putSecrets(entries: Record<string, string>): Promise<void>;
 	/** 不满足 `keep` 的都删掉：删掉的供应商，它的 key 一起忘掉。 */
 	keepSecrets(keep: (id: string) => boolean): Promise<void>;
+	/** 插件 `plugin` 的 `ctx.secrets`：同一把钥匙按插件名派生出的子钥，别的插件封的解不开。 */
+	pluginSecrets(plugin: string): PluginSecrets;
 }
 
 export function createVault(dir: string): Vault {
@@ -141,6 +147,46 @@ export function createVault(dir: string): Vault {
 		}
 	}
 
+	/**
+	 * 插件的子钥：HKDF-SHA256，主钥匙作输入，插件名放进 info。各插件一把，A 插件的密文抄进 B 插件的配置，B 解出来是 null。
+	 * 插件都在同一个进程里、钥匙文件谁都读得到，这挡不住存心的插件；挡的是一个插件把找到的 `plume-sealed:` 都拿去解、
+	 * 再把明文发到它自己的服务上。现有的插件（内置的和市场的）都只解自己封的，没有跨插件解密的需要。
+	 */
+	const pluginKeys = new Map<string, PluginSecrets>();
+	function pluginSecrets(plugin: string): PluginSecrets {
+		const existing = pluginKeys.get(plugin);
+		if (existing) return existing;
+		let derived: Buffer | null = null;
+		const subkey = async () => (derived ??= Buffer.from(hkdfSync("sha256", await key(), Buffer.alloc(0), `plume plugin secrets\0${plugin}`, KEY_BYTES)));
+		const isSealed = (value: string) => typeof value === "string" && PLUGIN_SEALED.test(value);
+		const secrets = Object.freeze<PluginSecrets>({
+			async seal(value) {
+				const iv = randomBytes(IV_BYTES);
+				const cipher = createCipheriv("aes-256-gcm", await subkey(), iv);
+				const body = Buffer.concat([cipher.update(String(value), "utf8"), cipher.final()]);
+				return PLUGIN_PREFIX + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64");
+			},
+			async unseal(sealed) {
+				if (!isSealed(sealed)) return null;
+				const raw = Buffer.from(sealed.slice(PLUGIN_PREFIX.length), "base64");
+				if (raw.length < IV_BYTES + TAG_BYTES) return null;
+				// 从没加密过的数据目录没有钥匙：不为了解一段打不开的密文去生成一把。
+				if (!cached && (await readKeyFile()) === null) return null;
+				const k = await subkey();
+				try {
+					const decipher = createDecipheriv("aes-256-gcm", k, raw.subarray(0, IV_BYTES));
+					decipher.setAuthTag(raw.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
+					return Buffer.concat([decipher.update(raw.subarray(IV_BYTES + TAG_BYTES)), decipher.final()]).toString("utf8");
+				} catch {
+					return null;
+				}
+			},
+			isSealed,
+		});
+		pluginKeys.set(plugin, secrets);
+		return secrets;
+	}
+
 	/** `{ secrets: { [id]: 密文 } }`；读不到或读不懂都当作空的。 */
 	async function read(): Promise<Record<string, string>> {
 		const raw = await readFile(file, "utf8").catch(() => null);
@@ -174,6 +220,7 @@ export function createVault(dir: string): Vault {
 	}
 
 	return {
+		pluginSecrets,
 		async secret(id) {
 			const stored = (await read())[id];
 			return stored === undefined ? null : unseal(stored);

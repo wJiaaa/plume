@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
 import type { StoredProvider } from "../src/models.ts";
+import type { Plugin, PluginContext } from "@plume/contract";
 import { createVault, providerKeys } from "../src/vault.ts";
 
 let dir: string;
@@ -162,4 +163,80 @@ it("经 agent 保存的供应商：settings.json 里没有 key、只有本人可
 		["p-typed", true],
 		["新的", true],
 	]);
+});
+
+it("插件的密钥：封出来带前缀、认得出，下次启动用同一把钥匙解回原值；不是密文、坏的、明文都是 null", async () => {
+	const secrets = createVault(dir).pluginSecrets("acme.one");
+	const a = await secrets.seal("ghp_secret");
+	const b = await secrets.seal("ghp_secret");
+	expect(secrets.isSealed(a)).toBe(true);
+	expect(a).toMatch(/^plume-sealed:v1:/);
+	expect(a).not.toBe(b);
+	expect(a).not.toContain("ghp_secret");
+	expect(await secrets.unseal(a)).toBe("ghp_secret");
+	expect(await secrets.unseal(await secrets.seal(""))).toBe("");
+	expect(await createVault(dir).pluginSecrets("acme.one").unseal(b)).toBe("ghp_secret");
+	expect(secrets.isSealed("ghp_plain")).toBe(false);
+	for (const value of ["ghp_plain", "plume-sealed:v1:", "plume-sealed:v1:@@", "plume-sealed:v1:AAAA"]) expect(await secrets.unseal(value), value).toBeNull();
+});
+
+it("插件的密钥：从没封过的数据目录解一段密文是 null，也不为它生成钥匙", async () => {
+	const elsewhere = await mkdtemp(join(tmpdir(), "plume-vault-other-"));
+	try {
+		const foreign = await createVault(elsewhere).pluginSecrets("acme.one").seal("token");
+		expect(await createVault(dir).pluginSecrets("acme.one").unseal(foreign)).toBeNull();
+		expect(await readdir(dir)).toEqual([]);
+	} finally {
+		await rm(elsewhere, { recursive: true, force: true });
+	}
+});
+
+it("插件的密钥：别的钥匙封的、别的插件封的都解不开（null），和供应商 key 共用一个 vault.key", async () => {
+	const vault = createVault(dir);
+	await vault.putSecrets({ "provider:p1": "sk-fake-one" });
+	const mine = await vault.pluginSecrets("acme.one").seal("token");
+	expect(await vault.pluginSecrets("acme.two").unseal(mine)).toBeNull();
+	expect(await vault.pluginSecrets("acme.one").unseal(mine)).toBe("token");
+	expect((await readdir(dir)).filter((name) => name.startsWith("vault.key"))).toEqual(["vault.key"]);
+
+	const elsewhere = await mkdtemp(join(tmpdir(), "plume-vault-other-"));
+	try {
+		const foreign = await createVault(elsewhere).pluginSecrets("acme.one").seal("token");
+		expect(await vault.pluginSecrets("acme.one").unseal(foreign)).toBeNull();
+	} finally {
+		await rm(elsewhere, { recursive: true, force: true });
+	}
+});
+
+it.skipIf(!chmodBlocks)("插件的密钥：钥匙文件读不出来时报错，不是 null", async () => {
+	const sealed = await createVault(dir).pluginSecrets("acme.one").seal("x");
+	const keyFile = join(dir, "vault.key");
+	const secrets = createVault(dir).pluginSecrets("acme.one");
+	await chmod(keyFile, 0o000);
+	try {
+		await expect(secrets.unseal(sealed)).rejects.toThrow(keyFile);
+		await expect(secrets.seal("y")).rejects.toThrow(keyFile);
+	} finally {
+		await chmod(keyFile, 0o600);
+	}
+	expect(await secrets.unseal(sealed)).toBe("x");
+});
+
+it("插件拿到的 `ctx.secrets` 由本体给：自己封的自己解得开，另一个插件解不开", async () => {
+	const dataDir = join(dir, "data");
+	const got = new Map<string, PluginContext["secrets"]>();
+	const plugin = (name: string): Plugin => ({ name, apply: (ctx) => void got.set(name, ctx.secrets) });
+	agent = await createAgent({
+		dataDir,
+		settingsFile: join(dir, "model.json"),
+		plugins: ["acme.one", "acme.two"].map((name) => ({ key: name, load: async () => plugin(name) })),
+		log: () => undefined,
+	});
+	const one = got.get("acme.one")!;
+	const two = got.get("acme.two")!;
+	const sealed = await one.seal("token");
+	expect(await one.unseal(sealed)).toBe("token");
+	expect(await two.unseal(sealed)).toBeNull();
+	// 钥匙是本体给供应商 key 用的那把，在 Plume 的数据目录里，不在哪个插件的数据目录里。
+	expect(await readdir(dataDir)).toContain("vault.key");
 });

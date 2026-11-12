@@ -1,9 +1,9 @@
 /**
- * `servers.json` 里的密钥：像密钥的变量值写盘前经服务 `secrets` 加密、留在原处，读出来时解开。
+ * `servers.json` 里的密钥：像密钥的变量值写盘前经 `ctx.secrets` 加密、留在原处，读出来时解开。
  * 手写进文件的明文照样能用，下次存配置时加密。插件带来的服务上人填的值（`plugins`）同样处理。
  */
 
-import type { SecretsService } from "@plume/contract";
+import type { PluginSecrets } from "@plume/contract";
 import type { PluginServerState, ServerConfig } from "./config.ts";
 import { isPlaceholder } from "./placeholders.ts";
 import { looksSecret } from "./vars.ts";
@@ -22,20 +22,20 @@ async function mapVars(server: ServerConfig, map: (name: string, value: string) 
  * 写盘前把像密钥的值加密。只是空位（`${TOKEN}`）的不加密：它不是密钥，留着给人看得懂。
  * 判断「像不像」和界面藏不藏原值是同一条规则，界面看得到的值文件里也是明文。
  */
-const seal = (secrets: SecretsService) => async (name: string, value: string) =>
+const seal = (secrets: PluginSecrets) => async (name: string, value: string) =>
 	looksSecret(name) && value !== "" && !isPlaceholder(value) && !secrets.isSealed(value) ? secrets.seal(value) : value;
 
 /**
  * 读出来以后把密文解开，换回原值；解不开（钥匙换过）的当成没填，人在设置页重新填。
  * 钥匙文件读不出来时 `unseal` 抛错，这里不接：带着空值的配置一旦写回去，原来的密文就没了。
  */
-const open = (secrets: SecretsService) => async (_name: string, value: string) => (secrets.isSealed(value) ? ((await secrets.unseal(value)) ?? "") : value);
+const open = (secrets: PluginSecrets) => async (_name: string, value: string) => (secrets.isSealed(value) ? ((await secrets.unseal(value)) ?? "") : value);
 
-export function sealServers(servers: readonly ServerConfig[], secrets: SecretsService): Promise<ServerConfig[]> {
+export function sealServers(servers: readonly ServerConfig[], secrets: PluginSecrets): Promise<ServerConfig[]> {
 	return Promise.all(servers.map((server) => mapVars(server, seal(secrets))));
 }
 
-export function openServers(servers: readonly ServerConfig[], secrets: SecretsService): Promise<ServerConfig[]> {
+export function openServers(servers: readonly ServerConfig[], secrets: PluginSecrets): Promise<ServerConfig[]> {
 	return Promise.all(servers.map((server) => mapVars(server, open(secrets))));
 }
 
@@ -54,10 +54,10 @@ async function mapStates(
 	return Object.fromEntries(entries);
 }
 
-export function sealStates(states: Readonly<Record<string, PluginServerState>>, secrets: SecretsService): Promise<Record<string, PluginServerState>> {
+export function sealStates(states: Readonly<Record<string, PluginServerState>>, secrets: PluginSecrets): Promise<Record<string, PluginServerState>> {
 	return mapStates(states, seal(secrets));
 }
 
-export function openStates(states: Readonly<Record<string, PluginServerState>>, secrets: SecretsService): Promise<Record<string, PluginServerState>> {
+export function openStates(states: Readonly<Record<string, PluginServerState>>, secrets: PluginSecrets): Promise<Record<string, PluginServerState>> {
 	return mapStates(states, open(secrets));
 }

@@ -850,6 +850,26 @@ export interface ModelAccess {
 }
 
 /**
+ * 插件的 `ctx.secrets`：把要存的密钥（令牌、密码、请求头里的凭据）加密成一段文本，插件把它写回自己的配置文件。
+ * AES-256-GCM，钥匙由本体从它给供应商 key 用的那把（`vault.key`）按插件名派生：各插件的密文互相解不开。
+ *
+ * 只管加解密，不替插件存：密文跟着它所属的那条配置走，删掉配置就是删掉密钥，不用另外清。
+ * 挡的是配置文件被同步、拷走、贴进问题报告时带出明文，以及一个插件的密文被抄进另一个插件的配置后被它解开；
+ * 挡不住同一台机器上同一个用户的程序——钥匙就在数据目录里，插件也都跑在同一个进程里。
+ */
+export interface PluginSecrets {
+	/** 加密一个值，返回带固定前缀的文本（`isSealed` 认得出），能放进 JSON 之类的任何文本里。 */
+	seal(value: string): Promise<string>;
+	/**
+	 * 解回来。不是 `seal` 出来的、不是这个插件封的、或者这把钥匙打不开（钥匙丢了换了新的、密文来自别的机器）时是 null，当成「要重新填」。
+	 * 钥匙文件在却读不出来时抛错：这时不能当成「没了」，否则调用方把空值写回去，等钥匙又读得出来时已经没东西可解了。
+	 */
+	unseal(sealed: string): Promise<string | null>;
+	/** 这段文本是不是 `seal` 出来的样子：手写进配置的明文和密文分得开。 */
+	isSealed(value: string): boolean;
+}
+
+/**
  * 会话的媒体目录：会话里的图片挪出消息后按内容（sha1）存在这里，消息里只留名字（`ImageContent.media`）。
  * 存进去的名字和会话存图时起的一样，同一张图不会存两份。
  */
@@ -1293,6 +1313,8 @@ export interface PluginContext {
 	readonly model: ModelAccess;
 	/** 读写会话的媒体目录，见 `MediaAccess`。 */
 	readonly media: MediaAccess;
+	/** 把插件要存的密钥加密成一段文本、再解回来，见 `PluginSecrets`。本体提供，别的插件换不掉。 */
+	readonly secrets: PluginSecrets;
 	/** 读会话，见 `SessionAccess`。 */
 	readonly sessions: SessionAccess;
 	/** 驱动界面入口画的网页（`<webview>`），见 `WebPages`。 */
@@ -1383,27 +1405,6 @@ export interface Services {
 	"project.files": ProjectFilesService;
 	resources: ResourcesService;
 	"session.worktree": SessionWorktreeService;
-	secrets: SecretsService;
-}
-
-/**
- * 服务 `secrets`：把插件要存的密钥（令牌、密码、请求头里的凭据）加密成一段文本，插件把它写回自己的配置文件。
- * 内置插件 plume.secrets 提供：AES-256-GCM，钥匙在它的数据目录。
- *
- * 只管加解密，不替插件存：密文跟着它所属的那条配置走，删掉配置就是删掉密钥，不用另外清。
- * 挡的是配置文件被同步、拷走、贴进问题报告时带出明文；挡不住同一台机器上同一个用户的程序——插件都跑在同一个进程里，
- * 谁拿到服务都解得开谁的密文。
- */
-export interface SecretsService {
-	/** 加密一个值，返回带固定前缀的文本（`isSealed` 认得出），能放进 JSON 之类的任何文本里。 */
-	seal(value: string): Promise<string>;
-	/**
-	 * 解回来。不是 `seal` 出来的、或者这把钥匙打不开（钥匙丢了换了新的、密文来自别的机器）时是 null，当成「要重新填」。
-	 * 钥匙文件在却读不出来时抛错：这时不能当成「没了」，否则调用方把空值写回去，等钥匙又读得出来时已经没东西可解了。
-	 */
-	unseal(sealed: string): Promise<string | null>;
-	/** 这段文本是不是 `seal` 出来的样子：手写进配置的明文和密文分得开。 */
-	isSealed(value: string): boolean;
 }
 
 /**

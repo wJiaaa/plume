@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { SecretsService, ToolRun } from "@plume/contract";
+import type { PluginSecrets, ToolRun } from "@plume/contract";
 import type { SearchKeys } from "../src/api.ts";
 import { htmlToText } from "../src/html-text.ts";
 import { defaultSearchProviders } from "../src/search/defaults.ts";
@@ -203,9 +203,9 @@ test("web_search：按 <search> 格式输出，配置错误时说出 code", asyn
 	assert.match(failed.output, /SEARCH_PROVIDER_AMBIGUOUS/);
 });
 
-/** 服务 `secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把 key 交给它加密。 */
+/** `ctx.secrets` 的替身：前缀和真的一样，内容只做 base64，测的是插件有没有把 key 交给它加密。 */
 const SEALED = "plume-sealed:v1:";
-const fakeSecrets: SecretsService = {
+const fakeSecrets: PluginSecrets = {
 	seal: async (value) => SEALED + Buffer.from(value).toString("base64"),
 	unseal: async (sealed) =>
 		sealed.startsWith(`${SEALED}lost`) ? null : sealed.startsWith(SEALED) ? Buffer.from(sealed.slice(SEALED.length), "base64").toString() : null,

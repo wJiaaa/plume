@@ -31,6 +31,7 @@ import type {
 	Plugin,
 	PluginContext,
 	PluginEntry,
+	PluginSecrets,
 	PluginStatus,
 	SessionAccess,
 	SessionEndReason,
@@ -49,6 +50,17 @@ const NO_MEDIA: MediaAccess = {
 	},
 	read: async () => null,
 	nameOf: () => null,
+};
+
+/** 没有 vault 时的 `ctx.secrets`：加不了密、也解不了，认得出密文的样子。 */
+const NO_SECRETS: PluginSecrets = {
+	seal: async () => {
+		throw new Error(text("secrets.unavailable"));
+	},
+	unseal: async () => {
+		throw new Error(text("secrets.unavailable"));
+	},
+	isSealed: (value) => typeof value === "string" && value.startsWith("plume-sealed:"),
 };
 
 /**
@@ -239,6 +251,8 @@ export class PluginHost {
 			notice(sessionId: string, text: string, level: NoticeLevel): void;
 			/** 插件的 `ctx.media`：媒体目录在 agent 那边。只测宿主本身时不给，插件读不到图、也存不进去。 */
 			media?: MediaAccess;
+			/** 插件的 `ctx.secrets`，按插件名给（见 `vault.ts` 的 `pluginSecrets`）。只测宿主本身时不给，插件加解密都抛错。 */
+			secrets?: (plugin: string) => PluginSecrets;
 			/** 插件的 `ctx.sessions`，见 `HostSessions`。只测宿主本身时不给，插件读到的是一个会话也没有。 */
 			sessions?: HostSessions;
 			/** 插件的 `ctx.pages`，见 `HostPages`。 */
@@ -679,6 +693,7 @@ export class PluginHost {
 			log,
 			model: this.options.model,
 			media: this.options.media ?? NO_MEDIA,
+			secrets: this.options.secrets?.(name) ?? NO_SECRETS,
 			appDataDir: this.options.appDataDir,
 			sessions: {
 				list: () => sessions.list(),

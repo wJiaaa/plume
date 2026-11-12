@@ -1,7 +1,7 @@
 /**
  * 远程 MCP 服务的 OAuth 登录。没在请求头里写 `Authorization` 的 http、sse 服务按 OAuth 处理：服务说要鉴权（401）时，
  * 状态变成「需要登录」，人在设置页点「登录」，浏览器里授权，令牌存进插件数据目录（每台一个文件，权限 0600，
- * 整份经服务 `secrets` 加密），之后连接时带上、过期了用刷新令牌换新的。令牌只在 agent 进程里，不进界面。
+ * 整份经 `ctx.secrets` 加密），之后连接时带上、过期了用刷新令牌换新的。令牌只在 agent 进程里，不进界面。
  *
  * 后台连接用的 `BackgroundOAuthProvider` 从不开浏览器：要人做的事（第一次授权、刷新失效、要更大的权限）一律抛
  * `McpNeedsLogin`，等人点「登录」走 `login`。
@@ -13,7 +13,7 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { SecretsService } from "@plume/contract";
+import type { PluginSecrets } from "@plume/contract";
 import { type HttpServer, type ServerConfig, writePrivate } from "./config.ts";
 
 interface OAuthRecord {
@@ -82,10 +82,10 @@ function sameUrl(a: string, b: string): boolean {
 /** 一台服务的令牌文件，内容是整条记录加密后的文本。只有这个插件读写，同一个文件的改动排着队来。 */
 export class OAuthStore {
 	private readonly dir: string;
-	private readonly secrets: SecretsService;
+	private readonly secrets: PluginSecrets;
 	private readonly queue = new Map<string, Promise<unknown>>();
 
-	constructor(dataDir: string, secrets: SecretsService) {
+	constructor(dataDir: string, secrets: PluginSecrets) {
 		this.dir = join(dataDir, "oauth");
 		this.secrets = secrets;
 	}

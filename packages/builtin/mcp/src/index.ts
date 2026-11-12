@@ -91,11 +91,11 @@ function promptCommands(entries: { server: ServerConfig; prompts: PromptEntry[] 
 
 export default {
 	name: "plume.mcp",
-	inject: ["resources", "secrets"],
+	inject: ["resources"],
 	apply(ctx) {
 		const text = () => MESSAGES[ctx.locale()];
 		const file = join(ctx.dataDir, "servers.json");
-		const secrets = ctx.use("secrets");
+		const secrets = ctx.secrets;
 		const documents = new Documents(join(ctx.dataDir, "documents"));
 		const connections = new Connections({
 			register: (tool) => ctx.tools.register(tool),

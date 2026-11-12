@@ -22,6 +22,7 @@ export default {
 | `ctx.trash(path)` | 把文件或目录移到系统的废纸篓（Windows 上是回收站），删人写的东西时用它而不是直接删，删错了还能拿回来；宿主没有这个能力（agent 不在桌面应用里跑）或插件已停用时抛错。界面上的叫法按平台写：macOS「废纸篓」，Windows「回收站 / Recycle Bin」 |
 | `ctx.dataDir` | 插件私有的数据目录，加载前已创建。插件自己的文件都放这里 |
 | `ctx.appDataDir` | Plume 自己的数据目录（设置、会话、插件都在这里）。给模型用的工具不要写这里：写得到设置，就改得了自己的权限 |
+| `ctx.secrets.seal(value)` / `unseal(sealed)` / `isSealed(value)` | 插件要存的密钥（令牌、密码、请求头里的凭据）不要明文写进配置：`seal` 加密成带 `plume-sealed:v1:` 前缀的文本，写回你自己的配置；`unseal` 解回来，不是密文、不是你这个插件封的、钥匙打不开时是 null（当成没填、让人重新填），钥匙文件读不出来时抛错（这时别把空值写回去盖掉密文）；`isSealed` 分出手写的明文和密文。本体给、换不掉，钥匙是本体的 `vault.key` 按插件名派生的，别的插件解不开你的密文。只加解密、不替你存，删配置就是删密钥。挡的是配置被同步、拷走时带出明文，挡不住同一用户的程序 |
 | `ctx.tools.register(tool)` | 注册工具，停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
 | `ctx.tools.names()` | 现在登记着的工具名（各插件的，同名只算一个，停用的不算），给「让人挑工具」的设置用 |
 | `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、它声明的类别（`category`）。在钩子里按类别找别的插件的工具（「记清单的那件叫什么」）时用，见「按类别找工具」 |
@@ -498,7 +499,7 @@ await ctx.sessions.answer(asker, request.toolCallId, { answer: "先备份" }); /
 
 ## 服务：插件给插件用的一组方法
 
-一个插件提供实现，别的插件按名字用；依赖的是服务名，不是某个插件，所以谁提供都行，能整个换掉。
+一个插件提供实现，别的插件按名字用；依赖的是服务名，不是某个插件，所以谁提供都行，能整个换掉。服务只在插件之间：本体给的能力（`ctx.secrets`、`ctx.fetch`、`ctx.media`……）挂在 `ctx` 上，不是服务，换不掉。
 
 ```ts
 // 提供的一方
@@ -535,7 +536,6 @@ Plume 自带的服务：
 | `file.read` | 内置插件 plume.tools | `authorize(run, path)` 与文件工具共用读取授权，返回 `{ ok: true, absolute }` 或 `{ ok: false, message }`。消费方声明 `inject: ["file.read"]`，用当前工具的 `ToolRun` 调用，成功后实际读取必须使用返回的 `absolute`；详见下文 |
 | `project.files` | 内置插件 plume.tools（它的 glob、grep 也用这一份） | `list(root)`：`root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里时是 null，自己走目录。问 git 时不执行仓库能控制的程序，插件要列项目文件就用它，不要自己跑 `git ls-files` |
 | `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。建、收回、合并回去都归 plume.git |
-| `secrets` | 内置插件 plume.secrets（AES-256-GCM，钥匙在它的数据目录） | 插件要存的密钥（令牌、密码、请求头里的凭据）不要明文写进配置：`seal(value)` 加密成带 `plume-sealed:v1:` 前缀的文本，写回你自己的配置；`unseal(sealed)` 解回来，不是密文或钥匙打不开时是 null（当成没填、让人重新填），钥匙文件读不出来时抛错（这时别把空值写回去盖掉密文）；`isSealed(value)` 分出手写的明文和密文。只加解密、不替你存，删配置就是删密钥。挡的是配置被同步、拷走时带出明文，挡不住同一用户的程序 |
 
 ### 文件读取授权
 
