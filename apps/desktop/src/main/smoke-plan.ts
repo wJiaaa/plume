@@ -13,6 +13,9 @@ const PLAN_V2 = "# 改 hello.txt（先读再改）\n\n## 概要\n先读一遍 he
 const PLAN_V3 = "# 改 hello.txt（定稿）\n\n## 概要\n读 hello.txt，把 hello 改成 planned。";
 const FEEDBACK = "先读一遍再改";
 const DONE = "按计划改好了。";
+const ROUND3 = "冒烟计划：再交一份，按快捷键接受";
+const PLAN_V4 = "# 改 hello.txt（快捷键）\n\n## 概要\n读一遍 hello.txt。";
+const DONE_KEY = "按快捷键接受的计划做完了。";
 const PLAN_ON = "Plan mode is on";
 
 /**
@@ -26,6 +29,8 @@ const PLAN_ON = "Plan mode is on";
  * 3. 权限切到完全访问再发一句：`edit` 照样被拒，命令跑在只读沙箱里写不出文件，申请离开沙箱的被拒；计划卡照样出来、停着不被自动放行。
  *    点「接受」：卡收起、开关关掉，同一轮里模型接着读、改 hello.txt，改成了；模型收到的批准结果说计划模式已关。
  * 4. 环境卡片里「计划」一节列出批准的那份。
+ * 5. 权限切回请求批准、再开计划模式交一份：卡上主按钮是「接受」（键帽 ⌘↩），「接受并开启自动模式」是次按钮（⇧⌘↩）；
+ *    在卡上按 ⌘↩（Windows 上 Ctrl+Enter）只接受：计划模式关掉、模型接着做，权限签仍是请求批准。
  *
  * 模型经工具进计划模式没有这条路（只有人拨开关或 `/plan`）；提问卡在主流程（`smoke-question.ts`）里走过，这里不重复。
  */
@@ -98,6 +103,8 @@ export async function checkPlan(options: {
 		const all = JSON.stringify(request.messages ?? []);
 		const result = (id: string) => (seen[id] = toolResult(request, id));
 		// 按整段对话认走到哪一步，越往后的越先认。
+		if (all.includes(ROUND3))
+			return result("toolu_plan_submit4") !== undefined ? { text: DONE_KEY } : { toolCalls: [call("toolu_plan_submit4", "submit_plan", { plan: PLAN_V4 })] };
 		if (all.includes("toolu_plan_apply")) {
 			result("toolu_plan_apply");
 			return { text: DONE };
@@ -252,6 +259,38 @@ export async function checkPlan(options: {
 		await capture("smoke-plan-environment.png");
 		await page(`document.querySelector('[data-environment-toggle]').click()`);
 		await until(`document.querySelector('[data-plan-section]') === null`, "收起环境卡片");
+
+		// 5. 请求批准档下再交一份：主按钮是「接受」，⌘↩ 只接受、不动权限；连权限一起改的「接受并开启自动模式」要 ⇧⌘↩。
+		await page(`document.querySelector('[data-permission-chip]').click()`);
+		await until(`document.querySelectorAll('[role=menuitem]').length === 3`, "权限菜单列出三档");
+		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim().startsWith('请求批准')).click()`);
+		await until(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'ask'`, "权限签切回请求批准");
+		await page(`document.querySelector('button[aria-label^="进入计划模式"]').click()`);
+		await until(toggleOn, "再拨开计划模式");
+		await send(ROUND3);
+		await planCard("改 hello.txt（快捷键）", "请求批准档下的计划卡");
+		const buttons = await page<{ main?: string; auto?: string; mainText?: string; autoText?: string } | null>(`(() => {
+			const main = document.querySelector('${card} .plume-plan-main > button:last-child');
+			const auto = document.querySelector('${card} [data-plan-action=accept-auto]');
+			return { main: main?.dataset.planAction, auto: auto?.dataset.planAction, mainText: main?.textContent, autoText: auto?.textContent };
+		})()`);
+		if (buttons?.main !== "accept" || buttons.auto !== "accept-auto")
+			throw new Error(`请求批准档下主按钮应是「接受」、旁边是「接受并开启自动模式」，实际是 ${JSON.stringify(buttons)}`);
+		if (process.platform === "darwin" && (buttons.mainText?.includes("⇧") || !buttons.mainText?.includes("⌘") || !buttons.autoText?.includes("⇧")))
+			throw new Error(`键帽应是「接受」⌘↩、「接受并开启自动模式」⇧⌘↩，实际是 ${JSON.stringify(buttons)}`);
+		await mainNotAlone("请求批准档下");
+		await capture("smoke-plan-ask.png");
+		await page(`document.querySelector('${card}').focus()`);
+		const modifier = process.platform === "darwin" ? "meta" : "control";
+		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Enter", modifiers: [modifier] });
+		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Enter", modifiers: [modifier] });
+		await until(chatHas(DONE_KEY), "按 ⌘↩ 接受以后模型接着做完");
+		await until(turnEnded, "按快捷键接受的那一轮收尾");
+		await until(toggleOff, "按快捷键接受以后计划模式关掉");
+		const keyed = seen["toolu_plan_submit4" as string];
+		if (!keyed?.includes("The user approved the plan")) throw new Error(`按 ⌘↩ 模型应该收到批准，实际是 ${JSON.stringify(keyed)}`);
+		if (!(await page<boolean>(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'ask'`)))
+			throw new Error("按 ⌘↩ 只该接受计划，权限却被改了（那是 ⇧⌘↩ 的事）");
 	} finally {
 		setModel(undefined);
 	}

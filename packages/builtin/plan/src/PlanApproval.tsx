@@ -151,8 +151,9 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 				if (!editing) setRevising(true);
 			} else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
 				event.preventDefault();
-				if (event.shiftKey || !offerAuto) accept();
-				else acceptAuto();
+				// 最顺手的键给影响小的「接受」；连权限一起改的要多按一个 ⇧。没有那一颗时 ⇧ 也是接受。
+				if (event.shiftKey && offerAuto) acceptAuto();
+				else accept();
 			}
 		}
 
@@ -278,16 +279,16 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 						<span className="plume-plan-spacer" />
 						{handoffButton}
 						<span className="plume-plan-main">
-							<Button variant={offerAuto ? "soft" : "primary"} disabled={pending} onClick={accept} data-plan-action="accept">
-								{t.accept}
-								<Keys keys={offerAuto ? ["⇧", "⌘", "↩"] : ["⌘", "↩"]} />
-							</Button>
 							{offerAuto && (
-								<Button variant="primary" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
+								<Button variant="soft" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
 									{t.acceptAuto}
-									<Keys keys={["⌘", "↩"]} />
+									<Keys keys={["⇧", "⌘", "↩"]} />
 								</Button>
 							)}
+							<Button variant="primary" disabled={pending} onClick={accept} data-plan-action="accept">
+								{t.accept}
+								<Keys keys={["⌘", "↩"]} />
+							</Button>
 						</span>
 					</div>
 				)}
