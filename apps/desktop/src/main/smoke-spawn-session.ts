@@ -154,7 +154,8 @@ export async function checkSpawnSession(options: {
 		let startedCwd = "";
 		await wait(async () => {
 			startedCwd = (await agent.sessions()).find((item) => item.id === startedId)?.cwd ?? "";
-			return startedCwd.includes(`${sep}worktrees${sep}`);
+			// 和工作区比，不看路径里有没有 worktrees：仓库自己就在某个 git 工作树里跑冒烟时，工作区的路径本来就带着它。
+			return startedCwd !== "" && startedCwd !== workspace && !startedCwd.startsWith(workspace + sep);
 		}, "新会话第一轮换进自己的工作树");
 		const branch = (await promisify(execFile)("git", ["symbolic-ref", "--short", "HEAD"], { cwd: startedCwd })).stdout.trim();
 		if (!branch.startsWith("plume/session-")) throw new Error(`新会话的工作树不在它自己的分支上：${branch}`);
