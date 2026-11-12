@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
-import { scanCode } from "../check-core-names.mjs";
+import { nameProblems, scanCode, scanText } from "../check-core-names.mjs";
 
 const lists = {
 	plugins: new Set(["plume.side-chat", "plume.terminal", "plume.git"]),
@@ -51,6 +54,61 @@ test("全小写的单个词不在比较里时不算，名单外的基本工具�
 		'if (block.name === "bash") return;',
 		'const words = "task list";',
 		'const SNAKE = "todo_writer";',
+		'const prose = "a `tasks` list, `skill-set` and task`";',
 	].join("\n");
 	assert.deepEqual(found(code), []);
+});
+
+test("提示词里用反引号点名的工具算，全小写的单个词也算", () => {
+	assert.deepEqual(found('const line = "How it differs from a sub-agent (`task`): ...";'), ["name task"]);
+	assert.deepEqual(found("const note = `先用 \\`skill\\` 载入`;"), ["name skill"]);
+});
+
+test("写给模型的 Markdown：插件名、带下划线的名字出现就算，全小写的单个词在反引号里才算", () => {
+	const text = [
+		"Ask the user with `ask_user`.",
+		"Use the task list (plume.side-chat keeps its own).",
+		"Dispatch it with `task`.",
+		"Read with todo_write.",
+	].join("\n");
+	const hits = scanText(text, { plugins: lists.plugins, names: new Set([...lists.names, "ask_user"]) }).map(
+		({ line, kind, name }: { line: number; kind: string; name: string }) => `${line} ${kind} ${name}`,
+	);
+	assert.deepEqual(hits.sort(), ["1 name ask_user", "2 plugin plume.side-chat", "3 name task", "4 name todo_write"]);
+});
+
+test("内置插件里点名别的内置插件、它的工具算；自己的、注释里的不算", () => {
+	const root = mkdtempSync(join(tmpdir(), "plume-names-"));
+	try {
+		const plugin = (dir: string, files: Record<string, string>) => {
+			mkdirSync(join(root, "packages/builtin", dir, "src"), { recursive: true });
+			writeFileSync(join(root, "packages/builtin", dir, "package.json"), "{}");
+			for (const [file, text] of Object.entries(files)) {
+				mkdirSync(dirname(join(root, "packages/builtin", dir, file)), { recursive: true });
+				writeFileSync(join(root, "packages/builtin", dir, file), text);
+			}
+		};
+		plugin("todo", { "src/index.ts": 'export default { name: "plume.todo", apply(ctx) { ctx.tools.register({ name: "todo_write" }); } };' });
+		plugin("plan", {
+			"src/index.ts": [
+				'export default { name: "plume.plan" };',
+				"// 清单由 plume.todo 的 todo_write 记。",
+				'const hasTodo = tools.some((tool) => tool.name === "todo_write");',
+				'const panel = "plume.todo/list";',
+			].join("\n"),
+			"skills/plan/SKILL.md": "Track the steps with `todo_write`.",
+		});
+		const problems = nameProblems(root)
+			.filter(({ file }: { file: string }) => file.includes("packages/builtin/") && file.endsWith("index.ts"))
+			.map(({ file, message }: { file: string; message: string }) => `${relative(root, file)} ${message.split("：")[0]}`);
+		assert.deepEqual(problems.sort(), [
+			"packages/builtin/plan/src/index.ts 第 3 行按名字认了别的插件的 todo_write",
+			"packages/builtin/plan/src/index.ts 第 4 行认了插件 plume.todo",
+		]);
+		const skill = nameProblems(root).filter(({ file }: { file: string }) => file.endsWith("SKILL.md"));
+		assert.equal(skill.length, 1);
+		assert.match(skill[0].message, /todo_write/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });

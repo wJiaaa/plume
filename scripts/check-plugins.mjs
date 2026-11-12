@@ -12,6 +12,7 @@
  *    插件从 `@plume/ui` 引用的值只能是这些名字，名单里的名字 `@plume/ui` 都要真的导出。skill 的 references/components.md
  *    由这份名单、源码里的签名和注释、`@plume/styles` 的类名组合生成，和代码对不上就失败，`--fix` 重新生成。
  * 4. 本体的代码里不出现插件名；5. 本体不按名字认插件的工具、提示词段和送达标签（基本的文件和命令工具除外）。
+ * 6. 内置插件不按名字认别的插件：源码和带给模型的技能里不出现别的内置插件、市场插件的插件名和它们的工具名、段名。
  *    名单、匹配方式和例外在 scripts/check-core-names.mjs，规则的来由见 spec/domain/plugin-primitives.md。
  *
  *   node scripts/check-plugins.mjs          # 检查
@@ -21,7 +22,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { importProblems, stripComments } from "../packages/sdk/plugin-sdk/lib/lint/imports.mjs";
-import { coreNameProblems } from "./check-core-names.mjs";
+import { nameProblems } from "./check-core-names.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const SKILL = join(root, "skills/plume-plugin");
@@ -249,8 +250,8 @@ function componentsDoc() {
 	}
 }
 
-// 规则 4、5：本体不按名字认具体插件。
-for (const { file, message } of coreNameProblems(root)) report(file, message);
+// 规则 4、5、6：本体不按名字认具体插件，内置插件不按名字认别的插件。
+for (const { file, message } of nameProblems(root)) report(file, message);
 
 if (problems.length > 0) {
 	console.error(`插件检查没通过（规则见 scripts/check-plugins.mjs，写法见 skills/plume-plugin）：\n\n${problems.join("\n")}\n`);

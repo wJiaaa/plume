@@ -40,7 +40,7 @@
   - 审批的 `userOnly`：提问、计划、表单借审批卡，关掉审批语义，答案走旁路，`tool.approve` 的每一层都收到不是审批的请求。现在是单独的原语「等人」。
   - 送达的 `kind: "job" | "session" | "wakeup"`：后台命令、新会话交回、定时唤醒各占一个值，本体按值分支画。现在本体只认通用字段，那一行由交它的插件画。
   - 侧边聊天借排队消息（`origin: "child"`）把活交给主会话，本体随后为它长出回执条、`HandedTask`、`mainChat`。现在留下的 `QueuedMessage.origin`、`UserMessage.fromPlugin` 只是来处标注（安全边界，模型据此知道这不是用户的话），交过去的事走到哪是通用的 `ChildTask`，画成什么样归建子会话的插件。
-- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条）。
+- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。
 
 ### 已定的例外
 
@@ -53,19 +53,25 @@
 
 ### 插件之间怎么互相用
 
-- **逻辑侧走服务。** 一方 `ctx.provide(名字, 实现)`，另一方把名字写进 `inject`、`ctx.use(名字)`；类型写在 `@plume/contract` 的 `Services` 里。依赖的是服务名，不是插件名。插件不按名字找另一个插件，不认另一个插件的工具名、段名（内置插件不认市场插件）。
+- **逻辑侧走服务。** 一方 `ctx.provide(名字, 实现)`，另一方把名字写进 `inject`、`ctx.use(名字)`；类型写在 `@plume/contract` 的 `Services` 里。依赖的是服务名，不是插件名。插件不按名字找另一个插件，不认另一个插件的工具名、段名、面板 id、`details` 里它自己定的形状；内置插件之间也一样，内置插件不认市场插件。
+- **按声明认别的插件的东西。** 要对别的插件的某一类工具、段、结果区别对待，按上一节那些声明认：收窄工具表时留下 `category: "web"` 的，子会话换身份时换掉 `category: "identity"` 的段，压缩不剪 `instructions` 的结果，找起后台任务的那次调用认 `details.job`。
+- **提示词里点名别的插件的工具，按类别现找。** 「用 `todo_write` 记下步骤」「拿不准就用 `ask_user` 问」这种话写死名字，那个插件被换掉或停用时就是错的。按类别在 `ctx.tools.list()`（工具里 `run.tools()`）找它这会儿叫什么，`model.context` 里再和这一轮的 `input.tools` 对一下，找到了点名，找不到就换一种不靠它的说法；意思不变，不为去掉名字把话说含糊。现有的类别：`checklist`（记进度清单）、`question`（停下来问人）、`web`（只读地查网页）、`mcp`。缺一类时按上面四条准入加一个值，不加插件名。
+- **自己的事自己说。** 只跟某个插件的能力有关的提示词（压缩后计划还在、清单怎么记），由那个插件经自己的钩子说（计划模式经 `context.compact` 把批准的计划接进压缩头），不让另一个插件替它记着。
 - **界面侧也走服务，但先看是不是接手者或槽位。** 本体自己也要用的，做成接手者：本体给一个组件或入口，插件按种类登记，本体和别的插件都经本体用（`ui.documentViewer` 登记、`ui.DocumentPreview` 使用；`ui.linkOpener`、`ui.terminalOpener` 由本体的入口调）。许多插件各放一份、由一个插件画出来的，是槽位（`ui.environmentSection` 由宿主记账、包错误边界，画环境卡片的插件经 `ui.useEnvironmentSections` 拿）。只在「一个插件提供、另一个插件直接拿来调」、本体不用它时走界面侧服务：一方 `ui.provide(名字, 实现)`，另一方在组件里 `ui.useService(名字)`；类型写在 `@plume/contract/ui` 的 `UiServices` 里，服务名说能力（`background.jobs.view`：plume.diagnostics 提供打开后台任务，plume.tools 画的后台命令那一行点了用它）。和逻辑侧不同的地方：没有 `inject` 和加载先后，没人提供时拿到 `undefined`，用的一方不给那个入口；后提供的生效（界面入口按先内置、再装上的顺序加载，装上的就换掉内置的），撤下恢复前一个；提供方换了用的一方跟着重画；拿到的是提供方那一份，宿主不包。不为一对插件再加一事一接口。
 
 ## 检查点
 
-- `pnpm check:plugins`（[`scripts/check-plugins.mjs`](../../scripts/check-plugins.mjs) 的规则 4、5，名单和匹配方式在 [`scripts/check-core-names.mjs`](../../scripts/check-core-names.mjs)）：
+- `pnpm check:plugins`（[`scripts/check-plugins.mjs`](../../scripts/check-plugins.mjs) 的规则 4、5、6，名单和匹配方式在 [`scripts/check-core-names.mjs`](../../scripts/check-core-names.mjs)）：
   - 本体代码里不出现插件名：内置插件名从源码读，市场插件名登记在脚本里；以插件名打头的面板 id 也算。注释不查。
-  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具和 plume.prompt 的两个段名不在名单里。
+  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具和 plume.prompt 的两个段名不在名单里。提示词字面量里用反引号括着的名字（`` `task` ``）也算。
+  - 内置插件的源码（不含测试）和它带给模型的技能（`skills/**/*.md`）里不出现别的内置插件、市场插件的插件名，和登记在它们名下的工具名、段名、标签；自己的不算。
   - 正当的命中登记进脚本的 `ALLOWED`，写明理由；不放宽规则。
 - 检查查不到的，评审时对一遍：
   - 新接口的名字、注释、类型里有没有某个插件的名字或数据形状。
   - 有没有在已有类型上加标志位来表达另一种东西。
   - 本体有没有按全小写的单词比较插件的东西（检查只在比较、`case`、集合里查这类词，`identity`、`skills` 这些段名不查），有没有按插件的标签解析结果文字。
+  - 内置插件有没有按段名（`identity`、`guidelines` 这类和日常用词撞的不在名单里）换别的插件的段，有没有读别的插件 `details` 里它自己定的字段（字段名不在名单里）。
+  - 名单里没登记的名字检查也查不到：新插件、新工具、新段名要登记进 `scripts/check-core-names.mjs`。
   - 加接口时那个真实插件是哪一个。
 
 ## 事实来源
@@ -74,3 +80,4 @@
 - 本体认基本工具的地方：`apps/desktop/src/renderer/conversation/call-words.ts`、`tool-category.ts`、`turn-blocks.ts`，`apps/desktop/src/renderer/files/scope.ts`，`packages/core/agent/src/conversation-markdown.ts`、`repetition.ts`
 - 本体认段名的地方：`packages/core/agent/src/context-breakdown.ts`、`usage-record.ts`
 - 检查：`scripts/check-core-names.mjs`、`scripts/test/check-core-names.test.ts`
+- 按类别找别的插件的工具的例子：plume.plan（`packages/builtin/plan/src/index.ts` 的 `toolOf`）、plume.subagents、plume.browser

@@ -1,6 +1,6 @@
 /**
- * 本体不按名字认具体插件（`pnpm check:plugins` 的规则 4、5，由 scripts/check-plugins.mjs 调用）。规则和例外的来由见
- * spec/domain/plugin-primitives.md。
+ * 本体不按名字认具体插件，内置插件也不按名字认别的插件（`pnpm check:plugins` 的规则 4、5、6，由 scripts/check-plugins.mjs 调用）。
+ * 规则和例外的来由见 spec/domain/plugin-primitives.md。
  *
  * 本体是 packages/core、packages/contract、packages/client、apps/desktop/src；测试和冒烟（`apps/desktop/src/main/smoke*`）不算，
  * 它们本来就要装上具体插件、点具体面板。只查代码，注释不算：注释里写「内置插件 plume.prompt 提供」是在说明契约由谁兑现，
@@ -12,7 +12,12 @@
  * 规则 5：不按名字认插件的工具、提示词段和送达标签。名单是 BUILTIN_TOOLS、BUILTIN_MARKS、MARKET_TOOLS、MARKET_MARKS。
  *   带下划线或大写字母的名字（`todo_write`、`mcp__`、`projectMemory`）在字符串字面量里作为一个词出现就算（`"<subagent_result"` 也算）；
  *   全小写的单个词（`task`、`skill`、`monitor`）和日常用词撞得多，只在整个字面量就是它、而且在比较、`case`、
- *   `.has()` / `.includes()` / `.startsWith()` / `.endsWith()` 的参数或 `new Set([…])` 里时才算。正则字面量不查。
+ *   `.has()` / `.includes()` / `.startsWith()` / `.endsWith()` 的参数或 `new Set([…])` 里时才算；字面量里用反引号括着的
+ *   （提示词点名工具的写法，`` "派给 `task`" ``）也算。正则字面量不查。
+ * 规则 6：内置插件不认别的插件。内置插件 A 的源码（packages/builtin/A/src，不含测试）按规则 4、5 的方式查，名单是别的内置插件的
+ *   插件名、BUILTIN_TOOLS 和 BUILTIN_MARKS 里登记在别的目录名下的名字，加上市场插件的全部（内置插件不认识市场插件）；A 自己的不算。
+ *   A 带给模型的技能（packages/builtin/A/skills 下的 .md）是写给模型的话，整篇当一个字面量查。
+ *   要用别的插件的能力走服务、按声明（`ToolDefinition.category`、`PromptSection.category`、`details` 里 `@plume/contract` 定的形状）认。
  *
  * 名单怎么维护：
  * - 内置插件名从源码读，不用管。
@@ -119,6 +124,9 @@ const ALLOWED = [
 	},
 ];
 
+/** 内置插件目录：带给模型的技能在这下面（`skills/<名字>/SKILL.md`），规则 6 也查。 */
+const BUILTIN_SKILLS = "skills";
+
 /** 把注释换成空白，行号不变。行注释只认行首或空白后的 `//`，字符串里的 URL 不受影响。 */
 function blankComments(text) {
 	return text.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " ")).replace(/(^|\s)\/\/.*$/gm, "$1");
@@ -132,6 +140,8 @@ const LITERAL = /(["'`])((?:(?!\1)[^\\\n]|\\.)*)\1/g;
 /** 前面是比较、`case`、集合查询的调用时，全小写的单个词才算。 */
 const COMPARED_BEFORE = /(?:[!=]==?|\bcase|\.(?:has|includes|startsWith|endsWith)\()\s*$/;
 const COMPARED_AFTER = /^\s*[!=]==?/;
+/** 字面量里用反引号括着的名字：提示词点名工具的写法。模板字符串里的反引号带着转义。 */
+const quoted = (name) => new RegExp(`\\\\?\`${escape(name)}\\\\?\``);
 
 /**
  * 一段源码里认插件的地方：`{ line, kind: "plugin" | "name", name }`。
@@ -150,18 +160,41 @@ export function scanCode(text, { plugins, names }) {
 	const words = [...names]
 		.filter(distinctive)
 		.map((name) => ({ name, pattern: new RegExp(`(?<![\\w$])${escape(name)}${name.endsWith("_") ? "" : "(?![\\w$])"}`) }));
+	const lowercase = [...names].filter((name) => !distinctive(name));
 	const sets = [...code.matchAll(/new\s+Set\s*\(\s*\[[^\]]*\]/g)].map((match) => [match.index, match.index + match[0].length]);
 	for (const match of code.matchAll(LITERAL)) {
 		const content = match[2];
 		const start = match.index;
 		const end = start + match[0].length;
 		for (const { name } of words.filter(({ pattern }) => pattern.test(content))) hits.push({ line: lineOf(start), kind: "name", name });
+		for (const name of lowercase.filter((name) => quoted(name).test(content))) hits.push({ line: lineOf(start), kind: "name", name });
 		if (!names.has(content) || distinctive(content)) continue;
 		const compared =
 			COMPARED_BEFORE.test(code.slice(Math.max(0, start - 24), start)) ||
 			COMPARED_AFTER.test(code.slice(end, end + 6)) ||
 			sets.some(([from, to]) => start > from && end <= to);
 		if (compared) hits.push({ line: lineOf(start), kind: "name", name: content });
+	}
+	return hits;
+}
+
+/**
+ * 一篇写给模型的文字（技能的 SKILL.md）里认插件的地方：插件名、带下划线或大写字母的名字出现就算，全小写的单个词在反引号里才算。
+ * @param {string} text 正文
+ * @param {{ plugins: Set<string>, names: Set<string> }} lists 同 `scanCode`
+ */
+export function scanText(text, { plugins, names }) {
+	const lineOf = (index) => text.slice(0, index).split("\n").length;
+	const hits = [];
+	for (const match of text.matchAll(/(?<![\w$.])plume\.[a-z0-9][a-z0-9.-]*/g)) {
+		const name = match[0].replace(/[.-]+$/, "");
+		if (plugins.has(name)) hits.push({ line: lineOf(match.index), kind: "plugin", name });
+	}
+	for (const name of names) {
+		const pattern = distinctive(name)
+			? new RegExp(`(?<![\\w$])${escape(name)}${name.endsWith("_") ? "" : "(?![\\w$])"}`, "g")
+			: new RegExp(`\`${escape(name)}\``, "g");
+		for (const match of text.matchAll(pattern)) hits.push({ line: lineOf(match.index), kind: "name", name });
 	}
 	return hits;
 }
@@ -177,18 +210,29 @@ function sourceFiles(dir, out = []) {
 	return out;
 }
 
-/** 本体里认插件的地方和名单本身的问题：`{ file, message }`，file 是绝对路径。 */
-export function coreNameProblems(root) {
+function textFiles(dir, out = []) {
+	if (!existsSync(dir)) return out;
+	for (const name of readdirSync(dir)) {
+		const path = join(dir, name);
+		if (statSync(path).isDirectory()) textFiles(path, out);
+		else if (name.endsWith(".md")) out.push(path);
+	}
+	return out;
+}
+
+/** 本体和内置插件里认插件的地方，和名单本身的问题：`{ file, message }`，file 是绝对路径。 */
+export function nameProblems(root) {
 	const problems = [];
 	const self = join(root, "scripts/check-core-names.mjs");
 	const builtinDir = join(root, "packages/builtin");
-	const plugins = new Set(MARKET_PLUGINS);
+	/** 内置插件目录 → 插件名。 */
+	const builtins = new Map();
 	for (const dir of readdirSync(builtinDir)) {
 		if (!existsSync(join(builtinDir, dir, "package.json"))) continue;
 		const entry = join(builtinDir, dir, "src/index.ts");
 		const name = existsSync(entry) ? readFileSync(entry, "utf8").match(/\bname:\s*"(plume\.[a-z0-9.-]+)"/)?.[1] : undefined;
-		if (name) plugins.add(name);
-		else problems.push({ file: entry, message: '读不出内置插件的名字（找 `name: "plume.…"`），规则 4 会漏掉它' });
+		if (name) builtins.set(dir, name);
+		else problems.push({ file: entry, message: '读不出内置插件的名字（找 `name: "plume.…"`），规则 4、6 会漏掉它' });
 	}
 	for (const listed of [BUILTIN_TOOLS, BUILTIN_MARKS]) {
 		for (const [dir, names] of Object.entries(listed)) {
@@ -198,27 +242,53 @@ export function coreNameProblems(root) {
 			for (const name of names) if (!source.includes(name)) problems.push({ file: self, message: `名单过时：packages/builtin/${dir}/src 里找不到 ${name}` });
 		}
 	}
-	const names = new Set([...Object.values(BUILTIN_TOOLS).flat(), ...Object.values(BUILTIN_MARKS).flat(), ...MARKET_TOOLS, ...MARKET_MARKS]);
 	const used = new Set();
+	const check = (file, hits, explain) => {
+		const path = relative(root, file);
+		for (const hit of hits) {
+			const allowed = ALLOWED.findIndex((entry) => entry.file === path && entry.name === hit.name);
+			if (allowed >= 0) {
+				used.add(allowed);
+				continue;
+			}
+			problems.push({ file, message: explain(hit) });
+		}
+	};
+
+	// 规则 4、5：本体。
+	const all = {
+		plugins: new Set([...builtins.values(), ...MARKET_PLUGINS]),
+		names: new Set([...Object.values(BUILTIN_TOOLS).flat(), ...Object.values(BUILTIN_MARKS).flat(), ...MARKET_TOOLS, ...MARKET_MARKS]),
+	};
 	for (const dir of CORE_DIRS) {
 		for (const file of sourceFiles(join(root, dir))) {
-			const path = relative(root, file);
-			for (const hit of scanCode(readFileSync(file, "utf8"), { plugins, names })) {
-				const allowed = ALLOWED.findIndex((entry) => entry.file === path && entry.name === hit.name);
-				if (allowed >= 0) {
-					used.add(allowed);
-					continue;
-				}
-				problems.push({
-					file,
-					message:
-						hit.kind === "plugin"
-							? `第 ${hit.line} 行认了插件 ${hit.name}：本体按插件的声明和接口的形状办事，不认插件名`
-							: `第 ${hit.line} 行按名字认了插件的 ${hit.name}：让插件经声明告诉本体（ToolDefinition 的 describe、category，段的 category，ui.toolLine，details 的通用形状）`,
-				});
-			}
+			check(file, scanCode(readFileSync(file, "utf8"), all), (hit) =>
+				hit.kind === "plugin"
+					? `第 ${hit.line} 行认了插件 ${hit.name}：本体按插件的声明和接口的形状办事，不认插件名`
+					: `第 ${hit.line} 行按名字认了插件的 ${hit.name}：让插件经声明告诉本体（ToolDefinition 的 describe、category，段的 category，ui.toolLine，details 的通用形状）`,
+			);
 		}
 	}
+
+	// 规则 6：内置插件不认别的插件，自己的不算。
+	for (const [dir, own] of builtins) {
+		const others = {
+			plugins: new Set([...[...builtins.values()].filter((name) => name !== own), ...MARKET_PLUGINS]),
+			names: new Set([
+				...Object.entries(BUILTIN_TOOLS).flatMap(([other, names]) => (other === dir ? [] : names)),
+				...Object.entries(BUILTIN_MARKS).flatMap(([other, names]) => (other === dir ? [] : names)),
+				...MARKET_TOOLS,
+				...MARKET_MARKS,
+			]),
+		};
+		const explain = (hit) =>
+			hit.kind === "plugin"
+				? `第 ${hit.line} 行认了插件 ${hit.name}：内置插件不按名字找别的插件，要用它的能力走服务（ctx.provide / inject）`
+				: `第 ${hit.line} 行按名字认了别的插件的 ${hit.name}：按声明认（ToolDefinition.category、PromptSection.category、details 的通用形状），提示词里要点名工具就按类别在工具表里找它叫什么`;
+		for (const file of sourceFiles(join(builtinDir, dir, "src"))) check(file, scanCode(readFileSync(file, "utf8"), others), explain);
+		for (const file of textFiles(join(builtinDir, dir, BUILTIN_SKILLS))) check(file, scanText(readFileSync(file, "utf8"), others), explain);
+	}
+
 	ALLOWED.forEach((entry, index) => {
 		if (!used.has(index))
 			problems.push({ file: join(root, entry.file), message: `例外过时：已经不再命中 ${entry.name}，从 scripts/check-core-names.mjs 的 ALLOWED 删掉` });
