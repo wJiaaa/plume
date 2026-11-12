@@ -163,7 +163,7 @@ export function SessionCard({
 			role="tooltip"
 			data-plume-session-card=""
 			style={{ zIndex: CARD_Z, left: at?.left ?? -9999, top: at?.top ?? -9999, opacity: at ? undefined : 0 }}
-			className={`bg-float shadow-menu pointer-events-none fixed w-[248px] overflow-hidden rounded-xl border border-line-soft ${
+			className={`bg-float shadow-menu pointer-events-none fixed w-[248px] overflow-hidden rounded-xl border border-line-float ${
 				leaving ? "sidebar-card-out" : "sidebar-card-in"
 			}`}
 		>
