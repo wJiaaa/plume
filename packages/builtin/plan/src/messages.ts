@@ -44,9 +44,8 @@ const zhCN = {
 	handoffTitle: (title: string) => `按已批准的计划实施：${title}`,
 	handoffFile: (file: string) => `- 计划文件：${file}。以它为准，动手前完整读一遍。`,
 	handoffScope: "- 授权范围：按计划修改代码并完成计划里的验证。计划没写到的提交、推送、发布或改动外部状态，先问人。",
-	handoffQuestions: (address: string) =>
-		`- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍，先用 read_session 读「${address}」——那里有这份计划的完整讨论；读不出来再用 ask_session 问它，答复会作为一条消息送回来，等的时候先做不依赖它的部分。找不到这个会话就停下来问人，不要猜。`,
-	handoffQuestionsAlone: "- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍，停下来问人，不要猜。",
+	handoffQuestions:
+		"- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍不要猜：开出这个会话的原会话里有这份计划的完整讨论，有办法读它、问它就先去那里找，没有就停下来问人。",
 	handoffFailed: (reason: string, file: string) => `执行计划的新会话没能开出来：${reason}。计划保存在 ${file}。`,
 };
 
@@ -95,10 +94,8 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		handoffFile: (file: string) => `- Plan file: ${file}. It is the authority; read all of it before you start.`,
 		handoffScope:
 			"- Scope: change the code as the plan says and run the checks it lists. Anything it does not cover — committing, pushing, releasing, changing anything outside this machine — ask the person first.",
-		handoffQuestions: (address: string) =>
-			`- Questions: look up what the code can tell you yourself. For intent or trade-offs the plan leaves open, first read “${address}” with read_session — that session holds the whole discussion behind the plan; only if the answer is not there, ask it with ask_session. Its answer arrives as a message; meanwhile do the parts that do not depend on it. If it cannot be found, stop and ask the person; do not guess.`,
-		handoffQuestionsAlone:
-			"- Questions: look up what the code can tell you yourself. For intent or trade-offs the plan leaves open, stop and ask the person; do not guess.",
+		handoffQuestions:
+			"- Questions: look up what the code can tell you yourself. For intent or trade-offs the plan leaves open, do not guess: the session this one was started from holds the whole discussion behind the plan. If you have a way to read or ask it, look there first; otherwise stop and ask the person.",
 		handoffFailed: (reason: string, file: string) => `The session to carry out the plan could not be started: ${reason}. The plan is saved at ${file}.`,
 	},
 };

@@ -112,15 +112,6 @@ export function planSummary(plan: string): string {
 	return text.length > SUMMARY_MAX ? `${text.slice(0, SUMMARY_MAX)}…` : text;
 }
 
-/**
- * 会话在别的会话眼里的名字：`标题 [id 前六位]`，和 plume.sessions 的 `read_session`、`ask_session` 认的是同一种写法
- * （名字会变、会重名，后面的 ref 不变，那边按 ref 认）。标题压成一行、去掉方括号，空的用目录名。
- */
-export function sessionAddress(session: { id: string; title: string; cwd: string }): string {
-	const name = session.title.replace(/\s+/g, " ").replace(/[[\]]/g, "").trim() || session.cwd.split(/[\\/]/).findLast(Boolean) || "session";
-	return `${name} [${session.id.replace(/-/g, "").slice(0, 6).toLowerCase()}]`;
-}
-
 export interface CurrentPlan {
 	/** 带着注意事项的那份（`renderPlan`）。 */
 	plan: string;

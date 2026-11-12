@@ -175,12 +175,9 @@ export default {
 					try {
 						const origin = (await ctx.sessions.list()).find((session) => session.id === run.sessionId);
 						if (!origin) throw new Error(MESSAGES[ctx.locale()].handoffGone);
-						// 原会话能读能问才这么说；没装 plume.sessions 时只说停下来问人。
-						const tools = new Set(run.tools().map((tool) => tool.name));
-						const askable = tools.has("read_session") && tools.has("ask_session");
 						await ctx.sessions.launch({
 							...(origin.project ? { project: origin.project } : { cwd: origin.cwd }),
-							message: handoffPrompt(MESSAGES[ctx.locale()], { plan: renderPlan(plan, notes), file }, askable ? origin : undefined),
+							message: handoffPrompt(MESSAGES[ctx.locale()], { plan: renderPlan(plan, notes), file }),
 							title: [...planTitle(plan)].slice(0, 60).join(""),
 							...(model ? { model } : {}),
 							spawnedFrom: { sessionId: run.sessionId, toolCallId: run.toolCallId },

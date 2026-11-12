@@ -26,10 +26,9 @@ import plugin from "../src/index.ts";
 import { approvedPlans, currentPlan, type PlanReply, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
 
 /**
- * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`。`launch` 记下开过的新会话，`fail` 给了就让它抛这个错；
- * `toolNames` 是交计划时工具表里有的（装没装 plume.sessions 看它）。
+ * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`。`launch` 记下开过的新会话，`fail` 给了就让它抛这个错。
  */
-async function fakeContext(stored: Message[] = [], options: { fail?: string; toolNames?: string[] } = {}) {
+async function fakeContext(stored: Message[] = [], options: { fail?: string } = {}) {
 	const tools = new Map<string, ToolDefinition>();
 	const layers = new Map<string, unknown>();
 	let commands: CommandProvider | undefined;
@@ -105,7 +104,7 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string; too
 				signal,
 				progress() {},
 				permissionMode: async () => "full",
-				tools: () => (options.toolNames ?? []).map((name) => ({ name, plugin: "plume.sessions" })),
+				tools: () => [],
 				calls: [],
 				ask: async (content) => {
 					asked.push(content);
@@ -305,7 +304,7 @@ test("压缩把批准计划的那次结果换成摘要时，计划接在摘要�
 
 test("在新会话里执行：计划存成文件，在原会话的项目里开新会话、记着从这次调用开出来，这一轮停下", async () => {
 	const origin = "a1b2c3d4-0000-4000-8000-000000000000";
-	const plan = await fakeContext([], { toolNames: ["read_session", "ask_session"] });
+	const plan = await fakeContext();
 	plan.api.set(origin, true);
 	const text = "# 改登录\n\n## 概要\n把登录改成短信验证码。\n\n## 改动\n- a.ts";
 	const handed = await plan.submit(origin, text, "once", { note: "注意兼容", handoff: { model: "m1" } });
@@ -328,7 +327,8 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 				[
 					`- 计划文件：${details.file}。以它为准，动手前完整读一遍。`,
 					"- 授权范围：按计划修改代码并完成计划里的验证。计划没写到的提交、推送、发布或改动外部状态，先问人。",
-					"- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍，先用 read_session 读「改登录 草稿 [a1b2c3]」——那里有这份计划的完整讨论；读不出来再用 ask_session 问它，答复会作为一条消息送回来，等的时候先做不依赖它的部分。找不到这个会话就停下来问人，不要猜。",
+					// 不点名读会话、问会话的工具：那是别的插件的，它按 `spawnedFrom` 自己告诉新会话。
+					"- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍不要猜：开出这个会话的原会话里有这份计划的完整讨论，有办法读它、问它就先去那里找，没有就停下来问人。",
 				].join("\n"),
 			].join("\n\n"),
 			title: "改登录",
@@ -340,7 +340,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 	assert.equal((await plan.execute(origin, "edit")).reached?.readOnly, undefined);
 });
 
-test("在新会话里执行：没装读会话的插件时只说停下来问人；开不出来时提示人、这一轮照样停下", async () => {
+test("在新会话里执行：原会话不在项目里时开在它的目录；开不出来时提示人、这一轮照样停下", async () => {
 	const alone = await fakeContext();
 	alone.api.set("main", true);
 	await alone.submit("main", "改登录", "once", { handoff: {} });
@@ -348,7 +348,6 @@ test("在新会话里执行：没装读会话的插件时只说停下来问人�
 	assert.equal(launch?.cwd, "/w/app");
 	assert.equal(launch?.project, undefined);
 	assert.equal(launch?.model, undefined);
-	assert.match(launch?.message ?? "", /- 有疑问：能从代码查到的自己查；计划没定下的意图和取舍，停下来问人，不要猜。$/);
 
 	const broken = await fakeContext([], { fail: "项目已移除" });
 	broken.api.set("main", true);
