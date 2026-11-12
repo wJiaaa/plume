@@ -4,7 +4,7 @@
 
 ## 1. 结论与边界
 
-模型请求、agent 循环、会话和审批卡是产品本体；基本工具、沙箱、帮我批准的风险规则、系统提示词、压缩是随应用发的内置插件（`packages/builtin/`）。循环里依赖它的能力——新工具、工具结果、发给模型的上下文——通过**钩子**和**工具注册**开放给插件；对话里和这些能力配套的**工具卡片**也开放给插件画（审批卡是产品自己的）；对话旁边的**面板区**是产品的，里面的每个面板由插件注册。read / write / edit / ls / glob / grep / bash 是内置插件 plume.tools 的工具，内置插件先于其他插件加载；插件注册同名工具就覆盖它，后登记的生效。
+模型请求、agent 循环、会话、审批卡和命令的沙箱（`packages/core/sandbox`，权限模式对应哪一档、提权、只读）是产品本体；基本工具、帮我批准的风险规则、系统提示词、压缩是随应用发的内置插件（`packages/builtin/`）。循环里依赖它的能力——新工具、工具结果、发给模型的上下文——通过**钩子**和**工具注册**开放给插件；对话里和这些能力配套的**工具卡片**也开放给插件画（审批卡是产品自己的）；对话旁边的**面板区**是产品的，里面的每个面板由插件注册。read / write / edit / ls / glob / grep / bash 是内置插件 plume.tools 的工具，内置插件先于其他插件加载；插件注册同名工具就覆盖它，后登记的生效。
 
 | 能力 | 可变？ | 插件怎么改 |
 | --- | --- | --- |
@@ -108,12 +108,12 @@ Electron
 │        ▼
 ├─ agent 进程  utilityProcess · packages/core/agent
 │     AgentService：会话增删、发送、停止、回应审批、订阅事件
-│     会话存储 · 模型调用 @plume/llm · agent 循环
+│     会话存储 · 模型调用 @plume/llm · agent 循环 · 命令的沙箱 @plume/sandbox（run.exec）
 │        │ 在固定位置调用钩子
 │        ▼
 │     插件宿主：ctx · 钩子（洋葱）· 工具表 · 注册自动撤销 · 失败隔离
 │        ▲                ▲                  ▲
-│     内置插件（packages/builtin/*）：工具 plume.tools、沙箱 plume.sandbox、提问 plume.ask-user、系统提示词、压缩
+│     内置插件（packages/builtin/*）：工具 plume.tools、提问 plume.ask-user、系统提示词、压缩
 │     插件（插件仓库的 plugins/*，逻辑入口 dist/index.mjs）
 │
 │        ▲ parentPort · RPC：插件状态 / 关闭
@@ -286,6 +286,11 @@ interface ToolExecution {
 	tool: { name: string; mutating: boolean; plugin: string };
 	/** 外层已经放行的理由。设了它本体就不再问人（提权和层自己问的除外）。 */
 	approved?: string;
+	/**
+	 * 外层要求这次调用不改动工作区（计划模式）。本体从设上它的那一层往里交时，`kind` 是 create、modify 的工具不再往里交，
+	 * 以 `refusal` 作错误结果交回；别的照常交下去，`run.exec` 一律只读、`run.escalate` 直接拒。只能收紧，里层不去掉它。
+	 */
+	readOnly?: { refusal: string };
 	/** 用户停止这一轮时中止。 */
 	signal: AbortSignal;
 	/** 弹出审批卡，等用户决定；经 tool.approve（`byLayer`）。 */
@@ -319,6 +324,9 @@ interface ModelContext {
 	parentId?: string;         // 插件的子会话挂在哪个会话下面，同 SessionSummary.parentId；顶层会话不带
 	owner?: string;            // 建这个会话的插件，同 SessionSummary.owner；子会话、插件的独立会话才有
 	cwd: string;
+	permissionMode: "ask" | "auto" | "full";
+	readOnly?: boolean;        // 外层要求这一轮不改动工作区（计划模式），本体按它重算 shell
+	shell: { kind: "posix" | "powershell"; label: string; sandbox: SandboxMode }; // 命令跑在哪个 shell、哪一档沙箱，本体每层交接时按 permissionMode、readOnly 重算
 	systemPrompt: string;      // 就是 sections 用空行连起来
 	sections: PromptSection[]; // { id, text, category?, files? }：identity、guidelines、boundaries、environment、tone、userInstructions、projectInstructions、workspace；提供它的插件按 id 改自己的，别的插件按 category（identity、guidelines……）找
 	messages: Message[];
@@ -377,6 +385,12 @@ interface ToolDefinition {
 			ask(content: ApprovalContent): Promise<ApprovalDecision>;
 			/** 等人给一份数据（提问、计划、表单）：不经 tool.approve，和审批同一队；没答时说清是不答、过期还是停下。 */
 			request<T>(input: { kind: string; title: string; payload?: unknown; waiting?: string }): Promise<{ answered: true; value: T } | { answered: false; reason: "declined" | "expired" | "stopped" }>;
+			/** 这次调用跑命令用的 shell 和沙箱档（本体按权限模式、readOnly 选）。 */
+			shell(): Promise<{ kind: "posix" | "powershell"; label: string; sandbox: SandboxMode }>;
+			/** 在那一档沙箱里起一条命令；`denied(output)` 看输出像不像被沙箱拒了，`mode` 是实际跑的那一档。 */
+			exec(command: string, options?: { cwd?: string; env?: Record<string, string> }): Promise<RunProcess>;
+			/** 申请这次调用更宽的一档：弹提权卡、只认人答，批了之后的 exec 才换档；不批时 message 是交给模型的说明。 */
+			escalate(request: { mode: "workspace-write" | "danger-full-access"; justification: string; title: string; detail: string }): Promise<{ granted: true } | { granted: false; message: string }>;
 		},
 	): Promise<ToolOutput>;
 }
@@ -464,7 +478,7 @@ tool.execute(input)
 - **`bash cat hello.txt`**：语言服务层 → plume.tools 的 bash（能证明只读，不问；跑在权限模式对应的沙箱里）→ 执行 → 回到语言服务层，不是 edit、write，原样交回。
 - **`edit hello.txt`**：语言服务层 → plume.tools 的 edit 校验完参数后问用户 → 输入框上方弹出审批卡，正文是这次改动的 diff → 用户允许一次 → 执行 → 回到语言服务层，结果后面附上这个文件的错误（只附错误、最多 10 条）。
 - **谁来问**：写了 `asks` 的工具（plume.tools 的 write、edit、bash）校验完参数再问（注定失败的先报掉，不问人一个没法成立的问题），没写 `asks` 的 `mutating` 工具在执行前按参数问。本体先按权限模式放行这几种：权限模式是完全访问；外层设了 `approved`；问的对象（命令、文件的绝对路径、插件工具名）答过「以后不再问」，记在设置文件的 `alwaysAllow`。其余经钩子 `tool.approve`，内置插件 plume.approval 在 order 1000 放行帮我批准下 bash、write、edit 按风险规则（`packages/builtin/approval/src/risk*.ts`：递归删除、强制推送、写到项目外、密钥文件……）看不出风险的，命中的把理由写在卡上。能证明只读的 bash 命令根本不问。插件的层自己调 `ask` 只在完全访问下由本体放行，其余经 `tool.approve`，只能答一次。权限模式（`ask` 请求批准；`auto` 帮我批准，默认；`full` 完全访问）存在设置文件的 `permissionMode`，经 `AgentService.setPermissionMode` 改，界面上是输入框工具栏左边的权限签，切到完全访问要确认一次。用户拒绝时交给模型的结果说明被拒，并让它别换个方式做同一件事。
-- **命令的沙箱和提权**：请求批准下 bash 跑在只读沙箱里，帮我批准下只能写项目目录和临时目录（macOS `sandbox-exec`，Windows 受限令牌，Linux 没有后端、这两档跑不了命令，Windows 上受约束的命令跑在 PowerShell 里、完全访问跑在 Git Bash 里；档位到沙箱的对应在 plume.tools 的 `tools/types.ts`），完全访问下不进沙箱；这台机器给不了沙箱时命令直接报错，不悄悄裸跑。命令被沙箱拒绝时，结果里告诉模型可以带上 `escalate`（`workspace-write` 或 `danger-full-access`）和 `justification` 重试一次。提权请求总是弹卡：放宽沙箱是另一件事，只认人在卡上答或代管这个会话的插件转达，完全访问、`approved`、「以后不再问」都不是对它的回答，`tool.approve` 上的层答放行本体也不认（拒绝照算）；批准只管这一次，不记进「以后不再问」。
+- **命令的沙箱和提权**：请求批准下 bash 跑在只读沙箱里，帮我批准下只能写项目目录和临时目录（macOS `sandbox-exec`，Windows 受限令牌，Linux 没有后端、这两档跑不了命令，Windows 上受约束的命令跑在 PowerShell 里、完全访问跑在 Git Bash 里；档位到沙箱的对应在本体的 `packages/core/agent/src/commands.ts`，工具经 `run.exec` 起命令、选不了档），完全访问下不进沙箱；外层设了 `readOnly`（计划模式）时一律只读；这台机器给不了沙箱时命令直接报错，不悄悄裸跑。命令被沙箱拒绝时，结果里告诉模型可以带上 `escalate`（`workspace-write` 或 `danger-full-access`）和 `justification` 重试一次。提权经 `run.escalate`，由本体查申请合不合规矩、弹卡、换档：放宽沙箱是另一件事，只认人在卡上答或代管这个会话的插件转达，完全访问、`approved`、「以后不再问」都不是对它的回答，`tool.approve` 上的层答放行本体也不认（拒绝照算）；批准只管这一次，不记进「以后不再问」。
 - **要看最终结果的层放在最外层**：最外层看到的就是交给模型的最终结果，里面任何一层（包括拒绝提示）的输出都会经过它；比如把结果里的密钥换掉的脱敏层，该用很小的 order（如 -100）套在所有层外面。
 
 ## 7. 验证插件
@@ -484,7 +498,7 @@ tool.execute(input)
 | `plume.subagents`（内置） | `ctx.sessions`（start / wait / report / steer / onStopped / models）+ 工具与钩子 + `ctx.tools.names` + `ctx.appDataDir` + `ui.remote` + `ui.composerAbove` + `ui.turnFooter` + `ui.toolCard` + `ui.toolLine` + `ui.agentDelivery` + `ui.Conversation` + `ui.Markdown` + `ui.settingsSection`（`page: "agents"`）+ `ui.ModelSelect` + `ui.useProjects` | `task` 登记后台任务立即返回 ID，每个父会话最多 4 个，多的排队；`task` 带 `resume` 复用原会话和身份，`stop_subagent` 停单个；结果通过受限运行句柄回报。定义文件在 `~/.plume/agents` 和 `<项目>/.plume/agents`，设置 › 智能体里新建、编辑、复制、删除、开关、选模型；派发时记下指令和工具的快照。模型偏好、关掉的种类、任务与最终报告存在插件目录，对话归宿主。面板有头像切换器、任务卡、回报和附件插话，失败后只准备续跑草稿；活动条随任务出现和退场 | 验证父会话先结束后被结果唤起、审批仍在主输入框上方、停止不复活、排队和续跑、任务消息来源、回报去重、附件和模型选择；宿主测试在 `packages/core/agent/test`，插件测试在 `packages/builtin/subagents/test` |
 | `plume.side-chat`（内置） | `ctx.sessions`（建子会话、跑一轮、停、删）+ `ctx.tools.register` + `prompt.submit` + `model.context` + `tool.execute` + `ctx.commands`（`handled`）+ `ctx.serve` + `ui.remote` + `ui.panel`（`multiple`）+ `ui.useSession` + `ui.Conversation`（`tasks`）+ `ui.queueAction` | 「侧边聊天」面板一个标签一段侧边聊天：交给主会话的事在转录和输入框之间画回执条；每问一句附上主会话上次之后的新内容，更早的用 `read_main_chat` 翻；身份、准则换成侧边聊天的，工具只留读主会话、交出去、控制主会话、读写文件、跑命令、查网页；关标签就删掉那段；`/btw 问题` 另开一段问这句话；排队条上排着的消息经「更多 › 在侧边聊天中打开」拿到最早那段侧边聊天去问（还没有就新开一格），附件跟着走 | `/btw` 问的话不进主对话，新开一格侧边聊天，回答画在那里；侧边聊天的请求里有主对话的内容、没有 `task`。单测在 `packages/builtin/side-chat/test` |
 | `plume.ask-user`（内置） | `ctx.tools.register`（`run.request`）+ `ui.requestCard` + `ui.toolLine` | `ask_user`：模型停下来问人一个它自己答不了的问题；选项带说明和推荐、单选或多选、自己写、跳过（有默认项时采用它）；提问卡压在输入框上方，回答随 `run.request` 交回、按问题再核一遍；没人答 30 分钟后按没有答案收场 | 新对话里假模型调 `ask_user`，提问卡有标题、推荐、倒计时、「跳过将采用」，运行行说「等待你的回答」，按 1 选第一项确认后模型拿到那一项。单测在 `packages/builtin/ask-user/test` |
-| `plume.plan`（内置） | `tool.execute`（拦截、`readOnly`）+ `ctx.tools.register`（`run.request`）+ `prompt.submit` + `model.context` + `step.end` + `context.compact` + `ctx.commands`（`handled`）+ `ctx.serve` + `ui.remote` + `ui.composerItem` + `ui.requestCard` + `ui.panel` + `ui.toolLine` | 计划模式：按会话的开关（输入框开关、`/plan`），开着时写、改文件的工具（定义上 `kind` 是 `create`、`modify`）拒绝，其余调用带 `readOnly`（命令只读沙箱，跑命令的工具不申请离开它），子会话受父会话管；`submit_plan` 交 Markdown 计划，完全访问也弹给人，计划卡上拒绝、修改、接受（带评论作注意事项）、接受并开启自动模式，批准就地关掉开关；开着时提示词多一段，漏交计划提醒一次；「计划」面板读计划、划线评论、切换批准过的几份；压缩时批准的计划接在摘要后面 | 开着时改文件被拒、命令写不进去；交计划弹计划卡，接受后同一轮接着改，修改意见回给模型重交，拒绝后停下。单测在 `packages/builtin/plan/test` |
+| `plume.plan`（内置） | `tool.execute`（拦截、`readOnly`）+ `ctx.tools.register`（`run.request`）+ `prompt.submit` + `model.context` + `step.end` + `context.compact` + `ctx.commands`（`handled`）+ `ctx.serve` + `ui.remote` + `ui.composerItem` + `ui.requestCard` + `ui.panel` + `ui.toolLine` | 计划模式：按会话的开关（输入框开关、`/plan`），开着时每次调用都带 `readOnly`（连同拒绝时给模型的话），本体据此拒绝写、改文件的工具（定义上 `kind` 是 `create`、`modify`），命令进只读沙箱、不许提权，子会话受父会话管；`submit_plan` 交 Markdown 计划，完全访问也弹给人，计划卡上拒绝、修改、接受（带评论作注意事项）、接受并开启自动模式，批准就地关掉开关；开着时提示词多一段，漏交计划提醒一次；「计划」面板读计划、划线评论、切换批准过的几份；压缩时批准的计划接在摘要后面 | 开着时改文件被拒、命令写不进去；交计划弹计划卡，接受后同一轮接着改，修改意见回给模型重交，拒绝后停下。单测在 `packages/builtin/plan/test` |
 | `plume.terminal` | `ctx.serve` + `ui.remote` + `ui.panel`；`dependencies` 里的 node-pty 随 `dist/` 一起装 | shell 跑在 agent 进程，比面板活得长；「终端」面板一个标签一个 shell，xterm 经 `ui.remote()` 连上，attach 先回放再接着推输出 | 在终端面板里跑一条命令，输出画回了 xterm、shell 起在会话的工作目录；⌃` 收起、再打开 |
 | `plume.browser`（内置） | `ctx.pages`（含 `chromeLogins`）+ `ctx.tools.register`（`run.ask`、结果带 `images`）+ `ctx.sessions`（`onDeleted`、`list`）+ `ctx.dataDir` + `ctx.serve` + `ui.remote` + `ui.panel`（`multiple`、`keepAlive`、`detachable`）+ `ui.openPanel` / `ui.closePanel`（`tab`、`background`）+ `ui.draftInSession` + `ui.linkOpener` + `ui.settingsSection` + `ui.toolLine`；随包的 `skills/browser` | 「浏览器」面板一个标签一页：地址栏兼搜索框（也开本机的 `.html`）、书签、缩放、视口尺寸、检查元素和框选区域（选中的连同要求和截图放进输入框）、开发者工具，能弹到独立窗口；只给最近看过的三个会话和 agent 正在用浏览器的会话挂着页面；`browser_open`（先问一句，也开本地 `.html`）、`browser_act`、`browser_tabs`、`browser_viewport`、`browser_screenshot` 操作同一页，面板上画 agent 的光标；回复里的网址右键、`.html` 文件签能开进内置浏览器，设置里可让点网址默认开在这里、从 Chrome 同步登录状态；工具调用期间页面的对话框由宿主替它答、写进结果；页面开的新窗口成后台标签，跳去非网页地址的给「在系统浏览器中打开」；各会话的标签分开，会话删了一起关；设置存在插件数据目录的 `browser.json` | 冒烟里从开始页开浏览器标签、地址栏打开本机的一页，标签写着页面标题；假模型经 `browser_act` 读到按钮那一行、点它时 confirm 被取消并写进结果、点链接后等到新的一页，`browser_screenshot` 的结果带着图，面板上有光标；地址栏打开磁盘上的 `.html`；标签弹到独立窗口、页面在那边接上，收回后回到主窗口；右键回复里的网址在内置浏览器开出新标签；经菜单关掉标签后页面没了 |
 | `plume.todo` | `ctx.tools.register` + `model.context` + `step.end` + `ui.conversationCard` | `todo_write` 工具（整表替换，同一时刻最多一项在做，清单放 details 的 `checklist`，即宿主认的 `ChecklistDetails`）；单独调一次时结果末尾说一句（`run.calls`）；回答完清单还有一项在做时问一次（清单收尾），只补勾清单的那次以 `terminate` 结束这一轮、转录里不画；20 步没更新清单时问一句进度；转录里不另画卡片，经 `ui.toolLine` 登记说法，本体按工具定义上的 `category: "checklist"` 把调用并进一段活、说成「更新清单 1/2 · 在做的那一项」；清单卡片跟着会话，标题行是在做哪一步、勾到第几项，在做的那一步按这一轮在跑、被停下、失败、收了尾画不同的记号，旁边是暂停、重试这一步、继续的按钮，全勾完自己收走 | 模型收到的工具里有 todo_write；这一轮收了尾第二项没勾上，清单卡片浮在转录右上角、标题行是「停在 · 把 hello 改成 hi」；打开面板区后卡片回到输入框正上方；转录里没有 todo 的卡片 |
