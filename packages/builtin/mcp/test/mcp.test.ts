@@ -459,6 +459,9 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 			throw new Error("MCP 工具不跑命令");
 		},
 		escalate: async () => ({ granted: false, message: "MCP 工具不跑命令" }),
+		track: () => {
+			throw new Error("MCP 工具不起后台任务");
+		},
 		tools: () => [],
 		calls: [],
 	};

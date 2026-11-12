@@ -5,7 +5,18 @@
  * 测试里直接调也不用造一整个 `ToolRun`。`toDefinition` 把它换成工具表里的样子。
  */
 
-import type { ApprovalContent, ApprovalDecision, BackgroundChannel, ShellInfo, ToolDefinition, ToolKind, ToolOutput, ToolRun } from "@plume/contract";
+import type {
+	ApprovalContent,
+	ApprovalDecision,
+	BackgroundChannel,
+	SessionAccess,
+	SessionWakeup,
+	ShellInfo,
+	ToolDefinition,
+	ToolKind,
+	ToolOutput,
+	ToolRun,
+} from "@plume/contract";
 import type { ResourceRouter } from "../resources/router.ts";
 
 type ToolContent = { type: "text"; text: string };
@@ -55,6 +66,12 @@ export interface ToolContext {
 	onProgress?: (chunk: string) => void;
 	/** 后台结果送回会话的渠道（`ToolRun.background`）；子会话和直接调工具的测试没有，后台任务只能让模型自己读。 */
 	background?: () => BackgroundChannel;
+	/** 把后台任务登记进本体（`ToolRun.track`）；直接调工具的测试可不给，那时任务只在这里记着。 */
+	track?: ToolRun["track"];
+	/** 约以后再接着做（`ToolRun.schedule`）；子会话和直接调工具的测试没有。 */
+	schedule?: NonNullable<ToolRun["schedule"]>;
+	/** 这个会话还没触发的唤醒（`ctx.sessions.wakeups`、`cancelWakeup`）；直接调工具的测试可不给。 */
+	wakeups?: { list(): SessionWakeup[]; cancel(id: string): boolean };
 }
 
 export interface Tool<TArgs = Record<string, unknown>> {
@@ -79,6 +96,8 @@ export interface ToolEnv {
 	dataDir?: string;
 	resources?: ResourceRouter;
 	state(sessionId: string): Map<string, unknown>;
+	/** 读、取消会话里的唤醒（插件的 `ctx.sessions`）。 */
+	sessions?: Pick<SessionAccess, "wakeups" | "cancelWakeup">;
 }
 
 /** 文件工具和公开读取授权服务使用同一份会话环境，批准入口及状态不能另起一份。 */
@@ -100,7 +119,14 @@ export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		toolNames: new Set(run.tools().map((entry) => entry.name)),
 		onProgress: run.progress,
 		...(run.background ? { background: () => run.background!() } : {}),
+		track: (job) => run.track(job),
+		...(run.schedule ? { schedule: (wake) => run.schedule!(wake) } : {}),
+		...(env.sessions ? { wakeups: wakeupsOf(env.sessions, run.sessionId) } : {}),
 	};
+}
+
+function wakeupsOf(sessions: NonNullable<ToolEnv["sessions"]>, sessionId: string): NonNullable<ToolContext["wakeups"]> {
+	return { list: () => sessions.wakeups(sessionId), cancel: (id) => sessions.cancelWakeup(sessionId, id) };
 }
 
 /** 换成工具表里的样子。会改动工作区的工具自己在 execute 里经 `run.ask` 问（`asks`）。 */

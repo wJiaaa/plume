@@ -133,6 +133,9 @@ const run: ToolRun = {
 		throw new Error("网页工具不跑命令");
 	},
 	escalate: async () => ({ granted: false, message: "网页工具不跑命令" }),
+	track: () => {
+		throw new Error("网页工具不起后台任务");
+	},
 	tools: () => [],
 	calls: [],
 };

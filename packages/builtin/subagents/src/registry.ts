@@ -336,19 +336,6 @@ export class Registry implements SubagentsApi {
 		if (stopProcess && !already && this.occupied.has(task.id)) this.ctx.sessions.stop(task.session);
 	}
 
-	/**
-	 * 收工时停掉它起的后台进程（开发服务器之类）。子会话收不到后台送达，两段之间也没人读它们的输出，留下来就是一个
-	 * 没人管的进程，一直活到应用退出；续跑要用就再起一个。停不掉的只记一笔：交回的结果比一个停不掉的进程要紧。
-	 */
-	private stopJobs(sessionId: string): void {
-		try {
-			const jobs = this.ctx.use("background.jobs");
-			for (const job of jobs.list(sessionId)) if (job.status === "running" || job.status === "stopping") jobs.stop(sessionId, job.id, true);
-		} catch (error) {
-			this.ctx.log.warn(`Sub-agent ${sessionId}: background jobs not stopped: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
-
 	private changed(): void {
 		this.store.save();
 		for (const listener of this.listeners) listener();
@@ -401,7 +388,6 @@ export class Registry implements SubagentsApi {
 			stop = { reason: "error", error: error instanceof Error ? error.message : String(error) };
 			threw = true;
 		}
-		this.stopJobs(task.session);
 		if (!this.store.tasks.has(task.id)) return;
 		const reply = lastProse(await this.ctx.sessions.messages(task.session).catch(() => []), since);
 		const yielded = task.output ? { value: task.output, warnings: task.warnings ?? [] } : undefined;

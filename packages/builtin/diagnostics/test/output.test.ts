@@ -25,7 +25,6 @@ it("完整输出只读本会话结果登记的日志，拒绝跨会话和软链�
 			dataDir,
 			appDataDir: dir,
 			locale: () => "en",
-			use: () => ({}),
 			effect: (dispose: () => void) => disposers.push(dispose),
 			serve: (value: DiagnosticsApi) => {
 				api = value;

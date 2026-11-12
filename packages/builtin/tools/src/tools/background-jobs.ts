@@ -1,7 +1,8 @@
 /**
  * 一个会话的后台任务：`run_in_background` 起的、超过默认等待还在跑而转到后台的、命令退出后留下来拿着输出的，和 `monitor` 起的。
  *
- * 任务表放在会话的工具状态里，会话在它就在；删会话、关应用时连进程组一起停掉（`disposeBackgroundJobs`）。
+ * 任务表放在会话的工具状态里，给 bash_output 读、停用（输出读到哪了、结束要不要告诉模型）。每一个也登记进本体（`ToolRun.track`，
+ * 见 `bash.ts`）：会话闲没闲、删会话和关应用时连进程组一起停掉、界面列出它们，都是本体按登记做的，停的时候调回这里的 `stop`。
  * 只认这个会话自己起的进程句柄：停任务用的是 id，不是 pid，pid 会被系统复用。
  *
  * 起任务的那次调用拿到的送达渠道（`ToolRun.background`）跟着任务走：任务自己结束时经它告诉模型。人按停以后渠道作废，
@@ -109,18 +110,6 @@ export class BackgroundJobs {
 		}
 		return true;
 	}
-
-	dispose(): void {
-		const errors: unknown[] = [];
-		for (const id of this.entries.keys()) {
-			try {
-				this.stop(id, true);
-			} catch (error) {
-				errors.push(error);
-			}
-		}
-		if (errors.length) throw new AggregateError(errors, "Failed to stop background jobs");
-	}
 }
 
 export function backgroundJobs(state: Map<string, unknown>): BackgroundJobs {
@@ -129,20 +118,4 @@ export function backgroundJobs(state: Map<string, unknown>): BackgroundJobs {
 	const registry = new BackgroundJobs();
 	state.set(KEY, registry);
 	return registry;
-}
-
-/**
- * 会话不在了：停掉它还在跑的后台任务，连进程组一起。
- *
- * 不抛错：停不掉的多半是已经自己退出了；删会话、关应用不该因为一个停不掉的进程失败。返回停不掉的那些错误，调用方记日志。
- */
-export function disposeBackgroundJobs(state: Map<string, unknown>): unknown[] {
-	const registry = state.get(KEY);
-	if (!(registry instanceof BackgroundJobs)) return [];
-	try {
-		registry.dispose();
-		return [];
-	} catch (error) {
-		return error instanceof AggregateError ? error.errors : [error];
-	}
 }

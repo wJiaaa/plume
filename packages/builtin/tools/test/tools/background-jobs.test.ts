@@ -95,7 +95,7 @@ it("普通的停关掉命令起的子孙进程上的监听，别的会话的服�
 		expect.fail(`${label} after ${Date.now() - started}ms (shell: ${shell.label} ${shell.file})\njobs: ${JSON.stringify(jobs)}\n${processReport(pids)}`);
 	};
 	cleanups.push(async () => {
-		for (const jobs of registries) jobs.dispose();
+		for (const jobs of registries) for (const job of jobs.list()) jobs.stop(job.id, true);
 		await until(() => registries.every((jobs) => jobs.list().every((job) => job.finishedAt !== undefined)), "fixture processes did not exit");
 		await rm(root, { recursive: true, force: true });
 	});

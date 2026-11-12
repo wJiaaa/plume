@@ -7,8 +7,8 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { BackgroundChannel, DeliveryInput, ToolRun } from "@plume/contract";
-import { backgroundJobs, disposeBackgroundJobs } from "../../src/tools/background-jobs.ts";
+import type { BackgroundChannel, BackgroundJobInput, DeliveryInput, ToolRun } from "@plume/contract";
+import { backgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool, bashTool } from "../../src/tools/bash.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
@@ -23,7 +23,17 @@ beforeAll(async () => {
 });
 afterEach(() => {
 	vi.useRealTimers();
-	for (const state of states.splice(0)) disposeBackgroundJobs(state);
+	// 删会话、退出应用时本体按登记停它们；这里没有本体，自己停。
+	for (const state of states.splice(0)) {
+		const jobs = backgroundJobs(state);
+		for (const job of jobs.list()) {
+			try {
+				jobs.stop(job.id, true);
+			} catch {
+				// 停不掉的多半是已经自己退出了。
+			}
+		}
+	}
 });
 afterAll(async () => {
 	await rm(cwd, { recursive: true, force: true });
@@ -120,7 +130,7 @@ it("后台任务：bash_output 只给上次读之后的，任务结束时报退�
 	expect(textOf(await bashOutputTool.execute({ id: "nope" }, context))).toBe('No background job with id "nope".');
 });
 
-it("命令退出了但它放到后台的进程还拿着输出：不等它，交成后台任务；会话结束时停掉", async () => {
+it("命令退出了但它放到后台的进程还拿着输出：不等它，交成后台任务，停得掉", async () => {
 	const context = ctx();
 	const began = Date.now();
 	const result = await bashTool.execute({ command: "sleep 30 & echo started" }, context);
@@ -129,7 +139,7 @@ it("命令退出了但它放到后台的进程还拿着输出：不等它，交�
 	expect(textOf(result)).toContain("started\n\n[processes it started in the background are still running and holding its output — background job");
 	expect(result.isError).toBe(false);
 
-	expect(disposeBackgroundJobs(context.state)).toEqual([]);
+	expect(backgroundJobs(context.state).stop(id, true)).toBe(true);
 	const ended = textOf(await bashOutputTool.execute({ id }, context));
 	expect(ended).toMatch(new RegExp(`^\\[job ${id} (terminated|exited with code \\d+)\\]`));
 });
@@ -161,6 +171,26 @@ function fakeChannel() {
 	};
 	return { channel, sent, take, stop: () => controller.abort() };
 }
+
+it("后台任务登记进本体：id 是本体给的，结束了告诉本体，本体停它走任务表的 stop，给人看的输出不算模型读过", async () => {
+	const registered: BackgroundJobInput[] = [];
+	const done: (number | null)[] = [];
+	const track: ToolRun["track"] = (job) => {
+		registered.push(job);
+		return { id: `core-${registered.length}`, done: (code) => void done.push(code) };
+	};
+	const context = ctx({ track });
+	const started = await bashTool.execute({ command: "echo first; sleep 30", description: "起个服务", run_in_background: true }, context);
+	expect(textOf(started)).toContain("Started background job core-1.");
+	expect(registered[0]).toMatchObject({ command: "echo first; sleep 30", description: "起个服务" });
+	expect(registered[0]!.wakes).toBeUndefined();
+	await vi.waitFor(async () => expect((await registered[0]!.output()).text).toContain("first"));
+	expect(textOf(await bashOutputTool.execute({ id: "core-1" }, context))).toContain("first");
+	registered[0]!.stop(true);
+	await vi.waitFor(() => expect(done).toHaveLength(1));
+	expect(backgroundJobs(context.state).get("core-1")).toMatchObject({ status: "exited" });
+	expect(await registered[0]!.output()).toMatchObject({ done: true });
+});
 
 const ended = (context: ToolContext, id: string) => vi.waitFor(() => expect(backgroundJobs(context.state).get(id)?.finishedAt).toBeDefined());
 

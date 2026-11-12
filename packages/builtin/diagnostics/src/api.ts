@@ -1,4 +1,4 @@
-import type { BackgroundJobsService, BackgroundJobInfo, FileContents, SessionObservation, SessionSummary, SessionWakeup } from "@plume/contract";
+import type { BackgroundJobInfo, BackgroundJobOutput, FileContents, SessionObservation, SessionSummary, SessionWakeup } from "@plume/contract";
 
 /** 后台任务进程树里在监听的一个端口；`url` 是能点开的本机地址（它自己打印过的，或问过确实是 HTTP 的）。 */
 export interface ServiceEndpoint {
@@ -43,7 +43,7 @@ export interface DiagnosticsApi {
 	read(sessionId: string, version: string | null, ports: boolean): Promise<DiagnosticSnapshot>;
 	/** 一次请求实际发出去的内容，打开轨迹详情时取。 */
 	request(sessionId: string, requestId: string): Promise<RequestInput>;
-	output: BackgroundJobsService["output"];
+	output(sessionId: string, jobId: string): Promise<BackgroundJobOutput>;
 	stop(sessionId: string, jobId: string, force: boolean): Promise<void>;
 	/** 只读取该会话工具结果已登记的完整输出。 */
 	fullOutput(sessionId: string, toolCallId: string): Promise<{ path: string; contents: FileContents }>;

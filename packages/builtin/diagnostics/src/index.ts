@@ -8,17 +8,14 @@ import { MESSAGES } from "./messages.ts";
 
 export default {
 	name: "plume.diagnostics",
-	inject: ["background.jobs", "session.wakeups"],
 	// 调用轨迹记的是每个会话实际发出去的请求和回复：要看全部会话。
 	observe: "all",
 	apply(ctx) {
 		const store = new DiagnosticStore(join(ctx.dataDir, "diagnostics.db"));
-		const jobs = ctx.use("background.jobs");
-		const wakeups = ctx.use("session.wakeups");
 		ctx.effect(() => store.close());
 		const words = () => MESSAGES[ctx.locale()];
 		const findEndpoints = createEndpointFinder(
-			async (jobId, sessionId) => (await jobs.output(sessionId, jobId)).text,
+			async (jobId, sessionId) => (await ctx.sessions.jobOutput(sessionId, jobId)).text,
 			() => words().invalidListeners,
 		);
 		ctx.sessions.observe((value) => store.append(value));
@@ -33,14 +30,14 @@ export default {
 			async read(id, version, ports) {
 				const all = await session(id);
 				const current = store.version(id);
-				const list = jobs.list(id);
+				const list = ctx.sessions.jobs(id);
 				const found = ports ? await findEndpoints(id, list) : { jobs: list.map((job) => ({ ...job, endpoints: [] })) };
 				return {
 					...(typeof version !== "string" ? {} : current === version ? { version: current } : { version: current, ...store.read(id) }),
 					jobs: found.jobs,
 					...(found.error ? { discoveryError: found.error } : {}),
 					children: all.filter((entry) => entry.parentId === id),
-					wakeups: wakeups.list(id),
+					wakeups: ctx.sessions.wakeups(id),
 				};
 			},
 			async request(id, requestId) {
@@ -51,11 +48,11 @@ export default {
 			},
 			async output(id, jobId) {
 				await session(id);
-				return jobs.output(id, jobId);
+				return ctx.sessions.jobOutput(id, jobId);
 			},
 			async stop(id, jobId, force) {
 				await session(id);
-				if (typeof force !== "boolean" || !jobs.stop(id, jobId, force)) throw new Error(words().exited);
+				if (typeof force !== "boolean" || !ctx.sessions.stopJob(id, jobId, force)) throw new Error(words().exited);
 			},
 			async fullOutput(id, toolCallId) {
 				await session(id);
@@ -84,7 +81,7 @@ export default {
 			},
 			async cancelWakeup(id, wakeupId) {
 				await session(id);
-				return typeof wakeupId === "string" && wakeups.cancel(id, wakeupId);
+				return typeof wakeupId === "string" && ctx.sessions.cancelWakeup(id, wakeupId);
 			},
 		};
 		ctx.serve(api);

@@ -13,8 +13,9 @@ import type { DeliveryDetails } from "../delivery.ts";
 import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE, sandboxDenialMarker } from "../escalation.ts";
 import { words } from "../messages.ts";
 import { isReadOnlyCommand } from "../read-only-command.ts";
-import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess } from "@plume/contract";
+import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess, TrackedJob } from "@plume/contract";
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
+import { readJobOutput } from "./job-output.ts";
 import { commandChangesForJob, withCommandChanges } from "./command-changes.ts";
 import { OutputBuffer } from "./bash-output.ts";
 import { createOutputLog, type OutputLog } from "./output-log.ts";
@@ -326,14 +327,34 @@ const streams = new WeakMap<BackgroundJob, JobStream>();
  * 和 `run_in_background` 起的一样能读能停、结束时送达，删会话时一起停掉。`seen` 是模型在这次结果里已经看过的输出。
  */
 function adoptJob(ctx: ToolContext, args: BashArgs, process: SandboxProcess, outputLog: OutputLog | undefined, seen?: OutputBuffer): string {
-	const job = newJob(args, process, outputLog);
-	track(job, process, ctx, outputLog, seen);
+	const { job, tracked } = newJob(args, process, outputLog, ctx);
+	track(job, tracked, process, ctx, outputLog, seen);
 	return job.id;
 }
 
-function newJob(args: { command: string; description?: string }, process: SandboxProcess, outputLog: OutputLog | undefined, kind?: "monitor"): BackgroundJob {
-	return {
-		id: randomUUID(),
+/**
+ * 一个新的后台任务，登记进本体（`ToolRun.track`）：id 是本体给的；会话闲没闲、删会话和退出应用时停掉、界面列出它，都按这次登记。
+ * 本体要停它时调回任务表的 `stop`，和 bash_output 停它是同一条路。直接调工具的测试没有本体，id 自己起。
+ */
+function newJob(
+	args: { command: string; description?: string },
+	process: SandboxProcess,
+	outputLog: OutputLog | undefined,
+	ctx: ToolContext,
+	kind?: "monitor",
+): { job: BackgroundJob; tracked?: TrackedJob } {
+	const jobs = backgroundJobs(ctx.state);
+	let job!: BackgroundJob;
+	const tracked = ctx.track?.({
+		command: args.command,
+		...(args.description ? { description: args.description } : {}),
+		...(process.pid === undefined ? {} : { pid: process.pid }),
+		...(kind === "monitor" ? { wakes: true } : {}),
+		output: () => readJobOutput(job),
+		stop: (force) => void jobs.stop(job.id, force),
+	});
+	job = {
+		id: tracked?.id ?? randomUUID(),
 		command: args.command,
 		...(args.description ? { description: args.description } : {}),
 		...(kind ? { kind } : {}),
@@ -344,10 +365,18 @@ function newJob(args: { command: string; description?: string }, process: Sandbo
 		...(process.pid === undefined ? {} : { pid: process.pid }),
 		status: "running",
 	};
+	return { job, ...(tracked ? { tracked } : {}) };
 }
 
-/** 跟着一个任务的输出和退出，不管是谁起的；它自己结束时告诉模型（`reportEnd`）。 */
-function track(job: BackgroundJob, process: SandboxProcess, ctx: ToolContext, outputLog: OutputLog | undefined, seen?: OutputBuffer): void {
+/** 跟着一个任务的输出和退出，不管是谁起的；它自己结束时告诉模型（`reportEnd`）和本体（`tracked`）。 */
+function track(
+	job: BackgroundJob,
+	tracked: TrackedJob | undefined,
+	process: SandboxProcess,
+	ctx: ToolContext,
+	outputLog: OutputLog | undefined,
+	seen?: OutputBuffer,
+): void {
 	const all = seen ?? new OutputBuffer();
 	const stream: JobStream = { all, unread: new OutputBuffer(all.end), wake: new Set(), ...(seen ? { readAt: Date.now() } : {}) };
 	const news = () => {
@@ -375,7 +404,9 @@ function track(job: BackgroundJob, process: SandboxProcess, ctx: ToolContext, ou
 			job.exitCode = code;
 			job.finishedAt = Date.now();
 			job.status = code !== null && code !== 0 ? "failed" : "exited";
+			// 先把结束送出去（攒进送达）再告诉本体它结束了：中间没有一刻会话看着像什么都不等了。
 			reportEnd(job, jobs);
+			tracked?.done(code);
 			news();
 		});
 		process.onError((error) => {
@@ -385,6 +416,7 @@ function track(job: BackgroundJob, process: SandboxProcess, ctx: ToolContext, ou
 			job.finishedAt = Date.now();
 			// 起不来的错误在「Started background job」已经答出去以后才到，也是一种结束。
 			reportEnd(job, jobs);
+			tracked?.done(null, error.message);
 			news();
 		});
 	};
@@ -454,8 +486,8 @@ export async function launchJob(
 		await outputLog?.close();
 		return { error: `Failed to start command: ${error instanceof Error ? error.message : String(error)}` };
 	}
-	const job = newJob(args, child, outputLog, kind);
-	track(job, child, ctx, outputLog);
+	const { job, tracked } = newJob(args, child, outputLog, ctx, kind);
+	track(job, tracked, child, ctx, outputLog);
 	return { job, process: child };
 }
 

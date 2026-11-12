@@ -78,6 +78,9 @@ async function setup() {
 		shell: async () => ({ kind: "posix", label: "bash", sandbox: "workspace-write" }),
 		exec: localExec(cwd),
 		escalate: async () => ({ granted: false, message: "not here" }),
+		track: () => {
+			throw new Error("这里不起后台任务");
+		},
 		ask: async (content) => {
 			seen.push(content);
 			return decision;

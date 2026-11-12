@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { test, type TestContext } from "node:test";
 import type {
-	BackgroundJobInfo,
 	HookLayer,
 	Message,
 	ModelContext,
@@ -59,8 +58,6 @@ async function fixture(t: TestContext) {
 	let serial = 0;
 	let beforeCreate: (() => Promise<void>) | undefined;
 	const resources: ResourceHandler[] = [];
-	const jobs: Array<{ sessionId: string; id: string; status: BackgroundJobInfo["status"] }> = [];
-	const killed: Array<{ sessionId: string; id: string; force: boolean }> = [];
 	const ctx = {
 		name: "plume.subagents",
 		dataDir: directory,
@@ -88,24 +85,12 @@ async function fixture(t: TestContext) {
 			api = value;
 		},
 		effect: (dispose: () => void | Promise<void>) => disposers.push(dispose),
-		use: (name: string) =>
-			name === "background.jobs"
-				? {
-						list: (sessionId: string) => jobs.filter((job) => job.sessionId === sessionId),
-						stop: (sessionId: string, id: string, force: boolean) => {
-							const job = jobs.find((entry) => entry.sessionId === sessionId && entry.id === id);
-							if (!job) return false;
-							killed.push({ sessionId, id, force });
-							job.status = "exited";
-							return true;
-						},
-					}
-				: {
-						register: (handler: ResourceHandler) => {
-							resources.push(handler);
-							return () => void resources.splice(resources.indexOf(handler), 1);
-						},
-					},
+		use: () => ({
+			register: (handler: ResourceHandler) => {
+				resources.push(handler);
+				return () => void resources.splice(resources.indexOf(handler), 1);
+			},
+		}),
 		sessions: {
 			list: async () => [...sessions.values()],
 			models: async () => MODELS,
@@ -214,8 +199,6 @@ async function fixture(t: TestContext) {
 		directory,
 		resources,
 		tools,
-		jobs,
-		killed,
 	};
 }
 
@@ -797,27 +780,6 @@ test("agent:// 读这个会话派出的子代理交回的结果：整份、一�
 	]);
 	await f.unload();
 	assert.equal(f.resources.length, 0);
-});
-
-test("收工时停掉子会话自己起的后台进程，父会话的不动；续跑那一段收工时再停", async (t) => {
-	const f = await fixture(t);
-	await f.run({ description: "Serve", prompt: "Start the dev server" });
-	await until(() => f.starts.length === 1);
-	f.jobs.push(
-		{ sessionId: "child-1", id: "dev", status: "running" },
-		{ sessionId: "child-1", id: "old", status: "exited" },
-		{ sessionId: "main", id: "mine", status: "running" },
-	);
-	f.finish(0, "done", "Started");
-	await until(() => f.reports.length === 1);
-	assert.deepEqual(f.killed, [{ sessionId: "child-1", id: "dev", force: true }]);
-	f.jobs.push({ sessionId: "child-1", id: "again", status: "running" });
-	await f.run({ description: "Again", prompt: "More", resume: "child-1" });
-	await until(() => f.starts.length === 2);
-	assert.equal(f.killed.length, 1, "跑着的时候不动");
-	f.finish(1, "aborted");
-	await until(() => f.killed.length === 2);
-	assert.deepEqual(f.killed[1], { sessionId: "child-1", id: "again", force: true });
 });
 
 test("父会话还有子代理没回来：里层拿到 awaiting（空回复催在等谁），每 4 次带工具的请求提醒一次，名单变了从头数", async (t) => {

@@ -104,7 +104,7 @@ const NOT_TOP =
 
 export default {
 	name: "plume.subagents",
-	inject: ["resources", "background.jobs"],
+	inject: ["resources"],
 	async apply(ctx) {
 		const registry = new Registry(
 			ctx,
