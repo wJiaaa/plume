@@ -305,6 +305,10 @@ interface ToolOutput {
 	details?: unknown;
 	/** 这一步的结果写完以后这一轮就此结束；几个都带了时有 stalled 就按 stalled。 */
 	terminate?: "done" | "stalled";
+	/** 以后没人要读（没搜到、空目录）：压缩剪枝时换成一句「无结果」。 */
+	uneventful?: boolean;
+	/** 要照着做的说明（技能正文），不是观察：压缩不剪、不当作被顶替的旧结果清掉。 */
+	instructions?: boolean;
 }
 
 interface ModelContext {

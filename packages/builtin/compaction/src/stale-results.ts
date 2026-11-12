@@ -13,8 +13,6 @@ import { isAbsolute, posix, resolve } from "node:path";
 import type { Message, ToolResultMessage } from "@plume/contract";
 import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS } from "./prune.ts";
 
-/** 技能正文是要照着做的说明，不当作可顶替的观察。 */
-const PROTECTED = new Set(["skill"]);
 /** read 对一行最多给多少字（超过的给一个窗口，用 `char_offset` 接着读），和 plume.tools 的 read 一致。 */
 const MAX_LINE_CHARS = 2000;
 
@@ -34,7 +32,8 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 		const message = messages[index] as Message;
 		if (message.role !== "toolResult") continue;
 		const call = calls.get(message.toolCallId);
-		if (!call || PROTECTED.has(call.name) || PROTECTED.has(message.toolName)) continue;
+		// 要照着做的说明（技能正文，`ToolOutput.instructions`）不是观察，不会被顶替。
+		if (!call || message.instructions) continue;
 
 		const path = pathOf(call.arguments);
 		const key = path ? resolvedKey(cwd, path) : "";

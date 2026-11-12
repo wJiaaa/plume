@@ -72,7 +72,7 @@ it("发送路径上的剪法只看结果本身：同一条每次剪出同一份�
 	expect(first).not.toBe(huge);
 	expect(again).toEqual(first);
 	expect(freshView([first!], sink)[0]).toBe(first);
-	const skill: Message = { ...huge, toolName: "skill" };
+	const skill: Message = { ...huge, toolName: "skill", instructions: true };
 	expect(freshView([skill], sink)[0]).toBe(skill);
 	// 压缩时剪得更狠的那条线也不剪它。
 	expect(pruneToolResults([skill], undefined, sink)[0]).toBe(skill);

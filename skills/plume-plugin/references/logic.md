@@ -96,6 +96,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 - 出错返回 `{ output: "原因", isError: true }`；抛错也会变成交给模型的错误结果。
 - 结果带上 `terminate: "done"` 或 `"stalled"`：这一步的结果都写进会话以后，这一轮就以完成或卡住结束，不再把结果交给模型（一步里有几个都带了，有 `stalled` 就按 `stalled`）。工具和 `tool.execute` 的层都能设。
 - 结果带上 `uneventful: true`（没搜到、空目录）：以后不会再有人要读，压缩剪枝时它发给模型的正文换成一句「无结果」，卡片照旧是原文。
+- 结果带上 `instructions: true`（载入的技能正文这类要照着做的说明，不是一次观察）：压缩时原样留着，不按大小剪，也不当作被后来的结果顶替的旧观察清掉。例子是 `plume.skills`。
 - 长时间的操作接上 `run.signal`，用户点停止时能停下。
 - 调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型：`channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）——会话闲着时开一轮，忙着时在下一个步骤边界读入。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）；`delivery`（和 `ctx.sessions.report` 同一个形状 `DeliveryInput`）让界面在对话里画一行，宿主只留认得的字段，不给就只有模型看得到；那一行由你经 `ui.agentDelivery` 画（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），标 `inline: true` 的插在一段活中间时并进那段活。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。人按停、删会话、退出应用时渠道作废：`channel.signal` 触发，之后 `report` 返回 `false`、攒着的丢掉；撤回、编辑重发时只作废截掉的那段里的调用拿到的渠道，留下那段里拿到的照常送达。停不停后台的事本身由你定（plume.tools 的后台命令照跑、monitor 跟着停）。之后的调用拿到的是新的一条。子会话没有渠道，结果写进 `output` 叫模型自己去读。
 - 给另一个顶层会话寄一封信：`run.letter(to, { from, text, request?, answer?, re?, chain?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。`guide` 是给收件方模型的处理说明（怎么回），一次送达里一样的只写一遍。返回回执 `{ id, read, answer }`：`read` 兑现成 `{ status: "read", opened }`（`opened` 是这封叫起了对方一轮）、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answer(letter)` 从收件方寄回发件方一封，只能用一次，发件方不在了返回 `undefined`——对方没回、没读到时替它说一句，问的一方才不会一直等下去。请求（`request: true`）有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）：经 `answer` 回了信，或对方读到以后寄回一封带 `answer` 的信（答掉它读到的全部），才算答了；对方删掉、你的插件停用时不再等。对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。限速、去重、链长归你管（plume.sessions 做了一份）。
@@ -146,7 +147,7 @@ ctx.hook("model.context", async (input, next) => {
 | `ask(reason)` | 弹审批卡等用户决定，卡上是这次调用的参数和 `reason`，只能答这一次；返回是否允许，用户停止这一轮时得到 `false`。完全访问下本体直接允许，其余经过钩子 `tool.approve`（`byLayer` 为真） |
 | `progress(chunk)` | 执行中的输出推给界面 |
 
-输出是工具结果 `{ output, images?, isError?, details?, terminate?, uneventful? }`。
+输出是工具结果 `{ output, images?, isError?, details?, terminate?, uneventful?, instructions? }`。
 
 已有的层（`plume.lsp` 在 edit、write 的结果后面附上文件的错误，`plume.hooks`、`plume.plan`、`plume.skills` 等）都用默认的 order 0，按加载顺序叠。要看交给模型的最终结果（比如把结果里的密钥换掉）就用很小的 order（如 -100）套在最外层，里面任何一层的输出都经过它。
 

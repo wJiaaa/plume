@@ -124,6 +124,7 @@ function toolResult(call: ToolCallContent, result: ToolOutput, startedAt?: numbe
 			: {}),
 		...(result.details === undefined ? {} : { details: result.details }),
 		...(result.uneventful === true ? { uneventful: true } : {}),
+		...(result.instructions === true ? { instructions: true } : {}),
 		...(startedAt === undefined ? {} : { startedAt, durationMs: now - startedAt }),
 		timestamp: now,
 	};

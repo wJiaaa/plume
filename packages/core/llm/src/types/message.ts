@@ -496,6 +496,8 @@ export interface ToolResultMessage {
 	isError: boolean;
 	/** See `ToolResult.uneventful`. Carried on the message so compaction can see it. */
 	uneventful?: boolean;
+	/** See `ToolOutput.instructions`. Carried on the message so compaction can see it. */
+	instructions?: boolean;
 	/**
 	 * See `ToolResult.terminate`. Carried on the message so the loop can see it.
 	 *

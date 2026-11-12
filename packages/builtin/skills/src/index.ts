@@ -153,6 +153,8 @@ export default {
 				return {
 					output: duplicate ? `Skill "${skill.name}" is already loaded in the current context. Follow its instructions above.` : output,
 					details: { name: skill.name, path: skill.path, scope: skill.scope },
+					// 技能正文是要照着做的说明：压缩不剪它，也不当作被顶替的旧观察清掉。
+					instructions: true,
 				};
 			},
 		});
