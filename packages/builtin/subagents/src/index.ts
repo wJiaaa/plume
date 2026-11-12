@@ -91,6 +91,15 @@ function failed(output: string): ToolOutput {
 	return { output, isError: true };
 }
 
+/**
+ * 只有顶层会话（侧栏里那段对话）建得了子会话：插件的子会话、独立会话（比如运维助手）下面本体不让再挂子会话。
+ * 在那里不给派活、停活的工具，名单也不列；调到了照样拒绝，说清为什么。
+ */
+const TOP_ONLY = new Set(["task", "stop_subagent"]);
+// i18n-exempt：发给模型的工具结果。
+const NOT_TOP =
+	"Only a main conversation can dispatch sub-agents; a side chat, another plugin's child session or a plugin-owned session cannot. Do the work yourself.";
+
 export default {
 	name: "plume.subagents",
 	inject: ["resources", "background.jobs"],
@@ -119,6 +128,7 @@ export default {
 					: result.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n"),
 			async execute(args, run) {
 				if (registry.identity(run.sessionId)) return failed("Sub-agents cannot dispatch sub-agents. Do the work yourself.");
+				if (run.session.kind !== "top") return failed(NOT_TOP);
 				const description = typeof args.description === "string" ? args.description.trim() : "";
 				const prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
 				if (!description || !prompt) return failed("Both `description` and `prompt` are required and must be non-empty strings.");
@@ -154,9 +164,9 @@ export default {
 		ctx.hook("model.context", async (input, next) => {
 			const record = registry.identity(input.sessionId);
 			if (!record) {
-				// 里层都改完了再看：别的插件藏起了 task（侧边聊天只留它自己那几样工具），名单也就不列。
+				// 里层都改完了再看：别的插件藏起了 task（侧边聊天只留它自己那几样工具）、这里不是顶层会话（见 `TOP_ONLY`），名单也就不列。
 				const context = await next(input);
-				const tools = context.tools.filter((tool) => tool.name !== YIELD_TOOL);
+				const tools = context.tools.filter((tool) => tool.name !== YIELD_TOOL && (input.session.kind === "top" || !TOP_ONLY.has(tool.name)));
 				if (!tools.some((tool) => tool.name === "task")) return { ...context, tools };
 				const agents = await registry.enabled(input.cwd);
 				// 种类全关掉了：没有能派的，task 也不给模型，免得它调了只拿到错误。

@@ -13,8 +13,10 @@ import type {
 	ReportOptions,
 	ResourceAddress,
 	ResourceHandler,
+	SessionKind,
 	SessionMessage,
 	SessionModel,
+	SessionScope,
 	SessionSummary,
 	ToolDefinition,
 	ToolOutput,
@@ -158,9 +160,10 @@ async function fixture(t: TestContext) {
 		await unload();
 		rmSync(directory, { recursive: true, force: true });
 	});
-	const run = (args: Record<string, unknown>, sessionId = "main", name = "task") =>
+	const run = (args: Record<string, unknown>, sessionId = "main", name = "task", kind?: SessionKind) =>
 		tools.get(name)!.execute(args, {
 			sessionId,
+			session: scope(sessionId, kind),
 			cwd: "/work",
 			signal: new AbortController().signal,
 			progress() {},
@@ -203,8 +206,12 @@ async function fixture(t: TestContext) {
 	};
 }
 
-const context = (sessionId: string): ModelContext => ({
+/** 派出去的子会话叫 `child-<n>`，其余的当顶层会话；`kind` 给了就照它。 */
+const scope = (sessionId: string, kind?: SessionKind): SessionScope => ({ id: sessionId, kind: kind ?? (sessionId.startsWith("child-") ? "child" : "top") });
+
+const context = (sessionId: string, kind?: SessionKind): ModelContext => ({
 	sessionId,
+	session: scope(sessionId, kind),
 	cwd: "/work",
 	model: { id: "provider/model", name: "Model" },
 	personalization: { customInstructions: "", tone: "professional" },
@@ -399,6 +406,26 @@ test("validation and catalogue remain available without starting invalid tasks",
 		hidden.sections.some((section) => section.id === "subagents"),
 		false,
 	);
+});
+
+test("插件的子会话、独立会话建不了子会话：task、stop_subagent 和名单都不给，硬调 task 是一句说得清的拒绝", async (t) => {
+	const f = await fixture(t);
+	const layer = f.layers.get("model.context") as HookLayer<"model.context">;
+	for (const kind of ["child", "standalone"] as const) {
+		const built = await layer(context("other", kind), async (input) => input);
+		assert.deepEqual(
+			built.tools.map((tool) => tool.name),
+			["read", "write", "todo_write"],
+		);
+		assert.equal(
+			built.sections.some((section) => section.id === "subagents"),
+			false,
+		);
+		const refused = await f.run({ description: "Task", prompt: "work" }, "other", "task", kind);
+		assert.equal(refused.isError, true);
+		assert.match(refused.output, /Only a main conversation can dispatch sub-agents/);
+	}
+	assert.equal(f.starts.length, 0);
 });
 
 test("every agent kind switched off: task is hidden from the model along with the catalogue; switching one back on returns both", async (t) => {
