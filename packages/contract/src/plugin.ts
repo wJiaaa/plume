@@ -388,10 +388,12 @@ export interface ToolDefinition {
 	 *   别的插件要对模型说「用它记下步骤」时，按这一类在工具表里找它叫什么，找不到就不说。
 	 * - `question`：停下来问人一个问题、等人回答的工具（经 `run.request`）。别的插件要对模型说「拿不准就问人」时同样按这一类找。
 	 * - `web`：只读地查网页的工具（搜索网页、把网址读成文字），不碰工作区。给模型一套收窄的工具表的插件按这一类留下它们。
+	 * - `delegate`：把一件活派给子智能体、等它交回结论的工具。别的插件要对模型说「派子智能体去做」时按这一类找它叫什么，
+	 *   找不到就换成不派、自己做的说法；怎么填它的参数归它自己的说明。
 	 *
 	 * 不给的算普通工具。做的是哪种活（读、改文件、跑命令）用 `kind`，不在这里。
 	 */
-	category?: "mcp" | "checklist" | "question" | "web";
+	category?: "mcp" | "checklist" | "question" | "web" | "delegate";
 	execute(args: Record<string, unknown>, run: ToolRun): Promise<ToolOutput>;
 }
 

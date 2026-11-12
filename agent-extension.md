@@ -371,10 +371,10 @@ interface ToolDefinition {
 	 */
 	kind?: "view" | "list" | "find" | "search" | "create" | "modify" | "command" | "watch" | "job";
 	/**
-	 * 哪一类工具：`mcp` 的上下文用量单独算一段；`checklist` 记进度清单（转录把它并进旁边那段活，界面经工具表拿到），`question` 停下来问人，`web` 只读地查网页。
+	 * 哪一类工具：`mcp` 的上下文用量单独算一段；`checklist` 记进度清单（转录把它并进旁边那段活，界面经工具表拿到），`question` 停下来问人，`web` 只读地查网页，`delegate` 把活派给子智能体。
 	 * 本体和别的插件不认工具名，只认这几样声明：别的插件按种类、类别在 `ctx.tools.list()` / `run.tools()` 里找它这会儿叫什么。
 	 */
-	category?: "mcp" | "checklist" | "question" | "web";
+	category?: "mcp" | "checklist" | "question" | "web" | "delegate";
 	execute(
 		args: Record<string, unknown>,
 		run: {

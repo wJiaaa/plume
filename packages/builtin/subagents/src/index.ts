@@ -125,6 +125,8 @@ export default {
 			name: "task",
 			description: DESCRIPTION,
 			parameters: PARAMETERS,
+			// 别的插件要叫模型派子智能体时按这一类找到它，不认 `task` 这个名字。
+			category: "delegate",
 			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
 			describe: (args) => (typeof args.description === "string" ? args.description : "Sub-agent task"),
 			// 导出时把结论引在这一行下面；出错的、标了只派出去（`detached`）的不引。
