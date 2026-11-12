@@ -1304,6 +1304,11 @@ function screenFor(plugin: string): ScreenCapture {
 	};
 }
 
+/** 插件给的组件画在宿主的视图里（`ConversationProps.tasks`）：出错时只丢这一块。 */
+export function PluginPart({ plugin, children }: { plugin: string; children: ReactNode }) {
+	return <Isolated plugin={plugin}>{children}</Isolated>;
+}
+
 /** 插件画的一小块出错时只丢它自己：记日志，什么都不画。 */
 class Isolated extends Component<{ plugin: string; children: ReactNode; fallback?: ReactNode }, { failed: boolean }> {
 	state = { failed: false };

@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SideChatApi } from "./api.ts";
 import { dispatchCard } from "./DispatchCard.tsx";
 import { MESSAGES } from "./messages.ts";
+import { TaskStrip } from "./TaskStrip.tsx";
 import sideChatCss from "./side-chat.css";
 
 const PANEL = "chat";
@@ -123,6 +124,7 @@ function SideChatPanel({ session, tab, setTitle, onClose }: PanelProps) {
 			<ui.Conversation
 				{...(sideId ? { sessionId: sideId } : {})}
 				reask
+				tasks={TaskStrip}
 				empty={
 					<PanelEmpty icon={MessagesSquare} title={text.title}>
 						{text.empty}

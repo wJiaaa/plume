@@ -53,7 +53,7 @@ import type {
 	PluginStatus,
 	ProjectEntry,
 	QueuedMessage,
-	HandedTask,
+	ChildTask,
 	RevertPlan,
 	TurnStop,
 } from "@plume/contract";
@@ -72,7 +72,7 @@ import { conversationMarkdown } from "./conversation-markdown.ts";
 import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
 import { lettersText } from "./letters.ts";
-import { HandedTasks } from "./handed.ts";
+import { ChildTasks } from "./child-tasks.ts";
 import { SessionQueues, childTask } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
 import { kindOf, sessionScope } from "./session-scope.ts";
@@ -507,11 +507,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	const sessionRoots = ({ id, cwd, project }: SessionSummary) => [...projectRootsFor(projects, cwd, project), ...lineageScratchDirs(id)];
 
-	/** 侧边聊天交给父会话的那几件事走到了哪：子会话的回执条，见 `HandedTask`。 */
-	const handed = new HandedTasks((childId) => emitHanded(childId));
+	/** 子会话交给父会话的那几件事走到了哪，见 `ChildTask`。 */
+	const handed = new ChildTasks((childId) => emitHanded(childId));
 	/** 这一轮是为交过来的哪件事跑的：按这一轮的第一句认，收场时落到那件事上。 */
-	const handedPrompts = new WeakMap<UserMessage, { childId: string; task: HandedTask }>();
-	const handedOf = (childId: string): HandedTask[] => {
+	const handedPrompts = new WeakMap<UserMessage, { childId: string; task: ChildTask }>();
+	const handedOf = (childId: string): ChildTask[] => {
 		const parentId = sessions.get(childId)?.summary.parentId;
 		return handed.list(childId, parentId ? queues.list(parentId) : []);
 	};
@@ -522,7 +522,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		store,
 		(sessionId, queue) => {
 			emit({ type: "queue", sessionId, queue });
-			// 排着的就是回执条上「排队中」的那几行：交过事的子会话跟着变。
+			// 排着的也算在子会话的任务里（`ChildTask` 的 `queued`）：交过事的子会话跟着变。
 			for (const childId of handed.sidesOf(sessionId)) emitHanded(childId);
 		},
 		(error) => log("agent", "warn", `排队的消息没存上：${errorText(error)}`),
@@ -1486,7 +1486,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/**
 	 * 排着的一条变成这一轮的第一句：带着它的来处（子会话交过来的），「现在就发」的带着打断的说明。
-	 * 子会话交过来的，回执条上那一行从这里起是「在跑」，这一轮收场时落定（`runTurn`）。
+	 * 子会话交过来的，那件事（`ChildTask`）从这里起是「在跑」，这一轮收场时落定（`runTurn`）。
 	 */
 	function queuedPrompt(entry: QueuedMessage, interrupt: boolean): UserMessage {
 		const prompt = userMessage({ ...entry.message, ...(interrupt ? { interrupt: true } : {}) });
@@ -1546,7 +1546,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 侧边聊天 `child` 交给父会话的一件事（插件的 `ParentSession.enqueue`、人在卡片上点的「交给主会话」、回执条上的重试）。
+	 * 子会话 `child` 交给父会话的一件事（插件的 `ParentSession.enqueue`、人在卡片上点的「交给主会话」、重试）。
 	 * 返回排上那一刻它是不是就开始了。
 	 */
 	function enqueueTask(child: Session, instruction: unknown): boolean {

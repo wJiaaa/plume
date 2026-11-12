@@ -98,7 +98,6 @@ import { useManagedSkin } from "./appearance-settings.ts";
 import { QueuedMessages } from "./composer/QueuedMessages.tsx";
 import { Transcript } from "./conversation/Transcript.tsx";
 import type { MessageEdits } from "./conversation/message-edits.ts";
-import type { TaskActions } from "./conversation/TaskStrip.tsx";
 import { draftFromMessage, editedContent } from "./conversation/revert-draft.ts";
 import type { DraftAttachment } from "./composer/attachments/read.ts";
 import { type DraftQuote, withQuotes } from "./conversation/quote.ts";
@@ -160,7 +159,7 @@ import { FileScope, type FileScopeValue, touchedPaths } from "./files/scope.ts";
 import { MarketNavItem, MarketScreen, MarketToolbar } from "./market/market.tsx";
 import { NavItem } from "./nav-item.tsx";
 import { applyLive, connectLiveSessions, peekLiveSession, readSessionView, reloadLive, useLiveSession, viewChange } from "./session-live.ts";
-import { ChildConversation } from "./conversation/ChildConversation.tsx";
+import { ChildConversation, type ChildTaskActions } from "./conversation/ChildConversation.tsx";
 import { dropChildDraft, flushChildDrafts, seedChildQuote } from "./conversation/child-drafts.ts";
 import { publishSessionChanges } from "./plugin-session-changes.ts";
 import { EMPTY_HISTORY, type NavEntry, type NavHistory, record, type Screen, sameEntry, step } from "./nav-history.ts";
@@ -3283,8 +3282,8 @@ function ChildApproval({ sessionId, compact }: { sessionId: string; compact: boo
 	);
 }
 
-/** 回执条上的操作：「立即执行」「撤回」就是父会话排队条上的「现在就发」和拿掉那一条。 */
-const TASK_ACTIONS: TaskActions = {
+/** 子会话任务上的操作：「立即执行」「撤回」就是父会话排队条上的「现在就发」和拿掉那一条。 */
+const TASK_ACTIONS: ChildTaskActions = {
 	runNow: (parentId, taskId) => void agent.sendQueued(parentId, taskId).catch((error: unknown) => notify(errorText(error), "error")),
 	withdraw: async (parentId, taskId) => {
 		const entry = await agent.removeQueued(parentId, taskId).catch((error: unknown) => {
@@ -3293,8 +3292,8 @@ const TASK_ACTIONS: TaskActions = {
 		});
 		return entry && (entry.message.displayText ?? entry.preview);
 	},
-	retry: (sideId, taskId) => void agent.retryTask(sideId, taskId).catch((error: unknown) => notify(errorText(error), "error")),
-	dismiss: (sideId, taskId) => void agent.dismissTask(sideId, taskId).catch((error: unknown) => notify(errorText(error), "error")),
+	retry: (childId, taskId) => void agent.retryTask(childId, taskId).catch((error: unknown) => notify(errorText(error), "error")),
+	dismiss: (childId, taskId) => void agent.dismissTask(childId, taskId).catch((error: unknown) => notify(errorText(error), "error")),
 };
 
 /** 插件的 `ui.Conversation`：引用到的是当前对话的输入框，「去设置」去模型设置。 */
@@ -3321,7 +3320,7 @@ function PluginConversation(props: ConversationProps) {
 		<ChildConversation
 			{...props}
 			{...(edits ? { edits } : {})}
-			tasks={TASK_ACTIONS}
+			taskActions={TASK_ACTIONS}
 			documentText={async (name, data) => await agent.documentText(name, data)}
 			onOpenSettings={onOpenSettings}
 			onQuote={onQuote}

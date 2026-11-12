@@ -50,7 +50,7 @@
   { "title": "设置分区", "names": ["SettingsSectionTitle", "SettingsCard", "SettingsRow", "SettingsNotice"] },
   { "title": "面板", "names": ["PanelEmpty", "RetainedViews", "useNarrow", "useLiveRefresh"] },
   { "title": "页面", "names": ["PageTopRow"] },
-  { "title": "加载和占位", "names": ["ActionSpinner", "BreatheLoader", "SkeletonList", "SkeletonBar", "useSlowLoad"] },
+  { "title": "加载和占位", "names": ["StatusSpinner", "ActionSpinner", "BreatheLoader", "SkeletonList", "SkeletonBar", "useSlowLoad"] },
   { "title": "列表的行", "names": ["HoverRow", "HoverRowMark", "HoverRowReveal", "hoverSlot", "Caret", "MarkNumber"] },
   { "title": "过程行", "names": ["FlowRow"] },
   { "title": "文件图标", "names": ["lookFor", "iconColour"] },

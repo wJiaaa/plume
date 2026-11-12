@@ -355,7 +355,7 @@ export interface OutgoingMessage {
 }
 
 /**
- * 排在一个会话后面、等着轮到自己的一条（输入框上方那几行）。会话忙时人按下回车的，和侧边聊天交过来的任务排的是同一条队。
+ * 排在一个会话后面、等着轮到自己的一条（输入框上方那几行）。会话忙时人按下回车的，和子会话交过来的任务排的是同一条队。
  * 存在 agent 进程里、落盘：关了窗口、重开应用还在。这一轮以完成结束时发下一条；停了、出错了留着等人。
  */
 export interface QueuedMessage {
@@ -364,18 +364,19 @@ export interface QueuedMessage {
 	preview: string;
 	/** 轮到它时整份发出去的东西。 */
 	message: OutgoingMessage;
-	/** 不是人在这个会话的输入框里排的：`child` 是它的一个子会话（比如侧边聊天）交过来的任务，发出去的消息带着同样的来处（`UserMessage.origin`）。 */
+	/** 不是人在这个会话的输入框里排的：`child` 是它的一个子会话交过来的任务，发出去的消息带着同样的来处（`UserMessage.origin`）。 */
 	origin?: "child";
-	/** 子会话交过来的：是哪一个子会话交的，它的回执条（`HandedTask`）据此列出这一条。 */
+	/** 子会话交过来的：是哪一个子会话交的，它的任务列表（`ChildTask`）据此列出这一条。 */
 	childId?: string;
 	createdAt: number;
 }
 
 /**
- * 侧边聊天交给父会话的一件事走到了哪：子会话的回执条一行一件。还排着的就是父会话队列里那一条（`id` 相同），
+ * 子会话交给父会话的一件事（`ParentSession.enqueue`、卡片上的「交给主会话」）走到了哪。只有宿主知道父会话的一轮怎么收场，
+ * 所以状态由宿主给；画成什么样由建这个子会话的插件定（`ConversationProps.tasks`）。还排着的就是父会话队列里那一条（`id` 相同），
  * 开始跑以后的状态宿主只记在内存里，重开应用就没了；做了什么在父会话的转录里，这里只是回执。
  */
-export interface HandedTask {
+export interface ChildTask {
 	id: string;
 	/** 交过去的指令原文。 */
 	text: string;
@@ -388,7 +389,7 @@ export interface HandedTask {
 	error?: string;
 	/** 没出错却没做完：原地打转被叫停、用满了步数。 */
 	unfinished?: "stalled" | "max_turns";
-	/** 父会话被停下、这件跟着停的是 `stop`（还能继续）；人从回执条或计划作废里收回的是 `user`。 */
+	/** 父会话被停下、这件跟着停的是 `stop`（还能继续）；人收回的（撤回、计划作废）是 `user`。 */
 	cancelledBy?: "user" | "stop";
 }
 
@@ -440,8 +441,8 @@ export interface SessionView {
 	compacting: boolean;
 	/** 排着的几条，先排的在前，见 `QueuedMessage`。 */
 	queue: QueuedMessage[];
-	/** 这个子会话（侧边聊天）交给父会话的那几件事，先交的在前，见 `HandedTask`。没交过时没有。 */
-	tasks?: HandedTask[];
+	/** 这个子会话交给父会话的那几件事，先交的在前，见 `ChildTask`。没交过时没有。 */
+	tasks?: ChildTask[];
 	/** 转录里那几行压缩：自动的（定下要压以后）和人敲的 `/compact`，连同进行中的那一次，旧的在前。 */
 	compactionRuns: CompactionRun[];
 }
@@ -538,7 +539,7 @@ export type AgentEvent =
 	/** 一个会话排着的几条变了：整条队的最新快照。 */
 	| { type: "queue"; sessionId: string; queue: QueuedMessage[] }
 	/** 一个子会话交给父会话的那几件事有了变化（排上、开始、收场、拿掉）：全部的最新快照。 */
-	| { type: "tasks"; sessionId: string; tasks: HandedTask[] }
+	| { type: "tasks"; sessionId: string; tasks: ChildTask[] }
 	/** 这一轮出了模型调用以外的问题（如没配置模型、钩子出错）。 */
 	/** 有 `level` 的进提示条（插件经 `ctx.notice` 说的、循环在压缩或重发）；没有的是这一轮出了错，写在输入框上面。 */
 	| { type: "notice"; sessionId: string; text: string; level?: NoticeLevel }
@@ -666,16 +667,16 @@ export interface AgentService {
 	/** 拖动、↑↓ 改先后：`id` 那一条挪到 `targetId` 前面或后面。两条有一条不在队里时什么都不做。 */
 	moveQueued(sessionId: string, id: string, targetId: string, placement: "before" | "after"): Promise<void>;
 	/**
-	 * 人在子会话（侧边聊天）的卡片上点了「交给主会话」：把这件事排进 `sessionId` 这个子会话的父会话，和插件的
+	 * 人在子会话的卡片上点了「交给主会话」：把这件事排进 `sessionId` 这个子会话的父会话，和插件的
 	 * `ParentSession.enqueue` 同一条路（标着来自建这个子会话的插件）。只认父会话，不是子会话时报错。
 	 */
 	queueTask(sessionId: string, instruction: string): Promise<void>;
 	/**
-	 * 回执条上的「重试」「继续」：子会话 `sessionId` 交过去、失败了或随父会话停下的那件事重新排进父会话队尾，和第一次交过去一样。
+	 * 「重试」「继续」：子会话 `sessionId` 交过去、失败了或随父会话停下的那件事（`ChildTask`）重新排进父会话队尾，和第一次交过去一样。
 	 * 别的状态不动，返回排上没有。
 	 */
 	retryTask(sessionId: string, taskId: string): Promise<boolean>;
-	/** 回执条上的「移除」：收了场的那件从列表里拿掉，父会话的转录不动。还排着、在跑的不动，返回拿掉没有。 */
+	/** 「移除」：收了场的那件（`ChildTask`）从列表里拿掉，父会话的转录不动。还排着、在跑的不动，返回拿掉没有。 */
 	dismissTask(sessionId: string, taskId: string): Promise<boolean>;
 	/**
 	 * 编辑重发：第 `index` 条（人发的消息）连同它之后的全部截掉，拿 `message` 重新开始一轮。截完就返回，这一轮经 watch 推送。

@@ -17,25 +17,38 @@ import { ChildComposer, type ReadComposerDocument } from "./ChildComposer.tsx";
 import type { DraftQuote } from "./quote.ts";
 import { seedChildText } from "./child-drafts.ts";
 import type { MessageEdits } from "./message-edits.ts";
-import { type TaskActions, TaskStrip } from "./TaskStrip.tsx";
+import { PluginPart } from "../plugins.tsx";
 import { Transcript } from "./Transcript.tsx";
+
+/** 子会话任务上那几样操作。`withdraw` 交回收回的那句话，已经发出去了就是 undefined。 */
+export interface ChildTaskActions {
+	runNow(parentId: string, taskId: string): void;
+	withdraw(parentId: string, taskId: string): Promise<string | undefined>;
+	retry(childId: string, taskId: string): void;
+	dismiss(childId: string, taskId: string): void;
+}
+
+function parentIdOf(view: { summary: { parentId?: string } }): string {
+	return view.summary.parentId ?? "";
+}
 
 export function ChildConversation({
 	sessionId,
 	composer,
 	empty,
+	tasks: Tasks,
 	renderUserMessage,
 	replyText,
 	documentText,
 	onOpenSettings,
 	onQuote,
 	edits,
-	tasks,
+	taskActions,
 	respond,
 	answer,
 }: ConversationProps & {
-	/** 回执条（`TaskStrip`）的操作：这个子会话交给父会话的事有了，就画在转录和输入框之间。 */
-	tasks: TaskActions;
+	/** 插件画的子会话任务（`ConversationProps.tasks`）上那几样操作，由宿主接到 agent 上。 */
+	taskActions: ChildTaskActions;
 	/** 子会话只给编辑重问（见 `MessageEdits.aside`），由宿主按插件的 `reask` 拼好。 */
 	edits?: MessageEdits;
 	documentText: ReadComposerDocument;
@@ -108,14 +121,25 @@ export function ChildConversation({
 					</Arrival.Provider>
 				)
 			)}
-			{view?.tasks && view.summary.parentId && (
-				<TaskStrip
-					tasks={view.tasks}
-					sideId={view.summary.id}
-					parentId={view.summary.parentId}
-					actions={tasks}
-					{...(composer?.draftKey ? { onWithdrawn: (text: string) => seedChildText(composer.draftKey!, text) } : {})}
-				/>
+			{Tasks && view?.tasks && view.summary.parentId && (
+				<PluginPart plugin={view.summary.owner ?? ""}>
+					<Tasks
+						sessionId={view.summary.id}
+						parentId={view.summary.parentId}
+						tasks={view.tasks}
+						runNow={(taskId) => taskActions.runNow(parentIdOf(view), taskId)}
+						retry={(taskId) => taskActions.retry(view.summary.id, taskId)}
+						dismiss={(taskId) => taskActions.dismiss(view.summary.id, taskId)}
+						{...(composer?.draftKey
+							? {
+									withdraw: (taskId: string) =>
+										void taskActions.withdraw(parentIdOf(view), taskId).then((text) => {
+											if (text !== undefined) seedChildText(composer.draftKey!, text);
+										}),
+								}
+							: {})}
+					/>
+				</PluginPart>
 			)}
 			{view && approval && (
 				<ApprovalOverlay

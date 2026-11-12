@@ -9,6 +9,7 @@ import type { Locale, SlashCommand, ToolCall, ToolOutput } from "./plugin.ts";
 import type {
 	ApprovalDecision,
 	ApprovalRequest,
+	ChildTask,
 	ContextBreakdown,
 	FileContents,
 	HumanRequest,
@@ -363,6 +364,29 @@ export interface ConversationProps {
 	replyText?(text: string, message: AssistantMessage): string;
 	/** 还没有消息时画在转录的位置上（`PanelEmpty` 之类）。不给就是空白。 */
 	empty?: ReactNode;
+	/**
+	 * 这个子会话交给父会话的那几件事（`SessionView.tasks`）画成什么样，画在转录和输入框之间；状态是宿主给的，留几件、
+	 * 摆哪些按钮由插件定。不给就不画。组件出错时只丢这一块。
+	 */
+	tasks?: ComponentType<ChildTasksProps>;
+}
+
+/** `ConversationProps.tasks` 的组件收到的：子会话交给父会话的那几件事，和能对它们做的几样。出错时宿主弹提示条。 */
+export interface ChildTasksProps {
+	/** 交事的子会话。 */
+	sessionId: string;
+	/** 收事的父会话。 */
+	parentId: string;
+	/** 先交的在前，见 `ChildTask`。 */
+	tasks: ChildTask[];
+	/** 还排着的那件现在就发，和父会话排队条上的「现在就发」一样。 */
+	runNow(taskId: string): void;
+	/** 还排着的那件从父会话的队里收回，那句话放回这个视图的输入框。视图没有能放回去的输入框（没给 `composer.draftKey`）时不给。 */
+	withdraw?(taskId: string): void;
+	/** 失败的、随父会话停下的那件重新排进父会话队尾，见 `AgentService.retryTask`。 */
+	retry(taskId: string): void;
+	/** 收了场的那件从列表里拿掉，见 `AgentService.dismissTask`。 */
+	dismiss(taskId: string): void;
 }
 
 /**

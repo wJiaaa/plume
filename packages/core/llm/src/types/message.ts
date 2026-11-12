@@ -302,17 +302,10 @@ export interface UserMessage {
 	 */
 	origin?: "child" | "parent";
 	/**
-	 * `origin` 是 `child` 时，交来这件事的子会话是哪个插件建的（子会话的 `owner`，比如 `plume.side-chat`），界面按它标出插件的显示名。
+	 * `origin` 是 `child` 时，交来这件事的子会话是哪个插件建的（子会话的 `owner`），界面按它标出插件的显示名。
 	 * 宿主在这件事从队列里发出去时照子会话填上；那时子会话已经删掉了就不带，界面改用通用的说法。
 	 */
 	fromPlugin?: string;
-	/**
-	 * 侧边聊天每次提问前附上的主会话进展，读到了哪里。
-	 *
-	 * 只附上次之后新增的那一段，所以下一次要知道从哪接着读；`lastAt` 是读到的最后一条的时间戳，
-	 * 主会话被撤回、同一位置换成了别的消息时对不上，就整段重读。见 `runtime/side-chat/side-session.ts`。
-	 */
-	mainChat?: { seen: number; lastAt: number };
 	/** Clean user input text for UI display, excluding injected skill or session instructions. */
 	displayText?: string;
 	/** Skill triggered by this prompt, along with its filesystem path for viewing. */

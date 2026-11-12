@@ -1327,6 +1327,23 @@ export function PageTopRow({
 
 ## 加载和占位
 
+### `StatusSpinner`
+
+源码：`packages/client/ui/src/motion/loaders.tsx`
+
+```tsx
+/**
+ * 一圈虚线，匀速转。
+ *
+ * 六段等分，所以转过 60° 就回到自身：没有可追踪的端点，眼睛抓不到锚点。这是它敢转、而一段
+ * 弧不敢的原因——一段弧有头，十几个同时在屏幕上，每一个都在自己的相位上把视线勾一下。
+ *
+ * 颜色走 `currentColor`，默认跟着周围的文字走。要它说话大声一点的地方（任务清单里正在跑的
+ * 那一步、流水线里排队的那一条）自己传 `text-accent`、`text-warning`。
+ */
+export function StatusSpinner({ size = 14, className = "" }: { size?: number; className?: string })
+```
+
 ### `ActionSpinner`
 
 源码：`packages/client/ui/src/motion/loaders.tsx`

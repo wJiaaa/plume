@@ -88,3 +88,71 @@
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
+
+/* 交给主会话的那几件事：转录和输入框之间一件一行，不加底色和边框。 */
+.plume-side-tasks {
+	flex-shrink: 0;
+}
+
+.plume-side-tasks-list {
+	margin: 0 auto;
+	display: flex;
+	width: 100%;
+	max-width: var(--plume-content);
+	flex-direction: column;
+	gap: 1px;
+	padding: 0 8px 4px;
+}
+
+.plume-side-task {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	border-radius: var(--plume-radius-item);
+	padding: 4px 6px;
+	transition: background-color var(--plume-t-quick);
+}
+
+.plume-side-task:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-side-task-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+}
+
+.plume-side-task-icon[data-tone="failed"] {
+	color: var(--plume-danger);
+}
+
+.plume-side-task-icon[data-tone="done"] {
+	color: var(--plume-ok);
+}
+
+.plume-side-task-spinner {
+	color: var(--plume-ink-muted);
+}
+
+.plume-side-task-text {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 按钮只在悬停或键盘落在这一行时出来。 */
+.plume-side-task-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	opacity: 0;
+	transition: opacity var(--plume-t-quick);
+}
+
+.plume-side-task:hover .plume-side-task-actions,
+.plume-side-task:has(:focus-visible) .plume-side-task-actions {
+	opacity: 1;
+}
