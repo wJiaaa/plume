@@ -67,6 +67,11 @@ export interface ToolScope {
 	ask(request: ApprovalRequest): Promise<ApprovalDecision>;
 	/** 等人给一份数据（`ToolRun.request`），和 `ask` 同一队。 */
 	requestHuman(request: HumanRequest): Promise<HumanAnswer>;
+	/**
+	 * 这次调用弹的卡里有没有是代管插件替人答的（`SessionAccess.respond`、`answer`）：有就交回那个插件，并且忘掉这一笔。
+	 * 调用收场时问一次，记进结果的 `answeredBy`。
+	 */
+	answeredBy?(toolCallId: string): string | undefined;
 	/** 调用开始执行了（审批也算在执行里）：界面从这一刻给它计时。 */
 	started(toolCallId: string): void;
 	/** 执行中的输出：记下最新的一份，按节奏推给界面；`undefined` 表示这个调用跑完了。 */
@@ -79,6 +84,20 @@ export interface ToolScope {
 	archiveAfterTurn?(): void;
 	/** 注册这个工具的插件够得着的父会话（`ToolRun.parent`）：这个会话是它建的子会话时才有。 */
 	parent?(plugin: string): ParentSession | undefined;
+}
+
+/**
+ * 卡是代管插件替人答的：结果上记着是哪个插件（界面写一行），交给模型的正文后面也写明，模型不会把它当成人在 Plume 里亲手点的。
+ * 只陈述是谁答的，不评判这次放行或回答算不算数：权限照会话的设置，已经由本体定过了。
+ */
+function relayed(message: ToolResultMessage, plugin: string | undefined): ToolResultMessage {
+	if (!plugin) return message;
+	// i18n-exempt：交给模型的工具结果。
+	const note = `[The approval or answer for this call was relayed by the plugin "${plugin}" that stewards this session, not given by the user in Plume's interface.]`;
+	const [first, ...rest] = message.content;
+	const content =
+		first?.type === "text" ? [{ ...first, text: `${first.text}\n\n${note}` }, ...rest] : [{ type: "text" as const, text: note }, ...message.content];
+	return { ...message, content, answeredBy: plugin };
 }
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"]);
@@ -375,17 +394,23 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		// 人按了停才失败的，照实说是停下的；审批层在停下时只会说「拒绝」，那不是人的意思。
 		if (signal.aborted && result.isError === true) {
 			return [
-				toolResult(
-					call,
-					asking ? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } } : { ...result, details: result.details ?? { cancelled: true } },
-					startedAt,
+				relayed(
+					toolResult(
+						call,
+						asking ? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } } : { ...result, details: result.details ?? { cancelled: true } },
+						startedAt,
+					),
+					scope.answeredBy?.(call.id),
 				),
 			];
 		}
-		return [toolResult(call, result, startedAt), result.terminate === "done" || result.terminate === "stalled" ? result.terminate : undefined];
+		return [
+			relayed(toolResult(call, result, startedAt), scope.answeredBy?.(call.id)),
+			result.terminate === "done" || result.terminate === "stalled" ? result.terminate : undefined,
+		];
 	} catch (error) {
 		scope.log("agent", "error", errorText(error));
-		return [toolResult(call, { output: `没有执行：${errorText(error)}`, isError: true }, startedAt)];
+		return [relayed(toolResult(call, { output: `没有执行：${errorText(error)}`, isError: true }, startedAt), scope.answeredBy?.(call.id))];
 	} finally {
 		scope.progress(call.id, undefined, false);
 	}

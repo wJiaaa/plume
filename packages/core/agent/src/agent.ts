@@ -74,7 +74,7 @@ import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
 import { lettersText } from "./letters.ts";
 import { ChildTasks } from "./child-tasks.ts";
-import { SessionQueues, childTask } from "./queue.ts";
+import { SessionQueues, type Source, childTask, stewardMessage } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
 import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
@@ -245,6 +245,8 @@ interface Session {
 	switching?: Set<(to: Pick<ModelConfig, "id" | "name">) => void>;
 	/** 这一轮（记的是它的控制器）里有工具要求收场后归档，见 `ToolRun.archiveAfterTurn`。 */
 	archiveAfterTurn?: AbortController;
+	/** 代管插件替人答了的卡：调用 id → 那个插件。调用收场时取走，记进结果的 `answeredBy`（见 `tool-run.ts` 的 `relayed`）。 */
+	answeredBy?: Map<string, string>;
 }
 
 /** 一封问出去还没答复的请求，见 `asking`。`read`：收件方已经读到。 */
@@ -256,8 +258,11 @@ interface Asking {
 	read: boolean;
 }
 
-/** 一张卡怎么收场的：人答了审批、交回了数据，或者没人答（到时、停下）。 */
-type Settled = { decision: ApprovalDecision } | { value: unknown } | { gone: "expired" | "stopped" };
+/**
+ * 一张卡怎么收场的：人答了审批、交回了数据，或者没人答（到时、停下）。`by` 是替人答它的代管插件（`SessionAccess.respond`、`answer`），
+ * 人自己答的不带。
+ */
+type Settled = { decision: ApprovalDecision; by?: string } | { value: unknown; by?: string } | { gone: "expired" | "stopped" };
 
 /** 排着等人的一张卡：审批（`ask`）或等人给数据（`request`）。 */
 interface PendingApproval {
@@ -341,7 +346,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const asking = new Set<Asking>();
 	/** 等某个会话问出去的都有答复的，见 `settled`。 */
 	const answerWaiters = new Map<string, Array<() => void>>();
-	/** 插件经 `launch` 发的第一句：`prompt.submit` 据此告诉插件这句不是人在输入框里发的（`PromptSubmit.launched`）。 */
+	/** 插件发的话（经 `launch` 发的第一句、代管插件经 `post` 转来的）：`prompt.submit` 据此告诉插件这句不是人在输入框里发的（`PromptSubmit.launched`）。 */
 	const launchedPrompts = new WeakSet<UserMessage>();
 	const host = new PluginHost({
 		// 不叫 plugins：数据目录下的 plugins/ 是插件市场装插件的地方。
@@ -401,6 +406,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			create: async (owner, options) =>
 				structuredClone(await (options?.parentId === undefined ? createStandalone(owner, options) : createChild(owner, options))),
 			launch: (owner, options) => launchSession(owner, options),
+			post: async (owner, sessionId, message) => ({ started: postToSession(owner, sessionId, message) }),
+			respond: async (owner, sessionId, toolCallId, decision) => settleAsSteward(owner, sessionId, toolCallId, { decision }),
+			answer: async (owner, sessionId, toolCallId, value) => settleAsSteward(owner, sessionId, toolCallId, { value }),
 			models: async () => {
 				const settings = await readSettings();
 				return settings.providers
@@ -591,12 +599,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 不挂在别的会话下的会话：人在侧栏新建的，插件经 `ctx.sessions.launch` 开的（`extra` 带上它给的标题、模型、来处），
+	 * 不挂在别的会话下的会话：人在侧栏新建的，插件经 `ctx.sessions.launch` 开的（`extra` 带上它给的标题、模型、来处、代管插件），
 	 * 和插件经 `ctx.sessions.create` 建的独立会话（`extra` 带上 `owner`，见 `createStandalone`）。
 	 */
 	async function createPlain(
 		target: SessionTarget,
-		extra: Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner">> = {},
+		extra: Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner" | "steward">> = {},
 	): Promise<SessionSummary> {
 		const project = target.project ? findProject(target.project) : undefined;
 		let cwd = project?.path ?? target.cwd?.trim();
@@ -1198,6 +1206,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	async function askUser(session: Session, request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
 		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS, signal);
+		relayedBy(session, request.toolCallId, outcome);
 		const decision = "decision" in outcome ? outcome.decision : "reject";
 		const subject = request.subject;
 		if (decision === "always" && subject !== undefined && request.escalation === undefined) {
@@ -1211,8 +1220,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/** 等人给一份数据（`ToolRun.request`）：和审批同一队、同一套撤卡规则，等得比审批久（`QUESTION_TIMEOUT_MS`）。 */
 	async function requestUser(session: Session, request: HumanRequest, signal: AbortSignal): Promise<HumanAnswer> {
 		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.question ?? QUESTION_TIMEOUT_MS, signal);
+		relayedBy(session, request.toolCallId, outcome);
 		if ("value" in outcome) return { answered: true, value: outcome.value };
 		return { answered: false, reason: "gone" in outcome ? outcome.gone : "declined" };
+	}
+
+	/** 卡是代管插件替人答的：记下来，这次调用收场时写进结果（`ToolScope.answeredBy`）。 */
+	function relayedBy(session: Session, toolCallId: string, outcome: Settled): void {
+		if ("by" in outcome && outcome.by) (session.answeredBy ??= new Map()).set(toolCallId, outcome.by);
 	}
 
 	function waitForAnswer(session: Session, request: PendingRequest, timeout: number, signal: AbortSignal): Promise<Settled> {
@@ -1316,8 +1331,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/**
 	 * 插件开的新会话（`ctx.sessions.launch`）：建一个顶层会话、当场开第一轮，和人新建会话再发第一句话走同一条路。
-	 * 不记 `owner`：开出来就是人的会话，插件只拿到这一轮的结果。目录要是已有的：插件给的路径没人看过，
-	 * 错了的话第一轮的每个工具都会失败，不如当场说清楚。
+	 * 不记 `owner`：开出来就是人的会话，插件只拿到这一轮的结果；要了 `steward` 的记下它是代管插件（见 `stewarded`）。
+	 * 目录要是已有的：插件给的路径没人看过，错了的话第一轮的每个工具都会失败，不如当场说清楚。
 	 */
 	async function launchSession(owner: string, options: Parameters<SessionAccess["launch"]>[0] | undefined): ReturnType<SessionAccess["launch"]> {
 		if (quitting) throw new Error(text("session.quitting"));
@@ -1340,6 +1355,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				...(from
 					? { spawnedFrom: { sessionId: String(from.sessionId), ...(typeof from.toolCallId === "string" ? { toolCallId: from.toolCallId } : {}) } }
 					: {}),
+				...(options?.steward === true ? { steward: owner } : {}),
 			},
 		);
 		const session = sessions.get(summary.id)!;
@@ -1483,12 +1499,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 排着的一条变成这一轮的第一句：带着它的来处（子会话交过来的），「现在就发」的带着打断的说明。
+	 * 排着的一条变成这一轮的第一句：带着它的来处（子会话交过来的、代管插件转来的），「现在就发」的带着打断的说明。
 	 * 子会话交过来的，那件事（`ChildTask`）从这里起是「在跑」，这一轮收场时落定（`runTurn`）。
 	 */
 	function queuedPrompt(entry: QueuedMessage, interrupt: boolean): UserMessage {
 		const prompt = userMessage({ ...entry.message, ...(interrupt ? { interrupt: true } : {}) });
 		if (entry.origin) prompt.origin = entry.origin;
+		// 代管插件转来的：记下是哪个插件；`prompt.submit` 据此知道这句不是人在输入框里发的（`PromptSubmit.launched`）。
+		if (entry.origin === "plugin" && entry.fromPlugin) {
+			prompt.fromPlugin = entry.fromPlugin;
+			launchedPrompts.add(prompt);
+		}
 		const childId = entry.childId;
 		const owner = childId ? sessions.get(childId)?.summary.owner : undefined;
 		if (owner) prompt.fromPlugin = owner;
@@ -1533,12 +1554,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/** 排进队尾；会话空着（上一轮被停下、队里还有前面的）就由这一下把队伍推起来。 */
-	function enqueue(session: Session, message: OutgoingMessage, preview: string, origin?: QueuedMessage["origin"], childId?: string): QueuedMessage {
+	function enqueue(session: Session, message: OutgoingMessage, preview: string, source?: Source): QueuedMessage {
 		if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
 		if (quitting) throw new Error(text("session.parentStopped"));
 		// 先校验成一条消息：形状不对的现在就报，不等轮到它时才发现发不出去。
 		userMessage(message);
-		const entry = queues.push(session.summary.id, message, preview.replace(/\s+/g, " ").trim(), origin, childId);
+		const entry = queues.push(session.summary.id, message, preview.replace(/\s+/g, " ").trim(), source);
 		drainQueue(session);
 		return entry;
 	}
@@ -1552,8 +1573,52 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const words = typeof instruction === "string" ? instruction.trim() : "";
 		if (!words) throw new Error(text("session.emptyMessage"));
 		handed.handed(session.summary.id, child.summary.id);
-		const entry = enqueue(session, childTask(words), words, "child", child.summary.id);
+		const entry = enqueue(session, childTask(words), words, { origin: "child", childId: child.summary.id });
 		return !queues.list(session.summary.id).some((queued) => queued.id === entry.id);
+	}
+
+	/**
+	 * 插件动它代管的会话（转话、替人答卡）：要是顶层会话、`steward` 还是它。人停止了代管、会话删了以后再调都在这里抛错，
+	 * 说清是哪个会话、哪个插件。别的会话一律不行：插件不能借这条路往人已有的会话、别的插件代管的会话里说话或答卡。
+	 */
+	function stewarded(plugin: string, sessionId: unknown): Session {
+		const session = find(String(sessionId));
+		if (session.summary.kind !== "top" || session.summary.steward !== plugin) throw new Error(text("session.notStewarded", { id: session.summary.id, plugin }));
+		return session;
+	}
+
+	/**
+	 * 代管插件转进来一句话（`SessionAccess.post`）：排进队尾，和人排的同一条队、同一套规矩（闲着当场开跑，忙着排着，停下过的也由这一下推起来），
+	 * 不插进正在跑的那一轮。返回排上那一刻它是不是就开始了。
+	 */
+	function postToSession(plugin: string, sessionId: unknown, message: unknown): boolean {
+		const session = stewarded(plugin, sessionId);
+		if (session.summary.archived) throw new Error(text("session.stewardArchived", { id: session.summary.id }));
+		const words = typeof message === "string" ? message.trim() : "";
+		if (!words) throw new Error(text("session.emptyMessage"));
+		const entry = enqueue(session, stewardMessage(words), words, { origin: "plugin", fromPlugin: plugin });
+		return !queues.list(session.summary.id).some((queued) => queued.id === entry.id);
+	}
+
+	/**
+	 * 代管插件替人答这个会话弹着的那张卡（`SessionAccess.respond`、`answer`）：和人点卡同一条路，先到的算，另一边的卡跟着收起。
+	 * 只认弹着的那一张（人也只看得见这一张）；它已经不在、不是这一张时返回 false。「以后不再问」不给插件：它改的是人的设置，不只是这一张卡。
+	 */
+	function settleAsSteward(plugin: string, sessionId: unknown, toolCallId: unknown, outcome: { decision: unknown } | { value: unknown }): boolean {
+		const session = stewarded(plugin, sessionId);
+		const pending = session.approvals?.[0];
+		if (!pending || pending.request.toolCallId !== toolCallId) return false;
+		if ("value" in outcome) {
+			if (pending.request.type !== "request") return false;
+			pending.settle({ value: outcome.value, by: plugin });
+			return true;
+		}
+		if (outcome.decision !== "once" && outcome.decision !== "reject")
+			throw new Error(text("session.badStewardDecision", { decision: String(outcome.decision) }));
+		// 等人给数据的卡上「允许」没有意思：只能交数据（`answer`）或不答。
+		if (pending.request.type === "request" && outcome.decision !== "reject") return false;
+		pending.settle({ decision: outcome.decision, by: plugin });
+		return true;
 	}
 
 	function parentStatus(session: Session): ParentStatus {
@@ -1867,6 +1932,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					},
 					ask: (approval) => askUser(session, approval, controller.signal),
 					requestHuman: (request) => requestUser(session, request, controller.signal),
+					answeredBy: (toolCallId) => {
+						const plugin = session.answeredBy?.get(toolCallId);
+						session.answeredBy?.delete(toolCallId);
+						return plugin;
+					},
 					parent: (plugin) => parentFor(session, plugin),
 					started: (toolCallId) => {
 						const at = Date.now();
@@ -2237,6 +2307,16 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async setSessionArchived(sessionId, archived) {
 			archive(find(sessionId), archived);
+		},
+		async revokeSteward(sessionId) {
+			const session = find(sessionId);
+			const plugin = session.summary.steward;
+			if (!plugin) return;
+			delete session.summary.steward;
+			saveSummary(session);
+			// 它转进来、还没轮到的几条一起拿掉：停止代管是不要它再往这里说话，排着的也是它说的。
+			queues.remove(session.summary.id, (entry) => entry.origin === "plugin" && entry.fromPlugin === plugin);
+			log("agent", "info", `会话 ${session.summary.id} 停止由插件 ${plugin} 代管`);
 		},
 		async setSessionPinned(sessionId, pinned) {
 			const session = find(sessionId);

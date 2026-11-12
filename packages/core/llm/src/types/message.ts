@@ -299,11 +299,13 @@ export interface UserMessage {
 	 *
 	 * `parent` 是子智能体转录里「派它出去的那个 Agent 说的话」——开头那份任务、续跑时补的那一句。
 	 * 面板上它不该画成人发的气泡：那不是看着面板的人说的。
+	 *
+	 * `plugin` 是代管这个会话的插件转进来的话（Plume 的 `SessionAccess.post`）：外面的人经插件发来的，不是人在输入框里打的。
 	 */
-	origin?: "child" | "parent";
+	origin?: "child" | "parent" | "plugin";
 	/**
-	 * `origin` 是 `child` 时，交来这件事的子会话是哪个插件建的（子会话的 `owner`），界面按它标出插件的显示名。
-	 * 宿主在这件事从队列里发出去时照子会话填上；那时子会话已经删掉了就不带，界面改用通用的说法。
+	 * `origin` 是 `child` 时，交来这件事的子会话是哪个插件建的（子会话的 `owner`）；是 `plugin` 时，转来它的代管插件。界面按它标出插件的显示名。
+	 * 宿主在这件事从队列里发出去时填上；交来它的子会话那时已经删掉了就不带，界面改用通用的说法。
 	 */
 	fromPlugin?: string;
 	/** Clean user input text for UI display, excluding injected skill or session instructions. */
@@ -501,6 +503,11 @@ export interface ToolResultMessage {
 	 * 看自己这一轮刚拿到的结果，重放历史时没人会再读它。
 	 */
 	terminate?: boolean;
+	/**
+	 * 这次调用弹的审批卡或等人给数据的卡，是代管这个会话的插件替人答的（Plume 的 `SessionAccess.respond`、`answer`）：那个插件的名字。
+	 * 人自己在卡上答的不带。界面据此在这次调用旁边写明是谁代答的；不进请求体，模型读到的说明写在结果正文里。
+	 */
+	answeredBy?: string;
 	timestamp: number;
 }
 

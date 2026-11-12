@@ -18,5 +18,6 @@ export function sessionScope(summary: SessionSummary): SessionScope {
 		...(summary.owner ? { owner: summary.owner } : {}),
 		...(summary.spawnedFrom ? { spawnedFrom: { ...summary.spawnedFrom } } : {}),
 		...(summary.project ? { project: summary.project } : {}),
+		...(summary.steward ? { steward: summary.steward } : {}),
 	};
 }

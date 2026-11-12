@@ -52,6 +52,7 @@ export interface TurnScope {
 	permission: ToolScope["permission"];
 	ask: ToolScope["ask"];
 	requestHuman: ToolScope["requestHuman"];
+	answeredBy?: ToolScope["answeredBy"];
 	started: ToolScope["started"];
 	progress: ToolScope["progress"];
 	background?: ToolScope["background"];

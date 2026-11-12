@@ -168,6 +168,12 @@ export interface SessionSummary {
 	spawnedFrom?: { sessionId: string; toolCallId?: string };
 	/** 从哪条会话的消息分叉；来源存在于同一分组时嵌套显示。 */
 	forkedFrom?: { sessionId: string };
+	/**
+	 * 代管这个会话的插件：它经 `ctx.sessions.launch({ steward: true })` 开出这个会话，之后能往里转话（`SessionAccess.post`）、
+	 * 替人答它的审批和等人的卡（`SessionAccess.respond`、`answer`）。人在会话菜单里「停止代管」（`AgentService.revokeSteward`）后去掉。
+	 * 只记谁能这样做，不改会话的种类：代管的会话照旧是人的顶层会话，分叉出来的不带它。
+	 */
+	steward?: string;
 	/** 记录里有几条消息（人说的、回复、工具结果都算），给已归档的页和删除前的问题说「多少」。 */
 	messageCount?: number;
 }
@@ -360,10 +366,15 @@ export interface QueuedMessage {
 	preview: string;
 	/** 轮到它时整份发出去的东西。 */
 	message: OutgoingMessage;
-	/** 不是人在这个会话的输入框里排的：`child` 是它的一个子会话交过来的任务，发出去的消息带着同样的来处（`UserMessage.origin`）。 */
-	origin?: "child";
+	/**
+	 * 不是人在这个会话的输入框里排的：`child` 是它的一个子会话交过来的任务，`plugin` 是代管它的插件转进来的话（`SessionAccess.post`）。
+	 * 发出去的消息带着同样的来处（`UserMessage.origin`）。
+	 */
+	origin?: "child" | "plugin";
 	/** 子会话交过来的：是哪一个子会话交的，它的任务列表（`ChildTask`）据此列出这一条。 */
 	childId?: string;
+	/** 代管插件转进来的：是哪个插件，发出去时记进 `UserMessage.fromPlugin`。 */
+	fromPlugin?: string;
 	createdAt: number;
 }
 
@@ -626,6 +637,11 @@ export interface AgentService {
 	renameSession(sessionId: string, title: string): Promise<void>;
 	/** 归档或取消归档。归档的会话照样能打开、接着聊。 */
 	setSessionArchived(sessionId: string, archived: boolean): Promise<void>;
+	/**
+	 * 停止代管（会话菜单）：去掉 `SessionSummary.steward`，那个插件从此不能往里转话、不能替人答卡，之后再调就抛错；
+	 * 它转进来、还排着没发出的几条一起从队里拿掉。正在跑的那一轮不停。没有代管时什么都不做。
+	 */
+	revokeSteward(sessionId: string): Promise<void>;
 	/** 置顶和手动未读都不改变最后活动时间。 */
 	setSessionPinned(sessionId: string, pinned: boolean): Promise<void>;
 	setSessionUnread(sessionId: string, unread: boolean): Promise<void>;

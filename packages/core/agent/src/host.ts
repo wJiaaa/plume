@@ -57,6 +57,10 @@ export interface HostSessions extends Pick<SessionAccess, "list" | "get" | "mess
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 只用来记日志：开出来的会话不记在插件名下。 */
 	launch(owner: string, options: Parameters<SessionAccess["launch"]>[0]): ReturnType<SessionAccess["launch"]>;
+	/** 以下三样的 `owner` 是调它的插件：agent 只让它动自己代管的会话（`SessionSummary.steward`）。 */
+	post(owner: string, sessionId: string, message: string): ReturnType<SessionAccess["post"]>;
+	respond(owner: string, sessionId: string, toolCallId: string, decision: Parameters<SessionAccess["respond"]>[2]): ReturnType<SessionAccess["respond"]>;
+	answer(owner: string, sessionId: string, toolCallId: string, value: unknown): ReturnType<SessionAccess["answer"]>;
 	send(
 		owner: string,
 		sessionId: string,
@@ -157,6 +161,9 @@ const NO_SESSIONS: HostSessions = {
 	setArchived: missing,
 	create: async (_owner, options) => missing(options?.parentId),
 	launch: async (_owner, options) => missing(options?.spawnedFrom?.sessionId),
+	post: async (_owner, sessionId) => missing(sessionId),
+	respond: async (_owner, sessionId) => missing(sessionId),
+	answer: async (_owner, sessionId) => missing(sessionId),
 	models: async () => [],
 	start: async (_owner, sessionId) => missing(sessionId),
 	wait: async (_owner, runId) => missing(runId),
@@ -689,6 +696,19 @@ export class PluginHost {
 							return launched.reportBack(words, delivery);
 						},
 					};
+				},
+				// 停用、重载以后不再替它转话、答卡：那是一个已经不在的插件的意思。
+				post: async (sessionId, message) => {
+					live();
+					return sessions.post(name, sessionId, message);
+				},
+				respond: async (sessionId, toolCallId, decision) => {
+					live();
+					return sessions.respond(name, sessionId, toolCallId, decision);
+				},
+				answer: async (sessionId, toolCallId, value) => {
+					live();
+					return sessions.answer(name, sessionId, toolCallId, value);
 				},
 				models: () => sessions.models(),
 				send: async (sessionId, message, options) => {
