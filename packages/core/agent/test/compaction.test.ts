@@ -202,8 +202,11 @@ it("分叉的回复调了工具：丢掉，改走独立请求", async () => {
 	for (const body of model!.requests.slice(5)) expect(body.tools).toBeUndefined();
 	const view = await service.getSession(session.id);
 	expect(view.compactionRuns).toMatchObject([{ status: "done", via: "independent" }]);
-	// 分叉回复里的工具调用不进会话。
-	expect(JSON.stringify(view.messages)).not.toContain("c3");
+	// 分叉回复里的工具调用不进会话。按调用的 id 比，不在整段 JSON 里找 "c3"：随机的供应商 id（`p-c389e538`）也会含它。
+	const callIds = view.messages.flatMap((message) =>
+		message.role === "assistant" ? message.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : [])) : [],
+	);
+	expect(callIds).toEqual(["c1", "c2"]);
 });
 
 it("/compact：带着说明从主请求分叉写摘要，转录里一行 /compact 和它的结果；太短、正在跑时说清楚", async () => {
