@@ -49,6 +49,8 @@ export default defineConfig({
 					index: resolve(import.meta.dirname, "src/main/index.ts"),
 					// agent 进程（utilityProcess）的入口。
 					"agent-process": resolve(import.meta.dirname, "src/main/agent-process.ts"),
+					// Windows 上沙箱的 runner（`@plume/sandbox` 经 ELECTRON_RUN_AS_NODE 起它），agent 进程经 useSandboxRunner 指过去。
+					"sandbox-runner": resolve(import.meta.dirname, "src/main/sandbox-runner.ts"),
 				},
 			},
 		},

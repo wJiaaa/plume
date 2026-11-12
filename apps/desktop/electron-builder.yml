@@ -18,9 +18,10 @@ directories:
 # dependencies 留成主进程运行时再加载的外部依赖，别的（界面用的包、workspace 里的 @plume/*）都打进 out/，所以
 # dependencies 里只放主进程运行时要加载的包，其余的写进 devDependencies，免得 app.asar 里多一份用不上的 node_modules。
 #
-# 按平台、架构分的原生模块每个包只带自己那份。现在 app.asar 里没有这样的依赖（node-pty、koffi 在插件里，走
-# extraResources，由下面的 beforePack 裁），最后两条管的是以后进了 apps/desktop 生产依赖的那种：koffi 一个平台、
-# 架构一个包，supportedArchitectures 让每份都装上了；node-pty 一个包里放着各平台的 prebuilds。写成 `!` 规则：
+# 按平台、架构分的原生模块每个包只带自己那份。app.asar 里的是 koffi：本体的沙箱在 Windows 上靠它造受限令牌（只在
+# runner 进程 out/main/sandbox-runner.js 里加载），一个平台、架构一个包，supportedArchitectures 让每份都装上了，
+# 原生的 .node 由 electron-builder 解到 app.asar.unpacked。node-pty 在插件里，走 extraResources，由下面的 beforePack 裁；
+# 这里那条管的是以后进了 apps/desktop 生产依赖的情况，它一个包里放着各平台的 prebuilds。写成 `!` 规则：
 # node_modules 里的生产依赖默认全带，正向规则不起作用。`${platform}` 是打包这台机器的 process.platform（mac 包在
 # mac 上打、Windows 包在 Windows 上打），`${arch}` 按每次打的架构展开。
 # 所有规则都写在这一处，不写 mac.files、win.files：electron-builder 把这里的规则收成一组、平台下的另成一组，只有

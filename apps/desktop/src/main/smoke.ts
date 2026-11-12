@@ -2242,7 +2242,6 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (inactive.length > 0) throw new Error(`有插件不是 active：${JSON.stringify(inactive)}`);
 		const builtins = plugins.filter((plugin) => plugin.builtin).map((plugin) => plugin.name);
 		for (const name of [
-			"plume.sandbox",
 			"plume.tools",
 			"plume.approval",
 			"plume.ask-user",

@@ -44,6 +44,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      koffi:
+        specifier: ^3.3.7
+        version: 3.3.7
       unpdf:
         specifier: ^1.9.1
         version: 1.9.1
@@ -135,6 +138,9 @@ importers:
       '@plume/rpc':
         specifier: workspace:*
         version: link:../../packages/infra/rpc
+      '@plume/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/core/sandbox
       '@plume/styles':
         specifier: workspace:*
         version: link:../../packages/client/styles
@@ -378,28 +384,6 @@ importers:
 
   packages/builtin/prompt:
     devDependencies:
-      '@plume/platform':
-        specifier: workspace:*
-        version: link:../../infra/platform
-      '@plumeai/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../sdk/plugin-sdk
-      '@types/node':
-        specifier: ^24.10.0
-        version: 24.19.2
-      vitest:
-        specifier: ^5.1.0
-        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
-
-  packages/builtin/sandbox:
-    dependencies:
-      koffi:
-        specifier: ^3.3.7
-        version: 3.3.7
-    devDependencies:
-      '@plume/platform':
-        specifier: workspace:*
-        version: link:../../infra/platform
       '@plumeai/plugin-sdk':
         specifier: workspace:*
         version: link:../../sdk/plugin-sdk
@@ -620,6 +604,12 @@ importers:
       '@plume/llm':
         specifier: workspace:*
         version: link:../llm
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
+      '@plume/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
     devDependencies:
       '@types/node':
         specifier: ^24.10.0
@@ -636,6 +626,25 @@ importers:
       '@types/node':
         specifier: ^24.10.0
         version: 24.19.2
+
+  packages/core/sandbox:
+    dependencies:
+      '@plume/contract':
+        specifier: workspace:*
+        version: link:../../contract
+      '@plume/platform':
+        specifier: workspace:*
+        version: link:../../infra/platform
+      koffi:
+        specifier: ^3.3.7
+        version: 3.3.7
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.19.2
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
   packages/infra/document-text:
     dependencies:

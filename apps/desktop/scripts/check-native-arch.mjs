@@ -12,6 +12,8 @@
  *   （beforePack 该裁掉的）；包说它发了这个平台、架构的那份（optionalDependencies 里有、prebuilds 里该有）就得在。
  *   包根本没发这个平台、架构的（比如某个包不发 Intel mac 的），只提醒，不让打包失败：打包这一步补不上它。
  * - ripgrep，插件 SDK 的 esbuild、tsc：缺了的话搜索、写插件悄悄退回慢的路或者跑不起来。
+ * - 本体沙箱的 koffi（app.asar.unpacked 里）：缺了 Windows 上的默认权限档一条命令都跑不了。koffi 本身的 package.json
+ *   留在 app.asar 里，上面按 optionalDependencies 查不到它，所以单独点名查。
  *
  * 用法：`node scripts/check-native-arch.mjs [<输出目录>]`，缺省是 release/。`pnpm package` 经 scripts/package.mjs
  * 打完就跑；这里失败的包不能发。
@@ -212,6 +214,8 @@ for (const [name, build] of Object.entries(BUILDS)) {
 	expectArch(name, build, esbuild, relative(resources, esbuild), true);
 	const tsc = join(sdk, "@typescript", `typescript-${target}`, "lib", `tsc${exe}`);
 	expectArch(name, build, tsc, relative(resources, tsc), true);
+	const koffi = join(resources, "app.asar.unpacked", "node_modules", "@koromix", `koffi-${target}`, target.replace("-", "_"), "koffi.node");
+	expectArch(name, build, koffi, relative(resources, koffi), true);
 
 	console.log(`[arch] ${name}: 查了 ${checked - before} 个二进制，${build.platform}/${build.arch}`);
 }

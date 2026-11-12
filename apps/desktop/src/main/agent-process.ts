@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { createAgent, SessionDbUnavailable } from "@plume/agent";
 import type { PluginEntry } from "@plume/contract";
 import { type Port, RpcChannel, remote, serve } from "@plume/rpc";
+import { primeCommandPath, useSandboxRunner } from "@plume/sandbox";
 import { net, type MessagePortMain } from "electron";
 import {
 	type AgentProcessApi,
@@ -59,6 +60,11 @@ redirectNativeLoads(process, {
 	roots: JSON.parse(process.env[NATIVE_ROOTS_ENV] ?? "[]") as string[],
 	cacheDir: join(dataDir, "native-cache"),
 });
+
+// 沙箱的 runner 打成了和这里并排的一个入口（electron.vite.config.ts）；包被打进这个入口，自己找不到它。
+useSandboxRunner(join(import.meta.dirname, "sandbox-runner.js"));
+// 从图标启动时向登录 shell 要一份环境（PATH、代理……），第一条命令就能找到用户装的工具，见 `@plume/sandbox` 的 `login-path.ts`。
+void primeCommandPath({ always: true });
 
 /**
  * 插件的入口。地址带上加载时刻：插件市场更新了文件再加载时，模块缓存按地址认，

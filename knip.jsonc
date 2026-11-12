@@ -23,8 +23,9 @@
     "apps/desktop": {
       // 主进程、预加载、渲染进程的入口 knip 从 electron.vite.config.ts 读得到，这里只补它读不到的。
       "entry": [
-        // agent 进程（utilityProcess）的入口，配置里写在 rolldownOptions.input 下。
+        // agent 进程（utilityProcess）、沙箱 runner 的入口，配置里写在 rolldownOptions.input 下。
         "src/main/agent-process.ts",
+        "src/main/sandbox-runner.ts",
         // 渲染进程的样式表由 index.html 的 <link> 引入，knip 不读 HTML。
         "src/renderer/styles.css",
         "test/**/*.test.ts",
@@ -33,11 +34,17 @@
       // agent 进程经 @plume/document-text 用到它，这里没人直接 import，但必须写在这个包的依赖里：
       // electron-vite 只把这里声明的依赖留在产物外面（见 electron.vite.config.ts 的 externalizeDeps），打包也只带这些。
       // fflate 同理，只是冒烟（main/smoke-files.ts）直接 import 了它，knip 看得见，不用登记。
-      "ignoreDependencies": ["unpdf"],
+      // koffi 同理：沙箱 runner 经 @plume/sandbox 的 createRequire 加载它，原生的那份要随应用进 app.asar.unpacked。
+      "ignoreDependencies": ["unpdf", "koffi"],
       // 带上 CSS：样式表里 `@import "tailwindcss"`、`@import "@plume/styles/…"`，knip 要跟进去才知道这些依赖有人用。
       "project": ["src/**/*.{ts,tsx,css}"],
     },
     "packages/core/agent": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+    },
+    // src/index.ts、src/runner-entry.ts 是 package.json 的 exports，knip 自己认得。
+    "packages/core/sandbox": {
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts"],
     },

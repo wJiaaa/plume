@@ -7,7 +7,8 @@
  *
  * 用法：`node scripts/stage-resources.mjs <platform>-<arch>`，缺省是本机。插件构建时带上了各平台、各架构的原生模块
  * （见插件 SDK 的 lib/targets.mjs），放进来以后按目标只留那一份：.stage 走 extraResources，不经 electron-builder 的
- * `files` 过滤，不在这里裁，mac 的包里就带着 Windows 的 node-pty、koffi。一次打两个架构时 beforePack 每个架构调一次，
+ * `files` 过滤，不在这里裁，mac 的包里就带着 Windows 的原生模块。本体沙箱用的 koffi 不在这里，是应用的生产依赖，
+ * 由 electron-builder.yml 的 `files` 规则裁。一次打两个架构时 beforePack 每个架构调一次，
  * 每次都从仓库重新放一遍，前一个架构裁掉的不影响后一个。
  *
  * 插件 SDK（plugin-sdk/）也由 beforePack 整理进 .stage/，在这之后：这里先把整个 .stage 清掉。

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.3",
+    "koffi": "^3.3.7",
     "unpdf": "^1.9.1"
   },
   "devDependencies": {
@@ -46,6 +47,7 @@
     "@plume/contract": "workspace:*",
     "@plume/llm": "workspace:*",
     "@plume/rpc": "workspace:*",
+    "@plume/sandbox": "workspace:*",
     "@plume/styles": "workspace:*",
     "@plume/ui": "workspace:*",
     "@plumeai/plugin-sdk": "workspace:*",
