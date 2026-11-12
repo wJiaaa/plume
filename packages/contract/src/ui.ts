@@ -1171,6 +1171,11 @@ export interface UiContext {
 	/** 用户点击时在系统浏览器打开 HTTP(S) 链接，不允许凭据或其他协议。 */
 	openExternal(url: string): Promise<void>;
 	/**
+	 * 用户点击时把本机的一个文件或文件夹交给系统：文件用默认程序打开，文件夹在文件管理器里打开。直接打开会运行它的
+	 * （程序、脚本、应用）和网络共享上的，改成在所在文件夹里指出来并提示一句。打不开（不存在、没有程序认它）时抛错，话是给人看的。
+	 */
+	openPath(path: string): Promise<void>;
+	/**
 	 * 像人点了回复里的网址那样打开 HTTP(S) 链接：有插件接手点击（`LinkOpener.takesClicks`，比如内置浏览器）时开在它那里，否则系统浏览器。
 	 * `sessionId` 是链接所在的会话；规则同 `openExternal`，只在用户点击时调。
 	 */

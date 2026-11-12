@@ -1560,6 +1560,13 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		openExternal: async (url) => {
 			await window.plume.openExternal(externalWebUrl(url));
 		},
+		openPath: async (path) => {
+			if (typeof path !== "string" || !path) throw new Error(translate("filePanel.unreadable"));
+			const outcome = await window.plume.files.open(path);
+			if (outcome === "failed") throw new Error(translate("filePanel.unreadableAt", { path }));
+			// 主进程改成了在文件夹里指出来（直接打开会运行它）：说出来，不然这一下看起来像点错了。
+			if (outcome === "revealed") notify(translate("attachment.revealedInstead", { name: path.split(/[/\\]/).at(-1) ?? path }), "warn");
+		},
 		openLink: async (url, sessionId) => {
 			const href = externalWebUrl(url);
 			const opener = clickOpener();
