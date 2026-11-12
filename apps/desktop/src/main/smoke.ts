@@ -59,6 +59,7 @@ import { checkBackgroundJob } from "./smoke-background-job.ts";
 import { checkEnvironment } from "./smoke-environment.ts";
 import { checkPeers } from "./smoke-peers.ts";
 import { checkSpawnSession } from "./smoke-spawn-session.ts";
+import { checkPlan } from "./smoke-plan.ts";
 import { checkHooks } from "./smoke-hooks.ts";
 import { checkBrowser, type ModelOverride } from "./smoke-browser.ts";
 import { checkNavigation } from "./smoke-navigation.ts";
@@ -945,6 +946,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "spawn-session") {
 			await checkSpawnSession({ window, agent, outDir, workspace, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "spawn-session" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "plan") {
+			await checkPlan({ window, agent, outDir, workspace, setModel: (next) => (override = next) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "plan" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();

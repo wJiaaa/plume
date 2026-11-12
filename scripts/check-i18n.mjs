@@ -92,6 +92,7 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-environment.ts",
 	"apps/desktop/src/main/smoke-peers.ts",
 	"apps/desktop/src/main/smoke-spawn-session.ts",
+	"apps/desktop/src/main/smoke-plan.ts",
 	// `/compact` 的冒烟按中文界面读压缩那一行，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-compact.ts",
 	// 使用统计的冒烟按中文界面找设置章节、读图例，假模型的回复和断言是写给开发者的。

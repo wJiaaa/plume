@@ -7,8 +7,8 @@ import type { ModelOverride } from "./smoke-browser.ts";
  * 内置插件 plume.ask-user 的提问卡，经真界面走一遍：新对话里让假模型调 `ask_user`，卡片压在输入框上方，标题、说明、推荐、
  * 倒计时、「跳过将采用」都在；深浅色各截一张，按数字键选第二项、确认，模型拿到的结果就是那一项。最后回到原会话。
  */
-/** 请求里这次调用的结果的文字；还没有结果时是 undefined。 */
-function toolResult(request: Record<string, unknown>, id: string): string | undefined {
+/** 请求里这次调用的结果的文字；还没有结果时是 undefined。计划模式那段（`smoke-plan.ts`）也用它。 */
+export function toolResult(request: Record<string, unknown>, id: string): string | undefined {
 	for (const message of (request.messages as { content?: unknown }[] | undefined) ?? []) {
 		if (!Array.isArray(message.content)) continue;
 		for (const block of message.content as { type?: string; tool_use_id?: string; content?: unknown }[]) {
