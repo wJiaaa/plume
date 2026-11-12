@@ -14,7 +14,9 @@
   "dependencies": {
     "@plume/contract": "workspace:*",
     "@plume/document-text": "workspace:*",
-    "@plume/llm": "workspace:*"
+    "@plume/llm": "workspace:*",
+    "@plume/platform": "workspace:*",
+    "@plume/sandbox": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

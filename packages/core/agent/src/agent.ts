@@ -85,6 +85,7 @@ import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImag
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
 import { settlePrompt, validSections } from "./prompt/sections.ts";
+import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
 import {
 	checkProvider,
@@ -1037,6 +1038,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			scratchDir: scratchDir(session.summary.id),
 			model: { id: model.id, name: model.name },
 			permissionMode: settings.permissionMode ?? "auto",
+			shell: contextShell(settings.permissionMode ?? "auto"),
 			personalization: personalizationOf(settings),
 			systemPrompt: "",
 			sections: [],
@@ -1045,7 +1047,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			tools: host.toolSpecs(),
 		};
 		await restoreImages(mediaDir, input.messages);
-		const context = await host.run("model.context", input, async (context) => context, settlePrompt);
+		const context = await host.run(
+			"model.context",
+			input,
+			async (context) => context,
+			(context: ModelContext) => settleShell(settlePrompt(context)),
+		);
 		if (typeof context?.systemPrompt !== "string" || !validSections(context.sections) || !Array.isArray(context.messages) || !Array.isArray(context.tools)) {
 			throw new Error(text("session.contextIncomplete"));
 		}
@@ -1982,6 +1989,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						return plugin;
 					},
 					parent: (plugin) => parentFor(session, plugin),
+					commands: commandAccess,
 					started: (toolCallId) => {
 						const at = Date.now();
 						session.startedAt.set(toolCallId, at);

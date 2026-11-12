@@ -533,17 +533,21 @@ export class PluginHost {
 	/**
 	 * 按洋葱顺序调用钩子，inner 是最里层。
 	 * `settle` 在每一层交接时调：这一层交给里层的、里层交回来又被这一层改过的，都先经它整理（见 `prompt/sections.ts`）。
+	 * `stop` 在交给每一层（含最里层）之前调：它给出结果时不再往里交，交过来的那一层拿到的就是它（见 `tool-run.ts` 的只读）。
 	 */
 	run<N extends HookName>(
 		name: N,
 		input: Hooks[N][0],
 		inner: (input: Hooks[N][0]) => Promise<Hooks[N][1]>,
 		settle?: (value: never) => unknown,
+		stop?: (input: Hooks[N][0]) => Hooks[N][1] | undefined,
 	): Promise<Hooks[N][1]> {
 		// 取快照：调用过程中有插件停用或新注册，不影响这一次。
 		const layers = [...(this.layers.get(name) ?? [])];
 		const align = (value: unknown) => (settle ? settle(value as never) : value);
 		const dispatch = async (index: number, value: unknown): Promise<unknown> => {
+			const stopped = stop?.(value as Hooks[N][0]);
+			if (stopped !== undefined) return stopped;
 			const layer = layers[index];
 			if (!layer) return inner(value as Hooks[N][0]);
 			try {

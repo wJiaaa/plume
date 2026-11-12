@@ -44,7 +44,7 @@ const CANCELLED_WAITING = "Tool call was stopped while it waited for approval, s
 const ARGUMENTS_LOST_REASON =
 	"every call in this reply arrived with empty arguments. That is the provider dropping the arguments of parallel tool calls, not something you left out. Make one tool call per reply from now on";
 /** 用户拒绝之后给模型的话：别原样重试，也别换个工具达到同样效果。和 plume.tools 的拒绝文案用的是同一句，模型在哪看到都认得出。 */
-const DECLINED =
+export const DECLINED =
 	"Do not retry it unchanged or get the same effect another way — another tool, a shell command, a script. Change your approach; if the task cannot go on without it, say so.";
 
 export interface ToolScope {
@@ -84,6 +84,22 @@ export interface ToolScope {
 	archiveAfterTurn?(): void;
 	/** 注册这个工具的插件够得着的父会话（`ToolRun.parent`）：这个会话是它建的子会话时才有。 */
 	parent?(plugin: string): ParentSession | undefined;
+	/** 这次调用跑命令用的 `ToolRun.shell`、`exec`、`escalate`（`commands.ts`）：沙箱档、提权都在那里，这里只把它们挂到 `run` 上。 */
+	commands(call: CallCommands): Pick<ToolRun, "shell" | "exec" | "escalate">;
+}
+
+/** 造一次调用的 `shell`、`exec`、`escalate` 要的东西，这里按这次调用给，`commands.ts` 用它造。 */
+export interface CallCommands {
+	/** 这次调用的工作目录（`exec` 不给 `cwd` 时用它）。 */
+	cwd: string;
+	/** 外层要求这次调用不改动工作区。 */
+	readOnly: boolean;
+	/** 现在的权限模式，这次调用里只读一次设置。 */
+	permission(): Promise<PermissionMode>;
+	/** 经过闸问一次（`ToolRun.ask` 那一条路）：带 `escalation` 的只认人答，见 `tool-run.ts` 的 `approve`。 */
+	ask(content: ApprovalContent): Promise<ApprovalDecision>;
+	/** 调用答完以后再用就抛错。 */
+	alive(what: string): void;
 }
 
 /**
@@ -351,6 +367,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				ask,
 				request,
 				permissionMode: async () => (await permission()).mode,
+				...scope.commands({ cwd: input.cwd, readOnly: Boolean(input.readOnly), permission: async () => (await permission()).mode, ask, alive }),
 				tools: () => scope.host.toolOwners(),
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),
 				...(input.readOnly ? { readOnly: true } : {}),
@@ -381,11 +398,21 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		}
 	};
 
+	/*
+	 * 外层要求只读（`ToolExecution.readOnly`）以后，写、改文件的工具到此为止：不再往里交（里层的钩子也不会为一次注定不跑的调用去问人），
+	 * 结果就是设它的那一层给的说明。按工具声明的种类认，不认工具名。别的调用照常往里交，命令由 `run.exec` 压进只读沙箱。
+	 */
+	const readOnlyStop = (input: ToolExecution): ToolOutput | undefined => {
+		if (!input?.readOnly) return undefined;
+		const kind = scope.host.tool(input.call.name)?.definition.kind;
+		return kind === "create" || kind === "modify" ? { output: String(input.readOnly.refusal), isError: true } : undefined;
+	};
+
 	// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 	const startedAt = Date.now();
 	try {
 		scope.started(call.id);
-		let result = await scope.host.run("tool.execute", execution, execute);
+		let result = await scope.host.run("tool.execute", execution, execute, undefined, readOnlyStop);
 		if (typeof result?.output !== "string") throw new Error("tool.execute 返回的结果没有 output");
 		if (result.images !== undefined && !(Array.isArray(result.images) && result.images.every(validImage)))
 			throw new Error("tool.execute 返回的 images 不是 { data, mimeType } 的数组");

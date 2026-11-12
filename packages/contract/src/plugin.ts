@@ -186,8 +186,32 @@ export interface ToolRun {
 	tools(): RegisteredToolInfo[];
 	/** 这一步回复里的全部调用（含这一次），按回复里的顺序。工具要知道这一步是不是只做了它这一件事时看它（todo 清单收尾）。 */
 	calls: readonly ToolCall[];
-	/** 钩子 tool.execute 的外层要求这次调用不改动工作区（见 `ToolExecution.readOnly`）：跑命令的工具只在只读沙箱里跑。 */
+	/** 钩子 tool.execute 的外层要求这次调用不改动工作区（见 `ToolExecution.readOnly`）：`exec` 的命令只在只读沙箱里跑，`escalate` 一律不批。 */
 	readOnly?: boolean;
+	/**
+	 * 这次调用的命令跑在哪个 shell、哪一档沙箱（见 `ShellInfo`），本体按权限模式和 `readOnly` 算好，和系统提示词里点名的是同一个。
+	 * 提权不改它：提权的命令仍是照这个 shell 写的。用到才读设置，同 `permissionMode()`。
+	 */
+	shell(): Promise<ShellInfo>;
+	/**
+	 * 在这次调用的沙箱里用 `shell()` 的那个 shell 起一条命令，环境向登录 shell 要（从图标启动时也找得到用户装的工具）。
+	 * 沙箱档由本体定，工具选不了：完全访问不设限，帮我批准只能写项目目录和临时目录，请求批准只读，`readOnly` 一律只读；
+	 * 这次调用经 `escalate` 批过更宽的一档时跑在那一档。`cwd` 不给是这次调用的工作目录。机器上给不了这一档的沙箱时拒绝（Linux 没有后端），
+	 * 不悄悄不加沙箱就跑。问不问人不归这里：要问的工具自己先经 `ask` 问。只在这次调用里用：调用答完以后再调就抛错，已经起来的进程不受影响。
+	 */
+	exec(command: string, options?: { cwd?: string; env?: Record<string, string> }): Promise<RunProcess>;
+	/**
+	 * 申请这次调用的命令跑在比权限模式更宽的一档（提权）。本体弹提权卡（`ApprovalRequest.escalation`），只认人答，或代管这个会话的插件
+	 * 经 `ctx.sessions.respond` 转达；完全访问、外层放行、钩子 tool.approve、「以后不再问」都不替人答。批了，这次调用之后的 `exec`
+	 * 都跑在那一档，调用答完就作废，什么都不累积。`readOnly` 下、没给理由、要的不比当前宽、人拒绝时不批，`message` 是交给模型的说明。
+	 * `title`、`detail` 是卡上的标题和正文（要跑的命令），`justification` 是模型给的理由，原样给人看。只在这次调用里用。
+	 */
+	escalate(request: {
+		mode: "workspace-write" | "danger-full-access";
+		justification: string;
+		title: string;
+		detail: string;
+	}): Promise<{ granted: true } | { granted: false; message: string }>;
 	/**
 	 * 调用答完以后还在后台接着跑的事（后台命令、监视）把结果送回这个会话的渠道，见 `BackgroundChannel`。
 	 * 只有顶层会话有：插件的子会话（侧边聊天、子 Agent）没人等它们的后台结果，拿不到就只能让模型自己去读。
@@ -383,10 +407,13 @@ export interface ToolExecution {
 	/** 外层已经放行的理由。设了它，本体就不再问人（提权和层自己问的除外），也不经钩子 tool.approve。 */
 	approved?: string;
 	/**
-	 * 外层要求这次调用不改动工作区（计划模式）。交给工具的 `ToolRun.readOnly`：plume.tools 的 bash 不按权限模式选沙箱，
-	 * 一律在只读沙箱里跑，机器上给不了只读沙箱时不跑。只能收紧：里层不该把它去掉。
+	 * 外层要求这次调用不改动工作区（计划模式）。只能收紧：里层不该把它去掉。本体照它执行，从设上它的那一层往里：
+	 * - 写、改文件的工具（`ToolDefinition.kind` 是 `create`、`modify`）不再往里交、不执行，这次调用的结果就是 `refusal`
+	 *   （交给模型的话：为什么没跑、接下来怎么办）；
+	 * - 别的工具照常往里交、执行，拿到 `ToolRun.readOnly`：`run.exec` 的命令不按权限模式选沙箱，一律在只读沙箱里跑（机器上给不了时不跑），
+	 *   `run.escalate` 一律不批。
 	 */
-	readOnly?: boolean;
+	readOnly?: { refusal: string };
 	signal: AbortSignal;
 	/**
 	 * 问一次要不要放行，卡上是这次调用的参数和 `reason`。经钩子 tool.approve（标着 `byLayer`），由那里的层定要不要弹给人
@@ -459,13 +486,18 @@ export interface ModelContext {
 	scratchDir: string;
 	/** 这一次请求用的模型。 */
 	model: { id: string; name: string };
-	/** 这个会话现在的权限模式（含项目覆盖）。Windows 上受约束的命令跑在 PowerShell、完全访问跑在 Git Bash，系统提示词按它点名 shell。 */
+	/** 这个会话现在的权限模式（含项目覆盖）。 */
 	permissionMode: PermissionMode;
 	/**
 	 * 外层要求这一轮的命令都在只读沙箱里跑（计划模式，和 `ToolExecution.readOnly` 同一件事）。宿主不给；要设就挂在
-	 * plume.prompt（order -1000）外面，它按这一档点名 shell：Windows 上只读的命令跑 PowerShell，权限模式是完全访问也一样。
+	 * 点名 shell 的那一层（plume.prompt，order -1000）外面：宿主据此重算 `shell`。
 	 */
 	readOnly?: boolean;
+	/**
+	 * 这一轮的命令跑在哪个 shell、哪一档沙箱（见 `ShellInfo`），和 `ToolRun.shell()` 是同一个，系统提示词按它点名 shell 和写法。
+	 * 宿主按 `permissionMode` 和 `readOnly` 算，每层交接时重算：改它不作数，要收紧就设 `readOnly`。
+	 */
+	shell: ShellInfo;
 	/** 设置 › 个性化：语气和全局指令。 */
 	personalization: Personalization;
 	/** 发出去的系统提示词，就是 `sections` 依次用空行连起来。只读：每层交接时宿主按 `sections` 重拼，改它不作数。 */
@@ -1465,7 +1497,6 @@ export interface Services {
 	};
 	"background.jobs": BackgroundJobsService;
 	"session.wakeups": SessionWakeupsService;
-	sandbox: SandboxService;
 	"file.changes": FileChangesService;
 	"project.files": ProjectFilesService;
 	resources: ResourcesService;
@@ -1495,8 +1526,29 @@ export interface ProjectFilesService {
 	list(root: string): Promise<string[] | null>;
 }
 
-/** 沙箱的模式：只读、能写项目目录、不设限。 */
+/**
+ * 沙箱的模式：只读、能写项目目录、不设限。权限模式对应哪一档由本体定：请求批准只读，帮我批准能写项目目录和临时目录，
+ * 完全访问不设限；`ToolExecution.readOnly` 一律只读。macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端。
+ */
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+/** 命令跑在哪个 shell、哪一档沙箱，见 `ToolRun.shell()`、`ModelContext.shell`。 */
+export interface ShellInfo {
+	/** 命令行按什么语法写。Git Bash 是 `posix`。 */
+	kind: "posix" | "powershell";
+	/** 告诉模型、告诉人这是哪个 shell 时用的名字（「zsh」「Git Bash」「Windows PowerShell 5.1」）。 */
+	label: string;
+	/** 会话宣布的那一档。Windows 上受约束的命令跑在 PowerShell 里，完全访问跑在 Git Bash 里，别的平台每档都是同一个 shell。 */
+	sandbox: SandboxMode;
+}
+
+/** `ToolRun.exec` 起的一条命令。 */
+export interface RunProcess extends SandboxProcess {
+	/** 实际跑在哪一档（提权批过的就是更宽的那一档）。 */
+	readonly mode: SandboxMode;
+	/** 这段输出像不像被沙箱拒了（只读的文件系统、没有权限）：像的话模型可以申请提权重试。`danger-full-access` 下总是 false。 */
+	denied(output: string): boolean;
+}
 
 /** 一条已经启动的命令。 */
 export interface SandboxProcess {
@@ -1512,21 +1564,6 @@ export interface SandboxProcess {
 	onError(listener: (error: Error) => void): void;
 	/** 连它起的子进程一起停。 */
 	kill(signal?: "SIGTERM" | "SIGKILL"): void;
-}
-
-/** 服务 `sandbox`：在沙箱里跑 shell 命令。内置插件 plume.sandbox 提供（macOS 用 seatbelt，Windows 用受限令牌；Linux 没有后端）。 */
-export interface SandboxService {
-	/**
-	 * 用用户的 shell 起一条命令，环境向登录 shell 要（从图标启动时也找得到用户装的工具）。`mode` 不给就不进沙箱；
-	 * 给了而这台机器给不了那样的沙箱时抛错。
-	 *
-	 * `shellMode` 是按哪一档选 shell：会话宣布的模式，系统提示词里告诉模型的 shell 就是按它选的；不给时按 `mode`。
-	 * 只在 Windows 上有区别（受约束的跑 PowerShell，完全访问跑 Git Bash）：提权的命令传更宽的 `mode` 和原来的 `shellMode`，
-	 * 它仍是照被告知的那个 shell 写的。
-	 */
-	run(command: string, options: { cwd: string; mode?: SandboxMode; shellMode?: SandboxMode; env?: Record<string, string> }): SandboxProcess;
-	/** 这段输出像不像被沙箱拒了（只读的文件系统、没有权限）：像的话模型可以申请提权重试。 */
-	looksDenied(output: string): boolean;
 }
 
 /** 逻辑入口 `dist/index.mjs` 的默认导出。 */

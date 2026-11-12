@@ -59,6 +59,7 @@ export interface TurnScope {
 	letter?: ToolScope["letter"];
 	archiveAfterTurn?: ToolScope["archiveAfterTurn"];
 	parent?: ToolScope["parent"];
+	commands: ToolScope["commands"];
 }
 
 /** 跑完一轮，返回它为什么结束。抛错（钩子出错、没配模型）由调用方当作出错收场。 */
