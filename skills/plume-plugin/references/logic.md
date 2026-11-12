@@ -55,6 +55,7 @@ export default {
 | `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
+| `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；默认只收和自己有关的会话的，要看全部在默认导出上写 `observe: "all"`。见下文「只读运行观察和后台任务」 |
 
 ## 工具
 
@@ -612,6 +613,18 @@ ctx.serve(api);
 ## 只读运行观察和后台任务
 
 `ctx.sessions.observe(listener)` 订阅 `SessionObservation`：实际模型请求和响应、工具开始、审批、重试、通知、运行状态、一轮收场（`turnEnd`，带 `stop`：完成、出错、被停下、用满步数、原地打转，退出应用时停下的是 `interrupted`）与撤回。每个观察者拿独立副本，异常只记日志，不能拦截或改变执行；订阅在插件停用时撤下。事件不提供供应商配置、请求头或密钥。`at` 是观察时已有的消息数，持久化者在 `rewound` 时删掉 `at >= count` 的观察，在 `onDeleted` 时清理整段会话。诊断记录不是新的上下文，不应再注入模型。
+
+只收到和你有关的会话的观察：你建的（子会话、独立会话）、你代管的和挂在它下面的子会话、你经 `launch` 开出还没兑现 `idle` 的。要看全部会话（诊断轨迹、给每个会话写摘要、一轮收场后跑用户的钩子、在任意会话里等一轮收场再做事），在默认导出上和 `inject` 并列写 `observe: "all"`；别的值加载失败。插件市场的详情页会对装着的插件写一句「能看到所有会话的运行情况」，只在真要看全部时写。
+
+```ts
+export default {
+	name: "acme.trace",
+	observe: "all", // 要看每个会话的请求和回复
+	apply(ctx) {
+		ctx.sessions.observe(({ sessionId, event }) => record(sessionId, event));
+	},
+} satisfies Plugin;
+```
 
 内置 `plume.tools` 提供 `background.jobs`，消费方声明 `inject: ["background.jobs"]`：
 

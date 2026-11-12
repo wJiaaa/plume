@@ -2574,6 +2574,7 @@ it("运行观察记录真实请求和响应，不暴露模型配置密钥", asyn
 		[
 			{
 				name: "test.observer",
+				observe: "all",
 				apply(ctx) {
 					ctx.sessions.observe((value) => observations.push(value));
 				},

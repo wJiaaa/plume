@@ -947,6 +947,7 @@ export const zhCN = {
 	"retry.fixedDetail": "每次大致等这么久，上下浮动两成，免得断线后大家同时重连；服务端明确要求等更久时按服务端（最多 5 分钟）。",
 	"plugins.failed": "加载失败",
 	"plugins.waiting": "等待服务：{services}",
+	"plugins.observesAll": "能看到所有会话的运行情况：发给模型的内容、模型的回复、等人答的卡",
 	"about.intro": "查看当前版本、更新内容，手动检查更新、设置自动检查的频率。",
 	"about.checking": "正在检查…",
 	"about.checkInterval": "自动检查更新",

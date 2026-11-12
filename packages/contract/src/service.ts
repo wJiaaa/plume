@@ -514,6 +514,8 @@ export interface PluginStatus {
 	builtin?: boolean;
 	/** 等待中时，还没有插件提供的那几项服务。 */
 	waitingFor?: string[];
+	/** 插件声明了要看全部会话的运行观察（`Plugin.observe`）。 */
+	observe?: "all";
 }
 
 export type AgentEvent =

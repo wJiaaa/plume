@@ -30,6 +30,8 @@ const TOP_LEVEL_ONLY = new Set(["monitor", ...WAKEUP_TOOLS.map((tool) => tool.na
 export default {
 	name: "plume.tools",
 	inject: ["sandbox"],
+	// 定时唤醒可能排在任何会话里，要知道每个会话的一轮什么时候收场（见下面的 `running`）：要看全部会话。
+	observe: "all",
 	apply(ctx) {
 		// 文件工具不写 Plume 的数据目录：那里有设置和会话，见 `tools/home.ts`。
 		setDataDir(ctx.appDataDir);

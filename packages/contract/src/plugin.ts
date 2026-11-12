@@ -971,7 +971,11 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
  * 身份和工具限制由插件经 model.context、tool.execute 管理。
  */
 export interface SessionAccess {
-	/** 只读观察请求、工具开始、审批、重试和运行状态；副本不含配置密钥，停用时自动撤下。 */
+	/**
+	 * 只读观察请求、工具开始、审批、重试和运行状态；副本不含配置密钥，停用时自动撤下。
+	 * 只收到和本插件有关的会话的：本插件建的（`owner` 是它的子会话、独立会话），本插件代管的会话和挂在它下面的子会话，
+	 * 本插件经 `launch` 开出、还没兑现 `idle` 的会话。要看全部会话的（诊断轨迹、按每个会话的运行状态做事）在 `Plugin.observe` 声明 `"all"`。
+	 */
 	observe(listener: (observation: SessionObservation) => void): void;
 	/** 全部会话的摘要（含归档的、子会话），最近活动的在前。只为找一个会话时用 `get`。 */
 	list(): Promise<SessionSummary[]>;
@@ -1467,5 +1471,11 @@ export interface Plugin {
 	 * 提供方换了或停了，插件先停用，再按现在的提供方重新加载（缺了就回到等待）。
 	 */
 	inject?: readonly (keyof Services)[];
+	/**
+	 * `"all"`：`ctx.sessions.observe` 收全部会话的观察（每个会话的模型请求和回复、弹着的卡、运行状态），不只和本插件有关的那些
+	 * （见 `SessionAccess.observe`）。诊断轨迹、一轮收场后跑用户的钩子、给每个会话写摘要这类插件要它；插件市场的详情页对装着的插件标出这一条。
+	 * 不写就是只看和自己有关的会话。内置插件也一样要写。
+	 */
+	observe?: "all";
 	apply(ctx: PluginContext): void | Promise<void>;
 }

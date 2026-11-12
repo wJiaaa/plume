@@ -247,6 +247,8 @@ interface Session {
 	archiveAfterTurn?: AbortController;
 	/** 代管插件替人答了的卡：调用 id → 那个插件。调用收场时取走，记进结果的 `answeredBy`（见 `tool-run.ts` 的 `relayed`）。 */
 	answeredBy?: Map<string, string>;
+	/** 经 `ctx.sessions.launch` 开出它、还在等它第一次真闲下来（`LaunchedSession.idle`）的插件：这期间它收得到这个会话的观察，见 `concerned`。 */
+	launchedBy?: string;
 }
 
 /** 一封问出去还没答复的请求，见 `asking`。`read`：收件方已经读到。 */
@@ -320,7 +322,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/** 删除后晚回来的请求不能重新创建诊断记录。 */
 	function observe(sessionId: string, event: SessionObservation["event"], timestamp = Date.now()): void {
 		const session = sessions.get(sessionId);
-		if (session) host.observe({ sessionId, at: session.messages?.length ?? 0, timestamp, event });
+		if (session) host.observe({ sessionId, at: session.messages?.length ?? 0, timestamp, event }, concerned(session));
+	}
+
+	/**
+	 * 和这个会话有关的插件，不声明 `observe: "all"` 也收得到它的观察：建它的（子会话、独立会话的 `owner`），代管它的、代管它父会话的
+	 * （代管插件要看得见子智能体、侧边聊天弹的卡才答得了），开出它还在等它闲下来的（`launchedBy`）。
+	 */
+	function concerned(session: Session): Set<string> {
+		const { owner, steward, parentId } = session.summary;
+		const parentSteward = parentId ? sessions.get(parentId)?.summary.steward : undefined;
+		return new Set([owner, steward, parentSteward, session.launchedBy].filter((name): name is string => name !== undefined));
 	}
 	let quitting = false;
 	// 删除会话不等循环收尾；退出和卸载仍须等这些已从列表移走的运行。
@@ -1359,6 +1371,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			},
 		);
 		const session = sessions.get(summary.id)!;
+		session.launchedBy = owner;
 		const first = userMessage({ content: [{ type: "text", text: words }] });
 		launchedPrompts.add(first);
 		begin(session, first);
@@ -1371,11 +1384,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			idle: done
 				.catch(() => undefined)
 				.then(() => settled(session))
-				.then(() =>
-					sessions.has(summary.id)
+				.then(() => {
+					// 闲下来以后它就只是人的会话了：开它的插件不再收它的观察（代管的照 `steward` 收）。
+					delete session.launchedBy;
+					return sessions.has(summary.id)
 						? { stop: structuredClone(session.summary.stop), reply: lastReply(session.messages ?? store.messages(summary.id)) }
-						: { reply: "" },
-				),
+						: { reply: "" };
+				}),
 			reportBack(words, delivery) {
 				if (!delivery || typeof delivery !== "object") throw new Error(text("session.badDelivery"));
 				if (typeof words !== "string" || !words.trim()) throw new Error(text("session.emptyMessage"));

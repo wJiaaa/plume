@@ -566,12 +566,38 @@ it("运行观察各拿副本，观察者失败不影响运行，卸载时撤下"
 		} satisfies Plugin),
 	]);
 	const value = { sessionId: "s", at: 0, timestamp: 1, event: { type: "running" as const, running: true } };
-	expect(() => h.observe(value)).not.toThrow();
+	const concerned = new Set(["bad-observer", "observer"]);
+	expect(() => h.observe(value, concerned)).not.toThrow();
 	expect(value.sessionId).toBe("s");
 	expect(seen).toBe(1);
 	expect(logs.some((line) => line.includes("observer failed"))).toBe(true);
-	await h.setEnabled("observer", false);
-	h.observe(value);
+	// 和它无关的会话：没声明 `observe: "all"` 就收不到。
+	h.observe(value, new Set());
 	expect(seen).toBe(1);
+	await h.setEnabled("observer", false);
+	h.observe(value, concerned);
+	expect(seen).toBe(1);
+	await h.dispose();
+});
+
+it('声明了 observe: "all" 的插件收全部会话的观察，状态里标着；写成别的值加载失败', async () => {
+	const h = host();
+	const seen: string[] = [];
+	await h.load([
+		entry({
+			name: "watch-all",
+			observe: "all",
+			apply(ctx) {
+				ctx.sessions.observe((value) => void seen.push(value.sessionId));
+			},
+		} satisfies Plugin),
+		entry({ name: "bad-scope", observe: "some" as "all", apply() {} } satisfies Plugin),
+	]);
+	h.observe({ sessionId: "s", at: 0, timestamp: 1, event: { type: "running", running: true } }, new Set());
+	expect(seen).toEqual(["s"]);
+	expect(h.status()).toEqual([
+		expect.objectContaining({ name: "watch-all", state: "active", observe: "all" }),
+		expect.objectContaining({ name: "bad-scope", state: "failed", error: expect.stringContaining("observe") }),
+	]);
 	await h.dispose();
 });

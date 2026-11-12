@@ -986,6 +986,7 @@ export const en = {
 		"About the same wait every time, give or take 20% so clients do not all reconnect at once — longer only when the server asks for it (up to 5 minutes).",
 	"plugins.failed": "Failed to load",
 	"plugins.waiting": "Waiting for services: {services}",
+	"plugins.observesAll": "Can see how every session runs: what is sent to the model, its replies, and cards waiting for an answer",
 	"about.intro": "The version you are on, what changed, checking by hand, and how often to check on its own.",
 	"about.checking": "Checking…",
 	"about.checkInterval": "Check for updates",

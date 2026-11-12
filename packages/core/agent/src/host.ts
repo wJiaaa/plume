@@ -195,7 +195,8 @@ interface ProvidedCommands {
 }
 
 export class PluginHost {
-	private readonly observers = new Set<{ plugin: string; listener: (observation: SessionObservation) => void }>();
+	/** `all`：插件声明了要看全部会话（`Plugin.observe`），不然只收和它有关的会话的，见 `observe`。 */
+	private readonly observers = new Set<{ plugin: string; all: boolean; listener: (observation: SessionObservation) => void }>();
 	private readonly records: PluginRecord[] = [];
 	/** 工具名 → 登记过的同名工具，后登记的在最后、生效；它撤下后前一个恢复。 */
 	private readonly tools = new Map<string, RegisteredTool[]>();
@@ -253,9 +254,13 @@ export class PluginHost {
 		this.disabled = new Set(options.disabled);
 	}
 
-	/** 每个观察者各拿副本，失败只记日志，不能改变执行或别的观察者看到的数据。 */
-	observe(observation: SessionObservation): void {
-		for (const { plugin, listener } of this.observers) {
+	/**
+	 * 每个观察者各拿副本，失败只记日志，不能改变执行或别的观察者看到的数据。`concerned` 是和这个会话有关的插件（建它的、代管它或它父会话的、
+	 * 开出它还在等它闲下来的，由 agent 按会话算好）：没声明 `observe: "all"` 的插件只收这些会话的。
+	 */
+	observe(observation: SessionObservation, concerned: ReadonlySet<string>): void {
+		for (const { plugin, all, listener } of this.observers) {
+			if (!all && !concerned.has(plugin)) continue;
 			try {
 				void Promise.resolve(listener(structuredClone(observation))).catch((error: unknown) => {
 					this.options.log(plugin, "error", `运行观察失败：${errorText(error)}`);
@@ -572,6 +577,7 @@ export class PluginHost {
 			return fail(error);
 		}
 		status.name = plugin.name;
+		if (plugin.observe === "all") status.observe = "all";
 		if (this.records.some((other) => other !== record && other.status.name === plugin.name)) {
 			return fail(new Error(text("plugin.nameTaken", { name: plugin.name, key: entry.key })));
 		}
@@ -745,7 +751,7 @@ export class PluginHost {
 				observe: (listener) => {
 					live();
 					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, listener };
+					const entry = { plugin: name, all: record.plugin?.observe === "all", listener };
 					own(() => void this.observers.delete(entry));
 					this.observers.add(entry);
 				},
@@ -964,6 +970,7 @@ function validPlugin(module: unknown): Plugin {
 	if (inject !== undefined && (!Array.isArray(inject) || !inject.every((service) => typeof service === "string" && SERVICE_NAME.test(service)))) {
 		throw new Error(text("plugin.badInject", { name: plugin.name }));
 	}
+	if (plugin.observe !== undefined && plugin.observe !== "all") throw new Error(text("plugin.badObserve", { name: plugin.name }));
 	return plugin as Plugin;
 }
 

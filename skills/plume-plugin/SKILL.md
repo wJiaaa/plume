@@ -138,7 +138,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | `usage` | 设置 › 数据里的一页（`ui.settingsSection` 的 `page: "nav"` 加 `group: "data"`，页头介绍用 `detail`）；逻辑入口经 `ctx.model.usage` 读花销、`ctx.serve` 转给界面；SVG 自己画的堆叠柱状图（悬停气泡 fixed 定位）、环图（`stroke-dasharray` 分段）、热力图和色点，插件自带的模型品牌标 |
 | `screenshot` | 截屏浮层（`ui.screen`、`ui.screenOverlay`、`ui.pinnedShot`）、标注组件、输入框按钮（`ui.composerItem`）、占导航一行的设置分区（`ui.settingsSection` 的 `page: "nav"`）、逻辑入口跑子进程 |
 | `commands` | `ctx.commands.provide` 供 `/` 命令（每次现读磁盘）；设置分区经 `ui.remote()` 新建、打开、删除文件 |
-| `hooks` | 四个钩子一起用：`prompt.submit` 拦消息、补上下文，`tool.execute` 预先放行、要确认（`input.ask`）、改参数、接结果，`tool.approve`（order 2000）替人答审批，`step.end` 让它接着干；`ctx.sessions.observe` 的 `turnEnd` 和 `ctx.sessions.onEnded` 接一轮失败、会话结束；逻辑入口跑子进程，项目钩子读 `.plume/config.json` 的 `hooks`、按内容指纹信任；运行记录存在 `ctx.dataDir`、`watch` 推变化，`ui.replyAction` 在回复底下看、`ui.composerAbove` 提示待审核、`ui.openSettings` 去设置分区；设置分区里 `ui.useProjects` 切范围、表单弹窗 |
+| `hooks` | 四个钩子一起用：`prompt.submit` 拦消息、补上下文，`tool.execute` 预先放行、要确认（`input.ask`）、改参数、接结果，`tool.approve`（order 2000）替人答审批，`step.end` 让它接着干；`ctx.sessions.observe` 的 `turnEnd`（默认导出写 `observe: "all"`，看每个会话）和 `ctx.sessions.onEnded` 接一轮失败、会话结束；逻辑入口跑子进程，项目钩子读 `.plume/config.json` 的 `hooks`、按内容指纹信任；运行记录存在 `ctx.dataDir`、`watch` 推变化，`ui.replyAction` 在回复底下看、`ui.composerAbove` 提示待审核、`ui.openSettings` 去设置分区；设置分区里 `ui.useProjects` 切范围、表单弹窗 |
 | `im` | 不给 `page` 的设置分区：画进插件详情的「设置」一节，不占设置导航；密钥经 `ui.remote()` 交给逻辑入口存进 `ctx.dataDir`，界面只知道存没存 |
 | `index` | `inject` 服务 `project.files` 列项目文件；按会话缓存工具要用的数据、会话删掉时丢掉；设置分区用 `ui.useProjects` 列项目、经 `ui.remote()` 看状态、触发重建 |
 | `web` | 只读的工具（不弹审批卡）、`ctx.dataDir` 存 API key、key 不经界面（界面只知道填没填） |

@@ -9,6 +9,8 @@ import { MESSAGES } from "./messages.ts";
 export default {
 	name: "plume.diagnostics",
 	inject: ["background.jobs", "session.wakeups"],
+	// 调用轨迹记的是每个会话实际发出去的请求和回复：要看全部会话。
+	observe: "all",
 	apply(ctx) {
 		const store = new DiagnosticStore(join(ctx.dataDir, "diagnostics.db"));
 		const jobs = ctx.use("background.jobs");

@@ -28,7 +28,7 @@ import {
 	useI18n,
 	usePopover,
 } from "@plume/ui";
-import { ArrowUp, ArrowUpRight, CircleAlert, Clock, Download, ExternalLink, FolderOpen, Globe, MoreHorizontal, Settings2, Trash2 } from "@plume/ui/icons";
+import { ArrowUp, ArrowUpRight, CircleAlert, Clock, Download, ExternalLink, Eye, FolderOpen, Globe, MoreHorizontal, Settings2, Trash2 } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useState } from "react";
 import { listPluginSettingsSections, localized, type SettingsSectionEntry, usePluginUis } from "../plugins.tsx";
 import { Toggle } from "../settings/controls.tsx";
@@ -175,6 +175,14 @@ function DetailBody({
 				<p className="mt-4 flex items-start gap-2 rounded-panel bg-card-hover px-4 py-2.5 text-detail text-ink-muted">
 					<Clock size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
 					<span className="min-w-0 break-words">{t("plugins.waiting", { services: formatList(item.status.waitingFor) })}</span>
+				</p>
+			)}
+
+			{/* 声明了要看全部会话的（`Plugin.observe`）：说一次它看得到什么。只有装上的才知道，市场目录里没有这一条。 */}
+			{item.status?.observe === "all" && (
+				<p className="mt-4 flex items-start gap-2 rounded-panel bg-card-hover px-4 py-2.5 text-detail text-ink-muted" data-plugin-observes-all="">
+					<Eye size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
+					<span className="min-w-0 break-words">{t("plugins.observesAll")}</span>
 				</p>
 			)}
 

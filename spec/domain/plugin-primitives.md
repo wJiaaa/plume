@@ -15,7 +15,7 @@
 | 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`、`session.rewind`），`ctx.tools.register` |
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
 | 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
-| 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话；会话是哪一种 | `ctx.sessions`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
+| 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话，观察会话的运行（默认只看和自己有关的会话，看全部要声明）；会话是哪一种 | `ctx.sessions`，`ctx.sessions.observe` 和 `Plugin.observe: "all"`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
 | 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它和它下面的子会话弹着的卡（审批、提权、等人，不含「以后不再问」）；只能动自己代管的，人随时在会话菜单里停止代管，那时弹着的卡只能人答 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
 | 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
 | 服务 | 插件之间按名字配合，装一个同名的就换掉实现 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
@@ -40,7 +40,7 @@
   - 审批的 `userOnly`：提问、计划、表单借审批卡，关掉审批语义，答案走旁路，`tool.approve` 的每一层都收到不是审批的请求。现在是单独的原语「等人」。
   - 送达的 `kind: "job" | "session" | "wakeup"`：后台命令、新会话交回、定时唤醒各占一个值，本体按值分支画。现在本体只认通用字段，那一行由交它的插件画。
   - 侧边聊天借排队消息（`origin: "child"`）把活交给主会话，本体随后为它长出回执条、`HandedTask`、`mainChat`。现在留下的 `QueuedMessage.origin`、`UserMessage.fromPlugin` 只是来处标注（安全边界，模型据此知道这不是用户的话），交过去的事走到哪是通用的 `ChildTask`，画成什么样归建子会话的插件。
-- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。
+- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。插件要的范围比默认大时也靠声明，不按名字放行：看全部会话的运行观察写 `Plugin.observe: "all"`，内置插件（plume.diagnostics、plume.tools）和市场插件写的是同一个字段。
 
 ### 已定的例外
 
