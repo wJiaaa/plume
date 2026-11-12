@@ -1,12 +1,15 @@
 /**
- * 测试里直接调 bash 时用的沙箱：就是内置插件 plume.sandbox 的实现，不经插件宿主。
+ * 测试里直接调 bash 时跑命令的入口（代替 `ToolRun.exec`）：就是本体 `@plume/sandbox` 起命令的实现，不进沙箱、不经插件宿主。
+ * 沙箱档、提权由本体定，在 `packages/core/agent/test/commands.test.ts` 里测。
  */
 
-import type { SandboxService } from "@plume/contract";
-import { looksDenied, selectRunner } from "../../sandbox/src/backend.ts";
-import { runCommand } from "../../sandbox/src/local.ts";
+import type { ToolRun } from "@plume/contract";
+import { runCommand } from "../../../core/sandbox/src/local.ts";
 
-export const localSandbox: SandboxService = {
-	run: (command, options) => runCommand(command, options),
-	looksDenied: (output) => looksDenied(output, selectRunner()),
-};
+export function localExec(cwd: string): ToolRun["exec"] {
+	return async (command, options = {}) =>
+		Object.assign(runCommand(command, { cwd: options.cwd ?? cwd, ...(options.env ? { env: options.env } : {}) }), {
+			mode: "danger-full-access" as const,
+			denied: () => false,
+		});
+}

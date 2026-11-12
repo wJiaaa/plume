@@ -15,7 +15,7 @@ import { systemShell } from "@plume/platform";
 import { afterEach, expect, it } from "vitest";
 import { backgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashTool } from "../../src/tools/bash.ts";
-import { localSandbox } from "../sandbox.ts";
+import { localExec } from "../sandbox.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -109,8 +109,8 @@ server.listen(0,'127.0.0.1',()=>console.log('SERVICE_READY '+process.pid+' '+ser
 	await writeFile(join(root, "launcher.cjs"), "require('node:child_process').spawn(process.execPath,['server.cjs','owned'],{stdio:'inherit'});\n");
 	// 按要跑它的 shell 写：Windows 上装了 Git 的是 Git Bash，没装的是 PowerShell。
 	const executable = systemShell().kind === "powershell" ? `& '${process.execPath.replaceAll("'", "''")}'` : `'${process.execPath.replaceAll("'", "'\\''")}'`;
-	await bashTool.execute({ command: `${executable} launcher.cjs`, run_in_background: true }, { cwd: root, state: ownedState, sandbox: localSandbox });
-	await bashTool.execute({ command: `${executable} server.cjs sibling`, run_in_background: true }, { cwd: root, state: siblingState, sandbox: localSandbox });
+	await bashTool.execute({ command: `${executable} launcher.cjs`, run_in_background: true }, { cwd: root, state: ownedState, exec: localExec(root) });
+	await bashTool.execute({ command: `${executable} server.cjs sibling`, run_in_background: true }, { cwd: root, state: siblingState, exec: localExec(root) });
 	const jobs = registries.map((registry) => registry.list()[0]!);
 	await until(() => registries.every((registry) => /SERVICE_READY \d+ \d+/.test(registry.list()[0]?.output ?? "")), "services did not listen");
 	const endpoints = registries.map((registry) => {

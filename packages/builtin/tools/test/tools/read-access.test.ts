@@ -13,7 +13,7 @@ import { afterAll, expect, it, onTestFinished } from "vitest";
 import { assessRead, authorizeCommandReads, commandReadTargets, readGrantRoot, toAbsolute } from "../../src/tools/read-access.ts";
 import { isReadOnlyCommand } from "../../src/read-only-command.ts";
 import { bashTool } from "../../src/tools/bash.ts";
-import { localSandbox } from "../sandbox.ts";
+import { localExec } from "../sandbox.ts";
 import { windowsSpelling } from "../../src/tools/paths.ts";
 import { home, scratchHome } from "../../src/tools/home.ts";
 import { readTool } from "../../src/tools/read.ts";
@@ -56,7 +56,7 @@ function ctxFor(cwd: string, approvals?: { decisions: Decision[]; seen: Approval
 	return {
 		cwd,
 		state: new Map(),
-		sandbox: localSandbox,
+		exec: localExec(cwd),
 		...(approvals
 			? {
 					requestApproval: async (request: ApprovalContent) => {

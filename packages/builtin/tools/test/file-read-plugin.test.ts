@@ -5,7 +5,7 @@ import type { ApprovalContent, ApprovalDecision, PluginContext, Services, ToolDe
 import { expect, it, onTestFinished } from "vitest";
 import plugin from "../src/index.ts";
 import { authorizeCommandReads } from "../src/tools/read-access.ts";
-import { localSandbox } from "./sandbox.ts";
+import { localExec } from "./sandbox.ts";
 
 /**
  * 别的插件经 file.read 读项目里的文件（LSP 插件的查询就是这样）：先 authorize，过了才去碰文件。
@@ -37,7 +37,7 @@ async function setup() {
 	for (const dir of [shared, outside]) await writeFile(join(dir, "core.ts"), "export const value = 1;\n");
 	const effects: Array<() => void | Promise<void>> = [];
 	const tools = new Map<string, ToolDefinition>();
-	const services = new Map<string, unknown>([["sandbox", localSandbox]]);
+	const services = new Map<string, unknown>();
 	const context = {
 		name: "plume.tools",
 		dataDir,
@@ -75,6 +75,9 @@ async function setup() {
 		permissionMode: async () => "auto",
 		tools: () => [...tools.keys()].map((name) => ({ name, plugin: name === "probe" ? "test.probe" : "plume.tools" })),
 		request: async () => ({ answered: false, reason: "declined" }),
+		shell: async () => ({ kind: "posix", label: "bash", sandbox: "workspace-write" }),
+		exec: localExec(cwd),
+		escalate: async () => ({ granted: false, message: "not here" }),
 		ask: async (content) => {
 			seen.push(content);
 			return decision;

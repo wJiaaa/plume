@@ -1,22 +1,11 @@
 /**
  * 本体工具内部的形状：工具拿到会话的环境，返回给模型的内容和给卡片的 `details`。
  *
- * 和 `ToolDefinition` 分开写：工具直接拿到按会话记的状态（读过哪些文件）、跑命令的沙箱、这一次的沙箱模式，
+ * 和 `ToolDefinition` 分开写：工具直接拿到按会话记的状态（读过哪些文件）、跑命令的入口（`ToolRun.exec`）、这一次的 shell，
  * 测试里直接调也不用造一整个 `ToolRun`。`toDefinition` 把它换成工具表里的样子。
  */
 
-import type {
-	ApprovalContent,
-	ApprovalDecision,
-	BackgroundChannel,
-	PermissionMode,
-	SandboxMode,
-	SandboxService,
-	ToolDefinition,
-	ToolKind,
-	ToolOutput,
-	ToolRun,
-} from "@plume/contract";
+import type { ApprovalContent, ApprovalDecision, BackgroundChannel, ShellInfo, ToolDefinition, ToolKind, ToolOutput, ToolRun } from "@plume/contract";
 import type { ResourceRouter } from "../resources/router.ts";
 
 type ToolContent = { type: "text"; text: string };
@@ -54,12 +43,12 @@ export interface ToolContext {
 	allowedPaths?: ReadonlySet<string>;
 	/** 同一个项目的其他源码目录，读它们不用问。 */
 	projectRoots?: readonly string[];
-	/** 命令跑在哪个沙箱模式里；不给就是不进沙箱（测试里直接调）。 */
-	sandboxMode?: SandboxMode;
-	/** 外层要求这次调用不改动工作区（`ToolRun.readOnly`，计划模式）：命令只能在只读沙箱里跑，不许申请离开。 */
-	readOnly?: true;
-	/** 跑命令用的服务 `sandbox`。 */
-	sandbox?: SandboxService;
+	/** 命令照哪个 shell 写（`ToolRun.shell()`，会话宣布的那一档）；不给时按这台机器的默认 shell 读（测试里直接调）。 */
+	shell?: Pick<ShellInfo, "kind">;
+	/** 跑命令（`ToolRun.exec`）：沙箱档由本体按权限模式定。不给就跑不了命令。 */
+	exec?: ToolRun["exec"];
+	/** 申请这次调用的命令跑在更宽的一档（`ToolRun.escalate`）：本体弹提权卡、只认人答。不给就不能提权。 */
+	escalate?: ToolRun["escalate"];
 	/** 这个会话现在有哪些工具：改道只建议真有的；不给就是不改道。 */
 	toolNames?: ReadonlySet<string>;
 	/** 执行中的输出，一段一段推给界面（追加，不是整份替换）。 */
@@ -83,24 +72,12 @@ export interface Tool<TArgs = Record<string, unknown>> {
 	execute(args: TArgs, ctx: ToolContext): Promise<ToolResult>;
 }
 
-/** 工具执行时插件给它的东西：按会话记的状态、跑命令的沙箱。 */
+/** 工具执行时插件给它的东西：按会话记的状态。 */
 export interface ToolEnv {
 	dataDir?: string;
 	resources?: ResourceRouter;
 	state(sessionId: string): Map<string, unknown>;
-	sandbox: SandboxService;
 }
-
-/**
- * 每个权限模式下命令跑在哪个沙箱模式里：权限模式不只是问几次，也是命令碰得到哪些文件。
- * 请求批准只读，什么都不经人同意就写不了；帮我批准能写项目目录和临时目录，项目随便改，`~/.ssh` 碰不到；完全访问不设沙箱。
- * 三个模式都写全：新加一个模式时 TypeScript 会指到这张表，不会因为没查到就悄悄落到最宽的那个。
- */
-const SANDBOX_BY_PERMISSION: Record<PermissionMode, SandboxMode> = {
-	ask: "read-only",
-	auto: "workspace-write",
-	full: "danger-full-access",
-};
 
 /** 文件工具和公开读取授权服务使用同一份会话环境，批准入口及状态不能另起一份。 */
 export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
@@ -108,7 +85,6 @@ export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		cwd: run.cwd,
 		projectRoots: run.projectRoots,
 		...(run.allowedPaths ? { allowedPaths: new Set(run.allowedPaths) } : {}),
-		...(run.readOnly ? { readOnly: true as const } : {}),
 		sessionId: run.sessionId,
 		scratchDir: run.scratchDir,
 		...(run.scratchDirs ? { scratchDirs: run.scratchDirs } : {}),
@@ -117,7 +93,8 @@ export function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		signal: run.signal,
 		state: env.state(run.sessionId),
 		requestApproval: (content: ApprovalContent): Promise<ApprovalDecision> => run.ask(content),
-		sandbox: env.sandbox,
+		exec: (command, options) => run.exec(command, options),
+		escalate: (request) => run.escalate(request),
 		toolNames: new Set(run.tools().map((entry) => entry.name)),
 		onProgress: run.progress,
 		...(run.background ? { background: () => run.background!() } : {}),
@@ -136,13 +113,9 @@ export function toDefinition<TArgs>(tool: Tool<TArgs>, env: ToolEnv): ToolDefini
 		...(tool.kind ? { kind: tool.kind } : {}),
 		asks: true,
 		async execute(args, run: ToolRun): Promise<ToolOutput> {
-			// 沙箱只管跑命令的那个（bash），它会改动工作区；只读的工具在进程里读文件，不用它。
-			// 外层要求不改工作区（计划模式）时不看权限模式，一律只读：给不了只读沙箱时 sandbox 服务抛错，命令不跑。
-			const sandboxMode: SandboxMode | undefined = !tool.mutating ? undefined : run.readOnly ? "read-only" : SANDBOX_BY_PERMISSION[await run.permissionMode()];
-			const result = await tool.execute(args as TArgs, {
-				...toolContext(run, env),
-				...(sandboxMode ? { sandboxMode } : {}),
-			});
+			// 跑命令的（bash、monitor）会改动工作区，要知道命令照哪个 shell 写；只读的工具在进程里读文件，用不着。
+			const shell = tool.mutating ? await run.shell() : undefined;
+			const result = await tool.execute(args as TArgs, { ...toolContext(run, env), ...(shell ? { shell } : {}) });
 			return {
 				output: result.content.map((part) => part.text).join("\n"),
 				...(result.images?.length ? { images: result.images } : {}),

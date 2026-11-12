@@ -1,18 +1,18 @@
 /**
  * bash 真的跑命令：退出码按命令读、超时的两种处理、后台任务的读和停、命令退出后留下来的进程。
- * 不进沙箱（不给 sandboxMode），沙箱另有 sandbox.test.ts。
+ * 不进沙箱（`ToolRun.exec` 换成不设限的本地实现），沙箱档和提权由本体定，另有 `packages/core/agent/test/commands.test.ts`。
  */
 
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { BackgroundChannel, DeliveryInput, SandboxService } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, ToolRun } from "@plume/contract";
 import { backgroundJobs, disposeBackgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool, bashTool } from "../../src/tools/bash.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
-import { localSandbox } from "../sandbox.ts";
+import { localExec } from "../sandbox.ts";
 
 let cwd: string;
 const states: Map<string, unknown>[] = [];
@@ -32,7 +32,7 @@ afterAll(async () => {
 function ctx(extra: Partial<ToolContext> = {}): ToolContext {
 	const state = new Map<string, unknown>();
 	states.push(state);
-	return { cwd, state, sandbox: localSandbox, ...extra };
+	return { cwd, state, exec: localExec(cwd), ...extra };
 }
 
 const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("\n");
@@ -52,39 +52,29 @@ it("退出码按命令读：搜不到是答案，别的非零是失败，成功�
 	expect(textOf(failed)).toBe("broke\n\n[exit code 3]");
 });
 
-it("提权的命令换更宽的沙箱，shell 仍按会话宣布的模式选", async () => {
-	// Windows 上会话受约束时命令照 PowerShell 写，提成完全访问也还是那一行 PowerShell，不能交给 Git Bash 跑。
-	const calls: Parameters<SandboxService["run"]>[1][] = [];
-	const sandbox: SandboxService = {
-		...localSandbox,
-		run: (command, options) => {
-			calls.push(options);
-			return localSandbox.run(command, { cwd: options.cwd });
-		},
-	};
-	const escalated = { command: "echo hi", escalate: "danger-full-access", justification: "要写项目外的缓存" };
-	const session = { sandbox, sandboxMode: "workspace-write" as const, requestApproval: async () => "once" as const };
-	expect(textOf(await bashTool.execute(escalated, ctx(session)))).toBe("hi");
-	await bashTool.execute({ ...escalated, run_in_background: true }, ctx(session));
-	await bashTool.execute({ command: "echo plain" }, ctx(session));
-	expect(calls).toEqual([
-		{ cwd, mode: "danger-full-access", shellMode: "workspace-write" },
-		{ cwd, mode: "danger-full-access", shellMode: "workspace-write" },
-		{ cwd, mode: "workspace-write", shellMode: "workspace-write" },
-	]);
+it("提权经 run.escalate 申请：卡上是命令和模型的理由，批了才跑，不批时命令不跑、结果是本体给的说明", async () => {
+	const requests: Parameters<ToolRun["escalate"]>[0][] = [];
+	const ran: string[] = [];
+	const exec: ToolRun["exec"] = (command, options) => (ran.push(command), localExec(cwd)(command, options));
+	const escalated = { command: "echo hi", description: "写缓存", escalate: "danger-full-access", justification: "要写项目外的缓存" };
+	const granted = await bashTool.execute(escalated, ctx({ exec, escalate: async (request) => (requests.push(request), { granted: true }) }));
+	expect(textOf(granted)).toBe("hi");
+	expect(requests).toEqual([{ mode: "danger-full-access", justification: "要写项目外的缓存", title: "提权运行：写缓存", detail: "echo hi" }]);
+
+	const refused = await bashTool.execute(escalated, ctx({ exec, escalate: async () => ({ granted: false, message: "本体说不行" }) }));
+	expect(refused.isError).toBe(true);
+	expect(textOf(refused)).toBe("本体说不行");
+	expect(ran).toEqual(["echo hi"]);
 });
 
-it("外层要求不改工作区（readOnly）时不许提权：不问人，直接拒，命令不跑", async () => {
-	const asked: unknown[] = [];
-	const ran: unknown[] = [];
-	const sandbox: SandboxService = { ...localSandbox, run: (command, options) => (ran.push(command), localSandbox.run(command, options)) };
+it("只给理由不申请提权：不问人，直接拒，命令不跑", async () => {
+	const ran: string[] = [];
 	const result = await bashTool.execute(
-		{ command: "echo hi", escalate: "danger-full-access", justification: "要写缓存" },
-		ctx({ sandbox, sandboxMode: "read-only", readOnly: true, requestApproval: async (request) => (asked.push(request), "once") }),
+		{ command: "echo hi", justification: "要写缓存" },
+		ctx({ exec: async (command) => (ran.push(command), localExec(cwd)(command)), escalate: async () => ({ granted: true }) }),
 	);
 	expect(result.isError).toBe(true);
-	expect(textOf(result)).toMatch(/read-only sandbox and may not leave it/);
-	expect(asked).toEqual([]);
+	expect(textOf(result)).toMatch(/justification 只能和 escalate 一起用/);
 	expect(ran).toEqual([]);
 });
 

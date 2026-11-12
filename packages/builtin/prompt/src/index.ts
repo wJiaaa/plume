@@ -11,8 +11,7 @@
  */
 
 import { join } from "node:path";
-import type { PermissionMode, Plugin, SandboxMode } from "@plume/contract";
-import { commandShell } from "@plume/platform";
+import type { Plugin } from "@plume/contract";
 import { withEnvironment } from "./environment.ts";
 import { FrozenPrompts } from "./frozen.ts";
 import { findRepoRoot, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "./instructions.ts";
@@ -21,17 +20,6 @@ import { buildPromptSections } from "./system.ts";
 
 /** 比插件常用的 order 都小：先于它们补上默认的内容。 */
 const ORDER = -1000;
-
-/**
- * 点名哪个 shell 按会话的权限模式对应的沙箱档选，和 plume.tools 的 bash 跑命令时选的是同一个（`commandShell`）：
- * Windows 上受约束的命令跑 PowerShell，完全访问跑 Git Bash；别的平台每档都是同一个 shell。
- * 插件之间不互相引用实现，这份对应和 plume.tools 的 `tools/types.ts` 里的 `SANDBOX_BY_PERMISSION` 各存一份，改一处要同步另一处。
- */
-const SANDBOX_BY_PERMISSION: Record<PermissionMode, SandboxMode> = {
-	ask: "read-only",
-	auto: "workspace-write",
-	full: "danger-full-access",
-};
 
 export default {
 	name: "plume.prompt",
@@ -53,8 +41,8 @@ export default {
 					cwd: input.cwd,
 					projectRoots: input.projectRoots,
 					platform: process.platform,
-					// 外层（计划模式）要求只读时命令跑在只读沙箱里，按那一档点名。
-					shell: commandShell(input.readOnly ? "read-only" : SANDBOX_BY_PERMISSION[input.permissionMode]),
+					// 本体按权限模式和外层的只读（计划模式）选好的那个，和工具经 `run.exec` 跑命令时用的是同一个。
+					shell: input.shell,
 					// 工具做的是哪种活按注册它的插件的声明（`ToolDefinition.kind`）认，只看这一轮真给模型的那些。
 					tools: input.tools.map((tool) => ({ name: tool.name, kind: kinds.get(tool.name) })),
 					modelName: input.model.name,

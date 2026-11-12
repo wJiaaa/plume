@@ -3,13 +3,13 @@
  */
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { BackgroundChannel, DeliveryInput, SandboxProcess, SandboxService } from "@plume/contract";
+import type { BackgroundChannel, DeliveryInput, RunProcess, ToolRun } from "@plume/contract";
 import { backgroundJobs } from "../../src/tools/background-jobs.ts";
 import { bashOutputTool } from "../../src/tools/bash.ts";
 import { monitorTool } from "../../src/tools/monitor.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
 
-interface FakeProcess extends SandboxProcess {
+interface FakeProcess extends RunProcess {
 	print(chunk: string): void;
 	exit(code: number | null): void;
 	kills: string[];
@@ -21,6 +21,8 @@ function fakeProcess(): FakeProcess {
 	const kills: string[] = [];
 	return {
 		pid: 4242,
+		mode: "workspace-write",
+		denied: () => false,
 		kills,
 		onOutput: (listener) => void output.push(listener),
 		onExit: (listener) => void exits.push(listener),
@@ -67,8 +69,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const sandbox: SandboxService = { run: () => process, looksDenied: () => false };
-const ctx = (extra: Partial<ToolContext> = {}): ToolContext => ({ cwd: "/tmp", state, sandbox, background: () => channel.channel, ...extra });
+const exec: ToolRun["exec"] = async () => process;
+const ctx = (extra: Partial<ToolContext> = {}): ToolContext => ({ cwd: "/tmp", state, exec, background: () => channel.channel, ...extra });
 const textOf = (result: ToolResult) => result.content.map((part) => part.text).join("\n");
 
 async function start(args: Record<string, unknown> = {}): Promise<string> {

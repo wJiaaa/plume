@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { HookLayer, Message, ModelContext, PluginContext, ToolSpec } from "@plume/contract";
-import { resetSystemShell } from "@plume/platform";
 import plugin from "../src/index.ts";
 import { withEnvironment } from "../src/environment.ts";
 import { mergeTools } from "../src/frozen.ts";
@@ -355,16 +354,7 @@ describe("日期", () => {
 	});
 });
 
-describe("按哪一档点名 shell", () => {
-	const realPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
-	const realShell = process.env.PLUME_SHELL;
-	afterEach(() => {
-		Object.defineProperty(process, "platform", realPlatform);
-		if (realShell === undefined) delete process.env.PLUME_SHELL;
-		else process.env.PLUME_SHELL = realShell;
-		resetSystemShell();
-	});
-
+describe("点名哪个 shell", () => {
 	/** 跑一遍 plume.prompt 的 model.context 层，取环境那一段。 */
 	async function environmentFor(input: Partial<ModelContext>): Promise<string> {
 		let layer: HookLayer<"model.context"> | undefined;
@@ -376,6 +366,7 @@ describe("按哪一档点名 shell", () => {
 				scratchDir: join(dir, "scratch"),
 				model: { id: "m", name: "M" },
 				permissionMode: "full",
+				shell: { kind: "posix", label: "Git Bash", sandbox: "danger-full-access" },
 				personalization: { tone: "professional", customInstructions: "" },
 				systemPrompt: "",
 				sections: [],
@@ -388,14 +379,11 @@ describe("按哪一档点名 shell", () => {
 		return context.sections.find((section) => section.id === "environment")?.text ?? "";
 	}
 
-	it("Windows 上完全访问点名 Git Bash；外层要求只读（计划模式）时点名 PowerShell，和实际跑命令的一致", async () => {
-		Object.defineProperty(process, "platform", { ...realPlatform, value: "win32" });
-		const bash = join(dir, "bash.exe");
-		await writeFile(bash, "");
-		process.env.PLUME_SHELL = bash;
-		resetSystemShell();
+	it("照本体给的 `ModelContext.shell` 点名，不自己按权限模式选（哪一档对应哪个 shell 在本体测）", async () => {
 		expect(await environmentFor({})).toContain("- Shell: Git Bash");
-		expect(await environmentFor({ readOnly: true })).toMatch(/- Shell: .*PowerShell/);
+		expect(await environmentFor({ shell: { kind: "powershell", label: "Windows PowerShell 5.1", sandbox: "read-only" } })).toMatch(
+			/- Shell: Windows PowerShell 5\.1\n- Commands run in Windows PowerShell 5\.1, not bash/,
+		);
 	});
 });
 
@@ -461,6 +449,7 @@ describe("会话内冻结的系统提示词", () => {
 					scratchDir: join(dir, "scratch"),
 					model: { id: "m", name: "M" },
 					permissionMode: "full",
+					shell: { kind: "posix", label: "zsh", sandbox: "danger-full-access" },
 					personalization: { tone: "professional", customInstructions: "" },
 					systemPrompt: "",
 					sections: [],

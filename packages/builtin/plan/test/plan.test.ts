@@ -170,21 +170,21 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string } = 
 	return { api, commands, execute, submit, end, sections, readOnly, submitPrompt, compact, launched, notices };
 }
 
-test("关着时什么都不管；开着时写文件被拒，别的调用带着 readOnly 交下去，子会话受父会话的开关管", async () => {
+test("关着时什么都不管；开着时每次调用都带着 readOnly 和拒绝的话交下去，子会话受父会话的开关管", async () => {
 	const plan = await fakeContext();
 	assert.deepEqual((await plan.execute("main", "edit")).output, { output: "ran" });
 	assert.equal((await plan.execute("main", "bash")).reached?.readOnly, undefined);
 
 	plan.api.set("main", true);
-	const edit = await plan.execute("main", "edit");
-	assert.equal(edit.reached, undefined);
-	assert.equal(edit.output.isError, true);
-	assert.match(edit.output.output, /^Plan mode: it edits files, so "edit" did not run/);
-	assert.equal((await plan.execute("main", "bash", { command: "ls" })).reached?.readOnly, true);
-	// 申请离开只读沙箱不在这里拦：照样带着 readOnly 交下去，由跑命令的工具自己拒。
-	assert.equal((await plan.execute("main", "bash", { command: "touch x", escalate: "workspace-write" })).reached?.readOnly, true);
-	assert.match((await plan.execute("child", "write")).output.output, /^The conversation that started you is in plan mode/);
-	assert.equal((await plan.execute("child", "read")).reached?.readOnly, true);
+	// 拦哪些归本体（写、改文件的工具不往里交，命令压进只读沙箱、不许提权，见 `packages/core/agent/test/commands.test.ts`），
+	// 这里只交下拒绝时给模型的话。
+	assert.match((await plan.execute("main", "edit")).reached?.readOnly?.refusal ?? "", /^Plan mode: it edits files, so "edit" did not run/);
+	assert.match((await plan.execute("main", "bash", { command: "ls" })).reached?.readOnly?.refusal ?? "", /so "bash" did not run/);
+	assert.match(
+		(await plan.execute("child", "write")).reached?.readOnly?.refusal ?? "",
+		/^The conversation that started you is in plan mode: it edits files, so "write"/,
+	);
+	assert.ok((await plan.execute("child", "read")).reached?.readOnly);
 	assert.equal((await plan.execute("fresh", "write")).reached?.readOnly, undefined);
 	assert.deepEqual(await plan.sections("main"), ["plan"]);
 	assert.deepEqual(await plan.sections("child"), []);
@@ -208,11 +208,11 @@ test("交计划：只能人答；批准就地关掉开关，拒绝结束这一�
 	const declined = await plan.submit("main", "# 改登录\n\n概要");
 	assert.deepEqual(declined.asked, [{ kind: SUBMIT_PLAN, title: "Plume 提出了一个计划", payload: "# 改登录\n\n概要", waiting: "等你批准计划" }]);
 	assert.equal(declined.output.terminate, "done");
-	assert.equal((await plan.execute("main", "edit")).reached, undefined);
+	assert.ok((await plan.execute("main", "edit")).reached?.readOnly);
 	// 交回来的不成形（空的修改意见、认不出的回答）：和什么都没说的拒绝一样，这一轮停下。
 	for (const bad of [{ accept: false, feedback: "  " }, "once", { accept: "yes" }]) {
 		assert.equal((await plan.submit("main", "# 改登录", bad)).output.terminate, "done", JSON.stringify(bad));
-		assert.equal((await plan.execute("main", "edit")).reached, undefined);
+		assert.ok((await plan.execute("main", "edit")).reached?.readOnly);
 	}
 
 	const approved = await plan.submit("main", "# 改登录\n\n概要", { accept: true });
@@ -307,7 +307,7 @@ test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停�
 	assert.match(revised.output.output, /Feedback: 先别动数据库[\s\S]*Revise the plan/);
 	assert.equal(revised.output.terminate, undefined);
 	assert.deepEqual(revised.output.details, { kind: "plan", plan: "# 改登录", approved: false, feedback: "先别动数据库" });
-	assert.equal((await plan.execute("main", "edit")).reached, undefined);
+	assert.ok((await plan.execute("main", "edit")).reached?.readOnly);
 
 	const approved = await plan.submit("main", "# 改登录", { accept: true, note: "> 第二节\n\n注意兼容" });
 	assert.match(approved.output.output, /approved the plan with notes[\s\S]*## 执行时注意\n> 第二节/);

@@ -5,12 +5,12 @@
  * 会丢掉反斜杠，Windows PowerShell 5.1 里 `&&` 是语法错误。
  *
  * 写成 shell 的函数而不是 `bash` 工具的一条规矩，因为是哪个 shell 取决于会话：Windows 上受约束的命令跑在 PowerShell 里，
- * 不受约束的跑在 Git Bash 里（`@plume/platform` 的 `commandShell`）。环境一段点名的和这里说的是同一个 shell，两边不会对不上。
+ * 不受约束的跑在 Git Bash 里（本体给的 `ModelContext.shell`）。环境一段点名的和这里说的是同一个 shell，两边不会对不上。
  */
 
-import type { CommandShell } from "@plume/platform";
+import type { ShellInfo } from "@plume/contract";
 
-export function shellGuidance(shell: Pick<CommandShell, "kind" | "label">): string[] {
+export function shellGuidance(shell: Pick<ShellInfo, "kind" | "label">): string[] {
 	if (shell.kind === "powershell") {
 		return [
 			`Commands run in ${shell.label}, not bash: write PowerShell.` +

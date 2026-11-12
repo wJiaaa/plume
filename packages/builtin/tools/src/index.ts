@@ -1,11 +1,10 @@
 /**
  * 工具：read、write、edit、ls、glob、grep、bash、bash_output、monitor（见 `tools.ts`），和定时唤醒 schedule_wakeup、cron_create、cron_list、
- * cron_delete（见 `tools/wakeups.ts`）。monitor 和定时唤醒只列给顶层会话。命令经服务 `sandbox` 跑。
+ * cron_delete（见 `tools/wakeups.ts`）。monitor 和定时唤醒只列给顶层会话。命令经本体的 `ToolRun.exec` 跑，沙箱档由本体按权限模式定。
  * 提供服务 `session.wakeups`（待触发的定时唤醒）、`file.changes`（改动快照和撤销）、`file.read`（读取授权）、`project.files`（项目里该看哪些文件）、`resources`（资源地址，见 `resources/`）；
  * 地址清单经 `model.context` 加成系统提示词的 `resources` 段。
  *
- * 状态按会话放在内存里（读过哪些文件、后台任务）：会话删掉时停掉它的后台任务、清掉它的状态，插件停用（退出应用、
- * 沙箱的提供方换了）时全部停掉。
+ * 状态按会话放在内存里（读过哪些文件、后台任务）：会话删掉时停掉它的后台任务、清掉它的状态，插件停用（退出应用）时全部停掉。
  */
 
 import type { Plugin, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
@@ -29,7 +28,6 @@ const TOP_LEVEL_ONLY = new Set(["monitor", ...WAKEUP_TOOLS.map((tool) => tool.na
 
 export default {
 	name: "plume.tools",
-	inject: ["sandbox"],
 	// 定时唤醒可能排在任何会话里，要知道每个会话的一轮什么时候收场（见下面的 `running`）：要看全部会话。
 	observe: "all",
 	apply(ctx) {
@@ -92,7 +90,7 @@ export default {
 			},
 			{ order: -10_000 },
 		);
-		const env = { state, dataDir: ctx.dataDir, resources, sandbox: ctx.use("sandbox") };
+		const env = { state, dataDir: ctx.dataDir, resources };
 		ctx.provide("file.read", { authorize: (run, path) => authorizeRead(toolContext(run, env), path) });
 		const own = new Map([...TOOLS, ...WAKEUP_TOOLS].map((tool) => [tool.name, toDefinition(tool, env)]));
 		for (const definition of own.values()) ctx.tools.register(definition.name === "bash" ? withShortcut(definition, own, ctx.name) : definition);

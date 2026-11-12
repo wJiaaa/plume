@@ -1,6 +1,6 @@
 # 工具
 
-提供 read、write、edit、ls、glob、grep、bash、bash_output、monitor；文件改动前询问用户，命令经 sandbox 服务运行。read 读 PNG、JPEG、GIF、WebP 图片时原样把图交给模型（最大 5 MB，不缩放；BMP 交不出去，照实说）。
+提供 read、write、edit、ls、glob、grep、bash、bash_output、monitor；文件改动前询问用户，命令经本体的 `run.exec` 在权限模式对应的沙箱里运行（提权经 `run.escalate`）。read 读 PNG、JPEG、GIF、WebP 图片时原样把图交给模型（最大 5 MB，不缩放；BMP 交不出去，照实说）。
 
 ## 资源地址
 

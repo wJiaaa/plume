@@ -6,8 +6,7 @@
  * 顺序按变化频率排：不变的在前，随机器、项目、会话变的在后，服务商的前缀缓存能命中得越长越好。
  */
 
-import type { PromptSection, Tone, ToolKind } from "@plume/contract";
-import type { CommandShell } from "@plume/platform";
+import type { PromptSection, ShellInfo, Tone, ToolKind } from "@plume/contract";
 import type { ProjectInstructions } from "./instructions.ts";
 import { shellGuidance } from "./shell-guidance.ts";
 
@@ -17,10 +16,10 @@ export interface SystemPromptInput {
 	platform: string;
 	/**
 	 * 跑命令用的 shell，在环境里点名（「zsh」「Git Bash」「Windows PowerShell 5.1」），这一轮有跑命令的工具时连写法一起说：
-	 * 只写 `Platform: win32`，模型要在三种语法里猜，猜的总是 bash。调用方给的是这个会话的模式下跑的那个（`commandShell`）：
+	 * 只写 `Platform: win32`，模型要在三种语法里猜，猜的总是 bash。调用方给的是这个会话的模式下跑的那个（`ModelContext.shell`）：
 	 * Windows 上受约束时是 PowerShell，不受约束时是 Git Bash。
 	 */
-	shell?: Pick<CommandShell, "kind" | "label">;
+	shell?: Pick<ShellInfo, "kind" | "label">;
 	/**
 	 * 这一轮工具表里的工具和它们声明做的是哪种活（`ToolDefinition.kind`，调用方按 `ctx.tools.list()` 对上 `input.tools`）。
 	 * 提示词要说到跑命令、写文件的工具时按种类在这里找，不认工具名：有跑命令的（`command`）才说 shell 的写法，写、改文件的

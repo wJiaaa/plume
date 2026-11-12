@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SandboxProcess, SandboxService } from "@plume/contract";
+import type { RunProcess, SandboxProcess, ToolRun } from "@plume/contract";
 import { expect, it, onTestFinished } from "vitest";
 import { bashOutputTool, bashTool } from "../../src/tools/bash.ts";
 import { beforeCommand, afterCommand, withCommandChanges } from "../../src/tools/command-changes.ts";
@@ -127,8 +127,12 @@ it("200 文件、单文件 2 MiB、总量 16 MiB、二进制和软链边界都�
 	await expect(beforeCommand(ctx)).rejects.toThrow(words().changeLargeBefore);
 });
 
-class Process implements SandboxProcess {
+class Process implements RunProcess {
 	readonly pid = 1;
+	readonly mode = "workspace-write" as const;
+	denied() {
+		return false;
+	}
 	private readonly exits: ((code: number | null, signal?: string | null, lingering?: SandboxProcess) => void)[] = [];
 	private readonly errors: ((error: Error) => void)[] = [];
 	private readonly outputs: ((chunk: string) => void)[] = [];
@@ -149,13 +153,10 @@ class Process implements SandboxProcess {
 		for (const listener of this.errors) listener(new Error("spawn failed"));
 	}
 }
-function sandbox(process: Process, started: () => void = () => {}): SandboxService {
-	return {
-		run: () => {
-			started();
-			return process;
-		},
-		looksDenied: () => false,
+function exec(process: Process, started: () => void = () => {}): ToolRun["exec"] {
+	return async () => {
+		started();
+		return process;
 	};
 }
 const details = (result: ToolResult) => result.details as { id: string; jobId: string; changeIds: string[]; changeWarning?: string };
@@ -164,9 +165,9 @@ it("前台命令结果附带 ID；观测失败只加警告，不把成功命令�
 	const { ctx } = await fixture();
 	for (const binary of [false, true]) {
 		const process = new Process();
-		ctx.sandbox = sandbox(process);
+		ctx.exec = exec(process);
 		const result = await withCommandChanges(ctx, async (observed) => {
-			observed.sandbox!.run("command", { cwd: ctx.cwd });
+			await observed.exec!("command");
 			await writeFile(join(ctx.cwd, "tracked"), binary ? Buffer.from([0, 1]) : "changed");
 			process.exit();
 			return { content: [{ type: "text", text: "success" }], isError: false };
@@ -180,9 +181,9 @@ it("前台命令结果附带 ID；观测失败只加警告，不把成功命令�
 	}
 	await writeFile(join(ctx.cwd, "tracked"), Buffer.from([0, 1]));
 	const process = new Process();
-	ctx.sandbox = sandbox(process);
+	ctx.exec = exec(process);
 	const result = await withCommandChanges(ctx, async (observed) => {
-		observed.sandbox!.run("command", { cwd: ctx.cwd });
+		await observed.exec!("command");
 		process.exit();
 		return { content: [{ type: "text", text: "success" }] };
 	});
@@ -193,7 +194,7 @@ it("前台命令结果附带 ID；观测失败只加警告，不把成功命令�
 it("后台命令和遗留进程结束前保护撤销，停止请求不提前放锁，结束记录经 bash_output 返回", async () => {
 	const { ctx, service } = await fixture();
 	const child = new Process();
-	ctx.sandbox = sandbox(child);
+	ctx.exec = exec(child);
 	const started = await bashTool.execute({ command: "do-work", run_in_background: true }, ctx);
 	const id = details(started).id;
 	expect(details(started).changeWarning).toBe(words().changeBackground);
@@ -219,9 +220,11 @@ it("前台命令转交遗留进程也不释放保护，启动失败会释放", a
 	const started = new Promise<void>((resolve) => {
 		ready = resolve;
 	});
-	ctx.sandbox = sandbox(child, ready);
+	ctx.exec = exec(child, ready);
 	const pending = bashTool.execute({ command: "do-work" }, ctx);
 	await started;
+	// bash 拿到进程以后才挂上退出的监听：真的进程退出是下一轮事件循环的事，这里等到那时再退。
+	await new Promise((resolve) => setImmediate(resolve));
 	child.exit(lingering);
 	const result = await pending;
 	expect(details(result).jobId).toBeTruthy();
@@ -232,17 +235,14 @@ it("前台命令转交遗留进程也不释放保护，启动失败会释放", a
 	release();
 	for (const thrown of [false, true]) {
 		const process = new Process();
-		ctx.sandbox = thrown
-			? {
-					run: () => {
-						throw new Error("no backend");
-					},
-					looksDenied: () => false,
+		ctx.exec = thrown
+			? async () => {
+					throw new Error("no backend");
 				}
-			: sandbox(process);
+			: exec(process);
 		await withCommandChanges(ctx, async (observed) => {
 			try {
-				observed.sandbox!.run("command", { cwd: ctx.cwd });
+				await observed.exec!("command");
 			} catch {}
 			if (!thrown) process.error();
 			return { content: [{ type: "text", text: "failed" }], isError: true };
@@ -274,21 +274,18 @@ it("只读命令不拍快照、不占门闩，所以什么都不记；会写的�
 	const { ctx } = await fixture();
 	// 假沙箱：不管命令是什么都改一个文件。只读命令照样改了，却不该被记下——它根本没拍快照。
 	let undoBlocked: boolean | undefined;
-	ctx.sandbox = {
-		run: () => {
-			const process = new Process();
-			void writeFile(join(ctx.cwd, "tracked"), `changed ${Math.random()}\n`).then(() => {
-				try {
-					beginUndo()();
-					undoBlocked = false;
-				} catch {
-					undoBlocked = true;
-				}
-				process.exit();
-			});
-			return process;
-		},
-		looksDenied: () => false,
+	ctx.exec = async () => {
+		const process = new Process();
+		void writeFile(join(ctx.cwd, "tracked"), `changed ${Math.random()}\n`).then(() => {
+			try {
+				beginUndo()();
+				undoBlocked = false;
+			} catch {
+				undoBlocked = true;
+			}
+			process.exit();
+		});
+		return process;
 	};
 	expect(details(await bashTool.execute({ command: "git log --oneline -5" }, ctx)).changeIds).toBeUndefined();
 	expect(undoBlocked, "只读命令跑着时撤销不被挡").toBe(false);

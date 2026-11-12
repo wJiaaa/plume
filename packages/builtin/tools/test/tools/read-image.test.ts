@@ -40,7 +40,7 @@ it("PNG 原样交给模型，details 记下路径、大小、类型，并记作�
 
 it("经工具表交出去时图跟在结果后面", async () => {
 	writeFileSync(join(dir, "dot.jpg"), PNG);
-	const definition = toDefinition(readTool, { state: () => new Map(), sandbox: { run: () => undefined as never, looksDenied: () => false } });
+	const definition = toDefinition(readTool, { state: () => new Map() });
 	const run = { sessionId: "s", cwd: dir, scratchDir: join(dir, "scratch"), signal: new AbortController().signal, tools: () => [] } as unknown as ToolRun;
 	const output = await definition.execute({ path: "dot.jpg" }, run);
 	expect(output).toMatchObject({ output: "", images: [{ data: PNG.toString("base64"), mimeType: "image/jpeg" }] });

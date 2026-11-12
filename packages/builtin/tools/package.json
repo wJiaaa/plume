@@ -1,7 +1,7 @@
 {
   "name": "@plume/tools",
   "version": "0.1.0",
-  "description": "工具：读写文件、改文件、列目录、找文件、搜内容、跑命令。命令经服务 sandbox 跑，改动前问用户。",
+  "description": "工具：读写文件、改文件、列目录、找文件、搜内容、跑命令。命令经本体的 run.exec 在沙箱里跑，改动前问用户。",
   "author": "Plume",
   "plume": {
     "displayName": "工具"

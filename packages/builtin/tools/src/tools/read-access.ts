@@ -260,11 +260,11 @@ export async function authorizeCommandReads(command: string, ctx: ToolContext): 
 	const asked = new Map<string, { absolute: string; verdict: Extract<ReadVerdict, { decision: "ask" }> }>();
 	const projectRoots = await realProjectRoots(ctx);
 	/*
-	 * 按会话里真正跑这条命令的 shell 的语法读（`commandShell`）：Windows 上受约束时是 PowerShell，不受约束时是 Git Bash。
+	 * 按会话里真正跑这条命令的 shell 的语法读（`ToolRun.shell()`）：Windows 上受约束时是 PowerShell，不受约束时是 Git Bash。
 	 * 那里不管哪个跑都按两种读的话，Git Bash 下的 bash heredoc 也会被 PowerShell 读一遍，而 PowerShell 没有 heredoc：
 	 * `<<'EOF'` 里不会跑的正文成了活代码，人被问到一个什么都不会打开的文件。
 	 */
-	for (const literal of commandReadTargets(command, ctx.cwd, dialectsOf(commandShell(ctx.sandboxMode)))) {
+	for (const literal of commandReadTargets(command, ctx.cwd, dialectsOf(ctx.shell ?? commandShell()))) {
 		// 和文件工具同一判定：链接按它指向的地方算，见 `resolveForReading`。
 		const absolute = attached(ctx, literal) ? literal : await resolveForReading(ctx.cwd, literal);
 		const verdict = assessRead(absolute, ctx.cwd, {

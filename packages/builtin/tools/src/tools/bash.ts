@@ -1,5 +1,5 @@
 /**
- * bash 和 bash_output：在会话的工作目录里跑一条 shell 命令，跑在审批层给的沙箱模式里。
+ * bash 和 bash_output：在会话的工作目录里跑一条 shell 命令，经 `ToolRun.exec` 跑在本体按权限模式定的沙箱里。
  *
  * 不会改动的命令（`isReadOnlyCommand`）不问人，也能和相邻的只读调用同时跑；其余的动手前问。命令写明的路径先按
  * 文件工具的读边界判一遍（`authorizeCommandReads`）。超过默认等待还在跑的命令不杀，转成这个会话的后台任务，
@@ -10,10 +10,10 @@
 import { randomUUID } from "node:crypto";
 import { commandShell } from "@plume/platform";
 import type { DeliveryDetails } from "../delivery.ts";
-import { escalationDeclined, escalationHint, ESCALATION_TARGETS, escalationTarget, sandboxDenialMarker, validateEscalationArgs } from "../escalation.ts";
+import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE, sandboxDenialMarker } from "../escalation.ts";
 import { words } from "../messages.ts";
 import { isReadOnlyCommand } from "../read-only-command.ts";
-import type { BackgroundChannel, SandboxMode, SandboxProcess, SandboxService } from "@plume/contract";
+import type { BackgroundChannel, RunProcess, SandboxProcess } from "@plume/contract";
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
 import { commandChangesForJob, withCommandChanges } from "./command-changes.ts";
 import { OutputBuffer } from "./bash-output.ts";
@@ -34,9 +34,6 @@ const MAX_OUTPUT_CHARS = 60_000;
  * 吃掉一大块上下文；超过的部分按整行省略，省略了哪几行写在标记里。
  */
 const MODEL_OUTPUT_CHARS = 35_400;
-// i18n-exempt：工具结果是发给模型的，不随界面语言变。
-const ESCALATION_READ_ONLY =
-	"Not run: this conversation may not change files right now, so commands run in a read-only sandbox and may not leave it. Run it without `escalate`.";
 
 interface BashArgs {
 	command: string;
@@ -112,27 +109,20 @@ export const bashTool: Tool<BashArgs> = {
 		if (reroute) return { ...errorResult(reroute.message), details: { kind: "reroute", tool: reroute.tool } };
 
 		/*
-		 * 提权在任何东西跑起来之前定下。不比现在宽的申请什么都不授予，没东西可决定，不到人面前；到人面前的是模型自己说的理由。
-		 * 提权只能由人答：它要的是放宽沙箱，外层的放行和「以后不再问」都不是对这件事的回答（见 tool-run.ts）。
+		 * 提权在任何东西跑起来之前定下，归本体（`ToolRun.escalate`）：`readOnly` 下（计划模式）、没给理由、不比现在宽的申请直接拒，
+		 * 不到人面前；到人面前的是模型自己说的理由，只认人答，批了这次调用的命令才跑在更宽的那一档。理由只能跟着提权一起来。
 		 */
-		let mode = ctx.sandboxMode;
-		/*
-		 * 外层要求这次不改工作区（计划模式）时命令一律在只读沙箱里跑，提权就是要离开它：不到人面前，直接拒。
-		 * 这一条归跑命令的工具自己守，`ToolRun.readOnly` 说的就是它；外层不按参数名猜哪次调用在提权。
-		 */
-		if (ctx.readOnly && args.escalate !== undefined) return errorResult(ESCALATION_READ_ONLY);
-		try {
-			validateEscalationArgs(args.escalate, args.justification);
-			if (args.escalate !== undefined) {
-				const target = escalationTarget(args.escalate, mode ?? "danger-full-access") as Exclude<SandboxMode, "read-only">;
-				const title = words().escalate(args.description ?? (args.command.split("\n")[0] ?? "").slice(0, 60));
-				const decision = await ctx.requestApproval?.({ kind: "command", title, detail: args.command, reason: args.justification!, escalation: target });
-				// i18n-exempt：工具结果是发给模型的，不随界面语言变。
-				if (decision === "reject") return errorResult(escalationDeclined("命令", target));
-				mode = target;
-			}
-		} catch (error) {
-			return errorResult(error instanceof Error ? error.message : String(error));
+		if (args.escalate === undefined) {
+			if (args.justification !== undefined) return errorResult(JUSTIFICATION_ALONE);
+		} else {
+			const title = words().escalate(args.description ?? (args.command.split("\n")[0] ?? "").slice(0, 60));
+			const outcome = await escalateOf(ctx)({
+				mode: args.escalate as Parameters<NonNullable<ToolContext["escalate"]>>[0]["mode"],
+				justification: args.justification as string,
+				title,
+				detail: args.command,
+			});
+			if (!outcome.granted) return errorResult(outcome.message);
 		}
 
 		// 提权的已经带着更宽的模式问过了，问一次就够。
@@ -145,7 +135,7 @@ export const bashTool: Tool<BashArgs> = {
 		 */
 		const observe: typeof withCommandChanges = isReadOnlyCommand(args.command) ? (ctx, action) => action(ctx) : withCommandChanges;
 		return observe(ctx, async (ctx) => {
-			if (args.run_in_background) return startBackground(args, ctx, mode);
+			if (args.run_in_background) return startBackground(args, ctx);
 
 			/*
 			 * 模型给的 timeout 是上限，默认的那个只是不再等的时刻。
@@ -159,15 +149,16 @@ export const bashTool: Tool<BashArgs> = {
 			const outputLog = await openOutputLog(ctx);
 			/** 命令活过了这次调用：日志留给接手的后台任务接着写。 */
 			let handedOff = false;
+			const spawned: RunProcess | Error = await Promise.resolve()
+				.then(() => execOf(ctx)(args.command))
+				.catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
 			const result = await new Promise<ToolResult>((resolve) => {
-				let child: SandboxProcess;
-				try {
-					child = sandboxOf(ctx).run(args.command, runOptions(ctx, mode));
-				} catch (error) {
+				if (spawned instanceof Error) {
 					// 给不了沙箱的抛错；模型拿到的是这句话，不是崩溃。
-					resolve(errorResult(`Failed to start command: ${error instanceof Error ? error.message : String(error)}`));
+					resolve(errorResult(`Failed to start command: ${spawned.message}`));
 					return;
 				}
+				const child = spawned;
 
 				// 累计的原始输出；给模型看的那一份每次从它截一次，见 `bash-output.ts`。
 				const buffer = new OutputBuffer();
@@ -243,18 +234,18 @@ export const bashTool: Tool<BashArgs> = {
 					 * 是沙箱拒的就说出来：被拒的写入和磁盘满、路径错一样只是非零退出，分不清的模型会换个写法再写三遍，
 					 * 然后报告工具坏了。标记把「失败了」说成「被拒了」，旁边是正当的出路。
 					 */
-					const denied = mode !== undefined && mode !== "danger-full-access" && sandboxOf(ctx).looksDenied(output());
+					const denied = child.denied(output());
 					/*
 					 * 按人的读法判失败（见 `exit-status.ts`）：`grep` 没找到、`gh pr checks` 报检查还在跑，都是答案。
 					 * 退出码总是用字写给模型：只有部分服务商的协议带 `is_error`，别的协议下失败的构建和通过的长得一样。
 					 */
 					// 按命令是照哪个 shell 写的读：会话宣布的模式选的那个，提权不改它。
-					const reading = readExit(args.command, code, output(), commandShell(ctx.sandboxMode).kind);
+					const reading = readExit(args.command, code, output(), (ctx.shell ?? commandShell()).kind);
 					const status = code === 0 ? undefined : `[${describeStatus(code, signal)}${reading.meaning ? ` — ${reading.meaning}; not a failure` : ""}]`;
 					const leftBehind = lingering ? adoptJob(ctx, args, lingering, undefined) : undefined;
 					// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 					const markers = [
-						...(denied && mode ? [sandboxDenialMarker(mode), escalationHint("命令")] : []),
+						...(denied ? [sandboxDenialMarker(child.mode), escalationHint("命令")] : []),
 						...(leftBehind
 							? [
 									`[processes it started in the background are still running and holding its output — background job ${leftBehind}. ` +
@@ -433,34 +424,31 @@ export function attribute(value: string): string {
 	return value.replaceAll('"', "'").replace(/\s+/g, " ").trim();
 }
 
-/** 命令经服务 `sandbox` 跑；没有它（不该发生：plume.tools 要等它就位才加载）就起不了命令。 */
-function sandboxOf(ctx: ToolContext): SandboxService {
-	if (!ctx.sandbox) throw new Error("no sandbox service to run commands");
-	return ctx.sandbox;
+/** 命令经 `ToolRun.exec` 跑；没有它（直接调工具的测试没给）就起不了命令。 */
+function execOf(ctx: ToolContext): NonNullable<ToolContext["exec"]> {
+	if (!ctx.exec) throw new Error("no exec to run commands");
+	return ctx.exec;
 }
 
-/**
- * 交给服务 `sandbox` 的选项：`mode` 是这一次跑在哪一档（提权过的就是更宽的那档），`shellMode` 是会话宣布的那一档，
- * shell 按它选：提权的命令仍是模型照系统提示词里那个 shell 写的，提成完全访问的 PowerShell 命令还是 PowerShell。
- */
-function runOptions(ctx: ToolContext, mode: SandboxMode | undefined): Parameters<SandboxService["run"]>[1] {
-	return { cwd: ctx.cwd, ...(mode ? { mode } : {}), ...(ctx.sandboxMode ? { shellMode: ctx.sandboxMode } : {}) };
+/** 提权经 `ToolRun.escalate` 申请；没有它（直接调工具的测试没给）就申请不了。 */
+function escalateOf(ctx: ToolContext): NonNullable<ToolContext["escalate"]> {
+	if (!ctx.escalate) return async () => ({ granted: false, message: "Escalation is not available here." });
+	return ctx.escalate;
 }
 
 /**
  * 把一条命令起成这个会话的后台任务：进沙箱、写日志、能用 bash_output 读、结束时送达。`monitor` 也从这里起，
- * 它和 `run_in_background` 的不同只在怎么处理输出，不在怎么跑。`mode` 是提权后的那档，不给就是会话的。
+ * 它和 `run_in_background` 的不同只在怎么处理输出，不在怎么跑。这次调用提权批过的，命令跑在那一档（本体记着）。
  */
 export async function launchJob(
 	args: { command: string; description?: string },
 	ctx: ToolContext,
 	kind?: "monitor",
-	mode: SandboxMode | undefined = ctx.sandboxMode,
 ): Promise<{ job: BackgroundJob; process: SandboxProcess } | { error: string }> {
 	const outputLog = await openOutputLog(ctx);
 	let child: SandboxProcess;
 	try {
-		child = sandboxOf(ctx).run(args.command, runOptions(ctx, mode));
+		child = await execOf(ctx)(args.command);
 	} catch (error) {
 		await outputLog?.close();
 		return { error: `Failed to start command: ${error instanceof Error ? error.message : String(error)}` };
@@ -470,8 +458,8 @@ export async function launchJob(
 	return { job, process: child };
 }
 
-async function startBackground(args: BashArgs, ctx: ToolContext, mode: SandboxMode | undefined): Promise<ToolResult> {
-	const started = await launchJob(args, ctx, undefined, mode);
+async function startBackground(args: BashArgs, ctx: ToolContext): Promise<ToolResult> {
+	const started = await launchJob(args, ctx);
 	if ("error" in started) return errorResult(started.error);
 	const { id, outputPath } = started.job;
 	return {

@@ -1,7 +1,7 @@
 import { isUtf8 } from "node:buffer";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
-import type { SandboxProcess, SandboxService } from "@plume/contract";
+import type { SandboxProcess } from "@plume/contract";
 import { words } from "../messages.ts";
 import { beginMutation } from "./change-lock.ts";
 import { recordFileChange } from "./file-changes.ts";
@@ -163,19 +163,16 @@ export async function withCommandChanges(ctx: ToolContext, action: (ctx: ToolCon
 	const observation: Observation = {
 		read: () => (ended ? completion : Promise.resolve({ changeIds: [], changeWarning: changeWarning ?? words().changeBackground })),
 	};
-	const sandbox: SandboxService | undefined = ctx.sandbox
-		? {
-				looksDenied: (output) => ctx.sandbox!.looksDenied(output),
-				run(command, options) {
-					const process = ctx.sandbox!.run(command, options);
-					started = true;
-					watch(process);
-					return process;
-				},
+	const exec: ToolContext["exec"] = ctx.exec
+		? async (command, options) => {
+				const process = await ctx.exec!(command, options);
+				started = true;
+				watch(process);
+				return process;
 			}
 		: undefined;
 	try {
-		const result = await action({ ...ctx, ...(sandbox ? { sandbox } : {}) });
+		const result = await action({ ...ctx, ...(exec ? { exec } : {}) });
 		if (!persistent || !started) return result;
 		const details = result.details && typeof result.details === "object" ? (result.details as Record<string, unknown>) : {};
 		const id = typeof details.jobId === "string" ? details.jobId : typeof details.id === "string" ? details.id : undefined;
