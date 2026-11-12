@@ -1,5 +1,6 @@
 /**
- * 插件检查（`pnpm check` 的一部分）：写插件只靠 skill `skills/plume-plugin` 和公开接口，这里查两头都守住了。
+ * 插件检查（`pnpm check` 的一部分）：写插件只靠 skill `skills/plume-plugin` 和公开接口，这里查两头都守住了；
+ * 反过来，本体也不按名字认具体插件。
  *
  * 1. 内置插件（packages/builtin/*）只引用公开接口：规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/imports.mjs），
  *    另外允许 `packages/infra/` 下的通用库（不懂 agent 业务，构建时打进插件），同样要在 package.json 里声明。
@@ -10,6 +11,8 @@
  * 3. 组件清单跟得上代码：`@plume/ui` 给插件用的名字列在 packages/client/ui/plugin-api.json（这就是它对插件公开的范围），
  *    插件从 `@plume/ui` 引用的值只能是这些名字，名单里的名字 `@plume/ui` 都要真的导出。skill 的 references/components.md
  *    由这份名单、源码里的签名和注释、`@plume/styles` 的类名组合生成，和代码对不上就失败，`--fix` 重新生成。
+ * 4. 本体的代码里不出现插件名；5. 本体不按名字认插件的工具、提示词段和送达标签（基本的文件和命令工具除外）。
+ *    名单、匹配方式和例外在 scripts/check-core-names.mjs，规则的来由见 spec/domain/plugin-primitives.md。
  *
  *   node scripts/check-plugins.mjs          # 检查
  *   node scripts/check-plugins.mjs --fix    # 另外重新生成 references/components.md
@@ -18,6 +21,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { importProblems, stripComments } from "../packages/sdk/plugin-sdk/lib/lint/imports.mjs";
+import { coreNameProblems } from "./check-core-names.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const SKILL = join(root, "skills/plume-plugin");
@@ -243,6 +247,9 @@ function componentsDoc() {
 		report(COMPONENTS_DOC, "和代码对不上（组件签名、注释或 plugin-api.json 改了）：node scripts/check-plugins.mjs --fix 重新生成");
 	}
 }
+
+// 规则 4、5：本体不按名字认具体插件。
+for (const { file, message } of coreNameProblems(root)) report(file, message);
 
 if (problems.length > 0) {
 	console.error(`插件检查没通过（规则见 scripts/check-plugins.mjs，写法见 skills/plume-plugin）：\n\n${problems.join("\n")}\n`);
