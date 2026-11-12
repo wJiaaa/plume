@@ -61,6 +61,7 @@ import type {
 	ReplyActionProps,
 	UiContext,
 	UiPlugin,
+	UiServices,
 	WelcomeLine,
 } from "@plume/contract/ui";
 import { text } from "@plume/styles";
@@ -88,6 +89,7 @@ import { captureWindow } from "./image/capture-window.ts";
 import { requestReveal } from "./conversation/reveal.ts";
 import { setManagedSkin, updateAppearance, useAppearance } from "./appearance-settings.ts";
 import { uiLifetime } from "./ui-lifetime.ts";
+import { provideUiService, removeUiServices, uiService } from "./ui-services.ts";
 import { skinRegistry } from "./skins.ts";
 import { PluginChatBackgroundSettings } from "./plugin-background.tsx";
 import { matchingToolCards } from "./tool-card-matching.ts";
@@ -618,7 +620,6 @@ let conversationCards: ConversationCardEntry[] = [];
 
 const sessionToolbar = new Map<string, Entry<{ session: SessionView }>[]>();
 let sessionMenuItems: Array<{ key: string; plugin: string; item: Parameters<UiContext["sessionMenuItem"]>[1] }> = [];
-let jobViewers: Array<{ plugin: string; view: Parameters<UiContext["jobViewer"]>[0] }> = [];
 let agentDeliveries: Array<{ plugin: string; component: ComponentType<AgentDeliveryProps> }> = [];
 
 export function SessionToolbar({ session }: { session: SessionView }) {
@@ -661,10 +662,10 @@ export function SessionMenuItems({ session, onClose }: { session: SessionView["s
 	);
 }
 
-/** 后台任务的查看入口（`ui.jobViewer`）：后登记的生效，撤下恢复前一个。 */
-function useJobViewer(): Parameters<UiContext["jobViewer"]>[0] | undefined {
+/** 一项界面侧服务现在生效的实现（`ui.useService`）；提供方换了、撤了，登记的修订号跟着变，用它的组件重画。 */
+function useUiService<K extends keyof UiServices>(name: K): UiServices[K] | undefined {
 	usePluginUis();
-	return jobViewers.at(-1)?.view;
+	return uiService(name) as UiServices[K] | undefined;
 }
 
 /**
@@ -1423,11 +1424,8 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			const key = `${name}/${id}`;
 			sessionMenuItems = [...sessionMenuItems.filter((entry) => entry.key !== key), { key, plugin: name, item }];
 		},
-		jobViewer: (view) => {
-			if (typeof view !== "function") throw new Error("Invalid jobViewer");
-			jobViewers = [...jobViewers.filter((entry) => entry.plugin !== name), { plugin: name, view }];
-		},
-		useJobViewer,
+		provide: (service, implementation) => provideUiService(name, service, implementation),
+		useService: useUiService,
 		agentDelivery: (component) => {
 			if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error("Invalid agentDelivery");
 			agentDeliveries = [...agentDeliveries.filter((entry) => entry.plugin !== name), { plugin: name, component }];
@@ -1627,7 +1625,7 @@ function unloadPluginUi(name: string): void {
 	environmentSections = environmentSections.filter((entry) => !entry.key.startsWith(`${name}/`));
 	for (const [key, entries] of sessionToolbar) if (entries.some((entry) => entry.plugin === name)) sessionToolbar.delete(key);
 	sessionMenuItems = sessionMenuItems.filter((entry) => entry.plugin !== name);
-	jobViewers = jobViewers.filter((entry) => entry.plugin !== name);
+	removeUiServices(name);
 	agentDeliveries = agentDeliveries.filter((entry) => entry.plugin !== name);
 	turnFooters = turnFooters.filter((entry) => entry.plugin !== name);
 	replyActions = replyActions.filter((entry) => entry.plugin !== name);

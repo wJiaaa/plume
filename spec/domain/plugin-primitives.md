@@ -27,8 +27,9 @@
 | 接手者 | 某一类东西由谁画、谁打开，按工具名、`kind`、扩展名登记，没人登记时本体有通用的 | `ui.toolCard`、`ui.toolLine`、`ui.requestCard`、`ui.agentDelivery`、`ui.documentViewer`、`ui.linkOpener` |
 | 导航 | 人点了按钮以后去哪 | `ui.openPanel`、`ui.openPage`、`ui.openSettings`、`ui.openSession`、`ui.draftInSession` |
 | 数据 | 界面拿数据只有三个来源 | 工具结果的 `details`（随会话保存）、本体的实时状态（`ui.useSession`、`ui.contextBreakdown`）、插件自己的逻辑入口（`ctx.serve` / `ui.remote()`） |
+| 服务 | 插件的界面入口之间按名字配合，本体只记账、不用它 | `ui.provide`，用的一方 `ui.useService`；类型在 `UiServices` |
 
-新的界面需求先归进这四类，归不进去才加方法。
+新的界面需求先归进这五类，归不进去才加方法。
 
 ### 什么时候可以给 `@plume/contract` 加东西
 
@@ -51,7 +52,7 @@
 ### 插件之间怎么互相用
 
 - **逻辑侧走服务。** 一方 `ctx.provide(名字, 实现)`，另一方把名字写进 `inject`、`ctx.use(名字)`；类型写在 `@plume/contract` 的 `Services` 里。依赖的是服务名，不是插件名。插件不按名字找另一个插件，不认另一个插件的工具名、段名（内置插件不认市场插件）。
-- **界面侧没有通用的服务。** 能做成接手者的做成接手者：本体给一个组件或入口，插件按种类登记，本体和别的插件都经本体用（`ui.documentViewer` 登记、`ui.DocumentPreview` 使用）。必须是「一个插件提供、另一个插件直接拿来调」的，现在只有一对：`ui.jobViewer` / `ui.useJobViewer`（plume.diagnostics 提供任务查看，plume.tools 画的后台命令那一行点了用它），一事一接口。出现第二对时再抽成通用的界面侧服务，不提前抽。
+- **界面侧也走服务，但先看是不是接手者或槽位。** 本体自己也要用的，做成接手者：本体给一个组件或入口，插件按种类登记，本体和别的插件都经本体用（`ui.documentViewer` 登记、`ui.DocumentPreview` 使用；`ui.linkOpener`、`ui.terminalOpener` 由本体的入口调）。许多插件各放一份、由一个插件画出来的，是槽位（`ui.environmentSection` 由宿主记账、包错误边界，画环境卡片的插件经 `ui.useEnvironmentSections` 拿）。只在「一个插件提供、另一个插件直接拿来调」、本体不用它时走界面侧服务：一方 `ui.provide(名字, 实现)`，另一方在组件里 `ui.useService(名字)`；类型写在 `@plume/contract/ui` 的 `UiServices` 里，服务名说能力（`background.jobs.view`：plume.diagnostics 提供打开后台任务，plume.tools 画的后台命令那一行点了用它）。和逻辑侧不同的地方：没有 `inject` 和加载先后，没人提供时拿到 `undefined`，用的一方不给那个入口；后提供的生效（界面入口按先内置、再装上的顺序加载，装上的就换掉内置的），撤下恢复前一个；提供方换了用的一方跟着重画；拿到的是提供方那一份，宿主不包。不为一对插件再加一事一接口。
 
 ## 检查点
 

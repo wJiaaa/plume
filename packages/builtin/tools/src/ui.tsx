@@ -24,7 +24,7 @@ function detailsOf(report: DeliveredReport): DeliveryDetails | undefined {
 function deliveries(ui: UiContext): ComponentType<AgentDeliveryProps> {
 	return function ToolsDelivery({ sessionId, reports }: AgentDeliveryProps) {
 		const text = MESSAGES[useI18n().resolvedLocale];
-		const view = ui.useJobViewer();
+		const viewer = ui.useService("background.jobs.view");
 		const jobs = reports.flatMap((report) => {
 			const details = detailsOf(report);
 			return details?.kind === "job" ? [{ report, details }] : [];
@@ -41,7 +41,7 @@ function deliveries(ui: UiContext): ComponentType<AgentDeliveryProps> {
 						</div>
 					);
 				})}
-				{jobs.length > 0 && <JobRow jobs={jobs} open={view ? () => view(sessionId, jobs[0]!.report.id) : undefined} />}
+				{jobs.length > 0 && <JobRow jobs={jobs} open={viewer ? () => viewer.open(sessionId, jobs[0]!.report.id) : undefined} />}
 			</>
 		);
 	};

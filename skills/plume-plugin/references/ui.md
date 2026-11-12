@@ -98,6 +98,7 @@ export default {
 | `ui.Conversation` | 产品的对话视图组件：画一个会话（插件自己的子会话、独立会话），可选底下一个输入框 |
 | `ui.Markdown` | `{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走 |
 | `ui.remote<T>()` | 调自己逻辑入口经 `ctx.serve` 开的对象 |
+| `ui.provide(name, service)` / `ui.useService(name)` | 界面入口之间的服务：一方提供，别的插件的组件里按名字拿到（没人提供是 undefined），见下文「服务」 |
 
 ## 会话变化与停止按钮
 
@@ -561,6 +562,36 @@ apply(ui) {
 - 每个方法返回一个调用：`await` 拿结果；逻辑入口返回异步迭代器的，`for await` 逐个拿中间值；`.cancel()` 取消，对端的 `signal` 中止。组件卸载时记得取消还在流的调用。
 - 逻辑入口没开或插件停用了，调用以错误结束，界面要能显示这种状态。
 
+## 服务：给别的插件的界面入口用
+
+一个插件的界面入口提供实现，别的插件的界面入口按名字拿来用，两边都不用知道对方是谁。和逻辑入口的服务（`ctx.provide` / `ctx.use`）是同一个意思，但不经宿主排加载先后：
+
+```tsx
+// 提供的一方
+apply(ui) {
+	ui.provide("background.jobs.view", { open: (sessionId, jobId) => { /* 选中任务，ui.openPanel(...) */ } });
+}
+
+// 用的一方：在组件里拿
+function OpenJob({ sessionId, jobId }: { sessionId: string; jobId: string }) {
+	const viewer = ui.useService("background.jobs.view");
+	if (!viewer) return null; // 没人提供：不给这个入口
+	return <Button onClick={() => viewer.open(sessionId, jobId)}>查看输出</Button>;
+}
+```
+
+- 服务的接口是 `@plume/contract/ui` 里的 `UiServices`。自己定义的服务用声明合并加一项：`declare module "@plume/contract/ui" { interface UiServices { "my.thing": { open(id: string): void } } }`。服务名说能力，不带插件名。
+- `ui.useService` 是 React hook（规则同 hook），只在组件里调。没人提供（提供方没装、停用了）时是 `undefined`，用的一方别画那个入口或别让它能点；不用写 `inject`，也不会因此等着不加载。
+- 同一项服务有几个插件提供时后提供的生效（界面入口先装内置的、再装本地上传和市场的，所以装一个提供同名服务的插件就换掉内置的），它停用后前一个恢复；同一插件再提供同名的换掉自己前一个。提供方换了、撤了，用它的组件跟着重画。
+- 拿到的就是提供方给的那个对象，宿主不包一层；别往上面挂东西。
+- 本体自己也要用的（打开网址、终端、文件预览）不是服务，是按种类登记的接手者（`ui.linkOpener`、`ui.terminalOpener`、`ui.documentViewer`）。
+
+Plume 自带的界面侧服务：
+
+| 服务 | 提供方 | 接口 |
+| --- | --- | --- |
+| `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（服务 `background.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
+
 ## 共享模块
 
 `react`、`react/jsx-runtime`、`@plume/ui`、`@plume/styles` 不打包，运行时用产品的那一份；其余（包括 `@plume/ui/icons` 和第三方库）打进 `dist/ui.mjs`。宿主启动时就加载每个插件的 `ui.mjs`：只在某个操作里才用到的大库（预览、图表、编辑器）写成 `await import("…")`，构建时拆到 `dist/chunks/`，用到时才取。能用哪些组件、各自的签名和用法，见 [components.md](components.md)（从源码生成）；`@plume/ui` 里没列在那里的导出是产品内部用的，引用了 `pnpm check:plugins` 会拦。
@@ -569,7 +600,6 @@ apply(ui) {
 
 - `ui.sessionToolbar(id, Component)` 在有会话的标题栏放局部控件，收到 `{ session }`；新会话不画，不能接管标题与布局。使用 `IconButton`，停用自动撤下。
 - `ui.sessionMenuItem(id, { label, icon?, run })` 在会话操作菜单加一项。`run` 收到被点的会话摘要，异步操作固定使用它的 id，不跟随焦点；报错由宿主提示。同插件同 id 替换。
-- `ui.jobViewer((sessionId, jobId) => ...)` 登记后台任务（服务 `background.jobs` 列出的那些）的查看入口，只在人点击时调用；后登记的生效，撤下恢复前一个，不改变送达或命令状态。画后台任务那一行的插件用 `ui.useJobViewer()` 拿到它（没人登记时是 `undefined`，那一行就不给点）：两边都不用知道对方是谁。
 - `ui.agentDelivery(Component)` 画本插件交回的结果在对话里的那一行（`ctx.sessions.report`、`channel.report`、`reportBack` 带了 `delivery` 的）：收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给（连着几次只带 `inline` 的送达并成一次），画成一行（子 Agent 的「消息来自 @explore」、plume.tools 的「后台命令完成」，用 `FlowRow`）。每份的 `details` 是你交的时候给的自己的数据，宿主不读，原样带回来。宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下；没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（新会话交回）画成「来自新会话」、点了过去；组件出错时只丢这一行。
 - `ui.ProjectOpener` 以 `{ path }` 显示目录的打开方式，复用文件预览的默认应用与选择菜单；只有用户点击才调用系统打开。
 - `ui.environmentSection(id, Component, { label, order?, attention? })` 往环境卡片里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。没东西时返回 null。order 排进卡片自己的几节（打开方式 0、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、引用 90）和别的插件的节之间；内置插件已经用了的：后台任务 10、定时唤醒 50、压缩记录 85（`plume.diagnostics`），计划 30（`plume.plan`），建议的新会话 40（`plume.spawn-session`）。卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。`attention` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关的说明后面。要提醒的是两种事：等人回来决定的，和会自己叫醒这个会话的（人不回来，会话也会自己开一轮）；普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。例子：内置的 `plume.spawn-session` 用 40 放「建议的新会话」，还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」；`plume.diagnostics` 的后台任务一节说「N 个监视在跑」（监视有输出就开一轮，普通后台命令不算），定时唤醒一节说「N 个定时唤醒待触发」。

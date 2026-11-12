@@ -896,12 +896,15 @@ export interface UiContext {
 		item: { label: LocalizedText; icon?: ComponentType<{ size?: number }>; run(session: SessionSummary): void | Promise<void> },
 	): void;
 	/**
-	 * 后台任务（服务 `background.jobs` 列出的那些）的查看入口：人点了对话里某个后台任务那一行时打开它。后注册者生效，停用时恢复前一个。
-	 * 画那一行的插件经 `useJobViewer` 拿到它，两边都不用知道对方是谁。
+	 * 提供一项界面侧的服务（见 `UiServices`）给别的插件的界面入口用，停用时撤下。同一项服务有几个插件提供时后提供的生效，
+	 * 它撤下后前一个恢复；同一插件再提供同名的换掉自己前一个。
 	 */
-	jobViewer(view: (sessionId: string, jobId: string) => void): void;
-	/** 现在生效的后台任务查看入口，没人登记时是 `undefined`（那一行就不给点）；登记换了跟着重画。 */
-	useJobViewer(): ((sessionId: string, jobId: string) => void) | undefined;
+	provide<K extends keyof UiServices>(name: K, service: UiServices[K]): void;
+	/**
+	 * React hook：一项界面侧服务现在生效的实现，没人提供时是 `undefined`（用的一方据此不给那个入口）；提供方换了、撤了跟着重画。
+	 * 拿到的就是提供方给的那一份，不用声明依赖。只在组件里调，规则同 React 的 hook。
+	 */
+	useService<K extends keyof UiServices>(name: K): UiServices[K] | undefined;
 	/**
 	 * 本插件交回的结果（`ctx.sessions.report`、`BackgroundChannel.report`、`LaunchedSession.reportBack` 带了 `delivery` 的）在对话里
 	 * 画成哪一行：一次送达里本插件交的几份一起交给它。只画自己交的那几份，别的插件交的由它们自己登记的组件画；同一插件再登记换掉前一个，
@@ -1203,6 +1206,16 @@ export interface UiContext {
 	 * T 写逻辑入口那边的接口，末尾的 CallContext 参数这边不传。
 	 */
 	remote<T extends object>(): Remote<T>;
+}
+
+/**
+ * 界面侧的服务名 → 服务的接口：一个插件的界面入口经 `ui.provide` 给出实现，别的插件的界面入口经 `ui.useService` 拿到。
+ * 和逻辑侧的 `Services` 一样依赖的是名字、不是某个插件；本体要用的、按种类登记的（`ui.documentViewer`、`ui.linkOpener`……）不走这里。
+ * 仓库外的插件给自己的服务用声明合并加一项：`declare module "@plume/contract/ui" { interface UiServices { … } }`。
+ */
+export interface UiServices {
+	/** 打开一个后台任务（服务 `background.jobs` 列出的那些）给人看：人点了对话里那个后台任务那一行时调，不改变送达或命令状态。 */
+	"background.jobs.view": { open(sessionId: string, jobId: string): void };
 }
 
 /** `ui.draftInSession` 放进输入框的东西。 */

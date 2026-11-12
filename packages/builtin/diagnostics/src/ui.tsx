@@ -105,6 +105,6 @@ export default {
 				runtime.openTrace(session.id);
 			},
 		});
-		ui.jobViewer(runtime.openJob);
+		ui.provide("background.jobs.view", { open: runtime.openJob });
 	},
 } satisfies UiPlugin;

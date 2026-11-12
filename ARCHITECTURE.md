@@ -70,7 +70,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 ## 运行诊断与环境卡片
 
-内置插件 `plume.diagnostics` 提供任务面板和调用轨迹，并经公开的 `ui.environmentSection` 往环境卡片里放后台任务、定时唤醒、压缩记录三节；环境卡片本身（标题栏开关、卡片、分节菜单）是内置插件 `plume.environment`，两者不互相点名，只经宿主的分节注册表配合。工具插件以服务 `background.jobs` 公开按会话隔离的任务元数据、尾部输出和停止；读取不消费模型未读输出。宿主通过 `ctx.sessions.observe` 提供独立副本的只读观察，观察者异常不改变执行，已删除会话的迟到事件不再转交。插件将观察存在私有 `diagnostics.db`，撤回截断、删除清理；会话消息与工具结果仍从公开视图读取。请求观察带着实际发出的整段历史，插件把系统提示词、工具表和每条消息按内容指纹在会话内只存一份，请求只记指纹，库随会话长度线性增长；轨迹列表只拿到条数和系统提示词，打开某次请求的详情时才拼回它的消息和工具表。环境卡片里的几节和开关的圆点（各节的 `attention`）只读任务与唤醒，不读观察。界面经 `ui.sessionMenuItem`、`ui.jobViewer`、`ui.environmentSection` 接入入口，面板使用既有注册方式。
+内置插件 `plume.diagnostics` 提供任务面板和调用轨迹，并经公开的 `ui.environmentSection` 往环境卡片里放后台任务、定时唤醒、压缩记录三节；环境卡片本身（标题栏开关、卡片、分节菜单）是内置插件 `plume.environment`，两者不互相点名，只经宿主的分节注册表配合。工具插件以服务 `background.jobs` 公开按会话隔离的任务元数据、尾部输出和停止；读取不消费模型未读输出。宿主通过 `ctx.sessions.observe` 提供独立副本的只读观察，观察者异常不改变执行，已删除会话的迟到事件不再转交。插件将观察存在私有 `diagnostics.db`，撤回截断、删除清理；会话消息与工具结果仍从公开视图读取。请求观察带着实际发出的整段历史，插件把系统提示词、工具表和每条消息按内容指纹在会话内只存一份，请求只记指纹，库随会话长度线性增长；轨迹列表只拿到条数和系统提示词，打开某次请求的详情时才拼回它的消息和工具表。环境卡片里的几节和开关的圆点（各节的 `attention`）只读任务与唤醒，不读观察。界面经 `ui.sessionMenuItem`、`ui.environmentSection` 接入入口，经界面侧服务 `background.jobs.view`（`ui.provide`）让 plume.tools 画的后台命令那一行点开任务面板，面板使用既有注册方式。
 
 ## 数据
 
