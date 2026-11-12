@@ -21,7 +21,11 @@
 
 ## 业务域（domain/）—— 命中业务对象或业务链路时读
 
-暂时没有 rule。会话、插件宿主、钩子的设计目前在 [`agent-extension.md`](../agent-extension.md)。
+| rule | 何时读（when） | 触发文件（files） |
+|---|---|---|
+| [plugin-primitives](./domain/plugin-primitives.md) ⚠️ | 给插件加接口（钩子、服务、`ToolRun`、`ctx`、`ui` 的成员）；本体要对插件的工具、提示词段、送达、会话区别对待；插件之间要互相用；`pnpm check:plugins` 报本体认了插件 | `packages/contract/src/{plugin,ui,service}.ts`、`packages/core/agent/src/**`、`apps/desktop/src/renderer/plugins.tsx`、`apps/desktop/src/renderer/conversation/**`、`scripts/check-core-names.mjs` |
+
+会话、插件宿主、钩子的设计在 [`agent-extension.md`](../agent-extension.md)。
 
 写插件（插件仓库的 `plugins/**`）或改插件接口（`packages/contract/src/plugin.ts`、`packages/contract/src/ui.ts`）时，必须读 skill [`plume-plugin`](../skills/plume-plugin/SKILL.md)；改了接口同步它，`pnpm check:plugins` 会查。
 

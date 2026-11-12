@@ -1,0 +1,73 @@
+# 插件原语
+
+管本体（`packages/core`、`packages/contract`、`packages/client`、`apps/desktop/src`）给插件什么、怎么给：本体只给原语，功能由插件用原语拼出来；本体按插件的声明和接口的形状办事，不按名字认具体插件。给 `@plume/contract` 加插件接口、在本体里为插件的东西分支、加钩子／服务／界面扩展点之前读。每个接口怎么用见 [`agent-extension.md`](../../agent-extension.md) 和 skill [`plume-plugin`](../../skills/plume-plugin/SKILL.md)，这里只写准入规则。
+
+## 开发准则
+
+### 原语清单
+
+新需求先拆成下面这些原语的组合，拆得出来就不加接口。
+
+逻辑侧（逻辑入口的 `ctx`、工具的 `run`）：
+
+| 原语 | 是什么 | 接口 |
+| --- | --- | --- |
+| 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`、`session.rewind`），`ctx.tools.register` |
+| 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
+| 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
+| 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话；会话是哪一种 | `ctx.sessions`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
+| 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
+| 服务 | 插件之间按名字配合，装一个同名的就换掉实现 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
+
+界面侧（界面入口的 `ui`）：
+
+| 原语 | 是什么 | 例子 |
+| --- | --- | --- |
+| 槽位 | 位置是本体的，插件往里放内容 | `ui.panel`、`ui.page`、`ui.composerItem`、`ui.conversationCard`、`ui.settingsSection`、`ui.replyAction` |
+| 接手者 | 某一类东西由谁画、谁打开，按工具名、`kind`、扩展名登记，没人登记时本体有通用的 | `ui.toolCard`、`ui.toolLine`、`ui.requestCard`、`ui.agentDelivery`、`ui.documentViewer`、`ui.linkOpener` |
+| 导航 | 人点了按钮以后去哪 | `ui.openPanel`、`ui.openPage`、`ui.openSettings`、`ui.openSession`、`ui.draftInSession` |
+| 数据 | 界面拿数据只有三个来源 | 工具结果的 `details`（随会话保存）、本体的实时状态（`ui.useSession`、`ui.contextBreakdown`）、插件自己的逻辑入口（`ctx.serve` / `ui.remote()`） |
+
+新的界面需求先归进这四类，归不进去才加方法。
+
+### 什么时候可以给 `@plume/contract` 加东西
+
+- **先有真实插件要用。** 要加的那个插件写得出来、没有它就做不成，才加；「以后可能有人要」不算（[`safety.md`](../safety.md) 第 2、8 条）。
+- **接口说的是能力，不带插件名。** 名字、注释、字段说的是「子会话交给父会话的任务」，不是「侧边聊天的回执」；字段里不出现某个插件定的数据形状，插件自己的数据放 `details`、`payload`，本体不读。
+- **不借已有类型加标志位表达另一种东西。** 一个类型加了标志位、再关掉原来的语义，等于两种东西挤在一个类型里，每个经过它的地方都要分辨。反例：
+  - 审批的 `userOnly`：提问、计划、表单借审批卡，关掉审批语义，答案走旁路，`tool.approve` 的每一层都收到不是审批的请求。现在是单独的原语「等人」。
+  - 送达的 `kind: "job" | "session" | "wakeup"`：后台命令、新会话交回、定时唤醒各占一个值，本体按值分支画。现在本体只认通用字段，那一行由交它的插件画。
+  - 侧边聊天借排队消息（`origin: "child"`）把活交给主会话，本体随后为它长出回执条、`HandedTask`、`mainChat`。现在留下的 `QueuedMessage.origin`、`UserMessage.fromPlugin` 只是来处标注（安全边界，模型据此知道这不是用户的话），交过去的事走到哪是通用的 `ChildTask`，画成什么样归建子会话的插件。
+- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`category`，`PromptSection.category`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`），界面的 `ui.toolLine`（`checklist`、`apart`、`group`）。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条）。
+
+### 已定的例外
+
+下面这些不算违规，也不能拿来类推出新的例外；要加新的，先改这一节、说出理由。
+
+- **基本文件和命令工具的名字。** 本体认 plume.tools 的 `read`、`write`、`edit`、`ls`、`glob`、`grep`、`bash`、`bash_output`：转录里的说法、分类和图标，回复里的文件签按读写过的路径认文件，重复检测，导出会话，以及 `ToolLike`（`ui.toolLine` 的 `like`）。它们是本体界面骨架的一部分，抽成声明的代价大于收益；插件注册同名工具覆盖它们时，本体照样按这几个名字认。别的工具（`monitor`、定时唤醒、`todo_write`……）不在内。
+- **plume.prompt 的两个段名。** 上下文用量和用量记录按段名 `userInstructions`、`projectInstructions` 认出人写的指令。别的段（技能目录、记忆、能力目录）按 `PromptSection.category` 认。
+- **只有一个插件在用、但按能力命名的接口。** `ToolRun.parent` / `ParentSession`、`AgentService` 的 `queueTask` / `retryTask` / `dismissTask`、`ToolCardProps.handToParent`、`ui.queueAction`、`ui.quoteAction` 现在只有侧边聊天用。可以留，条件是：名字、注释、类型说的是能力（「子会话够得着它的父会话」「排队消息的菜单项」），不提用它的插件；本体不知道是谁在用；换一个插件来用不用改接口。哪一条不满足，就回到上一节按违规处理。
+
+### 插件之间怎么互相用
+
+- **逻辑侧走服务。** 一方 `ctx.provide(名字, 实现)`，另一方把名字写进 `inject`、`ctx.use(名字)`；类型写在 `@plume/contract` 的 `Services` 里。依赖的是服务名，不是插件名。插件不按名字找另一个插件，不认另一个插件的工具名、段名（内置插件不认市场插件）。
+- **界面侧没有通用的服务。** 能做成接手者的做成接手者：本体给一个组件或入口，插件按种类登记，本体和别的插件都经本体用（`ui.documentViewer` 登记、`ui.DocumentPreview` 使用）。必须是「一个插件提供、另一个插件直接拿来调」的，现在只有一对：`ui.jobViewer` / `ui.useJobViewer`（plume.diagnostics 提供任务查看，plume.tools 画的后台命令那一行点了用它），一事一接口。出现第二对时再抽成通用的界面侧服务，不提前抽。
+
+## 检查点
+
+- `pnpm check:plugins`（[`scripts/check-plugins.mjs`](../../scripts/check-plugins.mjs) 的规则 4、5，名单和匹配方式在 [`scripts/check-core-names.mjs`](../../scripts/check-core-names.mjs)）：
+  - 本体代码里不出现插件名：内置插件名从源码读，市场插件名登记在脚本里；以插件名打头的面板 id 也算。注释不查。
+  - 本体代码里不按名字认插件的工具、段名、送达标签：名单登记在脚本里，基本工具和 plume.prompt 的两个段名不在名单里。
+  - 正当的命中登记进脚本的 `ALLOWED`，写明理由；不放宽规则。
+- 检查查不到的，评审时对一遍：
+  - 新接口的名字、注释、类型里有没有某个插件的名字或数据形状。
+  - 有没有在已有类型上加标志位来表达另一种东西。
+  - 本体有没有按全小写的单词比较插件的东西（检查只在比较、`case`、集合里查这类词，`identity`、`skills` 这些段名不查），有没有按插件的标签解析结果文字。
+  - 加接口时那个真实插件是哪一个。
+
+## 事实来源
+
+- 接口：`packages/contract/src/plugin.ts`（`PluginContext`、`ToolRun`、`ToolDefinition`、`PromptSection`、`Services`）、`packages/contract/src/ui.ts`（`UiContext`）、`packages/contract/src/service.ts`（`AgentService`、`QueuedMessage`、`ChildTask`）
+- 本体认基本工具的地方：`apps/desktop/src/renderer/conversation/call-words.ts`、`tool-category.ts`、`turn-blocks.ts`，`apps/desktop/src/renderer/files/scope.ts`，`packages/core/agent/src/conversation-markdown.ts`、`repetition.ts`
+- 本体认段名的地方：`packages/core/agent/src/context-breakdown.ts`、`usage-record.ts`
+- 检查：`scripts/check-core-names.mjs`、`scripts/test/check-core-names.test.ts`
