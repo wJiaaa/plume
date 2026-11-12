@@ -489,6 +489,11 @@ function createWindow(hidden: boolean, appearance: Appearance): BrowserWindow {
 		},
 	});
 	guardWebviews(window.webContents);
+	// 和会话窗口、面板窗口一样：页面不能把主窗口带去别处，也不能开新窗口（新窗口会继承这里的预加载脚本）。
+	// 链接由界面自己经 openExternal / openLink 交出去。
+	window.webContents.on("will-navigate", (navigation) => navigation.preventDefault());
+	window.webContents.on("will-redirect", (navigation) => navigation.preventDefault());
+	window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 	rememberWindowState(window, { ...saved, width: saved?.width ?? WINDOW_DEFAULT.width, height: saved?.height ?? WINDOW_DEFAULT.height });
 	if (!hidden)
 		window.once("ready-to-show", () => {

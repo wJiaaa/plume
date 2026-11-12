@@ -811,6 +811,15 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				},
 				sessionId,
 			});
+			// 页面既开不出新窗口，也不能把主窗口带去别的地址。
+			const windows = BrowserWindow.getAllWindows().length;
+			const address = window.webContents.getURL();
+			if ((await page(`window.open('https://example.com/', '_blank') === null`)) !== true) throw new Error("主窗口的 window.open 应被拒绝");
+			await page(
+				`(() => { const link = document.createElement('a'); link.href = 'https://example.com/'; document.body.append(link); link.click(); link.remove(); })()`,
+			);
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			if (BrowserWindow.getAllWindows().length !== windows || window.webContents.getURL() !== address) throw new Error("页面把主窗口带去了别处或开了新窗口");
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "navigation" }));
 			await shutdown();
 			app.quit();
