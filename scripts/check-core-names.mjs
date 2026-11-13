@@ -94,6 +94,7 @@ const MARKET_TOOLS = [
 	"preview",
 	"read_pull_request",
 	"review_session",
+	"ask_implementer",
 	"list_sessions",
 	"read_session",
 	"ask_session",
