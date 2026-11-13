@@ -19,7 +19,8 @@ const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')
 
 /**
  * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟）。
- * 卡片收着时开关上有圆点、说明里数着唤醒和监视；打开后后台任务那一行有端口签、监视签，唤醒一节两项，取消掉十分钟那项；
+ * 卡片收着时开关上有圆点、说明里数着唤醒和监视；打开后后台任务那一行有端口签、监视签，服务被认成挂着的（`TrackedJob.stand`）、
+ * 会话不再算有后台的事没完，唤醒一节两项，取消掉十分钟那项；
  * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那项到点——对话里出现「定时唤醒」那一行、会话被叫醒开一轮，
  * 那一轮再约一次唤醒——最后点「全部停止」、确认，服务、监视、唤醒一起清空，之后没有「后台命令完成」那一行、不再请求模型。
  * 这段要一分多钟，大头是等唤醒的一分钟。
@@ -115,6 +116,10 @@ export async function checkEnvironment(options: {
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-port]')?.textContent.startsWith(':') === true`, "服务那一行有端口签", 30_000);
 		await until(`document.querySelector('[data-environment-monitor]') !== null`, "监视那一行有监视签");
+		// 服务打印了本机地址，plume.tools 经 `TrackedJob.stand` 标成挂着的；监视登记时就是挂着的。两样都还在跑，会话却不算还有后台的事没完
+		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后「全部停止」。
+		await wait(async () => (await agent.sessions()).find((item) => !previous.has(item.id))?.background !== true, "服务被认成挂着的，会话不再等它结束");
+		if ((await page<number>(`document.querySelectorAll('[data-environment-job]').length`)) !== 2) throw new Error("服务和监视应该都还在跑");
 		await until(`document.querySelectorAll('[data-environment-wakeup]').length === 2`, "唤醒一节两项");
 		if (await page<boolean>(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`))
 			throw new Error("卡片开着时开关上还挂着圆点");
