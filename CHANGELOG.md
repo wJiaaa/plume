@@ -2,6 +2,42 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.2.1] - 2026-11-13
+
+<!-- plume:notes en -->
+### Changes
+
+- **Turning on Full access from Settings asks first.** The "Full access" switch in Settings › General used to turn it on with one click; now it shows the same confirmation as the permission chip. Turning it off still happens right away.
+- **The Git panel no longer runs programs set by the repository.** Its automatic refresh and background fetch used to run programs a repository's Git config can name (such as fsmonitor, filters or an external diff) on your machine, even when you hadn't clicked anything. They now run in an isolated copy. Actions you start yourself (commit, push, pull, switch branch) work as before.
+- **Disabled plugins really stay off.** A disabled plugin's code used to be loaded at startup anyway; now it isn't loaded until you enable it. Plugins you disabled before this update are enabled once more; disable them again if you still want them off.
+- The permission chip catches up as soon as you switch back to Plume after editing a project's `.plume/config.json`.
+- Long tool results that were cut short can still be read in full after restarting Plume.
+- Conversations using MCP tool search no longer briefly switch back to listing every tool after a restart, which made the model re-read the whole conversation.
+- When you stop a turn while a tool is waiting for your answer, the model is no longer told the tool never ran.
+- After a plugin is updated or disabled, its panels and other UI no longer linger.
+- Screen readers announce "Saved" after saving on the Personalization page.
+
+### For plugin authors
+
+No breaking changes. New: `run.files.spill(tool, content)` saves a truncated result's full text and returns an `artifact://` address that survives restarts (declare it with `SpillDetails`); `ctx.workspace.git(root, work)` reads a repository in an isolated view that doesn't run its configured programs.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **在设置里开完全访问也要先确认。** 以前设置 › 常规里的「完全访问」开关一点就打开，现在和输入框的权限签一样，先弹确认框。关掉照旧直接关。
+- **Git 面板不再执行仓库配置的程序。** 以前就算你什么都没点，Git 面板自动刷新和后台获取时，也会在你的电脑上执行仓库的 Git 配置指定的程序（比如 fsmonitor、过滤器、外部 diff）。现在这些读取在隔离的副本里做。提交、推送、拉取、切分支这些你自己点的操作照旧。
+- **停用的插件真的不再运行。** 以前停用的插件启动时代码照样会被加载，现在要等你启用才加载。这次更新前停用过的插件会重新启用一次，还想关着的话请再停用一下。
+- 在编辑器里改了项目的 `.plume/config.json`，切回 Plume 时权限签马上跟上。
+- 被截断的长工具结果，重开应用后仍然能读到全文。
+- 用了 MCP 工具搜索的会话，重开应用后不会再短暂地变回列出全部工具，模型也就不会因此把整段对话重读一遍。
+- 工具在等你回答时按了停，模型不会再被告知那个工具从没运行过。
+- 插件更新或停用后，它的面板和别的界面不会再残留。
+- 在个性化页保存后，读屏软件会念出「已保存」。
+
+### 给插件作者
+
+没有不兼容的改动。新增：`run.files.spill(tool, content)` 把截断前的全文存下，换回重开应用后仍然有效的 `artifact://` 地址（结果上用 `SpillDetails` 声明）；`ctx.workspace.git(root, work)` 在隔离视图里读仓库，不执行仓库配置的程序。
+
 ## [0.2.0] - 2026-11-13
 
 <!-- plume:notes en -->
