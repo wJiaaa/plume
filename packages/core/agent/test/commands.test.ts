@@ -71,9 +71,14 @@ describe("三档权限对应三档沙箱", () => {
 		]);
 	});
 
-	it("完全访问不认沙箱的拒绝；受约束的档才认", async () => {
-		expect((await call("full").exec("ls")).denied("Operation not permitted")).toBe(false);
-		expect((await call("ask").exec("ls")).denied("touch: x: Operation not permitted")).toBe(process.platform === "darwin");
+	it("完全访问不认沙箱的拒绝；受约束的档才认，认出来时交回给模型的说明", async () => {
+		expect((await call("full").exec("ls")).denied("Operation not permitted")).toBeUndefined();
+		const denial = (await call("ask").exec("ls")).denied("touch: x: Operation not permitted");
+		if (process.platform !== "darwin") return expect(denial).toBeUndefined();
+		// 说出实际跑的那一档，说清是策略拒绝：模型才不会换个写法再写三遍。
+		expect(denial).toContain("当前模式：只读");
+		expect(denial).toMatch(/策略拒绝/);
+		expect(denial).toMatch(/换个写法重试没有用/);
 	});
 
 	it("ModelContext.shell 跟着权限模式和 readOnly 走，每层交接时重算", () => {

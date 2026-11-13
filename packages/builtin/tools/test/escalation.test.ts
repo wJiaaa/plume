@@ -1,21 +1,14 @@
 /**
- * 被沙箱拒了之后申请更大的权限：工具这边给模型看的话。申请合不合规矩、弹卡、换档归本体，
+ * 被沙箱拒了之后申请更大的权限：工具这边给模型看的话。申请合不合规矩、弹卡、换档、被拒的那句说明归本体，
  * 在 `packages/core/agent/test/commands.test.ts` 里测。
  */
 
 import { describe, expect, it } from "vitest";
-import { DECLINED, ESCALATION_TARGETS, escalationHint, JUSTIFICATION_ALONE, MODE_LABEL, sandboxDenialMarker } from "../src/escalation.ts";
+import { ESCALATION_TARGETS, escalationHint, JUSTIFICATION_ALONE } from "../src/escalation.ts";
 
 describe("给模型的话", () => {
 	it("可提权的目标不含 read-only", () => {
 		expect(ESCALATION_TARGETS).toEqual(["workspace-write", "danger-full-access"]);
-	});
-
-	it("拒绝标记说明是策略拒绝，不是命令坏了", () => {
-		const marker = sandboxDenialMarker("workspace-write");
-		expect(marker).toMatch(/策略拒绝/);
-		expect(marker).toMatch(/换个写法重试没有用/);
-		expect(marker).toContain(MODE_LABEL["workspace-write"]);
 	});
 
 	it("提示跟着拒绝一起到，说清怎么申请", () => {
@@ -27,9 +20,5 @@ describe("给模型的话", () => {
 
 	it("只给理由不申请：说清它不改变任何行为", () => {
 		expect(JUSTIFICATION_ALONE).toMatch(/只能和 escalate 一起用/);
-	});
-
-	it("别绕过去的那句用英文，各处拒绝共用", () => {
-		expect(DECLINED).toMatch(/^Do not retry it unchanged/);
 	});
 });

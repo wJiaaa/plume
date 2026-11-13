@@ -192,6 +192,11 @@ export interface ToolRun {
 	 */
 	ask(content: ApprovalContent): Promise<ApprovalDecision>;
 	/**
+	 * `ask` 得到 `"reject"` 以后交给模型的话：说这次调用被人拒了，叮嘱别原样重试、别换个工具或命令达到同样效果。原样作为错误结果交回，
+	 * 工具不自己另写一份。本体自己拒绝时（替没写 `asks` 的工具在执行前问的、`escalate`、`files.read`）用的是同一句叮嘱，模型在哪看到都认得出。
+	 */
+	rejection: string;
+	/**
 	 * 停下来等人给一份数据：回答一个问题、批准一份计划、填一张表。卡片由界面入口按 `kind` 登记（`ui.requestCard`），
 	 * 没登记时产品画一张只能「不答」的通用卡。和 `ask` 同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方。
 	 * 不是权限：不经钩子 tool.approve，完全访问、「以后不再问」都不替人答。等 30 分钟，到时得到 `expired`；这一轮停了得到
@@ -1756,8 +1761,11 @@ export interface ShellInfo {
 export interface RunProcess extends SandboxProcess {
 	/** 实际跑在哪一档（提权批过的就是更宽的那一档）。 */
 	readonly mode: SandboxMode;
-	/** 这段输出像不像被沙箱拒了（只读的文件系统、没有权限）：像的话模型可以申请提权重试。`danger-full-access` 下总是 false。 */
-	denied(output: string): boolean;
+	/**
+	 * 这段输出像不像被沙箱拒了（只读的文件系统、没有权限）：像的话交回给模型的那句说明（说出实际跑的那一档、说清这是策略拒绝而不是命令出错），
+	 * 原样放进结果，模型可以申请提权重试；不像交回 undefined。`danger-full-access` 下总是 undefined。
+	 */
+	denied(output: string): string | undefined;
 }
 
 /** 一条已经启动的命令。 */

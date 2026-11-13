@@ -49,9 +49,6 @@ const STDERR_LINES = 20;
 const STDERR_LINE_CHARS = 500;
 /** 进度最多这么密地推给界面：有的服务器每处理一行就报一次。 */
 const PROGRESS_EVERY_MS = 200;
-/** 拒绝之后别换个法子再来一遍。i18n-exempt：交给模型的话。 */
-const DECLINED =
-	"Do not retry it unchanged or get the same effect another way — another tool, a shell command, a script. Change your approach; if the task cannot go on without it, say so.";
 
 export type ServerState = "connecting" | "connected" | "reconnecting" | "failed" | "needs-login" | "missing" | "disabled";
 
@@ -614,7 +611,7 @@ export class Connections implements McpResources {
 				subject: name,
 			});
 			// i18n-exempt：以下都是交给模型的结果。
-			if (decision === "reject") return { output: `The user rejected this MCP call. ${DECLINED}`, isError: true };
+			if (decision === "reject") return { output: run.rejection, isError: true };
 		}
 		const slot = this.slotFor(shared, run.sessionId);
 		await this.ready(slot, run.signal);

@@ -127,6 +127,7 @@ const run: ToolRun = {
 	progress: () => {},
 	request: async () => ({ answered: false, reason: "declined" }),
 	ask: async () => "once",
+	rejection: "人拒绝了",
 	permissionMode: async () => "ask",
 	shell: async () => ({ kind: "posix", label: "zsh", sandbox: "read-only" }),
 	exec: async () => {

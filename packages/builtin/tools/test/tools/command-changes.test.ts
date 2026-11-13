@@ -44,7 +44,7 @@ class Process implements RunProcess {
 	readonly pid = 1;
 	readonly mode = "workspace-write" as const;
 	denied() {
-		return false;
+		return undefined;
 	}
 	private readonly exits: ((code: number | null, signal?: string | null, lingering?: SandboxProcess) => void)[] = [];
 	private readonly errors: ((error: Error) => void)[] = [];

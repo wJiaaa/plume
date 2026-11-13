@@ -10,6 +10,6 @@ export function localExec(cwd: string): ToolRun["exec"] {
 	return async (command, options = {}) =>
 		Object.assign(runCommand(command, { cwd: options.cwd ?? cwd, ...(options.env ? { env: options.env } : {}) }), {
 			mode: "danger-full-access" as const,
-			denied: () => false,
+			denied: () => undefined,
 		});
 }

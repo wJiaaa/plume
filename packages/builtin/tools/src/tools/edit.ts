@@ -116,7 +116,7 @@ export const editTool: Tool<EditArgs> = {
 						detail: formatDiff(diff, shown),
 						subject: absolute,
 					});
-					if (decision !== "once" && decision !== "always") return { value: declinedResult("The user rejected this edit.") };
+					if (decision !== "once" && decision !== "always") return { value: declinedResult(ctx) };
 				}
 
 				// 上下文一行而不是预览的三行：回显是为了省一次重读，不是为了审这次改动。

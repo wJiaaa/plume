@@ -68,7 +68,7 @@ const WIDER: Partial<Record<SandboxMode, readonly Exclude<SandboxMode, "read-onl
 	"workspace-write": ["danger-full-access"],
 };
 
-/** 每个模式用文字说出来时的名字（提权的报错里用它）。 */
+/** 每个模式用文字说出来时的名字（提权的报错、沙箱拒绝的说明里用它）。 */
 // i18n-exempt：发给模型的，不随界面语言变。
 const MODE_LABEL: Record<SandboxMode, string> = {
 	"read-only": "只读",
@@ -84,6 +84,13 @@ const EMPTY_JUSTIFICATION = "justification 不能是空的。";
 const notWider = (requested: string, current: SandboxMode) => `「${requested}」不比当前的「${MODE_LABEL[current]}」更宽，提权请求无效。`;
 /** 人拒绝提权时给模型的话：和「申请得不对」分得开，模型才知道该换办法而不是改参数重试。 */
 const declined = (target: SandboxMode) => `用户拒绝了把这条命令提权到「${MODE_LABEL[target]}」。${DECLINED}`;
+/**
+ * 命令被沙箱拒了时交给模型的说明（`RunProcess.denied`）：被拒的写入和磁盘满、路径错一样只是非零退出，分不清的模型会换个写法再写三遍，
+ * 然后报告工具坏了。所有跑命令的工具共用这一种措辞，模型在任何地方都能一眼、一样地认出它。
+ * 不只是写文件：setuid 程序（`top`、`sudo`）在 Seatbelt 下起不来，报的也是被拒写入时那句「Operation not permitted」。
+ */
+const sandboxDenial = (mode: SandboxMode) =>
+	`[sandbox: 被沙箱拒绝（当前模式：${MODE_LABEL[mode]}；写文件、运行 top、sudo 这类 setuid 程序都会被拒）——这是策略拒绝，不是命令本身出错，换个写法重试没有用]`;
 
 /** 一次调用的 `ToolRun.shell`、`exec`、`escalate`。提权批下来的那一档只记在这里，调用答完就随它没了。 */
 export function commandAccess(call: CallCommands): Pick<ToolRun, "shell" | "exec" | "escalate"> {
@@ -124,7 +131,7 @@ export function commandAccess(call: CallCommands): Pick<ToolRun, "shell" | "exec
 			const process = runCommand(command, { cwd: options.cwd ?? call.cwd, ...(options.env ? { env: options.env } : {}), mode, shellMode });
 			const run: RunProcess = Object.assign(process, {
 				mode,
-				denied: (output: string) => mode !== "danger-full-access" && looksDenied(output, selectRunner()),
+				denied: (output: string) => (mode !== "danger-full-access" && looksDenied(output, selectRunner()) ? sandboxDenial(mode) : undefined),
 			});
 			return run;
 		},

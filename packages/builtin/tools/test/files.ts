@@ -7,14 +7,15 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FileChanges, PluginChanges, PluginResources, ResourceHandler, SessionSummary, ShellInfo } from "@plume/contract";
+import { REJECTED } from "../../../core/agent/src/declined.ts";
 import { Workspace } from "../../../core/agent/src/run-files.ts";
 import type { ToolContext } from "../src/tools/types.ts";
 
 /** 没给 `dataDir` 时本体用的数据目录：隔离视图建在它下面，不能落到真实的 ~/.plume。 */
 const DATA_DIR = join(tmpdir(), "plume-tools-test-data");
 
-type Input = Omit<ToolContext, "files" | "projectFiles" | "resources"> &
-	Partial<Pick<ToolContext, "files" | "projectFiles" | "resources">> & {
+type Input = Omit<ToolContext, "files" | "projectFiles" | "resources" | "rejection"> &
+	Partial<Pick<ToolContext, "files" | "projectFiles" | "resources" | "rejection">> & {
 		/** Plume 的数据目录：改动快照记在它下面，文件工具不写它。 */
 		dataDir?: string;
 		sessionId?: string;
@@ -39,7 +40,7 @@ export type TestContext = ToolContext & {
 };
 
 /**
- * 补上本体给的那几样。问人用 `requestApproval`（宿主上两者是同一个过闸），不给就是没人可问。
+ * 补上本体给的那几样。问人用 `requestApproval`（宿主上两者是同一个过闸），不给就是没人可问；拒绝后的话不给就用本体那一句。
  * 换了 `requestApproval`、`cwd` 之类时重新调一次：已有的 `files` 不算数，按这次给的重造。
  * 之后再给 `exec` 赋值也会包上本体的改动观测，和宿主给工具的 `run.exec` 一样。
  */
@@ -92,6 +93,7 @@ function callOn(
 		alive: () => {},
 	});
 	const out = {
+		rejection: REJECTED,
 		...rest,
 		sessionId,
 		resources: workspace.resources,

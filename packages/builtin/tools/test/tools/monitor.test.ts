@@ -23,7 +23,7 @@ function fakeProcess(): FakeProcess {
 	return {
 		pid: 4242,
 		mode: "workspace-write",
-		denied: () => false,
+		denied: () => undefined,
 		kills,
 		onOutput: (listener) => void output.push(listener),
 		onExit: (listener) => void exits.push(listener),

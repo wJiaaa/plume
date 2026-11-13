@@ -82,7 +82,7 @@ export const writeTool: Tool<WriteArgs> = {
 						detail: formatDiff(diff, shown),
 						subject: absolute,
 					});
-					if (decision !== "once" && decision !== "always") return { value: declinedResult("The user rejected this write.") };
+					if (decision !== "once" && decision !== "always") return { value: declinedResult(ctx) };
 				}
 
 				const lines = after === "" ? 0 : after.split("\n").length;

@@ -392,11 +392,13 @@ interface ToolDefinition {
 			signal: AbortSignal;
 			progress(chunk: string): void;
 			ask(content: ApprovalContent): Promise<ApprovalDecision>;
+			/** ask 得到 "reject" 时原样交给模型的话：本体给的一句，说被拒了、别换个法子再做一遍，本体自己拒绝时也是这一句。 */
+			rejection: string;
 			/** 等人给一份数据（提问、计划、表单）：不经 tool.approve，和审批同一队；没答时说清是不答、过期还是停下。 */
 			request<T>(input: { kind: string; title: string; payload?: unknown; waiting?: string }): Promise<{ answered: true; value: T } | { answered: false; reason: "declined" | "expired" | "stopped" }>;
 			/** 这次调用跑命令用的 shell 和沙箱档（本体按权限模式、readOnly 选）。 */
 			shell(): Promise<{ kind: "posix" | "powershell"; label: string; sandbox: SandboxMode }>;
-			/** 在那一档沙箱里起一条命令；`denied(output)` 看输出像不像被沙箱拒了，`mode` 是实际跑的那一档。`recordChanges` 时本体在命令前后对比工作区，记下改了什么。 */
+			/** 在那一档沙箱里起一条命令；`denied(output)` 看输出像不像被沙箱拒了，像就交回给模型的那句说明，`mode` 是实际跑的那一档。`recordChanges` 时本体在命令前后对比工作区，记下改了什么。 */
 			exec(command: string, options?: { cwd?: string; env?: Record<string, string>; recordChanges?: boolean }): Promise<RunProcess>;
 			/** 申请这次调用更宽的一档：弹提权卡、只认人答，批了之后的 exec 才换档；不批时 message 是交给模型的说明。 */
 			escalate(request: { mode: "workspace-write" | "danger-full-access"; justification: string; title: string; detail: string }): Promise<{ granted: true } | { granted: false; message: string }>;

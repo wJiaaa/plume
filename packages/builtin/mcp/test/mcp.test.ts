@@ -452,6 +452,7 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 			asked.push(content.title);
 			return "once";
 		},
+		rejection: "人拒绝了",
 		request: async () => ({ answered: false, reason: "declined" }),
 		permissionMode: async () => "auto",
 		shell: async () => ({ kind: "posix", label: "zsh", sandbox: "workspace-write" }),

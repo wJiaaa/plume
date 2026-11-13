@@ -50,6 +50,8 @@ export interface ToolContext {
 	state: Map<string, unknown>;
 	/** 问人要不要做这件事（写、改、跑命令）；不给就是没人可问。读的问人在 `files` 里。 */
 	requestApproval?: (request: ApprovalContent) => Promise<ApprovalDecision>;
+	/** 人拒绝以后（`requestApproval` 得到 `"reject"`）交给模型的话（`ToolRun.rejection`），原样作为错误结果交回。 */
+	rejection: string;
 	/** 命令照哪个 shell 写（`ToolRun.shell()`，会话宣布的那一档）；不给时按这台机器的默认 shell 读（测试里直接调）。 */
 	shell?: Pick<ShellInfo, "kind">;
 	/** 跑命令（`ToolRun.exec`）：沙箱档由本体按权限模式定，带 `recordChanges` 的由本体记下改了什么。不给就跑不了命令。 */
@@ -106,6 +108,7 @@ function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 		signal: run.signal,
 		state: env.state(run.sessionId),
 		requestApproval: (content: ApprovalContent): Promise<ApprovalDecision> => run.ask(content),
+		rejection: run.rejection,
 		exec: (command, options) => run.exec(command, options),
 		escalate: (request) => run.escalate(request),
 		toolNames: new Set(run.tools().map((entry) => entry.name)),

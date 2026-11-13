@@ -237,7 +237,7 @@ class FakeProcess implements RunProcess {
 	readonly mode = "workspace-write" as const;
 	private readonly exits: ((code: number | null) => void)[] = [];
 	denied() {
-		return false;
+		return undefined;
 	}
 	onOutput() {}
 	onExit(listener: (code: number | null) => void) {

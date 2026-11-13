@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentEvent, ApprovalRequest, HumanRequest, Message, Plugin, PluginContext } from "@plume/contract";
+import { REJECTED } from "../src/declined.ts";
 import { type Agent, type AgentOptions, createAgent } from "../src/index.ts";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";
@@ -448,7 +449,7 @@ it("用户拒绝时不执行，外层预先放行时不问", async () => {
 	expect(results.map((result) => [result.toolCallId, result.isError, result.content[0]?.type === "text" ? result.content[0].text : ""])).toEqual([
 		["call_bash", false, expect.stringMatching(/hello[\s\S]*\[Executed with read; use that tool directly next time\.\]$/)],
 		["call_read_hello", false, expect.stringContaining("hello")],
-		["call_edit", true, expect.stringContaining("The user rejected this edit.")],
+		["call_edit", true, REJECTED],
 	]);
 });
 

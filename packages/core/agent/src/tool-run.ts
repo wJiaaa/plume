@@ -33,7 +33,7 @@ import type {
 } from "@plume/contract";
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
-import { DECLINED } from "./declined.ts";
+import { REJECTED } from "./declined.ts";
 import type { CallFileAccess, CallFiles } from "./run-files.ts";
 import { text } from "./i18n.ts";
 
@@ -462,6 +462,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				signal: input.signal,
 				progress: input.progress,
 				ask,
+				rejection: REJECTED,
 				request,
 				permissionMode: async () => (await permission()).mode,
 				...commands,
@@ -494,9 +495,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				...(scope.archiveAfterTurn ? { archiveAfterTurn: () => scope.archiveAfterTurn!() } : {}),
 				...(parent ? { parent } : {}),
 			};
-			// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 			if (tool.definition.mutating && !tool.definition.asks && (await ask({ ...generic, subject: call.name })) === "reject")
-				output = { output: `The user rejected this call. ${DECLINED}`, isError: true };
+				output = { output: REJECTED, isError: true };
 			else output = await tool.definition.execute(input.call.args, run);
 		} catch (error) {
 			// i18n-exempt：工具结果是发给模型的，不随界面语言变。

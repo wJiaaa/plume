@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { commandShell } from "@plume/platform";
 import type { DeliveryDetails } from "../delivery.ts";
-import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE, sandboxDenialMarker } from "../escalation.ts";
+import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE } from "../escalation.ts";
 import { words } from "../messages.ts";
 import { isReadOnlyCommand } from "../read-only-command.ts";
 import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess, TrackedJob } from "@plume/contract";
@@ -228,7 +228,7 @@ export const bashTool: Tool<BashArgs> = {
 					const text = output().trim();
 					/*
 					 * 是沙箱拒的就说出来：被拒的写入和磁盘满、路径错一样只是非零退出，分不清的模型会换个写法再写三遍，
-					 * 然后报告工具坏了。标记把「失败了」说成「被拒了」，旁边是正当的出路。
+					 * 然后报告工具坏了。本体给的那句把「失败了」说成「被拒了」，旁边是正当的出路。
 					 */
 					const denied = child.denied(output());
 					/*
@@ -241,7 +241,7 @@ export const bashTool: Tool<BashArgs> = {
 					const leftBehind = lingering ? adoptJob(ctx, args, lingering, undefined) : undefined;
 					// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 					const markers = [
-						...(denied ? [sandboxDenialMarker(child.mode), escalationHint("命令")] : []),
+						...(denied !== undefined ? [denied, escalationHint("命令")] : []),
 						...(leftBehind
 							? [
 									`[processes it started in the background are still running and holding its output — background job ${leftBehind}. ` +
@@ -259,10 +259,10 @@ export const bashTool: Tool<BashArgs> = {
 							exitCode: code,
 							...(signal ? { signal } : {}),
 							...(reading.meaning && !reading.failed ? { exitMeaning: reading.meaning } : {}),
-							...(denied ? { denied: true } : {}),
+							...(denied !== undefined ? { denied: true } : {}),
 							...(leftBehind ? { jobId: leftBehind } : {}),
 						},
-						isError: reading.failed || denied,
+						isError: reading.failed || denied !== undefined,
 					});
 				});
 			});
@@ -309,7 +309,7 @@ export async function authorizeCommand(command: string, title: string | undefine
 	if (!read.ok) return errorResult(read.message);
 	if (ask && ctx.requestApproval && !isReadOnlyCommand(command)) {
 		const decision = await ctx.requestApproval({ kind: "command", title: title ?? "Run shell command", detail: command, subject: command });
-		if (decision !== "once" && decision !== "always") return declinedResult("The user rejected this command.");
+		if (decision !== "once" && decision !== "always") return declinedResult(ctx);
 	}
 	return undefined;
 }
