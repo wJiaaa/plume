@@ -204,7 +204,7 @@ export function browserTools(
 						? { kind: "browser_open", title: MESSAGES[locale()].approvalTitle(basename(file)), detail: file, subject: file }
 						: { kind: "browser_open", title: MESSAGES[locale()].approvalTitle(url!.host || url!.href), detail: url!.href, subject: url!.origin },
 				);
-				if (approval === "reject") throw new Error("The user declined opening this page");
+				if (approval === "reject") throw new Error(run.rejection);
 				const id = await workspace.open(href, run.sessionId, { newTab: args.newTab === true, reveal: true });
 				await workspace.loaded(id, run.sessionId);
 				// 打不开的站点交回来的是 Chromium 的空白错误页：读它什么也看不出，直接说没打开、为什么。
