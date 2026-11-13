@@ -48,4 +48,6 @@ export interface DiagnosticsApi {
 	/** 只读取该会话工具结果已登记的完整输出。 */
 	fullOutput(sessionId: string, toolCallId: string): Promise<{ path: string; contents: FileContents }>;
 	cancelWakeup(sessionId: string, wakeupId: string): Promise<boolean>;
+	/** 环境卡片的「全部停止」：停掉还在跑的后台任务、取消待触发的定时唤醒，交回各停了几个，见 `stop-all.ts`。 */
+	stopAll(sessionId: string): Promise<{ jobs: number; wakeups: number }>;
 }

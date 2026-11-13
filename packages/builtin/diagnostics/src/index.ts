@@ -5,6 +5,7 @@ import type { DiagnosticsApi } from "./api.ts";
 import { createEndpointFinder } from "./endpoints.ts";
 import { DiagnosticStore } from "./store.ts";
 import { MESSAGES } from "./messages.ts";
+import { stopAll } from "./stop-all.ts";
 
 export default {
 	name: "plume.diagnostics",
@@ -82,6 +83,10 @@ export default {
 			async cancelWakeup(id, wakeupId) {
 				await session(id);
 				return typeof wakeupId === "string" && ctx.sessions.cancelWakeup(id, wakeupId);
+			},
+			async stopAll(id) {
+				await session(id);
+				return stopAll(ctx.sessions, id);
 			},
 		};
 		ctx.serve(api);

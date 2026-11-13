@@ -80,6 +80,11 @@ const zhCN = {
 	wakeupExpires: (time: string) => `${time} 过期`,
 	wakeupCancel: "取消这个定时唤醒",
 	wakeupMemoryOnly: "只在这次运行里有效：退出应用、按停止或撤回都会取消。",
+	stopAll: "全部停止",
+	stopAllConfirm: "停下这个会话的全部后台事？",
+	stopAllDetail: (jobs: number, wakeups: number) =>
+		[...(jobs > 0 ? [`停掉 ${jobs} 个后台任务（开着的服务、监视会结束）`] : []), ...(wakeups > 0 ? [`取消 ${wakeups} 个定时唤醒`] : [])].join("，") +
+		"。它们不会再叫醒这个会话，要再用得让 agent 重新起。",
 	pendingWakeups: (n: number) => `${n} 个定时唤醒待触发`,
 	runningMonitors: (n: number) => `${n} 个监视在跑`,
 	monitorTip: "有新输出就会叫醒 agent，每送一批就是一轮",
@@ -170,6 +175,13 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		wakeupExpires: (time: string) => `expires ${time}`,
 		wakeupCancel: "Cancel this wakeup",
 		wakeupMemoryOnly: "Only for this run: quitting the app, pressing Stop or undoing cancels them.",
+		stopAll: "Stop all",
+		stopAllConfirm: "Stop everything this conversation runs in the background?",
+		stopAllDetail: (jobs: number, wakeups: number) =>
+			[
+				...(jobs > 0 ? [`Stops ${jobs} background job${jobs === 1 ? "" : "s"} (running servers and monitors exit)`] : []),
+				...(wakeups > 0 ? [`${jobs > 0 ? "cancels" : "Cancels"} ${wakeups} scheduled wakeup${wakeups === 1 ? "" : "s"}`] : []),
+			].join(" and ") + ". They won't wake this conversation again; the agent has to start them anew.",
 		pendingWakeups: (n: number) => `${n} scheduled wakeup${n === 1 ? "" : "s"} pending`,
 		runningMonitors: (n: number) => `${n} monitor${n === 1 ? "" : "s"} running`,
 		monitorTip: "New output wakes the agent; every batch is a turn",

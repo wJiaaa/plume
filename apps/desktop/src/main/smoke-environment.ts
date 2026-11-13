@@ -4,7 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { clickVisible, clickVisibleIn, firstOf } from "./smoke-kit.ts";
+import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
 
 const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
 const STARTED = "服务起来了，监视和唤醒都安排好了。";
@@ -13,13 +13,15 @@ const WOKE = "唤醒到点了，接着看服务。";
 const SUMMARY = "冒烟会话：起了一个本地服务和一个监视，安排了定时唤醒，下一步是到点后接着看服务。";
 const FIRE = "冒烟里到点的唤醒";
 const CANCEL = "冒烟里取消的唤醒";
+const AGAIN = "冒烟里全部停止取消的唤醒";
 /** 在本机随便一个端口上开 HTTP 服务，把地址打出来：端口发现既能从系统表找到它，也能拿输出里的地址补全 URL。 */
 const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')).listen(0, '127.0.0.1', function () { console.log('http://127.0.0.1:' + this.address().port + '/') })"`;
 
 /**
  * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟）。
  * 卡片收着时开关上有圆点、说明里数着唤醒和监视；打开后后台任务那一行有端口签、监视签，唤醒一节两项，取消掉十分钟那项；
- * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那项到点——对话里出现「定时唤醒」那一行、会话被叫醒开一轮——
+ * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那项到点——对话里出现「定时唤醒」那一行、会话被叫醒开一轮，
+ * 那一轮再约一次唤醒——最后点「全部停止」、确认，服务、监视、唤醒一起清空，之后没有「后台命令完成」那一行、不再请求模型。
  * 这段要一分多钟，大头是等唤醒的一分钟。
  *
  * 会话摘要单独一段（`part: "summary"`，段名 environment-summary）：装上市场插件 plume.summary，说三句人话，这一轮结束静下来一分钟后
@@ -70,12 +72,17 @@ export async function checkEnvironment(options: {
 		await checkSummary();
 		return;
 	}
+	let requests = 0;
 	setModel((request) => {
+		requests++;
 		const messages = (request.messages ?? []) as Array<{ role?: string }>;
 		// 看上一条回复之后送来的全部，不只最后一条：人的话、唤醒的送达后面还会接一段 `<env>` 环境信息，
 		// 只认最后一条就认不出唤醒、又回一遍起服务的工具调用。
 		const last = JSON.stringify(messages.slice(messages.findLastIndex((message) => message.role === "assistant") + 1));
-		if (last.includes("<wakeup")) return { text: WOKE };
+		if (last.includes("toolu_env_again")) return { text: WOKE };
+		// 被叫醒的那一轮再约一次：最后的「全部停止」要连唤醒一起取消。
+		if (last.includes("<wakeup"))
+			return { toolCalls: [{ id: "toolu_env_again", name: "schedule_wakeup", args: { delay_seconds: 60, prompt: "再看一次服务", reason: AGAIN } }] };
 		if (last.includes(PROMPTS[1]!)) return { text: REPLIES[0]! };
 		if (last.includes(PROMPTS[2]!)) return { text: REPLIES[1]! };
 		if (last.includes("toolu_env_server")) return { text: STARTED };
@@ -169,15 +176,34 @@ export async function checkEnvironment(options: {
 		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes(${JSON.stringify(FIRE)}) === true`, "对话里出现定时唤醒那一行", 120_000);
 		if (!(await page<string>(`document.querySelector(${JSON.stringify(row)}).textContent`)).includes("定时唤醒")) throw new Error("送达那一行没写是定时唤醒");
 		await until(chatHas(WOKE), "唤醒叫醒会话开了一轮");
-		await until(`document.querySelectorAll('[data-environment-wakeup]').length === 0`, "到点后唤醒一节清空");
+		await until(
+			`document.querySelectorAll('[data-environment-wakeup]').length === 1 && document.querySelector('[data-environment-wakeup]').textContent.includes(${JSON.stringify(AGAIN)})`,
+			"到点那项不在了，只剩被叫醒的那一轮新约的",
+		);
 		await page(`document.querySelector(${JSON.stringify(row)}).scrollIntoView({ block: 'center' })`);
 		await capture("smoke-environment-wakeup.png");
 
-		// 收拾：停掉服务和监视。
-		for (let left = 2; left > 0; left--) {
-			await clickVisibleIn(page, firstOf('[data-environment-job] button[aria-label="停止"]'), "第一个后台任务的停止");
-			await until(`document.querySelectorAll('[data-environment-job]').length < ${left}`, "停掉后台任务");
-		}
+		// 全部停止：服务、监视、新约的唤醒一起清空，先问一句；之后它们都不再叫醒会话。
+		await until(`document.querySelectorAll('[data-environment-job]').length === 2`, "服务和监视还在跑");
+		await clickVisible(page, `[data-environment-stop-all]`);
+		await until(`document.querySelector('[role=dialog]')?.textContent.includes('停掉 2 个后台任务') === true`, "确认框数清两个后台任务");
+		if (!(await page<boolean>(`document.querySelector('[role=dialog]').textContent.includes('取消 1 个定时唤醒')`))) throw new Error("确认框没数唤醒");
+		await capture("smoke-environment-stop-all.png");
+		const before = requests;
+		await clickVisible(page, `[role=dialog] button`, /^全部停止$/);
+		await until(
+			`document.querySelectorAll('[data-environment-job]').length === 0 && document.querySelectorAll('[data-environment-wakeup]').length === 0`,
+			"全部停止后后台任务、唤醒都清空",
+		);
+		if (await page<boolean>(`document.querySelector('[data-environment-stop-all]') !== null`)) throw new Error("清空后还有「全部停止」");
+		// 停掉的服务、监视退出时不送回会话，取消的唤醒不再到点：等几秒，对话里没有「后台命令完成」那一行，也没再请求模型。
+		await page(`new Promise(resolve => setTimeout(resolve, 3000))`);
+		if (await page<boolean>(`document.querySelector('[data-screen=chat] [data-delivery-row][data-delivery-kind=job]') !== null`))
+			throw new Error("停掉的后台任务结束时又叫醒了会话");
+		if (requests !== before) throw new Error(`全部停止后又请求了 ${requests - before} 次模型`);
+		const session = (await agent.sessions()).find((item) => !previous.has(item.id));
+		if (session?.running) throw new Error("全部停止后会话又开了一轮");
+		await capture("smoke-environment-stopped.png");
 	} finally {
 		setModel(undefined);
 	}

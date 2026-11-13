@@ -5,22 +5,26 @@
  *
  * 后台任务、定时唤醒两节带 `attention`：卡片收着时，会自己叫醒这个会话的东西让开关挂圆点——在跑的监视命令（`wakes`，有输出就开一轮）、
  * 待触发的唤醒（过一会儿自己开一轮）。普通后台命令不算：开着一个开发服务器是常态，算进去圆点就一直亮着。
+ *
+ * 两节合起来有不止一项时，排在前面的那一节标题行上有「全部停止」（`StopAll`），一次停掉这个会话列在这两节里的全部。
+ * 会话闲着时输入框上没有停止键，挂着的服务、监视、唤醒只能在这里停；入口不另放到输入框上：开关上的圆点和计数已经指到这里。
  */
 
 import type { SessionView, SessionWakeup } from "@plume/contract";
 import type { EnvironmentSectionProps } from "@plume/contract/ui";
-import { IconButton, ScrollText, Text, useI18n } from "@plume/ui";
+import { Button, IconButton, ScrollText, Text, useConfirmer, useI18n } from "@plume/ui";
 import { AlarmClock, History, Square, X } from "@plume/ui/icons";
 import { useState, type ReactNode } from "react";
 import { MESSAGES } from "./messages.ts";
 import type { Runtime } from "./state.tsx";
 
-function Label({ children }: { children: ReactNode }) {
+function Label({ children, action }: { children: ReactNode; action?: ReactNode }) {
 	return (
 		<div className="plume-diagnostics-section-label">
-			<Text size="caption" tone="faint">
+			<Text size="caption" tone="faint" className="plume-diagnostics-grow">
 				{children}
 			</Text>
+			{action}
 		</div>
 	);
 }
@@ -40,6 +44,42 @@ function wakeupLabel(wakeup: SessionWakeup): string {
 }
 
 export function environmentSections(runtime: Runtime) {
+	/**
+	 * 一次停掉这个会话的全部后台事：还在跑的后台任务（开发服务器、监视、没跑完的命令）和待触发的定时唤醒。停了拿不回来
+	 * （服务要 agent 重新起，唤醒要它重新约），所以先问一句，问题里数清各有几项。逐项的停止、取消不问，和原来一样。
+	 */
+	function StopAll({ sessionId, jobs, wakeups }: { sessionId: string; jobs: number; wakeups: number }) {
+		const words = MESSAGES[useI18n().resolvedLocale];
+		const confirm = useConfirmer();
+		const [busy, setBusy] = useState(false);
+		const run = async () => {
+			setBusy(true);
+			try {
+				await runtime.api.stopAll(sessionId);
+			} catch (error) {
+				runtime.ui.notify(String(error), "error");
+			} finally {
+				await runtime.state.refresh(sessionId);
+				setBusy(false);
+			}
+		};
+		return (
+			<>
+				<Button
+					size="xs"
+					loading={busy}
+					data-environment-stop-all
+					onClick={() =>
+						confirm.ask({ title: words.stopAllConfirm, detail: words.stopAllDetail(jobs, wakeups), confirmLabel: words.stopAll, onConfirm: () => void run() })
+					}
+				>
+					{words.stopAll}
+				</Button>
+				{confirm.element}
+			</>
+		);
+	}
+
 	/** 还在跑的后台任务，一行一个：点了在任务面板里选中它，端口签要问系统，只在这一节画出来时查。 */
 	function Jobs({ session }: EnvironmentSectionProps) {
 		const words = MESSAGES[useI18n().resolvedLocale];
@@ -48,6 +88,7 @@ export function environmentSections(runtime: Runtime) {
 		const [busy, setBusy] = useState<string>();
 		const jobs = data.jobs.filter((job) => job.finishedAt === undefined);
 		if (jobs.length === 0 && !data.error) return null;
+		const everything = jobs.length + data.wakeups.length;
 		const stop = async (jobId: string) => {
 			setBusy(jobId);
 			try {
@@ -66,7 +107,7 @@ export function environmentSections(runtime: Runtime) {
 						{data.error}
 					</Text>
 				)}
-				{jobs.length > 0 && <Label>{words.jobs}</Label>}
+				{jobs.length > 0 && <Label action={everything > 1 && <StopAll sessionId={id} jobs={jobs.length} wakeups={data.wakeups.length} />}>{words.jobs}</Label>}
 				{jobs.map((job) => {
 					const port = job.endpoints[0]?.port;
 					return (
@@ -115,8 +156,10 @@ export function environmentSections(runtime: Runtime) {
 		const { resolvedLocale } = useI18n();
 		const words = MESSAGES[resolvedLocale];
 		const id = session.summary.id;
-		const { wakeups } = runtime.state.useSnapshot(id, true);
+		const { wakeups, jobs } = runtime.state.useSnapshot(id, true);
 		if (wakeups.length === 0) return null;
+		// 有在跑的任务时「全部停止」在排在前面的后台任务那一节，这里不再放一个。
+		const running = jobs.some((job) => job.finishedAt === undefined);
 		const cancel = (wakeupId: string) =>
 			void runtime.api
 				.cancelWakeup(id, wakeupId)
@@ -124,7 +167,7 @@ export function environmentSections(runtime: Runtime) {
 				.catch((error: unknown) => runtime.ui.notify(String(error), "error"));
 		return (
 			<>
-				<Label>{words.wakeups}</Label>
+				<Label action={!running && wakeups.length > 1 && <StopAll sessionId={id} jobs={0} wakeups={wakeups.length} />}>{words.wakeups}</Label>
 				{wakeups.map((wakeup) => {
 					const meta = [
 						when(wakeup.nextAt, resolvedLocale),
