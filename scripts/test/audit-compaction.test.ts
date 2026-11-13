@@ -26,7 +26,7 @@ const said = (text: string): Message => ({
 	timestamp: 1,
 });
 
-const stream = (messages: Message[], at: number, kept: number): AuditStream => ({ messages, calls: [], boundaries: [{ at, kept }], resultChars: () => 0 });
+const stream = (messages: Message[], at: number, kept: number): AuditStream => ({ messages, calls: [], boundaries: [{ at, kept }], resultTokens: () => 0 });
 
 test("折叠掉的话压缩后又说了一遍算；还留在尾部的不算", () => {
 	const messages = [

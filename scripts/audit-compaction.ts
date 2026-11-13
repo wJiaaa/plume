@@ -33,7 +33,8 @@ export interface AuditStream {
 	/** 按会话里的顺序。 */
 	calls: AuditCall[];
 	boundaries: AuditBoundary[];
-	resultChars(callId: string): number;
+	/** 一条工具结果的 token 数（估算）。 */
+	resultTokens(callId: string): number;
 }
 
 const median = (values: number[]) => (values.length ? [...values].sort((a, b) => a - b)[Math.ceil(values.length / 2) - 1]! : 0);
@@ -88,7 +89,7 @@ export function afterCompaction(streams: AuditStream[]) {
 	const tailTokens: number[] = [];
 	let reads = 0;
 	let foldedRereads = 0;
-	let foldedRereadChars = 0;
+	let foldedRereadTokens = 0;
 	let recalls = 0;
 	let userAfter = 0;
 	let repeatedAfter = 0;
@@ -134,7 +135,7 @@ export function afterCompaction(streams: AuditStream[]) {
 				// 中间改过的，内容确实变了，重读是对的。
 				if (edits.some((edit) => pathOf(edit) === path && edit.at > last && edit.at < call.at)) continue;
 				foldedRereads++;
-				foldedRereadChars += stream.resultChars(call.id);
+				foldedRereadTokens += stream.resultTokens(call.id);
 			}
 		});
 	}
@@ -146,7 +147,7 @@ export function afterCompaction(streams: AuditStream[]) {
 		tailTokensMedian: median(tailTokens),
 		reads,
 		foldedRereads,
-		foldedRereadChars,
+		foldedRereadTokens,
 		recalls,
 		userAfter,
 		repeatedAfter,

@@ -36,6 +36,7 @@ import type { CompactionRun, Message, SessionSummary, ToolResultMessage, UsageCa
 import type { Compaction } from "../packages/core/agent/src/compaction.ts";
 import { loadCachedModelCatalog } from "../packages/core/agent/src/model-catalog-sync.ts";
 import { RepetitionWatch } from "../packages/core/agent/src/repetition.ts";
+import { textTokens } from "../packages/core/agent/src/token-estimate.ts";
 import { CACHE_NOISE_FLOOR_TOKENS } from "../packages/core/agent/src/usage-record.ts";
 import { catalogModelFor } from "../packages/core/llm/src/model-catalog.ts";
 import { requestUsage } from "../packages/core/llm/src/types.ts";
@@ -44,8 +45,6 @@ import { copiedCount } from "./audit-copies.ts";
 import { PEER_TOOLS, type PeerArrival, type PeerCall, peerStats } from "./audit-peers.ts";
 import { plumeHome, openSessionsReadOnly, storedSessions } from "./session-records.ts";
 
-/** 字符数换算 token 的粗系数。绝对值不重要，前后两次用同一个就行。 */
-const CHARS_PER_TOKEN = 3.5;
 /** 进入「单条最贵」榜的门槛，低于这个的条目太多且都不值得看。 */
 const BIG_RESULT_CHARS = 2000;
 /** 一轮里自动压缩的 p90 到这个数，等待才算挡人、值得挪到后台。 */
@@ -220,15 +219,20 @@ function loadSession(summary: SessionSummary, all: Message[], record: { compacti
 	};
 }
 
-/** 一条工具结果的正文长度——模型真正要为之付钱的部分。 */
-function charsOf(result: Message | undefined): number {
-	if (!result || result.role !== "toolResult") return 0;
-	let total = 0;
-	for (const part of result.content) if (part.type === "text") total += part.text.length;
-	return total;
+/** 一条工具结果的正文——模型真正要为之付钱的部分。 */
+function resultTexts(result: Message | undefined): string[] {
+	if (!result || result.role !== "toolResult") return [];
+	return result.content.flatMap((part) => (part.type === "text" ? [part.text] : []));
 }
 
-const tk = (chars: number) => Math.round(chars / CHARS_PER_TOKEN);
+/** 正文的字符数：只拿来比按字符定的门槛（裁剪线、上榜线）。 */
+const charsOf = (result: Message | undefined) => resultTexts(result).reduce((sum, text) => sum + text.length, 0);
+
+/** 正文的 token 数，用本体的估算（`token-estimate.ts`），和上下文用量、压缩说的是同一个数。 */
+const tokensOf = (result: Message | undefined) => resultTexts(result).reduce((sum, text) => sum + textTokens(text), 0);
+
+/** 估算不取整，加完再取整。 */
+const tk = Math.round;
 const pad = (value: string | number, width: number) => String(value).padStart(width);
 const share = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(1)}%` : "—");
 
@@ -268,29 +272,29 @@ const sessions = allSessions.filter((session) => session.rounds > 0);
 
 interface ToolCost {
 	n: number;
-	chars: number;
-	/** 字符·轮。一条结果留在上下文里，之后每一轮都要重新发一遍。 */
+	tokens: number;
+	/** token·轮。一条结果留在上下文里，之后每一轮都要重新发一遍。 */
 	carried: number;
 }
 const byTool = new Map<string, ToolCost>();
-const biggest: { session: string; tool: string; chars: number; after: number; carried: number; args: string }[] = [];
-let allChars = 0;
+const biggest: { session: string; tool: string; tokens: number; after: number; carried: number; args: string }[] = [];
+let allTokens = 0;
 let allCarried = 0;
 
 for (const session of sessions) {
 	for (const call of session.calls) {
-		const chars = charsOf(call.result);
+		const tokens = tokensOf(call.result);
 		const after = session.rounds - call.round;
-		const carried = chars * after;
-		const entry = byTool.get(call.name) ?? { n: 0, chars: 0, carried: 0 };
+		const carried = tokens * after;
+		const entry = byTool.get(call.name) ?? { n: 0, tokens: 0, carried: 0 };
 		entry.n++;
-		entry.chars += chars;
+		entry.tokens += tokens;
 		entry.carried += carried;
 		byTool.set(call.name, entry);
-		allChars += chars;
+		allTokens += tokens;
 		allCarried += carried;
-		if (chars >= BIG_RESULT_CHARS)
-			biggest.push({ session: session.id, tool: call.name, chars, after, carried, args: JSON.stringify(call.args ?? {}).slice(0, 60) });
+		if (charsOf(call.result) >= BIG_RESULT_CHARS)
+			biggest.push({ session: session.id, tool: call.name, tokens, after, carried, args: JSON.stringify(call.args ?? {}).slice(0, 60) });
 	}
 }
 
@@ -299,11 +303,11 @@ for (const session of sessions) {
 // ---------------------------------------------------------------------------
 
 let readCalls = 0;
-let readChars = 0;
+let readTokens = 0;
 let rereadCalls = 0;
-let rereadChars = 0;
+let rereadTokens = 0;
 let identicalCalls = 0;
-let identicalChars = 0;
+let identicalTokens = 0;
 
 for (const session of sessions) {
 	const seenPath = new Set<string>();
@@ -312,18 +316,18 @@ for (const session of sessions) {
 		if (call.name !== "read") continue;
 		const path = pathArg(call.args);
 		if (path === undefined) continue;
-		const chars = charsOf(call.result);
+		const tokens = tokensOf(call.result);
 		readCalls++;
-		readChars += chars;
+		readTokens += tokens;
 		if (seenPath.has(path)) {
 			rereadCalls++;
-			rereadChars += chars;
+			rereadTokens += tokens;
 		}
 		seenPath.add(path);
 		const exact = JSON.stringify(call.args);
 		if (seenExact.has(exact)) {
 			identicalCalls++;
-			identicalChars += chars;
+			identicalTokens += tokens;
 		}
 		seenExact.add(exact);
 	}
@@ -368,7 +372,7 @@ for (const session of sessions) {
 
 let warns = 0;
 let corrected = 0;
-let correctedChars = 0;
+let correctedTokens = 0;
 let wouldStop = 0;
 
 /**
@@ -393,7 +397,7 @@ for (const session of sessions) {
 			const notice = watch.replaced.get(result.toolCallId);
 			if (notice === undefined || before.get(result.toolCallId) === notice) continue;
 			corrected++;
-			correctedChars += charsOf(result);
+			correctedTokens += tokensOf(result);
 		}
 		if (!stopped && watch.exhausted()) {
 			stopped = true;
@@ -410,13 +414,13 @@ for (const session of sessions) {
 // ---------------------------------------------------------------------------
 
 /** 把一条工具结果单独交给生产的裁剪函数，看它会被裁到多大。 */
-function prunedCharsOf(result: ToolResultMessage): number {
+function prunedTokensOf(result: ToolResultMessage): number {
 	const [pruned] = pruneToolResults([result]);
-	return charsOf(pruned);
+	return tokensOf(pruned);
 }
 
 const DELAYS = [0, 5, 12, 20, 40, 80];
-/** 按裁剪延迟 N 轮算出来的总携带成本（字符·轮）。 */
+/** 按裁剪延迟 N 轮算出来的总携带成本（token·轮）。 */
 const curve = new Map<number, number>(DELAYS.map((n) => [n, 0]));
 let bigCount = 0;
 let bigCarried = 0;
@@ -424,20 +428,20 @@ let allCount = 0;
 
 for (const session of sessions) {
 	for (const call of session.calls) {
-		const chars = charsOf(call.result);
+		const tokens = tokensOf(call.result);
 		const after = session.rounds - call.round;
 		allCount++;
 		// 没到裁剪线的结果，在任何 N 下成本都一样，直接计入每一档
-		if (!call.result || chars <= PRUNE_THRESHOLD_CHARS) {
-			for (const n of DELAYS) curve.set(n, curve.get(n)! + chars * after);
+		if (!call.result || charsOf(call.result) <= PRUNE_THRESHOLD_CHARS) {
+			for (const n of DELAYS) curve.set(n, curve.get(n)! + tokens * after);
 			continue;
 		}
 		bigCount++;
-		bigCarried += chars * after;
-		const small = prunedCharsOf(call.result);
+		bigCarried += tokens * after;
+		const small = prunedTokensOf(call.result);
 		for (const n of DELAYS) {
 			const atFullSize = Math.min(n, after);
-			curve.set(n, curve.get(n)! + chars * atFullSize + small * Math.max(0, after - n));
+			curve.set(n, curve.get(n)! + tokens * atFullSize + small * Math.max(0, after - n));
 		}
 	}
 }
@@ -751,8 +755,8 @@ for (const { run } of compactionRuns) byCode[run.code ?? run.status] = (byCode[r
 
 const folded = afterCompaction(
 	sessions.map((session) => {
-		const results = new Map(session.calls.map((call) => [call.id, charsOf(call.result)]));
-		return { messages: session.messages, calls: session.calls, boundaries: session.boundaries, resultChars: (id: string) => results.get(id) ?? 0 };
+		const results = new Map(session.calls.map((call) => [call.id, tokensOf(call.result)]));
+		return { messages: session.messages, calls: session.calls, boundaries: session.boundaries, resultTokens: (id: string) => results.get(id) ?? 0 };
 	}),
 );
 const lifetime = [...cacheLifetime(lifetimeRequests)].sort(([a], [b]) => a.localeCompare(b));
@@ -778,22 +782,22 @@ if (asJson) {
 				sessions: sessions.length,
 				byKind: { main: countKinds("main"), child: countKinds("child"), standalone: countKinds("standalone") },
 				rounds: allRounds,
-				totalTokens: tk(allChars),
+				totalTokens: tk(allTokens),
 				totalCarried: tk(allCarried),
-				tools: Object.fromEntries(tools.map(([name, v]) => [name, { calls: v.n, tokens: tk(v.chars), carried: tk(v.carried) }])),
+				tools: Object.fromEntries(tools.map(([name, v]) => [name, { calls: v.n, tokens: tk(v.tokens), carried: tk(v.carried) }])),
 				read: {
 					calls: readCalls,
-					tokens: tk(readChars),
+					tokens: tk(readTokens),
 					reread: rereadCalls,
-					rereadTokens: tk(rereadChars),
+					rereadTokens: tk(rereadTokens),
 					identical: identicalCalls,
-					identicalTokens: tk(identicalChars),
+					identicalTokens: tk(identicalTokens),
 					outlined: outlinedReads,
 					rangedAfterOutline,
 					editsOk,
 					readAfterEdit,
 				},
-				repetition: { warns, corrected, savedTokens: tk(correctedChars), wouldStop },
+				repetition: { warns, corrected, savedTokens: tk(correctedTokens), wouldStop },
 				pruneGain: Object.fromEntries(
 					DELAYS.map((n) => [`delay${n}`, { carried: tk(curve.get(n)!), savedShare: share(allCarried - curve.get(n)!, allCarried) }]),
 				),
@@ -851,7 +855,7 @@ if (asJson) {
 				},
 				peers,
 				compactions: { automatic: blockingCompactions, idle: idleCompactions, manual: manualCompactions, byVia, byCode },
-				afterCompaction: { ...folded, foldedRereadChars: undefined, foldedRereadTokens: tk(folded.foldedRereadChars) },
+				afterCompaction: { ...folded, foldedRereadTokens: tk(folded.foldedRereadTokens) },
 				cacheLifetime: Object.fromEntries(
 					lifetime.map(([model, cells]) => [model, Object.fromEntries(LIFETIME_BUCKETS.map((bucket, i) => [bucket.label, cells[i]]))]),
 				),
@@ -889,25 +893,25 @@ console.log(
 );
 
 console.log("── 1. 工具结果的一次性体积，与它的携带成本 ──");
-console.log(`合计 ${tk(allChars).toLocaleString()} token，携带 ${(tk(allCarried) / 1e6).toFixed(0)}M token·轮\n`);
+console.log(`合计 ${tk(allTokens).toLocaleString()} token，携带 ${(tk(allCarried) / 1e6).toFixed(0)}M token·轮\n`);
 console.log("工具            次数     token    平均   携带(token·轮)   占比");
 for (const [name, v] of tools.slice(0, 12))
 	console.log(
-		`${name.padEnd(14)} ${pad(v.n, 5)}  ${pad(tk(v.chars).toLocaleString(), 9)}  ${pad(tk(v.chars / v.n), 6)}  ` +
+		`${name.padEnd(14)} ${pad(v.n, 5)}  ${pad(tk(v.tokens).toLocaleString(), 9)}  ${pad(tk(v.tokens / v.n), 6)}  ` +
 			`${pad(`${(tk(v.carried) / 1e6).toFixed(1)}M`, 13)}  ${pad(share(v.carried, allCarried), 6)}`,
 	);
 
 console.log("\n── 2. 单条最贵：体积 × 之后还要重发多少轮 ──");
 for (const item of biggest.sort((a, b) => b.carried - a.carried).slice(0, 10))
 	console.log(
-		`  ${item.session} ${item.tool.padEnd(7)} ${pad(tk(item.chars).toLocaleString(), 8)} token × 之后${pad(item.after, 4)}轮 ` +
+		`  ${item.session} ${item.tool.padEnd(7)} ${pad(tk(item.tokens).toLocaleString(), 8)} token × 之后${pad(item.after, 4)}轮 ` +
 			`= ${pad(`${(tk(item.carried) / 1e6).toFixed(0)}M`, 5)}  ${item.args}`,
 	);
 
 console.log("\n── 3. read 的重复 ──");
-console.log(`  ${readCalls} 次 / ${tk(readChars).toLocaleString()} token`);
-console.log(`  这个 path 之前读过：${rereadCalls} 次 (${share(rereadCalls, readCalls)})，${tk(rereadChars).toLocaleString()} token —— 改过再读是正常的`);
-console.log(`  参数一字不差：      ${identicalCalls} 次 (${share(identicalCalls, readCalls)})，${tk(identicalChars).toLocaleString()} token —— 这些是纯重复`);
+console.log(`  ${readCalls} 次 / ${tk(readTokens).toLocaleString()} token`);
+console.log(`  这个 path 之前读过：${rereadCalls} 次 (${share(rereadCalls, readCalls)})，${tk(rereadTokens).toLocaleString()} token —— 改过再读是正常的`);
+console.log(`  参数一字不差：      ${identicalCalls} 次 (${share(identicalCalls, readCalls)})，${tk(identicalTokens).toLocaleString()} token —— 这些是纯重复`);
 console.log(
 	`  折叠成结构视图：    ${outlinedReads} 次，之后又按段读同一文件 ${rangedAfterOutline} 次` +
 		`（平均 ${outlinedReads ? (rangedAfterOutline / outlinedReads).toFixed(1) : "0"} 次）`,
@@ -916,7 +920,7 @@ console.log(`  edit 成功后下一步就是重读同一文件：${readAfterEdit
 
 console.log("\n── 4. 重复检测这条闸门 ──");
 console.log(`  提醒（精确重复、翻页合计）：${warns} 次`);
-console.log(`  改写成「第 N 次」的结果：${corrected} 条，省下 ${tk(correctedChars).toLocaleString()} token (${share(correctedChars, allChars)})`);
+console.log(`  改写成「第 N 次」的结果：${corrected} 条，省下 ${tk(correctedTokens).toLocaleString()} token (${share(correctedTokens, allTokens)})`);
 console.log(`  会被 exhausted() 停掉的会话：${wouldStop} 个；实际被叫停（stalled）的：${lastStops.get("stalled") ?? 0} 个（只看最后一轮）`);
 if (wouldStop === 0) console.log("  ⚠ 一个都没有 —— 这条停止线在这批数据上是死的");
 
@@ -1063,7 +1067,7 @@ else {
 		`  写下边界 ${folded.boundaries} 次；保留的尾部中位 ${folded.keptMedian} 条、约 ${folded.tailTokensMedian.toLocaleString()} token，最少 ${folded.keptMin} 条，少于 ${KEEP_MIN} 条的 ${folded.keptBelowMin} 次`,
 	);
 	console.log(
-		`  压缩后到下一次压缩前：read ${folded.reads} 次，其中重读折叠掉的、期间没改过的文件 ${folded.foldedRereads} 次 / ${tk(folded.foldedRereadChars).toLocaleString()} token；recall ${folded.recalls} 次`,
+		`  压缩后到下一次压缩前：read ${folded.reads} 次，其中重读折叠掉的、期间没改过的文件 ${folded.foldedRereads} 次 / ${tk(folded.foldedRereadTokens).toLocaleString()} token；recall ${folded.recalls} 次`,
 	);
 	console.log(
 		`  压缩后用户发言 ${folded.userAfter} 条，其中提到「之前说过」或把折叠掉的原话又说了一遍 ${folded.repeatedAfter} 条 (${share(folded.repeatedAfter, folded.userAfter)})`,
