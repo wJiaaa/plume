@@ -1585,7 +1585,6 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		pinnedShot: (component) => registerSingle("pinnedShot", name, component),
 		useSession: useLiveSession,
 		useSessionActivity,
-		contextBreakdown: async (sessionId) => await agent.contextBreakdown(String(sessionId)),
 		listCommands: async (given) => {
 			const cwd = typeof given?.cwd === "string" && given.cwd ? given.cwd : undefined;
 			const provided = await agent.listCommands(cwd ? { cwd } : {});

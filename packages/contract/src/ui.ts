@@ -10,7 +10,6 @@ import type {
 	ApprovalDecision,
 	ApprovalRequest,
 	ChildTask,
-	ContextBreakdown,
 	FileContents,
 	HumanRequest,
 	OutgoingMessage,
@@ -371,7 +370,7 @@ export interface ConversationProps {
 		/**
 		 * 发送按钮左边的模型和思考档位，量的是这个会话（子会话没选的跟着父会话，独立会话没选的用默认模型）；会话还没建时只有给了 `blank` 才画。
 		 * `choose`：和主输入框同一枚按钮，能换，子会话的模型菜单最前面多一项「跟随主会话」；`show`：只读的模型名和档位，悬停说明末尾接 `modelTip`。
-		 * 不给就不画。插件经 `ui.composerItem(…, { side: "end" })` 加的格子（上下文用量）不用声明，会话在就画。
+		 * 不给就不画。插件经 `ui.composerItem(…, { side: "end" })` 加的格子和宿主的上下文用量不用声明，会话在就画。
 		 */
 		model?: "choose" | "show";
 		/**
@@ -1004,8 +1003,8 @@ export interface UiContext {
 	/** 登记界面入口的订阅清理；停用、重载或加载失败时执行，旧入口不能再注册皮肤。 */
 	effect(dispose: () => void): void;
 	/**
-	 * 输入框底下那排控件加一格：`start` 在左边，排在产品自己的「添加附件」和权限后面；`end` 在右边，排在模型选择前面
-	 * （上下文用量这类读数）。各自按 order 从小到大（默认 0，相同时按注册先后）。
+	 * 输入框底下那排控件加一格：`start` 在左边，排在产品自己的「添加附件」和权限后面；`end` 在右边，排在产品自己的上下文用量和模型选择前面
+	 * （跟下一轮的模型有关的读数）。各自按 order 从小到大（默认 0，相同时按注册先后）。
 	 * 组件自己画按钮（`@plume/ui` 的 `IconButton`，`size="composer"`），这一格不该显示时返回 null。id 在插件内唯一。
 	 */
 	composerItem(id: string, component: ComponentType<ComposerItemProps>, options?: ComposerItemOptions): void;
@@ -1204,11 +1203,6 @@ export interface UiContext {
 	 * 只在内存里，重开应用后都算看过。只在组件里调，规则同 React 的 hook。
 	 */
 	useSessionActivity(sessionId: string): SessionActivity | undefined;
-	/**
-	 * 这个会话的上下文窗口用到哪儿了：对话消息、工具表、系统提示词、项目指令、项目记忆各占多少，项目指令和项目记忆来自哪几个文件，见 `ContextBreakdown`。
-	 * 各段按最近一次发出的请求估，本次启动后这个会话还没发过请求时是 null。每次调用现算，在要看的时候调（比如点开读数时），别每次渲染都调。
-	 */
-	contextBreakdown(sessionId: string): Promise<ContextBreakdown | null>;
 	/**
 	 * 输入框 `/` 菜单此刻有的命令，同名去重后的样子：产品自己的（`/clear`，没有 `plugin`）在前，再是各插件经 `ctx.commands`
 	 * 供的。`cwd` 是按哪个目录列（项目里的命令文件、技能跟着变）。只读，展开、发送仍走输入框。每次调用现问，要看时再调。

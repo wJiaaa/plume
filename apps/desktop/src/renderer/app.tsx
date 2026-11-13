@@ -87,6 +87,7 @@ import { ChatBackdrop } from "./chat-backdrop.tsx";
 import { ImageViewerHost } from "./image/index.ts";
 import { notify, Toaster } from "./toast/index.ts";
 import { ComposerSend, ComposerShell } from "./composer/index.ts";
+import { ContextMeter } from "./composer/ContextMeter.tsx";
 import { useComposerAttachments } from "./composer/useComposerAttachments.tsx";
 import { InputMenu } from "./composer/InputMenu.tsx";
 import { parseInvocation, resolveCommand } from "./composer/commands.ts";
@@ -3260,6 +3261,7 @@ function Composer({ view, centered = false, cards = false }: { view?: SessionVie
 						right={
 							<>
 								<ComposerItems side="end" {...item} />
+								<ContextMeter view={view} contextWindow={model?.contextWindow} />
 								<ComposerModels view={view} disabled={sending !== undefined} />
 								<ComposerSend
 									running={running}

@@ -95,7 +95,6 @@ export default {
 | `ui.ComposerSend` | 产品的发送／停止按钮，收到 `{ running, disabled?, tip?, onSend, onStop }`；签名与使用见下文。经 `ui` 使用，不从 `@plume/ui` 导入 |
 | `ui.useSession(sessionId)` | React hook：一个会话的视图（摘要、消息、草稿、进度、审批），随它的事件更新；还没读到是 undefined |
 | `ui.useSessionActivity(sessionId)` | React hook：侧栏行首给这个会话的记号：`"waiting"`（它或子会话在等批准）、`"done"`、`"failed"`（人没看着时跑完、没跑完，人打开看过就清掉），没有记号是 undefined；只在内存里，重开应用都算看过。卡片上要「看过就不再提」时用它 |
-| `ui.contextBreakdown(sessionId)` | 这个会话的上下文窗口按段拆开：对话消息、工具、MCP 工具、技能目录、系统提示词、项目指令、记忆（`segments` 的 key 是 `memory`）各多少 token（按最近一次请求估，有服务商的总数时按比例缩放到它），`memoryFiles` 是项目指令和记忆按文件的来源（`{ path, tokens }[]`，插件经段的 `files` 标的）；本次启动后还没发过请求是 null。每次现算，要看时再调 |
 | `ui.listCommands({ cwd? })` | 输入框 `/` 菜单此刻有的命令（`ListedCommand[]`：`SlashCommand` 加 `plugin`），同名去重后的样子：产品自己的 `/clear`（没有 `plugin`）在前，再是各插件经 `ctx.commands` 供的；`cwd` 决定项目里的命令文件、技能列不列。只读，展开、发送仍走输入框；每次现问，要看时再调。命令设置页靠它列「内置」那一段（没有 `source` 的） |
 | `ui.Conversation` | 产品的对话视图组件：画一个会话（插件自己的子会话、独立会话），可选底下一个输入框 |
 | `ui.Markdown` | `{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走 |
@@ -309,12 +308,12 @@ ui.page("pull-requests", PullRequestsPage, { title, icon: GitPullRequest, topRow
 
 ```tsx
 ui.composerItem("capture", CaptureButton, { order: 0 });          // 左边，排在「添加附件」和权限后面
-ui.composerItem("context", ContextMeter, { side: "end" });        // 右边，排在模型选择前面
+ui.composerItem("budget", BudgetMeter, { side: "end" });          // 右边，排在宿主的上下文用量和模型选择前面
 ```
 
-新对话和会话里的输入框都有这一格。`side` 默认 `start`：左边放动作（截图）；`end` 放跟下一轮的模型有关的读数（上下文用量）。组件收到 `sessionId`（新对话里还没有会话，是 undefined）、`running`（这个会话在跑一轮）、`model`（下一轮会用的模型：`id`、`name`、`contextWindow`；一个可用的都没有时为空），自己画按钮：`IconButton`，`size="composer"`，加 `emphasis`；有开、关两态的模式开关用 `ComposerToggle`（关着是淡色图标，开着带字、用强调色）；读数这类不铺悬停底色的，自己的按钮加上 `plume-composer-control plume-composer-icon` 跟着工具栏的控件边长。会话的消息和用量用 `ui.useSession(sessionId)` 拿（回复的 `usage`），上下文按段的大小在点开时用 `ui.contextBreakdown(sessionId)` 要。这一格不该显示时（比如设置里关掉了）返回 null。
+新对话和会话里的输入框都有这一格。`side` 默认 `start`：左边放动作（截图）；`end` 放跟下一轮的模型有关的读数（挨着宿主自己的上下文用量圆环）。组件收到 `sessionId`（新对话里还没有会话，是 undefined）、`running`（这个会话在跑一轮）、`model`（下一轮会用的模型：`id`、`name`、`contextWindow`；一个可用的都没有时为空），自己画按钮：`IconButton`，`size="composer"`，加 `emphasis`；有开、关两态的模式开关用 `ComposerToggle`（关着是淡色图标，开着带字、用强调色）；读数这类不铺悬停底色的，自己的按钮加上 `plume-composer-control plume-composer-icon` 跟着工具栏的控件边长。会话的消息和用量用 `ui.useSession(sessionId)` 拿（回复的 `usage`）。这一格不该显示时（比如设置里关掉了）返回 null。
 
-这一排放不下时，模型名先缩；缩到认不出，宿主按顺序藏掉标了 `data-plume-fit-drop` 的元素：`"1"` 先藏（权限签和 `ComposerToggle` 开着时的字，`ComposerToggle` 自己带着），`"2"` 再藏（上下文用量这类看一眼的读数）。量是宿主做的，插件只在可让的元素上标这个属性；不标的一直画着。
+这一排放不下时，模型名先缩；缩到认不出，宿主按顺序藏掉标了 `data-plume-fit-drop` 的元素：`"1"` 先藏（权限签和 `ComposerToggle` 开着时的字，`ComposerToggle` 自己带着），`"2"` 再藏（宿主的上下文用量，和插件加的这类看一眼的读数）。量是宿主做的，插件只在可让的元素上标这个属性；不标的一直画着。
 
 ## 项目签那一行
 
@@ -453,7 +452,7 @@ function SidePanel({ tab }: PanelProps) {
 ```
 
 - 不给 `composer` 就只读。默认按发送调 `send`，会话跑着时发送键换成停止键、按了调 `stop`，保持侧边聊天行为。`mode: "steer"` 时运行中也能发送，发送键不变停止键；`disabled` 保留但禁用操控区。停止可放在面板头部。
-- 输入框右下和主输入框一样：插件经 `ui.composerItem(…, { side: "end" })` 加的格子（上下文用量）会话在就画，拿到的是子会话；`model: "choose"` 再画能换的模型和思考档位（菜单最前面是「跟随主会话」，选了就清掉子会话自己的），`model: "show"` 画只读的模型和档位、悬停说明末尾接 `modelTip`。量的都是下一轮实际会用的：子会话没选的跟着父会话。会话还没建（第一句没发）时这些都不画；要让人在第一句之前就选，给 `blank: { parentId, model }`（第一句开在哪个会话下面、人没动过时插件要用的模型），`model: "choose"` 的模型和档位照画（没有用量格子），选的经 `send(text, choice)`、`sendMessage(message, choice)` 的 `choice`（`SessionChoice`：`model` 没有是跟随父会话）交回，建会话时照它给 `ctx.sessions.create({ parentId, ...choice })`。`footer` 放插件自己的东西，排在它们前面。
+- 输入框右下和主输入框一样：插件经 `ui.composerItem(…, { side: "end" })` 加的格子和宿主的上下文用量会话在就画，量的是子会话；`model: "choose"` 再画能换的模型和思考档位（菜单最前面是「跟随主会话」，选了就清掉子会话自己的），`model: "show"` 画只读的模型和档位、悬停说明末尾接 `modelTip`。量的都是下一轮实际会用的：子会话没选的跟着父会话。会话还没建（第一句没发）时这些都不画；要让人在第一句之前就选，给 `blank: { parentId, model }`（第一句开在哪个会话下面、人没动过时插件要用的模型），`model: "choose"` 的模型和档位照画（没有用量格子），选的经 `send(text, choice)`、`sendMessage(message, choice)` 的 `choice`（`SessionChoice`：`model` 没有是跟随父会话）交回，建会话时照它给 `ctx.sessions.create({ parentId, ...choice })`。`footer` 放插件自己的东西，排在它们前面。
 - 提供 `sendMessage` 时输入框接入附件，交回完整 `OutgoingMessage`；不提供仍是纯文字。草稿与附件按子会话隔离，异步发送失败不会把文字还到另一个子会话。
 - 需要保留草稿、接收划词引用或弹出窗口时设置 `composer.draftKey: tab`（`PanelProps.tab`）。未发送文字、附件和引用按标签保存，支持 `sendMessage`；弹出、收回先确认存储成功，失败阻止交接并保留内存草稿。发送时引用附在消息文字前面，发送失败保留草稿，关闭标签后清理草稿；是否允许关闭仍由面板的 `onClose` 决定。
 - `renderUserMessage(message, fallback)` 只改当前视图用户消息的样子，可按 `origin === "parent"` 画任务卡，其余返回 fallback。`replyText(text, message)` 只过滤当前视图正文与复制，回报卡去重时只拿掉该条最终正文，不动工具和思考，也不改存储。回报卡复用 `ui.turnFooter`。

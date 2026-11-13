@@ -27,7 +27,7 @@ export function ProjectCard({
 			role="tooltip"
 			data-plume-project-card=""
 			style={{ zIndex: CARD_Z, left: at?.left ?? -9999, top: at?.top ?? -9999, opacity: at ? undefined : 0 }}
-			className={`bg-float shadow-menu pointer-events-none fixed w-max max-w-[340px] min-w-[220px] overflow-hidden rounded-xl border border-line-soft px-3 py-2.5 ${
+			className={`bg-float shadow-menu pointer-events-none fixed w-max max-w-[340px] min-w-[220px] overflow-hidden rounded-xl border border-line-float px-3 py-2.5 ${
 				leaving ? "sidebar-card-out" : "sidebar-card-in"
 			}`}
 		>
