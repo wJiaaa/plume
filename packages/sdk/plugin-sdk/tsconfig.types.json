@@ -8,7 +8,17 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "rootDir": "../..",
-    "outDir": "dist"
+    "outDir": "dist",
+    // 这几个包互相引用时直接指到源码，不经 node_modules 里的软链接：经 node_modules 找到的文件算外部库、不生成声明，
+    // 而 tsc 并行加载时同一个文件先从哪条路被找到不固定，偶尔就缺了 rpc 的 endpoint.d.ts 这种子文件，
+    // 插件里引到它的类型悄悄成了 any（skipLibCheck 不报），插件的类型检查报出一批「参数隐式 any」。
+    // @plume/llm 不在这里：用的是它自己生成的声明，声明文件本来就不生成。
+    "paths": {
+      "@plume/contract": ["../../contract/src/index.ts"],
+      "@plume/contract/ui": ["../../contract/src/ui.ts"],
+      "@plume/rpc": ["../../infra/rpc/src/index.ts"],
+      "@plume/styles": ["../../client/styles/src/index.ts"]
+    }
   },
   "files": [
     "../../contract/src/index.ts",
