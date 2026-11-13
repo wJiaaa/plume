@@ -25,6 +25,24 @@ const ANSWERS =
 	"unreplied 是对方读到请求的那一轮收场了却没答，正文是那一轮最后说的话，未必对着你的问题；" +
 	"dropped 是对方没读到（它的人先按了停，或者送达被拦下），closed 是对方会话在答复之前关了——这两种都没有答复，要再问先告诉你的用户。";
 
+/**
+ * 往来链：一封信经手过的会话，按先后排、含发件方。信叫起的那一轮接着它，那一轮里寄出的信再加一跳；代答也一样（见 `LetterReceipt`），
+ * 所以对方总不正面回答时链照样变长。超过这么多跳，多半是几个会话在原地来回。
+ */
+const CHAIN_LIMIT = 28;
+/** 同一个会话在一条链里最多经手几次：两个会话来回时它先撞上。 */
+const CHAIN_SELF_HOPS = 10;
+
+/** `from` 寄出一封在 `chain` 上的信（`chain` 已经含它）：太长、太绕时给模型的那句，能寄就是 `undefined`。 */
+export function chainRefusal(from: string, chain: readonly string[]): string | undefined {
+	if (chain.length <= CHAIN_LIMIT && chain.filter((id) => id === from).length <= CHAIN_SELF_HOPS) return undefined;
+	// i18n-exempt：给模型的话，作为寄信抛的错交给寄信的插件。
+	return (
+		`没有寄出：这封信会让会话之间的往来链到 ${chain.length} 跳（最多 ${CHAIN_LIMIT} 跳，同一个会话最多经手 ${CHAIN_SELF_HOPS} 次），多半是在原地来回。` +
+		"别再转给别的会话了，把情况告诉你的用户。"
+	);
+}
+
 /** 代答时带过去的最后那段回复最多几个字：够读结论，长报告该让对方写进文件。 */
 const REPLY_LIMIT = 4000;
 

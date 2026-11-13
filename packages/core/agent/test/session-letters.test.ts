@@ -107,17 +107,17 @@ const holdCall: FakeReply = { toolCalls: [{ id: "call_hold", name: "keep", args:
 it("寄给闲着的会话：聚合后为它开一轮，消息带 peer，开头说明不是用户的话，同样的说明只写一遍", async () => {
 	const { service, asker, target, done, letterOf } = await open([keepCall, { text: "读到了" }]);
 	const letter = (await letterOf())!;
-	const first = letter(target.id, { from: "问的 [aaaaaa]", text: "第一问", request: true, guide: "GUIDE_REQUEST", chain: [asker.id] });
+	const first = letter(target.id, { from: "问的 [aaaaaa]", text: "第一问", request: true, guide: "GUIDE_REQUEST" });
 	const second = letter(target.id, { from: "问的 [aaaaaa]", text: "第二问", request: true, guide: "GUIDE_REQUEST" });
 	await done(target.id, 1);
-	expect(await first.read).toEqual({ status: "read", opened: true });
-	expect(await second.read).toEqual({ status: "read", opened: true });
+	expect(await first.read).toEqual({ status: "read" });
+	expect(await second.read).toEqual({ status: "read" });
 	const delivered = (await service.getSession(target.id)).messages[0]!;
 	expect(delivered).toMatchObject({
 		role: "user",
 		synthetic: true,
 		peer: [
-			{ id: first.id, sessionId: asker.id, from: "问的 [aaaaaa]", text: "第一问", cwd: dir, request: true, chain: [asker.id] },
+			{ id: first.id, sessionId: asker.id, from: "问的 [aaaaaa]", text: "第一问", cwd: dir, request: true },
 			{ id: second.id, sessionId: asker.id, text: "第二问", request: true },
 		],
 	});
@@ -127,7 +127,7 @@ it("寄给闲着的会话：聚合后为它开一轮，消息带 peer，开头�
 	expect(text).toContain(`<session-message from="问的 [aaaaaa]" cwd="${dir}" reply="expected">\n第一问\n</session-message>`);
 });
 
-it("寄给忙着的会话：不另开一轮，在步骤边界读到，不算叫起这一轮", async () => {
+it("寄给忙着的会话：不另开一轮，在步骤边界读到", async () => {
 	const { service, target, done, letterOf } = await open([keepCall, { toolCalls: [{ id: "call_gate", name: "gate", args: {} }] }, { text: "做完" }], (ctx) =>
 		ctx.tools.register({
 			name: "gate",
@@ -144,7 +144,7 @@ it("寄给忙着的会话：不另开一轮，在步骤边界读到，不算叫�
 	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.running).toBe(true));
 	const receipt = letter(target.id, { from: "问的", text: "插一句" });
 	await done(target.id, 2);
-	expect(await receipt.read).toEqual({ status: "read", opened: false });
+	expect(await receipt.read).toEqual({ status: "read" });
 	const roles = (await service.getSession(target.id)).messages.map((message) => (message.role === "user" && message.peer ? "letter" : message.role));
 	expect(roles).toEqual(["user", "assistant", "toolResult", "letter", "assistant"]);
 });
@@ -173,7 +173,7 @@ it("收件方的人按停：请求没读到，本体替它答 dropped；通知�
 
 	service.send(target.id, { content: [{ type: "text", text: "人开口" }] });
 	await done(target.id, 1);
-	expect(await notice.read).toEqual({ status: "read", opened: false });
+	expect(await notice.read).toEqual({ status: "read" });
 	const messages = (await service.getSession(target.id)).messages;
 	expect(messages.map((message) => (message.role === "user" && message.peer ? "letter" : message.role))).toEqual(["user", "letter", "assistant"]);
 	expect(messages[1]).toMatchObject({ peer: [{ text: "停之前的通知" }] });
@@ -187,8 +187,8 @@ it("停下以后寄来的照常为它开一轮，留着的信一起读到、排�
 	service.stop(target.id);
 	const fresh = letter(target.id, { from: "问的", text: "停之后" });
 	await done(target.id, 1);
-	expect(await kept.read).toEqual({ status: "read", opened: true });
-	expect(await fresh.read).toEqual({ status: "read", opened: true });
+	expect(await kept.read).toEqual({ status: "read" });
+	expect(await fresh.read).toEqual({ status: "read" });
 	expect((await service.getSession(target.id)).messages[0]).toMatchObject({ peer: [{ text: "停之前" }, { text: "停之后" }] });
 });
 
@@ -209,7 +209,7 @@ it("读信的那一轮被插话打断：请求和通知都留着，接在插话�
 	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.running).toBe(true));
 	service.send(target.id, { content: [{ type: "text", text: "插话" }], interrupt: true });
 	await done(target.id, 1);
-	expect(await request.read).toEqual({ status: "read", opened: false });
+	expect(await request.read).toEqual({ status: "read" });
 	const messages = (await service.getSession(target.id)).messages;
 	expect(messages.map((message) => (message.role === "user" && message.peer ? "letter" : message.role))).toEqual(["user", "letter", "assistant"]);
 });
@@ -279,7 +279,7 @@ it("发件方删掉了：读到请求的那一轮照常收场，不再答，回�
 	const receipt = letter(target.id, { from: "问的", text: "问一句", request: true });
 	await service.deleteSession(asker.id);
 	await done(target.id, 1);
-	expect(await receipt.read).toEqual({ status: "read", opened: true });
+	expect(await receipt.read).toEqual({ status: "read" });
 	expect(receipt.answer({ from: "答的", text: "x" })).toBeUndefined();
 });
 
@@ -287,7 +287,7 @@ it("收件方读到请求以后被人停下：那一轮以停下收场，本体�
 	const { service, asker, target, letterOf, release } = await open([keepCall, { ...holdCall, text: "先看看" }, { text: "收到" }]);
 	const letter = (await letterOf())!;
 	const receipt = letter(target.id, { from: "问的", text: "要答的问", request: true, recipient: "答的" });
-	expect(await receipt.read).toEqual({ status: "read", opened: true });
+	expect(await receipt.read).toEqual({ status: "read" });
 	await vi.waitFor(async () => expect((await service.getSession(target.id)).messages.some((message) => message.role === "assistant")).toBe(true), {
 		timeout: 5_000,
 		interval: 10,
@@ -314,7 +314,7 @@ it("收件方删掉了：读到了的、还没读到的请求都由本体答 clo
 	const unread = letter(other.id, { from: "问的", text: "没读到的问", request: true, recipient: "另一个" });
 	await service.deleteSession(target.id);
 	await service.deleteSession(other.id);
-	expect(await read.read).toEqual({ status: "read", opened: true });
+	expect(await read.read).toEqual({ status: "read" });
 	expect(await unread.read).toEqual({ status: "closed" });
 	// 答复聚合好了再放开发件方，在它的下一个步骤边界读到。
 	await new Promise((resolve) => setTimeout(resolve, 600));
@@ -392,3 +392,57 @@ it("收件方自己寄来答复：本体对上那封请求、补上 re，那一�
 	]);
 	expect(receipt().answer({ from: "对方", text: "它最后说的话", answer: "unreplied" })).toBeUndefined();
 });
+
+it("收件方总不正面回答：代答叫起的那一轮接着请求的链往下数，来回到上限时寄信抛错；人开口以后从头算", async () => {
+	/** 发件方每被叫起一次就再问一句；`asking` 关掉以后只说一句话收场。 */
+	let asking = true;
+	let targetId = "";
+	const sent: string[] = [];
+	const refused: string[] = [];
+	const last = (request: Record<string, unknown>) => JSON.stringify((request.messages as unknown[]).at(-1));
+	const { service, asker, target } = await open(
+		(request) => {
+			const message = last(request);
+			if (message.includes("tool_result")) return { text: "等答复" };
+			// 收件方：从不寄答复，那一轮收场时由本体拿这句代答。
+			if (message.includes('reply=\\"expected\\"')) return { text: "我先不说" };
+			// 参数每次不同，免得撞上重复调用的提醒。
+			const n = sent.length + refused.length;
+			return asking ? { toolCalls: [{ id: `call_ask_${n}`, name: "ask", args: { n } }] } : { text: "好" };
+		},
+		(ctx) =>
+			ctx.tools.register({
+				name: "ask",
+				description: "再问一句",
+				parameters: { type: "object", properties: {} },
+				async execute(_args, run) {
+					try {
+						const receipt = run.letter!(targetId, { from: "问的", text: `第 ${sent.length + 1} 问`, request: true, recipient: "答的" });
+						sent.push(receipt.id);
+						return { output: "问了" };
+					} catch (error) {
+						asking = false;
+						refused.push((error as Error).message);
+						return { output: (error as Error).message, isError: true };
+					}
+				},
+			}),
+	);
+	targetId = target.id;
+	service.send(asker.id, { content: [{ type: "text", text: "开始" }] });
+	await vi.waitFor(() => expect(refused).toHaveLength(1), { timeout: 30_000, interval: 20 });
+	// 两边来回：发件方第 n 次问时链有 2n-1 跳、它自己经手 n 次，第 11 次超出同一个会话最多经手 10 次。
+	expect(sent).toHaveLength(10);
+	expect(refused[0]).toContain("往来链到 21 跳");
+	const answers = answersOf((await service.getSession(asker.id)).messages);
+	expect(answers).toHaveLength(10);
+	expect(answers.every((letter) => letter.answer === "unreplied")).toBe(true);
+
+	// 被拦下的那一轮收场以后人再开口。
+	await vi.waitFor(async () => expect((await service.getSession(asker.id)).summary.running).toBe(false), { timeout: 5_000, interval: 20 });
+	asking = true;
+	service.send(asker.id, { content: [{ type: "text", text: "再问一次" }] });
+	await vi.waitFor(() => expect(sent).toHaveLength(11), { timeout: 5_000, interval: 20 });
+	asking = false;
+	expect(refused).toHaveLength(1);
+}, 40_000);

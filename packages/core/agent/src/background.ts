@@ -44,6 +44,8 @@ interface Run {
 /** 别的会话寄来、还没有着落的一封信，见 `ToolRun.letter`。 */
 export interface Letter {
 	peer: PeerLetter;
+	/** 它所在的往来链，按经手的会话 id 排、含发件方；叫起收件方一轮时那一轮接着它（见 `chainRefusal`）。 */
+	chain: string[];
 	guide?: string;
 	/** 定下它的下落；只认第一次。 */
 	settle(fate: LetterFate): void;
@@ -156,11 +158,12 @@ export class BackgroundRuns {
 	}
 
 	/** 给 `sessionId` 攒一封信，信有了着落时兑现。删掉、退出时是 `closed`，人按停时请求是 `dropped`（见 `cancelSession`）。 */
-	letter(sessionId: string, peer: PeerLetter, guide?: string): Promise<LetterFate> {
+	letter(sessionId: string, peer: PeerLetter, chain: string[], guide?: string): Promise<LetterFate> {
 		const fate = Promise.withResolvers<LetterFate>();
 		let settled = false;
 		const letter: Letter = {
 			peer,
+			chain,
 			...(guide ? { guide } : {}),
 			settle: (value) => {
 				if (settled) return;

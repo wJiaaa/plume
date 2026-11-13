@@ -75,7 +75,7 @@ import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
 import { BackgroundJobs } from "./jobs.ts";
 import { SessionWakeups } from "./wakeups.ts";
-import { CLOSED_TEXT, DROPPED_TEXT, excerpt, lettersText, unrepliedText } from "./letters.ts";
+import { chainRefusal, CLOSED_TEXT, DROPPED_TEXT, excerpt, lettersText, unrepliedText } from "./letters.ts";
 import { ChildTasks } from "./child-tasks.ts";
 import { SessionQueues, type Source, childTask, stewardMessage } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
@@ -251,6 +251,12 @@ interface Session {
 	switching?: Set<(to: Pick<ModelConfig, "id" | "name">) => void>;
 	/** 这一轮（记的是它的控制器）里有工具要求收场后归档，见 `ToolRun.archiveAfterTurn`。 */
 	archiveAfterTurn?: AbortController;
+	/**
+	 * 这一轮接着的往来链（按经手的会话 id 排，见 `chainRefusal`）：叫起它的那几封信里最长的那条（见 `consumeBoundary` 的 `waking`）。
+	 * 插在两步之间的信不接——几个会话各跑一个长回合、互相递信时，每封都加一跳，正常协作也会撞上上限。一轮开头清空，
+	 * 人在这一轮里开口时也清空。只在内存里。
+	 */
+	chain?: string[];
 	/** 代管插件替人答了的卡：调用 id → 那个插件。调用收场时取走，记进结果的 `answeredBy`（见 `tool-run.ts` 的 `relayed`）。 */
 	answeredBy?: Map<string, string>;
 	/** 经 `ctx.sessions.launch` 开出它、还在等它第一次真闲下来（`LaunchedSession.idle`）的插件：这期间它收得到这个会话的观察，见 `concerned`。 */
@@ -270,7 +276,7 @@ interface Asking {
 	recipient: string;
 	cwd: string;
 	/** 请求所在的往来链，代答接在它后面。 */
-	chain?: string[];
+	chain: string[];
 }
 
 /**
@@ -1868,9 +1874,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/**
 	 * 把这一刻送到的读进会话：先是人的插话，再是后台结果和别的会话的信（合成一条运行时送达）。
-	 * `opening`：这是一轮开头、没有人的话叫起它，读进来的信算叫起这一轮的（`LetterFate.opened`）。
+	 * `waking`：会话这一刻没在做事——一轮开头没有人的话，或者这一轮的步骤已经做完——读进来的信叫起了它，之后接着它们的
+	 * 往来链（`Session.chain`）；插在两步之间的不接。
 	 */
-	async function consumeBoundary(session: Session, controller: AbortController, opening = false): Promise<boolean> {
+	async function consumeBoundary(session: Session, controller: AbortController, waking = false): Promise<boolean> {
 		let received = false;
 		while (!controller.signal.aborted && session.steering?.length) {
 			const prompt = session.steering.shift()!;
@@ -1879,7 +1886,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const verdict = await submitPrompt(session, prompt, controller.signal);
 			if (controller.signal.aborted) return received;
 			if (verdict.block) emit({ type: "notice", sessionId: session.summary.id, text: verdict.reason, level: "warn" });
-			else if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted)) received = true;
+			else if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted)) {
+				received = true;
+				// 人开口了：之后寄出去的信是人要的，不再接着叫起这一轮的那条链。
+				if (!prompt.synthetic) delete session.chain;
+			}
 		}
 		if (controller.signal.aborted) return received;
 		let reports = background.take(session.summary.id);
@@ -1911,7 +1922,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					break;
 				}
 				if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted && reports.every((report) => report.valid()))) {
-					for (const letter of letters) letter.settle({ status: "read", opened: opening });
+					for (const letter of letters) letter.settle({ status: "read" });
+					// 叫起它的信接上它们的链；几条时取最长的：链是防两边原地来回的，宁可多算一跳。
+					if (waking)
+						session.chain = letters.reduce<string[] | undefined>(
+							(longest, letter) => (letter.chain.length > (longest?.length ?? 0) ? letter.chain : longest),
+							session.chain,
+						);
 					received = true;
 					break;
 				}
@@ -1934,19 +1951,25 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/**
 	 * `from` 给 `toId` 寄一封信（`ToolRun.letter`、`LetterReceipt.answer`）。两边都得是顶层会话；发件方的 id、目录照实填。
 	 *
-	 * 请求记进 `asking`，有了答复才划掉，配对归本体（见 `LetterReceipt`）：一封答复答掉 `answering` 那几封，没给就是收件方问
+	 * 请求记进 `asking`，有了答复才划掉，配对归本体（见 `LetterReceipt`）：一封答复答掉 `reply.answering` 那几封，没给就是收件方问
 	 * 这边、这边读到了还没答的全部；一封也对不上的按通知送。没答的由本体代答：读到它的那一轮收场时（`answerUnreplied`），
 	 * 没读到时（下面 `read` 的下落），收件方删掉时（`deleteTree`）。
+	 *
+	 * 往来链也归本体：工具调用寄的接着发件方这一轮的链（`Session.chain`），太长、太绕的抛错不寄（`chainRefusal`）；回执替收件方答的（`reply`）
+	 * 接着它答的那封信的链，不拦：一封答一封，放大不了。
 	 */
-	function postLetter(from: Session, toId: string, input: LetterInput, answering?: Asking[]): LetterReceipt {
+	function postLetter(from: Session, toId: string, input: LetterInput, reply?: { chain: string[]; answering: Asking[] }): LetterReceipt {
 		const to = sessions.get(String(toId));
 		if (quitting || !sessions.has(from.summary.id)) throw new Error(text("session.parentStopped"));
 		if (!to || to.summary.kind !== "top" || from.summary.kind !== "top" || to === from) throw new Error(text("session.badLetterTarget", { id: String(toId) }));
 		const words = typeof input?.text === "string" ? input.text.trim() : "";
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
+		const chain = reply?.chain ?? [...(from.chain ?? []), from.summary.id];
+		const runaway = reply ? undefined : chainRefusal(from.summary.id, chain);
+		if (runaway) throw new Error(runaway);
 		const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined);
-		const chain = strings(input.chain);
+		const answering = reply?.answering;
 		const kind = input.answer && ["replied", "unreplied", "dropped", "closed"].includes(input.answer) ? input.answer : undefined;
 		const answers = kind
 			? (answering ?? [...asking].filter((entry) => entry.from === to.summary.id && entry.to === from.summary.id && entry.read)).filter((entry) =>
@@ -1963,9 +1986,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			cwd: from.summary.cwd,
 			...(input.request === true ? { request: true } : {}),
 			...(kind && answers.length ? { answer: kind, re: given?.length ? given : answers.map((entry) => entry.excerpt) } : {}),
-			...(chain?.length ? { chain } : {}),
 		};
-		const read = deliverLetter(to, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
+		const read = deliverLetter(to, peer, chain, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
 		answered(answers);
 		const entry: Asking | undefined = peer.request
 			? {
@@ -1976,7 +1998,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					excerpt: excerpt(words),
 					recipient,
 					cwd: to.summary.cwd,
-					...(chain?.length ? { chain } : {}),
+					chain,
 				}
 			: undefined;
 		if (entry) {
@@ -1995,14 +2017,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			answer: (letter) => {
 				if (used || quitting || !sessions.has(from.summary.id) || !sessions.has(to.summary.id) || (entry && !asking.has(entry))) return undefined;
 				used = true;
-				return postLetter(to, from.summary.id, entry ? { ...letter, answer: letter?.answer ?? "replied" } : letter, entry ? [entry] : []);
+				return postLetter(to, from.summary.id, entry ? { ...letter, answer: letter?.answer ?? "replied" } : letter, {
+					chain: [...chain, to.summary.id],
+					answering: entry ? [entry] : [],
+				});
 			},
 		};
 	}
 
-	/** 把一封信攒给 `to`：一封信是一件新的事，和人开口一样，停下过的会话也为它开一轮。 */
-	function deliverLetter(to: Session, peer: PeerLetter, guide?: string): Promise<LetterFate> {
-		const read = background.letter(to.summary.id, peer, guide);
+	/** 把一封信攒给 `to`：一封信是一件新的事，和人开口一样，停下过的会话也为它开一轮。`chain` 是它所在的往来链。 */
+	function deliverLetter(to: Session, peer: PeerLetter, chain: string[], guide?: string): Promise<LetterFate> {
+		const read = background.letter(to.summary.id, peer, chain, guide);
 		to.stopped = false;
 		return read;
 	}
@@ -2019,17 +2044,21 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const first = theirs[0]!;
 			const asker = sessions.get(askerId);
 			if (asker) {
-				const chain = theirs.reduce<string[]>((longest, entry) => (entry.chain && entry.chain.length > longest.length ? entry.chain : longest), []);
-				deliverLetter(asker, {
-					id: randomUUID(),
-					sessionId: first.to,
-					from: first.recipient,
-					text: words(theirs),
-					cwd: first.cwd,
-					answer: kind,
-					re: theirs.map((entry) => entry.excerpt),
-					...(chain.length ? { chain: [...chain, first.to] } : {}),
-				});
+				// 代答和收件方自己回的一样接着请求的链，叫起的那一轮照样往下数：对方总不正面回答时，来回几次照样撞上上限。
+				const chain = theirs.reduce<string[]>((longest, entry) => (entry.chain.length > longest.length ? entry.chain : longest), []);
+				deliverLetter(
+					asker,
+					{
+						id: randomUUID(),
+						sessionId: first.to,
+						from: first.recipient,
+						text: words(theirs),
+						cwd: first.cwd,
+						answer: kind,
+						re: theirs.map((entry) => entry.excerpt),
+					},
+					[...chain, first.to],
+				);
 			}
 			answered(theirs);
 		}
@@ -2053,6 +2082,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		active.add(session);
 		session.looping = controller;
 		delete session.summary.stop;
+		delete session.chain;
 		session.hiccups = [];
 		emit({ type: "hiccups", sessionId, hiccups: [] });
 		setRunning(session, true);
@@ -2150,9 +2180,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			} else accepted = await consumeBoundary(session, controller, true);
 			// 拦下的这条没写进会话，这一轮什么也没做，按完成收场：不留「已暂停 · 继续」。
 			stop = controller.signal.aborted ? { reason: "aborted" } : !accepted ? { reason: "done" } : await steps();
-			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。
+			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。步骤已经做完，这时读到的信是叫起了它。
 			while (!controller.signal.aborted && stop.reason === "done" && (session.steering?.length || background.hasReady(sessionId))) {
-				if (await consumeBoundary(session, controller)) stop = await steps();
+				if (await consumeBoundary(session, controller, true)) stop = await steps();
 			}
 			if (controller.signal.aborted) stop = { reason: "aborted" };
 		} catch (error) {

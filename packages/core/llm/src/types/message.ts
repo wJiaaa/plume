@@ -312,7 +312,7 @@ export interface UserMessage {
 	 * 另一个会话的模型发来的消息——不是看着这个面板的人说的话。
 	 *
 	 * `content` 是给模型读的那份（外面套着 `<session-message>`）；这一项给界面画成「来自 X」，
-	 * 并让回信的那一方接上同一条链（插件经 `ToolRun.letter` 寄，配对和代答见 `@plume/contract` 的 `LetterReceipt`）。
+	 * 本体代答时据它的 `id` 找回读到请求的那条消息（插件经 `ToolRun.letter` 寄，配对和代答见 `@plume/contract` 的 `LetterReceipt`）。
 	 */
 	peer?: PeerLetter[];
 	/**
@@ -397,8 +397,6 @@ export interface PeerLetter {
 	text: string;
 	/** 对方的工作目录，跨项目时路径的意思会变，模型要知道是从哪儿说的。 */
 	cwd?: string;
-	/** 这封信所在的往来链，按经手的会话 id 排；跳数上限由寄信的插件定。 */
-	chain?: string[];
 }
 
 export interface RequestPrefix {

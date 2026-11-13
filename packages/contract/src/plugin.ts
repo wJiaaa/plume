@@ -271,8 +271,8 @@ export interface ToolRun {
 	schedule?(wake: WakeupInput): SessionWakeup | undefined;
 	/**
 	 * 给另一个顶层会话寄一封信（`to` 是它的 id），见 `LetterReceipt`。只有顶层会话有，也只寄得到别的顶层会话：
-	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。请求的答复由本体配对、没答时由本体代答，见 `LetterReceipt`。
-	 * 对方不在、是子会话、是自己时抛错。
+	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。请求的答复由本体配对、没答时由本体代答，往来链也由本体数，
+	 * 见 `LetterReceipt`。对方不在、是子会话、是自己时抛错；往来链太长、太绕时抛错，message 是给模型的话（让它停下、回去告诉人）。
 	 * 只在这次调用里用：调用答完以后再调就抛错（回执的 `answer` 不受影响）。
 	 */
 	letter?(to: string, letter: LetterInput): LetterReceipt;
@@ -440,7 +440,7 @@ export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "i
 
 /**
  * 一封信写什么（`ToolRun.letter`）。字段的意思见 `PeerLetter`：`from` 是发件方的地址，收件方回信时原样当作收件人；
- * 是请求、答复还是通知，所在的往来链，由寄信的插件定。
+ * 是请求、答复还是通知由寄信的插件定，往来链由本体数（见 `LetterReceipt`）。
  * - 答复（`answer`，插件写的一般是 `replied`）对着哪几封请求由本体认：收件方读到了、还没答的、这封信的收件方问它的请求，一封答复
  *   全部答掉；`re` 不给时本体按这几封请求的开头填。一封也对不上（问的都答过了、根本没问过）时按通知送，`answer`、`re` 都不带。
  * - `recipient` 只对请求有用：收件方的地址，写法和 `from` 一样由寄信的插件定。本体替收件方代答（见 `LetterReceipt`）时拿它当
@@ -448,14 +448,14 @@ export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "i
  * - `guide` 是给收件方模型的处理说明（「标着 reply="expected" 的用某件工具回」），一次送达里一样的只写一遍。各个标记本身是什么意思
  *   （请求没答会被代答、`answer` 的几种值）本体自己会说，插件只说怎么用它的工具。
  */
-export type LetterInput = Pick<PeerLetter, "from" | "text" | "request" | "answer" | "re" | "chain"> & { recipient?: string; guide?: string };
+export type LetterInput = Pick<PeerLetter, "from" | "text" | "request" | "answer" | "re"> & { recipient?: string; guide?: string };
 
 /**
- * 信的下落。`read`：写进了收件方的对话；`opened` 是这封信（和同批的）叫起了收件方的一轮，不是插进一轮已经在跑的。
+ * 信的下落。`read`：写进了收件方的对话。
  * `dropped`：没读到——请求还没读到收件方的人就按了停（通知和答复不丢，留到它下一轮开头读，这期间没有着落），或钩子 prompt.submit
  * 拦下了这次送达。`closed`：收件方删掉了，或应用退出了。
  */
-export type LetterFate = { status: "read"; opened: boolean } | { status: "dropped" } | { status: "closed" };
+export type LetterFate = { status: "read" } | { status: "dropped" } | { status: "closed" };
 
 /**
  * 寄出的一封信。信和后台结果走同一条路：收件方忙着时在下一个步骤边界读到，闲着时为它开一轮（停下过的也开：一封信是
@@ -469,6 +469,11 @@ export type LetterFate = { status: "read"; opened: boolean } | { status: "droppe
  * - 发件方删掉了、应用退出了：不再答。
  * 代答从收件方寄回发件方，`from` 是请求的 `recipient`，和收件方自己回的一样走信的路。答过的请求再答一次（收件方答了以后又回、
  * 插件在本体代答以后再代答）什么也不寄：`answer` 返回 `undefined`，寄来的答复按通知送或不寄（见 `answer`）。
+ *
+ * 往来链防几个会话原地来回，也由本体数，不靠哪个插件记账：一封信叫起收件方的一轮（不是插进一轮已经在跑的），这一轮里经
+ * `ToolRun.letter` 寄出的信就接着它的链再加一跳；人在这一轮里开口以后从头算。代答、经回执 `answer` 替收件方答的接着它答的
+ * 那封信的链，同样往下数，所以收件方总不正面回答时也照样数到上限。一条链超过 28 跳、或同一个会话经手超过 10 次时
+ * `ToolRun.letter` 抛错不寄；代答和回执的 `answer` 一封答一封，不拦。
  */
 export interface LetterReceipt {
 	/** 这封信的 id，记在收件方对话里那条消息的 `peer` 上。 */
