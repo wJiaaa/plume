@@ -8,6 +8,7 @@ import type { KindOf, ReplyOrigin } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
 import { FIRST_SUMMARY, focusNote, hasSummary, SUMMARY_SYSTEM, UPDATE_SUMMARY } from "./prompts.ts";
 import { allowance } from "./prune.ts";
+import { shownPath } from "./stale-results.ts";
 
 /**
  * 历史一次放不进摘要请求时，最多分几段写。每多一段就多一次不吃缓存的请求，还要多等一份摘要写完。超长恢复时历史大约一个窗口，摘要请求的
@@ -316,11 +317,19 @@ function clip(text: string, limit: number): string {
  * 这条路恰好在摘要模型够不着时走，那正是会话最经不起再丢掉目的的时候。所以上一份摘要原样带过来——它已经是要的格式，也写着模型还看得见时
  * 记下的目标。
  */
-export function fallbackSummary(messages: readonly Message[], kindOf: KindOf): string {
+export function fallbackSummary(messages: readonly Message[], kindOf: KindOf, cwd: string): string {
 	const userPrompts: string[] = [];
 	const touchedFiles = new Set<string>();
 	const keyActions: string[] = [];
 	const carried = previousSummary(messages);
+	// 每次调用改了哪些文件：只认本体记在结果上的（`ToolResultMessage.changes`），不从参数猜；工作目录里的写成相对路径。
+	const changed = new Map<string, string[]>();
+	for (const msg of messages)
+		if (msg.role === "toolResult" && msg.changes?.paths.length)
+			changed.set(
+				msg.toolCallId,
+				msg.changes.paths.map((path) => shownPath(cwd, path)),
+			);
 
 	for (const msg of messages) {
 		if (msg.role === "user" && !msg.synthetic) {
@@ -338,13 +347,15 @@ export function fallbackSummary(messages: readonly Message[], kindOf: KindOf): s
 				if (part.type !== "toolCall") continue;
 				const name = part.name;
 				const args = (part.arguments ?? {}) as Record<string, unknown>;
-				const path = typeof args.path === "string" ? args.path : undefined;
-				if (path) touchedFiles.add(path);
-				// 动过东西的才算关键动作：写、改文件和跑命令（注册它的插件声明的 `ToolDefinition.kind`）。
 				const kind = kindOf(name);
-				if (kind === "create" || kind === "modify" || kind === "command") {
+				const paths = changed.get(part.id) ?? [];
+				// 读过的按声明了 `view` 的工具的参数认，改过的按结果上记下的认。
+				if (kind === "view" && typeof args.path === "string" && args.path) touchedFiles.add(args.path);
+				for (const path of paths) touchedFiles.add(path);
+				// 动过东西的才算关键动作：写、改文件和跑命令（注册它的插件声明的 `ToolDefinition.kind`），和结果上记着改了文件的。
+				if (kind === "create" || kind === "modify" || kind === "command" || paths.length > 0) {
 					const desc = (args.description as string | undefined) ?? (args.command as string | undefined)?.split("\n")[0];
-					const line = desc ? `${name}: ${desc}` : path ? `${name} ${path}` : name;
+					const line = desc ? `${name}: ${desc}` : paths.length > 0 ? `${name} ${paths.join(", ")}` : name;
 					if (!keyActions.includes(line)) keyActions.push(line);
 				}
 			}

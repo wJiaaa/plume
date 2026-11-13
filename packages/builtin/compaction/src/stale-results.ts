@@ -8,10 +8,8 @@
  * 每个请求都被拒。
  */
 
-import { homedir, tmpdir } from "node:os";
-import { isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { isAbsolute, posix, relative, sep } from "node:path";
 import type { FileViewDetails, Message, ToolResultMessage } from "@plume/contract";
-import type { KindOf } from "./head.ts";
 import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS } from "./prune.ts";
 
 interface StaleCut {
@@ -19,7 +17,7 @@ interface StaleCut {
 	notice: string;
 }
 
-function staleCuts(messages: Message[], cwd: string, kindOf: KindOf): StaleCut[] {
+function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 	const calls = callsById(messages);
 	const latestReads = new Map<string, Window[]>();
 	const mutated = new Set<string>();
@@ -34,13 +32,12 @@ function staleCuts(messages: Message[], cwd: string, kindOf: KindOf): StaleCut[]
 		if (!call || message.instructions) continue;
 
 		/*
-		 * 读了哪个文件的哪一块，只认结果里的通用声明（`FileViewDetails`），不认是哪个工具、参数叫什么：别的插件的读文件工具
-		 * 参数和 `details` 另是一个样子，照猜就会错读。没带声明的读不当作读，只照下面的「同样的调用」处理。
+		 * 读了哪个文件的哪一块，只认结果里的通用声明（`FileViewDetails`），改了哪些文件只认本体记在结果上的（`ToolResultMessage.changes`），
+		 * 都不认是哪个工具、参数叫什么：别的插件的工具参数和 `details` 另是一个样子，照猜就会错认；命令改的文件在参数里根本看不出来。
+		 * 没带声明的读不当作读，只照下面的「同样的调用」处理。
 		 */
 		const view = message.isError ? undefined : fileViewOf(message.details);
-		const kind = kindOf(call.name);
-		const changes = kind === "create" || kind === "modify";
-		const key = view ? pathKey(view.path) : changes ? changedKey(cwd, call.arguments) : "";
+		const key = view ? pathKey(view.path) : "";
 		const fingerprint = `${call.name} ${stable(call.arguments)}`;
 		/*
 		 * 一次读盖住的是它返回的那些，不是它要的那些：不带范围读一个长源文件，返回的可能是只有大纲的版本；宽的窗口也可能停在输出上限上。
@@ -62,7 +59,8 @@ function staleCuts(messages: Message[], cwd: string, kindOf: KindOf): StaleCut[]
 		 * 失败，模型就以为改动从没落地。
 		 */
 		if (!message.isError) seenExact.add(fingerprint);
-		if (key && changes && !message.isError) mutated.add(key);
+		// 出了错的结果上记着改动，也是真改了：两边的路径都是解析好的绝对路径（`FileChanges.paths`、`FileViewDetails.path`），比全等。
+		for (const path of message.changes?.paths ?? []) mutated.add(pathKey(path));
 		if (key && returned) {
 			const list = latestReads.get(key) ?? [];
 			list.push(returned);
@@ -73,9 +71,9 @@ function staleCuts(messages: Message[], cwd: string, kindOf: KindOf): StaleCut[]
 	return cuts;
 }
 
-/** `cwd`：写改文件的调用里的相对路径按它解析。`kindOf`：哪个工具是写改文件的。 */
-export function dropStaleResults(messages: Message[], cwd: string, kindOf: KindOf): Message[] {
-	const cuts = staleCuts(messages, cwd, kindOf);
+/** `cwd`：告诉模型清掉的是哪个文件时，它里面的写成相对路径。 */
+export function dropStaleResults(messages: Message[], cwd: string): Message[] {
+	const cuts = staleCuts(messages, cwd);
 	if (cuts.length === 0) return messages;
 	const byIndex = new Map(cuts.map((cut) => [cut.index, cut.notice]));
 	return messages.map((message, index) => {
@@ -150,48 +148,14 @@ function coversAny(laters: Window[] | undefined, earlier: Window): boolean {
 	return laters.some((later) => later.from <= earlier.from && later.to >= earlier.to && later.charFrom <= earlier.charFrom && later.charTo >= earlier.charTo);
 }
 
-/** 告诉模型被清掉的是哪个文件的读：工作目录里的写成相对路径，和读文件结果的头部一样短。 */
-function shownPath(cwd: string, path: string): string {
+/** 告诉模型是哪个文件：工作目录里的写成相对路径，和读文件结果的头部一样短。 */
+export function shownPath(cwd: string, path: string): string {
 	const inside = relative(cwd, path);
 	return inside && inside !== ".." && !inside.startsWith(`..${sep}`) && !isAbsolute(inside) ? inside : path;
 }
 
-/** 写改文件的调用改的是哪个文件：参数里的路径照 `FileViewDetails.path` 的写法解析成绝对路径，和读到的那个文件对得上。 */
-function changedKey(cwd: string, args: Record<string, unknown>): string {
-	const path = pathOf(args);
-	return path ? resolvedKey(cwd, path) : "";
-}
-
-function pathOf(args: Record<string, unknown>): string {
-	return typeof args.path === "string" ? args.path : "";
-}
-
 function pathKey(path: string): string {
 	return posix.normalize(path.replace(/\\/g, "/")).replace(/\/+$/, "");
-}
-
-/**
- * 路径照 `FileViewDetails.path` 说的解析办法（`~/` 展开、Windows 上 shell 的写法、相对路径按工作目录，不追符号链接）变成绝对路径，之后只认全等：
- * `package.json` 和 `apps/cli/package.json` 是两个文件；绝对路径恰好以某个相对路径结尾、却不在 cwd 下的，也是两个文件。
- */
-function resolvedKey(cwd: string, path: string): string {
-	const native = process.platform === "win32" ? windowsSpelling(path) : path;
-	const expanded = native === "~" || native.startsWith("~/") ? native.replace("~", homedir()) : native;
-	return pathKey(isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded));
-}
-
-/**
- * Windows 上 shell 写的路径，换成它指的那个 Windows 路径：Git Bash 的 `/c/…`（`/cygdrive/c/…`）是 C 盘，`/tmp` 是用户的
- * 临时目录，`~\` 是 PowerShell 写的家目录。Node 把前两种读成 `C:\c\…`、`C:\tmp`，同一个文件换种写法再读就认不出是同一个。
- * 读文件的声明里的路径也这样解析（plume.tools 就是）。
- */
-function windowsSpelling(path: string): string {
-	const drive = /^(?:\/cygdrive)?\/([a-zA-Z])(?=\/|$)(.*)$/.exec(path);
-	if (drive) return `${drive[1]!.toUpperCase()}:\\${drive[2]!.replace(/^[/]/, "").replaceAll("/", "\\")}`;
-	const temp = /^\/tmp(?=\/|$)(.*)$/.exec(path);
-	if (temp) return `${tmpdir()}${temp[1]!.replaceAll("/", "\\")}`;
-	if (path === "~" || path.startsWith("~\\")) return `${homedir()}${path.slice(1)}`;
-	return path;
 }
 
 function stable(value: unknown): string {

@@ -4,6 +4,7 @@
  */
 
 import type { AssistantMessage, Message, TokenEstimate, ToolKind } from "@plume/contract";
+import { shownPath } from "./stale-results.ts";
 import { type CompactionContext, copyTaskContext, foldTaskContext, formatTaskContext, USER_WORDS_CHARS } from "./task-context.ts";
 
 /** 摘要头里中间那些请求的原话合计最多占窗口多少（按 token 算），见 `wordsBudget`。 */
@@ -29,27 +30,30 @@ export interface ReplyOrigin {
  * 逐条读：被折进头里的那段一条条往后长，读到哪儿都能当场交出那一段的清单。
  *
  * 交出全量，截到 `SEEN_FILES_CAP` 只在写进正文时做：全量放在头的 `compactionFiles` 里带到下一次压缩，链式算出来的才和从头算的是同一份。
+ *
+ * 改过的只认本体记在工具结果上的（`ToolResultMessage.changes`），不从调用参数猜：命令改的也算，没写成的不算。读过的按声明了
+ * `view` 的工具的 `path` 参数认。两边都按模型看到的写法记：工作目录里的写成相对路径。
  */
 class SeenFiles {
 	private readonly read = new Set<string>();
 	private readonly changed = new Set<string>();
 
-	constructor(private readonly kindOf: KindOf) {}
+	constructor(
+		private readonly kindOf: KindOf,
+		private readonly cwd: string,
+	) {}
 
 	add(message: Message): void {
 		if (message.role === "user" && message.synthetic && message.compactionFiles) {
 			for (const path of message.compactionFiles.read) this.read.add(path);
 			for (const path of message.compactionFiles.changed) this.changed.add(path);
 		}
+		if (message.role === "toolResult") for (const path of message.changes?.paths ?? []) this.changed.add(shownPath(this.cwd, path));
 		if (message.role !== "assistant") return;
 		for (const part of message.content) {
-			if (part.type !== "toolCall") continue;
-			const args = (part.arguments ?? {}) as Record<string, unknown>;
-			const path = args.path;
-			if (typeof path !== "string" || !path) continue;
-			const kind = this.kindOf(part.name);
-			if (kind === "create" || kind === "modify") this.changed.add(path);
-			else if (kind === "view") this.read.add(path);
+			if (part.type !== "toolCall" || this.kindOf(part.name) !== "view") continue;
+			const path = (part.arguments ?? {}).path;
+			if (typeof path === "string" && path) this.read.add(path);
 		}
 	}
 
@@ -193,8 +197,9 @@ export class RetiredHistory {
 	private context: CompactionContext = {};
 	private readonly seen: SeenFiles;
 
-	constructor(kindOf: KindOf) {
-		this.seen = new SeenFiles(kindOf);
+	/** `cwd`：会话的工作目录，改过的文件在它里面的写成相对路径。 */
+	constructor(kindOf: KindOf, cwd: string) {
+		this.seen = new SeenFiles(kindOf, cwd);
 	}
 
 	add(message: Message): void {
