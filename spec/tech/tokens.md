@@ -69,7 +69,7 @@
 
 - 加 token 四处一起改：theme.css 的 `:root`（深色需要时在 `@media` 里覆盖）、`@theme inline` 的映射、`@plume/contract/ui` 的 `SkinToken`、本页的表。动效时长和曲线不开放给皮肤，不加进 `SkinToken`；直接经 CSS 变量使用的时长不需要 Tailwind 映射。
 - 皮肤插件经 `ui.skin` 覆盖 `--plume-*`，通常只改种子。`SkinToken` 是公开接口，只加不删。
-- 用户在外观页挑的配色、UI 字体字号、代码主题与排版写在 `:root:root` 上，比 theme.css 和旧皮肤都高一级：用户挑过的通常生效，没挑过的字段照常用皮肤或默认值。恢复默认删除对应覆盖，不把出厂配色写死到皮肤上方。代码主题原色表在 `packages/client/ui/src/lib/code/themes.ts`，只给代码区的 token 赋值。见 `apps/desktop/src/renderer/appearance-settings.ts`。
+- 用户在外观页挑的配色、UI 字体字号、代码主题与排版写在 `:root:root` 上，比 theme.css 和皮肤插件（`ui.skin`）写的 `:root` 都高一级：用户挑过的通常生效，没挑过的字段照常用皮肤或默认值。恢复默认删除对应覆盖，不把出厂配色写死到皮肤上方。代码主题原色表在 `packages/client/ui/src/lib/code/themes.ts`，只给代码区的 token 赋值。见 `apps/desktop/src/renderer/appearance-settings.ts`。
 - 同时给出 `name`、`mode` 的数据皮肤管理界面配色：只暂时屏蔽用户的 bg/fg/accent/contrast 种子与深浅模式，外观页实时展示皮肤名及只读配色；字体、代码外观（包括代码底色）、背景图和其他偏好仍优先且可改。恢复默认也不清除被管理的原配色，停用后恢复。模式支持 system/light/dark；同时提供 name、mode 而不提供 token 时使用产品默认配色，system 随系统切换，不把默认配色复制成静态 12 色。深浅覆盖存在主进程内存，按渲染窗口 owner 释放，不写用户偏好。`ui.skin` 可重复更新或以 null 撤回自己，旧入口失效后不能复活；apply 中开启的 watch 以 `ui.effect` 收回。
 
 ## 检查点

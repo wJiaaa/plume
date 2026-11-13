@@ -31,6 +31,7 @@
 | `pnpm audit:sessions [--json]` / `pnpm audit:prune` | 量本机真实会话：花销、重复调用检测、回合怎么结束、缓存未命中、压缩的耗时和丢失、会话互发消息（`scripts/session-audit.ts`）；裁剪工具结果能省多少。改循环、截断、停止条件、压缩前后各跑一次 `--json` 对照（同一台机器、同一批会话） |
 | `pnpm probe:prune <模型 id>` | 真实模型上查 grep 截断后 agent 还能不能把事做完，模型和 key 从环境变量给（见文件头），在临时数据目录里跑、不碰 `~/.plume`；花钱 |
 | `pnpm tool-eval` | 编辑格式评测（`test/tool-eval/run.ts`），同目录的 `*-eval.ts` 是各项工具能力的评测，用法在各自文件头；模型和 key 取 `PLUME_HOME` 的设置，调真实模型、花钱，结果写到 `test/tool-eval/results/`（不进仓库） |
+| `pnpm catalog:update` | 从 pi.dev 拉模型目录，重写随应用发的快照 `packages/core/llm/src/catalog/model-catalog.json`（`scripts/update-model-catalog.ts`）；应用运行时自己拉最新的，快照只在首次启动和离线时用，发版前刷一次；要联网 |
 | `pnpm release <patch\|minor\|major\|x.y.z> [--no-push]` | 发版：把 `apps/desktop/package.json` 和其余非插件包的版本号改齐（`scripts/versions.mjs` 按目录算；插件的版本归插件自己），用 git-cliff（`cliff.toml`）在 `CHANGELOG.md` 里生成这一版的提交列表，提交 `chore(release): vX`，打 tag（说明是 `scripts/changelog-section.mjs` 读出的那一节），推送；要在远端的默认分支上、工作区干净、和远端一致。生成的列表是原料：发出去的文案手写成 `<!-- plume:notes en -->`、`<!-- plume:notes zh-CN -->` 两段，英文在前，两种语言各写一遍、不直译，写给用的人（先说他遇到的现象，再说现在怎样），关于页和更新对话框按界面语言只显示其中一段 |
 
 Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`。

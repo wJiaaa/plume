@@ -305,7 +305,7 @@ export interface PanelOptions {
 	icon?: ComponentType<{ size?: number; className?: string }>;
 	/**
 	 * 打开这个面板的快捷键，Electron accelerator 的写法（`Control+\``、`CommandOrControl+Shift+P`），卡片上会显示它。
-	 * 作用于当前会话：面板区没开或在看别的就切到它（没开着就新开一个标签），正在看它就收起。和别的面板重了归后注册的，它撤下后还给前一个；Plume 自己的快捷键（⌘B、后退前进、Esc）和它自己面板的快捷键拿不走。
+	 * 作用于当前会话：面板区没开或在看别的就切到它（没开着就新开一个标签），正在看它就收起。和别的面板重了归后注册的，它撤下后还给前一个；Plume 自己的快捷键（⌘B、后退前进、Esc，本体文件树的 ⌘P、文件面板的 ⌥⌘P）拿不走。
 	 */
 	shortcut?: string;
 	order?: number;
