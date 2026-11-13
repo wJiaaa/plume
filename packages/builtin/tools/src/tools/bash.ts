@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
 import { commandShell } from "@plume/platform";
 import type { DeliveryDetails } from "../delivery.ts";
 import { escalationHint, ESCALATION_TARGETS, JUSTIFICATION_ALONE } from "../escalation.ts";
@@ -267,7 +268,23 @@ export const bashTool: Tool<BashArgs> = {
 				});
 			});
 			const logged = handedOff ? (outputLog ? { outputPath: outputLog.path } : {}) : await outputLog?.close();
-			return logged ? { ...result, details: { ...(result.details as object | undefined), ...logged } } : result;
+			/*
+			 * 截过时再带上 `spill`（`SpillDetails` 的形状）：同样的位置，但按「结果截过、全文在别处」认。完整日志本来就是这份
+			 * 文件，不必另存一份；地址用 `scratch://`，模型拿它就能按行、按窗口读回来。
+			 */
+			const spilled = (() => {
+				if (!logged || handedOff) return undefined;
+				const record = logged as { outputPath?: string; outputCharacters?: number; outputComplete?: boolean };
+				if (!record.outputPath || record.outputCharacters === undefined || record.outputCharacters <= MODEL_OUTPUT_CHARS) return undefined;
+				return {
+					spill: {
+						address: `scratch://tool-output/${basename(record.outputPath)}`,
+						path: record.outputPath,
+						characters: record.outputCharacters,
+					},
+				};
+			})();
+			return logged ? { ...result, details: { ...(result.details as object | undefined), ...logged, ...spilled } } : result;
 		});
 	},
 };

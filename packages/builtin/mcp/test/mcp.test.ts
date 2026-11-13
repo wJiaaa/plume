@@ -362,18 +362,28 @@ test("结果换成文字：结构化结果和正文不重复，音频写一句�
 	assert.match(long, /characters omitted by Plume/);
 });
 
-test("太长的结果全文存进临时目录的 mcp-results/，截短的那份告诉模型去哪读", async () => {
-	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-test-"));
-	try {
-		const full = "y".repeat(RESULT_CHARS * 2);
-		const short = mcpResult({ content: [{ type: "text", text: full }] }, dir).output;
-		const [saved] = await readdir(join(dir, "mcp-results"));
-		assert.ok(saved);
-		assert.ok(short.includes(`the full result is saved at ${join(dir, "mcp-results", saved)}`));
-		assert.equal(await readFile(join(dir, "mcp-results", saved), "utf8"), full);
-	} finally {
-		await rm(dir, { recursive: true, force: true });
-	}
+test("太长的结果交给 spill 存下，截短的那份给出地址；告诉读文件的工具、存不下时让它要少一点", () => {
+	const full = "y".repeat(RESULT_CHARS * 2);
+	const saved = { address: "artifact://a0123456789ab", path: "/tmp/a0123456789ab.txt", characters: [...full].length };
+	const calls: string[] = [];
+	const result = mcpResult({ content: [{ type: "text", text: full }] }, undefined, undefined, "read", (tool, content) => {
+		calls.push(tool);
+		assert.equal(content, full);
+		return saved;
+	});
+	assert.deepEqual(calls, ["mcp"]);
+	assert.deepEqual(result.spill, saved);
+	assert.match(result.output, /the full result is saved at artifact:\/\/a0123456789ab — `read` it with offset/);
+
+	// 没给 spill、或它存不下：截断照常，提示改成向工具要少一点。
+	const bare = mcpResult({ content: [{ type: "text", text: full }] });
+	assert.equal(bare.spill, undefined);
+	assert.match(bare.output, /ask the tool for less/);
+	const failing = mcpResult({ content: [{ type: "text", text: full }] }, undefined, undefined, "read", () => {
+		throw new Error("磁盘满了");
+	});
+	assert.equal(failing.spill, undefined);
+	assert.match(failing.output, /ask the tool for less/);
 });
 
 /** 这么多字节的图，base64。 */
@@ -471,6 +481,9 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 				throw new Error("MCP 工具不写文件");
 			},
 			write: async () => ({ ok: false, message: "MCP 工具不写文件" }),
+			spill: () => {
+				throw new Error("MCP 工具不存原文");
+			},
 			includeChanges: () => {},
 		},
 		tools: () => [],

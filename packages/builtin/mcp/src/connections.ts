@@ -642,13 +642,14 @@ export class Connections implements McpResources {
 				resetTimeoutOnProgress: true,
 				onprogress,
 			});
-			// 大图和太长的全文存进这个会话的临时目录：随会话删掉，read 读它不用问人。
+			// 大图存进这个会话的临时目录，超长结果的全文经本体存下（`run.files.spill`）：随会话删掉，read 读它不用问人。
 			run.signal.throwIfAborted();
 			const result = mcpResult(
 				response,
 				run.scratchDir,
 				(uri, mime, blob) => this.host.documents?.save(run.sessionId, uri, mime, blob) ?? null,
 				run.tools().find((tool) => tool.kind === "view")?.name,
+				(tool, content) => run.files.spill(tool, content),
 			);
 			return {
 				output: result.output,
@@ -659,6 +660,7 @@ export class Connections implements McpResources {
 					server: server.name,
 					tool: raw.name,
 					...(result.documents ? { documents: result.documents } : {}),
+					...(result.spill ? { spill: result.spill } : {}),
 				},
 			};
 		} catch (error) {

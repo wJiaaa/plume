@@ -179,7 +179,11 @@ export default {
 				if (!reply) return { output: SUBMIT_PLAN_RESULTS.declined, details: { kind: "plan", plan, approved: false } satisfies PlanDetails, terminate: "done" };
 				const notes = reply.note;
 				const approvedAt = Date.now();
-				// 计划连同注意事项存成文件：交给新会话靠它；原地执行时压缩以后路径还在，随时能重读。
+				/*
+				 * 计划连同注意事项存成文件：交给新会话靠它；原地执行时压缩以后路径还在，随时能重读。
+				 * 直接写，不走 `run.files.write`：这次调用带着计划模式的 `readOnly`，那条路会拒；这里落的是会话自己的草稿，
+				 * 不是工作区，何况它是「批准之后」的产物。
+				 */
 				const directory = join(run.scratchDir, "plans");
 				await mkdir(directory, { recursive: true });
 				const file = join(directory, `plan-${approvedAt}.md`);

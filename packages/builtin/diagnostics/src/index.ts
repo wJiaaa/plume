@@ -7,6 +7,15 @@ import { DiagnosticStore } from "./store.ts";
 import { MESSAGES } from "./messages.ts";
 import { stopAll } from "./stop-all.ts";
 
+/** 结果里记着的全文在哪：`spill.path`（截过的结果）或 `outputPath`（命令的完整输出）。 */
+function detailsPath(details: unknown): string | undefined {
+	if (!details || typeof details !== "object") return undefined;
+	const record = details as Record<string, unknown>;
+	const spill = record.spill;
+	if (spill && typeof spill === "object" && typeof (spill as Record<string, unknown>).path === "string") return (spill as { path: string }).path;
+	return typeof record.outputPath === "string" ? record.outputPath : undefined;
+}
+
 export default {
 	name: "plume.diagnostics",
 	// 调用轨迹记的是每个会话实际发出去的请求和回复：要看全部会话。
@@ -60,9 +69,10 @@ export default {
 				const messages = await ctx.sessions.messages(id);
 				const result = messages.find((message) => message.role === "toolResult" && message.toolCallId === toolCallId);
 				const details = result?.role === "toolResult" ? result.details : undefined;
-				const path = details && typeof details === "object" && "outputPath" in details ? details.outputPath : undefined;
+				// 截过的结果带 `spill`（全文在会话的 `spill/`），命令的完整输出带 `outputPath`（`tool-output/`）。都在这一个临时目录里。
+				const path = detailsPath(details);
 				if (typeof path !== "string") throw new Error(words().outputGone);
-				const root = await realpath(join(ctx.appDataDir, "scratch", id, "tool-output"));
+				const root = await realpath(join(ctx.appDataDir, "scratch", id));
 				const actual = await realpath(path);
 				const part = relative(root, actual);
 				if (!part || part.startsWith("..") || isAbsolute(part)) throw new Error(words().outputGone);

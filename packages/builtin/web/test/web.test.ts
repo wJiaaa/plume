@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -145,6 +146,9 @@ const run: ToolRun = {
 			throw new Error("网页工具不写文件");
 		},
 		write: async () => ({ ok: false, message: "网页工具不写文件" }),
+		spill: () => {
+			throw new Error("网页工具的测试自己给 spill");
+		},
 		includeChanges: () => {},
 	},
 	tools: () => [],
@@ -172,26 +176,46 @@ test("web_fetch：同源跳转跟过去并把网页转成文字，跨源跳转�
 	);
 });
 
-test("web_fetch：正文超过上限时整份存进会话临时目录，结果里给出路径", async () => {
+test("web_fetch：正文超过上限时整份经 spill 存下，结果里给出可读的地址", async () => {
 	const scratchDir = await mkdtemp(join(tmpdir(), "plume-web-scratch-"));
 	const body = `${"a".repeat(40_000)}TAIL_AFTER_CUT`;
 	try {
 		await withServer(
 			(_req, res) => res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(body),
 			async (base) => {
-				// 读全文的工具按工具表里的种类现查，不认名字。
+				// 读全文的工具按工具表里的种类现查，不认名字；只有读文件的会按地址读。
 				const tools = () => [
 					{ name: "search_files", plugin: "p", kind: "search" as const },
 					{ name: "view_file", plugin: "p", kind: "view" as const },
 				];
-				const result = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir, tools });
-				const saved = (result.details as { outputPath?: string }).outputPath!;
-				assert.ok(saved.startsWith(join(scratchDir, "tool-output")));
-				assert.equal(await readFile(saved, "utf8"), body);
-				assert.equal((await stat(saved)).mode & 0o777, 0o600);
-				assert.ok(result.output.endsWith(`[full text: ${saved} (${body.length} characters) — view_file or search_files it for the part after the cut]`));
-				const bare = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir });
-				assert.ok(bare.output.endsWith(" characters) — look in that file for the part after the cut]"));
+				const saved: string[] = [];
+				const files = {
+					...run.files,
+					// 和本体的 `run.files.spill` 一样是同步的：结果在同步地拼出来。
+					spill: (tool: string, content: string) => {
+						const directory = join(scratchDir, "spill");
+						mkdirSync(directory, { recursive: true });
+						const path = join(directory, "a0123456789ab.txt");
+						writeFileSync(path, content, { mode: 0o600 });
+						saved.push(tool);
+						return { address: "artifact://a0123456789ab", path, characters: content.length };
+					},
+				};
+				const result = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir, tools, files });
+				const spill = (result.details as { spill?: { address: string; path: string; characters: number } }).spill!;
+				assert.deepEqual(saved, ["web_fetch"]);
+				assert.equal(spill.address, "artifact://a0123456789ab");
+				assert.equal(spill.characters, body.length);
+				assert.equal(await readFile(spill.path, "utf8"), body);
+				assert.equal((await stat(spill.path)).mode & 0o777, 0o600);
+				assert.ok(result.output.endsWith(`[full text: ${spill.address} (${body.length} characters) — view_file it with offset for the part after the cut]`));
+				// 没有读文件的工具：地址照样给，只说拿它去读。
+				const bare = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir, files });
+				assert.ok(bare.output.endsWith(" characters) — read it for the part after the cut]"));
+				// 存不进去（磁盘满、没有临时目录）：截断照常，只是少一句提示。
+				const failed = await webFetchTool().execute({ url: `${base}/big` }, { ...run, scratchDir });
+				assert.ok(failed.output.endsWith("</fetched>"));
+				assert.equal((failed.details as { spill?: unknown }).spill, undefined);
 				assert.ok(!result.output.includes("TAIL_AFTER_CUT"));
 				assert.ok(result.output.length <= 37_400);
 			},

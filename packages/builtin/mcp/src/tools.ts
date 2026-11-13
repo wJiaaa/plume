@@ -84,18 +84,30 @@ export interface McpResult {
 
 type SaveDocument = (uri: string, mime: string | undefined, blob: string) => DocumentRef | null;
 
+/** `run.files.spill` 换回来的地址。 */
+interface SpillTextResult {
+	address: string;
+	path: string;
+	characters: number;
+}
+
+/** 把一截太长的文字存起来（`ToolRun.files.spill`），换回它放在哪。 */
+export type SpillText = (tool: string, content: string) => SpillTextResult;
+
 /**
  * 服务器的结果换成交给模型的样子。每种内容块都有去处，一种都不悄悄丢：文字照给；图按大小直接给、存进临时目录给路径，或只说一声；
  * 音频、认不出的写一句说明。`structuredContent` 在正文里没有同样内容时接在后面。`scratchDir` 是会话的临时目录，
- * 大图和超长结果的全文落在那里，读文件的工具不用问人就能读回来；没有（设置页探测）时不存。`reader` 是这次能用的读文件工具
- * （工具表里 `kind: "view"` 的那个）叫什么，告诉模型拿它去读；没有就只说去读那个文件。
+ * 大图落在那里，读文件的工具不用问人就能读回来；没有（设置页探测）时不存。超长结果的全文交给 `spill`（本体存进同一处，
+ * 换来一个 `artifact://` 地址）；不给时就是存不下。`reader` 是这次能用的读文件工具（工具表里 `kind: "view"` 的那个）叫什么，
+ * 告诉模型拿它去读；没有就只说去读那个文件。
  */
 export function mcpResult(
 	response: { content?: unknown; structuredContent?: unknown; toolResult?: unknown },
 	scratchDir?: string,
 	saveDocument?: SaveDocument,
 	reader?: string,
-): McpResult {
+	spill?: SpillText,
+): McpResult & { spill?: { address: string; path: string; characters: number } } {
 	const raw = response.content ?? (response.toolResult !== undefined ? [{ type: "text", text: JSON.stringify(response.toolResult) }] : undefined);
 	const parts: string[] = [];
 	const result: McpResult = { output: "", images: [], shown: [] };
@@ -123,8 +135,9 @@ export function mcpResult(
 		if (!present) parts.push(`structuredContent: ${JSON.stringify(response.structuredContent)}`);
 	}
 	const text = parts.join("\n\n");
-	result.output = bound(text || (result.images.length > 0 ? "" : "(the server returned no content)"), scratchDir && join(scratchDir, "mcp-results"), reader);
-	return result;
+	const bounded = bound(text || (result.images.length > 0 ? "" : "(the server returned no content)"), spill, reader);
+	result.output = bounded.text;
+	return { ...result, ...(bounded.spill ? { spill: bounded.spill } : {}) };
 }
 
 /** 一张图：小的原样给模型；大的存进临时目录、给人看、给模型路径；超过 5 MB 的只说一声。 */
@@ -218,32 +231,29 @@ function stable(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-/** 截掉中间之前把全文存进 `saveDir`（临时目录的 `mcp-results/`），告诉模型去哪读；存不下就让它向工具要少一点。 */
-function bound(text: string, saveDir: string | undefined, reader: string | undefined): string {
+/** 截掉中间之前把全文交给 `spill` 存下，告诉模型拿地址去读；存不下就让它向工具要少一点。 */
+function bound(text: string, spill: SpillText | undefined, reader: string | undefined): { text: string; spill?: SpillTextResult } {
 	const points = [...text];
-	if (points.length <= RESULT_CHARS) return text;
-	const saved = saveDir ? saveFull(text, saveDir) : undefined;
+	if (points.length <= RESULT_CHARS) return { text };
+	let saved: SpillTextResult | undefined;
+	try {
+		saved = spill?.("mcp", text);
+	} catch {
+		// 存不进去（磁盘满之类）不用报错：截断照常，让模型向工具要少一点。
+		saved = undefined;
+	}
 	const where = saved
-		? `the full result is saved at ${saved} — ${reader ? `\`${reader}\` it with offset` : "read that file"} if you need the middle`
+		? `the full result is saved at ${saved.address} — ${reader ? `\`${reader}\` it with offset` : "read it"} if you need the middle`
 		: "ask the tool for less — a narrower query or a page — if you need the middle";
 	const note = (omitted: number) =>
 		`\n\n… [${omitted.toLocaleString("en-US")} of ${points.length.toLocaleString("en-US")} characters omitted by Plume (limit ${RESULT_CHARS.toLocaleString("en-US")}); ${where}.] …\n\n`;
 	const keep = RESULT_CHARS - [...note(points.length)].length;
 	const head = Math.floor(keep * 0.8);
 	const tail = keep - head;
-	return `${points.slice(0, head).join("")}${note(points.length - head - tail)}${points.slice(points.length - tail).join("")}`;
-}
-
-function saveFull(text: string, dir: string): string | undefined {
-	try {
-		mkdirSync(dir, { recursive: true });
-		// 按内容起名：同一个结果再来一次不多占一份。
-		const path = join(dir, `${createHash("sha256").update(text).digest("hex").slice(0, 16)}.txt`);
-		writeFileSync(path, text);
-		return path;
-	} catch {
-		return undefined;
-	}
+	return {
+		text: `${points.slice(0, head).join("")}${note(points.length - head - tail)}${points.slice(points.length - tail).join("")}`,
+		...(saved ? { spill: saved } : {}),
+	};
 }
 
 function size(data: unknown): string {

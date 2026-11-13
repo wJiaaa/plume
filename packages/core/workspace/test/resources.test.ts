@@ -145,27 +145,40 @@ it("插件登记时塞了 write 也写不进去：服务只留读的几样", asy
 	expect(await r.locate("sneaky://guide", scope())).toBe(join(skillDir, "guide"));
 });
 
-it("artifact://：同一段原文换回同一个地址；每个会话最多 30 份，超了丢最旧的；取不到时说是重开过", async () => {
-	const store = new ArtifactStore();
-	const address = store.keep("s1", "bash", "完整输出");
-	expect(store.keep("s1", "bash", "完整输出")).toBe(address);
-	expect(new ArtifactStore().keep("s1", "bash", "完整输出")).toBe(address);
-	expect(store.keep("s1", "bash", "另一段")).not.toBe(address);
+it("artifact://：同一段原文换回同一个地址；每个会话最多 30 份，超了丢最旧的；取不到时说是跟着会话清掉了", async () => {
+	const dataDir = await mkdtemp(join(tmpdir(), "plume-artifacts-"));
+	try {
+		const store = new ArtifactStore(dataDir);
+		const first = store.keep("s1", "bash", "完整输出");
+		// 同一段原文换回同一个地址，路径也一样。
+		expect(store.keep("s1", "bash", "完整输出")).toMatchObject({ id: first.id, path: first.path });
+		// 重开应用（新建一个存储）以后地址和内容都还在：存在临时目录里，不在内存里。
+		const reopened = new ArtifactStore(dataDir);
+		expect(reopened.keep("s1", "bash", "完整输出").id).toBe(first.id);
+		expect(await reopened.get("s1", first.id)).toMatchObject({ tool: "bash", characters: 4 });
+		expect(store.keep("s1", "bash", "另一段").id).not.toBe(first.id);
 
-	for (let i = 0; i < 40; i += 1) store.keep("s1", "bash", `第 ${i} 次`);
-	const kept = store.list("s1").map((a) => a.content);
-	expect(kept.length).toBe(30);
-	expect(kept).not.toContain("第 0 次");
-	expect(kept).toContain("第 39 次");
+		const oldest = store.keep("s1", "bash", "第 0 次");
+		for (let i = 1; i < 40; i += 1) store.keep("s1", "bash", `第 ${i} 次`);
+		const kept = await store.list("s1");
+		expect(kept.length).toBe(30);
+		// 按修改时间留最新的 30 份：最早的那份没了，最后一份在。
+		expect(await store.get("s1", oldest.id)).toBeUndefined();
+		expect(kept.some((a) => a.characters === "第 39 次".length)).toBe(true);
 
-	const handler = artifactResource(store);
-	const id = store.keep("s1", "grep", "三万行").slice("artifact://".length);
-	const got = await handler.resolve(parseResourceUrl(`artifact://${id}`)!, scope());
-	expect(got).toMatchObject({ content: "三万行", origin: "grep 的原始输出" });
-	// 会话各管各的。
-	await expect(handler.resolve(parseResourceUrl(`artifact://${id}`)!, { ...scope(), sessionId: "s2" })).rejects.toThrow(/重开会话后就没有了/);
-	store.forget("s1");
-	expect(store.list("s1")).toEqual([]);
+		const handler = artifactResource(reopened);
+		const saved = store.keep("s1", "grep", "三万行");
+		const got = await handler.resolve(parseResourceUrl(`artifact://${saved.id}`)!, scope());
+		expect(got).toMatchObject({ content: "三万行", origin: "grep 的原始输出" });
+		// 会话各管各的。
+		await expect(handler.resolve(parseResourceUrl(`artifact://${saved.id}`)!, { ...scope(), sessionId: "s2" })).rejects.toThrow(/跟着会话走/);
+		// id 是模型给的：`../` 拼不出路。
+		await expect(handler.resolve(parseResourceUrl("artifact://../../etc/passwd")!, scope())).rejects.toThrow(/取不到/);
+		store.forget("s1");
+		expect(await store.list("s1")).toEqual([]);
+	} finally {
+		await rm(dataDir, { recursive: true, force: true });
+	}
 });
 
 const summary = (id: string, title: string, extra: Partial<SessionSummary> = {}): SessionSummary =>

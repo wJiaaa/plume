@@ -63,7 +63,9 @@ function object(value: unknown): Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 export function outputPath(entry: Entry): boolean {
-	return typeof object(entry.metadata).outputPath === "string";
+	const metadata = object(entry.metadata);
+	// 命令的完整输出记 `outputPath`，截过的结果记 `spill.path`；两种都能经 `fullOutput` 读全文。
+	return typeof metadata.outputPath === "string" || typeof object(metadata.spill).path === "string";
 }
 const headline = (text: string) => text.trim().split("\n")[0]?.slice(0, 240) ?? "";
 const replyStatus = (reply: AssistantMessage): Status =>

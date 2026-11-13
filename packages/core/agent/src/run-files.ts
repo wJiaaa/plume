@@ -123,7 +123,7 @@ function changeWords(): ChangeWords {
  */
 export class Workspace {
 	private readonly router = new ResourceRouter();
-	private readonly artifacts = new ArtifactStore();
+	private readonly artifacts: ArtifactStore;
 	private readonly lock = new ChangeLock(changeWords);
 	private readonly store: ChangeStore;
 	private readonly textFiles: TextFiles;
@@ -141,6 +141,7 @@ export class Workspace {
 		private readonly sessions: { list(): Promise<SessionSummary[]>; messages(sessionId: string): Promise<Message[]> },
 		plugins: () => InstalledPlugin[],
 	) {
+		this.artifacts = new ArtifactStore(dataDir);
 		for (const handler of [scratchResource, artifactResource(this.artifacts), sessionResource(sessions), pluginResource(plugins)])
 			this.router.register(handler);
 		// 同一个或嵌套的项目里还有会话在跑一轮时不撤销：它可能正要改这些文件。
@@ -154,7 +155,7 @@ export class Workspace {
 	readonly resources: PluginResources = {
 		register: (handler) => this.router.register(readOnly(handler)),
 		list: () => this.router.schemes(),
-		keepArtifact: (sessionId, tool, content) => this.artifacts.keep(sessionId, tool, content),
+		keepArtifact: (sessionId, tool, content) => `artifact://${this.artifacts.keep(sessionId, tool, content).id}`,
 	};
 
 	/** 插件的 `ctx.workspace`。 */
@@ -281,6 +282,11 @@ export class Workspace {
 				} catch (error) {
 					return { ok: false, message: error instanceof Error ? error.message : String(error) };
 				}
+			},
+			spill: (tool, content) => {
+				call.alive("ToolRun.files.spill");
+				const saved = this.artifacts.keep(call.sessionId, String(tool), String(content));
+				return { address: `artifact://${saved.id}`, path: saved.path, characters: saved.characters };
 			},
 			includeChanges: (process) => {
 				call.alive("ToolRun.files.includeChanges");

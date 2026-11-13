@@ -7,6 +7,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { InstalledPlugin, Message, Resource, ResourceAddress, ResourceEntry, ResourceHandler, ResourceScope, SessionSummary } from "@plume/contract";
@@ -63,56 +64,114 @@ export const scratchResource: WritableHandler = {
 	locate: (url, scope) => scratchTarget(url, scope),
 };
 
-/** 一块被折叠掉的输出。 */
-interface Artifact {
+/** 存下来的一块原文。 */
+export interface Artifact {
 	id: string;
 	/** 哪个工具产生的，用来说清这是什么。 */
 	tool: string;
-	content: string;
+	characters: number;
 	/** 存下的时刻，列表按它排序。 */
 	at: number;
+	/** 磁盘上的位置。 */
+	path: string;
 }
 
 /** 每个会话最多留几份：每一份都可能是几十万字符，跑一天的会话不设上限能攒出几百兆。 */
 const MAX_ARTIFACTS = 30;
 
+/** id 只认自己写出来的形状：`artifact://<id>` 是模型给的，拼进路径前必须核一遍，`../` 不能从这儿走出去。 */
+const ARTIFACT_ID = /^a[0-9a-f]{12}$/;
+
 /**
- * 被剪掉的大块输出，按会话存在内存里。
+ * 截过的大块输出，按会话存在磁盘上（会话临时目录的 `spill/` 下）。
  *
  * 剪枝把巨大的工具结果换成占位标记：三万行日志一直带在上下文里，后面每一轮都在为它付钱。换掉以前等于丢了——模型后来要第
  * 8000 行，只能把命令重跑一遍，而那个命令可能已经不可重现。存下来给个地址，「丢了」就成了「不在手边」。
+ *
+ * 放在会话的临时目录里而不是内存里：重开应用以后还能读回来，删会话时跟临时目录一起清掉。和 `scratch://` 同一棵树，
+ * 读它不用问人。三样东西一份：正文 `<id>.txt`，旁边 `<id>.json` 记着哪个工具、多少字、什么时候存的（列表和结果头要用）。
  */
 export class ArtifactStore {
-	private readonly sessions = new Map<string, Map<string, Artifact>>();
+	/** @param dataDir Plume 的数据目录：各会话的临时目录在它的 `scratch/` 下。 */
+	constructor(private readonly dataDir: string) {}
+
+	/** 这个会话的外溢目录。 */
+	dir(sessionId: string): string {
+		const safe = String(sessionId).replace(/[^A-Za-z0-9._-]/g, "");
+		return join(this.dataDir, "scratch", safe, "spill");
+	}
 
 	/**
 	 * 地址按内容取：发给模型的历史每轮都从会话重建（重启之后也是），占位标记里的地址要是换了，发给模型的前缀就从那里断开。
 	 * 重复存同一份只是把它挪到最新。超过上限丢最旧的：最近折叠的那几份才是模型可能回头去看的。
+	 *
+	 * 同步写：调用它的两处（压缩剪一条结果、工具截断以后存全文）本来就在同步地生成一条结果，内容已经在内存里；
+	 * 改成异步会把「这条结果长什么样」散成两步。写不进去时抛错，由调用方决定少说一句还是报错。
 	 */
-	keep(sessionId: string, tool: string, content: string): string {
+	keep(sessionId: string, tool: string, content: string): Artifact {
 		const id = `a${createHash("sha256").update(tool).update("\0").update(content).digest("hex").slice(0, 12)}`;
-		let store = this.sessions.get(sessionId);
-		if (!store) this.sessions.set(sessionId, (store = new Map()));
-		store.delete(id);
-		store.set(id, { id, tool, content, at: Date.now() });
-		while (store.size > MAX_ARTIFACTS) {
-			const oldest = store.keys().next().value;
-			if (oldest === undefined) break;
-			store.delete(oldest);
+		const dir = this.dir(sessionId);
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		const path = join(dir, `${id}.txt`);
+		const now = new Date();
+		// 同一份再来一次：只把它挪到最新，不重写正文。
+		if (!existsSync(path)) writeFileSync(path, content, { mode: 0o600 });
+		else utimesSync(path, now, now);
+		const artifact: Artifact = { id, tool, characters: content.length, at: now.getTime(), path };
+		writeFileSync(join(dir, `${id}.json`), JSON.stringify({ tool, characters: artifact.characters, at: artifact.at }));
+		this.prune(dir);
+		return artifact;
+	}
+
+	/** 存着的那一份；没有这个 id、读不出来时是 undefined。 */
+	async get(sessionId: string, id: string): Promise<Artifact | undefined> {
+		if (!ARTIFACT_ID.test(id)) return undefined;
+		const path = join(this.dir(sessionId), `${id}.txt`);
+		const content = await readFile(path, "utf8").catch(() => null);
+		if (content === null) return undefined;
+		const meta = await readFile(join(this.dir(sessionId), `${id}.json`), "utf8").catch(() => null);
+		let tool = "";
+		let at = 0;
+		if (meta !== null) {
+			try {
+				const parsed = JSON.parse(meta) as { tool?: unknown; at?: unknown };
+				if (typeof parsed.tool === "string") tool = parsed.tool;
+				if (typeof parsed.at === "number") at = parsed.at;
+			} catch {
+				// 元数据坏了不影响正文：说不上是谁的，照样能读。
+			}
 		}
-		return `artifact://${id}`;
+		return { id, tool, characters: content.length, at, path };
 	}
 
-	get(sessionId: string, id: string): Artifact | undefined {
-		return this.sessions.get(sessionId)?.get(id);
+	/** 这个会话存着的那几份，按存的先后。 */
+	async list(sessionId: string): Promise<Artifact[]> {
+		const dir = this.dir(sessionId);
+		const names = await readdir(dir).catch(() => [] as string[]);
+		const found = await Promise.all(
+			names
+				.filter((name) => name.endsWith(".txt"))
+				.map((name) => this.get(sessionId, name.slice(0, -".txt".length)))
+				.filter((artifact): artifact is Promise<Artifact> => artifact !== undefined),
+		);
+		return found.flatMap((artifact) => (artifact ? [artifact] : []));
 	}
 
-	list(sessionId: string): Artifact[] {
-		return [...(this.sessions.get(sessionId)?.values() ?? [])];
-	}
-
+	/** 会话删掉了：它存下的原文一起清掉（临时目录本身也会被删，这里清的是万一剩下的那份）。 */
 	forget(sessionId: string): void {
-		this.sessions.delete(sessionId);
+		rmSync(this.dir(sessionId), { recursive: true, force: true });
+	}
+
+	/** 超过上限时按修改时间丢最旧的。 */
+	private prune(dir: string): void {
+		const files = readdirSync(dir).filter((name) => name.endsWith(".txt"));
+		if (files.length <= MAX_ARTIFACTS) return;
+		const ranked = files.map((name) => ({ name, at: statSync(join(dir, name), { throwIfNoEntry: false })?.mtimeMs ?? 0 })).sort((a, b) => b.at - a.at);
+		for (const { name } of ranked.slice(MAX_ARTIFACTS)) {
+			const id = name.slice(0, -".txt".length);
+			rmSync(join(dir, name), { force: true });
+			rmSync(join(dir, `${id}.json`), { force: true });
+		}
 	}
 }
 
@@ -125,34 +184,33 @@ export function artifactResource(store: ArtifactStore): ResourceHandler {
 
 		async resolve(url, scope): Promise<Resource> {
 			const id = url.segments.join("/");
-			const found = store.get(scope.sessionId, id);
+			const found = await store.get(scope.sessionId, id);
 			if (!found) {
 				/*
-				 * 找不到通常不是打错了，是重开过：折叠下来的内容只在内存里，转录里的占位标记却存进了会话。说清楚这件事，
-				 * 比说「没有这个 id」有用：后者会让模型去试别的 id。
+				 * 找不到可能是打错了 id，也可能是存下来的那些已经跟会话一起清掉了（会话删了、超过上限丢了最旧的）：
+				 * 说清楚这件事比说「没有这个 id」有用——后者会让模型去试别的 id。
 				 */
 				// i18n-exempt：交给模型的工具结果。
-				throw new ResourceError(`取不到 ${id}。折叠下来的内容跟会话一起存在内存里，重开会话后就没有了——需要的话得重新跑一次产生它的命令。`);
+				throw new ResourceError(`取不到 ${id}。存下来的原文跟着会话走，会话删掉或存得太久就没了——需要的话得重新跑一次产生它的命令。`);
 			}
 			return {
 				url: url.raw,
-				content: found.content,
+				content: await readFile(found.path, "utf8"),
 				contentType: "text/plain",
 				// i18n-exempt：交给模型的工具结果。
 				label: `${found.tool} 被折叠掉的完整输出`,
 				// i18n-exempt：交给模型的工具结果。
 				origin: `${found.tool} 的原始输出`,
-				meta: { tool: found.tool, at: found.at },
+				meta: { tool: found.tool, at: found.at, path: found.path },
 			};
 		},
 
 		async list(scope): Promise<ResourceEntry[]> {
 			return (
-				store
-					.list(scope.sessionId)
+				(await store.list(scope.sessionId))
 					.sort((a, b) => b.at - a.at)
 					// i18n-exempt：交给模型的工具结果。
-					.map((a) => ({ value: `artifact://${a.id}`, description: `${a.tool} 的输出（${a.content.length} 字符）` }))
+					.map((a) => ({ value: `artifact://${a.id}`, description: `${a.tool} 的输出（${a.characters} 字符）` }))
 			);
 		},
 	};

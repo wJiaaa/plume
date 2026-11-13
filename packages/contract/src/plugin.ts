@@ -51,7 +51,7 @@ export interface ToolOutput {
 	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认这几个通用声明：
 	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务，
 	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff，
-	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败。
+	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败，带 `spill`（`SpillDetails`）是结果截过、全文在别处。
 	 * 插件之间另认一个：让模型看了文件的哪一块（`FileViewDetails`）。改了哪些文件不在这里，见 `changes`。
 	 */
 	details?: unknown;
@@ -118,6 +118,16 @@ export interface FileViewDetails {
 		columns?: { from: number; to: number };
 		verbatim: boolean;
 	};
+}
+
+/**
+ * 工具结果的 `details` 带上 `spill`，就是声明「这次结果截过，全文在 `address`」：`address` 是资源地址（`run.files.spill` 给的
+ * `artifact://`），`read` 能按行、按窗口读回来；`path` 是它在磁盘上的位置，给人打开、给别的插件核对用；`characters` 是全文多少字。
+ *
+ * 本体和插件都不按工具名找它：诊断从结果上认出它就能看全文，不再拼某个插件的目录。`details` 里别的字段照旧归插件。
+ */
+export interface SpillDetails {
+	spill: { address: string; path: string; characters: number };
 }
 
 /**
@@ -346,6 +356,18 @@ export interface RunFiles {
 	 * 只读、越界、不是登记着的地址时 `ok: false`，`message` 是交给模型的话。只在这次调用里用。
 	 */
 	write(address: string, content: string): Promise<{ ok: true; path?: string } | { ok: false; message: string }>;
+	/**
+	 * 结果截过以后，把没交给模型的那份原文存在会话的临时目录里，交回它的地址和位置（`SpillDetails` 的形状，直接放进
+	 * `ToolOutput.details.spill`）。地址是 `artifact://<id>`，按 `tool` 和内容算：同一段原文每次换回同一个地址，后来重发的历史里
+	 * 那句提示逐字不变。模型要读了经 `read` 按行、按窗口取回；会话删掉时一起清掉，重开应用以后还在。
+	 *
+	 * 每个会话最多留 30 份，超了丢最旧的。写不进去（磁盘满、会话没有临时目录）时抛错，由工具自己决定少说一句还是报错——
+	 * 截断本身不该因此失败。不记改动快照、不问人：临时目录是会话自己的草稿。只在这次调用里用。
+	 *
+	 * 同步的：调用它的都在同步地生成一条结果（压缩剪一条结果、mcp 把服务器的回复换成交给模型的样子），内容已经在内存里，
+	 * 写成异步只会把「这条结果长什么样」摊成两步，还得让这些路径都变成异步。写的是几百 KB 到磁盘。
+	 */
+	spill(tool: string, content: string): { address: string; path: string; characters: number };
 	/**
 	 * 这次调用的结果也算上一条命令改的文件：`process` 是经 `exec`（`recordChanges`）起的进程或它留下的进程，可以是之前的调用起的（后台命令）。
 	 * 命令已经结束就算上它记下的，还在跑就记一句「结束后才记」。读后台命令输出的调用用。不是这个会话里经 `exec` 观测的进程时什么都不做。

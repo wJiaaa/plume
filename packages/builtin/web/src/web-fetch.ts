@@ -10,11 +10,8 @@
  * body 流式读，超过上限当场断开，不先读完再判断大小。
  */
 
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { join } from "node:path";
 import { pipeline, type Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import type { ToolDefinition, ToolOutput } from "@plume/contract";
@@ -147,35 +144,33 @@ export function webFetchTool(): ToolDefinition {
 			const close = "\n</fetched>";
 			// 外壳里的 URL 和 content-type 长短由对方定，跳转后的地址也不受 MAX_URL_LENGTH 约束；外壳超出余量时从正文里扣，整条仍不越线。
 			const room = Math.min(MAX_TEXT, RESULT_MAX_CHARS - open.length - close.length - TRUNCATED.length);
-			const saved = text.length > room ? await saveFull(text, run.scratchDir) : undefined;
-			// 去读全文用的工具按工具表里的声明现查（读文件 `kind: "view"`、搜内容 `kind: "search"`），不认名字；一个都没有就只说去那个文件里找。
-			const tools = run.tools();
-			const readers = (["view", "search"] as const).flatMap((kind) => tools.find((tool) => tool.kind === kind)?.name ?? []);
+			const saved = text.length > room ? await saveFull(text, run) : undefined;
+			// 去读全文用的工具按工具表里的声明现查（读文件 `kind: "view"`），不认名字；地址能按行、按窗口读，只有它会读。
+			const reader = run.tools().find((tool) => tool.kind === "view")?.name;
 			// i18n-exempt：发给模型的工具结果
-			const how = readers.length > 0 ? `${readers.join(" or ")} it` : "look in that file";
-			const hint = saved ? `\n\n[full text: ${saved} (${text.length} characters) — ${how} for the part after the cut]` : "";
+			const how = reader ? `${reader} it with offset for` : "read it for";
+			const hint = saved ? `\n\n[full text: ${saved.address} (${text.length} characters) — ${how} the part after the cut]` : "";
 			const limit = room - hint.length;
 			const clipped = text.length > limit ? `${text.slice(0, limit)}${TRUNCATED}` : text;
 
 			return {
 				output: `${open}${clipped}${close}${hint}`,
-				details: { kind: "web_fetch", url: current.toString(), status, bytes: buffer.byteLength, ...(saved ? { outputPath: saved } : {}) },
+				details: { kind: "web_fetch", url: current.toString(), status, bytes: buffer.byteLength, ...(saved ? { spill: saved } : {}) },
 			};
 		},
 	};
 }
 
 /**
- * 截掉的部分存进会话临时目录的 `tool-output/`（和 bash 的完整输出同一处），模型要后半段时 read 或 grep 它，不必再抓一次。
- * 写不进去（磁盘满之类）就当没存：结果照样返回，只是少一句提示。
+ * 截掉的部分交给本体存进会话的临时目录（`run.files.spill`，和压缩剪掉的大块原文同一处），换回一个 `artifact://` 地址，
+ * 模型要后半段时按行、按窗口读它，不必再抓一次。写不进去（磁盘满之类）就当没存：结果照样返回，只是少一句提示。
  */
-async function saveFull(text: string, scratchDir: string): Promise<string | undefined> {
+function saveFull(
+	text: string,
+	run: { files: { spill(tool: string, content: string): { address: string; path: string; characters: number } } },
+): { address: string; path: string; characters: number } | undefined {
 	try {
-		const directory = join(scratchDir, "tool-output");
-		await mkdir(directory, { recursive: true });
-		const path = join(directory, `${randomUUID()}.log`);
-		await writeFile(path, text, { flag: "wx", mode: 0o600 });
-		return path;
+		return run.files.spill("web_fetch", text);
 	} catch {
 		return undefined;
 	}
