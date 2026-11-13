@@ -7,7 +7,8 @@
 
 import { open } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { DiffBlob, DiffFile, DiffHunk, FileStatus, WorkspaceDiff } from "../api.ts";
+import type { ChangeHunk } from "@plume/contract";
+import type { DiffBlob, DiffFile, FileStatus, WorkspaceDiff } from "../api.ts";
 import { readBlobs, type BlobRead } from "./blobs.ts";
 import { mapLimit, MAX_BLOB_BYTES, MAX_FILES } from "./exec.ts";
 import { computeDiff } from "@plume/platform";
@@ -139,7 +140,7 @@ function asCheckedOut(committed: string, working: string): string {
 }
 
 /** 几百个 hunk 的文件只带前一部分。 */
-export function capHunks(hunks: DiffHunk[]): DiffHunk[] {
+export function capHunks(hunks: ChangeHunk[]): ChangeHunk[] {
 	return hunks.slice(0, 40);
 }
 

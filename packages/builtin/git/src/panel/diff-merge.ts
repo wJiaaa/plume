@@ -1,4 +1,5 @@
-import type { DiffFile, DiffHunk } from "../api.ts";
+import type { ChangeHunk } from "@plume/contract";
+import type { DiffFile } from "../api.ts";
 
 /**
  * 列出来的文件，内容到了的填上。
@@ -22,7 +23,7 @@ export function keepUnchangedHunks(held: DiffFile[], next: DiffFile[]): DiffFile
 	});
 }
 
-function sameHunks(a: DiffHunk[], b: DiffHunk[]): boolean {
+function sameHunks(a: ChangeHunk[], b: ChangeHunk[]): boolean {
 	return (
 		a.length === b.length &&
 		a.every((hunk, index) => {

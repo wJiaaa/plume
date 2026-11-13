@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiffLine } from "../src/api.ts";
+import type { ChangeLine } from "@plume/contract";
 import { MESSAGES } from "../src/messages.ts";
 import { commentPlace, diffCommentPrompt, diffComments } from "../src/panel/diff-comments.ts";
 import type { Translate } from "../src/panel/i18n.ts";
@@ -11,8 +11,8 @@ const t: Translate = (key, variables) => {
 	return template.replace(/\{([^}]+)\}/g, (match, name: string) => String(variables?.[name] ?? match));
 };
 
-const add = (newLine: number, text: string): DiffLine => ({ type: "add", text, newLine });
-const remove = (oldLine: number, text: string): DiffLine => ({ type: "remove", text, oldLine });
+const add = (newLine: number, text: string): ChangeLine => ({ type: "add", text, newLine });
+const remove = (oldLine: number, text: string): ChangeLine => ({ type: "remove", text, oldLine });
 
 test("diffComments：按文件、再按行排，改一条不换位置以外的东西，清掉整个仓库", () => {
 	const cwd = "/repo-sort";

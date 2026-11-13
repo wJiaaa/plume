@@ -16,7 +16,7 @@ import { Button, IconButton, Popover, Text, Textarea } from "@plume/ui";
 import { ArrowUp, MessageSquare, Trash2 } from "@plume/ui/icons";
 import { textarea } from "@plume/styles";
 import { createContext, useContext, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { DiffHunk, DiffLine } from "../api.ts";
+import type { ChangeHunk, ChangeLine } from "@plume/contract";
 import { commentPlace, diffCommentPrompt, diffComments, rowKey } from "./diff-comments.ts";
 import { handToSession, notify } from "./host.ts";
 import { useT } from "./i18n.ts";
@@ -30,12 +30,12 @@ export interface DiffNote {
 
 export interface DiffRow {
 	path: string;
-	hunk: DiffHunk;
+	hunk: ChangeHunk;
 	lineIndex: number;
 }
 
 export interface DiffCommenting {
-	noteOf(path: string, line: DiffLine): DiffNote | null;
+	noteOf(path: string, line: ChangeLine): DiffNote | null;
 	/** 在行号上按下。`extend` 是按着 Shift：从上一次点的那一行拉到这一行。 */
 	press(row: DiffRow, anchor: HTMLElement, extend: boolean): void;
 	/** 按着拖进了另一行的行号。 */
@@ -51,7 +51,7 @@ export function useDiffCommenting(): DiffCommenting | null {
 
 interface Draft {
 	path: string;
-	lines: DiffLine[];
+	lines: ChangeLine[];
 	anchor: HTMLElement;
 	/** 改的是已有的那一条。 */
 	id?: string;

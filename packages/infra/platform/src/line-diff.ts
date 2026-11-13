@@ -3,6 +3,10 @@
  *
  * 用 Myers 最短编辑脚本算行级差异。界面要画带上下文的分块（不只是增删行数），所以输出是一块块的 hunk。
  * 搜索有上限：大段重写不去找最小改动，直接整块替换，结果仍然正确，只是不是最小的。
+ *
+ * `DiffHunk` / `DiffLine` 和 `@plume/contract` 的 `ChangeHunk` / `ChangeLine` 同形，但不能合成一份：infra 不依赖 contract
+ * （`infra-stands-alone`），反过来让 contract 引这里，插件 SDK 的公开声明就得带上这个用 Node 的包。结果交给 `ChangeHunk` 的
+ * 地方由类型检查保证两边一直对得上。
  */
 
 export interface DiffLine {

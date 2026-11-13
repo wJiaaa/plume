@@ -5,7 +5,7 @@
  * 只放内存：评论是一次审阅的草稿，发出去就清空；重启以后那些行多半已经被改过，留着只会标错地方。
  */
 
-import type { DiffLine } from "../api.ts";
+import type { ChangeLine } from "@plume/contract";
 import type { Translate } from "./i18n.ts";
 
 export interface DiffComment {
@@ -17,7 +17,7 @@ export interface DiffComment {
 	 * 发给模型的是这几行原文，不只是行号：留完评论到发出去之间文件还可能被改，行号会漂，原文能让它
 	 * 认出说的是哪一段。界面上标记也按原文对（见 `rowKey`），对不上的那一行就不再标。
 	 */
-	lines: DiffLine[];
+	lines: ChangeLine[];
 	text: string;
 }
 
@@ -27,7 +27,7 @@ export interface DiffComment {
  * 删掉的行只有旧行号，其余用新行号。字也算进去：文件被改过以后同一个行号上可能已经是别的内容，
  * 标在那里就是标错了地方。
  */
-export function rowKey(path: string, line: DiffLine): string {
+export function rowKey(path: string, line: ChangeLine): string {
 	const at = line.type === "remove" ? `-${line.oldLine ?? ""}` : `+${line.newLine ?? ""}`;
 	return `${path}\0${at}\0${line.text}`;
 }

@@ -2,7 +2,15 @@
 export interface ChangeHunk {
 	oldStart: number;
 	newStart: number;
-	lines: { type: "context" | "add" | "remove"; text: string; oldLine?: number; newLine?: number }[];
+	lines: ChangeLine[];
+}
+
+/** diff 里的一行；行号只在那一边有这一行时给。 */
+export interface ChangeLine {
+	type: "context" | "add" | "remove";
+	text: string;
+	oldLine?: number;
+	newLine?: number;
 }
 
 export interface ChangedFile {

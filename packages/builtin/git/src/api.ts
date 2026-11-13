@@ -5,20 +5,7 @@
  * 远端的三个调用（拉取、推送、获取）和生成提交说明会卡在网络上，界面用 `.cancel()` 叫停，这边接 `call.signal`。
  */
 
-import type { CallContext } from "@plume/contract";
-
-export interface DiffLine {
-	type: "context" | "add" | "remove";
-	text: string;
-	oldLine?: number;
-	newLine?: number;
-}
-
-export interface DiffHunk {
-	oldStart: number;
-	newStart: number;
-	lines: DiffLine[];
-}
+import type { CallContext, ChangeHunk } from "@plume/contract";
 
 export type FileStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
 
@@ -28,7 +15,7 @@ export interface DiffFile {
 	status: FileStatus;
 	added: number;
 	removed: number;
-	hunks: DiffHunk[];
+	hunks: ChangeHunk[];
 	/** 不是文本：没有 hunk，行数为 0。照样列出来，界面画图或写大小。 */
 	binary?: boolean;
 	/** 存在的那一边的字节数，给二进制那一行用。 */

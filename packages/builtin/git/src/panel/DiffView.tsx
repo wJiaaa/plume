@@ -1,6 +1,6 @@
 import { MarkNumber, OverlayScrollbar, Text } from "@plume/ui";
 import { useRef } from "react";
-import type { DiffHunk } from "../api.ts";
+import type { ChangeHunk } from "@plume/contract";
 import { useDiffCommenting, type DiffCommenting } from "./DiffComments.tsx";
 import { useT, type Translate } from "./i18n.ts";
 
@@ -10,7 +10,7 @@ import { useT, type Translate } from "./i18n.ts";
  * 长行横着滚，这就是分层的原因：行铺在和最长那行一样宽的一层上，底色和分隔线跟着整行走，不在折叠处断掉；
  * 行号和竖条钉在左边，行长到要横着滚的时候正是最想知道在哪一行的时候。hunk 头、截断提示这些不是代码的东西也钉住。
  */
-export function DiffView({ hunks, path, showPath = false, maxLines = 600 }: { hunks: DiffHunk[]; path?: string; showPath?: boolean; maxLines?: number }) {
+export function DiffView({ hunks, path, showPath = false, maxLines = 600 }: { hunks: ChangeHunk[]; path?: string; showPath?: boolean; maxLines?: number }) {
 	const t = useT();
 	let emitted = 0;
 	const scroller = useRef<HTMLDivElement>(null);
@@ -85,7 +85,7 @@ function DiffGutterButton({
 	t: Translate;
 	commenting: DiffCommenting;
 	path: string;
-	hunk: DiffHunk;
+	hunk: ChangeHunk;
 	lineIndex: number;
 }) {
 	const line = hunk.lines[lineIndex]!;
