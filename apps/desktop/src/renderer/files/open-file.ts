@@ -201,7 +201,7 @@ export function baseName(path: string): string {
 /**
  * 按路径打开文件：已经有标签看着它就切过去，不然新开一个。读不到不开标签，说一声。
  *
- * 标签由 `app.tsx` 管，它在启动时把自己的实现交进来；回复里的文件签从这里调，不回头 import `app.tsx`。
+ * 标签由 `app/panels.ts` 管，启动时（`app/start.ts`）把它的实现交进来；回复里的文件签从这里调，不回头 import `app/`。
  */
 let opener: ((path: string, lines?: LineRange | null, sessionId?: string) => Promise<void>) | null = null;
 

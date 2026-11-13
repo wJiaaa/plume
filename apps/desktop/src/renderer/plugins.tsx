@@ -272,14 +272,14 @@ function sameShortcut(a: string, b: string): boolean {
 }
 
 /**
- * Plume 自己在 app.tsx 里接的快捷键：⌘B / Ctrl+B 开合侧栏，后退前进，Esc 收起，⌘P / ⌥⌘P 开文件树、文件面板。面板快捷键在捕获阶段先拦，
- * 插件要了同一个就会把它们抢走，所以插件面板拿不到这些。app.tsx 那边改了要同步这里。
+ * Plume 自己在 app.tsx 和 app/ 里接的快捷键：⌘B / Ctrl+B 开合侧栏，后退前进，Esc 收起，⌘P / ⌥⌘P 开文件树、文件面板。面板快捷键在捕获阶段先拦，
+ * 插件要了同一个就会把它们抢走，所以插件面板拿不到这些。那边改了要同步这里。
  */
 const HOST_SHORTCUTS = [
 	"Command+B",
 	"Control+B",
 	"Escape",
-	// 本体的文件树和文件面板（app.tsx 的 registerHostPanel）。
+	// 本体的文件树和文件面板（app/start.ts 的 registerHostPanel）。
 	"CommandOrControl+P",
 	"CommandOrControl+Alt+P",
 	...(MAC ? ["Command+[", "Command+]"] : ["Alt+Left", "Alt+Right", "Alt+ArrowLeft", "Alt+ArrowRight"]),

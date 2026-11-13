@@ -17,7 +17,7 @@
 | rule | 何时读（when） | 触发文件（files） |
 |---|---|---|
 | [tool-card](./scenario/tool-card.md) | 转录里的工具调用和过程行（合并、收起、思考、运行行）、审批卡、插件的界面入口、通用卡片、工具输出和 diff 的展示 | `apps/desktop/src/renderer/plugins.tsx`、插件仓库的 `plugins/*/src/ui.tsx`、`apps/desktop/src/renderer/conversation/**`（转录：`Transcript`、`ToolCard`、`WorkStep`、`TurnWork`……），`apps/desktop/src/renderer/conversation/ApprovalOverlay.tsx`、`apps/desktop/src/renderer/composer/PermissionPicker.tsx` |
-| [form-page](./scenario/form-page.md) | 设置页这类表单：输入框、下拉、开关、提交、取消、错误提示 | `apps/desktop/src/renderer/settings/**`、`apps/desktop/src/renderer/app.tsx` 里的 `SettingsScreen` |
+| [form-page](./scenario/form-page.md) | 设置页这类表单：输入框、下拉、开关、提交、取消、错误提示 | `apps/desktop/src/renderer/settings/**`、`apps/desktop/src/renderer/app/SettingsScreen.tsx` |
 
 ## 业务域（domain/）—— 命中业务对象或业务链路时读
 

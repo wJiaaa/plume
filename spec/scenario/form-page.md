@@ -37,5 +37,5 @@
 ## 事实来源
 
 - `apps/desktop/src/renderer/settings/controls.tsx`、`apps/desktop/src/renderer/settings/pages.tsx`
-- `apps/desktop/src/renderer/app.tsx`（`SettingsScreen`）、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`、`apps/desktop/src/renderer/settings/personalization.tsx`（“已保存”）
+- `apps/desktop/src/renderer/app/SettingsScreen.tsx`、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`、`apps/desktop/src/renderer/settings/personalization.tsx`（“已保存”）
 - `apps/desktop/src/main/smoke.ts`
