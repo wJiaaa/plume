@@ -2351,49 +2351,63 @@ it("编辑重发：截掉这条和之后的，拿新的话重新跑一轮；跑�
 	expect(view.messages[0]).toMatchObject({ role: "user", displayText: "改过的问题" });
 });
 
-it("session.rewind：截掉之前先问插件那段改过的文件；退不回去就不截、原话报给人，只截对话时不问", async () => {
-	const asked: Array<{ roles: string[]; restore: boolean; cwd: string }> = [];
-	let refuse = false;
-	const files: Plugin = {
-		name: "test.files",
+it("撤回、编辑重发连文件一起退：认本体记在结果上的改动，不认工具自称的；文件之后被改过只能撤对话，文件原样留着", async () => {
+	const writer: Plugin = {
+		name: "test.writer",
 		apply: (ctx) =>
-			ctx.hook("session.rewind", async (input, next) => {
-				asked.push({ roles: input.messages.map((message) => message.role), restore: input.restore, cwd: input.cwd });
-				if (input.restore && refuse) throw new Error("a.ts 之后被改过，没有退回");
-				const inner = await next(input);
-				return { files: [...inner.files, { path: join(input.cwd, "a.ts"), added: 1, removed: 0, problem: null }], unrecorded: inner.unrecorded };
+			void ctx.tools.register({
+				name: "put",
+				description: "写文件",
+				parameters: { type: "object", properties: { path: { type: "string" }, text: { type: "string" } } },
+				execute: async (args, run) => {
+					const { path } = await run.files.change(String(args.path), async () => ({ text: String(args.text), value: undefined }));
+					// 工具自己声称的改动不算数：结果上的 changes 只由本体填。
+					return { output: `wrote ${path}`, changes: { ids: ["forged"], paths: ["/forged"] } };
+				},
 			}),
 	};
-	const { service, session, events, until, idle } = await start([{ text: "第一个回答" }, { text: "第二个回答" }, { text: "重来的回答" }], [files]);
-	for (const words of ["第一问", "第二问"]) {
+	const put = (id: string, path: string, text: string): FakeReply => ({ toolCalls: [{ id, name: "put", args: { path, text } }] });
+	const { service, session, events, until, idle } = await start(
+		[{ text: "第一个回答" }, put("call_a", "a.ts", "new\n"), { text: "写好了" }, put("call_b", "b.ts", "b\n"), { text: "又写好了" }, { text: "重来的回答" }],
+		[writer],
+	);
+	const ask = async (words: string) => {
 		const done = idle();
 		service.send(session.id, { content: [{ type: "text", text: words }] });
 		await done;
-	}
-	expect(await service.revertPlan(session.id, 2)).toEqual({
-		files: [{ path: join(session.cwd, "a.ts"), added: 1, removed: 0, problem: null }],
-		unrecorded: false,
-	});
-	await expect(service.revertPlan(session.id, 1)).rejects.toThrow("找不到这条消息");
-	expect(asked).toEqual([{ roles: ["user", "assistant"], restore: false, cwd: session.cwd }]);
+	};
+	await ask("第一问");
+	await ask("写个 a.ts");
+	const root = await realpath(workspace);
+	const result = (await service.getSession(session.id)).messages[4]!;
+	expect(result).toMatchObject({ role: "toolResult", changes: { paths: [join(session.cwd, "a.ts")] } });
+	expect(result.role === "toolResult" && result.changes?.ids).toHaveLength(1);
+	expect(result.role === "toolResult" && result.changes?.ids).not.toContain("forged");
+	const plan = { files: [{ path: join(root, "a.ts"), added: 1, removed: 0, problem: null }], unrecorded: false };
+	expect(await service.revertPlan(session.id, 2)).toEqual(plan);
+	expect(await service.revertPlan(session.id, 0)).toEqual(plan);
 
-	refuse = true;
-	await expect(service.revertMessage(session.id, 2, { files: true })).rejects.toThrow(/^a\.ts 之后被改过，没有退回$/);
-	await expect(service.editMessage(session.id, 2, { content: [{ type: "text", text: "改问" }] }, { files: true })).rejects.toThrow("没有退回");
-	expect((await service.getSession(session.id)).summary.messageCount).toBe(4);
-	expect(asked.slice(1).map((entry) => entry.restore)).toEqual([true, true]);
-
-	// 只截对话：不问插件。
+	// 之后被人改过：演算说得出是哪一类，连文件退被拒、对话也不截，文件不覆盖。
+	await writeFile(join(workspace, "a.ts"), "user\n");
+	expect((await service.revertPlan(session.id, 2)).files).toMatchObject([{ path: join(root, "a.ts"), problem: "modified" }]);
+	await expect(service.revertMessage(session.id, 2, { files: true })).rejects.toThrow();
+	expect((await service.getSession(session.id)).summary.messageCount).toBe(6);
+	// 只撤对话：文件原样留着。
 	await service.revertMessage(session.id, 2);
-	expect(asked).toHaveLength(3);
 	expect((await service.getSession(session.id)).summary.messageCount).toBe(2);
+	expect(await readFile(join(workspace, "a.ts"), "utf8")).toBe("user\n");
 
-	refuse = false;
+	// 没被改过：编辑重发连文件一起退，新建的文件删掉，再拿新的话跑一轮。
+	await ask("写个 b.ts");
+	expect(await readFile(join(workspace, "b.ts"), "utf8")).toBe("b\n");
 	const from = events.length;
-	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "重新问" }] }, { files: true });
-	expect(asked[3]).toEqual({ roles: ["user", "assistant"], restore: true, cwd: session.cwd });
+	const done = idle();
+	await service.editMessage(session.id, 2, { content: [{ type: "text", text: "重新问" }] }, { files: true });
+	await expect(readFile(join(workspace, "b.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+	expect(await readFile(join(workspace, "a.ts"), "utf8")).toBe("user\n");
 	await until((event): event is AgentEvent => event.type === "message" && event.message.role === "assistant", from);
-	expect((await service.getSession(session.id)).messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+	await done;
+	expect((await service.getSession(session.id)).messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
 });
 
 it("分叉：问题上停在它之前，落定的回复上带着它；原会话不动，压缩记录只留对得上的", async () => {

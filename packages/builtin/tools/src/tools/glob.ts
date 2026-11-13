@@ -4,7 +4,7 @@ import { join, relative, sep } from "node:path";
 import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolResult } from "./types.ts";
-import { displayPath, toAbsolute } from "./paths.ts";
+import { displayPath } from "./paths.ts";
 import { SKIP_DIRS } from "./project-files.ts";
 import { describeGlob } from "./describe.ts";
 
@@ -50,7 +50,7 @@ export const globTool: Tool<GlobArgs> = {
 		let root = ctx.cwd;
 		if (path) {
 			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
-			const authorized = await ctx.files.read(toAbsolute(ctx.cwd, path));
+			const authorized = await ctx.files.read(ctx.files.resolve(path));
 			if (!authorized.ok) return errorResult(authorized.message);
 			if (authorized.path) root = authorized.path;
 		}

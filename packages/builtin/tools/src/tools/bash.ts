@@ -16,7 +16,6 @@ import { isReadOnlyCommand } from "../read-only-command.ts";
 import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess, TrackedJob } from "@plume/contract";
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
 import { readJobOutput } from "./job-output.ts";
-import { commandChangesForJob, withCommandChanges } from "./command-changes.ts";
 import { OutputBuffer } from "./bash-output.ts";
 import { createOutputLog, type OutputLog } from "./output-log.ts";
 import { describeStatus, readExit } from "./exit-status.ts";
@@ -130,12 +129,7 @@ export const bashTool: Tool<BashArgs> = {
 		const refused = await authorizeCommand(args.command, args.description, ctx, args.escalate === undefined);
 		if (refused) return refused;
 
-		/*
-		 * 只读命令不拍前后快照、不占改动门闩：它不写文件，快照记不到任何东西，代价却不小——前后各起五六个 git、
-		 * 把工作区里每个已改动的文件读一遍。一批并行的 `git log`、`rg` 正好全是只读的（能并行的判定就是它）。
-		 */
-		const observe: typeof withCommandChanges = isReadOnlyCommand(args.command) ? (ctx, action) => action(ctx) : withCommandChanges;
-		return observe(ctx, async (ctx) => {
+		return withRecording(ctx, args.command, async (ctx) => {
 			if (args.run_in_background) return startBackground(args, ctx);
 
 			/*
@@ -277,6 +271,18 @@ export const bashTool: Tool<BashArgs> = {
 		});
 	},
 };
+
+/**
+ * 可能改文件的命令请本体记下它改了什么（`ToolRun.exec` 的 `recordChanges`）：本体在命令前后对比工作区，记进这次调用的结果，撤回、交付卡据此认。
+ *
+ * 只读命令不记：它不写文件，快照记不到任何东西，代价却不小——前后各起五六个 git、把工作区里每个已改动的文件读一遍，
+ * 还占着撤销的门闩。一批并行的 `git log`、`rg` 正好全是只读的（能并行的判定就是它）。
+ */
+function withRecording(ctx: ToolContext, command: string, action: (ctx: ToolContext) => Promise<ToolResult>): Promise<ToolResult> {
+	const exec = ctx.exec;
+	if (!exec || isReadOnlyCommand(command)) return action(ctx);
+	return action({ ...ctx, exec: (line, options) => exec(line, { ...options, recordChanges: true }) });
+}
 
 /** 写不了日志（临时目录建不出来、磁盘满）不挡命令：只是截过的结果里少一句完整日志在哪。 */
 async function openOutputLog(ctx: ToolContext): Promise<OutputLog | undefined> {
@@ -557,6 +563,9 @@ export const bashOutputTool: Tool<BashOutputArgs> = {
 		if (args.kill) jobs.stop(args.id, true);
 		else await waitForNews(job, ctx.signal);
 		jobs.observed(args.id);
+		// 起它的那次调用答完时命令还在跑，它改了什么那时还没记下：读它输出的这次结果把记下的算进来（还在跑就记一句「结束后才记」）。
+		const process = jobs.process(args.id);
+		if (process) ctx.files.includeChanges(process);
 		const { status, text } = readJob(job);
 		return {
 			content: [{ type: "text", text: `[job ${job.id} ${status}]\n${text}` }],
@@ -568,7 +577,6 @@ export const bashOutputTool: Tool<BashOutputArgs> = {
 				...(job.outputPath ? { outputPath: job.outputPath } : {}),
 				...(job.outputComplete === undefined ? {} : { outputComplete: job.outputComplete }),
 				...(job.outputError ? { outputError: job.outputError } : {}),
-				...(await commandChangesForJob(ctx, job.id)),
 			},
 		};
 	},

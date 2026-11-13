@@ -37,16 +37,11 @@ export interface ToolResult {
 export interface ToolContext {
 	/** 会话的工作目录，绝对路径。 */
 	cwd: string;
-	/** 直接工具测试可不给；没有私有目录时不记录快照。 */
-	dataDir?: string;
-	sessionId?: string;
-	/** 会话的临时目录（`ToolRun.scratchDir`）；直接工具测试可不给，不给就没有 `scratch://`。 */
+	/** 会话的临时目录（`ToolRun.scratchDir`），命令的完整输出写在它下面；直接工具测试可不给，不给就不写日志。 */
 	scratchDir?: string;
-	/** 同一脉的会话（子会话、分叉、建议开出的新会话）的临时目录（`ToolRun.scratchDirs`），写不用问人；不给时只算 `scratchDir`，见 `scratchDirsOf`。 */
-	scratchDirs?: readonly string[];
 	/** 登记着的资源地址（`scratch://` 之类，`ctx.resources.list()`）：认出一个参数是不是地址。不给时地址都按普通路径读（直接调工具的测试）。 */
 	resources?: Pick<PluginResources, "list">;
-	/** 经本体读（`ToolRun.files`）：路径能不能读、要不要问人，地址读到什么，都在那里。 */
+	/** 经本体读写（`ToolRun.files`）：路径能不能读写、要不要问人，地址读到什么，改了什么，都在那里。 */
 	files: ToolRun["files"];
 	/** 项目里 git 认为该看的文件（`ctx.workspace.files`）；不在仓库里是 null，工具自己走目录。 */
 	projectFiles: PluginWorkspace["files"];
@@ -57,7 +52,7 @@ export interface ToolContext {
 	requestApproval?: (request: ApprovalContent) => Promise<ApprovalDecision>;
 	/** 命令照哪个 shell 写（`ToolRun.shell()`，会话宣布的那一档）；不给时按这台机器的默认 shell 读（测试里直接调）。 */
 	shell?: Pick<ShellInfo, "kind">;
-	/** 跑命令（`ToolRun.exec`）：沙箱档由本体按权限模式定。不给就跑不了命令。 */
+	/** 跑命令（`ToolRun.exec`）：沙箱档由本体按权限模式定，带 `recordChanges` 的由本体记下改了什么。不给就跑不了命令。 */
 	exec?: ToolRun["exec"];
 	/** 申请这次调用的命令跑在更宽的一档（`ToolRun.escalate`）：本体弹提权卡、只认人答。不给就不能提权。 */
 	escalate?: ToolRun["escalate"];
@@ -94,7 +89,6 @@ export interface Tool<TArgs = Record<string, unknown>> {
 
 /** 工具执行时插件给它的东西：按会话记的状态，本体给的资源地址和项目文件清单。 */
 export interface ToolEnv {
-	dataDir?: string;
 	resources: Pick<PluginResources, "list">;
 	workspace: PluginWorkspace;
 	state(sessionId: string): Map<string, unknown>;
@@ -105,13 +99,10 @@ export interface ToolEnv {
 function toolContext(run: ToolRun, env: ToolEnv): ToolContext {
 	return {
 		cwd: run.cwd,
-		sessionId: run.sessionId,
 		scratchDir: run.scratchDir,
-		...(run.scratchDirs ? { scratchDirs: run.scratchDirs } : {}),
 		resources: env.resources,
 		files: run.files,
 		projectFiles: (root) => env.workspace.files(root),
-		...(env.dataDir ? { dataDir: env.dataDir } : {}),
 		signal: run.signal,
 		state: env.state(run.sessionId),
 		requestApproval: (content: ApprovalContent): Promise<ApprovalDecision> => run.ask(content),

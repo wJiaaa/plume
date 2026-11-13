@@ -6,7 +6,6 @@ const zhCN = {
 	missingTurn: "找不到对应轮次的最后回答。",
 	invalidPath: "撤销路径必须是非空的文件路径。",
 	collectFailed: (reason: string) => `变更快照不可用：${reason}`,
-	unrecorded: "有改动没有记录下来，没法完整退回。",
 };
 
 const en: typeof zhCN = {
@@ -14,7 +13,6 @@ const en: typeof zhCN = {
 	missingTurn: "The final answer for the requested turn was not found.",
 	invalidPath: "The undo path must be a nonempty file path.",
 	collectFailed: (reason) => `Change snapshots are unavailable: ${reason}`,
-	unrecorded: "Some changes weren't recorded, so the files can't be fully put back.",
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = { "zh-CN": zhCN, en };

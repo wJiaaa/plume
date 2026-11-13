@@ -169,13 +169,13 @@ it("抽字读出的文档和不合法的 UTF-8 不能当文本覆写", async () 
 });
 
 it.skipIf(process.platform === "win32")("同一文件的别名共享读过的记录，写不能借链接逃出工作区", async () => {
-	const { cwd, path, ctx } = await fixture();
+	const { cwd, path, ctx: outer } = await fixture();
 	const project = join(cwd, "project");
 	await mkdir(project);
 	const inside = join(project, "inside.txt");
 	await writeFile(inside, "before");
 	await symlink(inside, join(project, "alias.txt"));
-	ctx.cwd = project;
+	const ctx = withFiles({ ...outer, cwd: project });
 	await readTool.execute({ path: "alias.txt" }, ctx);
 	expect((await editTool.execute({ path: inside, old_string: "before", new_string: "after" }, ctx)).isError).not.toBe(true);
 	await symlink(path, join(project, "escape.txt"));
@@ -247,17 +247,20 @@ it("拒绝和取消不动字节，并释放队列", async () => {
 	await readTool.execute({ path }, ctx);
 	ctx.requestApproval = async () => "reject";
 	expect((await editTool.execute({ path, old_string: "a", new_string: "A" }, ctx)).isError).toBe(true);
+	// 取消信号是一次调用的（`ToolRun.signal`），换一次调用。
 	const controller = new AbortController();
-	ctx.signal = controller.signal;
-	ctx.requestApproval = async () => {
-		controller.abort();
-		return "once";
-	};
-	expect((await writeTool.execute({ path, content: "bad" }, ctx)).isError).toBe(true);
+	const cancelled = withFiles({
+		...ctx,
+		signal: controller.signal,
+		requestApproval: async () => {
+			controller.abort();
+			return "once";
+		},
+	});
+	expect((await writeTool.execute({ path, content: "bad" }, cancelled)).isError).toBe(true);
 	expect(await readFile(path, "utf8")).toBe("a\nb\nc\nd\n");
-	ctx.signal = undefined;
-	ctx.requestApproval = undefined;
-	expect((await editTool.execute({ path, old_string: "a", new_string: "A" }, ctx)).isError).not.toBe(true);
+	const next = withFiles({ ...ctx, requestApproval: undefined });
+	expect((await editTool.execute({ path, old_string: "a", new_string: "A" }, next)).isError).not.toBe(true);
 });
 
 it("空的 old_string 指向 write；把全部换成空，文件剩零字节", async () => {

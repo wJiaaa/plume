@@ -228,15 +228,7 @@ const NO_SESSIONS: HostSessions = {
 	stop: () => undefined,
 	delete: async (_owner, sessionId) => missing(sessionId),
 };
-const HOOKS: ReadonlySet<string> = new Set<HookName>([
-	"tool.execute",
-	"model.context",
-	"step.end",
-	"prompt.submit",
-	"context.compact",
-	"tool.approve",
-	"session.rewind",
-]);
+const HOOKS: ReadonlySet<string> = new Set<HookName>(["tool.execute", "model.context", "step.end", "prompt.submit", "context.compact", "tool.approve"]);
 /** 市场插件的 `apply` 最多等多久，见 `PluginHost.limited`。 */
 const APPLY_TIMEOUT_MS = 15_000;
 /** 命令名：`/` 后面能敲的字，`:` 分段。 */
@@ -333,7 +325,9 @@ export class PluginHost {
 
 	/** 会话删掉了：告诉登记过 `ctx.sessions.onDeleted` 的插件。某个插件出错只记日志，不拦着别的。 */
 	sessionDeleted(sessionId: string): void {
-		this.workspace.forget(sessionId);
+		void this.workspace
+			.forget(sessionId)
+			.catch((error: unknown) => this.options.log("agent", "error", `删掉会话 ${sessionId} 的改动快照失败：${errorText(error)}`));
 		for (const { plugin, listener } of [...this.deletedListeners]) {
 			try {
 				listener(sessionId);
@@ -775,6 +769,7 @@ export class PluginHost {
 				keepArtifact: (sessionId, tool, content) => this.workspace.resources.keepArtifact(sessionId, tool, content),
 			},
 			workspace: this.workspace.workspace,
+			changes: this.workspace.changes,
 			appDataDir: this.options.appDataDir,
 			sessions: {
 				list: () => sessions.list(),

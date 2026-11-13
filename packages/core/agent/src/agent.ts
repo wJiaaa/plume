@@ -68,7 +68,7 @@ import { operateSessionFile } from "./file-operations.ts";
 import { managedMediaPath, readManagedMedia } from "./media-access.ts";
 import { listSessionDirectory, locateSessionFiles, readListedFile, readSessionFile, readSessionFileBytes, sessionFilePath } from "./files.ts";
 import { foldRetry, settleHiccups } from "./hiccups.ts";
-import { errorText, HookError, type HostPages, PluginHost } from "./host.ts";
+import { errorText, type HostPages, PluginHost } from "./host.ts";
 import { activeLocale, setLocale, text } from "./i18n.ts";
 import { conversationMarkdown } from "./conversation-markdown.ts";
 import { runSteps } from "./loop.ts";
@@ -969,17 +969,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 截掉第 `index` 条起的那段时，问插件那段改过的东西（钩子 session.rewind）。`restore` 为真时插件真的写回去，写不回去就抛错；
-	 * 抛给人的是插件说的那句原话，不包成「插件出错」：退不回去是插件拒绝了，不是它坏了。
+	 * 截掉第 `index` 条起的那段改过的文件（按结果上本体记下的 `ToolResultMessage.changes`，见 `run-files.ts` 的 `revert`）。
+	 * `restore` 为真时真的退回去，退不回去就抛错，message 给人看。
 	 */
 	async function rewindFiles(session: Session, index: number, restore: boolean): Promise<RevertPlan> {
-		const messages = structuredClone((await messagesOf(session)).slice(index));
-		const input = { sessionId: session.summary.id, session: sessionScope(session.summary), cwd: session.summary.cwd, messages, restore };
-		try {
-			return await host.run("session.rewind", input, async () => ({ files: [], unrecorded: false }));
-		} catch (error) {
-			throw restore && error instanceof HookError && error.cause instanceof Error ? error.cause : error;
-		}
+		return host.workspace.revert(session.summary.id, session.summary.cwd, (await messagesOf(session)).slice(index), restore);
 	}
 
 	/** 开始新的一轮；上一轮还没收完尾（被打断的那一轮）时排在它后面。 */
@@ -1345,21 +1339,29 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const words = prompt.displayText ?? prompt.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
 		const fresh = (await messagesOf(session)).length === 0;
 		signal.throwIfAborted();
-		const verdict = await host.run(
-			"prompt.submit",
-			{
-				sessionId: session.summary.id,
-				session: sessionScope(session.summary),
-				cwd: session.summary.cwd,
-				text: words,
-				attachments: (prompt.attachments ?? []).map((item) => item.name),
-				synthetic: prompt.synthetic === true,
-				fresh,
-				launched: launchedPrompts.has(prompt),
-				signal,
-			},
-			async () => ({ block: false }),
-		);
+		// 正在撤销改动时不开新的一问；送进会话期间撤销也不能开始（之后这一轮在跑，撤销看会话在跑）。
+		const release = host.workspace.beginPrompt();
+		if (!release) return { block: true, reason: text("changes.undoBusy") };
+		let verdict: PromptVerdict;
+		try {
+			verdict = await host.run(
+				"prompt.submit",
+				{
+					sessionId: session.summary.id,
+					session: sessionScope(session.summary),
+					cwd: session.summary.cwd,
+					text: words,
+					attachments: (prompt.attachments ?? []).map((item) => item.name),
+					synthetic: prompt.synthetic === true,
+					fresh,
+					launched: launchedPrompts.has(prompt),
+					signal,
+				},
+				async () => ({ block: false }),
+			);
+		} finally {
+			release();
+		}
 		if (verdict?.block === true)
 			return { block: true, reason: typeof verdict.reason === "string" && verdict.reason.trim() ? verdict.reason : text("prompt.blocked") };
 		return {
@@ -2108,7 +2110,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					// 只有顶层会话的任务算在等：结果经那次调用的送达渠道送回来，渠道作废（人按停、撤回）就不再算。子会话没有渠道。
 					track: (plugin, toolCallId, job) =>
 						jobs.track(sessionId, plugin, job, session.summary.kind === "top" ? background.channel(sessionId, toolCallId, plugin).signal : undefined),
-					files: (call) => host.workspace.files(call),
+					files: (call) => host.workspace.call(call),
 					started: (toolCallId) => {
 						const at = Date.now();
 						session.startedAt.set(toolCallId, at);

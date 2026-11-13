@@ -4,7 +4,7 @@
  *
  * - `prompt.submit`：每一问后面附上主会话上次之后的新内容（见 main-chat.ts），每一问读到哪里记在插件数据目录的 `marks.json`，
  *   编辑重问截掉的那几问一起作废；
- *   主会话的下一问后面附上侧边聊天这期间改过的文件（见 changes.ts），经 `file.changes` 认改动记录。
+ *   主会话的下一问后面附上侧边聊天这期间改过的文件（见 changes.ts），经本体的 `ctx.changes` 认改动记录。
  * - `model.context`：身份、准则换成侧边聊天的，工具只留读主会话、交出去、控制主会话、读写文件、跑命令、查网页（见 profile.ts）。
  *   普通会话里藏起这三件侧边聊天专用的，`tool.execute` 再拦一次子 Agent 这类别的会话。
  * - `dispatch_task`、`control_main`（见 controls.ts）：经宿主给的父会话（`ToolRun.parent`）把活排进主会话、让它停下或接着做；
@@ -39,9 +39,7 @@ import { GUIDELINES_TEXT, IDENTITY, KINDS, READ_MAIN_CHAT_DESCRIPTION, SIDE_ONLY
 
 export default {
 	name: "plume.side-chat",
-	inject: ["file.changes"],
 	async apply(ctx) {
-		const changes = ctx.use("file.changes");
 		/** 侧边聊天 → 它挂在哪个会话旁边。 */
 		const sides = new Map<string, string>();
 		for (const summary of await ctx.sessions.list()) if (summary.owner === ctx.name && summary.parentId) sides.set(summary.id, summary.parentId);
@@ -97,7 +95,6 @@ export default {
 
 		/** 这个主会话旁边的侧边聊天上次告诉它之后改过的文件，说过的往后挪；没有就是空的。 */
 		async function sideChanges(parentId: string): Promise<string | undefined> {
-			const summaries = new Map((await ctx.sessions.list()).map((summary) => [summary.id, summary]));
 			const paths = new Set<string>();
 			for (const [sideId, parent] of sides) {
 				if (parent !== parentId) continue;
@@ -108,10 +105,9 @@ export default {
 				const fresh = intact ? messages.slice(mark.seen) : messages.filter((message) => message.timestamp > mark.lastAt);
 				const ids = changeIds(fresh);
 				noted.set(sideId, markOf(messages));
-				const cwd = summaries.get(sideId)?.cwd;
-				if (ids.length === 0 || !cwd) continue;
-				// 改动记录读不出来（快照已清掉）时少说几个文件，不拦下主会话这一问。
-				const summary = await changes.collect(sideId, cwd, ids).catch(() => undefined);
+				if (ids.length === 0) continue;
+				// 改动记录读不出来（快照已清掉、会话没了）时少说几个文件，不拦下主会话这一问。
+				const summary = await ctx.changes.collect(sideId, ids).catch(() => undefined);
 				for (const file of summary?.files ?? []) paths.add(file.path);
 			}
 			return paths.size > 0 ? sideChangesNote([...paths]) : undefined;

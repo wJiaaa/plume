@@ -13,6 +13,7 @@ import type {
 	BackgroundChannel,
 	BackgroundJobInput,
 	CancelledDetails,
+	FileChanges,
 	HumanAnswer,
 	HumanRequest,
 	HumanRequestInput,
@@ -33,7 +34,7 @@ import type {
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { DECLINED } from "./declined.ts";
-import type { CallFiles } from "./run-files.ts";
+import type { CallFileAccess, CallFiles } from "./run-files.ts";
 import { text } from "./i18n.ts";
 
 /** 工具执行进度最快多久推一次；界面上也只留最后这么多字符，完整输出在结果里。 */
@@ -95,8 +96,11 @@ export interface ToolScope {
 	parent?(plugin: string): ParentSession | undefined;
 	/** 这次调用跑命令用的 `ToolRun.shell`、`exec`、`escalate`（`commands.ts`）：沙箱档、提权都在那里，这里只把它们挂到 `run` 上。 */
 	commands(call: CallCommands): Pick<ToolRun, "shell" | "exec" | "escalate">;
-	/** 这次调用读工作区用的 `ToolRun.files`（`run-files.ts`）：读边界、问人都在那里，这里只把它挂到 `run` 上。 */
-	files(call: CallFiles): ToolRun["files"];
+	/**
+	 * 这次调用读写工作区用的 `ToolRun.files`，和观测命令的那层 `exec`（`run-files.ts`）：读写边界、问人、改动快照都在那里，
+	 * 这里只把它们挂到 `run` 上，调用收场时把记下的改动写进结果（`ToolOutput.changes`）。
+	 */
+	files(call: CallFiles): CallFileAccess;
 }
 
 /** 造一次调用的 `shell`、`exec`、`escalate` 要的东西，这里按这次调用给，`commands.ts` 用它造。 */
@@ -150,6 +154,7 @@ function toolResult(call: ToolCallContent, result: ToolOutput, startedAt?: numbe
 			? { shownImages: result.shownImages.map((image) => ({ type: "image" as const, data: image.data, mimeType: image.mimeType })) }
 			: {}),
 		...(result.details === undefined ? {} : { details: result.details }),
+		...(result.changes ? { changes: result.changes } : {}),
 		...(result.uneventful === true ? { uneventful: true } : {}),
 		...(result.instructions === true ? { instructions: true } : {}),
 		...(startedAt === undefined ? {} : { startedAt, durationMs: now - startedAt }),
@@ -342,6 +347,24 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		};
 		return (await waitFor(() => scope.requestHuman(asked))) as HumanAnswer<T>;
 	};
+	/**
+	 * 这次调用经 `run.files`、`run.exec` 改了的文件，本体记的（`ToolOutput.changes`）。层可能把里层调了几次，几次的并起来；
+	 * 结果交回以后照它重填：层读得到、改不了，工具自己填的也不算。
+	 */
+	let changed: FileChanges | undefined;
+	const remember = (more: FileChanges | undefined) => {
+		if (!more) return;
+		const warnings = [changed?.warning, more.warning].filter((warning): warning is string => Boolean(warning));
+		changed = {
+			ids: [...new Set([...(changed?.ids ?? []), ...more.ids])],
+			paths: [...new Set([...(changed?.paths ?? []), ...more.paths])],
+			...(warnings.length ? { warning: [...new Set(warnings)].join("\n") } : {}),
+		};
+	};
+	const withChanges = (output: ToolOutput): ToolOutput => {
+		const { changes: _claimed, ...rest } = output;
+		return changed ? { ...rest, changes: changed } : rest;
+	};
 	// 插件的层自己要问时，卡片上是这个调用的参数和它给的理由；没有 subject，只能答这一次。
 	const generic = { kind: call.name, title: call.name, detail: JSON.stringify(call.arguments, null, 2) };
 	// 用到才读设置：不改动工作区的调用不等它，同一批同时跑的照调用的顺序开始。
@@ -407,11 +430,26 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		const alive = (what: string) => {
 			if (!open) throw new Error(text("session.callEnded", { what }));
 		};
+		let access: CallFileAccess | undefined;
+		let output: ToolOutput;
 		try {
 			const ask = (content: ApprovalContent) => approve(input, content, false);
 			const parent = boundParent(scope.parent?.(tool.plugin), alive);
 			const allowedPaths = (await scope.allowedPaths?.()) ?? [];
 			const commands = scope.commands({ cwd: input.cwd, readOnly: Boolean(input.readOnly), permission: async () => (await permission()).mode, ask, alive });
+			access = scope.files({
+				sessionId: input.sessionId,
+				cwd: input.cwd,
+				scratchDir: scope.scratchDir,
+				...(scope.scratchDirs ? { scratchDirs: scope.scratchDirs() } : {}),
+				...(input.readOnly ? { readOnly: true } : {}),
+				...(scope.projectRoots ? { projectRoots: scope.projectRoots } : {}),
+				...(allowedPaths.length > 0 ? { allowedPaths } : {}),
+				signal: input.signal,
+				shell: commands.shell,
+				ask,
+				alive,
+			});
 			const run: ToolRun = {
 				sessionId: input.sessionId,
 				session: structuredClone(scope.session),
@@ -427,17 +465,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				request,
 				permissionMode: async () => (await permission()).mode,
 				...commands,
-				files: scope.files({
-					sessionId: input.sessionId,
-					cwd: input.cwd,
-					scratchDir: scope.scratchDir,
-					...(scope.projectRoots ? { projectRoots: scope.projectRoots } : {}),
-					...(allowedPaths.length > 0 ? { allowedPaths } : {}),
-					signal: input.signal,
-					shell: commands.shell,
-					ask,
-					alive,
-				}),
+				exec: access.exec(commands.exec),
+				files: access.files,
 				tools: () => scope.host.toolOwners(),
 				calls: step.map((sibling) => ({ id: sibling.id, name: sibling.name, args: sibling.arguments })),
 				...(input.readOnly ? { readOnly: true } : {}),
@@ -467,17 +496,20 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			};
 			// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 			if (tool.definition.mutating && !tool.definition.asks && (await ask({ ...generic, subject: call.name })) === "reject")
-				return { output: `The user rejected this call. ${DECLINED}`, isError: true };
-			return await tool.definition.execute(input.call.args, run);
+				output = { output: `The user rejected this call. ${DECLINED}`, isError: true };
+			else output = await tool.definition.execute(input.call.args, run);
 		} catch (error) {
 			// i18n-exempt：工具结果是发给模型的，不随界面语言变。
-			return {
+			output = {
 				output: signal.aborted ? `${CANCELLED_RUNNING}${shown ? `\nOutput so far:\n${shown}` : ""}` : `工具执行失败：${errorText(error)}`,
 				isError: true,
 			};
 		} finally {
 			open = false;
 		}
+		// 失败的结果也带上：文件真的改了，撤回时得知道。
+		remember(await access?.recorded());
+		return withChanges(output);
 	};
 
 	/*
@@ -496,6 +528,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		scope.started(call.id);
 		let result = await scope.host.run("tool.execute", execution, execute, canonicalHandoff(tool.definition.aliases), readOnlyStop);
 		if (typeof result?.output !== "string") throw new Error("tool.execute 返回的结果没有 output");
+		result = withChanges(result);
 		if (result.images !== undefined && !(Array.isArray(result.images) && result.images.every(validImage)))
 			throw new Error("tool.execute 返回的 images 不是 { data, mimeType } 的数组");
 		if (result.shownImages !== undefined && !(Array.isArray(result.shownImages) && result.shownImages.every(validImage)))
@@ -522,7 +555,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		];
 	} catch (error) {
 		scope.log("agent", "error", errorText(error));
-		return [relayed(toolResult(call, { output: `没有执行：${errorText(error)}`, isError: true }, startedAt), scope.answeredBy?.(call.id))];
+		return [relayed(toolResult(call, withChanges({ output: `没有执行：${errorText(error)}`, isError: true }), startedAt), scope.answeredBy?.(call.id))];
 	} finally {
 		scope.progress(call.id, undefined, false);
 	}

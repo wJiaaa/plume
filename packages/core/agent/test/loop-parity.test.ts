@@ -113,7 +113,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 		track: () => {
 			throw new Error("这里不起后台任务");
 		},
-		files: (call) => host.workspace.files(call),
+		files: (call) => host.workspace.call(call),
 		started: () => {},
 		progress: () => {},
 	};

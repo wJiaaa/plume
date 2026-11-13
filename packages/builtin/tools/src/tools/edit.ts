@@ -11,10 +11,8 @@ import type { FileDiffDetails } from "@plume/contract";
 import { computeDiff, type FileDiff } from "@plume/platform";
 import { formatDiff } from "../diff.ts";
 import { findEditMatch, replacementFor } from "./edit-match.ts";
-import { withTextFile } from "./file-write.ts";
 import { formatCharWindow, MAX_LINE_CHARS } from "./long-line.ts";
-import { displayPath, resolveWorkspacePath, scratchDirsOf } from "./paths.ts";
-import { scratchFile } from "./scratch-file.ts";
+import { displayPath, isAddress } from "./paths.ts";
 import { changedSince, markRead, readRecord } from "./read-state.ts";
 import { declinedResult, errorResult } from "./result.ts";
 import { decodeInput, decodeText, encodeText } from "./text-layout.ts";
@@ -58,42 +56,50 @@ export const editTool: Tool<EditArgs> = {
 			return errorResult("`old_string` and `new_string` must both be strings.");
 		}
 		try {
-			// `scratch://x` 改的是临时目录里的那个文件，和 read 认的是同一个，见 `scratch-file.ts`。
-			const file = await scratchFile(ctx, args.path);
-			return await withTextFile<ToolResult>(ctx, file ?? args.path, async ({ path: absolute, before: raw, stamp, write }) => {
+			/*
+			 * `scratch://x` 改的是临时目录里的那个文件，和 read 认的是同一个：本体按地址读时交回的就是那个文件（带行范围的不是文件，照路径处理）。
+			 * 先读再改的记录按文件记，edit 把地址当相对路径的话，每次改临时文件都报「先读一遍」。
+			 */
+			const located = isAddress(ctx.resources, args.path) ? await ctx.files.read(args.path) : undefined;
+			if (located && !located.ok) return errorResult(located.message);
+			const file = located?.ok && located.path !== undefined ? located.path : undefined;
+			const fail = (text: string) => ({ value: errorResult(text) });
+			const {
+				value,
+				path: absolute,
+				written,
+			} = await ctx.files.change<ToolResult>(file ?? args.path, async ({ path: absolute, text: raw, stamp }) => {
 				const record = readRecord(ctx, absolute);
-				if (!record?.stamp) return errorResult(`Read ${args.path} as text before editing it.`);
+				if (!record?.stamp) return fail(`Read ${args.path} as text before editing it.`);
 				if (record.partial) {
-					return errorResult(
-						`Your last read of ${args.path} did not show the whole file. Read the part you are changing with offset and limit before editing it.`,
-					);
+					return fail(`Your last read of ${args.path} did not show the whole file. Read the part you are changing with offset and limit before editing it.`);
 				}
-				if (raw === null || !stamp) return errorResult(`File not found: ${args.path}`);
-				if (changedSince(record, stamp)) return errorResult(`The file changed since you read it. Re-read ${args.path} before editing.`);
+				if (raw === null || !stamp) return fail(`File not found: ${args.path}`);
+				if (changedSince(record, stamp)) return fail(`The file changed since you read it. Re-read ${args.path} before editing.`);
 
 				const { text: before, layout } = decodeText(raw);
-				if (args.old_string === "") return errorResult("`old_string` is empty. To fill an empty file or replace a whole file, use `write`.");
+				if (args.old_string === "") return fail("`old_string` is empty. To fill an empty file or replace a whole file, use `write`.");
 				const oldString = decodeInput(args.old_string, layout);
 				const newString = decodeInput(args.new_string, layout);
-				if (oldString === newString) return errorResult("`old_string` and `new_string` are identical, so this edit would do nothing.");
+				if (oldString === newString) return fail("`old_string` and `new_string` are identical, so this edit would do nothing.");
 
 				const match = findEditMatch(before, oldString, Boolean(args.replace_all));
 				if (match.status === "not_found") {
-					return errorResult(
+					return fail(
 						`\`old_string\` was not found in ${args.path}. It must match exactly, including whitespace and indentation — copy it from what read showed, without the line-number prefix.`,
 					);
 				}
 				if (match.status === "ambiguous") {
-					return errorResult(
+					return fail(
 						`\`old_string\` does not match ${args.path} exactly, and ${match.count} places come close in different ways. Copy the text from what read showed, with enough around it to be unique.`,
 					);
 				}
 				const target = match.actual;
 				const replacement = replacementFor(match.strategy, oldString, target, newString);
-				if (target === replacement) return errorResult("`old_string` and `new_string` are identical, so this edit would do nothing.");
+				if (target === replacement) return fail("`old_string` and `new_string` are identical, so this edit would do nothing.");
 				const occurrences = countOccurrences(before, target, Boolean(args.replace_all));
 				if (occurrences > 1 && !args.replace_all) {
-					return errorResult(
+					return fail(
 						`\`old_string\` appears ${occurrences} times in ${args.path}. Include more of the surrounding text to make it unique, or set replace_all: true.`,
 					);
 				}
@@ -101,7 +107,7 @@ export const editTool: Tool<EditArgs> = {
 				const after = args.replace_all ? before.split(target).join(replacement) : before.replace(target, () => replacement);
 				const count = args.replace_all ? occurrences : 1;
 				const diff = computeDiff(before, after);
-				const shown = displayPath(ctx.cwd, resolveWorkspacePath(ctx.cwd, file ?? args.path, scratchDirsOf(ctx)));
+				const shown = displayPath(ctx.cwd, ctx.files.resolve(file ?? args.path));
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({
@@ -110,29 +116,29 @@ export const editTool: Tool<EditArgs> = {
 						detail: formatDiff(diff, shown),
 						subject: absolute,
 					});
-					if (decision !== "once" && decision !== "always") return declinedResult("The user rejected this edit.");
+					if (decision !== "once" && decision !== "always") return { value: declinedResult("The user rejected this edit.") };
 				}
 
-				const written = await write(encodeText(after, layout));
-				markRead(ctx, absolute, written.stamp);
 				// 上下文一行而不是预览的三行：回显是为了省一次重读，不是为了审这次改动。
 				const echo = changedView(computeDiff(before, after, 1), after);
 
-				return {
+				const result: ToolResult = {
 					content: [
 						{
 							type: "text",
 							text: `Edited ${file ? args.path : shown}: ${count} replacement${count === 1 ? "" : "s"}, +${diff.added} -${diff.removed}.${echo}`,
 						},
 					],
-					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；`changeId` 是 `FileChangeDetails`。
+					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；改了哪个文件由本体记在结果上（`ToolOutput.changes`）。
 					details: {
 						kind: "edit",
-						...(written.changeId ? { changeId: written.changeId } : {}),
 						...({ path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks } satisfies FileDiffDetails),
 					},
 				};
+				return { text: encodeText(after, layout), value: result };
 			});
+			if (written) markRead(ctx, absolute, written);
+			return value;
 		} catch (error) {
 			return errorResult(error instanceof Error ? error.message : String(error));
 		}

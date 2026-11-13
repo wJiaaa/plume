@@ -55,6 +55,7 @@ export default {
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
 | `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
 | `ctx.resources.register(handler)` / `list()` / `keepArtifact(sessionId, tool, content)` | 资源地址 `scheme://路径[:行-行]`，本体给、换不掉，解析统一走 `run.files.read`（见「工具」），类型在 `@plume/contract` 的 `ResourceHandler` 等。`register` 加一个只读的 scheme（`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置），返回撤下的函数，停用时本体替你撤下；塞了 `write` 也写不进去。内容不是你写的（第三方文档、外部服务）时给 `origin`，plume.tools 的 read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。`list()` 是现在登记着的（`{ scheme, describe, writable }`，只有 `scratch://` 可写）。`keepArtifact` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；按会话在内存里，最多 30 份，会话删掉时丢掉）。本体自带 `scratch://`（会话的临时目录）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://` |
+| `ctx.changes.collect(sessionId, ids)` / `undo(sessionId, ids, path?)` | 本体记下的文件改动（工具经 `run.files.change` 写的、带 `recordChanges` 的命令改的），`ids` 取工具结果上的 `changes.ids`（`ToolResultMessage.changes`，本体填，按这个认，不认是哪个工具交的），工作目录用会话自己的。`collect` 交回按文件合并的净变化（`FileChangesSummary`：`files` 每项 `{ path, added, removed, hunks, canUndo, undoReason?, undoProblem? }`，`warnings`），改了又改回原样的不列；`undo` 撤销整批或其中一个文件：重新读快照，不收界面给的原文，查当前内容、连续的修改链和项目边界，有一个不对就都不写，命令改的不能自动撤销；撤销进行中、同一个或嵌套的项目里还有会话在跑一轮时抛错，`message` 给人看。界面先问人再调，显示状态不是写入许可。例子是 plume.delivery、plume.side-chat |
 | `ctx.workspace.files(root)` | `root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里、git 答不上来时是 null，自己走目录。本体在隔离视图里问 git，不执行仓库能控制的程序（`core.fsmonitor`、过滤器、钩子：沙箱里的命令写得到 `.git/config`），插件要列项目文件就用它，不要自己跑 `git ls-files` |
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
@@ -98,9 +99,11 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 `run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
 `run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
 
-跑 shell 命令用 `run.exec(command, { cwd?, env? })`，不要自己起进程：本体按权限模式选沙箱档（请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错），用用户的 shell、向登录 shell 要的环境起命令，返回 `RunProcess`（`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像不像被沙箱拒了）。`run.shell()` 告诉你这次调用的命令跑在哪个 shell（`{ kind: "posix" | "powershell", label, sandbox }`），照它的写法拼命令。问不问人不归 `exec`：要问的自己先经 `run.ask` 问。命令被沙箱拒了、要更宽的一档时调 `run.escalate({ mode, justification, title, detail })`（`mode` 是 `"workspace-write"` 或 `"danger-full-access"`，`justification` 是模型给的理由、原样给人看，`title`、`detail` 是卡上的标题和正文）：本体查申请合不合规矩（只读下、没理由、不比当前宽的直接拒），弹提权卡、只认人答（或代管插件转达），批了这次调用之后的 `run.exec` 才跑在那一档，返回 `{ granted: true }`；不批返回 `{ granted: false, message }`，把 `message` 原样交给模型。批准只管这一次调用，调用答完 `exec`、`escalate` 都不能再用。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。
+跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程：本体按权限模式选沙箱档（请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错），用用户的 shell、向登录 shell 要的环境起命令，返回 `RunProcess`（`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像不像被沙箱拒了）。`run.shell()` 告诉你这次调用的命令跑在哪个 shell（`{ kind: "posix" | "powershell", label, sandbox }`），照它的写法拼命令。问不问人不归 `exec`：要问的自己先经 `run.ask` 问。命令被沙箱拒了、要更宽的一档时调 `run.escalate({ mode, justification, title, detail })`（`mode` 是 `"workspace-write"` 或 `"danger-full-access"`，`justification` 是模型给的理由、原样给人看，`title`、`detail` 是卡上的标题和正文）：本体查申请合不合规矩（只读下、没理由、不比当前宽的直接拒），弹提权卡、只认人答（或代管插件转达），批了这次调用之后的 `run.exec` 才跑在那一档，返回 `{ granted: true }`；不批返回 `{ granted: false, message }`，把 `message` 原样交给模型。批准只管这一次调用，调用答完 `exec`、`escalate` 都不能再用。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。命令可能改文件时带 `recordChanges: true`：本体在命令起来之前、结束以后（连它留下的进程一起退出）各对比一次 git 工作区，改了的记成快照、记进这次调用的结果（`changes`），撤回、交付卡据此认；太多、太大、二进制、像密钥的文件不记，结果上带一句没记全（`changes.warning`）；观测期间挡着撤销，所以只读的命令（`git log`、`rg`）别带。不在 git 仓库里时什么都不记。
 
 读用户的文件经 `run.files`，不要自己判能不能读：本体守读的边界，和 read、ls、grep、glob、bash 是同一个答案、同一份批准记录。`run.files.read(target, { directory? })` 收路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）或资源地址：工作区、同一个项目的其他源码目录（`run.projectRoots`）、各会话的临时目录、系统临时目录和工具链的系统目录、人拖进来的文件（`run.allowedPaths`）不问；密钥文件（`~/.ssh/id_*`、`~/.aws/credentials`、Plume 自己的设置和钥匙……）在哪都问、只批这一个；别处按所在的项目问（过闸，卡片 `kind` 是 `view`，「以后不再问」记在 `read:<项目>` 名下）。判定前顺着符号链接走到真实位置，源码目录内指向外面的链接照问。过了交回 `{ ok: true, path }`，实际读就读这个 `path`；不存在的普通路径不问、照样交回，由你报「找不到」。人拒绝了、没人可问时交回 `{ ok: false, message }`，把 `message` 原样交给模型，不要改用别的路径或工具去读。有人登记了 scheme 的地址不问人：交回读到的 `resource`（`url`、`content`、`label?`、`origin?`，带行范围的已经切好，`scheme://` 是清单），`scratch://<路径>`（不带行范围）交回临时目录里那个文件的 `path`；`directory: true` 时要的是一个目录（列目录），地址交回 scheme 给的磁盘位置。没人登记的 `foo://` 照路径判。`run.files.readCommand(command)` 把一行命令写明要读的路径（照 `run.shell()` 的语法拆，只认字面写的）按同一个边界判，同一个批准范围只问一次：跑命令的工具在审批、起命令之前调它（`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥）。只管能不能读，不授予写，也不把文件记作「模型已读过」；调用答完再用就抛错。plume.tools 的 read、ls、grep、glob、bash 就是这么用的。
+
+写、改用户的文件也经 `run.files`，不要自己 `writeFile`：本体守写的边界，并把改动记成快照，撤回时连文件一起退、交付卡能看和撤销靠的就是它。`run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件）不写，同一脉会话的临时目录能写、别的会话的不能，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。同一个文件（包括经硬链接、别名）的几次 `change` 排队；`edit(current)` 拿到 `{ path, text, stamp }`（`path` 是真正要写的那个文件，`text` 是现在的内容、不存在时是 null，`stamp` 是 `{ mtimeMs, size }`），交回 `{ text?, value }`：给了 `text` 本体就在写之前再核一遍文件没被别处改过（期间被改了、被换成别的文件、新文件被别人先建了都抛错，一个字节不写）、写下、记快照；不给就不写，`value` 原样交回。返回 `{ value, path, written? }`，`written` 是写下以后的 `stamp`（给「读过以后有没有变」的检查用）。撤销进行中、外层要求只读（`run.readOnly`）时抛错；快照存不下来时抛错，文件已经写下，`message` 照实说。`run.files.write(address, content)` 写资源地址（只有 `scratch://` 可写），交回 `{ ok: true, path? }` 或 `{ ok: false, message }`。`run.files.resolve(path)` 把模型写的路径照同样的写法换成绝对路径（不追链接），只是解析、不判边界。改了哪些文件由本体记在这次调用的结果上（`ToolOutput.changes`：`{ ids, paths, warning? }`，`paths` 是解析好的绝对路径），工具交回的 `changes` 不算数，`tool.execute` 的层读得到、改不了。后台命令改的文件到起它的那次调用答完还没记下（结果上是一句「结束后才记」），读它输出的调用经 `run.files.includeChanges(process)` 把它记下的算进自己的结果（`process` 是那次 `run.exec` 交回的，或它留下的进程；别的会话的不认）。plume.tools 的 write、edit、bash、bash_output 就是这么用的。
 
 - `output` 发给模型；`details` 存进会话、不发给模型，给工具卡片和插件自己用。会话重新打开时卡片还能从 `details` 画出来。
 - 要让模型看图（截图）时带上 `images: [{ data, mimeType }]`：`data` 是 base64、不带 `data:` 前缀，`mimeType` 是 png、jpeg、webp、gif、bmp 之一，跟在 `output` 后面交给模型（bmp 模型不收：照样存下、画给人看，发请求时换成一句 `[unsupported image: image/bmp]`）；大图由本体存进会话的媒体目录。格式不对的整个结果判失败。
@@ -121,13 +124,12 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 ### 工具结果里的通用声明
 
-`details` 归插件，宿主不看里面，只认这几个通用声明（类型在 `@plume/contract`）；插件之间另认几个（改了文件、读了文件的哪一块）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
+`details` 归插件，宿主不看里面，只认这几个通用声明（类型在 `@plume/contract`）；插件之间另认几个（读了文件的哪一块）。改了哪些文件不在 `details` 里，是本体记在结果上的 `changes`（见上面「工具」）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
 
 - `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。记清单的工具在定义上标 `category: "checklist"`（见下面「按类别找工具」），转录据它把这次调用并进一段活。例子是 `plume.todo`。
 - `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
-- `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）：这次调用改了一个文件，`path` 是给人看的路径（工作目录里的写相对路径），`hunks` 是 `ChangeHunk[]`。通用卡片据它画 diff、写 +N −M，一段活的那一行把各次的加减合起来；自己登记了 `ui.toolCard` 的照样可以带。和 `FileChangeDetails`（改动快照记在服务 `file.changes` 里，见下文）是两件事，常一起带。例子是 `plume.tools` 的 `edit`、`write`。
-- `changeId` / `changeIds` / `changeWarning`（`FileChangeDetails`）：这次调用改了文件，快照记在服务 `file.changes` 里，见下面「文件变更服务」。
-- `fileView`（`FileViewDetails`）：这次调用让模型看了一个文件的哪一块 `{ path, lines?, columns?, verbatim }`。`path` 是调用里写的路径解析成的绝对路径（`~/` 展开、相对路径按工作目录，不追符号链接）；`lines` 是第几行到第几行（从 1 数、含两头），从头到尾的不写；`columns` 是每行给了第几个到第几个字符，整行的不写；`verbatim` 说给的是不是这一块的原文（大纲、截断的抽取文字是 `false`）。压缩据此清掉被后来的观察顶替掉的旧读：之后又原样读到了盖住它的一块，或者文件被改过。不带它的读文件结果压缩不当作读，只照「同样的调用又跑了一次」处理。例子是 `plume.tools` 的 `read`。
+- `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）：这次调用改了一个文件，`path` 是给人看的路径（工作目录里的写相对路径），`hunks` 是 `ChangeHunk[]`。通用卡片据它画 diff、写 +N −M，一段活的那一行把各次的加减合起来；自己登记了 `ui.toolCard` 的照样可以带。和本体记在结果上的 `changes`（改动快照，撤回、交付卡据它认）是两件事：一个画给人看，一个是记录。例子是 `plume.tools` 的 `edit`、`write`。
+- `fileView`（`FileViewDetails`）：这次调用让模型看了一个文件的哪一块 `{ path, lines?, columns?, verbatim }`。`path` 是调用里写的路径解析成的绝对路径（`~/` 展开、相对路径按工作目录，不追符号链接）；`lines` 是第几行到第几行（从 1 数、含两头），从头到尾的不写；`columns` 是每行给了第几个到第几个字符，整行的不写；`verbatim` 说给的是不是这一块的原文（大纲、截断的抽取文字是 `false`）。压缩据此清掉被后来的观察顶替掉的旧读：之后又原样读到了盖住它的一块，或者文件被改过（认结果上的 `changes.paths`，和 `path` 是同一种写法）。不带它的读文件结果压缩不当作读，只照「同样的调用又跑了一次」处理。例子是 `plume.tools` 的 `read`。
 - `cancelled: true`（`CancelledDetails`）：出错的结果（`isError`）是因为人按了停，不是失败，转录画成「已停止」。工具被停下时自己交结果（命令跑到一半被杀）就带上；没带 `details` 的停下结果由宿主补上。例子是 `plume.tools` 的 `bash`。
 
 ```ts
@@ -387,33 +389,6 @@ ctx.hook("context.compact", async (input) => {
 ctx.hook("tool.approve", async (input, next) => (/\.env\b/.test(JSON.stringify(input.call.args)) ? "reject" : next(input)));
 ```
 
-### `session.rewind`
-
-人撤回一条消息、或者编辑重发时，要截掉从这条人发的消息起的那段对话。截断由宿主做；这个钩子问的是那段里插件自己记着的改动（文件等）能不能、要不要一起退回到截断点之前。先以 `restore: false` 问一次，只演算，界面拿结论问人「连文件一起，还是只动对话」；人选了连文件一起，宿主在截断前以 `restore: true` 再问一次。只动对话时不问。
-
-| 输入字段 | 说明 |
-| --- | --- |
-| `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见「钩子」开头 |
-| `messages` | 要截掉的那段：从被撤回、编辑的那条人发的消息起到最后，副本 |
-| `restore` | `true` 是真的写回去，`false` 只演算 |
-
-输出是 `{ files, unrecorded }`：`files` 每项 `{ path, added, removed, problem }`，`problem` 为 `null` 的能安全退回，否则是 `"command"`（改动来自命令）、`"interleaved"`（中途被别处改过）、`"outside"`（不在项目内）、`"modified"`（之后被改过）；`unrecorded` 说有改动没记下来、退回的不会完整。最里层答 `{ files: [], unrecorded: false }`，每一层把自己的结论并进 `next` 的结论里。有一个文件的 `problem` 不为空或 `unrecorded` 为真，界面就只给「只动对话」。
-
-`restore: true` 时要全有或全无：重新校验（从人看到演算到按下确认，文件可能又被改过），有一个不能安全退回就一个都不写，写到一半失败把写了的退回原样再抛错。抛错时宿主不截对话，错误的 message 原样弹给人（按界面语言写），不包成「插件出错」。被人或别的会话改过的文件不覆盖、不合并，留给人。
-
-内置插件 plume.delivery 在这一层退回截掉那段里文件工具记下了快照的改动（经服务 `file.changes`）：新建的文件删掉，改过的写回原样。
-
-```ts
-// 记着自己生成过的文件：撤回时一并列出，选了就删掉。
-ctx.hook("session.rewind", async (input, next) => {
-	const inner = await next(input);
-	const mine = generatedIn(input.messages); // 自己的记录，读的是工具结果里自己写下的 details
-	if (input.restore) await removeAll(mine); // 全有或全无，不行就抛错
-	return { files: [...inner.files, ...mine.map((path) => ({ path, added: 0, removed: 0, problem: null }))], unrecorded: inner.unrecorded };
-});
-```
-
 ## `/` 命令
 
 输入框里敲 `/` 弹出菜单，本体只带一条 `/clear`（开新对话）；别的命令由插件经 `ctx.commands.provide` 供。宿主每次打开菜单、每次发送命令前都现问一遍，命令的来源（文件、配置）改了不用重载插件。
@@ -563,15 +538,6 @@ Plume 自带的服务：
 | --- | --- | --- |
 | `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。建、收回、合并回去都归 plume.git |
 | `session.plan` | 内置插件 plume.plan | `approved(sessionId)`：这个会话照着做的、人批准过的计划（正文连同批准时附的注意事项），没有是 null。会话自己最后批准、没交给新会话执行的那份；会话是计划「在新会话里执行」开出来的，就是交给它的那份。要读计划的插件用它，不认 `submit_plan` 的结果 |
-
-### 文件变更服务
-
-内置插件 `plume.tools` 提供 `file.changes`。消费方声明 `inject: ["file.changes"]` 后，经 `ctx.use("file.changes")` 调用：
-
-- `collect(sessionId, cwd, ids)`：`ids` 来自本轮工具结果 `details` 里的改动记录（`@plume/contract` 的 `FileChangeDetails`：`changeId` / `changeIds`，记不全时 `changeWarning` 是给人看的话；按这个形状认，不认是哪个工具交的），返回按文件合并的净变化、diff、能否撤销和警告；修改后又恢复原文的不列出。
-- `undo(sessionId, cwd, ids, path?)`：指定文件或整轮撤销。它重新读取快照，不接收界面提供的原文；检查当前内容、连续修改链和项目边界，命令观测的改动不能自动撤销。界面必须先确认，显示状态不是写入许可，最终以执行时复查为准。
-
-快照由工具在实际写入处记录，保存在工具插件的私有目录；插件不要从工作区当前 Git diff 猜本轮修改。`plume.delivery` 消费此服务，按会话原始消息生成交付报告，报告不调用模型。
 
 ## 网页
 

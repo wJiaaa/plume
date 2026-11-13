@@ -3,10 +3,10 @@
  * 界面入口的 API 在 `ui.ts`（`@plume/contract/ui`）。
  */
 
-import type { FileChangesService, RevertPlan } from "./changes.ts";
+import type { PluginChanges } from "./changes.ts";
 import type { BackgroundJobInfo, BackgroundJobOutput, SessionObservation, SessionWakeup } from "./diagnostics.ts";
 import type { PluginResources, Resource } from "./resources.ts";
-import type { AssistantMessage, DeliveredReport, Message, PeerLetter, ThinkingOption, ToolResultMessage, ToolSpec } from "@plume/llm/types";
+import type { AssistantMessage, DeliveredReport, FileChanges, Message, PeerLetter, ThinkingOption, ToolResultMessage, ToolSpec } from "@plume/llm/types";
 import type {
 	ApprovalDecision,
 	ApprovalRequest,
@@ -52,9 +52,15 @@ export interface ToolOutput {
 	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务，
 	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff，
 	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败。
-	 * 插件之间另认两个：改了文件（`FileChangeDetails`），让模型看了文件的哪一块（`FileViewDetails`）。
+	 * 插件之间另认一个：让模型看了文件的哪一块（`FileViewDetails`）。改了哪些文件不在这里，见 `changes`。
 	 */
 	details?: unknown;
+	/**
+	 * 这次调用改了哪些文件（`FileChanges`），由本体填：经 `ToolRun.files.change` 写成的、经 `ToolRun.exec`（`recordChanges`）观测到的命令改的，
+	 * 和 `ToolRun.files.includeChanges` 算进来的。工具自己填的不算，钩子 tool.execute 的外层读得到、改不了（本体最后照它记下的重填）。
+	 * 记进会话里的结果（`ToolResultMessage.changes`），撤回连文件一起退、交付卡、压缩都按它认改过的文件。
+	 */
+	changes?: FileChanges;
 	/**
 	 * 这一步的结果都写进会话以后，这一轮就此结束，不再把结果交给模型：`done` 是完成，`stalled` 是卡住了。
 	 * 一步里有几个结果都带了它时，有 `stalled` 就按 `stalled`。结果本身照常存，下一轮模型照样看得到。
@@ -210,8 +216,13 @@ export interface ToolRun {
 	 * 沙箱档由本体定，工具选不了：完全访问不设限，帮我批准只能写项目目录和临时目录，请求批准只读，`readOnly` 一律只读；
 	 * 这次调用经 `escalate` 批过更宽的一档时跑在那一档。`cwd` 不给是这次调用的工作目录。机器上给不了这一档的沙箱时拒绝（Linux 没有后端），
 	 * 不悄悄不加沙箱就跑。问不问人不归这里：要问的工具自己先经 `ask` 问。只在这次调用里用：调用答完以后再调就抛错，已经起来的进程不受影响。
+	 *
+	 * `recordChanges`：这条命令可能改文件，本体在它起来之前、结束以后（连同它留下的进程）各看一次 git 工作区，改了的文件记进改动快照
+	 * （来源是命令，不能自动撤销，撤回时说清），记进这次调用的结果（`ToolOutput.changes`）；这次调用答完时还在跑的，结果里记一句「结束后才记」，
+	 * 之后读它输出的调用用 `files.includeChanges` 把记下的算进去。观测期间撤销等着它结束。能证明什么都不写的命令（只读的 `git log`）不用带：
+	 * 前后各起几个 git、读一遍工作区里改动着的文件，不便宜；挂着不结束的命令（监视）不该带：撤销会一直等它。
 	 */
-	exec(command: string, options?: { cwd?: string; env?: Record<string, string> }): Promise<RunProcess>;
+	exec(command: string, options?: { cwd?: string; env?: Record<string, string>; recordChanges?: boolean }): Promise<RunProcess>;
 	/**
 	 * 申请这次调用的命令跑在比权限模式更宽的一档（提权）。本体弹提权卡（`ApprovalRequest.escalation`），只认人答，或代管这个会话的插件
 	 * 经 `ctx.sessions.respond` 转达；完全访问、外层放行、钩子 tool.approve、「以后不再问」都不替人答。批了，这次调用之后的 `exec`
@@ -303,6 +314,42 @@ export interface RunFiles {
 	 * 跑命令的工具在审批、起命令之前调它：命令改不改东西是另一回事，`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥。
 	 */
 	readCommand(command: string): Promise<{ ok: true } | { ok: false; message: string }>;
+	/**
+	 * 模型写的路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）指的是哪个绝对路径，和读、写边界判定用的是同一个解析。
+	 * 不判能不能读写、不追符号链接、不认资源地址。给模型看路径、往结果里写 `FileViewDetails.path` 时用，不自己再解析一遍。
+	 */
+	resolve(path: string): string;
+	/**
+	 * 替模型改一个文本文件：写边界、按文件排队、拿当前内容、写、记改动快照、撤销门闩一次做完，写成的记进这次调用的结果（`ToolOutput.changes`）。
+	 *
+	 * 写边界：不写 Plume 的数据目录和 `~/.plume`（工作区、同一脉的会话的临时目录在里面的除外），工作区里一个指向外面的链接不写
+	 * （审批卡写的是字面路径，改的却是别处）；工作区外不在这里拒，审批由工具问。附件（`allowedPaths`）不算能写。
+	 * `edit` 拿到这个文件现在的样子（`path` 是真实路径，不存在时 `text`、`stamp` 是 null），在同一个队里决定写不写：要写就交回 `text`，
+	 * 不写就不给；`value` 原样交回。审批由工具在 `edit` 里经 `ask` 问（diff 只有工具写得出来）。写之前本体再核对一遍：等审批时文件被改了、
+	 * 换成了链接，不写并抛错。只认 UTF-8 文本，二进制、不是普通文件的抛错；撤销进行中抛错。抛的错都是交给模型的话。
+	 * 交回的 `written` 是写完那一刻的修改时间和大小（没写时不给）。只在这次调用里用。
+	 */
+	change<T>(
+		path: string,
+		edit: (current: { path: string; text: string | null; stamp: FileStamp | null }) => Promise<{ text?: string; value: T }>,
+	): Promise<{ value: T; path: string; written?: FileStamp }>;
+	/**
+	 * 写一个资源地址。能写的只有本体的 `scratch://`（会话的临时目录，落点不出目录、软链出不去），别的 scheme 都是只读的：能写
+	 * `skill://<名字>` 的模型就能改掉它该遵守的说明。不问人、不记改动快照（临时目录是会话自己的草稿）。成了交回地址在磁盘上的位置；
+	 * 只读、越界、不是登记着的地址时 `ok: false`，`message` 是交给模型的话。只在这次调用里用。
+	 */
+	write(address: string, content: string): Promise<{ ok: true; path?: string } | { ok: false; message: string }>;
+	/**
+	 * 这次调用的结果也算上一条命令改的文件：`process` 是经 `exec`（`recordChanges`）起的进程或它留下的进程，可以是之前的调用起的（后台命令）。
+	 * 命令已经结束就算上它记下的，还在跑就记一句「结束后才记」。读后台命令输出的调用用。不是这个会话里经 `exec` 观测的进程时什么都不做。
+	 */
+	includeChanges(process: SandboxProcess): void;
+}
+
+/** 一个文件的修改时间和大小：工具判断读过以后文件变没变用。 */
+export interface FileStamp {
+	mtimeMs: number;
+	size: number;
 }
 
 /**
@@ -873,26 +920,6 @@ export interface ToolApproval {
 	signal: AbortSignal;
 }
 
-/**
- * 钩子 session.rewind 的输入：人撤回或编辑重发，要截掉从某条人发的消息起的那段对话。截断由宿主做，这里问的是那段里
- * 插件记着的改动（文件改动等）能不能、要不要一起退回到截断点之前。
- *
- * 先以 `restore: false` 问一次，只演算：答那段改过哪些文件、各自能不能安全退回，界面据此问人。人选了连文件一起退，宿主在截断
- * 之前以 `restore: true` 再问一次：重新校验、真的写回去；写不回去就抛错（message 原样给人看，按界面语言写），这时宿主不截对话。
- * 写回要全有或全无：一个文件不能安全退回，就一个都不写，已经写了的退回原样再抛错。
- * 只截对话、不动文件时不问。最里层答 `{ files: [], unrecorded: false }`；每一层把自己的结论并进 `next` 的结论里。
- */
-export interface SessionRewind {
-	sessionId: string;
-	/** 要截的会话，见 `SessionScope`。 */
-	session: SessionScope;
-	cwd: string;
-	/** 要截掉的那段：从被撤回、编辑的那条人发的消息起到最后，副本。 */
-	messages: Message[];
-	/** 真的写回去，还是只演算。 */
-	restore: boolean;
-}
-
 /** 钩子名 → [输入, 输出]。 */
 export interface Hooks {
 	"tool.execute": [ToolExecution, ToolOutput];
@@ -901,7 +928,6 @@ export interface Hooks {
 	"prompt.submit": [PromptSubmit, PromptVerdict];
 	"context.compact": [ContextCompact, CompactSummary];
 	"tool.approve": [ToolApproval, ApprovalDecision];
-	"session.rewind": [SessionRewind, RevertPlan];
 }
 
 /** 输入框 `/` 菜单里的一条命令。 */
@@ -1587,6 +1613,8 @@ export interface PluginContext {
 	readonly resources: PluginResources;
 	/** 在宿主上读工作区仓库，不执行仓库能控制的程序，见 `PluginWorkspace`。本体提供，别的插件换不掉。 */
 	readonly workspace: PluginWorkspace;
+	/** 本体记下的改动快照汇总和撤销，见 `PluginChanges`。本体提供，别的插件换不掉。 */
+	readonly changes: PluginChanges;
 	/** 读会话，见 `SessionAccess`。 */
 	readonly sessions: SessionAccess;
 	/** 驱动界面入口画的网页（`<webview>`），见 `WebPages`。 */
@@ -1666,7 +1694,6 @@ export interface InstalledPlugin {
  * 仓库外的插件给自己的服务用声明合并加一项：`declare module "@plume/contract" { interface Services { … } }`。
  */
 export interface Services {
-	"file.changes": FileChangesService;
 	"session.worktree": SessionWorktreeService;
 	"session.plan": SessionPlanService;
 }

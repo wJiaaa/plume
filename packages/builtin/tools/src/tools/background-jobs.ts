@@ -73,6 +73,11 @@ export class BackgroundJobs {
 		return channel && !channel.signal.aborted ? channel : undefined;
 	}
 
+	/** 任务的进程：读它输出的调用经 `ToolRun.files.includeChanges` 把它改了什么算进结果。 */
+	process(id: string): SandboxProcess | undefined {
+		return this.entries.get(id)?.process;
+	}
+
 	get(id: string): BackgroundJob | undefined {
 		return this.entries.get(id)?.info;
 	}

@@ -5,10 +5,9 @@ import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { charWindow, formatCharWindow, longLineFooter, MAX_LINE_CHARS } from "./long-line.ts";
 import { outline, outlineFooter } from "./outline.ts";
-import { displayPath, imageMimeType, looksBinary, toAbsolute } from "./paths.ts";
+import { displayPath, imageMimeType, isAddress, looksBinary } from "./paths.ts";
 import { markRead } from "./read-state.ts";
 import { sameNamed } from "./project-files.ts";
-import { addressOf } from "./scratch-file.ts";
 import { decodeText } from "./text-layout.ts";
 import { LINE_KEEP_BYTES, readLineWindow, STREAM_ABOVE_BYTES } from "./large-text.ts";
 import { extractDocumentText } from "@plume/document-text";
@@ -109,13 +108,13 @@ export const readTool: Tool<ReadArgs> = {
 		 * 回答一个从没想用地址的人路径里的笔误。地址经本体读：临时文件按文件交回，edit 才找得到它要的那次 read；拒绝的话由地址那边说。
 		 */
 		let scratch: string | undefined;
-		if (addressOf(ctx, path)) {
+		if (isAddress(ctx.resources, path)) {
 			const got = await ctx.files.read(path);
 			if (!got.ok) return errorResult(got.message);
 			if (got.resource) return resourceResult(got.resource, { offset: args.offset, limit: args.limit, charOffset });
 			scratch = got.path;
 		}
-		const named = scratch ?? toAbsolute(ctx.cwd, path);
+		const named = scratch ?? ctx.files.resolve(path);
 		const shownPath = scratch ? path : displayPath(ctx.cwd, named);
 
 		/*

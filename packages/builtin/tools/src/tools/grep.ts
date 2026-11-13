@@ -9,7 +9,7 @@ import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { globToRegExp } from "./glob.ts";
 import { insideGitWorkTree, SKIP_DIRS } from "./project-files.ts";
 import { formatMatchWindow, formatMatchWindowAt, utf8ByteOffsetToIndex, type MatchOptions } from "./long-line.ts";
-import { displayPath, looksBinary, toAbsolute } from "./paths.ts";
+import { displayPath, looksBinary } from "./paths.ts";
 import { describeGrep } from "./describe.ts";
 
 const MAX_MATCHES = 200;
@@ -98,7 +98,7 @@ export const grepTool: Tool<GrepArgs> = {
 		let root = ctx.cwd;
 		if (normalizedArgs.path) {
 			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
-			const authorized = await ctx.files.read(toAbsolute(ctx.cwd, normalizedArgs.path));
+			const authorized = await ctx.files.read(ctx.files.resolve(normalizedArgs.path));
 			if (!authorized.ok) return errorResult(authorized.message);
 			if (authorized.path) root = authorized.path;
 			/*

@@ -465,6 +465,12 @@ function fakeRun(asked: string[], sessionId = "s"): ToolRun {
 		files: {
 			read: async () => ({ ok: false, message: "MCP 工具不读文件" }),
 			readCommand: async () => ({ ok: false, message: "MCP 工具不跑命令" }),
+			resolve: (path) => path,
+			change: async () => {
+				throw new Error("MCP 工具不写文件");
+			},
+			write: async () => ({ ok: false, message: "MCP 工具不写文件" }),
+			includeChanges: () => {},
 		},
 		tools: () => [],
 		calls: [],

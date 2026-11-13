@@ -487,7 +487,22 @@ export interface ToolResultMessage {
 	 * 人自己在卡上答的不带。界面据此在这次调用旁边写明是谁代答的；不进请求体，模型读到的说明写在结果正文里。
 	 */
 	answeredBy?: string;
+	/**
+	 * 这次调用改了哪些文件（Plume 的 `FileChanges`，本体经 `ToolRun.files` 写文件、`ToolRun.exec` 观测命令时记下，工具自己填的不算）。
+	 * 不进请求体；撤回、交付卡、压缩按它认改过的文件，不认是哪个工具、参数叫什么。
+	 */
+	changes?: FileChanges;
 	timestamp: number;
+}
+
+/**
+ * 一次工具调用改了的文件。`ids` 是改动快照的标识（撤回、`ctx.changes` 汇总和撤销用），`paths` 是改了的文件的绝对路径，
+ * `warning` 是有改动没记全时给人看的话（命令影响的文件太多、命令还在后台跑）。
+ */
+export interface FileChanges {
+	ids: string[];
+	paths: string[];
+	warning?: string;
 }
 
 export type Message = UserMessage | AssistantMessage | ToolResultMessage;

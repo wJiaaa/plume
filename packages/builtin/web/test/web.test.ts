@@ -139,6 +139,12 @@ const run: ToolRun = {
 	files: {
 		read: async () => ({ ok: false, message: "网页工具不读文件" }),
 		readCommand: async () => ({ ok: false, message: "网页工具不跑命令" }),
+		resolve: (path) => path,
+		change: async () => {
+			throw new Error("网页工具不写文件");
+		},
+		write: async () => ({ ok: false, message: "网页工具不写文件" }),
+		includeChanges: () => {},
 	},
 	tools: () => [],
 	calls: [],

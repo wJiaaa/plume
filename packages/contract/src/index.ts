@@ -12,6 +12,7 @@ export type {
 	ApiFormat,
 	AssistantMessage,
 	DeliveredReport,
+	FileChanges,
 	ImageContent,
 	Message,
 	MessageAttachment,

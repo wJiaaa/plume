@@ -10,7 +10,7 @@
  * 进子模块跑的 status（子模块自己的配置）。于是「沙箱写一行配置，面板下一次刷新在沙箱外替它执行」。
  *
  * `-c` 只压得住名字固定的键，压不住驱动名由仓库自己取的 `filter.<名>.*`、`diff.<名>.*`，`info/attributes` 也关不掉。
- * 所以不逐项压制，而是让 git 读不到仓库的配置（和 plume.tools 的 `host-git.ts` 同一个办法）：
+ * 所以不逐项压制，而是让 git 读不到仓库的配置（和本体 `@plume/workspace` 的 `host-git.ts` 同一个办法）：
  *
  * - 真实仓库上只跑不读 index、不读对象内容的几条：`rev-parse`、`symbolic-ref`、`for-each-ref`、`config --list`
  *   （`exec.ts` 给前三种关了惰性拉取），用来找目录、抄下 HEAD、引用和配置。

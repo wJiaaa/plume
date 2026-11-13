@@ -1,9 +1,5 @@
+import type { FileStamp } from "@plume/contract";
 import type { ToolContext } from "./types.ts";
-
-export interface FileStamp {
-	mtimeMs: number;
-	size: number;
-}
 
 export interface ReadRecord {
 	/** 读的时候的修改时间和大小。图片、抽出字的文档没有：它们不是能编辑的文本。 */

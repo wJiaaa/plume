@@ -1,34 +1,21 @@
 # 工具
 
-提供 read、write、edit、ls、glob、grep、bash、bash_output、monitor；文件改动前询问用户，命令经本体的 `run.exec` 在权限模式对应的沙箱里运行（提权经 `run.escalate`）。read 读 PNG、JPEG、GIF、WebP 图片时原样把图交给模型（最大 5 MB，不缩放；BMP 交不出去，照实说）。
+提供 read、write、edit、ls、glob、grep、bash、bash_output、monitor；文件改动前询问用户，写文件经本体的 `run.files.change`（写边界、写前复核、改动快照都在本体），命令经本体的 `run.exec` 在权限模式对应的沙箱里运行（提权经 `run.escalate`）。read 读 PNG、JPEG、GIF、WebP 图片时原样把图交给模型（最大 5 MB，不缩放；BMP 交不出去，照实说）。
 
 ## 资源地址
 
 read、ls 除了文件路径，还认 `scheme://路径`（末尾可带 `:10-40` 只要这几行，光写 `scheme://` 列出里面有什么）；地址清单经 `model.context` 写进系统提示词的 `resources` 段。地址和读边界归本体（`run.files.read`、`ctx.resources`），本体自带四种：
 
-- `scratch://`：会话的临时目录（宿主给的 `run.scratchDir`，会话删掉时一起删）。唯一可写的地址，write、edit 都认；临时目录里指向外面的软链读写都拒。用绝对路径读写这个目录也不问人。
+- `scratch://`：会话的临时目录（宿主给的 `run.scratchDir`，会话删掉时一起删）。唯一可写的地址，write 经 `run.files.write` 写、edit 改它指的那个文件；临时目录里指向外面的软链读写都拒。用绝对路径读写这个目录也不问人。
 - `artifact://<id>`：被剪掉的大块输出，按会话存在内存里（最多 30 份），重开应用后就没有了。
 - `session://<id>`：另一次会话的转录，一条消息一行，工具调用只留名字；`session://` 列出最近的会话（不含当前的、归档的和子会话）。
 - `plugin://<插件名>`：插件的 README，没有就给 `package.json` 里的版本和说明；`plugin://<插件名>/<路径>` 读它目录里的文件。
 
 后三种的内容不是这个项目写的，read 把它包进 `<resource origin="…">`。别的插件经 `ctx.resources.register(handler)` 加只读的 scheme（技能插件的 `skill://`）。
 
-## 文件交付记录
+## 改动记录
 
-edit 和 write 在实际写入后，把前后快照保存在插件私有数据目录下的 `changes/<会话标识的 SHA-256>/` 中，记录文件权限为 `0600`。工具结果的 `details.changeId` 只包含记录标识，不包含用于撤销的文件原文。没有快照标识的旧结果不推测历史、不回填记录。
-
-插件提供公开服务 `file.changes`：
-
-- `collect(sessionId, cwd, ids)` 按文件合并首次写入前到末次写入后的净差异，改回原样的文件不列出；返回差异块、增删行数、能否撤销、拒绝原因和记录警告。
-- `undo(sessionId, cwd, ids, path?)` 重新读取私有快照，只撤销连续且当前身份、内容和文件状态仍匹配的项目内普通文件。可只撤销一个返回路径，也可统一预检后撤销全部；新建文件安全删除，原文件权限保留。部分失败时尽力回滚，不覆盖后来修改。
-
-撤销与文件工具写入、命令进程共用进程级互斥保护。仍有工具或后台命令可能写入时拒绝撤销；同一或嵌套项目的会话运行时也拒绝。撤销期间 `prompt.submit` 拒绝发起新一轮。
-
-## 命令观测
-
-bash 在命令前后通过隔离 Git 视图观测工作区，不执行仓库配置中的钩子、过滤器、外部 diff 或 textconv。命令结果使用 `details.changeIds` 和可选的 `details.changeWarning`。后台任务和命令留下的进程未结束时保持保护，结束后记录由 bash_output 返回。观测记录不能可靠归因，始终拒绝自动撤销，需手动审阅。
-
-仅记录 Git 可见的文本变化：最多 200 个文件，单个工作区文件不超过 2 MiB，观测内容合计不超过 16 MiB。二进制、非普通文件、超限或观测失败只产生记录警告，不把原本成功的命令改成失败。被忽略的文件、Git 仓库之外的改动不属于命令观测范围。环境文件与已知凭据路径不会自动读取或保存，只留下未覆盖警告；删除会话时清理该会话的快照。
+edit、write 经本体的 `run.files.change` 写文件，可能改文件的 bash 命令（判不出只读的）带 `recordChanges` 跑：快照、命令前后的对比、撤销和它们的门闩都在本体（`@plume/workspace`），这次调用改了哪些文件由本体记在结果上（`ToolResultMessage.changes`），交付卡、撤回据它认；这个插件不存快照、不提供服务。只读的命令不观测：它不写文件，对比却要起好几个 git、还挡着撤销。后台命令到起它的那次调用答完还没结束的，`bash_output` 读它时经 `run.files.includeChanges` 把记下的算进那次结果。工具结果里的 `details`（diff、命令输出）只给卡片画，不带快照标识和原文。
 
 ## 后台任务和完整输出
 
