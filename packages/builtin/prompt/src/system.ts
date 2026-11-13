@@ -6,7 +6,7 @@
  * 顺序按变化频率排：不变的在前，随机器、项目、会话变的在后，服务商的前缀缓存能命中得越长越好。
  */
 
-import type { PromptSection, ShellInfo, Tone, ToolKind } from "@plume/contract";
+import type { PermissionMode, PromptSection, ShellInfo, Tone, ToolKind } from "@plume/contract";
 import type { ProjectInstructions } from "./instructions.ts";
 import { shellGuidance } from "./shell-guidance.ts";
 
@@ -27,6 +27,13 @@ export interface SystemPromptInput {
 	 */
 	tools?: readonly { name: string; kind?: ToolKind }[];
 	modelName: string;
+	/**
+	 * 这个会话的权限模式（`ModelContext.permissionMode`）。决定提示词怎么说工作区外：完全访问下读写哪里都不问，
+	 * 照「要批准」说的话，模型会把它当成禁区，宁可猜也不去看。
+	 */
+	permissionMode: PermissionMode;
+	/** 外层要求这一轮只读（计划模式，`ModelContext.readOnly`）：完全访问下也只说读不问，写由计划模式那段说。 */
+	readOnly?: boolean;
 	isGitRepo: boolean;
 	/**
 	 * 工作目录本身就是一份隔离副本（`git worktree`），改在这里用户的主工作树看不见。决定 `isolationGuideline` 怎么说。
@@ -81,11 +88,22 @@ const BASE_GUIDELINES = [
 	"When an approach fails, find out why before switching: read the error and check your assumptions. Do not retry blindly, and do not drop a workable approach after one failure.",
 	"Finish the whole task. If part of it is blocked, complete the rest and say plainly what you left and why.",
 	"Do not invent file paths, APIs or command output. If you have not verified something, say so.",
-	/*
-	 * 越界读写都要经过用户，模型必须知道这件事，否则它只看见一个莫名其妙的失败，然后换 `cat`、`cat > … <<EOF` 去绕。
-	 */
-	"Reading or writing outside the workspace asks the user for approval — that is a rule, not a malfunction. Use the file tools for it.",
 ];
+
+/**
+ * 工作区外怎么说，跟着权限模式走。
+ *
+ * 要批准的两档必须说：不说的话模型只看见一个莫名其妙的失败，然后换 `cat`、`cat > … <<EOF` 去绕。完全访问下不能照这句说：
+ * 本体在那一档直接放行（`tool-run.ts`），说「要批准」是一句假话，模型照它把本机当禁区，用户点名本机配置过的东西（一个 ssh 别名）它不去查，
+ * 转去猜。两种说法都点明工作区不是能看的范围的边界。
+ */
+function outsideGuideline(input: SystemPromptInput): string {
+	if (input.permissionMode !== "full") {
+		return "Reading or writing outside the workspace asks the user for approval — that is a rule, not a malfunction, and not a reason to guess instead of looking. Use the file tools for it.";
+	}
+	const access = input.readOnly ? "reading anywhere on this machine" : "reading and writing anywhere on this machine";
+	return `Full access is on: ${access} — other projects, other workspaces, the user's own configuration — needs no approval, so look there whenever the task needs it instead of guessing.`;
+}
 
 /**
  * 为了拿证据而改代码，改在用户工作树看不见的地方。
@@ -123,7 +141,7 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 	const sections: PromptSection[] = [
 		// 身份、准则两段标上类别：要换身份、换准则或往准则里补几条的插件按类别找，不认段名。
 		{ id: "identity", text: IDENTITY, category: "identity" },
-		{ id: "guidelines", text: `Guidelines:\n${bullets([...BASE_GUIDELINES, isolationGuideline(input)])}`, category: "guidelines" },
+		{ id: "guidelines", text: `Guidelines:\n${bullets([...BASE_GUIDELINES, outsideGuideline(input), isolationGuideline(input)])}`, category: "guidelines" },
 		{ id: "boundaries", text: `Boundaries:\n${bullets(BOUNDARIES)}` },
 		{
 			id: "environment",
@@ -164,8 +182,11 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 Files that exist only to get this answer — a script to check a hypothesis, downloaded sample data, output you needed once — go here, whether or not the user said so; it is deleted with the conversation. Files the user will keep, run or commit go in the working directory, and nothing else does: no documentation, README or example files they did not ask for.`
 		: "";
 	const otherRoots = (input.projectRoots ?? []).map((root) => root.replace(/\\/g, "/")).filter((root) => root !== cwd);
+	// 完全访问下写哪里都不问，「写那里要先问」是假话；写的规矩由准则里工作区外那条说。
+	const writing =
+		input.permissionMode === "full" ? "" : ` Writing there is not free: ${writersAsk(input.tools)}, as for any path outside the working directory.`;
 	const sources = otherRoots.length
-		? `\n\nThis project also covers these folders — read, search and list them without asking:\n${otherRoots.map((root) => `- ${root}`).join("\n")}\nUse absolute paths there; a relative path resolves against the working directory. Writing there is not free: ${writersAsk(input.tools)}, as for any path outside the working directory.`
+		? `\n\nThis project also covers these folders — read, search and list them without asking:\n${otherRoots.map((root) => `- ${root}`).join("\n")}\nUse absolute paths there; a relative path resolves against the working directory.${writing}`
 		: "";
 	sections.push({ id: "workspace", text: `Current working directory: ${cwd}${sources}${scratch}` });
 	return sections;

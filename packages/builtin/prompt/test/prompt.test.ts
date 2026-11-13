@@ -43,6 +43,7 @@ const base: SystemPromptInput = {
 	platform: "darwin",
 	shell: { kind: "posix", label: "zsh" },
 	modelName: "Test Model",
+	permissionMode: "auto",
 	isGitRepo: true,
 	projectInstructions: [],
 };
@@ -90,6 +91,26 @@ describe("系统提示词的段", () => {
 		);
 		expect(workspace([{ name: "patch", kind: "modify" }])).toContain("Writing there is not free: patch asks the user first,");
 		expect(workspace([{ name: "read", kind: "view" }])).toContain("Writing there is not free: writing or editing a file there asks the user first,");
+	});
+
+	it("工作区外怎么说跟着权限模式走：要批准的两档说要批准，完全访问说哪里都不问（计划模式下只说读），项目其他目录也不再说写要先问", () => {
+		const prompt = (input: Partial<SystemPromptInput>) => joinSections(buildPromptSections({ ...base, projectRoots: ["/work/app", "/work/lib"], ...input }));
+		for (const permissionMode of ["ask", "auto"] as const) {
+			const text = prompt({ permissionMode });
+			expect(text).toContain("Reading or writing outside the workspace asks the user for approval");
+			expect(text).toContain("Writing there is not free:");
+			expect(text).not.toContain("Full access is on");
+		}
+		const full = prompt({ permissionMode: "full" });
+		expect(full).toContain(
+			"Full access is on: reading and writing anywhere on this machine — other projects, other workspaces, the user's own configuration — needs no approval",
+		);
+		// 完全访问下本体直接放行，「要批准」「写要先问」都是假话。
+		expect(full).not.toContain("asks the user for approval");
+		expect(full).not.toContain("Writing there is not free");
+		const planning = prompt({ permissionMode: "full", readOnly: true });
+		expect(planning).toContain("Full access is on: reading anywhere on this machine");
+		expect(planning).not.toContain("reading and writing anywhere");
 	});
 
 	it("取证用的改动去哪改，跟着工作区走", () => {

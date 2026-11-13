@@ -46,6 +46,8 @@ export default {
 					// 工具做的是哪种活按注册它的插件的声明（`ToolDefinition.kind`）认，只看这一轮真给模型的那些。
 					tools: input.tools.map((tool) => ({ name: tool.name, kind: kinds.get(tool.name) })),
 					modelName: input.model.name,
+					permissionMode: input.permissionMode,
+					readOnly: input.readOnly,
 					isGitRepo: gitRepo,
 					isolatedWorktree,
 					projectInstructions,
