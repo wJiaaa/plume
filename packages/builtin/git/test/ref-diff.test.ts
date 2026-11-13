@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { commitDiff, commitDiffSummary, diffRefs } from "../src/git/history.ts";
-import { setViewsDir } from "../src/git/view.ts";
+import { usePlainView } from "./plain-view.ts";
 
 let dir: string;
 let repo: string;
@@ -24,7 +24,7 @@ const lines = (count: number) => Array.from({ length: count }, (_, i) => `line $
 beforeEach(async () => {
 	dir = await realpath(await mkdtemp(join(tmpdir(), "plume-git-refdiff-")));
 	repo = join(dir, "repo");
-	setViewsDir(join(dir, "data"));
+	usePlainView();
 	execFileSync("git", ["init", "-q", "-b", "main", repo]);
 	git("config", "user.name", "test");
 	git("config", "user.email", "test@example.com");

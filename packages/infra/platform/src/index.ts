@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } f
 import { homedir, tmpdir } from "node:os";
 import nodePath, { basename, isAbsolute, join, resolve, win32 } from "node:path";
 
+export * from "./git.ts";
 export * from "./line-diff.ts";
 export * from "./shell-split.ts";
 

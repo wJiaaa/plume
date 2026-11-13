@@ -28,7 +28,7 @@ import { gitBranch, probeRepo } from "./git/probe.ts";
 import { initRepo, listRepos, listWorktrees } from "./git/repos.ts";
 import { say, setLocaleSource } from "./git/say.ts";
 import { discardPaths, gitStatus, stagePaths, unstagePaths, upstreamDistance, workspaceStat } from "./git/status.ts";
-import { setViewsDir } from "./git/view.ts";
+import { setGitView } from "./git/view.ts";
 import { serveWorktrees } from "./worktree/serve.ts";
 
 const COMMIT_LANGUAGE_IDS = new Set(["zh", "en", "ja", "ko", "es", "fr", "de", "pt", "ru"]);
@@ -41,8 +41,8 @@ export default {
 	name: "plume.git",
 	apply(ctx) {
 		setLocaleSource(() => ctx.locale());
-		// 读仓库用的视图放在插件自己的数据目录：沙箱里的命令写不到这里（见 `git/view.ts`）。
-		setViewsDir(ctx.dataDir);
+		// 读仓库经本体的隔离视图（见 `git/view.ts`）：视图建在 Plume 的数据目录下，沙箱里的命令写不到那里。
+		setGitView(ctx.workspace.git);
 		const settingsFile = join(ctx.dataDir, "settings.json");
 
 		const readSettings = async (): Promise<{ commitLanguage?: unknown }> => {

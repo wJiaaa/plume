@@ -18,38 +18,9 @@ export interface BlobRead {
 	content: Buffer | null;
 }
 
-/** 一批里最多同时拿着多少字节。 */
-const MAX_BATCH_BYTES = 64 * 1024 * 1024;
-
-/** 修订一行一个从 stdin 进去，所以用 `spawnGit`；路径里带换行会破坏分帧，调用方要先滤掉。 */
+/** 修订一行一个从 stdin 进去，所以用 `gitWithInput`；路径里带换行会破坏分帧，调用方要先滤掉。 */
 function catFile(view: RepoView, revs: string[], args: string[]): Promise<Buffer> {
-	return new Promise((resolve, reject) => {
-		const child = view.spawnGit(["cat-file", ...args, "--buffer"]);
-		const chunks: Buffer[] = [];
-		let size = 0;
-		let done = false;
-		const fail = (error: Error) => {
-			if (done) return;
-			done = true;
-			child.kill();
-			reject(error);
-		};
-		child.stdout.on("data", (chunk: Buffer) => {
-			size += chunk.length;
-			// 失控的一批直接杀掉，不让它撑满堆。
-			if (size > MAX_BATCH_BYTES) return fail(new Error("cat-file batch too large"));
-			chunks.push(chunk);
-		});
-		child.on("error", fail);
-		child.on("close", () => {
-			if (done) return;
-			done = true;
-			resolve(Buffer.concat(chunks));
-		});
-		// stdin 出错是子进程已经走了，`close` 会报。
-		child.stdin.on("error", () => {});
-		child.stdin.end(`${revs.join("\n")}\n`);
-	});
+	return view.gitWithInput(["cat-file", ...args, "--buffer"], `${revs.join("\n")}\n`);
 }
 
 /** `--batch-check` 的输出：每个修订一行，`<oid> <type> <size>` 或 `<input> missing`，按请求顺序。 */

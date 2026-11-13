@@ -42,7 +42,7 @@ it("PNG 原样交给模型，details 记下路径、大小、类型，并记作�
 it("经工具表交出去时图跟在结果后面", async () => {
 	writeFileSync(join(dir, "dot.jpg"), PNG);
 	const { files, projectFiles, resources } = withFiles({ cwd: dir, state: new Map() });
-	const definition = toDefinition(readTool, { state: () => new Map(), resources: resources!, workspace: { files: projectFiles } });
+	const definition = toDefinition(readTool, { state: () => new Map(), resources: resources!, workspace: { files: projectFiles, git: async () => null } });
 	const run = {
 		sessionId: "s",
 		cwd: dir,

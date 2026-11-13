@@ -19,7 +19,7 @@ export { ChangeStore } from "./change-store.ts";
 export type { ChangeWords } from "./change-words.ts";
 export { CommandChanges, type CommandObservation } from "./command-changes.ts";
 export { TextFiles } from "./text-file.ts";
-export { openRepo, withRepoView } from "./host-git.ts";
+export { openRepo, withPluginView, withRepoView } from "./host-git.ts";
 export { gitListedFiles } from "./project-files.ts";
 export { ArtifactStore, artifactResource, pluginResource, scratchResource, sessionResource } from "./resources/handlers.ts";
 export { readOnly, ResourceRouter } from "./resources/router.ts";

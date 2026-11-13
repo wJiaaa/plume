@@ -14,10 +14,12 @@ import { commitDiff, commitStaged, createBranch, gitLog } from "../src/git/histo
 import { probeRepo } from "../src/git/probe.ts";
 import { initRepo } from "../src/git/repos.ts";
 import { gitStatus, stagePaths, workspaceStat } from "../src/git/status.ts";
+import { usePlainView } from "./plain-view.ts";
 
 let dir = "";
 
 before(async () => {
+	usePlainView();
 	dir = await mkdtemp(join(tmpdir(), "plume-git-"));
 });
 

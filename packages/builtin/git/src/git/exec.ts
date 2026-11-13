@@ -6,9 +6,8 @@
  */
 
 import { execFile } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, win32 } from "node:path";
 import { promisify } from "node:util";
+import { gitEnv, gitFile } from "@plume/platform";
 
 import type { OpResult, RemoteResult } from "../api.ts";
 import { explainGitFailure } from "./errors.ts";
@@ -17,66 +16,17 @@ import { say } from "./say.ts";
 const execFileAsync = promisify(execFile);
 
 /**
- * 让 git 去别处干活的环境变量。
- *
- * 它们都比启动目录优先：继承下来一个 `GIT_DIR`，`rev-parse --is-inside-work-tree` 回答的就是另一个仓库，
- * 界面会对一个好好的仓库说「不是 Git 仓库」。从 git 钩子、`rebase --exec`、还留着它们的终端里启动 Plume
- * 都会带进来；我们从不需要它们，所以丢掉——这里问的就是那个目录本身。
- */
-const REDIRECTING = [
-	"GIT_DIR",
-	"GIT_WORK_TREE",
-	"GIT_COMMON_DIR",
-	"GIT_INDEX_FILE",
-	"GIT_OBJECT_DIRECTORY",
-	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
-	"GIT_NAMESPACE",
-	"GIT_CEILING_DIRECTORIES",
-	"GIT_PREFIX",
-];
-
-/**
- * git 常在的地方。macOS 上从访达启动的程序只继承 `/usr/bin:/bin:/usr/sbin:/sbin`，Homebrew 的 git 不在里面，
- * 起进程报 ENOENT，读起来和「不是仓库」一模一样。追加在后面，用户自己设的 PATH 仍然优先。
- */
-const LIKELY_PATHS = ["/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin", "/usr/bin", "/bin"];
-
-function gitEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	const env = { ...base };
-	for (const name of REDIRECTING) delete env[name];
-	/*
-	 * git 的提示语固定成英文：`errors.ts` 按英文原话认错误，中文系统下 git 跟着 LANG 本地化就一条也认不出。
-	 * 只动 LANGUAGE（gettext 选消息语言最先看它），不动 LC_ALL / LC_CTYPE：那两个管编码，改了中文路径会被转义。
-	 */
-	env.LANGUAGE = "en";
-	// 工作树的合并、同步不开编辑器等人关：这里没有人能去关它。
-	env.GIT_EDITOR = "true";
-	// 面板每隔一会儿跑一次 status：不顺手刷新 index，免得拿着 index.lock 和 agent 正在跑的 `git commit` 撞上。
-	env.GIT_OPTIONAL_LOCKS = "0";
-
-	// Windows 的环境变量不分大小写，通常叫 `Path`；展开成普通对象后得自己找是哪个键。
-	const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
-	const path = env[pathKey] ?? "";
-	if (process.platform !== "win32") {
-		const known = new Set(path.split(delimiter).filter(Boolean));
-		const missing = LIKELY_PATHS.filter((dir) => !known.has(dir));
-		if (missing.length > 0) env[pathKey] = [path, ...missing].filter(Boolean).join(delimiter);
-	}
-	return env;
-}
-
-/**
  * 远端操作的环境：这里没有地方让人输入凭据。
  *
  * `GIT_TERMINAL_PROMPT=0` 只管 git 自己的提示；Windows 上 Git Credential Manager 会先弹自己的窗口，
  * 超时杀掉 git 也关不掉它，所以 `GCM_INTERACTIVE=never` 也要（新旧 GCM 认的值不同，`never` 两边都认）。
  */
 function remoteGitEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	return { ...gitEnvironment(base), GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" };
+	return { ...gitEnv(base), GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" };
 }
 
 /** 只建一次：`process.env` 不会变，每次重建会落在两百个文件的 diff 里每一次 `git show` 上。 */
-const GIT_ENV = gitEnvironment(process.env);
+const GIT_ENV = gitEnv(process.env);
 const REMOTE_GIT_ENV = remoteGitEnvironment(process.env);
 
 /**
@@ -86,13 +36,6 @@ const REMOTE_GIT_ENV = remoteGitEnvironment(process.env);
  */
 const METADATA_COMMANDS = new Set(["rev-parse", "symbolic-ref", "for-each-ref", "show-ref"]);
 const METADATA_GIT_ENV = { ...GIT_ENV, GIT_NO_LAZY_FETCH: "1" };
-
-/** 视图里跑 git 的环境：继承来的 `GIT_*` 一个不留，只有调用方明确设的那些；语言、PATH 和别处一样。 */
-export function isolatedEnvironment(vars: Record<string, string>): NodeJS.ProcessEnv {
-	const env: NodeJS.ProcessEnv = {};
-	for (const [key, value] of Object.entries(GIT_ENV)) if (!/^GIT_/i.test(key)) env[key] = value;
-	return { ...env, ...vars };
-}
 
 /**
  * 放在每个作为位置参数交给 git 的引用、分支、标签前面。
@@ -121,54 +64,6 @@ export async function mapLimit<T, R>(items: T[], run: (item: T) => Promise<R>): 
 	});
 	await Promise.all(workers);
 	return out;
-}
-
-/** Windows 上能直接运行的文件：存在、是文件。 */
-function runnable(path: string): boolean {
-	try {
-		accessSync(path, constants.F_OK);
-		return statSync(path).isFile();
-	} catch {
-		return false;
-	}
-}
-
-/**
- * 当作 git 运行的那个文件。
- *
- * 除 Windows 外就是 `git`。Windows 上给一个不带路径的名字，进程启动器会先在**工作目录**里找——工作目录
- * 就是仓库，一个顶层带着自己 `git.exe` 的检出每次刷新都会被面板执行。所以 Windows 上自己按 PATH 找，
- * 跳过相对路径（`.` 会把同一个洞带回来），只认 `.exe`、`.com`：`git.cmd` 不经 shell 起不来。
- * 找不到时为空，调用方报「没有 git」，不让启动器去仓库里找。
- */
-export function gitProgram(
-	platform: string = process.platform,
-	env: NodeJS.ProcessEnv = process.env,
-	isRunnable: (path: string) => boolean = runnable,
-): string | null {
-	if (platform !== "win32") return "git";
-	const key = Object.keys(env).find((name) => name.toUpperCase() === "PATH");
-	const dirs = (key ? (env[key] ?? "") : "")
-		.split(win32.delimiter)
-		.map((dir) => dir.trim().replace(/^"(.*)"$/, "$1"))
-		.filter((dir) => dir && win32.isAbsolute(dir));
-	for (const dir of new Set(dirs)) {
-		for (const name of ["git.com", "git.exe"]) {
-			const candidate = win32.join(dir, name);
-			if (isRunnable(candidate)) return candidate;
-		}
-	}
-	return null;
-}
-
-/** 找到就留着；没找到下次再找，装上 git 不用重启。 */
-let resolvedGit: string | null = null;
-
-export function gitFile(): string {
-	resolvedGit ??= gitProgram();
-	if (resolvedGit) return resolvedGit;
-	// 照启动器的说法写，`probeRepo` 据此认出「根本没有 git」。
-	throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" });
 }
 
 /** 每处起 git 都带 `windowsHide`：agent 进程没有控制台，Windows 上不带它，面板每刷新一次就闪一串黑窗口。 */

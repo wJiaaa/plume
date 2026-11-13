@@ -9,6 +9,7 @@ import type { SessionWorktree } from "../src/worktree/api.ts";
 import { cleanOldWorktrees, createSessionWorktree, reclaimWorktree, restoreWorktree, worktreeState } from "../src/worktree/lifecycle.ts";
 import { abortSync, mergeIntoBase, syncFromBase } from "../src/worktree/merge.ts";
 import { normalizeSettings } from "../src/worktree/store.ts";
+import { usePlainView } from "./plain-view.ts";
 
 let dir: string;
 let repo: string;
@@ -25,6 +26,7 @@ async function commit(cwd: string, file: string, content: string, message = `改
 }
 
 beforeEach(async () => {
+	usePlainView();
 	dir = await realpath(await mkdtemp(join(tmpdir(), "plume-worktree-")));
 	repo = join(dir, "repo");
 	root = join(dir, "worktrees");

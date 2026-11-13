@@ -1746,7 +1746,39 @@ export interface PluginWorkspace {
 	 * 不在 git 仓库里、或 git 答不上来时是 null，由调用方自己走目录。不问人：要不要读 `root` 由调用方先经 `ToolRun.files.read` 判。
 	 */
 	files(root: string): Promise<string[] | null>;
+	/**
+	 * 在同一个隔离视图里跑一组 git 命令，结束即删：HEAD、引用、分支的上游和远端地址都照着真实仓库抄好，分支、ahead / behind、
+	 * 日志上的装饰和在真实仓库里跑一样，读不到仓库自己的配置（`core.fsmonitor`、过滤器、`diff.external`、钩子）、也不会连网。
+	 * 一组读共用一个视图：搭一个要先跑几条命令，每条命令各搭一个就是每次刷新几十个进程。
+	 *
+	 * `root` 不在检出里时 `work` 不跑，交回 null。只读：暂存、提交、推送、切分支这些人点了才做的事仍由插件自己在真实仓库上跑，
+	 * 那样钩子、凭据助手正是人要的。除了要写 stdin 的那一个（`gitWithInput`，`cat-file --batch`），
+	 * 要按二进制读的用 `gitBuffer`：`git show HEAD:logo.png` 回的不是文字。
+	 */
+	git<T>(root: string, work: (view: PluginGitView) => Promise<T>): Promise<T | null>;
 }
+
+/**
+ * `ctx.workspace.git` 给的视图。路径、pathspec 相对 `cwd`，和在该目录直接跑 git 一样。
+ * 读的结果没有替调用方决定是不是文字，失败时抛错（和 git 自己一样：非零退出就算失败，stderr 上那些不是错误的话不管）。
+ */
+export interface PluginGitView {
+	/** 调用方给的目录：命令在这里跑。 */
+	readonly cwd: string;
+	git(args: string[]): Promise<string>;
+	gitBuffer(args: string[]): Promise<Uint8Array>;
+	gitWithInput(args: string[], input: string): Promise<Uint8Array>;
+	/**
+	 * 没人点的那种获取（面板露面时、之后每五分钟）：在视图里 `fetch --prune`，再把变了的引用搬回真实仓库。
+	 * 别人的改动被拒时整批不搬（每条引用带着抄快照时的旧值）。浅克隆的边界变了就不搬，留给人点的那次获取。
+	 *
+	 * `cancelled` 是调用方叫停的，不算失败；`timedOut` 是到了时限被杀；其余失败带 git 自己的话（`stderr`），原话交给调用方去说。
+	 */
+	fetch(options: { signal?: AbortSignal; timeoutMs: number }): Promise<PluginGitFetch>;
+}
+
+/** 见 `PluginGitView.fetch`。 */
+export type PluginGitFetch = { ok: true } | { ok: false; cancelled?: boolean; timedOut?: boolean; stderr?: string };
 
 /**
  * 沙箱的模式：只读、能写项目目录、不设限。权限模式对应哪一档由本体定：请求批准只读，帮我批准能写项目目录和临时目录，

@@ -49,6 +49,7 @@ import {
 	sessionResource,
 	TextFiles,
 	toAbsolute,
+	withPluginView,
 } from "@plume/workspace";
 import { DECLINED } from "./declined.ts";
 import { text } from "./i18n.ts";
@@ -159,6 +160,7 @@ export class Workspace {
 	/** 插件的 `ctx.workspace`。 */
 	readonly workspace: PluginWorkspace = {
 		files: (root) => gitListedFiles(String(root), this.dataDir),
+		git: (root, work) => withPluginView(String(root), this.dataDir, work),
 	};
 
 	/** 插件的 `ctx.changes`：工作目录用会话自己的。 */

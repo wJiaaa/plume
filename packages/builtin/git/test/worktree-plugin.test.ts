@@ -9,6 +9,7 @@ import type { PluginContext, PromptSubmit, PromptVerdict, SessionScope, SessionS
 import type { GitApi } from "../src/api.ts";
 import type { WorktreeApi } from "../src/worktree/api.ts";
 import plugin from "../src/index.ts";
+import { plainGit } from "./plain-view.ts";
 
 let dir: string;
 let repo: string;
@@ -58,6 +59,7 @@ async function load() {
 		provide: (name: string, provided: SessionWorktreeService) => {
 			if (name === "session.worktree") service = provided;
 		},
+		workspace: { git: plainGit },
 		sessions: {
 			list: async () => summaries.map((summary) => ({ ...summary })),
 			get: async (id: string) => summaries.find((summary) => summary.id === id),
