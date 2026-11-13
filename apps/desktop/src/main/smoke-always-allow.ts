@@ -17,6 +17,7 @@ const FILE = "always-allow.txt";
  * 1. 第一次弹审批卡，点「以后不再问」；第二次不再弹卡。
  * 2. 设置 › 常规 › 权限里列出这一条：写的是这个文件的路径，记在内置工具插件名下；点「撤销」，名单空了。
  * 3. 回到对话再写一次，审批卡重新弹出；这次又点「以后不再问」，到设置里点「全部撤销」，名单又空了。
+ * 4. 同一页的「完全访问」开关打开前先确认：取消不动，确认才开，关掉不问。
  */
 export async function checkAlwaysAllow(options: {
 	window: BrowserWindow;
@@ -99,9 +100,25 @@ export async function checkAlwaysAllow(options: {
 		await until(`${rows}.length === 1`, "又记下一条");
 		await clickVisible(page, "[data-always-allow-clear]", "全部撤销");
 		await until(`document.querySelector('[data-always-allow-list]') === null`, "全部撤销后名单空了");
+
+		// 4. 设置页的「完全访问」开关和权限签的菜单一样，打开前先确认：取消就不动，确认才开；关掉直接切。
+		const fullSwitch = `document.querySelector('[role=switch][aria-label="完全访问"]')`;
+		const confirmShown = `[...document.querySelectorAll('button')].some((button) => button.textContent.trim() === '确认开启')`;
+		await clickVisible(page, `[role=switch][aria-label="完全访问"]`);
+		await until(confirmShown, "设置页打开完全访问先弹确认");
+		await clickVisible(page, "button", "取消");
+		await until(`!(${confirmShown})`, "取消后确认框收起");
+		if ((await page(`${fullSwitch}.getAttribute('aria-checked')`)) !== "false") throw new Error("取消确认后完全访问不该打开");
+		await clickVisible(page, `[role=switch][aria-label="完全访问"]`);
+		await until(confirmShown, "再点一次又弹确认");
+		await clickVisible(page, "button", "确认开启");
+		await until(`${fullSwitch}?.getAttribute('aria-checked') === 'true'`, "确认后完全访问打开");
+		await clickVisible(page, `[role=switch][aria-label="完全访问"]`);
+		await until(`${fullSwitch}?.getAttribute('aria-checked') === 'false'`, "关掉完全访问不用确认");
+		if (await page<boolean>(confirmShown)) throw new Error("关掉完全访问不该弹确认");
 		await back();
 	} finally {
 		setModel(undefined);
 	}
-	console.log("PLUME_ALWAYS_ALLOW_SMOKE", JSON.stringify({ listed: true, revoked: true, askedAgain: true, cleared: true }));
+	console.log("PLUME_ALWAYS_ALLOW_SMOKE", JSON.stringify({ listed: true, revoked: true, askedAgain: true, cleared: true, fullAccessConfirmed: true }));
 }

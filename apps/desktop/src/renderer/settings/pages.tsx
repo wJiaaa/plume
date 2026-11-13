@@ -5,9 +5,10 @@
  */
 
 import { type ReactNode, useState, useSyncExternalStore } from "react";
-import type { ProjectEntry } from "@plume/contract";
+import type { PermissionMode, ProjectEntry } from "@plume/contract";
 import { ProjectLayerCards } from "./ProjectOverrideNotice.tsx";
 import { AlwaysAllowSettings } from "./AlwaysAllowSettings.tsx";
+import { FullAccessConfirm } from "../composer/PermissionPicker.tsx";
 import { readFontSmoothing, setFontSmoothing } from "../appearance.ts";
 import { Blocks, type Icon, Info, Layers, Palette, Settings2 } from "../icons.tsx";
 import { resetAppearancePatch } from "../../shared/appearance.ts";
@@ -128,6 +129,8 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 	const resolvedName = LOCALE_OPTIONS.find((option) => option.value === resolvedLocale);
 	const settings = useSyncExternalStore(subscribeModels, settingsView);
 	const mode = settings?.permissionMode ?? "auto";
+	const [confirmingFull, setConfirmingFull] = useState(false);
+	const setMode = (next: PermissionMode) => void modelsAgent().setPermissionMode(next).then(refreshModels).catch(saveFailed);
 	const transcript = useTranscriptPrefs();
 	const hideEmptied = useHideEmptiedProjects();
 	const [keepAwake, setKeepAwake] = useState(window.plume.keepAwake.get);
@@ -194,16 +197,24 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 						control={
 							<Toggle
 								checked={mode === "full"}
-								onChange={(on) =>
-									void modelsAgent()
-										.setPermissionMode(on ? "full" : "auto")
-										.then(refreshModels)
-										.catch(saveFailed)
-								}
+								onChange={(on) => {
+									// 打开和权限签的菜单一样先确认一次，见 `FullAccessConfirm`；关掉是往严了收，直接切。
+									if (on) setConfirmingFull(true);
+									else setMode("auto");
+								}}
 								ariaLabel={t("general.fullAccess")}
 							/>
 						}
 					/>
+					{confirmingFull && (
+						<FullAccessConfirm
+							onCancel={() => setConfirmingFull(false)}
+							onConfirm={() => {
+								setConfirmingFull(false);
+								setMode("full");
+							}}
+						/>
+					)}
 					<AlwaysAllowSettings />
 				</Card>
 			</section>
