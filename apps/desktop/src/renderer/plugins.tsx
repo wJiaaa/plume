@@ -98,6 +98,7 @@ import { menuCommands, productCommands } from "./composer/commands.ts";
 import { registerTerminalOpener, registerTerminalRunner } from "./files/open-terminal.ts";
 import { subscribeSessionChanges } from "./plugin-session-changes.ts";
 import { openMediaFile, revealMediaFile, revealMediaLabel } from "./media-files.ts";
+import { createPluginRegistry, type Handlers } from "./plugin-registry.ts";
 
 interface Entry<P> {
 	plugin: string;
@@ -110,19 +111,31 @@ interface Entry<P> {
 /** 注册先后的计数，卡片、面板快捷键、皮肤、截图组件共用。 */
 let registered = 0;
 
-const codeBlocks = new Map<string, Entry<CodeBlockProps>[]>();
+/** 槽位和接手者都从这里建，插件撤下时 `unloadPluginUi` 一次撤掉；有特殊逻辑的表不在里面，见 `unloadPluginUi`。 */
+const registry = createPluginRegistry();
+
+const codeBlocks = registry.handlers<Entry<CodeBlockProps>>();
 const codeCopies = new WeakMap<Entry<CodeBlockProps>, NonNullable<NonNullable<Parameters<UiContext["codeBlock"]>[2]>["copyText"]>>();
-const toolCards = new Map<string, Entry<ToolCardProps>[]>();
-const toolPrefixes = new Map<string, Entry<ToolCardProps>[]>();
+const toolCards = registry.handlers<Entry<ToolCardProps>>();
+const toolPrefixes = registry.handlers<Entry<ToolCardProps>>();
 /** `ui.toolCard(…, { inline })`：只在通用卡片上补东西的卡片，调用照常并进一段活；给的是函数时逐次调用问它。 */
 const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean)>();
-const approvalCards = new Map<string, Entry<ApprovalCardProps>[]>();
+const approvalCards = registry.handlers<Entry<ApprovalCardProps>>();
 /** `ui.requestCard`：按 `HumanRequest.kind` 认的、`run.request` 的卡。 */
-const requestCards = new Map<string, Entry<RequestCardProps>[]>();
+const requestCards = registry.handlers<Entry<RequestCardProps>>();
 
-function register<P>(table: Map<string, Entry<P>[]>, kind: string, plugin: string, tool: unknown, component: unknown, options?: { order?: number }): Entry<P> {
-	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
-	if (typeof tool !== "string" || tool === "") throw new Error(`${kind}需要工具名`);
+/** `keyName` 是按什么认这一类（工具名、`HumanRequest.kind`、语言），只用来说清报错。 */
+// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
+function register<P>(
+	table: Handlers<Entry<P>>,
+	kind: string,
+	plugin: string,
+	tool: unknown,
+	component: unknown,
+	options?: { order?: number },
+	keyName = "工具名",
+): Entry<P> {
+	if (typeof tool !== "string" || tool === "") throw new Error(`${kind}需要${keyName}`);
 	if (typeof component !== "function") throw new Error(`${kind} ${tool} 需要一个组件`);
 	const order = options?.order ?? 0;
 	if (!Number.isFinite(order)) throw new Error("order 必须是数字");
@@ -131,10 +144,7 @@ function register<P>(table: Map<string, Entry<P>[]>, kind: string, plugin: strin
 	if (taken) console.info(`[${plugin}] ${kind} ${tool} 的 order ${order} 覆盖了 ${taken.plugin} 的`);
 	// order 小的在前，相同时后注册的在前；前面的渲染出错就让给后面的。
 	const entry = { plugin, order, seq: registered++, component: component as ComponentType<P> };
-	table.set(
-		tool,
-		[...list, entry].sort((a, b) => a.order - b.order || b.seq - a.seq),
-	);
+	table.register(tool, entry);
 	return entry;
 }
 
@@ -438,7 +448,7 @@ export interface PageEntry {
 	component: ComponentType<PageProps>;
 }
 
-let pages: PageEntry[] = [];
+const pages = registry.slot<PageEntry>();
 
 function registerPage(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
@@ -450,7 +460,7 @@ function registerPage(plugin: string, id: unknown, component: unknown, options: 
 	if (icon !== undefined && typeof icon !== "function" && (typeof icon !== "object" || icon === null)) throw new Error(`页面 ${id} 的图标需要是组件`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	if (pages.some((page) => page.key === key)) console.info(`[${plugin}] 页面 ${id} 重新注册，替换上一次的`);
+	if (pages.has(key)) console.info(`[${plugin}] 页面 ${id} 重新注册，替换上一次的`);
 	const entry: PageEntry = {
 		key,
 		plugin,
@@ -460,13 +470,12 @@ function registerPage(plugin: string, id: unknown, component: unknown, options: 
 		topRow,
 		component: component as ComponentType<PageProps>,
 	};
-	// 稳定排序：order 相同的保持注册先后。
-	pages = [...pages.filter((page) => page.key !== key), entry].sort((a, b) => a.order - b.order);
+	pages.put(plugin, entry, { key, order });
 }
 
 /** 所有页面，按 order 排好。变化经 usePluginUis 通知。 */
 export function listPages(): readonly PageEntry[] {
-	return pages;
+	return pages.list();
 }
 
 /** 插件经 `ui.pageBadge` 挂在页面那一行上的数，按页面的 key。 */
@@ -475,7 +484,7 @@ const pageBadges = new Map<string, { count: number; label: LocalizedText; attent
 function setPageBadge(plugin: string, id: unknown, badge: unknown): void {
 	const key = `${plugin}/${String(id)}`;
 	// i18n-exempt：给插件作者的报错，界面上不显示。
-	if (!pages.some((page) => page.key === key)) throw new Error(`页面 ${String(id)} 没有注册`);
+	if (!pages.has(key)) throw new Error(`页面 ${String(id)} 没有注册`);
 	const { count, label, attention } = (badge ?? {}) as Record<string, unknown>;
 	const previous = pageBadges.get(key);
 	if (badge === null || count === 0) {
@@ -504,7 +513,7 @@ interface ComposerItemEntry {
 	component: ComponentType<ComposerItemProps>;
 }
 
-let composerItems: ComposerItemEntry[] = [];
+const composerItems = registry.slot<ComposerItemEntry>();
 
 function registerComposerItem(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
@@ -514,11 +523,12 @@ function registerComposerItem(plugin: string, id: unknown, component: unknown, o
 	if (side !== "start" && side !== "end") throw new Error(`输入框控件 ${id} 的 side 只能是 start 或 end`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	if (composerItems.some((item) => item.key === key)) console.info(`[${plugin}] 输入框控件 ${id} 重新注册，替换上一次的`);
-	composerItems = [
-		...composerItems.filter((item) => item.key !== key),
+	if (composerItems.has(key)) console.info(`[${plugin}] 输入框控件 ${id} 重新注册，替换上一次的`);
+	composerItems.put(
+		plugin,
 		{ key, plugin, side: side as ComposerItemEntry["side"], order, component: component as ComponentType<ComposerItemProps> },
-	].sort((a, b) => a.order - b.order);
+		{ key, order },
+	);
 }
 
 /** 插件加在输入框工具栏左边（`start`）或右边模型选择前面（`end`）的那几格。每格包一层错误边界：一个插件画坏了只丢它自己那一格，输入框照常能用。 */
@@ -527,6 +537,7 @@ export function ComposerItems({ side, ...props }: ComposerItemProps & { side: "s
 	return (
 		<>
 			{composerItems
+				.list()
 				.filter((item) => item.side === side)
 				.map((item) => (
 					<Isolated key={item.key} plugin={item.plugin}>
@@ -545,7 +556,7 @@ interface ComposerChipEntry {
 	component: ComponentType<ComposerChipProps>;
 }
 
-let composerChips: ComposerChipEntry[] = [];
+const composerChips = registry.slot<ComposerChipEntry>();
 
 function registerComposerChip(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
@@ -555,11 +566,12 @@ function registerComposerChip(plugin: string, id: unknown, component: unknown, o
 	if (side !== "start" && side !== "end") throw new Error(`输入框上方的格子 ${id} 的 side 只能是 start 或 end`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	if (composerChips.some((chip) => chip.key === key)) console.info(`[${plugin}] 输入框上方的格子 ${id} 重新注册，替换上一次的`);
-	composerChips = [
-		...composerChips.filter((chip) => chip.key !== key),
+	if (composerChips.has(key)) console.info(`[${plugin}] 输入框上方的格子 ${id} 重新注册，替换上一次的`);
+	composerChips.put(
+		plugin,
 		{ key, plugin, side: side as ComposerChipEntry["side"], order, component: component as ComponentType<ComposerChipProps> },
-	].sort((a, b) => a.order - b.order);
+		{ key, order },
+	);
 }
 
 /** 插件加在项目签那一行的格子，`side` 那一侧的。和输入框底下的格子一样，每格包一层错误边界。 */
@@ -568,6 +580,7 @@ export function ComposerChips({ side, ...props }: ComposerChipProps & { side: "s
 	return (
 		<>
 			{composerChips
+				.list()
 				.filter((chip) => chip.side === side)
 				.map((chip) => (
 					<Isolated key={chip.key} plugin={chip.plugin}>
@@ -578,7 +591,7 @@ export function ComposerChips({ side, ...props }: ComposerChipProps & { side: "s
 	);
 }
 
-let composerAbove: Array<{ key: string; plugin: string; order: number; component: ComponentType<ComposerAboveProps> }> = [];
+const composerAbove = registry.slot<{ key: string; plugin: string; order: number; component: ComponentType<ComposerAboveProps> }>();
 
 function registerComposerAbove(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：插件作者的接口错误，只写入加载日志。
@@ -587,10 +600,7 @@ function registerComposerAbove(plugin: string, id: unknown, component: unknown, 
 	const { order = 0 } = (options ?? {}) as Record<string, unknown>;
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	composerAbove = [
-		...composerAbove.filter((entry) => entry.key !== key),
-		{ key, plugin, order, component: component as ComponentType<ComposerAboveProps> },
-	].sort((a, b) => a.order - b.order);
+	composerAbove.put(plugin, { key, plugin, order, component: component as ComponentType<ComposerAboveProps> }, { key, order });
 }
 
 /** 输入框上方独占一行的扩展；不加外框，组件返回空时不会留下高度。 */
@@ -598,7 +608,7 @@ export function ComposerAbove(props: ComposerAboveProps) {
 	usePluginUis();
 	return (
 		<>
-			{composerAbove.map((entry) => (
+			{composerAbove.list().map((entry) => (
 				<Isolated key={`${entry.key}:${props.session.summary.id}`} plugin={entry.plugin}>
 					<entry.component {...props} />
 				</Isolated>
@@ -616,17 +626,18 @@ interface ConversationCardEntry {
 	component: ComponentType<ConversationCardProps>;
 }
 
-let conversationCards: ConversationCardEntry[] = [];
+const conversationCards = registry.slot<ConversationCardEntry>();
 
-const sessionToolbar = new Map<string, Entry<{ session: SessionView }>[]>();
-let sessionMenuItems: Array<{ key: string; plugin: string; item: Parameters<UiContext["sessionMenuItem"]>[1] }> = [];
-let agentDeliveries: Array<{ plugin: string; component: ComponentType<AgentDeliveryProps> }> = [];
+/** 读起来是全部显示，存法是接手者：每个 `插件名/id` 只有一项，重登记先整个删掉、排到最后（见 `ui.sessionToolbar`）。 */
+const sessionToolbar = registry.handlers<Entry<{ session: SessionView }>>();
+const sessionMenuItems = registry.slot<{ key: string; plugin: string; item: Parameters<UiContext["sessionMenuItem"]>[1] }>();
+const agentDeliveries = registry.slot<{ plugin: string; component: ComponentType<AgentDeliveryProps> }>();
 
 export function SessionToolbar({ session }: { session: SessionView }) {
 	usePluginUis();
 	return (
 		<>
-			{[...sessionToolbar.values()]
+			{[...sessionToolbar.table.values()]
 				.map((entries) => entries[0]!)
 				.map((entry) => (
 					<Isolated key={`${entry.plugin}:${entry.seq}`} plugin={entry.plugin}>
@@ -640,11 +651,11 @@ export function SessionToolbar({ session }: { session: SessionView }) {
 export function SessionMenuItems({ session, onClose }: { session: SessionView["summary"]; onClose(): void }) {
 	usePluginUis();
 	const { resolvedLocale } = useI18n();
-	if (!sessionMenuItems.length) return null;
+	if (!sessionMenuItems.list().length) return null;
 	return (
 		<>
 			<MenuSeparator />
-			{sessionMenuItems.map(({ key, item }) => (
+			{sessionMenuItems.list().map(({ key, item }) => (
 				<MenuItem
 					key={key}
 					icon={item.icon ? <item.icon size={13} /> : undefined}
@@ -674,7 +685,7 @@ function useUiService<K extends keyof UiServices>(name: K): UiServices[K] | unde
  */
 export function AgentDeliverySlot({ sessionId, reports, plugin }: AgentDeliveryProps & { plugin: string }) {
 	const version = usePluginRegistrations();
-	const entry = agentDeliveries.find((each) => each.plugin === plugin);
+	const entry = agentDeliveries.list().find((each) => each.plugin === plugin);
 	if (!entry) return null;
 	return (
 		<Isolated key={`${version}:${plugin}`} plugin={plugin}>
@@ -686,7 +697,7 @@ export function AgentDeliverySlot({ sessionId, reports, plugin }: AgentDeliveryP
 /** 这个插件登记了自己的送达行（`ui.agentDelivery`）；没登记、停用了的，送达画成宿主默认的一行。 */
 export function useDeliveryPlugins(): ReadonlySet<string> {
 	usePluginRegistrations();
-	return new Set(agentDeliveries.map((entry) => entry.plugin));
+	return new Set(agentDeliveries.list().map((entry) => entry.plugin));
 }
 
 function registerConversationCard(plugin: string, id: unknown, component: unknown, options: unknown): void {
@@ -697,11 +708,8 @@ function registerConversationCard(plugin: string, id: unknown, component: unknow
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	if (typeof lane !== "boolean") throw new Error("lane 必须是布尔值");
 	const key = `${plugin}/${id}`;
-	if (conversationCards.some((card) => card.key === key)) console.info(`[${plugin}] 跟着会话的卡片 ${id} 重新注册，替换上一次的`);
-	conversationCards = [
-		...conversationCards.filter((card) => card.key !== key),
-		{ key, plugin, order, lane, component: component as ComponentType<ConversationCardProps> },
-	].sort((a, b) => a.order - b.order);
+	if (conversationCards.has(key)) console.info(`[${plugin}] 跟着会话的卡片 ${id} 重新注册，替换上一次的`);
+	conversationCards.put(plugin, { key, plugin, order, lane, component: component as ComponentType<ConversationCardProps> }, { key, order });
 }
 
 /**
@@ -713,6 +721,7 @@ export function ConversationCards({ lane, ...props }: ConversationCardProps & { 
 	return (
 		<>
 			{conversationCards
+				.list()
 				.filter((card) => card.lane === lane)
 				.map((card) => (
 					<Isolated key={card.key} plugin={card.plugin}>
@@ -723,7 +732,7 @@ export function ConversationCards({ lane, ...props }: ConversationCardProps & { 
 	);
 }
 
-let environmentSections: EnvironmentSectionEntry[] = [];
+const environmentSections = registry.slot<EnvironmentSectionEntry>();
 
 function registerEnvironmentSection(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：插件作者的接口错误，只写入加载日志。
@@ -741,8 +750,8 @@ function registerEnvironmentSection(plugin: string, id: unknown, component: unkn
 			<Section {...props} />
 		</Isolated>
 	);
-	environmentSections = [
-		...environmentSections.filter((entry) => entry.key !== key),
+	environmentSections.put(
+		plugin,
 		{
 			key,
 			label: label as EnvironmentSectionEntry["label"],
@@ -750,7 +759,8 @@ function registerEnvironmentSection(plugin: string, id: unknown, component: unkn
 			component: Wrapped,
 			...(attention ? { attention: attentionProbe(plugin, attention as (session: SessionView) => string | undefined) } : {}),
 		},
-	].sort((a, b) => a.order - b.order);
+		{ key, order },
+	);
 }
 
 /** 把插件的 `attention` hook 包成一个什么都不画的组件：画卡片的插件挂上它，那句话变了经 `onChange` 告诉它；出错时当作没有。 */
@@ -770,10 +780,10 @@ function attentionProbe(plugin: string, use: (session: SessionView) => string | 
 
 function useEnvironmentSections(): readonly EnvironmentSectionEntry[] {
 	usePluginUis();
-	return environmentSections;
+	return environmentSections.list();
 }
 
-let turnFooters: Array<{ key: string; plugin: string; order: number; component: ComponentType<TurnFooterProps> }> = [];
+const turnFooters = registry.slot<{ key: string; plugin: string; order: number; component: ComponentType<TurnFooterProps> }>();
 
 function registerTurnFooter(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：插件作者的接口错误，只写入加载日志。
@@ -782,9 +792,7 @@ function registerTurnFooter(plugin: string, id: unknown, component: unknown, opt
 	const { order = 0 } = (options ?? {}) as Record<string, unknown>;
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	turnFooters = [...turnFooters.filter((entry) => entry.key !== key), { key, plugin, order, component: component as ComponentType<TurnFooterProps> }].sort(
-		(a, b) => a.order - b.order,
-	);
+	turnFooters.put(plugin, { key, plugin, order, component: component as ComponentType<TurnFooterProps> }, { key, order });
 }
 
 /** 跟着最新回复滚动；空组件不留槽位，错误只影响该插件。 */
@@ -792,7 +800,7 @@ export function TurnFooters(props: TurnFooterProps) {
 	const version = usePluginRegistrations();
 	return (
 		<>
-			{turnFooters.map((entry) => (
+			{turnFooters.list().map((entry) => (
 				<Isolated key={`${version}:${entry.key}:${props.session.summary.id}:${props.timestamp}`} plugin={entry.plugin}>
 					<entry.component {...props} />
 				</Isolated>
@@ -801,7 +809,7 @@ export function TurnFooters(props: TurnFooterProps) {
 	);
 }
 
-let replyActions: Array<{ key: string; plugin: string; order: number; component: ComponentType<ReplyActionProps> }> = [];
+const replyActions = registry.slot<{ key: string; plugin: string; order: number; component: ComponentType<ReplyActionProps> }>();
 
 function registerReplyAction(plugin: string, id: unknown, component: unknown, options: unknown): void {
 	// i18n-exempt：插件作者的接口错误，只写入加载日志。
@@ -810,9 +818,7 @@ function registerReplyAction(plugin: string, id: unknown, component: unknown, op
 	const { order = 0 } = (options ?? {}) as Record<string, unknown>;
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
-	replyActions = [...replyActions.filter((entry) => entry.key !== key), { key, plugin, order, component: component as ComponentType<ReplyActionProps> }].sort(
-		(a, b) => a.order - b.order,
-	);
+	replyActions.put(plugin, { key, plugin, order, component: component as ComponentType<ReplyActionProps> }, { key, order });
 }
 
 /** 回复底下那一排里插件的按钮；返回 null 的不占位，错误只影响该插件。 */
@@ -820,7 +826,7 @@ export function ReplyActions(props: ReplyActionProps) {
 	const version = usePluginRegistrations();
 	return (
 		<>
-			{replyActions.map((entry) => (
+			{replyActions.list().map((entry) => (
 				<Isolated key={`${version}:${entry.key}`} plugin={entry.plugin}>
 					<entry.component {...props} />
 				</Isolated>
@@ -857,25 +863,25 @@ export async function listMentions(context: { cwd?: string; sessionId?: string }
 }
 
 /** 输入框的灰字建议（`ui.composerHint`）和回复正文的过滤（`ui.replyText`），每个插件一个，按注册先后。 */
-let composerHints: Array<{ plugin: string; hint: (session: SessionView) => string | undefined }> = [];
-let replyTransforms: Array<{ plugin: string; transform: (text: string) => string }> = [];
+const composerHints = registry.slot<{ plugin: string; hint: (session: SessionView) => string | undefined }>();
+const replyTransforms = registry.slot<{ plugin: string; transform: (text: string) => string }>();
 
 function registerComposerHint(plugin: string, hint: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof hint !== "function") throw new Error("composerHint 需要一个函数");
-	composerHints = [...composerHints.filter((entry) => entry.plugin !== plugin), { plugin, hint: hint as (session: SessionView) => string | undefined }];
+	composerHints.put(plugin, { plugin, hint: hint as (session: SessionView) => string | undefined });
 }
 
 function registerReplyText(plugin: string, transform: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof transform !== "function") throw new Error("replyText 需要一个函数");
-	replyTransforms = [...replyTransforms.filter((entry) => entry.plugin !== plugin), { plugin, transform: transform as (text: string) => string }];
+	replyTransforms.put(plugin, { plugin, transform: transform as (text: string) => string });
 }
 
 /** 这个会话的输入框空着时显示的建议：第一个给出字的插件说了算。出错的插件跳过，只进日志。 */
 export function composerHint(session: SessionView | undefined): string | undefined {
 	if (!session) return undefined;
-	for (const { plugin, hint } of composerHints) {
+	for (const { plugin, hint } of composerHints.list()) {
 		try {
 			const text = hint(session);
 			if (typeof text === "string" && text.trim()) return text.trim();
@@ -887,22 +893,22 @@ export function composerHint(session: SessionView | undefined): string | undefin
 }
 
 /** 欢迎页问候下面的那一行（`ui.welcomeLine`），每个插件一个，按注册先后；只问最后一个。 */
-let welcomeLines: Array<{ plugin: string; line: (locale: Locale) => unknown }> = [];
+const welcomeLines = registry.slot<{ plugin: string; line: (locale: Locale) => unknown }>();
 
 function registerWelcomeLine(plugin: string, line: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof line !== "function") throw new Error("welcomeLine 需要一个函数");
-	welcomeLines = [...welcomeLines.filter((entry) => entry.plugin !== plugin), { plugin, line: line as (locale: Locale) => unknown }];
+	welcomeLines.put(plugin, { plugin, line: line as (locale: Locale) => unknown });
 }
 
 /** 有没有插件要换欢迎页的那一行：有就等它的答复，不先显示产品默认的那一句再换掉。 */
 export function hasWelcomeLine(): boolean {
-	return welcomeLines.length > 0;
+	return welcomeLines.list().length > 0;
 }
 
 /** 欢迎页这次显示的那一行：最后注册的插件说了算，没给、给空、出错都是 undefined（出错进日志）。 */
 export async function welcomeLine(locale: Locale): Promise<WelcomeLine | undefined> {
-	const entry = welcomeLines.at(-1);
+	const entry = welcomeLines.list().at(-1);
 	if (!entry) return undefined;
 	try {
 		const value = (await entry.line(locale)) as Partial<WelcomeLine> | undefined;
@@ -919,7 +925,7 @@ export async function welcomeLine(locale: Locale): Promise<WelcomeLine | undefin
 /** 回复正文画出来、复制出去之前过一遍插件的过滤。出错的那一个跳过，字照原样往下传。 */
 export function replyText(text: string): string {
 	let out = text;
-	for (const { plugin, transform } of replyTransforms) {
+	for (const { plugin, transform } of replyTransforms.list()) {
 		try {
 			const next = transform(out);
 			if (typeof next === "string") out = next;
@@ -931,12 +937,12 @@ export function replyText(text: string): string {
 }
 
 /** 侧栏会话行首的记号（`ui.sessionMark`），每个插件一个，按注册先后套起来，先注册的在外层。 */
-let sessionMarks: Array<{ plugin: string; component: ComponentType<SessionMarkProps> }> = [];
+const sessionMarks = registry.slot<{ plugin: string; component: ComponentType<SessionMarkProps> }>();
 
 function registerSessionMark(plugin: string, component: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error("sessionMark 需要一个组件");
-	sessionMarks = [...sessionMarks.filter((entry) => entry.plugin !== plugin), { plugin, component: component as ComponentType<SessionMarkProps> }];
+	sessionMarks.put(plugin, { plugin, component: component as ComponentType<SessionMarkProps> });
 }
 
 /** 会话行首空闲时那一格：各插件的记号一层套一层，最里层是 `fallback`（产品的空心圈）。渲染出错的那一层让给里面的。 */
@@ -946,7 +952,7 @@ export function SessionMarks({ session, fallback }: SessionMarkProps) {
 }
 
 function MarkLayer({ index, session, fallback }: SessionMarkProps & { index: number }) {
-	const entry = sessionMarks[index];
+	const entry = sessionMarks.list()[index];
 	if (!entry) return <>{fallback}</>;
 	const inner = <MarkLayer index={index + 1} session={session} fallback={fallback} />;
 	const Mark = entry.component;
@@ -958,13 +964,13 @@ function MarkLayer({ index, session, fallback }: SessionMarkProps & { index: num
 }
 
 /** 网址、文件签的别的打开方式（`ui.linkOpener`），每个插件一个，按注册先后。 */
-let linkOpeners: Array<{ plugin: string; opener: LinkOpener }> = [];
+const linkOpeners = registry.slot<{ plugin: string; opener: LinkOpener }>();
 
 function registerLinkOpener(plugin: string, opener: unknown): void {
 	const value = opener as Partial<LinkOpener> | null;
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (!value || typeof value.open !== "function" || !validTitle(value.label)) throw new Error("linkOpener 需要 label 和 open");
-	linkOpeners = [...linkOpeners.filter((entry) => entry.plugin !== plugin), { plugin, opener: value as LinkOpener }];
+	linkOpeners.put(plugin, { plugin, opener: value as LinkOpener });
 }
 
 /** 一种打开方式，问它的几样都接住错：插件出错不该让回复画不出来、链接点不动。 */
@@ -999,27 +1005,33 @@ function asks(plugin: string, question: () => boolean | undefined): boolean {
 
 /** 开得了网址的几种。 */
 export function webOpeners(): LinkChoice[] {
-	return linkOpeners.filter((entry) => entry.opener.web === true).map(choiceOf);
+	return linkOpeners
+		.list()
+		.filter((entry) => entry.opener.web === true)
+		.map(choiceOf);
 }
 
 /** 点网址时接手的那一种；没有就交给系统浏览器。 */
 export function clickOpener(): LinkChoice | undefined {
-	const taken = linkOpeners.find((entry) => entry.opener.web === true && asks(entry.plugin, () => entry.opener.takesClicks?.()));
+	const taken = linkOpeners.list().find((entry) => entry.opener.web === true && asks(entry.plugin, () => entry.opener.takesClicks?.()));
 	return taken && choiceOf(taken);
 }
 
 /** 开得了这个本机文件的几种。 */
 export function fileOpeners(path: string): LinkChoice[] {
-	return linkOpeners.filter((entry) => asks(entry.plugin, () => entry.opener.file?.(path))).map(choiceOf);
+	return linkOpeners
+		.list()
+		.filter((entry) => asks(entry.plugin, () => entry.opener.file?.(path)))
+		.map(choiceOf);
 }
 
 /** 排队消息「更多」菜单里插件加的项（`ui.queueAction`），每个插件一个，按注册先后。 */
-let queueActions: Array<{ plugin: string; action: QueueAction }> = [];
-let quoteActions: Array<{ plugin: string; action: QuoteAction }> = [];
+const queueActions = registry.slot<{ plugin: string; action: QueueAction }>();
+const quoteActions = registry.slot<{ plugin: string; action: QuoteAction }>();
 
 export function useQuoteActions(): readonly QuoteAction[] {
 	usePluginUis();
-	const entries = quoteActions;
+	const entries = quoteActions.list();
 	return useMemo(() => entries.map(({ action }) => action), [entries]);
 }
 
@@ -1027,7 +1039,7 @@ function registerQueueAction(plugin: string, action: unknown): void {
 	const value = action as Partial<QueueAction> | null;
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (!value || typeof value.run !== "function" || !validTitle(value.label)) throw new Error("queueAction 需要 label 和 run");
-	queueActions = [...queueActions.filter((entry) => entry.plugin !== plugin), { plugin, action: value as QueueAction }];
+	queueActions.put(plugin, { plugin, action: value as QueueAction });
 }
 
 /** 一项菜单，`run` 接住错：插件出错只弹提示。 */
@@ -1041,7 +1053,7 @@ export interface QueueChoice {
 /** React hook：插件加的排队菜单项，插件装上、停用时跟着变。 */
 export function useQueueActions(): QueueChoice[] {
 	usePluginUis();
-	return queueActions.map(({ plugin, action }) => ({
+	return queueActions.list().map(({ plugin, action }) => ({
 		key: plugin,
 		label: (locale: Locale) => localized(action.label, locale),
 		...(action.icon ? { icon: action.icon } : {}),
@@ -1054,15 +1066,12 @@ export function useQueueActions(): QueueChoice[] {
 }
 
 /** 删除确认框里各插件补的话（`ui.deleteNote`），每个插件一个，按注册先后。 */
-let deleteNoteEntries: Array<{ plugin: string; note: (sessionId: string, locale: Locale) => unknown }> = [];
+const deleteNoteEntries = registry.slot<{ plugin: string; note: (sessionId: string, locale: Locale) => unknown }>();
 
 function registerDeleteNote(plugin: string, note: unknown): void {
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof note !== "function") throw new Error("deleteNote 需要一个函数");
-	deleteNoteEntries = [
-		...deleteNoteEntries.filter((entry) => entry.plugin !== plugin),
-		{ plugin, note: note as (sessionId: string, locale: Locale) => unknown },
-	];
+	deleteNoteEntries.put(plugin, { plugin, note: note as (sessionId: string, locale: Locale) => unknown });
 }
 
 /** 确认框是人点了删除才开的，等久了像没反应：答得慢的插件不等，它那句不写。 */
@@ -1071,7 +1080,7 @@ const DELETE_NOTE_WAIT = 600;
 /** 删掉这个会话之前各插件要补的话，按注册先后。出错、超时、没话说的跳过，出错的只进日志。 */
 export async function deleteNotes(sessionId: string, locale: Locale): Promise<string[]> {
 	const answers = await Promise.all(
-		deleteNoteEntries.map(async ({ plugin, note }) => {
+		deleteNoteEntries.list().map(async ({ plugin, note }) => {
 			let timer: number | undefined;
 			try {
 				const answer = await Promise.race([
@@ -1207,7 +1216,7 @@ export interface SettingsSectionEntry {
 	component: ComponentType<ExtensionsSectionProps>;
 }
 
-let settingsSections: SettingsSectionEntry[] = [];
+const settingsSections = registry.slot<SettingsSectionEntry>();
 const SETTINGS_PAGES: ReadonlySet<string> = new Set([
 	"nav",
 	"general",
@@ -1243,7 +1252,7 @@ function registerSettingsSection(plugin: string, id: unknown, component: unknown
 	if (actions !== undefined && (!Array.isArray(actions) || !actions.every((action: unknown) => validAction(action))))
 		throw new Error(`设置分区 ${id} 的 actions 每一项要有名字和 run`);
 	const key = `${plugin}/${id}`;
-	if (settingsSections.some((section) => section.key === key)) console.info(`[${plugin}] 设置分区 ${id} 重新注册，替换上一次的`);
+	if (settingsSections.has(key)) console.info(`[${plugin}] 设置分区 ${id} 重新注册，替换上一次的`);
 	const entry: SettingsSectionEntry = {
 		key,
 		plugin,
@@ -1256,22 +1265,22 @@ function registerSettingsSection(plugin: string, id: unknown, component: unknown
 		...(actions === undefined ? {} : { actions: actions as SectionAction[] }),
 		component: component as ComponentType<ExtensionsSectionProps>,
 	};
-	settingsSections = [...settingsSections.filter((section) => section.key !== key), entry].sort((a, b) => a.order - b.order);
+	settingsSections.put(plugin, entry, { key, order });
 }
 
 /** 插件加的、单独占导航一行的设置分区，按 order 排好；在导航哪一组看 `group`。变化经 usePluginUis 通知。 */
 export function listSettingsSections(): readonly SettingsSectionEntry[] {
-	return settingsSections.filter((section) => section.page === "nav");
+	return settingsSections.list().filter((section) => section.page === "nav");
 }
 
 /** 一个插件加的全部设置分区，按 order 排好：插件详情画没给 `page` 的，给了的列成去那里的入口。变化经 usePluginUis 通知。 */
 export function listPluginSettingsSections(plugin: string): readonly SettingsSectionEntry[] {
-	return settingsSections.filter((section) => section.plugin === plugin);
+	return settingsSections.list().filter((section) => section.plugin === plugin);
 }
 
 /** 插件画进产品某一页的设置分区，按 order 排好。变化经 usePluginUis 通知。 */
 export function listPageSettingsSections(page: Exclude<SettingsSectionOptions["page"], "nav" | undefined>): readonly SettingsSectionEntry[] {
-	return settingsSections.filter((section) => section.page === page);
+	return settingsSections.list().filter((section) => section.page === page);
 }
 
 /** 截屏浮层、钉图窗口里画的组件：各只用一个，后注册的生效，它撤下后前一个恢复。 */
@@ -1387,7 +1396,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		codeBlock: (language, component, options) => {
 			if (options?.copyText !== undefined && typeof options.copyText !== "function") throw new Error("copyText must be a function");
-			const entry = register(codeBlocks, "正文代码块", name, language.trim().toLowerCase(), component, options);
+			const entry = register(codeBlocks, "正文代码块", name, language.trim().toLowerCase(), component, options, "语言");
 			if (options?.copyText) codeCopies.set(entry, options.copyText);
 		},
 		toolCard: (tool, component, options) => {
@@ -1397,7 +1406,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		toolLine: (tool, line, options) => registerToolLine(name, tool, line, options),
 		approvalCard: (tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options),
-		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options),
+		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind"),
 		panel: (id, component, options) => registerPanel(name, id, component, options),
 		page: (id, component, options) => registerPage(name, id, component, options),
 		skin: (skin) => {
@@ -1422,13 +1431,13 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		sessionMenuItem: (id, item) => {
 			if (!id || !validTitle(item?.label) || typeof item?.run !== "function") throw new Error("Invalid sessionMenuItem");
 			const key = `${name}/${id}`;
-			sessionMenuItems = [...sessionMenuItems.filter((entry) => entry.key !== key), { key, plugin: name, item }];
+			sessionMenuItems.put(name, { key, plugin: name, item }, { key });
 		},
 		provide: (service, implementation) => provideUiService(name, service, implementation),
 		useService: useUiService,
 		agentDelivery: (component) => {
 			if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error("Invalid agentDelivery");
-			agentDeliveries = [...agentDeliveries.filter((entry) => entry.plugin !== name), { plugin: name, component }];
+			agentDeliveries.put(name, { plugin: name, component });
 		},
 		ProjectOpener,
 		mentions: (provider) => {
@@ -1445,7 +1454,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		queueAction: (action) => registerQueueAction(name, action),
 		quoteAction: (action) => {
 			if (!validTitle(action?.label) || typeof action?.run !== "function") throw new Error("quoteAction requires label and run");
-			quoteActions = [...quoteActions.filter((entry) => entry.plugin !== name), { plugin: name, action }];
+			quoteActions.put(name, { plugin: name, action });
 		},
 		quoteInPanel: (id, sessionId, quote) => {
 			const key = `${name}/${String(id)}`;
@@ -1553,7 +1562,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		openPage: (id) => {
 			const key = `${name}/${String(id)}`;
-			if (!pages.some((page) => page.key === key)) throw new Error("The plugin page is not registered.");
+			if (!pages.has(key)) throw new Error("The plugin page is not registered.");
 			host?.openPage(key);
 		},
 		pageBadge: (id, badge) => setPageBadge(name, id, badge),
@@ -1614,43 +1623,17 @@ const applied = new Map<string, string>();
 /** 两次同步挨得近时排队，后一次按前一次的结果对账。 */
 let syncing: Promise<void> = Promise.resolve();
 
-/** 撤下一个插件登记的卡片、工具说法、面板、页面和皮肤。 */
+/** 撤下一个插件登记的界面：槽位和接手者经 `registry` 一次撤掉，有自己逻辑的（工具说法、面板和快捷键、页面角标、皮肤……）在这里逐个撤。 */
 function unloadPluginUi(name: string): void {
 	lifetimes.get(name)?.dispose();
 	lifetimes.delete(name);
 	removeToolLines(name);
-	for (const table of [codeBlocks, toolCards, toolPrefixes, approvalCards, requestCards] as Map<string, Entry<unknown>[]>[]) {
-		for (const [tool, list] of table) {
-			const kept = list.filter((entry) => entry.plugin !== name);
-			if (kept.length > 0) table.set(tool, kept);
-			else table.delete(tool);
-		}
-	}
+	registry.removePlugin(name);
 	for (const panel of panels) if (panel.plugin === name) wantedShortcuts.delete(panel.key);
 	panels = assignShortcuts(panels.filter((panel) => panel.plugin !== name));
-	pages = pages.filter((page) => page.plugin !== name);
 	for (const key of pageBadges.keys()) if (key.startsWith(`${name}/`)) pageBadges.delete(key);
-	composerItems = composerItems.filter((item) => item.plugin !== name);
-	composerChips = composerChips.filter((chip) => chip.plugin !== name);
-	composerAbove = composerAbove.filter((entry) => entry.plugin !== name);
-	conversationCards = conversationCards.filter((card) => card.plugin !== name);
-	environmentSections = environmentSections.filter((entry) => !entry.key.startsWith(`${name}/`));
-	for (const [key, entries] of sessionToolbar) if (entries.some((entry) => entry.plugin === name)) sessionToolbar.delete(key);
-	sessionMenuItems = sessionMenuItems.filter((entry) => entry.plugin !== name);
 	removeUiServices(name);
-	agentDeliveries = agentDeliveries.filter((entry) => entry.plugin !== name);
-	turnFooters = turnFooters.filter((entry) => entry.plugin !== name);
-	replyActions = replyActions.filter((entry) => entry.plugin !== name);
 	mentionProviders.delete(name);
-	composerHints = composerHints.filter((entry) => entry.plugin !== name);
-	welcomeLines = welcomeLines.filter((entry) => entry.plugin !== name);
-	replyTransforms = replyTransforms.filter((entry) => entry.plugin !== name);
-	sessionMarks = sessionMarks.filter((entry) => entry.plugin !== name);
-	deleteNoteEntries = deleteNoteEntries.filter((entry) => entry.plugin !== name);
-	linkOpeners = linkOpeners.filter((entry) => entry.plugin !== name);
-	queueActions = queueActions.filter((entry) => entry.plugin !== name);
-	quoteActions = quoteActions.filter((entry) => entry.plugin !== name);
-	settingsSections = settingsSections.filter((section) => section.plugin !== name);
 	singles.screenOverlay = singles.screenOverlay.filter((entry) => entry.plugin !== name);
 	singles.pinnedShot = singles.pinnedShot.filter((entry) => entry.plugin !== name);
 	void window.plume.screen.setShortcut(name, null);
@@ -1711,12 +1694,12 @@ function notifyPluginSignals(): void {
 
 /** 有插件给这个工具登记了卡片：画它的那一行时交给卡片（`ToolCardSlot`）。登记变了用 `usePluginUis` 的修订号重问。 */
 export function hasToolCard(tool: string): boolean {
-	return matchingToolCards(tool, toolCards, toolPrefixes).length > 0;
+	return matchingToolCards(tool, toolCards.table, toolPrefixes.table).length > 0;
 }
 
 /** 这次调用在转录里单独一行，不和别的调用合成一段：登记了不是 `inline` 的卡片，或者 `inline` 的函数对这次说了 false。 */
 export function ownsToolRow(call: { name: string; arguments: Record<string, unknown>; argumentsText?: string }): boolean {
-	return matchingToolCards(call.name, toolCards, toolPrefixes).some((entry) => {
+	return matchingToolCards(call.name, toolCards.table, toolPrefixes.table).some((entry) => {
 		const inline = inlineCards.get(entry);
 		if (typeof inline !== "function") return !inline;
 		// 插件的判断出错时按没说 inline 算：单独一行，卡片照常画出来。
@@ -1731,10 +1714,10 @@ export function ownsToolRow(call: { name: string; arguments: Record<string, unkn
 // 登记变了就从头再试一遍注册者：key 换成新的修订号，Chain 里记的「试到第几个」跟着清掉。
 export function ToolCardSlot(props: ToolCardProps) {
 	const version = usePluginRegistrations();
-	const entries = matchingToolCards(props.call.name, toolCards, toolPrefixes);
+	const entries = matchingToolCards(props.call.name, toolCards.table, toolPrefixes.table);
 	const send: ToolCardProps["send"] = props.send
 		? async (text, event, displayText) => {
-				const current = matchingToolCards(props.call.name, toolCards, toolPrefixes);
+				const current = matchingToolCards(props.call.name, toolCards.table, toolPrefixes.table);
 				if (current.length !== entries.length || current.some((entry, index) => entry !== entries[index])) throw new Error("Tool card renderer is inactive");
 				await props.send!(text, event, displayText);
 			}
