@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { basename, join } from "node:path";
 import { BrowserWindow } from "electron";
+import { clickEachVisible, clickVisibleIn, contextMenuVisible } from "./smoke-kit.ts";
 
 /**
  * 会话菜单开出真实独立窗口，验证外壳（贴顶的标题栏、没有卡片、不透明）、置顶、面板或文件交给主窗口、回到主窗口，
@@ -53,9 +54,7 @@ export async function checkSessionWindow(options: {
 	};
 	try {
 		await until(`document.querySelector(${JSON.stringify(sessionMenu)}) === null`, "上一次会话菜单已关闭");
-		await page(
-			`(() => { const row = document.querySelector(${JSON.stringify(row(other))}); const rect = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left + 80, clientY: rect.top + 16 })); })()`,
-		);
+		await contextMenuVisible(page, row(other), 80, 16);
 		await until(`document.querySelector(${JSON.stringify(sessionMenu)}) !== null`, "会话右键菜单出现");
 		assert.equal(
 			await page(`document.querySelector(${JSON.stringify(sessionMenu)})?.textContent.includes('分屏')`),
@@ -105,7 +104,7 @@ export async function checkSessionWindow(options: {
 			assert.deepEqual(detached.getWindowButtonPosition(), { x: 16, y: 15 }, "红绿灯在贴顶的 44px 标题栏里居中");
 		}
 		await capture(detached, join(outDir, "smoke-session-window.png"));
-		await inDetached(`document.querySelector('[data-keep-on-top]').closest('button').click()`);
+		await clickVisibleIn(inDetached, `[document.querySelector('[data-keep-on-top]')?.closest('button')]`, "置顶按钮");
 		await untilDetached(`document.querySelector('[data-keep-on-top]')?.dataset.keepOnTop === 'true'`, "会话窗口置顶");
 		assert.ok(detached.isAlwaysOnTop(), "会话窗口应该置顶了");
 		// 同一段会话再开一次只把那个窗口拿到前面来，不开第二个。
@@ -147,7 +146,7 @@ export async function checkSessionWindow(options: {
 			`${selected(sessionId)} && document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(finalText)})`,
 			"回到主窗口前先切走来源会话",
 		);
-		await inDetached(`document.querySelector('[data-open-in-main]').closest('button').click()`);
+		await clickVisibleIn(inDetached, `[document.querySelector('[data-open-in-main]')?.closest('button')]`, "回到主窗口");
 		await until(
 			`(async () => (await window.plume.sessionWindows.list()).length === 0 && ${selected(other)} && document.querySelector('[data-plume-screen-title]')?.textContent === ${JSON.stringify(title)} && document.querySelector('[data-screen=chat] [data-plume-quote=assistant]') !== null)()`,
 			"回到主窗口：会话窗口关掉，主窗口打开那段会话",
@@ -164,9 +163,7 @@ export async function checkSessionWindow(options: {
 			() => reopened.webContents.executeJavaScript(`document.querySelector('[data-screen=chat] [data-plume-quote=assistant]') !== null`),
 			"再开的会话窗口画出对话",
 		);
-		await page(
-			`(() => { const row = document.querySelector(${JSON.stringify(row(other))}); const rect = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left + 80, clientY: rect.top + 16 })); })()`,
-		);
+		await contextMenuVisible(page, row(other), 80, 16);
 		await until(`document.querySelector(${JSON.stringify(sessionMenu)}) !== null`, "归档用的会话菜单出现");
 		await click(`${sessionMenu} [role=menuitem]`, "归档");
 		await until(`window.plume.sessionWindows.list().then(list => list.length === 0)`, "会话归档后独立窗口关掉");
@@ -177,7 +174,7 @@ export async function checkSessionWindow(options: {
 		await click("[aria-label=设置章节] button", "已归档的聊天");
 		const archivedRow = `[data-plume-archive-row="${other}"]`;
 		await until(`document.querySelector('[data-plume-archive-group]') !== null`, "已归档里列出会话");
-		await page(`document.querySelectorAll('[data-plume-archive-group][data-open=false] > button').forEach(button => button.click())`);
+		await clickEachVisible(page, "[data-plume-archive-group][data-open=false] > button");
 		await until(`document.querySelector(${JSON.stringify(archivedRow)}) !== null`, "已归档里找到这段会话");
 		await click(`${archivedRow} button`, "取消归档");
 		await until(`document.querySelector(${JSON.stringify(archivedRow)}) === null`, "取消归档");

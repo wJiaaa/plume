@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { nativeClick, nativeEnter } from "./smoke-message-edits.ts";
+import { nativeEnter } from "./smoke-message-edits.ts";
+import { clickRealIn, lastOf } from "./smoke-kit.ts";
 
 /**
  * 排队条的「更多」菜单经真界面走一遍：主会话正忙（假模型挂着不收尾）时回车，话落进排队条；装着侧边聊天时这一行是
@@ -77,7 +78,7 @@ export async function checkQueueActions(options: {
 		// 侧边聊天里只有编辑重问：按钮在最后那句底下，编辑框的确认叫「重新提问」。
 		if (await page(`document.querySelector('${side} [data-message-undo], ${side} [data-message-fork]') !== null`))
 			throw new Error("侧边聊天里不该有撤回和分叉");
-		await nativeClick(window, page, `${side} [data-message-edit]`);
+		await clickRealIn(window, lastOf(`${side} [data-message-edit]`), "侧边聊天最后一条消息的编辑");
 		await until(`document.querySelector('${side} textarea') !== null`, "侧边聊天的编辑框出现");
 		if (!(await page(`document.querySelector('${side} button[data-plume-tip="重新提问"]') !== null`)))
 			throw new Error("侧边聊天编辑框的确认应该叫「重新提问」");

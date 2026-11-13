@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { clipboard, type BrowserWindow } from "electron";
+import { clickVisible, containing, contextMenuVisible } from "./smoke-kit.ts";
 
 /**
  * 文字框的右键菜单：在输入框（CodeMirror）里右键，全选、剪切、粘贴都作用在输入框里；没选中时「剪切」是灰的。
@@ -22,18 +23,13 @@ export async function checkInputMenu(options: { window: BrowserWindow; outDir: s
 		`[...${menu}?.querySelectorAll('[role=menuitem]') ?? []].find((element) => element.textContent.includes(${JSON.stringify(label)}))`;
 	// 空着时 CodeMirror 在里面画占位文字，读正文要把它去掉。
 	const composerText = `[...document.querySelectorAll('.cm-content .cm-line')].map((line) => { const copy = line.cloneNode(true); copy.querySelectorAll('.cm-placeholder').forEach((node) => node.remove()); return copy.textContent; }).join('\\n')`;
-	// 在输入框中间右键：派发 contextmenu 就是系统右键交给页面的那一下。
+	// 在输入框里右键：派发 contextmenu 就是系统右键交给页面的那一下。
 	const rightClick = async (selector = ".cm-content") => {
-		await page(`(() => {
-			const field = document.querySelector(${JSON.stringify(selector)});
-			const box = field.getBoundingClientRect();
-			field.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + 12, clientY: box.top + box.height / 2 }));
-		})()`);
+		await contextMenuVisible(page, selector, 12, 12);
 		await until(`${menu} !== null`, "右键菜单弹出");
 	};
 	const choose = async (label: string) => {
-		await until(`${item(label)}?.disabled === false`, `「${label}」可点`);
-		await page(`${item(label)}.click()`);
+		await clickVisible(page, "[data-plume-popover][role=menu] [role=menuitem]", containing(label));
 		await until(`${menu} === null`, `点了「${label}」菜单收起`);
 	};
 

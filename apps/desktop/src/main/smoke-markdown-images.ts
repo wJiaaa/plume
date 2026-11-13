@@ -5,6 +5,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { net, protocol, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickEachVisible, clickVisible } from "./smoke-kit.ts";
 
 /** 无图片插件的真窗口验证显示、目录边界、文件刷新；网络仅替换指定测试域名。 */
 export async function checkMarkdownImages(options: {
@@ -26,7 +27,7 @@ export async function checkMarkdownImages(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(text);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 	};
 	const capture = async (name: string) => {
 		await page(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -89,7 +90,7 @@ export async function checkMarkdownImages(options: {
 		}
 		const documentLink = `[data-file-link] a[href=${JSON.stringify(join(docs, "readme.md"))}]`;
 		await until(`document.querySelector(${JSON.stringify(documentLink)}) !== null`, "平滑出字到文档链接");
-		await page(`document.querySelector(${JSON.stringify(documentLink)}).click()`);
+		await clickVisible(page, documentLink);
 		await until(`document.querySelector('[data-panel]:not([inert]) img[alt="文档相对图"]')?.naturalWidth === 240`, "文档相对图");
 		await until(`document.querySelector('[data-panel]:not([inert]) img[alt="远程图"]')?.naturalWidth === 240`, "HTTPS 文档图片");
 		assert.equal(remoteRequests, 1);
@@ -100,7 +101,7 @@ export async function checkMarkdownImages(options: {
 			"徽章保持行内和作者尺寸",
 		);
 		await capture("smoke-markdown-images-document.png");
-		await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+		await clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 		await writeFile(join(root, "picture.svg"), svg("Updated image"));
 		setModel(() => ({ text: "更新图片：\n\n![更新图](picture.svg)" }));
 		await send("查看更新图片");
@@ -120,7 +121,7 @@ export async function checkMarkdownImages(options: {
 		await send("检查占位");
 		await until(`document.querySelector('.md-image-pending') !== null`, "未完成图片占位");
 		await capture("smoke-markdown-images-pending.png");
-		await page(`document.querySelector('[data-composer-send=stop]').click()`);
+		await clickVisible(page, `[data-composer-send=stop]`);
 		await until(`document.querySelector('[data-composer-send=stop]') === null`, "停止流式");
 		const size = window.getSize();
 		window.setSize(600, size[1]!);

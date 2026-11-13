@@ -141,7 +141,7 @@ export async function checkSteward(options: {
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "新建对话");
 		await click("[data-permission-chip]");
 		await until(`document.querySelectorAll('[role=menuitem]').length === 3`, "权限菜单列出三档");
-		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim().startsWith('请求批准')).click()`);
+		await clickVisible(page, `[role=menuitem]`, /^请求批准/);
 		await until(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'ask'`, "权限签切到「请求批准」");
 
 		// 2. 面板里开一个代管会话，转过去；标题栏标着由谁代管。

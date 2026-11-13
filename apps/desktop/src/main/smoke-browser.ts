@@ -7,6 +7,8 @@ import type { FakeReply } from "@plume/agent/testing";
 import { BrowserWindow, webContents } from "electron";
 import type { Remote } from "@plume/rpc";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible, contextMenuVisibleIn, lastOf } from "./smoke-kit.ts";
+import { windowClosed } from "./smoke-panels.ts";
 
 /** 冒烟里假模型的一次请求：看得到工具表和消息，回一段。 */
 export type ModelOverride = (request: Record<string, unknown>) => FakeReply;
@@ -81,9 +83,9 @@ export async function checkBrowser(options: {
 
 		// 从开始页开一个浏览器标签：空白页，地址栏打开本机那一页。
 		const panel = '[data-panel="plume.browser/browser"]:not([inert])';
-		await page(`document.querySelector('button[data-panel-add]').click()`);
+		await clickVisible(page, `button[data-panel-add]`);
 		await until(`document.querySelector('[data-panel-launch="plume.browser/browser"]') !== null`, "开始页列出浏览器");
-		await page(`document.querySelector('[data-panel-launch="plume.browser/browser"]').click()`);
+		await clickVisible(page, `[data-panel-launch="plume.browser/browser"]`);
 		await until(
 			`document.querySelector('${panel} [data-browser-empty]') !== null && document.querySelector('${panel} [data-browser-omnibox] input') !== null`,
 			"开出空白的浏览器标签",
@@ -136,7 +138,7 @@ export async function checkBrowser(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("看一下浏览器里的页面");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "发送按钮可用");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('浏览器验证完成。')`, "agent 操作完网页", 60_000);
 		options.setModel(undefined);
 		const last = seen.at(-1) ?? "";
@@ -165,7 +167,7 @@ export async function checkBrowser(options: {
 		await waitMain(() => titled("Local smoke")?.getURL().startsWith("http://127.0.0.1:") === true, "地址栏打开磁盘上的 .html");
 
 		// 弹到独立窗口：那边挂上新的 `<webview>`，同一页接过去；收回来再回到主窗口。
-		await page(`document.querySelector('button[aria-label="在新窗口中打开"]').click()`);
+		await clickVisible(page, `button[aria-label="在新窗口中打开"]`);
 		await waitMain(() => BrowserWindow.getAllWindows().some((candidate) => candidate !== window && candidate.isVisible()), "浏览器标签弹到独立窗口");
 		const detached = BrowserWindow.getAllWindows().find((candidate) => candidate !== window && candidate.isVisible())!;
 		await waitMain(() => titled("Local smoke")?.hostWebContents?.id === detached.webContents.id, "独立窗口里接上同一页");
@@ -173,13 +175,12 @@ export async function checkBrowser(options: {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 		await writeFile(join(outDir, "smoke-browser-window.png"), (await detached.webContents.capturePage()).toPNG());
 		// 收回时独立窗口跟着关掉，这一次脚本的结果回不来。
-		await page(`document.querySelector('button[aria-label="收回"]').click()`, detached).catch(() => {});
+		await clickVisible((code: string) => page(code, detached), `button[aria-label="收回"]`).catch(windowClosed);
 		await waitMain(() => titled("Local smoke")?.hostWebContents?.id === window.webContents.id, "收回主窗口后接上同一页");
 
 		// 右键回复里的网址：在内置浏览器里开出这个会话的一个新标签。
-		await page(
-			`(() => { const link = document.querySelector('[data-screen=chat] a[href="${url}other"]'); const box = link.getBoundingClientRect(); link.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: box.left + 2, clientY: box.top + 2 })); })()`,
-		);
+		// 会话里还留着前面没做完的计划，清单插件在这一轮收尾时追问一次，假模型照样再答一遍：同样的链接有两条，右键最后那条。
+		await contextMenuVisibleIn(page, lastOf(`[data-screen=chat] a[href="${url}other"]`), "回复里的「另一页」", 2, 2);
 		await until(
 			`[...document.querySelectorAll('[role=menuitem]')].some((item) => item.textContent.trim() === '在内置浏览器打开')`,
 			"网址的右键菜单列出内置浏览器",
@@ -187,16 +188,16 @@ export async function checkBrowser(options: {
 		// 第一行说出默认浏览器的名字；这台机器查不到时退回「系统浏览器」。
 		const first = await page<string>(`document.querySelector('[role=menuitem]').textContent.trim()`);
 		assert.match(first, /^在 .+ 中打开$|^在系统浏览器中打开$/, "网址右键菜单的第一行是系统浏览器");
-		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim() === '在内置浏览器打开').click()`);
+		await clickVisible(page, `[role=menuitem]`, "在内置浏览器打开");
 		await waitMain(() => guests().some((contents) => contents.getURL() === `${url}other`), "内置浏览器开出回复里的网址");
 		// 原来那页、target=_blank 开出的后台标签，加上这一个。
 		await until(`document.querySelectorAll('[data-panel-tab="plume.browser/browser"]').length === 3`, "开成一个新标签");
 
 		// 经菜单逐个关掉标签，页面跟着没了。
 		for (let left = 3; left > 0; left--) {
-			await page(`document.querySelector('${panel} button[aria-label="浏览器菜单"]').click()`);
+			await clickVisible(page, `${panel} button[aria-label="浏览器菜单"]`);
 			await until(`[...document.querySelectorAll('[role=menuitem]')].some((item) => item.textContent.trim() === '关闭标签页')`, "浏览器菜单打开");
-			await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim() === '关闭标签页').click()`);
+			await clickVisible(page, `[role=menuitem]`, "关闭标签页");
 			await until(`document.querySelectorAll('[data-panel-tab="plume.browser/browser"]').length === ${left - 1}`, "关掉浏览器标签");
 		}
 		await until(`document.querySelector('[data-panel="plume.browser/browser"]') === null`, "浏览器标签都关了");

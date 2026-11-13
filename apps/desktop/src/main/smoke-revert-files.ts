@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { nativeClick } from "./smoke-message-edits.ts";
+import { clickRealIn, lastOf } from "./smoke-kit.ts";
 
 /**
  * 撤回时连文件一起退回，经真界面走一遍：让假模型在项目里新建一个文件，撤回那一问时确认框列出这个文件，选「撤回对话和文件」，
@@ -54,7 +54,7 @@ export async function checkRevertFiles(options: {
 		await ask();
 
 		// 能安全退回：列出文件和增删行数，主按钮是连文件一起撤。
-		await nativeClick(window, page, `${chat} [data-message-undo]`);
+		await clickRealIn(window, lastOf(`${chat} [data-message-undo]`), "最后一条消息的撤回");
 		await until(`${dialog}?.querySelector('[data-revert-file]')?.textContent.includes(${JSON.stringify(name)})`, "撤回先列出要退回的文件");
 		await capture(window, join(outDir, "smoke-revert-files.png"));
 		await click("[role=dialog] button", "撤回对话和文件");
@@ -67,7 +67,7 @@ export async function checkRevertFiles(options: {
 		// 之后被人改过：标出来，只能撤回对话，人改过的文件不动。
 		await ask();
 		await writeFile(path, "人改过\n");
-		await nativeClick(window, page, `${chat} [data-message-undo]`);
+		await clickRealIn(window, lastOf(`${chat} [data-message-undo]`), "最后一条消息的撤回");
 		await until(`${dialog}?.querySelector('[data-revert-file]')?.textContent.includes('之后被改过')`, "被改过的文件标出来");
 		if (await page(`[...${dialog}.querySelectorAll('button')].some((button) => button.textContent.trim() === '撤回对话和文件')`))
 			throw new Error("有文件不能安全退回时不应该给「撤回对话和文件」");

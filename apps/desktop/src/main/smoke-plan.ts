@@ -5,6 +5,7 @@ import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { toolResult } from "./smoke-question.ts";
+import { clickVisible } from "./smoke-kit.ts";
 
 const ASK = "冒烟计划：把 hello.txt 里的 hello 改成 planned";
 const ROUND2 = "冒烟计划：按原样再交一次";
@@ -60,7 +61,7 @@ export async function checkPlan(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(text);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, `「${text}」可以发送`);
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 	};
 	// 开关是插件画的 `ComposerToggle`：开着时说「退出计划模式」，关着时说「进入计划模式：…」。
 	const toggleOn = `document.querySelector('button[aria-label="退出计划模式"]')?.getAttribute('aria-pressed') === 'true'`;
@@ -151,16 +152,16 @@ export async function checkPlan(options: {
 	try {
 		// 开在项目里：edit 落在工作区，帮我批准下不问，完全访问下也不问。
 		await until(`document.querySelector('[data-plume-section-action] button[aria-label="新建项目"]') !== null`, "侧栏有新建项目");
-		await page(`document.querySelector('[data-plume-section-action] button[aria-label="新建项目"]').click()`);
+		await clickVisible(page, `[data-plume-section-action] button[aria-label="新建项目"]`);
 		await until(`document.querySelector('[data-plume-add-folder]') !== null`, "打开新建项目");
-		await page(`document.querySelector('[data-plume-add-folder]').click()`);
+		await clickVisible(page, `[data-plume-add-folder]`);
 		await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好项目目录");
-		await page(`[...document.querySelectorAll('button')].find(item => item.textContent.includes('创建项目')).click()`);
+		await clickVisible(page, `button`, /创建项目/);
 		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') === true`, "进到工作区项目");
 
 		// 1. 新对话里拨开关：拨的是新对话的那一份，第一句话发出去时交给建出来的会话。
 		await until(toggleOff, "输入框底下有计划模式开关，缺省关着");
-		await page(`document.querySelector('button[aria-label^="进入计划模式"]').click()`);
+		await clickVisible(page, `button[aria-label^="进入计划模式"]`);
 		await until(toggleOn, "新对话的计划模式开关拨开");
 		const previous = new Set((await agent.sessions()).map((item) => item.id));
 		await send(ASK);
@@ -178,41 +179,41 @@ export async function checkPlan(options: {
 		await mainNotAlone("右栏开着、卡片窄");
 		await capture("smoke-plan-card.png");
 		// 收起右栏看宽的那一种，再打开：后面每份新计划还要在面板里读到。
-		await page(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]').click()`);
+		await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
 		await until(
 			`document.querySelector('[data-panel-area]:not([inert])') === null && document.querySelector('[data-panel-toggle] button') !== null`,
 			"收起右栏",
 		);
 		await mainNotAlone("右栏收着、卡片宽");
 		await capture("smoke-plan-card-wide.png");
-		await page(`document.querySelector('[data-panel-toggle] button').click()`);
+		await clickVisible(page, `[data-panel-toggle] button`);
 		await until(`document.querySelector('[data-panel-area]:not([inert])') !== null`, "再打开右栏");
 
 		// 2. 修改：写下意见、修订，模型收到的是没批准和这句意见，开关不动，它改完再交。
-		await page(`document.querySelector('${card} [data-plan-action=revise]').click()`);
+		await clickVisible(page, `${card} [data-plan-action=revise]`);
 		await until(`document.querySelector('${card} [data-plan-revise-input]') !== null`, "点「修改…」出来写意见的框");
 		await page(`document.querySelector('${card} [data-plan-revise-input]').focus()`);
 		await window.webContents.insertText(FEEDBACK);
 		await until(`document.querySelector('${card} [data-plan-send-revision]')?.disabled === false`, "写了意见可以修订");
 		await mainNotAlone("写修改意见时");
 		await capture("smoke-plan-revise.png");
-		await page(`document.querySelector('${card} [data-plan-send-revision]').click()`);
+		await clickVisible(page, `${card} [data-plan-send-revision]`);
 		await planCard("改 hello.txt（先读再改）", "改过的计划再弹出计划卡");
 		if (!seen.toolu_plan_submit1?.includes("did not approve") || !seen.toolu_plan_submit1.includes(FEEDBACK))
 			throw new Error(`修改以后模型应该收到没批准和意见，实际是 ${JSON.stringify(seen.toolu_plan_submit1)}`);
 		if (!(await page<boolean>(toggleOn))) throw new Error("要求修改以后计划模式不该关");
 
 		// 拒绝：这一轮停下，开关不动。
-		await page(`document.querySelector('${card} [data-plan-action=reject]').click()`);
+		await clickVisible(page, `${card} [data-plan-action=reject]`);
 		await until(turnEnded, "拒绝以后卡收起、这一轮停下");
 		if (!(await page<boolean>(toggleOn))) throw new Error("拒绝以后计划模式不该关");
 
 		// 3. 权限切到完全访问：要再确认一次。
-		await page(`document.querySelector('[data-permission-chip]').click()`);
+		await clickVisible(page, `[data-permission-chip]`);
 		await until(`document.querySelectorAll('[role=menuitem]').length === 3`, "权限菜单列出三档");
-		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim().startsWith('完全访问')).click()`);
+		await clickVisible(page, `[role=menuitem]`, /^完全访问/);
 		await until(`[...document.querySelectorAll('button')].some(button => button.textContent.trim() === '确认开启')`, "开完全访问要再确认一次");
-		await page(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === '确认开启').click()`);
+		await clickVisible(page, `button`, "确认开启");
 		await until(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'full'`, "权限签切到完全访问");
 
 		await send(ROUND2);
@@ -239,7 +240,7 @@ export async function checkPlan(options: {
 		await capture("smoke-plan-full-access.png");
 
 		// 接受：卡收起、开关关掉，同一轮里模型接着改。
-		await page(`document.querySelector('${card} [data-plan-action=accept]').click()`);
+		await clickVisible(page, `${card} [data-plan-action=accept]`);
 		await until(chatHas(DONE), "批准以后模型接着做完");
 		await until(turnEnded, "批准的那一轮收尾");
 		await until(toggleOff, "批准以后计划模式关掉");
@@ -254,18 +255,18 @@ export async function checkPlan(options: {
 
 		// 4. 环境卡片里「计划」一节列出批准的那份；看完收起，免得它留在后面的截图里。
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关在");
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-plan-section]')?.textContent.includes('改 hello.txt（定稿）') === true`, "环境卡片里列出批准的计划");
 		await capture("smoke-plan-environment.png");
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-plan-section]') === null`, "收起环境卡片");
 
 		// 5. 请求批准档下再交一份：主按钮是「接受」，⌘↩ 只接受、不动权限；连权限一起改的「接受并开启自动模式」要 ⇧⌘↩。
-		await page(`document.querySelector('[data-permission-chip]').click()`);
+		await clickVisible(page, `[data-permission-chip]`);
 		await until(`document.querySelectorAll('[role=menuitem]').length === 3`, "权限菜单列出三档");
-		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim().startsWith('请求批准')).click()`);
+		await clickVisible(page, `[role=menuitem]`, /^请求批准/);
 		await until(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'ask'`, "权限签切回请求批准");
-		await page(`document.querySelector('button[aria-label^="进入计划模式"]').click()`);
+		await clickVisible(page, `button[aria-label^="进入计划模式"]`);
 		await until(toggleOn, "再拨开计划模式");
 		await send(ROUND3);
 		await planCard("改 hello.txt（快捷键）", "请求批准档下的计划卡");

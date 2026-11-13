@@ -71,7 +71,7 @@ import { checkSessionWindow } from "./smoke-session-window.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { recentSessions } from "./tray-menu.ts";
-import { clickVisible, waitFor } from "./smoke-kit.ts";
+import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, waitFor } from "./smoke-kit.ts";
 
 export function smokeOutput(): { file: string; dir: string; workspace: string } | undefined {
 	const file = process.env.PLUME_SMOKE_OUT;
@@ -201,7 +201,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		const page = (code: string) => window.webContents.executeJavaScript(code) as Promise<unknown>;
 		const until = (code: string, label: string) => waitFor(async () => Boolean(await page(code)), label);
-		const click = (selector: string, text?: string) => clickVisible(page, selector, text);
+		const click = (selector: string, text?: string | RegExp) => clickVisible(page, selector, text);
 		const type = (selector: string, value: string) =>
 			page(`(() => {
 				const input = document.querySelector(${JSON.stringify(selector)});
@@ -218,9 +218,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			const revealLabel = process.platform === "darwin" ? "在访达中显示" : process.platform === "win32" ? "在资源管理器中显示" : "在文件管理器中显示";
 			const openSessionMenu = async () => {
 				await until(`document.querySelector(${JSON.stringify(sessionMenu)}) === null`, "上一次会话菜单已关闭");
-				await page(
-					`(() => { const row = document.querySelector('[data-plume-row]'); const rect = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left + 80, clientY: rect.top + 16 })); })()`,
-				);
+				await contextMenuVisibleIn(page, firstOf("[data-plume-row]"), "侧栏第一行", 80, 16);
 				await until(`document.querySelector(${JSON.stringify(sessionMenu)}) !== null`, "会话右键菜单出现");
 			};
 			const closeSessionMenu = async () => {
@@ -505,7 +503,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				const markdown = await readFile(join(outDir, "session-export.md"), "utf8");
 				if (!markdown.includes("会话右键回归") || !saveOptions?.defaultPath?.endsWith(".md") || String(saveOptions.filters?.[0]?.extensions[0]) !== "md")
 					throw new Error("Markdown 导出或保存对话框格式不符");
-				await page(`document.querySelectorAll('[data-plume-toaster] button[aria-label="关闭"]').forEach(button => button.click())`);
+				await clickEachVisible(page, `[data-plume-toaster] button[aria-label="关闭"]`);
 				await until(`!document.querySelector('[data-plume-toaster]')`, "清除导出成功提示");
 				cancelled = true;
 				await openSessionMenu();
@@ -679,7 +677,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "界面就绪");
 		await click("button", "模型设置");
 		await until(`document.querySelector('[data-model-catalog]') !== null`, "打开模型设置");
-		await click("[data-add-provider]");
+		await click("[data-add-provider]", "添加供应商");
 		await until(`document.querySelector('[data-provider-form]') !== null`, "打开添加供应商");
 		await type("#provider-name", "假模型");
 		await click("[data-provider-form] [data-segmented] button", "Messages");
@@ -709,7 +707,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-models.png"));
-		await page(`document.querySelectorAll('[data-plume-toaster] button[aria-label="关闭"]').forEach(button => button.click())`);
+		await clickEachVisible(page, `[data-plume-toaster] button[aria-label="关闭"]`);
 		await until(`!document.querySelector('[data-plume-toaster]')`, "提示条关闭后退场");
 		const exported = JSON.parse(await readFile(join(outDir, "providers.json"), "utf8")) as { kind?: string; providers?: unknown[] };
 		if (exported.kind !== "plume.providers" || exported.providers?.length !== 1) throw new Error("导出的供应商文件不对");
@@ -792,7 +790,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("button", "创建项目");
 			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "导航测试项目");
 			await click("[data-model-trigger]");
-			await click("button", "fake-model");
+			await click("[role=menuitem]", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
 			await window.webContents.insertText("导航准备");
 			await click("[data-composer-send=send]");
@@ -818,6 +816,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			const windows = BrowserWindow.getAllWindows().length;
 			const address = window.webContents.getURL();
 			if ((await page(`window.open('https://example.com/', '_blank') === null`)) !== true) throw new Error("主窗口的 window.open 应被拒绝");
+			// 故意用脚本点一个临时插进去的链接，不经 clickVisible：要验的就是页面自己发起的跳转被拦下。
 			await page(
 				`(() => { const link = document.createElement('a'); link.href = 'https://example.com/'; document.body.append(link); link.click(); link.remove(); })()`,
 			);
@@ -837,7 +836,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("button", "创建项目");
 			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "文件预览测试项目");
 			await click("[data-model-trigger]");
-			await click("button", "fake-model");
+			await click("[role=menuitem]", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
 			await window.webContents.insertText("验证只读文件预览");
 			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
@@ -1090,7 +1089,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("button", "创建项目");
 			await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "打开菜单测试项目");
 			await click("[data-model-trigger]");
-			await click("button", "fake-model");
+			await click("[role=menuitem]", "fake-model");
 			await page(`document.querySelector('.cm-content').focus()`);
 			await window.webContents.insertText("验证会话右键操作");
 			await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "菜单测试可发送");
@@ -1212,7 +1211,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click(`[data-card="${skillKey}"] button[aria-label="安装"]`);
 			await until(`document.querySelector('[data-card="${skillKey}"] button[aria-label^="安装"]') === null`, `装上技能合集 ${skillKey}`);
 			// 从技能这一类点开一张合集的详情，经面包屑返回时还在技能这一类。
-			await click('[data-market-tab="skills"] [data-card] > button');
+			await click(`[data-market-tab="skills"] [data-card="${skillKey}"] > button`);
 			await until(`document.querySelector('[data-plugin-detail]') !== null`, "技能合集的详情页");
 			await click(marketCrumb);
 			await until(`document.querySelector('[data-market-tab="skills"]') !== null`, "从详情返回时回到技能这一类");
@@ -1266,10 +1265,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			if ((await agent.plugins()).find((plugin) => plugin.name === "plume.scheduled")?.state !== "active") throw new Error("plume.scheduled 没有重新启用");
 			await click(marketCrumb);
 			// 右上角「创建插件」：菜单两条都带第二行说明，按开头的字点。冒烟里选文件夹给的是工作目录，不是插件，要说清楚。
-			const createItem = (label: string) =>
-				page(
-					`[...document.querySelectorAll('[role=menu][aria-label="创建插件"] [role=menuitem]')].find((item) => item.textContent.startsWith(${JSON.stringify(label)})).click()`,
-				);
+			const createItem = (label: string) => click('[role=menu][aria-label="创建插件"] [role=menuitem]', new RegExp(`^${label}`));
 			await click("[data-market-create]");
 			await until(`document.querySelector('[role=menu][aria-label="创建插件"]') !== null`, "打开创建插件菜单");
 			await delay(200);
@@ -1382,7 +1378,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"新项目的空白会话不串草稿",
 		);
 		await click("[data-model-trigger]");
-		await click("button", "fake-model");
+		await click("[role=menuitem]", "fake-model");
 		await click("[data-effort-trigger]");
 		await page(
 			`(() => { const input = document.querySelector('[data-effort-menu] input[type=range]'); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, '0'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
@@ -1447,7 +1443,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if ((await page(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip`)) !== "auto") throw new Error("权限签默认应该是「帮我批准」");
 		await click("[data-permission-chip]");
 		await until(`document.querySelectorAll('[role=menuitem]').length === 3`, "权限菜单列出三档");
-		await page(`[...document.querySelectorAll('[role=menuitem]')].find((item) => item.textContent.trim().startsWith('请求批准')).click()`);
+		await clickVisible(page, `[role=menuitem]`, /^请求批准/);
 		await until(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip === 'ask'`, "权限签切到「请求批准」");
 		await window.webContents.insertText("列个计划，然后把 hello.txt 里的 hello 改成 hi");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "发送按钮可用");
@@ -1463,6 +1459,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				resolve({ ok: timing.duration === 220 && getComputedStyle(event.target).animationTimingFunction === 'cubic-bezier(0.22, 1, 0.36, 1)' && frames[0].transform === 'translateY(16px)' && frames[0].opacity === '0' && frames.at(-1).transform === 'none' && frames.at(-1).opacity === '1', timing, frames });
 			}
 			document.addEventListener('animationstart', started);
+			// 故意在同一段脚本里连点两下，不经 clickVisible：要的是同一帧里的双击，看首发只发一次、动画只放一遍。
 			const send = document.querySelector('[data-composer-send=send]'); send.click(); send.click();
 		})`);
 		if (!(arrival as { ok?: boolean }).ok) throw new Error(`首发输入框动画不正确：${JSON.stringify(arrival)}`);
@@ -1633,7 +1630,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"输入框上方出现分支签和改动计数",
 		);
 		const git = shown("plume.git/git");
-		await page(`[...document.querySelectorAll('.plume-composer-tray button')].find((button) => button.textContent.includes('+1')).click()`);
+		await clickVisible(page, `.plume-composer-tray button`, /\+1/);
 		await until(
 			`document.querySelector('${git} [data-plume-sync]') !== null && document.querySelector('${git}')?.textContent.includes('notes.txt')`,
 			"改动计数打开 Git 面板，列出没提交的文件",
@@ -1667,7 +1664,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		scheduledFails = true;
 		await click('[data-nav="page:plume.scheduled/scheduled"]');
 		await until(`document.querySelector('[data-scheduled-task] [data-scheduled-run]')?.disabled === false`, "回到定时任务页");
-		await page(`document.querySelector('[data-scheduled-task] [data-scheduled-run]').click()`);
+		await clickVisible(page, `[data-scheduled-task] [data-scheduled-run]`);
 		window.webContents.send("plume:command", `open-session:${firstRun.lastSessionId}`);
 		const failureNav = `document.querySelector('[data-nav="page:plume.scheduled/scheduled"] [aria-label="1 个任务运行失败"]')`;
 		await until(
@@ -1698,15 +1695,13 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click(`[data-plume-row="${firstRun.lastSessionId}"] > button`);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到定时任务开出的会话");
 		for (const id of [firstRun.lastSessionId, secondRun.lastSessionId]) {
-			await page(
-				`[...document.querySelectorAll('[data-plume-row="${id}"] button')].find((button) => button.getAttribute('aria-label')?.startsWith('归档会话')).click()`,
-			);
+			await click(`[data-plume-row="${id}"] button[aria-label^="归档会话"]`);
 			await until(`document.querySelector('[data-plume-row="${id}"]') === null`, "定时任务开出的会话归档");
 		}
 		await click("button", "设置");
 		await click("[aria-label=设置章节] button", "已归档的聊天");
 		await click("[data-plume-delete-all-archived]");
-		await page(`[...document.querySelectorAll('[role=dialog] button')].find((button) => /^删除 \\d+ 个$/.test(button.textContent.trim())).click()`);
+		await click("[role=dialog] button", /^删除 \d+ 个$/);
 		await until(`document.querySelector('[data-plume-delete-all-archived]') === null`, "删掉定时任务开出的会话");
 		await click("button", "返回工作区");
 
@@ -1716,7 +1711,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 子 Agent、侧边聊天：都是内置插件，随应用加载，跑在子会话里（市场插件不重启当场加载，由下面的下一步建议验证）。
 		// 主 Agent 派活给子 Agent，子 Agent 的 write 要确认，审批卡压在主输入框上方、标明是哪个子 Agent 问的；
 		// 跑完点工具卡片上的 ↗，子 Agent 面板画出它的全过程。再敲 `/btw 问题`：这句话不进主对话，新开一格侧边聊天，回答画在那里。
-		await click("[data-plume-row] button");
+		await click("[data-plume-row] > button");
 		await until(`document.querySelector('[data-screen=chat] .cm-content') !== null`, "回到会话");
 		const sentBefore = model.requests.length;
 		childrenPhase = true;
@@ -1758,16 +1753,14 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await capture(window, join(outDir, "smoke-subagents-menu-narrow.png"));
 		await page(`document.querySelector('.subagents-menu').style.maxWidth = ''`);
 		await capture(window, join(outDir, "smoke-subagents-menu.png"));
-		await page(
-			`[...document.querySelectorAll('.subagents-menu [role=menuitem]')].find((item) => item.textContent.includes(${JSON.stringify(TASK_TITLE)})).click()`,
-		);
+		await click(".subagents-menu [role=menuitem]", containing(TASK_TITLE));
 		// 面板换过子 Agent 时，换走的那个的输入框还挂着（隐藏，见宿主的 ChildConversation），按钮排在前面：只认看得见的那个。
 		const agentsSend = `[...document.querySelectorAll('${agentsPanel} [data-composer-send=send]')].find((button) => button.checkVisibility())`;
 		await until(`document.querySelector('${agentsPanel} [data-sub-header]')?.textContent.includes(${JSON.stringify(TASK_TITLE)})`, "面板换到写说明的子 Agent");
 		await page(`[...document.querySelectorAll('${agentsPanel} .cm-content')].find((editor) => editor.checkVisibility()).focus()`);
 		await window.webContents.insertText("补充说明：保留 child 内容");
 		await until(`${agentsSend}?.disabled === false`, "运行中的子会话可以插话而不是停止");
-		await page(`${agentsSend}.click()`);
+		await click(`${agentsPanel} [data-composer-send=send]`);
 		await until(
 			`[...document.querySelectorAll('${agentsPanel} .cm-placeholder')].some((placeholder) => placeholder.checkVisibility()) && ${agentsSend}?.disabled === true`,
 			"插话已排入子会话",
@@ -1778,14 +1771,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(TASK_FINAL)})`, "主 Agent 拿到子 Agent 的回答");
 		if ((await readFile(join(workspace, "child.txt"), "utf8").catch(() => "")) !== "child\n") throw new Error("子 Agent 没写出 child.txt");
 		// 里面的活收着：点开收着的活，直到看见 task 的卡片。
-		await until(
-			`(() => {
-			if (document.querySelector('[data-tool=task]')) return true;
-			for (const button of document.querySelectorAll('[data-plume-step][data-plume-run] > button[aria-expanded=false]')) button.click();
+		await waitFor(async () => {
+			if (await page("document.querySelector('[data-tool=task]') !== null")) return true;
+			await clickEachVisible(page, "[data-plume-step][data-plume-run] > button[aria-expanded=false]");
 			return false;
-		})()`,
-			"看见 task 的工具卡片",
-		);
+		}, "看见 task 的工具卡片");
 		await click(`[data-tool=task] button[aria-label="在面板里看 @general 的全过程"]`);
 		await until(`document.querySelector('${agentsPanel} [data-sub-report]')?.textContent.includes(${JSON.stringify(CHILD_TEXT)})`, "子 Agent 单独画回报卡");
 		await until(
@@ -2142,7 +2132,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-agents-settings.png"));
-		await click("[data-agent-profile=general] button", "");
+		await click('[data-agent-profile=general] button[aria-label="编辑 general"]');
 		await until(`document.querySelector('[data-agent-editor] [data-agent-avatar]') !== null`, "点一行打开子智能体编辑器");
 		await click("[data-agent-editor] [data-agent-avatar]");
 		await until(`document.querySelectorAll('[data-avatar-picker] [data-avatar-shape]').length > 0`, "选脸弹层列出形状");
@@ -2167,7 +2157,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`, "重新准备导航验收草稿");
 		window.webContents.send("plume:command", `open-session:${sessions[0].id}`);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到项目会话验证导航");
-		// 点收起和看开关在同一段脚本里：面板还在往右滑，标题栏的「显示面板」要先藏着，不然和面板自己那颗「收起面板」叠成一道虚影。
+		// 点收起和看开关在同一段脚本里（所以不经 clickVisible）：面板还在往右滑，标题栏的「显示面板」要先藏着，不然和面板自己那颗「收起面板」叠成一道虚影。
 		const toggleWhileSliding = await page(`(() => {
 			document.querySelector('[data-panel-area] button[aria-label="收起面板"]')?.click();
 			const toggle = document.querySelector("[data-panel-toggle]");
@@ -2222,7 +2212,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		);
 		await capture(window, join(outDir, "smoke-welcome-compact.png"));
 		window.setSize(originalSize[0]!, originalSize[1]!);
-		await click("[data-plume-row] button");
+		await click("[data-plume-row] > button");
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "返回已有会话");
 		if (await page(`document.querySelector('.plume-composer-arrive') !== null`)) throw new Error("普通打开已有会话不应播放首次发送动画");
 		if ((await storedSessions()).length !== 1) throw new Error("新对话不应落盘");

@@ -4,6 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible } from "./smoke-kit.ts";
 
 /**
  * 使用统计的环图和缓存未命中：经界面发一轮带工具调用的对话（两次主请求），装上使用统计，看 Token 构成、耗时构成画出环图，
@@ -42,12 +43,13 @@ export async function checkUsage(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("用量统计：看看目录");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await until(
 			`document.querySelector('[data-screen=chat]')?.textContent.includes('用量统计读完了。') === true || document.querySelector('[data-approval-card]') !== null`,
 			"这一轮答完或弹出审批卡",
 		);
-		await page(`[...document.querySelectorAll('[data-approval-card] button')].find((button) => button.textContent.includes('允许一次'))?.click()`);
+		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-card] button')].some((button) => button.textContent.includes('允许一次'))`))
+			await clickVisible(page, `[data-approval-card] button`, /允许一次/);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('用量统计读完了。') === true`, "这一轮答完");
 	} finally {
 		setModel(undefined);
@@ -55,7 +57,7 @@ export async function checkUsage(options: {
 
 	window.webContents.send("plume:command", "settings");
 	await until(`document.querySelector('[aria-label=设置章节]') !== null`, "设置打开");
-	await page(`[...document.querySelectorAll('[aria-label=设置章节] button')].find((button) => button.textContent.trim() === '使用统计').click()`);
+	await clickVisible(page, `[aria-label=设置章节] button`, "使用统计");
 	await until(`document.querySelector('[data-usage-token-breakdown] [data-donut-segment="system"]') !== null`, "Token 构成画出环图");
 	for (const part of ["system", "toolDefs", "user", "toolResults", "outputReply"])
 		await until(`document.querySelector('[data-usage-token-breakdown] [data-usage-legend="${part}"]')?.textContent.includes('≈') === true`, `图例里有 ${part}`);

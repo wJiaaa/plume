@@ -4,6 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
 
 const PLAN = "冒烟：先定个计划";
 const READY = "计划定了：用 SQLite。";
@@ -48,7 +49,7 @@ export async function checkPeers(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(prompt);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		let id = "";
 		await wait(async () => {
 			id = (await agent.sessions()).find((item) => !previous.has(item.id))?.id ?? "";
@@ -95,11 +96,11 @@ export async function checkPeers(options: {
 		const request = letters.find((text) => text.includes('reply=\\"expected\\"'));
 		if (!request?.includes("不是用户说的话") || !request.includes(QUESTION)) throw new Error("送给被问的一方的信不对");
 		if (!letters.some((text) => text.includes('answer=\\"replied\\"') && text.includes(ANSWER))) throw new Error("送回问的一方的答复不对");
-		await page(`document.querySelector(${JSON.stringify(answer)}) .querySelector('[data-flow-row], button')?.click()`);
+		await clickVisibleIn(page, `[document.querySelector(${JSON.stringify(answer)})?.querySelector('[data-flow-row], button')]`, "答复那一行");
 		await capture("smoke-peers-answer.png");
 
 		// 第二个对话里那一行的箭头跳到第一个对话：那边有「来自 …」那一行和它回的那句。
-		await page(`document.querySelector('[data-peer-open]').click()`);
+		await clickVisible(page, `[data-peer-open]`);
 		await until(chatHas(REPLIED), "箭头跳到被问的那个对话");
 		await until(`document.querySelector(${JSON.stringify(answer)})?.textContent.includes('来自') === true`, "被问的对话里有「来自 …」那一行");
 		if (!(await page<string>(`document.querySelector(${JSON.stringify(answer)}).textContent`)).includes(QUESTION)) throw new Error("来信那一行的摘要不是问题");

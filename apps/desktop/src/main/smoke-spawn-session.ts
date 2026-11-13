@@ -6,6 +6,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible } from "./smoke-kit.ts";
 
 const ASK = "冒烟：顺手看到一处死代码";
 const TITLE = "清理 utils.ts 里的死代码";
@@ -81,16 +82,16 @@ export async function checkSpawnSession(options: {
 		const previous = new Set((await agent.sessions()).map((item) => item.id));
 		// 工作树开关只给项目会话：经界面把工作区登记成项目，在它下面发起对话。
 		await until(`document.querySelector('[data-plume-section-action] button[aria-label="新建项目"]') !== null`, "侧栏有新建项目");
-		await page(`document.querySelector('[data-plume-section-action] button[aria-label="新建项目"]').click()`);
+		await clickVisible(page, `[data-plume-section-action] button[aria-label="新建项目"]`);
 		await until(`document.querySelector('[data-plume-add-folder]') !== null`, "打开新建项目");
-		await page(`document.querySelector('[data-plume-add-folder]').click()`);
+		await clickVisible(page, `[data-plume-add-folder]`);
 		await until(`document.querySelector('[data-plume-source-folder]') !== null`, "选好项目目录");
-		await page(`[...document.querySelectorAll('button')].find(item => item.textContent.includes('创建项目')).click()`);
+		await clickVisible(page, `button`, /创建项目/);
 		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') === true`, "进到工作区项目");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(ASK);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		let parentId = "";
 		await wait(async () => {
 			parentId = (await agent.sessions()).find((item) => !previous.has(item.id))?.id ?? "";
@@ -107,24 +108,24 @@ export async function checkSpawnSession(options: {
 		if (!(await page<string>(`document.querySelector('[data-environment-toggle]').getAttribute('aria-label')`)).includes("等你决定"))
 			throw new Error("环境开关的说明里没有待决定的建议");
 		// 环境卡片里那一条只列出来，没有开始、选模型；点了滚回对话里那张卡片、闪一下。
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		const pendingEntry = "[data-spawn-environment][data-state=suggested]";
 		await until(`document.querySelector(${JSON.stringify(pendingEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "环境卡片里列出这条建议");
 		if (await page<boolean>(`document.querySelector('[data-spawn-section] [data-spawn-action=start], [data-spawn-section] [data-model-trigger]') !== null`))
 			throw new Error("环境卡片里那一节不该能开始、选模型");
 		await capture("smoke-spawn-session-environment.png");
-		await page(`document.querySelector(${JSON.stringify(pendingEntry)}).click()`);
+		await clickVisible(page, pendingEntry);
 		await until(
 			`document.querySelector(${JSON.stringify("[data-screen=chat] [data-plume-flash] [data-spawn-suggestion=suggested]")}) !== null`,
 			"点了滚回对话里那张卡片、闪一下",
 		);
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-spawn-section]') === null`, "收起环境卡片");
 		const worktreeToggle = `${card} [data-plume-worktree-toggle]`;
 		await until(`document.querySelector(${JSON.stringify(worktreeToggle)}) !== null`, "项目是仓库，卡片上有工作树开关");
 		if ((await page<string>(`document.querySelector(${JSON.stringify(worktreeToggle)}).getAttribute('aria-pressed')`)) === "true")
 			throw new Error("模型没说要并行改，卡片上的工作树开关却开着");
-		await page(`document.querySelector(${JSON.stringify(worktreeToggle)}).click()`);
+		await clickVisible(page, worktreeToggle);
 		await until(`document.querySelector(${JSON.stringify(worktreeToggle)}).getAttribute('aria-pressed') === 'true'`, "打开卡片上的工作树开关");
 		// 卡片上是输入框那两枚：档位拖到最高一档（假模型是默认的四档，最高是「高」），开出来的会话用它，不用默认的「中」。
 		const effort = `${card} [data-effort-trigger]`;
@@ -132,17 +133,17 @@ export async function checkSpawnSession(options: {
 			`document.querySelector(${JSON.stringify(`${card} [data-model-trigger]`)}) !== null && document.querySelector(${JSON.stringify(effort)}) !== null`,
 			"卡片上有和输入框一样的模型、思考档位",
 		);
-		await page(`document.querySelector(${JSON.stringify(effort)}).click()`);
+		await clickVisible(page, effort);
 		await until(`document.querySelector('[data-effort-menu] input[type=range]') !== null`, "点开卡片上的思考档位");
 		await page(
 			`(() => { const input = document.querySelector('[data-effort-menu] input[type=range]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, input.max); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
 		);
 		await until(`document.querySelector(${JSON.stringify(effort)}).textContent.includes('高')`, "卡片上的档位换成「高」");
-		await page(`document.querySelector(${JSON.stringify(effort)}).click()`);
+		await clickVisible(page, effort);
 		await until(`document.querySelector('[data-effort-menu]') === null`, "收起档位菜单");
 		await capture("smoke-spawn-session-card.png");
 
-		await page(`document.querySelector('${card} [data-spawn-action=start]').click()`);
+		await clickVisible(page, `${card} [data-spawn-action=start]`);
 		let startedId = "";
 		await wait(async () => {
 			startedId = (await agent.sessions()).find((item) => item.spawnedFrom?.sessionId === parentId && item.spawnedFrom.toolCallId === "toolu_spawn")?.id ?? "";
@@ -177,11 +178,11 @@ export async function checkSpawnSession(options: {
 			throw new Error("输入框上方那一条没写交出去的会话的标题");
 		await capture("smoke-spawn-session-report.png");
 
-		await page(`document.querySelector(${JSON.stringify(handedOff)}).click()`);
+		await clickVisible(page, handedOff);
 		await until(chatHas(CLEANED), "输入框上方那一条点了到新会话");
-		await page(`document.querySelector('[data-plume-row="${parentId}"] > button').click()`);
+		await clickVisible(page, `[data-plume-row="${parentId}"] > button`);
 		await until(`${chatHas(RECEIVED)} && document.querySelector(${JSON.stringify(handedOff)}) === null`, "回到原对话，看过的那一行收走");
-		await page(`document.querySelector('[data-screen=chat] [data-spawn-action=open]').click()`);
+		await clickVisible(page, `[data-screen=chat] [data-spawn-action=open]`);
 		await until(chatHas(CLEANED), "那一行点了到新会话");
 		await capture("smoke-spawn-session-opened.png");
 
@@ -189,7 +190,7 @@ export async function checkSpawnSession(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(ARCHIVE_ASK);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "新会话里可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await wait(async () => (await agent.sessions()).find((item) => item.id === startedId)?.archived === true, "archive_session 那一轮收场后会话归档");
 		await until(`document.querySelector('[data-screen=chat]') === null || !(${chatHas(CLEANED)})`, "界面离开归档的会话");
 		const archived = (await agent.sessions()).find((item) => item.id === startedId);

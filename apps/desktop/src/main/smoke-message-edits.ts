@@ -1,25 +1,7 @@
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
-
-/**
- * 真实的鼠标点击：消息操作只接受用户真按下的那一下（脚本的 `element.click()` 不算），这里经 `sendInputEvent` 按在元素中间。
- * 取同一选择器的最后一个，先滚进视口、先悬停（悬停才显出的按钮）。
- */
-export async function nativeClick(window: BrowserWindow, page: (code: string) => Promise<unknown>, selector: string): Promise<void> {
-	const point = (await page(`(() => {
-		const element = [...document.querySelectorAll(${JSON.stringify(selector)})].at(-1);
-		if (!element) return null;
-		element.scrollIntoView({ block: 'center' });
-		const rect = element.getBoundingClientRect();
-		return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
-	})()`)) as { x: number; y: number } | null;
-	if (!point) throw new Error(`找不到 ${selector}`);
-	window.webContents.sendInputEvent({ type: "mouseMove", ...point });
-	await new Promise((resolve) => setTimeout(resolve, 120));
-	window.webContents.sendInputEvent({ type: "mouseDown", ...point, button: "left", clickCount: 1 });
-	window.webContents.sendInputEvent({ type: "mouseUp", ...point, button: "left", clickCount: 1 });
-}
+import { clickReal, clickRealIn, lastOf } from "./smoke-kit.ts";
 
 /** 真实的回车：同上，编辑框只认用户按下的键。 */
 export function nativeEnter(window: BrowserWindow): void {
@@ -59,7 +41,8 @@ export async function checkMessageEdits(options: {
 	try {
 		const before = (await page(userCount)) as number;
 		// 分叉按钮只在悬停时显出来，点击不受透明度影响；取最后那条回复底下的那颗。
-		await nativeClick(window, page, `${chat} [data-plume-quote=assistant] [data-message-fork]`);
+		// 消息操作只接受人真按下的那一下（脚本的 `element.click()` 不算），都经 clickReal；点的是最后一条消息上的那个。
+		await clickRealIn(window, lastOf(`${chat} [data-plume-quote=assistant] [data-message-fork]`), "最后一条回复的分叉");
 		await until(
 			`document.querySelector('[data-plume-screen-title]')?.textContent.endsWith('（分叉）') && document.querySelector('${chat}')?.textContent.includes(${JSON.stringify(finalText)})`,
 			"分叉出的会话打开，带着那条回复",
@@ -75,7 +58,7 @@ export async function checkMessageEdits(options: {
 		await until(`document.querySelector('${chat}')?.textContent.includes('分叉里的回答')`, "分叉里问的一句有了回答");
 
 		// 编辑最后一条：气泡换成编辑框，改完回车重发。
-		await nativeClick(window, page, `${chat} [data-message-edit]`);
+		await clickRealIn(window, lastOf(`${chat} [data-message-edit]`), "最后一条消息的编辑");
 		await until(`document.querySelector('${chat} textarea') !== null`, "编辑框出现");
 		const box = `${chat} textarea`;
 		await page(`(() => {
@@ -92,7 +75,7 @@ export async function checkMessageEdits(options: {
 		);
 
 		// 撤回最后一条：不用确认，转录回到分叉时的样子，那句话回到输入框。
-		await nativeClick(window, page, `${chat} [data-message-undo]`);
+		await clickRealIn(window, lastOf(`${chat} [data-message-undo]`), "最后一条消息的撤回");
 		await until(
 			`!document.querySelector('${chat}')?.textContent.includes('改过以后的回答') && ${composerText} === '改过的问题'`,
 			"撤回截掉了那一轮，问题回到输入框",
@@ -117,7 +100,7 @@ export async function checkMessageEdits(options: {
 			});
 			observer.observe(root, { childList: true, subtree: true });
 		})()`);
-		await nativeClick(window, page, "[data-composer-send=stop]");
+		await clickReal(window, "[data-composer-send=stop]");
 		await until(`document.querySelector('${chat} [data-resume=user] [data-resume-retry]') !== null`, "按停以后「已暂停」旁边有重试");
 		if ((await page(`window.__plumeResumeOverlap`)) !== false) throw new Error("「已暂停」出现时运行行还没收掉，它会先挂在运行行下面再滑上去");
 		await click(`${chat} [data-resume-retry]`);
@@ -160,7 +143,7 @@ export async function checkMessageEdits(options: {
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "第一句可以发送");
 		await click("[data-composer-send=send]");
 		await until(`document.querySelector('${chat}')?.textContent.includes('第一句的回答')`, "第一句有了回答");
-		await nativeClick(window, page, `${chat} [data-message-edit]`);
+		await clickRealIn(window, lastOf(`${chat} [data-message-edit]`), "最后一条消息的编辑");
 		await until(`document.querySelector('${box}') !== null`, "第一句的编辑框出现");
 		await page(`(() => {
 			const box = document.querySelector('${box}');

@@ -75,7 +75,7 @@ export async function checkHooks(options: {
 		await click("button", "创建项目");
 		await until(`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')`, "钩子测试项目");
 		await click("[data-model-trigger]");
-		await click("button", "fake-model");
+		await click("[role=menuitem]", "fake-model");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("钩子准备");
 		await click("[data-composer-send=send]");

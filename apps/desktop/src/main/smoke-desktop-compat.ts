@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
 import { NATIVE_HEADER_HEIGHT, ROW_OFFSET, TOP_ROW_HEIGHT, TRAFFIC_LIGHTS_END } from "../shared/window-chrome.ts";
+import { clickEachVisible, clickVisible } from "./smoke-kit.ts";
 
 type Rect = { left: number; top: number; width: number; height: number };
 
@@ -89,13 +90,13 @@ export async function checkDesktopCompat(options: {
 	/** 每一组从同一个样子开始：面板区收着；宽窗口里侧栏开着，窄窗口里抽屉关着。 */
 	const reset = async () => {
 		if (await page<boolean>(panelShown)) {
-			await page(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]').click()`);
+			await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
 			await until(`!${panelShown}`, "收起面板区");
 		}
 		const compact = await page<boolean>(`innerWidth < 760`);
 		const open = await page<boolean>(`!document.querySelector(${JSON.stringify(SIDEBAR)}).inert`);
 		if (open === compact) {
-			await page(`document.querySelector(${JSON.stringify(NAV_TOGGLE)}).click()`);
+			await clickVisible(page, NAV_TOGGLE);
 			await until(`document.querySelector(${JSON.stringify(SIDEBAR)}).inert === ${compact}`, compact ? "关上抽屉" : "打开侧栏");
 		}
 		await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1, y: 1 });
@@ -176,7 +177,7 @@ export async function checkDesktopCompat(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("桌面兼容");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('桌面兼容准备好了。') === true`, "这一轮答完");
 	} finally {
 		setModel(undefined);
@@ -270,7 +271,7 @@ export async function checkDesktopCompat(options: {
 			await headerAlignment(`${label} 开合侧栏后`);
 			await shot(`desktop-compat-${scale * 100}-${width}x${height}-${theme}.png`);
 			// 把多开的开始页关掉，下一组从项目文件这一个标签开始。
-			await page(`[...document.querySelectorAll('[data-panel-area] [data-panel-tab=start] button[aria-label^="关闭"]')].forEach(button => button.click())`);
+			await clickEachVisible(page, `[data-panel-area] [data-panel-tab=start] button[aria-label^="关闭"]`);
 			await until(`${tabs} === ${before}`, `${label}：关掉多开的标签`);
 			results.push({ label, ...geometry, focus: focus.name });
 		}
@@ -338,9 +339,9 @@ export async function checkDesktopCompat(options: {
 		 * 去插件市场看一眼再回来，面板区原样：同一个标签、同一份存下的布局、同样的位置。项目文件不是常驻面板（keepAlive），
 		 * 离开工作区时按契约可以卸下，回来再挂上，所以这里不要求是同一份 DOM；常驻的那种（终端）由它所在插件的冒烟管。
 		 */
-		await page(`document.querySelector('[data-nav=market]').click()`);
+		await clickVisible(page, `[data-nav=market]`);
 		await until(`document.querySelector('[data-screen=chat]')?.checkVisibility({ visibilityProperty: true }) === false`, "插件市场盖住工作区");
-		await page(`document.querySelector(${JSON.stringify(BACK)}).click()`);
+		await clickVisible(page, BACK);
 		await until(
 			`document.querySelector('[data-screen=chat]')?.checkVisibility({ visibilityProperty: true }) === true && Boolean(${visible(FILES_TAB)})`,
 			"回到工作区，项目文件标签还在",
@@ -448,7 +449,7 @@ export async function checkDesktopCompat(options: {
 			await settle();
 			if (phase === "收起") await shot("desktop-compat-settings-collapsed.png");
 		}
-		await page(`document.querySelector(${JSON.stringify(BACK)}).click()`);
+		await clickVisible(page, BACK);
 	} finally {
 		await cdp("Emulation.clearDeviceMetricsOverride");
 		window.setContentSize(...initialSize);

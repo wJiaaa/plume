@@ -1,6 +1,7 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
+import { contextMenuVisible } from "./smoke-kit.ts";
 
 /** 只操作 smoke 的临时 fixture；菜单、键盘和拖放都经真实渲染进程。 */
 export async function checkFileOperations({
@@ -26,10 +27,7 @@ export async function checkFileOperations({
 	const selectTree = () => click('[data-panel-tab="plume/files"] [role=tab]');
 	const menu = async (path: string | null, item: string) => {
 		const selector = path ? row(path) : `${tree} [role=tree]`;
-		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `文件树菜单目标 ${path}`);
-		await page(
-			`(() => { const node = document.querySelector(${JSON.stringify(selector)}); const r = node.getBoundingClientRect(); node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 12 })); })()`,
-		);
+		await contextMenuVisible(page, selector);
 		await click("[role=menuitem]:not(:disabled) > .min-w-0", item);
 	};
 	const exists = async (path: string) => {

@@ -4,6 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { nativeTheme, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
 
 const PROMPT = "后台跑一条命令";
 const STARTED = "放到后台了，跑完会送回来。";
@@ -53,7 +54,7 @@ export async function checkBackgroundJob(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(PROMPT);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await wait(async () => (await agent.sessions()).some((item) => !previous.has(item.id)), "新会话已创建");
 		const row = "[data-screen=chat] [data-delivery-row][data-delivery-kind=job]";
 		// 跟在别的段后面跑时权限可能停在「请求批准」，命令先弹审批卡：答「允许一次」，单独跑时没有这张卡。
@@ -61,16 +62,17 @@ export async function checkBackgroundJob(options: {
 			`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(STARTED)}) === true || document.querySelector('[data-approval-card]') !== null`,
 			"命令放行或弹出审批卡",
 		);
-		await page(`[...document.querySelectorAll('[data-approval-card] button')].find((button) => button.textContent.includes('允许一次'))?.click()`);
+		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-card] button')].some((button) => button.textContent.includes('允许一次'))`))
+			await clickVisible(page, `[data-approval-card] button`, /允许一次/);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(STARTED)}) === true`, "放到后台后这一轮先收尾");
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-job]') !== null`, "环境卡显示后台任务");
 		await settled();
 		await writeFile(join(outDir, "smoke-environment.png"), (await window.webContents.capturePage()).toPNG());
 		// 环境卡开没开记在 localStorage 里、对所有会话生效：看完就收起，后面各段的对话底部不多一张卡。
 		// 它的阴影会漫进转录区，网页预览「复制整页」按片截图时每片底下都带一道。
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-job]') === null`, "收起环境卡");
 		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes('后台命令完成') === true`, "命令结束后对话里出现送达那一行");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(FINISHED)}) === true`, "送达叫醒会话开了一轮");
@@ -85,14 +87,14 @@ export async function checkBackgroundJob(options: {
 		await page(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
 		await settled();
 		await writeFile(join(outDir, "smoke-background-job.png"), (await window.webContents.capturePage()).toPNG());
-		await page(`document.querySelector(${JSON.stringify(row)}).querySelector('button').click()`);
+		await clickVisibleIn(page, `[document.querySelector(${JSON.stringify(row)})?.querySelector('button')]`, `${row} 的按钮`);
 		await until(`document.querySelector('[data-session-services]')?.textContent.includes('SMOKE_JOB_DONE') === true`, "送达行定位后台输出");
 		await until(`document.querySelector('[data-task-record]') !== null`, "任务运行记录");
 		await settled();
 		await writeFile(join(outDir, "smoke-tasks.png"), (await window.webContents.capturePage()).toPNG());
-		await page(`document.querySelector('[data-task-record] button').click()`);
+		await clickVisible(page, `[data-task-record] button`);
 		await until(`document.querySelector('button[aria-label="在轨迹中查看"]') !== null`, "运行详情跳转入口");
-		await page(`document.querySelector('button[aria-label="在轨迹中查看"]').click()`);
+		await clickVisible(page, `button[aria-label="在轨迹中查看"]`);
 		await until(`document.querySelector('[data-trajectory] [data-trace-inspector]')?.textContent.includes('SMOKE_JOB_DONE') === true`, "轨迹定位相同调用");
 		await settled();
 		await writeFile(join(outDir, "smoke-trajectory.png"), (await window.webContents.capturePage()).toPNG());
@@ -107,7 +109,7 @@ export async function checkBackgroundJob(options: {
 		} finally {
 			nativeTheme.themeSource = previousTheme;
 		}
-		await page(`document.querySelector('[data-trace-inspector] button[aria-label="返回"]').click()`);
+		await clickVisible(page, `[data-trace-inspector] button[aria-label="返回"]`);
 		await page(
 			`(() => { const input = document.querySelector('[data-trajectory] input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'NO_SUCH_DIAGNOSTIC'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
 		);

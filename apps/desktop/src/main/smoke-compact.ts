@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
+import { clickVisibleIn, lastOf } from "./smoke-kit.ts";
 
 const SUMMARY = "冒烟摘要：hello.txt 已改成 hi。";
 const FOCUS = "保留 hello 的改动";
@@ -46,7 +47,7 @@ export async function checkCompact(options: {
 		);
 	};
 	try {
-		await page(`[...document.querySelectorAll('${chat} [data-plume-quote=assistant] [data-message-fork]')].at(-1).click()`);
+		await clickVisibleIn(page, lastOf(`${chat} [data-plume-quote=assistant] [data-message-fork]`), "最后一条回复的分叉");
 		await until(`document.querySelector('[data-plume-screen-title]')?.textContent.endsWith('（分叉）')`, "分叉出压缩用的会话");
 		await say("垫一段长的", "This line pads the history");
 		await say("短问题一", "好的。");

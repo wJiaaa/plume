@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BrowserWindow } from "electron";
+import { clickVisible } from "./smoke-kit.ts";
 
 /** 真窗口验证布局、窗口交接和标签恢复，终端一直是同一个 shell。 */
 export async function checkPanelsFramework(window: BrowserWindow, outDir: string): Promise<void> {
@@ -14,7 +15,7 @@ export async function checkPanelsFramework(window: BrowserWindow, outDir: string
 			await page("new Promise(requestAnimationFrame)", target);
 		}
 	};
-	const click = (label: string, target = window) => page(`document.querySelector('button[aria-label=${JSON.stringify(label)}]').click()`, target);
+	const click = (label: string, target = window) => clickVisible((code: string) => page(code, target), `button[aria-label=${JSON.stringify(label)}]`);
 	const settle = () =>
 		page(
 			`(async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); await Promise.all(document.getAnimations().filter(a => Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a => a.finished.catch(() => {}))); })()`,
@@ -101,13 +102,13 @@ export async function checkPanelsFramework(window: BrowserWindow, outDir: string
 	window.webContents.reload();
 	await reloaded;
 	await until(`document.querySelector('[data-plume-row="${session}"]') !== null`, "刷新后会话列表恢复");
-	await page(`document.querySelector('[data-plume-row="${session}"] > button').click()`);
+	await clickVisible(page, `[data-plume-row="${session}"] > button`);
 	await until(`document.querySelector('${terminal}')?.dataset.terminalId === ${JSON.stringify(id)}`, "刷新接回原标签和shell");
 	await until(`document.querySelector('${terminal} .xterm-rows')?.textContent.includes('PLUME_42:')`, "刷新后历史输出恢复");
 	await capture("smoke-panel-restored.png");
-	await page("document.querySelector('[data-panel-add]').click()");
+	await clickVisible(page, "[data-panel-add]");
 	await until("document.querySelector('[data-panel-launch=\"plume.terminal/terminal\"]') !== null", "「+」打开开始页");
-	await page("document.querySelector('[data-panel-launch=\"plume.terminal/terminal\"]').click()");
+	await clickVisible(page, '[data-panel-launch="plume.terminal/terminal"]');
 	await until(
 		`document.querySelector('${terminal}')?.dataset.terminalId && document.querySelector('${terminal}').dataset.terminalId !== ${JSON.stringify(id)}`,
 		"第二个终端独立shell",
@@ -119,7 +120,7 @@ export async function checkPanelsFramework(window: BrowserWindow, outDir: string
 	await until(`document.querySelector('${terminal}')?.dataset.terminalId`, "关闭前终端已接上", closing);
 	closing.close();
 	await until("window.plume.panelWindows.list().then(list => list.length === 0)", "原生窗口关闭完成清理");
-	await page("document.querySelector('[data-panel-tab=\"plume.terminal/terminal\"] [role=tab]').click()");
+	await clickVisible(page, '[data-panel-tab="plume.terminal/terminal"] [role=tab]');
 	await until(`document.querySelector('${terminal}')?.dataset.terminalId === ${JSON.stringify(id)}`, "关闭第二窗不影响原终端");
 	console.log(
 		"PLUME_PANEL_SMOKE",
@@ -143,17 +144,17 @@ export async function checkSideChatWindow(window: BrowserWindow, outDir: string)
 	await page(`document.querySelector('${editor}').focus()`);
 	await window.webContents.insertText(draft);
 	await until(`document.querySelector('${editor}').textContent.includes(${JSON.stringify(draft)})`);
-	await page("document.querySelector('button[aria-label=\"在新窗口中打开\"]').click()");
+	await clickVisible(page, 'button[aria-label="在新窗口中打开"]');
 	await until("window.plume.panelWindows.list().then(list => list.length === 1)");
 	const detached = BrowserWindow.getAllWindows().find((candidate) => candidate !== window && candidate.isVisible());
 	assert.ok(detached);
 	await until(`document.querySelector('${editor}')?.textContent.includes(${JSON.stringify(draft)})`, detached);
-	await page("document.querySelector('[data-nav=new-chat]').click()");
+	await clickVisible(page, "[data-nav=new-chat]");
 	await until("document.querySelector('[data-screen=empty]') !== null");
 	// 点「收回」时独立窗口跟着关掉，这一次脚本的结果可能回不来（Render frame was disposed）；收回了没有由下一步核对。
-	await page("document.querySelector('button[aria-label=收回]').click()", detached).catch(windowClosed);
+	await clickVisible((code: string) => page(code, detached), "button[aria-label=收回]").catch(windowClosed);
 	await until(`document.querySelector('${editor}')?.textContent.includes(${JSON.stringify(draft)})`);
-	await page("document.querySelector('button[aria-label=\"在新窗口中打开\"]').click()");
+	await clickVisible(page, 'button[aria-label="在新窗口中打开"]');
 	await until("window.plume.panelWindows.list().then(list => list.length === 1)");
 	const crashed = BrowserWindow.getAllWindows().find((candidate) => candidate !== window && candidate.isVisible());
 	assert.ok(crashed);

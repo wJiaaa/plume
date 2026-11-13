@@ -4,7 +4,8 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { nativeClick, nativeEnter } from "./smoke-message-edits.ts";
+import { clickReal, clickRealIn, clickVisible, contextMenuVisible, lastOf } from "./smoke-kit.ts";
+import { nativeEnter } from "./smoke-message-edits.ts";
 
 /** 本体会话界面：项目折叠、项目草稿、置顶、停止后保留队列及手动发送。 */
 export async function checkConversations(options: {
@@ -24,12 +25,7 @@ export async function checkConversations(options: {
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(code), label);
-	const find = (selector: string, text?: string) =>
-		`[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => ${text === undefined ? "true" : `element.textContent.trim() === ${JSON.stringify(text)}`})`;
-	const click = async (selector: string, text?: string) => {
-		await until(`Boolean(${find(selector, text)})`, `${selector} ${text ?? ""}`);
-		await page(`${find(selector, text)}.click()`);
-	};
+	const click = (selector: string, text?: string) => clickVisible(page, selector, text);
 	const type = (selector: string, value: string) =>
 		page(`(() => {
 			const input = document.querySelector(${JSON.stringify(selector)});
@@ -46,9 +42,7 @@ export async function checkConversations(options: {
 	const menu = '[role=menu][aria-label="会话选项"]';
 	const openMenu = async (sessionId: string) => {
 		await until(`document.querySelector(${JSON.stringify(menu)}) === null`, "上一次会话菜单已关闭");
-		await page(
-			`(() => { const row = document.querySelector('[data-plume-row="${sessionId}"]'); const rect = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left + 40, clientY: rect.top + 12 })); })()`,
-		);
+		await contextMenuVisible(page, `[data-plume-row="${sessionId}"]`);
 		await until(`document.querySelector(${JSON.stringify(menu)}) !== null`, "会话右键菜单出现");
 	};
 	const menuItem = (label: string, within = menu) => click(`${within} [role^=menuitem]`, label);
@@ -108,7 +102,7 @@ export async function checkConversations(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("项目里的会话");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "项目会话可发送");
-		await nativeClick(window, page, "[data-composer-send=send]");
+		await clickReal(window, "[data-composer-send=send]");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('项目里答了一句。')`, "项目会话有回答");
 
 		const group = '[data-plume-project="冒烟项目"]';
@@ -125,7 +119,7 @@ export async function checkConversations(options: {
 		window.webContents.sendInputEvent({ type: "mouseMove", x: head.x + 600, y: head.y + 300 });
 		await until(`getComputedStyle(document.querySelector(${JSON.stringify(count)})).opacity === '1'`, "移开后数目回来");
 		await capture("smoke-project-collapsed-idle.png");
-		await click(`${group} button[aria-expanded=false]`);
+		await click(`${group} button[aria-expanded=false]:not([aria-haspopup])`);
 
 		const sessionId = await page<string>(`document.querySelector('[data-plume-session]').dataset.plumeSession`);
 		await openMenu(sessionId);
@@ -140,7 +134,7 @@ export async function checkConversations(options: {
 		hang = true;
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("等待停止的一轮");
-		await nativeClick(window, page, "[data-composer-send=send]");
+		await clickReal(window, "[data-composer-send=send]");
 		await wait(async () => (await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话开始运行");
 		await until(`document.querySelector('.cm-placeholder') !== null`, "已发送的草稿清空");
 		await page(`document.querySelector('.cm-content').focus()`);
@@ -150,7 +144,7 @@ export async function checkConversations(options: {
 		await until(`document.querySelector('.cm-placeholder') !== null`, "排队后输入框清空");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("尚未发送的草稿");
-		await nativeClick(window, page, "[data-composer-send=stop]");
+		await clickReal(window, "[data-composer-send=stop]");
 		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话已停止");
 		if (!(await page<boolean>(`document.querySelector('[data-queue-row]:not([data-leaving])')?.textContent.includes('排队的下一句')`)))
 			throw new Error("停止后排队消息丢失");
@@ -158,7 +152,7 @@ export async function checkConversations(options: {
 		await capture("smoke-conversation-queue-held.png");
 		hang = false;
 		reply = "排队消息已回复。";
-		await nativeClick(window, page, 'button[aria-label="现在就发"]');
+		await clickReal(window, 'button[aria-label="现在就发"]');
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('排队消息已回复。')`, "手动发送排队消息得到回复");
 		await until(`document.querySelectorAll('[data-queue-row]:not([data-leaving])').length === 0`, "队列已发送");
 		if (!(await page<boolean>(`document.querySelector('.cm-content')?.textContent === '尚未发送的草稿'`))) throw new Error("发送队列改变了输入框草稿");
@@ -184,7 +178,7 @@ export async function checkConversations(options: {
 			});
 			observer.observe(rows, { childList: true, subtree: true, characterData: true });
 		})()`);
-		await nativeClick(window, page, "[data-composer-send=send]");
+		await clickReal(window, "[data-composer-send=send]");
 		await wait(async () => (await agent.sessions()).some((session) => session.id === sessionId && session.running), "带工具的一轮开始运行");
 		await until(`document.querySelector('.cm-placeholder') !== null`, "草稿发出");
 		await page(`document.querySelector('.cm-content').focus()`);
@@ -196,7 +190,7 @@ export async function checkConversations(options: {
 		if (!order?.answered) throw new Error("排着的一句自动发出时，上一条回复还没整段画出来");
 		script = undefined;
 		// 二、后续会话同组嵌套，折叠后选中会话会展开；置顶后脱离来源，再取消置顶回去。
-		await nativeClick(window, page, "[data-screen=chat] [data-plume-quote=assistant] [data-message-fork]");
+		await clickRealIn(window, lastOf("[data-screen=chat] [data-plume-quote=assistant] [data-message-fork]"), "最后一条回复的分叉");
 		await until(`document.querySelector('[data-plume-screen-title]')?.textContent.endsWith('（分叉）')`, "分叉会话打开");
 		const forkId = await page<string>(`document.querySelector('[data-plume-session]').dataset.plumeSession`);
 		const forkRow = `[data-plume-row="${forkId}"]`;
@@ -246,7 +240,7 @@ export async function checkConversations(options: {
 		await until(`document.querySelector('[data-screen=empty] .cm-content') !== null`, "新建第二条顶层会话");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("侧栏排序测试");
-		await nativeClick(window, page, "[data-composer-send=send]");
+		await clickReal(window, "[data-composer-send=send]");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('排队消息已回复。')`, "排序会话已创建");
 		const secondId = await page<string>(`document.querySelector('[data-plume-session]').dataset.plumeSession`);
 		const drag = async (source: string, target: string) => {

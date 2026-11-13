@@ -7,6 +7,7 @@ import type { Remote } from "@plume/rpc";
 import { BrowserWindow, nativeImage, shell } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
+import { clickReal, clickVisible, contextMenuVisibleIn, firstOf } from "./smoke-kit.ts";
 
 /** 真生图插件、会话事件和窗口交接；模型与生图服务只访问本机，系统定位出口用记录替身。 */
 export async function checkGallery(options: {
@@ -26,23 +27,11 @@ export async function checkGallery(options: {
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(`Boolean(${code})`), label);
-	const click = async (selector: string, text?: string) => {
-		await until(
-			`(() => { const item = [...document.querySelectorAll(${JSON.stringify(selector)})].find(node => ${text === undefined ? "true" : `node.textContent.trim() === ${JSON.stringify(text)}`}); if (!item || item.disabled) return false; item.click(); return true; })()`,
-			`点击 ${text ?? selector}`,
-		);
-	};
+	const click = (selector: string, text?: string) => clickVisible(page, selector, text, 20_000);
 	const type = async (selector: string, value: string) => {
 		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `输入 ${selector}`);
 		await page(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); input.focus(); if (input.select) input.select(); })()`);
 		await window.webContents.insertText(value);
-	};
-	const nativeClick = async (selector: string) => {
-		const point = await page<{ x: number; y: number }>(
-			`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`,
-		);
-		window.webContents.sendInputEvent({ type: "mouseDown", button: "left", clickCount: 1, ...point });
-		window.webContents.sendInputEvent({ type: "mouseUp", button: "left", clickCount: 1, ...point });
 	};
 	const send = async (text: string) => {
 		await type(".cm-content", text);
@@ -102,7 +91,7 @@ export async function checkGallery(options: {
 		await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.image" && item.state === "active"), "生图插件加载");
 		window.webContents.send("plume:command", "settings");
 		await click("button", "模型设置");
-		await click("[data-add-provider]");
+		await click("[data-add-provider]", "添加供应商");
 		await type("#provider-name", "画廊假生图");
 		await type("#provider-url", `http://127.0.0.1:${address.port}`);
 		await type("#provider-key", "gallery-test-key");
@@ -172,8 +161,7 @@ export async function checkGallery(options: {
 		await wait(async () => pending !== undefined, "停止前生图挂起");
 		await gallery();
 		const stop = "[data-image-gallery-send] [data-composer-send=stop]";
-		await until(`document.querySelector(${JSON.stringify(stop)}) !== null`, "停止入口就绪");
-		await nativeClick(stop);
+		await clickReal(window, stop);
 		await wait(async () => !(await agent.sessions()).find((item) => item.id === session.id)?.running, "真实点击停止会话");
 		await wait(async () => pending?.destroyed === true, "生图网络请求取消");
 		pending = undefined;
@@ -205,40 +193,20 @@ export async function checkGallery(options: {
 			async () => Boolean(await detached!.webContents.executeJavaScript("document.querySelector('[data-image-card=done] img')?.naturalWidth > 0")),
 			"独立窗口图片",
 		);
-		const context = `(() => { const picture = document.querySelector('[data-image-card=done] .plume-image-canvas'); const r = picture.getBoundingClientRect(); picture.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + 4, clientY: r.y + 4 })); })()`;
-		await detached!.webContents.executeJavaScript(context);
-		await wait(
-			async () =>
-				Boolean(
-					await detached!.webContents.executeJavaScript(
-						"Boolean([...document.querySelectorAll('[role=menuitem]')].find(item => item.textContent.trim() === '在新标签页中打开图片'))",
-					),
-				),
-			"图片右键菜单",
-		);
-		await detached!.webContents.executeJavaScript(
-			"[...document.querySelectorAll('[role=menuitem]')].find(item => item.textContent.trim() === '在新标签页中打开图片').click()",
-		);
+		const detachedPage = (code: string) => detached!.webContents.executeJavaScript(code) as Promise<unknown>;
+		// 对话里有原图和改过的两张，右键的是原图（排在前面那张），下面定位到的也该是它。
+		const context = () => contextMenuVisibleIn(detachedPage, firstOf("[data-image-card=done] .plume-image-canvas"), "原图", 4, 4, 20_000);
+		await context();
+		await clickVisible(detachedPage, "[role=menuitem]", "在新标签页中打开图片", 20_000);
 		await until("document.querySelector('[data-panel]:not([inert]) img')?.naturalWidth > 0", "托管媒体在普通文件面板加载");
 		assert.equal(await page(`document.querySelector('[data-plume-row="${session.id}"] > button')?.getAttribute('aria-current')`), "page", "面板保持来源会话");
 		await capture("smoke-gallery-file-pane.png");
 		shell.showItemInFolder = (path) => {
 			revealed = path;
 		};
-		await detached!.webContents.executeJavaScript(context);
+		await context();
 		const revealLabel = process.platform === "darwin" ? "在访达中显示" : process.platform === "win32" ? "在资源管理器中显示" : "在文件管理器中显示";
-		await wait(
-			async () =>
-				Boolean(
-					await detached!.webContents.executeJavaScript(
-						`Boolean([...document.querySelectorAll('[role=menuitem]')].find(item => item.textContent.trim() === ${JSON.stringify(revealLabel)}))`,
-					),
-				),
-			"定位菜单项",
-		);
-		await detached!.webContents.executeJavaScript(
-			`[...document.querySelectorAll('[role=menuitem]')].find(item => item.textContent.trim() === ${JSON.stringify(revealLabel)}).click()`,
-		);
+		await clickVisible(detachedPage, "[role=menuitem]", revealLabel, 20_000);
 		await wait(async () => revealed !== undefined, "定位托管图片");
 		assert.equal(revealed, await page(`window.plume.media.path(${JSON.stringify(original)})`));
 

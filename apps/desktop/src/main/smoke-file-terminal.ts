@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { BrowserWindow } from "electron";
 import { nativeEnter } from "./smoke-message-edits.ts";
 import { windowClosed } from "./smoke-panels.ts";
+import { clickEachVisible, clickVisible, contextMenuVisible } from "./smoke-kit.ts";
 
 /** 接在面板框架验收后：只操作 smoke 目录和终端，最后留一个正常终端供后续步骤使用。 */
 export async function checkFileTerminal(window: BrowserWindow, workspace: string, outDir: string): Promise<void> {
@@ -47,11 +48,7 @@ export async function checkFileTerminal(window: BrowserWindow, workspace: string
 		}
 	};
 	const until = (code: string, label: string, target = window) => wait(() => page<boolean>(code, target), label, target);
-	const click = async (selector: string, text?: string, target = window) => {
-		const find = `[...document.querySelectorAll(${JSON.stringify(selector)})].find(node => ${text === undefined ? "true" : `node.textContent.trim() === ${JSON.stringify(text)}`})`;
-		await until(`Boolean(${find})`, `找到 ${selector} ${text ?? ""}`, target);
-		await page(`${find}.click()`, target);
-	};
+	const click = (selector: string, text?: string, target = window) => clickVisible((code: string) => page(code, target), selector, text, 20_000);
 	const capture = async (name: string, target = window) => {
 		await page("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))", target);
 		await writeFile(join(outDir, name), (await target.webContents.capturePage()).toPNG());
@@ -100,13 +97,7 @@ export async function checkFileTerminal(window: BrowserWindow, workspace: string
 		await until(`document.querySelector('${tree} [role=tree]') !== null`, "文件树可用");
 	};
 	const menu = async (selector: string, label: string) => {
-		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `文件树菜单目标 ${selector}`);
-		await page(`(() => {
-			const node = document.querySelector(${JSON.stringify(selector)});
-			node.scrollIntoView({ block: 'center' });
-			const rect = node.getBoundingClientRect();
-			node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left + 40, clientY: rect.top + rect.height / 2 }));
-		})()`);
+		await contextMenuVisible(page, selector, 40, 12, 20_000);
 		await click("[role=menuitem]:not(:disabled) > .min-w-0", label);
 	};
 	const fromTree = async (directory: string) => {
@@ -126,7 +117,7 @@ export async function checkFileTerminal(window: BrowserWindow, workspace: string
 	try {
 		assert.equal((await page<unknown[]>("window.plume.panelWindows.list()")).length, 0, "先前的面板验收应已收回独立窗口");
 		// 首次必须由文件树创建，不能误把已有 shell 当成首次打开成功。
-		await page(`document.querySelectorAll('${terminalTab} button[aria-label^="关闭"]').forEach(button => button.click())`);
+		await clickEachVisible(page, `${terminalTab} button[aria-label^="关闭"]`);
 		await until(`document.querySelectorAll('${terminalTab}').length === 0`, "关掉先前验收的终端标签");
 		await fromTree(first);
 		await waitForTerminal();

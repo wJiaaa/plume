@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
 import { windowClosed } from "./smoke-panels.ts";
+import { clickVisible } from "./smoke-kit.ts";
 
 /** 专项入口只准备主会话、一个其他面板和侧聊（内置插件，随应用加载），复用完整冒烟的同一组断言。 */
 export async function prepareQuoteSideChat(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
@@ -18,7 +19,7 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 	await click("button", "创建项目");
 	await until("document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace')", "划词专项项目就绪");
 	await click("[data-model-trigger]");
-	await click("button", "fake-model");
+	await click("[role=menuitem]", "fake-model");
 	await page("document.querySelector('.cm-content').focus()");
 	await window.webContents.insertText("为划词提问准备主会话");
 	await until("document.querySelector('[data-composer-send=send]')?.disabled === false", "主会话可发送");
@@ -186,14 +187,12 @@ export async function checkQuoteSideChat(options: {
 		assert.deepEqual(await detachedPage(draft), original, "主窗口的新引用不改弹出窗口里的草稿");
 		assert.equal(await page("window.plume.panelWindows.list().then(list => list.length)"), 1, "新引用不收回或复制弹出的原侧聊");
 		// 点「收回」时独立窗口跟着关掉，这一次脚本的结果可能回不来（Render frame was disposed）；收回了没有由下一步核对。
-		await detachedPage("document.querySelector('button[aria-label=收回]').click()").catch(windowClosed);
+		await clickVisible(detachedPage, "button[aria-label=收回]").catch(windowClosed);
 		await until(`document.querySelectorAll('${side} [data-plume-quote-chip]').length === 2`, "收回仍有两段引文");
 		assert.equal(await page(countTabs), tabs, "三种新标签验收结束后原标签集合保留");
 		// 收回后面板重新挂上，会话读回来之前输入框是禁用的，这时点发送什么都不做：等它能发再点。只认看得见的那个按钮
 		// （换过草稿的输入框还挂着、藏着，见宿主的 ChildConversation）。
-		const sideSend = `[...document.querySelectorAll('${side} [data-composer-send=send]')].find((button) => button.checkVisibility())`;
-		await until(`${sideSend}?.disabled === false`, "收回后侧聊可以发送");
-		await page(`${sideSend}.click()`);
+		await clickVisible(page, `${side} [data-composer-send=send]`);
 		await until(`document.querySelector('${side}')?.textContent.includes('侧边聊天已经读到引文和附件。')`, "手动发送才开始回答");
 		assert.ok(requests.length > 0);
 		const sent = JSON.stringify(requests.at(-1)?.messages);

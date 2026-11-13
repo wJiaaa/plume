@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
 import type { ModelOverride } from "./smoke-browser.ts";
+import { clickVisibleIn, firstOf } from "./smoke-kit.ts";
 
 /** 真输入框的 @、命令面板及通知跳转；系统通知由主进程的注入式测试验证，不打扰桌面。 */
 export async function checkNavigation({
@@ -111,7 +112,7 @@ export async function checkNavigation({
 		await capture(window, join(outDir, "smoke-notifications.png"));
 		await click("[data-plume-notice=waiting]");
 		await until(`document.querySelector('[data-ask-form]') !== null`, "通知跳回审批卡");
-		await click("[data-ask-option]");
+		await clickVisibleIn(page, firstOf("[data-ask-option]"), "第一个选项");
 		await click("[data-ask-action=submit]");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('引用已收到。')`, "通知中的提问答复完成");
 		// 最小窗口里列表和输入框都必须留在视口内。

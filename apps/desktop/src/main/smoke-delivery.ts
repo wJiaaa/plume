@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
+import { clickEachVisible, contextMenuVisibleIn, firstOf } from "./smoke-kit.ts";
 
 interface DeliverySmoke {
 	window: BrowserWindow;
@@ -68,9 +69,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		`document.activeElement?.hasAttribute('data-delivery-file') && document.querySelector(${JSON.stringify(preview)}) !== null`,
 		"键盘聚焦文件行立即预览",
 	);
-	await page(
-		`(() => { const row = document.querySelector('${card} [data-delivery-file]'); const r = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 18 })); })()`,
-	);
+	await contextMenuVisibleIn(page, firstOf(`${card} [data-delivery-file]`), "交付卡片的第一行文件", 40, 18);
 	await until(
 		`document.querySelector('[role=menu]')?.textContent.includes('复制相对路径') && !document.querySelector(${JSON.stringify(preview)})`,
 		"文件右键菜单出现且预览让开",
@@ -85,7 +84,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 	await capture(window, join(outDir, "smoke-delivery-review.png"));
 
 	// 清掉本次打开的辅助标签，后面的终端验证仍从空面板开始。
-	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+	await clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "关闭审核后面板收起");
 	await page(`window.plume.saveAppearance({ theme: 'dark' })`);
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "交付卡切到深色");
@@ -124,7 +123,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		)
 	)
 		throw new Error("撤销新建文件后文件仍存在");
-	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+	await clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "结束交付面板验证");
 	console.log(`PLUME_DELIVERY_SMOKE ${JSON.stringify({ ok: true, files: 4, animation, review: true, undo: true, themes: ["light", "dark"] })}`);
 }

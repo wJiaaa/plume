@@ -5,6 +5,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { clipboard, nativeImage, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickEachVisible, clickReal as clickRealIn, clickVisible } from "./smoke-kit.ts";
 
 const HTML = `<!doctype html><html><head><style>
 body{color:var(--foreground);font-family:var(--font-sans)}section{padding:20px;background:var(--card);border-radius:var(--radius)}h2{margin:0 0 12px}button{background:var(--primary);color:var(--primary-foreground);border:0;padding:8px 16px;border-radius:var(--radius)}.long{height:2400px;padding-top:24px}
@@ -39,7 +40,7 @@ export async function checkPreview({
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(code), label);
-	const click = (selector: string) => page(`document.querySelector(${JSON.stringify(selector)}).click()`);
+	const click = (selector: string) => clickVisible(page, selector);
 	const send = async (text: string) => {
 		await page("document.querySelector('.cm-content').focus()");
 		await window.webContents.insertText(text);
@@ -119,7 +120,7 @@ export async function checkPreview({
 			"({node:typeof require,app:typeof window.plume?.saveAppearance,parent:(()=>{try{return !!parent.document}catch{return false}})()})",
 		);
 		assert.deepEqual(sandbox, { node: "undefined", app: "undefined", parent: false });
-		await frame()!.executeJavaScript("document.querySelector('#count').click()");
+		await clickVisible((code) => frame()!.executeJavaScript(code), "#count");
 		await wait(async () => Boolean(await frame()!.executeJavaScript("plume.state.count===1")), "页面交互");
 		await page("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
 		await click('.preview-actions button[aria-label="重新运行"]');
@@ -130,21 +131,35 @@ export async function checkPreview({
 				return false;
 			}
 		}, "重跑恢复状态");
+		/**
+		 * 真点：宿主页面里的元素经共用的 clickReal 点；`nested` 时点沙箱页（跨进程的 iframe）里的元素，落点要加上 iframe 的位置、
+		 * 落没落到要在沙箱页里核对，共用的那份做不到，只有这一段要，留在这里。
+		 */
 		const clickReal = async (selector: string, nested = false) => {
 			await until("document.querySelector('.preview-handover')===null", "页面交接结束");
+			// 先往上滚一格，对话不再跟着底部走，下面滚到目标处才不会被拉回去。
 			await page(
-				`(() => { const el=document.querySelector(${JSON.stringify(nested ? ".preview-card iframe" : selector)}); el.closest('.plume-scroll-view').dispatchEvent(new WheelEvent('wheel',{deltaY:-1,bubbles:true}));el.scrollIntoView({block:${JSON.stringify(nested ? "start" : "center")},behavior:'instant'}); })()`,
+				`(() => { const el=document.querySelector(${JSON.stringify(nested ? ".preview-card iframe" : selector)}); el.closest('.plume-scroll-view').dispatchEvent(new WheelEvent('wheel',{deltaY:-1,bubbles:true})); ${nested ? "el.scrollIntoView({block:'start',behavior:'instant'});" : ""} })()`,
 			);
+			if (!nested) return clickRealIn(window, selector);
 			await page("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-			const rect = `(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`;
-			const point = (await (nested ? frame()!.executeJavaScript(rect) : page(rect))) as { x: number; y: number };
-			if (nested) {
-				const offset = await page<{ x: number; y: number }>(
-					"(() => {const r=document.querySelector('.preview-card iframe').getBoundingClientRect();return {x:r.x,y:r.y}})()",
-				);
-				point.x += offset.x;
-				point.y += offset.y;
-			}
+			await wait(
+				async () =>
+					Boolean(
+						await frame()!.executeJavaScript(
+							`(() => { const e = document.querySelector(${JSON.stringify(selector)}); return !!e && e.checkVisibility({ visibilityProperty: true }) && !e.matches(':disabled'); })()`,
+						),
+					),
+				`沙箱页里的 ${selector} 看得见、能点`,
+			);
+			const point = (await frame()!.executeJavaScript(
+				`(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+			)) as { x: number; y: number };
+			const offset = await page<{ x: number; y: number }>(
+				"(() => {const r=document.querySelector('.preview-card iframe').getBoundingClientRect();return {x:r.x,y:r.y}})()",
+			);
+			point.x += offset.x;
+			point.y += offset.y;
 
 			const press = async () => {
 				await window.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
@@ -162,7 +177,6 @@ export async function checkPreview({
 					y: point.y,
 				});
 			};
-			if (!nested) return press();
 			// 刚滚过的沙箱页：浏览器进程认点到哪个渲染进程，用的是合成器交上来的命中区域，可能还是滚动前的那一份，
 			// 这一下就落在宿主页面的 <iframe> 元素上、进不了沙箱页（宿主收到 pointerdown，沙箱页什么都没收到）。
 			// 沙箱页没收到才再点：落空的那一下在宿主那边没有作用，不会多发。
@@ -180,6 +194,7 @@ export async function checkPreview({
 			throw new Error(`网页预览冒烟：点不进沙箱页的 ${selector}`);
 		};
 		assert.equal(await frame()!.executeJavaScript("window.autoSend"), false);
+		// 故意用脚本点，不经 clickVisible：页面里程序触发的发送不算人话，下面断言它没有发出去；人点的那一下紧接着经 clickReal。
 		await frame()!.executeJavaScript("document.querySelector('#send').click()");
 		assert.equal(await frame()!.executeJavaScript("window.timerSend ?? false"), false);
 
@@ -205,7 +220,7 @@ export async function checkPreview({
 		await wait(async () => Boolean(await frame()!.executeJavaScript("design.size===20")), "复位");
 		await clickReal(".preview-card [role=switch]");
 		await wait(async () => Boolean(await frame()!.executeJavaScript("design.enabled===false")), "开关调整");
-		await page("document.querySelectorAll('[data-plume-toaster] button[aria-label=关闭]').forEach(button=>button.click())");
+		await clickEachVisible(page, "[data-plume-toaster] button[aria-label=关闭]");
 		await writeFile(join(outDir, "smoke-preview-tweaks.png"), (await window.webContents.capturePage()).toPNG());
 		await clickReal(".preview-card .preview-tweak-actions button:last-child");
 		await until("document.querySelector('[data-screen=chat]')?.textContent.includes('收到设计修改。') === true", "发送设计修改");

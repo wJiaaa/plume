@@ -8,6 +8,7 @@ import type { Remote } from "@plume/rpc";
 import { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
+import { clickEachVisible, clickVisible, clickVisibleIn } from "./smoke-kit.ts";
 
 /** 沿用文件专项的真实文档，验证 Git 入口和 MCP 直接／延迟调用走同一预览。 */
 export async function checkDocumentPlugins({
@@ -36,10 +37,7 @@ export async function checkDocumentPlugins({
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(`Boolean(${code})`), label);
-	const click = async (selector: string) => {
-		await until(`document.querySelector(${JSON.stringify(selector)})`, selector);
-		await page(`document.querySelector(${JSON.stringify(selector)}).click()`);
-	};
+	const click = (selector: string) => clickVisible(page, selector, undefined, 20_000);
 	const capture = async (name: string, selector?: string) => {
 		await page(
 			"Promise.all(document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation => animation.finished.catch(() => {})))",
@@ -100,7 +98,7 @@ export async function checkDocumentPlugins({
 	await click('[data-panel-tab="plume.git/git"] [role=tab]');
 	const commentFile = `[...document.querySelectorAll('${shown} .git-file')].find((row) => row.querySelector('.git-tree-file-name')?.textContent === 'comment.txt')`;
 	await until(commentFile, "Git 列出新写的文件");
-	await page(`${commentFile}.querySelector('.git-tree-toggle').click()`);
+	await clickVisibleIn(page, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
 	await until(`${commentFile}?.querySelector('.git-diff-pick')`, "改动视图的行号可以评论");
 	await page(`(() => {
 		${commentFile}.querySelector('.git-diff-pick').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -130,6 +128,8 @@ export async function checkDocumentPlugins({
 	await wait(async () => (await panelWindows()) === 1, "Git 面板弹到独立窗口");
 	const detached = BrowserWindow.getAllWindows().find((candidate) => candidate !== window && candidate.isVisible());
 	assert.ok(detached, "找到独立的 Git 窗口");
+	const detachedPage = (code: string) => detached.webContents.executeJavaScript(code) as Promise<unknown>;
+	const keepOnTop = "[document.querySelector('[data-keep-on-top]')?.closest('button')]";
 	try {
 		const inDetached = (code: string, label: string) =>
 			wait(() => detached.webContents.executeJavaScript(`Boolean(${code})`) as Promise<boolean>, `独立窗口：${label}`);
@@ -144,19 +144,17 @@ export async function checkDocumentPlugins({
 			true,
 			"独立窗口不画卡片和标签",
 		);
-		await detached.webContents.executeJavaScript("document.querySelector('[data-keep-on-top]').closest('button').click()");
+		await clickVisibleIn(detachedPage, keepOnTop, "置顶按钮");
 		await wait(async () => detached.isAlwaysOnTop(), "面板窗口置顶");
 		await inDetached(`document.querySelector('[data-keep-on-top]')?.dataset.keepOnTop === 'true'`, "置顶按钮按下");
-		await detached.webContents.executeJavaScript("document.querySelector('[data-keep-on-top]').closest('button').click()");
+		await clickVisibleIn(detachedPage, keepOnTop, "置顶按钮");
 		await wait(async () => !detached.isAlwaysOnTop(), "面板窗口取消置顶");
 		await detached.webContents.executeJavaScript(
 			"Promise.all(document.getAnimations().filter(a => Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a => a.finished.catch(() => {})))",
 		);
 		await writeFile(join(outDir, "smoke-panel-window-git.png"), (await detached.webContents.capturePage()).toPNG());
-		await detached.webContents.executeJavaScript(`(() => {
-			const row = ${commentFile};
-			if (!row.querySelector('.git-diff-pick')) row.querySelector('.git-tree-toggle').click();
-		})()`);
+		if (!(await detachedPage(`Boolean(${commentFile}.querySelector('.git-diff-pick'))`)))
+			await clickVisibleIn(detachedPage, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
 		await inDetached(`${commentFile}?.querySelector('.git-diff-pick')`, "改动视图的行号可以评论");
 		await detached.webContents.executeJavaScript(`(() => {
 			${commentFile}.querySelector('.git-diff-pick').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -166,21 +164,20 @@ export async function checkDocumentPlugins({
 		await detached.webContents.executeJavaScript("document.querySelector('[data-diff-comment-input]').focus()");
 		await detached.webContents.insertText("独立窗口里的评论");
 		await inDetached(`document.querySelector('button[aria-label="留下评论"]')?.disabled === false`, "评论写进框里");
-		await detached.webContents.executeJavaScript(`document.querySelector('button[aria-label="留下评论"]').click()`);
+		await clickVisible(detachedPage, 'button[aria-label="留下评论"]');
 		await inDetached(`document.querySelector('${shown} [data-diff-comment-bar]')?.textContent.includes('1 条评论')`, "底下一条写着 1 条评论");
 		setModel(() => ({ text: "独立窗口的评论已处理。" }));
-		await detached.webContents.executeJavaScript(`document.querySelector('${shown} [data-diff-comment-send]').click()`);
+		await clickVisible(detachedPage, `${shown} [data-diff-comment-send]`);
 		await until(
 			"document.querySelector('[data-screen=chat]')?.textContent.includes('独立窗口里的评论') && document.querySelector('[data-screen=chat]')?.textContent.includes('独立窗口的评论已处理。')",
 			"独立窗口的评论转交主窗口，在来源会话里发出、Agent 回复",
 		);
 		await inDetached(`!document.querySelector('${shown} [data-diff-comment-bar]')`, "发出去以后评论清空");
 	} finally {
-		if (!detached.isDestroyed())
-			await detached.webContents.executeJavaScript(`document.querySelector('button[aria-label="收回"]')?.click()`).catch(() => detached.close());
+		if (!detached.isDestroyed()) await clickVisible(detachedPage, 'button[aria-label="收回"]').catch(() => detached.close());
 	}
 	await wait(async () => (await panelWindows()) === 0, "Git 面板收回原会话");
-	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+	await clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 	let called = false;
 	setModel((request) => {
 		if (called) return { text: "MCP 文档已返回。" };

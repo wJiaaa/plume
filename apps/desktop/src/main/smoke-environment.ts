@@ -4,6 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickVisible, clickVisibleIn, firstOf } from "./smoke-kit.ts";
 
 const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
 const STARTED = "服务起来了，监视和唤醒都安排好了。";
@@ -45,7 +46,8 @@ export async function checkEnvironment(options: {
 	const until = (code: string, label: string, timeout?: number) =>
 		wait(
 			async () => {
-				await page(`[...document.querySelectorAll('[data-approval-card] button')].find((button) => button.textContent.includes('允许一次'))?.click()`);
+				if (await page<boolean>(`[...document.querySelectorAll('[data-approval-card] button')].some((button) => button.textContent.includes('允许一次'))`))
+					await clickVisible(page, `[data-approval-card] button`, /允许一次/);
 				return page<boolean>(code);
 			},
 			label,
@@ -61,7 +63,7 @@ export async function checkEnvironment(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(text);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 	};
 	const toggleLabel = () => page<string>(`document.querySelector('[data-environment-toggle]')?.getAttribute('aria-label') ?? ''`);
 	if (part === "summary") {
@@ -97,13 +99,13 @@ export async function checkEnvironment(options: {
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 
 		// 卡片收着：开关上的圆点和说明数着待触发的唤醒和在跑的监视。
-		if (await page<boolean>(`document.querySelector('[data-environment]') !== null`)) await page(`document.querySelector('[data-environment-toggle]').click()`);
+		if (await page<boolean>(`document.querySelector('[data-environment]') !== null`)) await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "收着的开关上有圆点");
 		await wait(async () => /2 个定时唤醒待触发/.test(await toggleLabel()) && /1 个监视在跑/.test(await toggleLabel()), "开关说明数着唤醒和监视");
 		await capture("smoke-environment-toggle.png");
 
 		// 打开卡片：后台任务那一行有端口签和监视签，唤醒一节两项。
-		await page(`document.querySelector('[data-environment-toggle]').click()`);
+		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-port]')?.textContent.startsWith(':') === true`, "服务那一行有端口签", 30_000);
 		await until(`document.querySelector('[data-environment-monitor]') !== null`, "监视那一行有监视签");
 		await until(`document.querySelectorAll('[data-environment-wakeup]').length === 2`, "唤醒一节两项");
@@ -138,8 +140,10 @@ export async function checkEnvironment(options: {
 		await settled();
 
 		// 取消十分钟那项。
-		await page(
-			`[...document.querySelectorAll('[data-environment-wakeup]')].find((row) => row.textContent.includes(${JSON.stringify(CANCEL)})).querySelector('[data-wakeup-cancel]').click()`,
+		await clickVisibleIn(
+			page,
+			`[...document.querySelectorAll('[data-environment-wakeup]')].filter((row) => row.textContent.includes(${JSON.stringify(CANCEL)})).map((row) => row.querySelector('[data-wakeup-cancel]'))`,
+			"十分钟那项的取消",
 		);
 		await until(
 			`document.querySelectorAll('[data-environment-wakeup]').length === 1 && document.querySelector('[data-environment-wakeup]').textContent.includes(${JSON.stringify(FIRE)})`,
@@ -148,7 +152,7 @@ export async function checkEnvironment(options: {
 
 		// 点服务那一行：任务面板里列出服务地址，带打开、复制。
 		const port = await page<string>(`document.querySelector('[data-environment-port]').textContent.slice(1)`);
-		await page(`document.querySelector('[data-environment-port]').closest('button').click()`);
+		await clickVisibleIn(page, `[...document.querySelectorAll('[data-environment-port]')].map((port) => port.closest('button'))`, "服务那一行");
 		await until(`document.querySelector('[data-session-services] [data-service-endpoint="${port}"]') !== null`, "任务面板列出服务地址");
 		if (!(await page<string>(`document.querySelector('[data-service-endpoint="${port}"]').textContent`)).includes(`127.0.0.1:${port}`))
 			throw new Error("服务地址不是本机这个端口");
@@ -171,7 +175,7 @@ export async function checkEnvironment(options: {
 
 		// 收拾：停掉服务和监视。
 		for (let left = 2; left > 0; left--) {
-			await page(`document.querySelector('[data-environment-job] button[aria-label="停止"]')?.click()`);
+			await clickVisibleIn(page, firstOf('[data-environment-job] button[aria-label="停止"]'), "第一个后台任务的停止");
 			await until(`document.querySelectorAll('[data-environment-job]').length < ${left}`, "停掉后台任务");
 		}
 	} finally {
@@ -204,8 +208,7 @@ export async function checkEnvironment(options: {
 				await until(chatHas(replies[index]!), `第 ${index + 1} 句的回复`);
 			}
 			await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
-			if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`)))
-				await page(`document.querySelector('[data-environment-toggle]').click()`);
+			if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`))) await clickVisible(page, `[data-environment-toggle]`);
 			await until(
 				`document.querySelector('[data-environment-summary]')?.textContent.includes(${JSON.stringify(SUMMARY)}) === true`,
 				"卡片里出现会话摘要",
@@ -225,7 +228,7 @@ export async function checkEnvironment(options: {
 
 		window.webContents.send("plume:command", "settings");
 		await until(`document.querySelector('[aria-label=设置章节]') !== null`, "设置打开");
-		await page(`[...document.querySelectorAll('[aria-label=设置章节] button')].find((button) => button.textContent.trim() === '智能体').click()`);
+		await clickVisible(page, `[aria-label=设置章节] button`, "智能体");
 		await until(`document.body.textContent.includes('会话摘要模型')`, "智能体设置里有会话摘要模型");
 		await page(
 			`[...document.querySelectorAll('*')].find((node) => node.childElementCount === 0 && node.textContent === '会话摘要模型')?.scrollIntoView({ block: 'center' })`,

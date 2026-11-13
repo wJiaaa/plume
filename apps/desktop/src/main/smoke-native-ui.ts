@@ -6,7 +6,7 @@ import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { runPluginCli } from "./smoke-plugin-cli.ts";
-import { clickReal as clickRealIn } from "./smoke-kit.ts";
+import { clickReal as clickRealIn, clickVisible } from "./smoke-kit.ts";
 
 const FORM = `<Card title="原生界面验证">
   <Input name="name" label="姓名" value="Ada"/>
@@ -61,7 +61,7 @@ export async function checkNativeUi(options: {
 		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "A", modifiers: [process.platform === "darwin" ? "meta" : "control"] });
 		await window.webContents.insertText(prompt);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送问题");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await wait(async () => (await agent.sessions()).some((item) => !previous.has(item.id)), "新会话已创建");
 		return (await agent.sessions()).find((item) => !previous.has(item.id))!;
 	};
@@ -69,13 +69,14 @@ export async function checkNativeUi(options: {
 		// 插件的开关在插件市场的详情页里：回到工作区，从侧栏进市场，详情开着时先回网格，再点这个插件的卡片。
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
-		await page(`document.querySelector('[data-nav=market]').click()`);
-		await page(`document.querySelector('nav[aria-label="插件市场"] button')?.click()`);
+		await clickVisible(page, `[data-nav=market]`);
+		if (await page<boolean>(`document.querySelector('nav[aria-label="插件市场"] button') !== null`))
+			await clickVisible(page, `nav[aria-label="插件市场"] button`);
 		await until(`document.querySelector('[data-card="native-ui"] > button') !== null`, "市场列出原生界面插件");
-		await page(`document.querySelector('[data-card="native-ui"] > button').click()`);
+		await clickVisible(page, `[data-card="native-ui"] > button`);
 		const toggle = '[data-plugin-detail="native-ui"] [role=switch]';
 		await until(`document.querySelector(${JSON.stringify(toggle)}) !== null`, "找到插件开关");
-		await page(`document.querySelector(${JSON.stringify(toggle)}).click()`);
+		await clickVisible(page, toggle);
 		await wait(
 			async () => (await agent.plugins()).some((item) => item.name === "plume.native-ui" && item.state === (on ? "active" : "disabled")),
 			"插件状态已更新",
@@ -199,7 +200,7 @@ export async function checkNativeUi(options: {
 		await until(`innerWidth === ${size[0]}`, "恢复窗口");
 
 		// DOM.click 是程序事件，不能替用户发送。
-		await page(`document.querySelector('${form} [data-native-ui-send=true]').click()`);
+		await clickVisible(page, `${form} [data-native-ui-send=true]`);
 		await until(`document.querySelector('${form} [data-native-ui-error]') !== null`, "程序点击被拒绝");
 		assert.equal(await page<number>(`document.querySelectorAll('[data-screen=chat] [data-plume-quote=user]').length`), 1);
 		await clickReal(`${form} [data-native-ui-send=true]`);
@@ -255,7 +256,7 @@ export async function checkNativeUi(options: {
 			),
 			"流式表单不能提交",
 		);
-		await page(`document.querySelector('[data-composer-send=stop]').click()`);
+		await clickVisible(page, `[data-composer-send=stop]`);
 		await wait(async () => (await agent.sessions()).some((item) => item.id === streaming.id && !item.running), "中断流式");
 		await until(
 			`!document.querySelector('${form} button') || document.querySelector('${form} button').disabled || document.querySelector('${form}').inert`,
@@ -280,7 +281,7 @@ export async function checkNativeUi(options: {
 		await page(
 			`if (window.__nativeClipboardWrite) { navigator.clipboard.writeText = window.__nativeClipboardWrite; delete window.__nativeClipboardWrite; } delete window.__nativeCopied;`,
 		);
-		await page(`document.querySelector('[data-composer-send=stop]')?.click()`);
+		if (await page<boolean>(`document.querySelector('[data-composer-send=stop]') !== null`)) await clickVisible(page, `[data-composer-send=stop]`);
 		setModel(undefined);
 		await page(`window.plume.saveAppearance({ theme: 'light' })`);
 	}

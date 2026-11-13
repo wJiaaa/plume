@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
+import { clickVisible, containing } from "./smoke-kit.ts";
 
 /**
  * 上下文用量里的「记忆文件」点得开会话目录外的文件：工作目录的上一层做成仓库根、放一份 AGENTS.md，plume.prompt 把它整段放进提示词并标出
@@ -23,11 +24,7 @@ export async function checkMemoryFiles(options: {
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(code), label);
-	const click = async (selector: string, text?: string) => {
-		const find = `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => ${text === undefined ? "true" : `element.textContent.includes(${JSON.stringify(text)})`})`;
-		await until(`Boolean(${find})`, text ?? selector);
-		await page(`${find}.click()`);
-	};
+	const click = (selector: string, text?: string) => clickVisible(page, selector, text === undefined ? undefined : containing(text));
 
 	// 只是让 plume.prompt 认出仓库根，往上收到这一层：不是真仓库，这一段跑完就退出。
 	const root = dirname(workspace);
@@ -42,7 +39,7 @@ export async function checkMemoryFiles(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("记忆文件：看看上层约定");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('记忆文件准备好了。') === true`, "这一轮答完");
 	} finally {
 		setModel(undefined);

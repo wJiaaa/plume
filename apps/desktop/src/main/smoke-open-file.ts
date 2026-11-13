@@ -7,6 +7,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { clipboard, shell, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { clickEachVisible, clickVisible, clickVisibleIn, contextMenuVisibleIn } from "./smoke-kit.ts";
 
 /**
  * 真实应用里点开回复中的文件：文件签（带行号的停在那一行、亮一下）、悬停出口条（点「在访达中显示」）、右键菜单（「复制相对路径」）、
@@ -40,7 +41,7 @@ export async function checkOpenFile(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(text);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可发送");
-		await page(`document.querySelector('[data-composer-send=send]').click()`);
+		await clickVisible(page, `[data-composer-send=send]`);
 	};
 	const capture = async (name: string) => {
 		await page(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -57,7 +58,11 @@ export async function checkOpenFile(options: {
 	const chip = (name: string) =>
 		`[...document.querySelectorAll('[data-screen=chat] [data-file-link]')].find((link) => link.querySelector('[data-file-name]')?.textContent === ${JSON.stringify(name)})`;
 	const panel = `document.querySelector('[data-panel="plume/file"]:not([inert])')`;
-	const closeFileTabs = () => page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+	/** 文件名是 `name` 的那枚签里的 `inner`（缺省是链接本身），给 clickVisibleIn：同名的签有两枚都看得见时不挑。 */
+	const inChip = (name: string, inner = "a") =>
+		`[...document.querySelectorAll('[data-screen=chat] [data-file-link]')].filter((link) => link.querySelector('[data-file-name]')?.textContent === ${JSON.stringify(name)}).map((link) => link.querySelector(${JSON.stringify(inner)}))`;
+	const openChip = (name: string) => clickVisibleIn(page, inChip(name), `文件签 ${name}`);
+	const closeFileTabs = () => clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 
 	setModel(() => ({ text: "打开文件准备好了。" }));
 	const originalCopy = clipboard.writeText;
@@ -142,7 +147,7 @@ export async function checkOpenFile(options: {
 		await until(`${chip("app.ts")}?.querySelector('[data-file-line]')?.textContent === ':30'`, "文件签带着行号");
 
 		// 点带行号的签：文件面板打开它，停在第 30 行并亮一下。
-		await page(`${chip("app.ts")}.querySelector('a').click()`);
+		await openChip("app.ts");
 		await until(
 			`(() => {
 				const lit = ${panel}?.querySelector('.cm-file-reveal');
@@ -165,21 +170,19 @@ export async function checkOpenFile(options: {
 		);
 		await capture("smoke-open-file-hover.png");
 		const revealLabel = process.platform === "darwin" ? "在访达中显示" : process.platform === "win32" ? "在资源管理器中显示" : "在文件管理器中显示";
-		await page(`${chip("app.ts")}.querySelector('[data-file-actions] button[aria-label=${JSON.stringify(revealLabel)}]').click()`);
+		await clickVisibleIn(page, inChip("app.ts", `[data-file-actions] button[aria-label=${JSON.stringify(revealLabel)}]`), `出口条的「${revealLabel}」`);
 		await waitMain(() => revealed === app, "出口条的「在访达中显示」定位到这个文件");
 		window.webContents.sendInputEvent({ type: "mouseMove", x: 0, y: 0 });
 
 		// 右键：菜单里有打开、打开方式、在访达中显示、复制路径和复制相对路径。
-		await page(
-			`(() => { const link = ${chip("app.ts")}.querySelector('a'); const box = link.getBoundingClientRect(); link.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + 8, clientY: box.bottom - 2 })); })()`,
-		);
+		await contextMenuVisibleIn(page, inChip("app.ts"), "文件签 app.ts", 8, -2);
 		const menuItems = `[...document.querySelectorAll('[role=menu] [role=menuitem]')].map((item) => item.textContent.trim())`;
 		await until(`${menuItems}.includes('复制相对路径')`, "右键菜单出现");
 		const items = await page<string[]>(menuItems);
 		for (const label of ["打开", "打开方式", revealLabel, "复制路径", "复制相对路径"])
 			assert.ok(items.includes(label), `右键菜单缺「${label}」：${JSON.stringify(items)}`);
 		await capture("smoke-open-file-menu.png");
-		await page(`[...document.querySelectorAll('[role=menu] [role=menuitem]')].find((item) => item.textContent.trim() === '复制相对路径').click()`);
+		await clickVisible(page, `[role=menu] [role=menuitem]`, "复制相对路径");
 		await waitMain(() => copied === join("open-file", "src", "app.ts"), "复制的是相对工作目录的路径");
 		await until(`document.querySelector('[role=menu]') === null`, "点了菜单项菜单收起");
 
@@ -196,28 +199,28 @@ export async function checkOpenFile(options: {
 
 		// 同名的两份：签不猜是哪一个，点了列出来让人挑，挑 b 那份就开它。
 		await until(`${chip("smoke-twin.ts")} && !${chip("smoke-twin.ts")}.querySelector('[data-file-actions]')`, "找到两份同名文件");
-		await page(`${chip("smoke-twin.ts")}.querySelector('a').click()`);
+		await openChip("smoke-twin.ts");
 		const choices = `[role=menu][aria-label="项目里有 2 个同名文件"]`;
 		await until(`document.querySelectorAll(${JSON.stringify(`${choices} [role=menuitem]`)}).length === 2`, "同名候选列出两份");
 		await capture("smoke-open-file-choices.png");
-		await page(`[...document.querySelectorAll(${JSON.stringify(`${choices} [role=menuitem]`)})].find((item) => item.textContent.trim().endsWith('b')).click()`);
+		await clickVisible(page, `${choices} [role=menuitem]`, /b$/);
 		await until(`${panel}?.textContent.includes('export const where = "b"')`, "挑了 b 那份，面板打开它");
 		await closeFileTabs();
 
 		// 图片、PDF、音视频：都经 plume-media 协议取，在面板里显示出来。
-		await page(`${chip("pic.png")}.querySelector('a').click()`);
+		await openChip("pic.png");
 		await until(`${panel}?.querySelector('img')?.naturalWidth === 320`, "图片在面板里显示");
 		await capture("smoke-open-file-image.png");
-		await page(`${chip("doc.pdf")}.querySelector('a').click()`);
+		await openChip("doc.pdf");
 		await until(`${panel}?.querySelector('embed[type="application/pdf"]') !== null`, "PDF 交给阅读器");
 		const pdf = await page<{ ok: boolean; type: string | null; head: string }>(
 			`fetch(${panel}.querySelector('embed').src).then(async (response) => ({ ok: response.ok, type: response.headers.get('content-type'), head: new TextDecoder().decode((await response.arrayBuffer()).slice(0, 5)) }))`,
 		);
 		assert.deepEqual(pdf, { ok: true, type: "application/pdf", head: "%PDF-" }, "PDF 经媒体协议取到");
 		await capture("smoke-open-file-pdf.png");
-		await page(`${chip("sound.wav")}.querySelector('a').click()`);
+		await openChip("sound.wav");
 		await until(`(() => { const audio = ${panel}?.querySelector('audio'); return audio?.readyState >= 1 && audio.duration > 0.4; })()`, "音频读出时长");
-		await page(`${chip("clip.webm")}.querySelector('a').click()`);
+		await openChip("clip.webm");
 		await until(`(() => { const video = ${panel}?.querySelector('video'); return video?.readyState >= 1 && video.videoWidth === 160; })()`, "视频读出画面尺寸");
 		await capture("smoke-open-file-video.png");
 		await closeFileTabs();

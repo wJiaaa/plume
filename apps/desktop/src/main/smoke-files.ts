@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { zipSync, strToU8 } from "fflate";
 import type { BrowserWindow } from "electron";
 import { checkFileOperations } from "./smoke-file-operations.ts";
+import { clickEachVisible, contextMenuVisible } from "./smoke-kit.ts";
 
 /** 使用当前会话的临时工作目录，经文件树打开、改名和预览；不碰用户资料。 */
 export async function checkFiles({
@@ -124,28 +125,22 @@ export async function checkFiles({
 			),
 		}),
 	);
-	const pick = async (selector: string) => {
-		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `文件入口 ${selector}`);
-		await click(selector);
-	};
 	await click("[data-panel-toggle] button");
 	await click('[data-panel-launch="plume/files"]');
 	const shown = "[data-panel]:not([inert])";
 	const row = (name: string) => `${shown} [data-file-tree] [data-path=${JSON.stringify(join(folder, name))}]`;
-	await pick(`${shown} [data-file-tree] [data-path=${JSON.stringify(folder)}]`);
+	await click(`${shown} [data-file-tree] [data-path=${JSON.stringify(folder)}]`);
 	await until(`document.querySelector(${JSON.stringify(row("sample.docx"))}) !== null`, "文件树展开子目录");
 	await capture(window, join(outDir, "smoke-files-tree.png"));
-	await pick(row("note.txt"));
+	await click(row("note.txt"));
 	await until(`document.querySelector('${shown} .file-code .cm-content')?.getAttribute('contenteditable') === 'false'`, "代码预览保持只读");
 	await click(`${shown} button[aria-label="项目文件"]`);
 	const dropdown = '[role=group][aria-label="项目文件"]';
 	if (!(await page(`document.querySelector('${dropdown} [data-path=${JSON.stringify(folder)}]')?.getAttribute('aria-expanded') === 'true'`)))
-		await pick(`${dropdown} [data-path=${JSON.stringify(folder)}]`);
+		await click(`${dropdown} [data-path=${JSON.stringify(folder)}]`);
 	const note = `${dropdown} [data-path=${JSON.stringify(join(folder, "note.txt"))}]`;
 	await until(`document.querySelector(${JSON.stringify(note)}) !== null`, "下拉树读取文件");
-	await page(
-		`(() => { const row = document.querySelector(${JSON.stringify(note)}); const r = row.getBoundingClientRect(); row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX:r.left+40, clientY:r.top+12 })); })()`,
-	);
+	await contextMenuVisible(page, note);
 	await click("[role=menuitem]:not(:disabled) > .min-w-0", "重命名");
 	await until(`document.querySelector('${dropdown} .plume-name-input') !== null`, "改名输入框");
 	await page(`(() => { const input = document.querySelector('${dropdown} .plume-name-input'); input.focus(); input.select(); })()`);
@@ -161,13 +156,11 @@ export async function checkFiles({
 	window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
 	const open = async (name: string) => {
 		await click('[data-panel-tab="plume/files"] [role=tab]');
-		await page(
-			`(() => { const tree = document.querySelector('${shown} [data-file-tree] [role=tree]'); const r = tree.getBoundingClientRect(); tree.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 40, clientY: r.top + 12 })); })()`,
-		);
+		await contextMenuVisible(page, `${shown} [data-file-tree] [role=tree]`);
 		await click("[role=menuitem]:not(:disabled) > .min-w-0", "刷新");
 		const expanded = await page(`document.querySelector('${shown} [data-path=${JSON.stringify(folder)}]')?.getAttribute('aria-expanded') === 'true'`);
-		if (!expanded) await pick(`${shown} [data-path=${JSON.stringify(folder)}]`);
-		await pick(row(name));
+		if (!expanded) await click(`${shown} [data-path=${JSON.stringify(folder)}]`);
+		await click(row(name));
 	};
 	await checkFileOperations({ window, folder, outDir, page, until, click, capture });
 	await open("sample.sqlite");
@@ -217,7 +210,7 @@ export async function checkFiles({
 		`document.querySelector('${shown}')?.textContent.includes('二进制文件') && [...document.querySelectorAll('${shown} button')].some(button => button.textContent.includes('用默认应用打开'))`,
 		"预览不了的二进制文件给出默认应用入口",
 	);
-	await page(`document.querySelectorAll('[data-panel-tab] button[aria-label^="关闭"]').forEach(button => button.click())`);
+	await clickEachVisible(page, `[data-panel-tab] button[aria-label^="关闭"]`);
 	await until(`document.querySelector('[data-panel-area]')?.inert === true`, "关闭文档测试标签");
 	await checkPlugins?.(folder);
 	await rm(folder, { recursive: true, force: true });

@@ -6,6 +6,7 @@ import type { Remote } from "@plume/rpc";
 import { nativeTheme, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
+import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
 
 /** 只用本次冒烟数据目录；通过真实界面选肤、复制、AI工具应用和停用恢复。 */
 export async function checkSkinStudio(options: {
@@ -25,18 +26,14 @@ export async function checkSkinStudio(options: {
 		}
 	};
 	const until = (code: string, label: string) => wait(() => page<boolean>(code), label);
-	const click = async (selector: string) => {
-		await until(
-			`document.querySelector(${JSON.stringify(selector)}) != null && !document.querySelector(${JSON.stringify(selector)}).matches(':disabled')`,
-			selector,
+	const click = (selector: string) => clickVisible(page, selector);
+	/** `scope` 里文字或无障碍名是 `label` 的按钮。 */
+	const button = (label: string, scope = "") =>
+		clickVisibleIn(
+			page,
+			`[...document.querySelectorAll(${JSON.stringify(`${scope} button`)})].filter(e => e.textContent.trim() === ${JSON.stringify(label)} || e.getAttribute('aria-label') === ${JSON.stringify(label)})`,
+			`${scope} 里的按钮「${label}」`,
 		);
-		await page(`document.querySelector(${JSON.stringify(selector)}).click()`);
-	};
-	const button = async (label: string, scope = "") => {
-		const expression = `[...document.querySelectorAll(${JSON.stringify(`${scope} button`)})].find(e => e.textContent.trim() === ${JSON.stringify(label)} || e.getAttribute('aria-label') === ${JSON.stringify(label)})`;
-		await until(`Boolean(${expression}) && !(${expression}).matches(':disabled')`, label);
-		await page(`(${expression}).click()`);
-	};
 	const type = (selector: string, value: string) =>
 		page(`(() => {
 		const input = document.querySelector(${JSON.stringify(selector)});
@@ -78,10 +75,11 @@ export async function checkSkinStudio(options: {
 	const openStudioDetail = async () => {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
-		await page(`document.querySelector('[data-nav=market]').click()`);
-		await page(`document.querySelector('nav[aria-label="插件市场"] button')?.click()`);
+		await clickVisible(page, `[data-nav=market]`);
+		if (await page<boolean>(`document.querySelector('nav[aria-label="插件市场"] button') !== null`))
+			await clickVisible(page, `nav[aria-label="插件市场"] button`);
 		await until(`document.querySelector('[data-card="skin-studio"] > button') !== null`, "市场列出换肤工坊");
-		await page(`document.querySelector('[data-card="skin-studio"] > button').click()`);
+		await clickVisible(page, `[data-card="skin-studio"] > button`);
 		await until(`document.querySelector(${JSON.stringify(studioSwitch)}) !== null`, "工坊详情有开关");
 	};
 	// 拨完开关回工作区：换肤工坊的入口在输入框上，市场页里没有。
@@ -100,7 +98,7 @@ export async function checkSkinStudio(options: {
 	assert.ok(plugin.cli);
 	await plugin.install("skin-studio");
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊安装");
-	await button("换肤工坊");
+	await button("换肤工坊", ".plume-composer");
 	// 浅色、深色各挑一套：会话窗底色、字色、强调色和深浅模式都换过来。侧栏底色（root）新旧两版插件不同，冒烟装的是线上那版，不断言。
 	for (const [id, base, bg, ink, accent] of [
 		["light-peach", "light", "#FFF8F6", "#3A1F1D", "#E0527A"],
@@ -228,7 +226,8 @@ export async function checkSkinStudio(options: {
 	await until(`document.querySelector('.cm-content')?.textContent.includes('skin_studio_theme')`, "设计请求进入草稿");
 	assert.ok(await page<boolean>(`document.querySelector('.cm-content').textContent.includes('我的偏好：莓果色。')`), "AI设计保留原草稿");
 	// 关闭面板后工具仍应立即换色，不依赖画廊是否挂载。
-	await page(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]')?.click()`);
+	if (await page<boolean>(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]') !== null`))
+		await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
 	let offered = false;
 	setModel((request) => {
 		offered ||= ((request.tools ?? []) as Array<{ name: string }>).some((tool) => tool.name === "skin_studio_theme");
@@ -259,14 +258,14 @@ export async function checkSkinStudio(options: {
 	await toggleStudio(true);
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重启插件恢复保存的皮肤");
 	await leaveMarket();
-	await button("换肤工坊");
+	await button("换肤工坊", ".plume-composer");
 	await button("恢复原外观");
 	await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "恢复原外观");
 	assert.equal((await library()).activeId, null);
 
 	window.webContents.send("plume:command", "new-session");
 	await until(`document.querySelector('[data-screen=empty]') !== null`, "首页背景验证使用新对话");
-	await button("换肤工坊");
+	await button("换肤工坊", ".plume-composer");
 	const appearance = async () => JSON.parse(await readFile(join(plumeHome(), "appearance.json"), "utf8")) as Record<string, unknown>;
 	const background = "[data-skin-studio] [data-chat-background-settings]";
 	await page(`document.querySelector('${background}').scrollIntoView({ block: 'end' })`);
@@ -351,7 +350,7 @@ export async function checkSkinStudio(options: {
 	await until(`document.querySelector('[data-screen=settings] [data-plume-code-appearance]') !== null`, "外观页打开");
 	assert.ok(await page<boolean>(`document.querySelector('[data-screen=settings] [data-chat-background-settings]') === null`), "首页背景只在换肤工坊里设置");
 	await button("返回工作区");
-	await button("换肤工坊");
+	await button("换肤工坊", ".plume-composer");
 	await button("铺满", background);
 	await wait(async () => (await appearance()).chatBackgroundFit === "cover", "工坊修改铺放设置");
 	await until(`document.querySelector('${background} .chat-backdrop')?.dataset.fit === 'cover'`, "背景预览铺满");
@@ -381,7 +380,7 @@ export async function checkSkinStudio(options: {
 	await wait(async () => (await agent.plugins()).some((item) => item.name === "plume.skin-studio" && item.state === "active"), "工坊重新启用");
 	await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "重新启用工坊仍是用户选的深色");
 	await leaveMarket();
-	await button("换肤工坊");
+	await button("换肤工坊", ".plume-composer");
 	await button("清除", background);
 	await wait(async () => (await appearance()).chatBackground === undefined, "清除背景图引用");
 	await until(`document.querySelector('${background} [data-chat-background-preview]') === null`, "清除后显示空状态");

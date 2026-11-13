@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
+import { clickVisible, containing } from "./smoke-kit.ts";
 
 /**
  * 应用更新的界面：菜单栏图标的「检查更新…」到设置 › 关于并查一次（冒烟不联网，答「查不了」），自动检查的间隔记得住；
@@ -40,9 +41,9 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 	);
 
 	// 间隔：改成每 12 小时，存在 localStorage 里。
-	await page(`${buttonWith("每 6 小时（默认）")}.click()`);
+	await clickVisible(page, "button", containing("每 6 小时（默认）"));
 	await until(`[...document.querySelectorAll('[role=menuitem]')].some((option) => option.textContent.includes('每 12 小时'))`, "间隔选项弹出");
-	await page(`[...document.querySelectorAll('[role=menuitem]')].find((option) => option.textContent.includes('每 12 小时')).click()`);
+	await clickVisible(page, `[role=menuitem]`, /每 12 小时/);
 	await until(`localStorage.getItem('plume.update.intervalHours') === '12' && Boolean(${buttonWith("每 12 小时")})`, "间隔记住了");
 	await shot("smoke-update-about.png");
 
@@ -77,7 +78,7 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 	);
 	await shot("smoke-update-badge.png");
 
-	await page(`document.querySelector('[data-plume-update-dot]').click()`);
+	await clickVisible(page, `[data-plume-update-dot]`);
 	await until(`document.querySelector('[data-plume-update-dialog] [data-plume-update-progress]')?.textContent.includes('45%')`, "对话框里是进度");
 	await until(
 		`Boolean(${buttonWith("暂停", "document.querySelector('[data-plume-update-dialog]')")}) && Boolean(${buttonWith("取消下载", "document.querySelector('[data-plume-update-dialog]')")})`,
@@ -98,7 +99,7 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 		"下好后给立即重启",
 	);
 	await shot("smoke-update-ready.png");
-	await page(`${buttonWith("关闭", "document.querySelector('[data-plume-update-dialog]')")}.click()`);
+	await clickVisible(page, "[data-plume-update-dialog] button", containing("关闭"));
 	await until(
 		`document.querySelector('[data-plume-update-dialog]') === null && document.querySelector('[data-plume-update-dot][data-phase=ready]') !== null`,
 		"关掉对话框，圆点还在",

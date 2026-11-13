@@ -9,6 +9,7 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
+import { clickVisible, clickVisibleIn, containing } from "./smoke-kit.ts";
 
 /** 从已有的闲置会话进入；只替换 GitLab 服务，账号、列表、评论和草稿都走实际插件。 */
 export async function checkPullRequests(options: {
@@ -28,14 +29,13 @@ export async function checkPullRequests(options: {
 		}
 	};
 	const until = (expression: string, label: string) => waitMain(() => page<boolean>(expression), label);
-	const visible = `(element) => element.getBoundingClientRect().width > 1 && element.getBoundingClientRect().height > 1 && !element.closest('[inert]')`;
-	const button = (scope: string, labels: string[]) =>
-		`[...document.querySelectorAll(${JSON.stringify(`${scope} button`)})].filter(${visible}).find(element => [element.getAttribute('aria-label'), element.textContent.trim(), element.querySelector(':scope > span')?.textContent.trim()].some(label => ${JSON.stringify(labels)}.includes(label)))`;
-	const click = async (scope: string, labels: string[]) => {
-		const target = button(scope, labels);
-		await until(`${target} && !${target}.disabled`, `按钮可用：${labels[0]}`);
-		await page(`${target}.click()`);
-	};
+	/** `scope` 里按无障碍名、文字或第一层 span 的文字认出的按钮（中英文界面各给一个名字）。 */
+	const click = (scope: string, labels: string[]) =>
+		clickVisibleIn(
+			page,
+			`[...document.querySelectorAll(${JSON.stringify(`${scope} button`)})].filter(element => [element.getAttribute('aria-label'), element.textContent.trim(), element.querySelector(':scope > span')?.textContent.trim()].some(label => ${JSON.stringify(labels)}.includes(label)))`,
+			`${scope} 里的按钮「${labels[0]}」`,
+		);
 	const fill = async (selector: string, value: string) => {
 		await until(`document.querySelector(${JSON.stringify(selector)}) !== null`, `输入框出现：${selector}`);
 		await page(`(() => {
@@ -216,13 +216,11 @@ export async function checkPullRequests(options: {
 	};
 	const openPage = async () => {
 		await until(`document.querySelector(${JSON.stringify(nav)}) !== null`, "侧栏出现拉取请求入口");
-		await page(`document.querySelector(${JSON.stringify(nav)}).click()`);
+		await clickVisible(page, nav);
 		await until(`document.querySelector('${root}') !== null`, "拉取请求页面打开");
 	};
 	const selectPr = async () => {
-		const row = `[...document.querySelectorAll('${list} .plume-pr-row')].find(element => element.textContent.includes(${JSON.stringify(title)}))`;
-		await until(`${row} !== undefined`, "列表中出现待审查 PR");
-		await page(`${row}.click()`);
+		await clickVisible(page, `${list} .plume-pr-row`, containing(title));
 		await until(`document.querySelector('${detail} h1')?.textContent === ${JSON.stringify(title)}`, "列表选中并读到详情");
 	};
 	try {
@@ -278,11 +276,10 @@ export async function checkPullRequests(options: {
 		nativeTheme.themeSource = "light";
 		await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "浅色主题生效");
 		await capture("smoke-pull-requests-light.png");
+		const before = await page<number>(`document.querySelector('${list} .plume-pr-group .plume-reveal').getBoundingClientRect().height`);
+		await clickVisibleIn(page, `[document.querySelector('${list} .plume-pr-group')?.querySelector('button')]`, "第一个分组的收起");
 		const foldMotion = await page<boolean>(`(async () => {
-			const group = document.querySelector('${list} .plume-pr-group');
-			const reveal = group.querySelector('.plume-reveal');
-			const before = reveal.getBoundingClientRect().height;
-			group.querySelector('button').click();
+			const reveal = document.querySelector('${list} .plume-pr-group .plume-reveal');
 			await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 			const animation = reveal.getAnimations().find(item => item.transitionProperty === 'grid-template-rows');
 			if (!animation) return false;
@@ -290,11 +287,11 @@ export async function checkPullRequests(options: {
 			animation.pause(); animation.currentTime = duration / 2;
 			const middle = reveal.getBoundingClientRect().height;
 			animation.finish();
-			return duration > 0 && middle > 0 && middle < before;
+			return duration > 0 && middle > 0 && middle < ${before};
 		})()`);
 		assert.ok(foldMotion, "分组收起有真实中间帧，不只是替换展示状态");
 		await until(`document.querySelector('${list} .plume-reveal').getBoundingClientRect().height < 1`, "分组收起到零高度");
-		await page(`document.querySelector('${list} .plume-pr-group-head').click()`);
+		await clickVisible(page, `${list} .plume-pr-group-head`);
 		await until(`document.querySelector('${list} .plume-reveal').getBoundingClientRect().height > 30`, "分组重新展开");
 		nativeTheme.themeSource = "dark";
 		await until(`matchMedia('(prefers-color-scheme: dark)').matches`, "深色主题生效");
@@ -381,6 +378,8 @@ export async function checkPullRequests(options: {
 		);
 		try {
 			await runGit("config", "--local", "--replace-all", "remote.origin.url", `${baseUrl}/${repo}.git`);
+			// 上面验完窄窗口后窗口还窄着，侧栏收起（inert），侧栏里的入口人点不到：放回宽窗口再从侧栏进。
+			window.setSize(Math.max(bounds.width, 1200), Math.max(bounds.height, 820));
 			await returnToSession();
 			await openPage();
 			await selectPr();
@@ -433,7 +432,7 @@ export async function checkPullRequests(options: {
 			await returnToSession();
 			if (original.draft !== null) await until(`${composerText} === ${JSON.stringify(original.draft)}`, "原会话草稿未受影响");
 			if (original.nav) {
-				await page(`document.querySelector(${JSON.stringify(`[data-nav="${original.nav}"]`)}).click()`);
+				await clickVisible(page, `[data-nav="${original.nav}"]`);
 				await until(`document.querySelector(${JSON.stringify(`[data-nav="${original.nav}"]`)})?.getAttribute('aria-current') === 'page'`, "恢复原页面");
 			}
 		} finally {
