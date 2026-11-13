@@ -21,7 +21,7 @@
 
 | 组 | 放什么 | 包 |
 | --- | --- | --- |
-| `core/` | 产品本体中跑在 agent 进程的部分：会话、循环、插件宿主、模型调用、命令的沙箱、读的边界 | `agent`（`@plume/agent`）、`llm`（`@plume/llm`）、`sandbox`（`@plume/sandbox`，seatbelt、Windows 受限令牌和 runner、登录 shell 的环境；只认命令、目录、档位，不认会话和循环，由 `agent` 按权限模式选档后经 `run.exec` 给工具）、`workspace`（`@plume/workspace`，读边界、资源地址、隔离视图里的 git 和项目文件清单；只认路径、目录、数据目录，不认会话和循环，由 `agent` 接到过闸上后经 `run.files`、`ctx.resources`、`ctx.workspace` 给插件） |
+| `core/` | 产品本体中跑在 agent 进程的部分：会话、循环、插件宿主、模型调用、命令的沙箱、读的边界 | `agent`（`@plume/agent`）、`llm`（`@plume/llm`）、`sandbox`（`@plume/sandbox`，seatbelt、Windows 受限令牌和 runner、登录 shell 的环境；只认命令、目录、档位，不认会话和循环，由 `agent` 按权限模式选档后经 `run.exec` 给工具）、`workspace`（`@plume/workspace`，读写边界、资源地址、改动快照和撤销、隔离视图里的 git 和项目文件清单；只认路径、目录、数据目录、会话 id，不认循环，由 `agent` 接到过闸和调用结果上后经 `run.files`、`run.exec` 的 `recordChanges`、`ctx.resources`、`ctx.workspace`、`ctx.changes` 给插件） |
 | `infra/` | 和产品无关的通用基础设施：换个产品也能用，不认识 agent、会话、插件 | `rpc`（`@plume/rpc`）、`platform`（`@plume/platform`，本机的 shell、把一行命令拆开的扫描器、按行比较两段文本）、`document-text`（`@plume/document-text`，从 PDF、Office 文档里抽字） |
 | `builtin/` | 内置插件：随应用发、不能停用，写法和市场插件一样，只用公开接口 | `tools`（`@plume/tools`，插件名 plume.tools）、`approval`（`@plume/approval`，plume.approval，钩子 `tool.approve` 上的帮我批准的风险规则）、`ask-user`（`@plume/ask-user`，plume.ask-user，`ask_user` 工具和提问卡）、`prompt`（`@plume/prompt`，plume.prompt）、`compaction`（`@plume/compaction`，plume.compaction）、`delivery`（`@plume/delivery`，plume.delivery，文件交付卡、审核）、`documents`（`@plume/documents`，plume.documents，文件面板和插件共用的只读文档预览） |
 | `client/` | 渲染进程共享的库：产品界面和插件界面入口都会用到 | `styles`（`@plume/styles`，设计 token `theme.css` 和共用的类名组合）、`ui`（`@plume/ui`，基础组件，类名来自 `styles`） |

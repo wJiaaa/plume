@@ -21,7 +21,8 @@
 | 工具卡片 | 可变 | 插件的界面入口按工具名注册；没注册的用产品的通用卡片。结果里的图（交给模型的 `images`，和 `shownImages` 里只给人看的）通用卡片都画 |
 | 会话的临时目录 | 不可变 | 宿主给每个会话一个（`<数据目录>/scratch/<会话 id>`，`ToolRun.scratchDir`、`ModelContext.scratchDir`），会话删掉时连目录一起删；同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的）的临时目录经 `ToolRun.scratchDirs`、`ToolApproval.scratchDirs` 给出，互相写不问，别的会话的写不进或要问；读哪个会话的临时目录都不问；里面放什么由插件定（太大没交给模型的图、截断前的全文），plume.prompt 把它写进系统提示词 |
 | 读用户的文件 | 不可变 | 本体守读的边界（`@plume/workspace`）：工具经 `ToolRun.files.read` 读路径或地址、经 `readCommand` 判一行命令写明要读的路径，工作区、项目目录、临时目录、附件不问，密钥按文件问、别处按项目问（过闸，卡片 `kind` 是 `view`）；plume.tools 的 read、ls、grep、glob、bash 和别的插件的工具是同一个答案、同一份批准记录。项目文件清单经 `ctx.workspace.files`，本体在隔离视图里问 git，不执行仓库配置的程序 |
-| 资源地址 | 部分可变 | 本体的 `ctx.resources`：`scheme://路径`，解析经 `ToolRun.files.read`（plume.tools 的 read、ls 认它）；插件经 `register` 加只读的 scheme（技能插件的 `skill://`，停用时本体撤下），经 `keepArtifact` 把大块原文存成 `artifact://`；本体自带 `scratch://`（唯一可写，write、edit 认它）、`artifact://`、`session://`、`plugin://` |
+| 写用户的文件、记下改了什么 | 不可变 | 本体守写的边界、记改动快照（`@plume/workspace`）：工具经 `ToolRun.files.change` 写文件（Plume 自己的数据目录、别的会话的临时目录不写，链接逃不出工作区，同一个文件排队、写之前再核一遍），经 `write` 写 `scratch://`；带 `recordChanges` 的 `run.exec` 由本体在命令前后对比工作区。改了哪些文件由本体记在这次调用的结果上（`ToolOutput.changes` → `ToolResultMessage.changes`），工具和层伪造不了；插件经 `ctx.changes` 读净变化、撤销（plume.delivery 的交付卡），撤回、编辑重发时连文件一起退由本体据它做，全有或全无。问不问人仍归工具（`run.ask`） |
+| 资源地址 | 部分可变 | 本体的 `ctx.resources`：`scheme://路径`，解析经 `ToolRun.files.read`（plume.tools 的 read、ls 认它）；插件经 `register` 加只读的 scheme（技能插件的 `skill://`，停用时本体撤下），经 `keepArtifact` 把大块原文存成 `artifact://`；本体自带 `scratch://`（唯一可写，经 `ToolRun.files.write`，write、edit 认它）、`artifact://`、`session://`、`plugin://` |
 | 插件的密钥 | 不可变 | 逻辑入口 `ctx.secrets`（本体给，插件换不掉）：`seal` 把令牌、密码加密成带 `plume-sealed:v1:` 前缀的文本，插件写回自己的配置，`unseal` 解回、`isSealed` 认出密文；钥匙是本体给供应商 key 用的 `vault.key`，按插件名派生子钥，一个插件封的另一个插件解不开（null）；模型读钥匙文件要问人 |
 | 审批卡 | 部分可变 | 产品的一张卡，压在输入框上方；插件在 `tool.execute` 里调 `ask` 时，卡上是这次调用的参数和它给的理由。插件可以经 `ui.approvalCard` 按工具名画自己的审批卡（SSH 命令），经 `ui.requestCard` 按 `kind` 画 `run.request` 等人给数据的卡（计划、提问、表单），经 `waiting` 说等这张卡时的那句状态；放不放行、过期、排队（+N）是本体的 |
 | 面板 | 可变 | 插件的界面入口用 `ui.panel` 注册，并列在面板区里；面板区本身（位置、宽度、标签、开关）是产品的 |
@@ -277,7 +278,6 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 | `step.end` | 每一步收尾，回复出错、被停下的那步除外 | `StepEnd` → `StepVerdict` | 本体的自然结论：有工具结果接着做；没有的截断了接着写、空回复催一句，否则结束；够到重复警告线时带一句提醒 | 换掉本体的续写和催促、以出错或卡住结束 | 按自然结论走，界面显示错误 |
 | `context.compact` | 每次发请求前（过完 `model.context`）；服务商说超长时再一次（`force`）；人敲 `/compact` 时（`force`、`manual`）；一轮干净收尾、有可分叉的主请求时（`idle`，宿主为它再经一遍 `model.context`） | `ContextCompact` → `CompactSummary`；有多满（`usage`）和估 token 的算法（`estimate`）由本体给，和上下文用量圆环是同一份 | 不压；紧挨着它的 plume.compaction 快满时先剪工具结果，不够再把较早的换成摘要 | 换一种压法（留多少、摘要怎么写、用什么模型） | 那一行写压缩失败，照常发全文 |
 | `tool.approve` | 一个调用要问人时（工具的 `run.ask`、会改动的工具执行前、层的 `ask`） | `ToolApproval` → `ApprovalDecision` | 把审批卡弹给人、等人答；紧挨着它的 plume.approval 按帮我批准的风险规则放行（完全访问、`approved`、「以后不再问」本体已放行，到不了这里） | 放行自己的工具、按参数拒绝、换一套风险规则；提权只能拒绝，放行本体不认 | 这次调用以错误结果交给模型 |
-| `session.rewind` | 撤回、编辑重发要截掉一段对话前：先只演算（`restore: false`），人选了连文件一起退时在截断前再写回（`restore: true`）；只动对话时不问 | `SessionRewind` → `RevertPlan` | 没有要退回的 `{ files: [], unrecorded: false }`；plume.delivery 退回那段里文件工具记下了快照的改动 | 撤回时把插件自己记着的改动一起退回 | 演算失败时界面只问要不要撤回对话；写回失败时不截对话，插件的原话弹给人 |
 
 ```ts
 interface ToolExecution {
@@ -310,8 +310,10 @@ interface ToolOutput {
 	/** 只给人看、不交给模型的图：本体把大图挪进媒体目录，通用卡片画在 images 后面。 */
 	shownImages?: ToolOutput["images"];
 	/** 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状归插件，别人只认 `@plume/contract` 定的几个声明：
-	 * checklist（ChecklistDetails）、job（BackgroundJobDetails）、changeId / changeIds（FileChangeDetails）、fileView（FileViewDetails）。 */
+	 * checklist（ChecklistDetails）、job（BackgroundJobDetails）、fileView（FileViewDetails）、path / hunks（FileDiffDetails）。 */
 	details?: unknown;
+	/** 这次调用改了哪些文件（`FileChanges`：快照标识、绝对路径、没记全时的说明），由本体记下、填上，工具交的不算；存进会话（`ToolResultMessage.changes`），撤回、交付卡据它认。 */
+	changes?: FileChanges;
 	/** 这一步的结果写完以后这一轮就此结束；几个都带了时有 stalled 就按 stalled。 */
 	terminate?: "done" | "stalled";
 	/** 以后没人要读（没搜到、空目录）：压缩剪枝时换成一句「无结果」。 */
@@ -394,10 +396,12 @@ interface ToolDefinition {
 			request<T>(input: { kind: string; title: string; payload?: unknown; waiting?: string }): Promise<{ answered: true; value: T } | { answered: false; reason: "declined" | "expired" | "stopped" }>;
 			/** 这次调用跑命令用的 shell 和沙箱档（本体按权限模式、readOnly 选）。 */
 			shell(): Promise<{ kind: "posix" | "powershell"; label: string; sandbox: SandboxMode }>;
-			/** 在那一档沙箱里起一条命令；`denied(output)` 看输出像不像被沙箱拒了，`mode` 是实际跑的那一档。 */
-			exec(command: string, options?: { cwd?: string; env?: Record<string, string> }): Promise<RunProcess>;
+			/** 在那一档沙箱里起一条命令；`denied(output)` 看输出像不像被沙箱拒了，`mode` 是实际跑的那一档。`recordChanges` 时本体在命令前后对比工作区，记下改了什么。 */
+			exec(command: string, options?: { cwd?: string; env?: Record<string, string>; recordChanges?: boolean }): Promise<RunProcess>;
 			/** 申请这次调用更宽的一档：弹提权卡、只认人答，批了之后的 exec 才换档；不批时 message 是交给模型的说明。 */
 			escalate(request: { mode: "workspace-write" | "danger-full-access"; justification: string; title: string; detail: string }): Promise<{ granted: true } | { granted: false; message: string }>;
+			/** 替这次调用读写用户的文件（`read`、`readCommand`、`resolve`、`change`、`write`、`includeChanges`）：读写边界、改动快照在本体，改了哪些文件记在结果的 `changes` 上。 */
+			files: RunFiles;
 		},
 	): Promise<ToolOutput>;
 }

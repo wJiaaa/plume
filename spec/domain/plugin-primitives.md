@@ -12,16 +12,17 @@
 
 | 原语 | 是什么 | 接口 |
 | --- | --- | --- |
-| 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`、`session.rewind`），`ctx.tools.register` |
+| 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`），`ctx.tools.register` |
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
 | 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的 | `run.ask`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
 | 跑命令 | 在权限模式对应的那一档沙箱里起命令、申请这次调用更宽的一档（提权，经过闸只认人答、批了才换档）；外层设 `readOnly` 时一律只读，写、改文件的工具（`kind` 是 `create`、`modify`）不往里交。档位、shell 由本体选，插件换不掉 | `run.exec`、`run.escalate`、`run.shell`，`ToolExecution.readOnly`，`ModelContext.shell` |
-| 读文件 | 替模型读这台机器：路径能不能读、要不要问人（工作区、项目目录、临时目录、附件不问，密钥按文件问、别处按项目问，经过闸），资源地址读到什么，一行命令写明要读的路径；列项目文件时在隔离视图里问 git。边界由本体守，所有读文件的工具是同一个答案，插件换不掉 | `run.files.read`、`run.files.readCommand`，`ctx.resources`（登记只读的 scheme、`keepArtifact`），`ctx.workspace.files` |
+| 读文件 | 替模型读这台机器：路径能不能读、要不要问人（工作区、项目目录、临时目录、附件不问，密钥按文件问、别处按项目问，经过闸），资源地址读到什么，一行命令写明要读的路径；列项目文件时在隔离视图里问 git。边界由本体守，所有读文件的工具是同一个答案，插件换不掉 | `run.files.read`、`run.files.readCommand`、`run.files.resolve`，`ctx.resources`（登记只读的 scheme、`keepArtifact`），`ctx.workspace.files` |
+| 写文件、记改动 | 替模型改这台机器上的文件：哪里不写（Plume 自己的目录、别的会话的临时目录、链接出工作区），同一个文件排队、写前复核，改了什么记成快照、记在调用结果上；命令改的由本体前后对比工作区记下。撤回时连文件一起退、交付卡的汇总和撤销都认这一份记录，全有或全无、不覆盖别人后来的改动。插件换不掉、伪造不了 | `run.files.change`、`run.files.write`（`scratch://`）、`run.exec` 的 `recordChanges`、`run.files.includeChanges`，结果上的 `ToolOutput.changes` / `ToolResultMessage.changes`，`ctx.changes`（`collect`、`undo`） |
 | 会话 | 建子会话或独立会话并发起一轮，开新的顶层会话，读会话，观察会话的运行（默认只看和自己有关的会话，看全部要声明）；会话是哪一种 | `ctx.sessions`，`ctx.sessions.observe` 和 `Plugin.observe: "all"`，钩子输入和 `ToolRun` 上的 `session`（`SessionScope.kind`） |
 | 代管 | 插件开一个顶层会话并代管它：往里转话（和人同一条队、不插话），替人答它和它下面的子会话弹着的卡（审批、提权、等人，不含「以后不再问」）；只能动自己代管的，人随时在会话菜单里停止代管，那时弹着的卡只能人答 | `ctx.sessions.launch({ steward: true })`、`ctx.sessions.post` / `respond` / `answer`，`SessionScope.steward`；卡和回复经 `ctx.sessions.observe` 读；停止代管是 `AgentService.revokeSteward` |
 | 寄信 | 顶层会话的一次工具调用给另一个顶层会话寄一封信（请求、答复、通知）。插件定写什么、发不发（地址、限速、链长）；请求和答复的配对、收件方没答（读到那一轮收场、没读到、删掉）时的代答归本体，发件方等的答复不靠哪个插件装着 | `ToolRun.letter`、`LetterInput`（`recipient` 是代答署的名）、`LetterReceipt`（`answered`、`answer`） |
 | 送达 | 调用答完以后才有的结果送回会话（子会话交回、后台命令、新会话交回） | `ToolRun.background()`、`ctx.sessions.report`、`LaunchedSession.reportBack`，形状都是 `DeliveryInput`；那一行由交它的插件经 `ui.agentDelivery` 画 |
-| 本体能力 | 本体替插件做、插件换不掉的事：挂在 `ctx`（工具调用里是 `run`）上，不借服务的壳。能被插件换掉的话，界面和文档对它的保证就不再成立 | `ctx.secrets`（加解密插件的密钥，钥匙由本体按插件名派生）、`ctx.fetch`、`ctx.media`、`ctx.trash`、`run.exec`（见「跑命令」）、`run.files`、`ctx.resources`、`ctx.workspace`（见「读文件」）、`run.track` 和 `run.schedule`（后台任务、约好的唤醒登记进本体：会话闲没闲只算会自己结束的一次性任务，挂着的监视、经 `stand()` 标上的服务、唤醒不算；删会话、退出时停掉、取消；`ctx.sessions` 的 `jobs`、`jobOutput`、`stopJob`、`wakeups`、`cancelWakeup` 读、停、取消） |
+| 本体能力 | 本体替插件做、插件换不掉的事：挂在 `ctx`（工具调用里是 `run`）上，不借服务的壳。能被插件换掉的话，界面和文档对它的保证就不再成立 | `ctx.secrets`（加解密插件的密钥，钥匙由本体按插件名派生）、`ctx.fetch`、`ctx.media`、`ctx.trash`、`run.exec`（见「跑命令」）、`run.files`、`ctx.resources`、`ctx.workspace`（见「读文件」）、`ctx.changes`（见「写文件、记改动」）、`run.track` 和 `run.schedule`（后台任务、约好的唤醒登记进本体：会话闲没闲只算会自己结束的一次性任务，挂着的监视、经 `stand()` 标上的服务、唤醒不算；删会话、退出时停掉、取消；`ctx.sessions` 的 `jobs`、`jobOutput`、`stopJob`、`wakeups`、`cancelWakeup` 读、停、取消） |
 | 服务 | 插件之间按名字配合，装一个同名的就换掉实现；只留给插件之间，本体给的能力不做成服务 | `ctx.provide`，用的一方写进 `inject` 再 `ctx.use` |
 
 界面侧（界面入口的 `ui`）：
@@ -44,7 +45,7 @@
   - 审批的 `userOnly`：提问、计划、表单借审批卡，关掉审批语义，答案走旁路，`tool.approve` 的每一层都收到不是审批的请求。现在是单独的原语「等人」。
   - 送达的 `kind: "job" | "session" | "wakeup"`：后台命令、新会话交回、定时唤醒各占一个值，本体按值分支画。现在本体只认通用字段，那一行由交它的插件画。
   - 侧边聊天借排队消息（`origin: "child"`）把活交给主会话，本体随后为它长出回执条、`HandedTask`、`mainChat`。现在留下的 `QueuedMessage.origin`、`UserMessage.fromPlugin` 只是来处标注（安全边界，模型据此知道这不是用户的话），交过去的事走到哪是通用的 `ChildTask`，画成什么样归建子会话的插件。
-- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`kind`、`category`、`aliases`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileChangeDetails`、`FileViewDetails`、`FileDiffDetails`、`CancelledDetails`），界面的 `ui.toolLine`（`file`、`note`、`command`、`job`、`apart`、`group`）。读文件、跑命令这些基本工具也一样，由 plume.tools 声明。同一件事只声明一处：工具做的是哪种活（`kind`：读、列、找、搜、写、改、跑命令、长跑的命令、后台任务）写在工具定义上，本体（重复检测）、界面（经 `AgentService.listTools()` 和 `tools` 事件拿到工具表：转录、审批卡、文件签）、别的插件（`ctx.tools.list()`、`run.tools()`）都读这一份，`ui.toolLine` 不再写一遍；是不是记进度清单（`category: "checklist"`）也一样，转录、别的插件都从工具表里认；模型写错的参数名认哪些（`aliases`）也只写在工具定义上，本体在任何钩子层、审批、转录看到参数之前换成规范名，工具和读调用参数的插件（压缩、钩子脚本）只读规范名，不各抄一份别名表——各认各的，守卫读规范名、工具读别名，就是一条绕过守卫的路。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。插件要的范围比默认大时也靠声明，不按名字放行：看全部会话的运行观察写 `Plugin.observe: "all"`，内置插件（plume.diagnostics）和市场插件写的是同一个字段。
+- **本体认形状和声明，不认名字。** 本体要对某类工具、段、结果区别对待时，让插件声明：`ToolDefinition` 的 `describe`、`exportResult`、`forwards`、`kind`、`category`、`aliases`，`PromptSection.category`，`ToolOutput` 的 `uneventful`、`instructions`，`details` 里 `@plume/contract` 定的形状（`ChecklistDetails`、`BackgroundJobDetails`、`FileViewDetails`、`FileDiffDetails`、`CancelledDetails`），本体记在结果上的 `changes`（改了哪些文件，`FileChanges`），界面的 `ui.toolLine`（`file`、`note`、`command`、`job`、`apart`、`group`）。读文件、跑命令这些基本工具也一样，由 plume.tools 声明。同一件事只声明一处：工具做的是哪种活（`kind`：读、列、找、搜、写、改、跑命令、长跑的命令、后台任务）写在工具定义上，本体（重复检测）、界面（经 `AgentService.listTools()` 和 `tools` 事件拿到工具表：转录、审批卡、文件签）、别的插件（`ctx.tools.list()`、`run.tools()`）都读这一份，`ui.toolLine` 不再写一遍；是不是记进度清单（`category: "checklist"`）也一样，转录、别的插件都从工具表里认；模型写错的参数名认哪些（`aliases`）也只写在工具定义上，本体在任何钩子层、审批、转录看到参数之前换成规范名，工具和读调用参数的插件（压缩、钩子脚本）只读规范名，不各抄一份别名表——各认各的，守卫读规范名、工具读别名，就是一条绕过守卫的路。本体代码里不写插件名、插件的工具名、段名、标签名；内置插件同样不认别的插件（[`safety.md`](../safety.md) 第 2 条，见下面「插件之间怎么互相用」）。插件要的范围比默认大时也靠声明，不按名字放行：看全部会话的运行观察写 `Plugin.observe: "all"`，内置插件（plume.diagnostics）和市场插件写的是同一个字段。
 
 ### 已定的例外
 
@@ -82,5 +83,5 @@
 - 接口：`packages/contract/src/plugin.ts`（`PluginContext`、`ToolRun`、`ToolDefinition`、`PromptSection`、`Services`）、`packages/contract/src/ui.ts`（`UiContext`）、`packages/contract/src/service.ts`（`AgentService`、`QueuedMessage`、`ChildTask`）
 - 检查：`scripts/check-core-names.mjs`、`scripts/test/check-core-names.test.ts`
 - 按类别找别的插件的工具的例子：plume.plan（`packages/builtin/plan/src/index.ts` 的 `toolOf`）、plume.subagents、plume.browser
-- 按结果里的声明认别的插件的结果的例子：plume.compaction（`stale-results.ts` 认 `FileViewDetails`，`task-context.ts` 认 `ChecklistDetails`）、plume.delivery（`record.ts` 认 `FileChangeDetails`）、plume.diagnostics（`entries.ts` 认 `BackgroundJobDetails`）
+- 按结果里的声明认别的插件的结果的例子：plume.compaction（`stale-results.ts` 认 `FileViewDetails`，`task-context.ts` 认 `ChecklistDetails`）、plume.compaction 和 plume.delivery（`stale-results.ts`、`head.ts`、`summary.ts`，`record.ts` 认本体记在结果上的 `ToolResultMessage.changes`）、plume.diagnostics（`entries.ts` 认 `BackgroundJobDetails`）
 - 按种类找别的插件的工具的例子：plume.subagents（`packages/builtin/subagents/src/agents.ts` 的 `builtinAgents`）、plume.side-chat（`profile.ts` 的 `KINDS`）、plume.prompt（`system.ts` 的 `writersAsk`）、plume.compaction（`head.ts` 的 `KindOf`）、plume.mcp、plume.web（结果里叫模型去读全文时点名的那件）
