@@ -81,6 +81,10 @@ export function PersonalizationSettings() {
 							{savedNotice ? <Check size={13} className="text-ok" strokeWidth={2.2} aria-hidden /> : <Save size={13} strokeWidth={1.9} aria-hidden />}
 							{savedNotice ? t("common.saved") : t("common.save")}
 						</DialogAction>
+						{/* 按钮上的字换了读屏不一定念：另给一个只给读屏的状态。 */}
+						<span role="status" className="sr-only">
+							{savedNotice ? t("common.saved") : ""}
+						</span>
 					</div>
 					{error && (
 						<Notice tone="danger" icon={CircleAlert} className="mb-3" data-personalization-save-error="">

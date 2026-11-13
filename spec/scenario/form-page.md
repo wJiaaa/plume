@@ -20,7 +20,7 @@
 
 - 底部一行，primary 在前（保存、创建），取消在后（ghost）。必填项为空时 primary 禁用。
 - 提交中用 `loading`，不让同一个请求发两次。
-- 失败：用 `Notice tone="danger"`，写在按钮上方，内容是能读懂的错误文字（`errorText`）。成功后要么离开页面，要么在按钮旁给一个 `role="status"` 的“已保存”。
+- 失败：用 `Notice tone="danger"`，写在按钮上方，内容是能读懂的错误文字（`errorText`）。成功后要么离开页面，要么把提交按钮换成勾加“已保存”，两秒后换回（个性化页的写法），同时给读屏一个 `role="status"` 的“已保存”（按钮上的字换了读屏不一定念）。
 - 改了任何字段，“已保存”提示要消失。
 
 ### 边界态
@@ -37,5 +37,5 @@
 ## 事实来源
 
 - `apps/desktop/src/renderer/settings/controls.tsx`、`apps/desktop/src/renderer/settings/pages.tsx`
-- `apps/desktop/src/renderer/app.tsx`（`SettingsScreen`）、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`
+- `apps/desktop/src/renderer/app.tsx`（`SettingsScreen`）、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`、`apps/desktop/src/renderer/settings/personalization.tsx`（“已保存”）
 - `apps/desktop/src/main/smoke.ts`
