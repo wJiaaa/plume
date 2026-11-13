@@ -542,9 +542,12 @@ export function protectSource(source: string, destination: string): void {
 	}
 }
 
-/** 存下来的摘要不带 `running`、`background`：重开以后没有在跑的会话，也没有在等的后台运行；`kind` 读回来时现算。 */
+/**
+ * 存下来的摘要不带 `running`、`background`：重开以后没有在跑的会话，也没有在等的后台运行；`kind` 读回来时现算；
+ * `projectPermission` 跟着项目配置和本机设置走，读这个会话的设置时现算。
+ */
 function stored(summary: SessionSummary): string {
-	const { running: _running, background: _background, kind: _kind, ...rest } = summary;
+	const { running: _running, background: _background, kind: _kind, projectPermission: _projectPermission, ...rest } = summary;
 	return JSON.stringify(rest);
 }
 

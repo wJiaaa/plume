@@ -26,7 +26,7 @@
 - 标题栏：标题（`Edit hello.txt`、`Run shell command`）、类型小标签（执行命令 / 写入文件 / 修改文件 / 读取文件，插件的工具写工具名）、倒计时（「4:59 后失效」，`expiresAt`）、后面还排着几张（+N）、收起箭头；整条标题栏都能点着收起。外框是 `@plume/ui` 的 `ApprovalFrame`，插件的提问卡（`plume.ask-user`）也用它；自己画外框的插件卡（计划、MCP 表单）标题行放 `ApprovalExpiry`。
 - 正文：理由（有的话）和 `detail`（命令原文、unified diff 文本、插件工具的 JSON 参数）。
 - 底部三个按钮：拒绝（最左）、以后不再问、允许一次（`primary`）；提权请求和没有 `subject` 的请求只有拒绝、允许一次。
-- 输入框工具栏左边是权限签：「请求批准」/「帮我批准」/「完全访问」（红色），点开是菜单，切到完全访问要在对话框里确认一次。
+- 输入框工具栏左边是权限签：「请求批准」/「帮我批准」/「完全访问」（红色），点开是菜单，切到完全访问要在对话框里确认一次。签上是这个会话实际按的那一档：项目配置收紧了就是项目那档（`SessionSummary.projectPermission`，本体算好的，渲染进程不自己读项目配置），菜单改的仍是本机设置。
 
 ### 插件的卡片
 
@@ -43,7 +43,7 @@
 
 ## 检查点
 
-- 冒烟依赖的属性不变：外层的 `data-tool`、`data-status`，合成一段活的 `data-plume-step`、`data-plume-run`，审批卡的 `data-approval-card`（提问卡里的 `data-ask-form`、`data-ask-option`、`data-ask-action`），权限签的 `data-permission-chip`，todo 卡片的 `data-todo-list`、`.plume-todo-row`。冒烟先点开那一段活，再查里面的卡片。
+- 冒烟依赖的属性不变：外层的 `data-tool`、`data-status`，合成一段活的 `data-plume-step`、`data-plume-run`，审批卡的 `data-approval-card`（提问卡里的 `data-ask-form`、`data-ask-option`、`data-ask-action`），权限签的 `data-permission-chip`、`data-permission-source`（菜单里项目要求的说明 `data-permission-project`），todo 卡片的 `data-todo-list`、`.plume-todo-row`。冒烟先点开那一段活，再查里面的卡片。
 - 新卡片在浅色和深色下各看一眼：`pnpm smoke` 的截图包含 todo 卡片、edit 的审批卡（正文是 diff）和提问卡（`smoke-question.png`、`smoke-question-dark.png`）。
 
 ## 事实来源

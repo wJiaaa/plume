@@ -1,13 +1,16 @@
 /**
  * 输入框工具栏里的权限签，和挂在它上面的菜单：工具多大程度上不用问人就能做。
  *
+ * 签上写的是这个会话实际按的那一档：项目配置收紧了（`SessionSummary.projectPermission`，本体算好的）就是项目那档，
+ * 图标换成带锁的文件夹、悬停和菜单顶上说明是项目要求的；菜单照旧改本机设置。还没有会话（新对话没发第一句）时按本机设置。
+ *
  * 菜单锚在签上而不是居中的对话框：居中读起来像在改整个应用，而这是输入框里就在手边的一个设置，
  * 和模型、思考档位的菜单挂在各自的签上是一个道理。
  */
 
 import type { PermissionMode } from "@plume/contract";
 import { type Anchor, DialogAction, DialogFrame, MenuBody, MenuItem, MenuLabel, type MessageKey, Overlay, Popover, usePopover, useI18n } from "@plume/ui";
-import { Check, ChevronDown, CircleAlert, Folder, Globe, Hand, SquareTerminal, Terminal, TriangleAlert } from "@plume/ui/icons";
+import { Check, ChevronDown, CircleAlert, Folder, FolderLock, Globe, Hand, SquareTerminal, Terminal, TriangleAlert } from "@plume/ui/icons";
 import { useState, useSyncExternalStore } from "react";
 import { modelsAgent, refreshModels, settingsView, subscribeModels } from "../models/store.ts";
 
@@ -19,11 +22,15 @@ const MODES: { value: PermissionMode; icon: typeof Hand; titleKey: MessageKey; d
 ];
 const TITLE: Record<PermissionMode, MessageKey> = { ask: "composer.permissionAsk", auto: "composer.permissionAuto", full: "composer.permissionFull" };
 
-export function PermissionChip({ onError }: { onError: (message: string) => void }) {
+export function PermissionChip({ required, onError }: { required?: PermissionMode; onError: (message: string) => void }) {
 	const { t } = useI18n();
 	const menu = usePopover();
-	const mode = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
+	const local = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
+	// 项目给的那档本体只在不比本机宽时才给，有它时就是生效的那档，这里不用再比。
+	const mode = required ?? local;
 	const label = t(TITLE[mode]);
+	const tip = required ? t("composer.permissionProject", { mode: label }) : label;
+	const Icon = required ? FolderLock : CircleAlert;
 	// 完全访问是红色而不是强调色：只有这一档把整台机器交出去。
 	const tone =
 		mode === "full"
@@ -36,21 +43,22 @@ export function PermissionChip({ onError }: { onError: (message: string) => void
 			<button
 				type="button"
 				data-permission-chip={mode}
-				data-plume-tip={label}
-				aria-label={label}
+				data-permission-source={required ? "project" : "local"}
+				data-plume-tip={tip}
+				aria-label={tip}
 				onClick={menu.toggle}
 				aria-haspopup="menu"
 				aria-expanded={menu.open}
 				className={`plume-composer-control flex shrink-0 items-center gap-1 rounded-lg px-2 text-label transition-colors ${tone}`}
 			>
-				<CircleAlert size={16} strokeWidth={1.9} className="shrink-0" />
+				<Icon size={16} strokeWidth={1.9} className="shrink-0" />
 				{/* 地方不够时最先让出去：图标（完全访问是红的）和悬停提示照样说是哪一档，这几个字设一次就一直放着，是这一排最便宜的东西。见 `fit.ts`。 */}
 				<span data-plume-fit-drop="1" className="flex shrink-0 items-center gap-1 whitespace-nowrap">
 					{label}
 					<ChevronDown size={14} className="shrink-0" aria-hidden />
 				</span>
 			</button>
-			{menu.open && <PermissionPicker anchor={menu.anchor} current={mode} onClose={menu.close} onError={onError} />}
+			{menu.open && <PermissionPicker anchor={menu.anchor} current={local} required={required} onClose={menu.close} onError={onError} />}
 		</>
 	);
 }
@@ -58,11 +66,15 @@ export function PermissionChip({ onError }: { onError: (message: string) => void
 function PermissionPicker({
 	anchor,
 	current,
+	required,
 	onClose,
 	onError,
 }: {
 	anchor: Anchor;
+	/** 本机设置的那档：菜单改的是它，勾也打在它上面。 */
 	current: PermissionMode;
+	/** 项目配置要求、在这个会话里生效的那档，见 `PermissionChip`。 */
+	required?: PermissionMode;
 	onClose: () => void;
 	onError: (message: string) => void;
 }) {
@@ -82,6 +94,11 @@ function PermissionPicker({
 			{!confirming && (
 				<Popover anchor={anchor} onClose={onClose} placement="top" align="start" width="wide" label={t("permission.mode")}>
 					<MenuBody>
+						{required && (
+							<p data-permission-project className="px-2 pt-1.5 pb-1 text-detail leading-relaxed text-ink-muted">
+								{t("permission.projectNote", { mode: t(TITLE[required]) })}
+							</p>
+						)}
 						<MenuLabel>{t("permission.question")}</MenuLabel>
 						{MODES.map((mode) => (
 							<MenuItem

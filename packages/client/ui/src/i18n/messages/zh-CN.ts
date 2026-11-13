@@ -852,6 +852,8 @@ export const zhCN = {
 	"composer.permissionAsk": "请求批准",
 	"composer.permissionAuto": "帮我批准",
 	"composer.permissionFull": "完全访问",
+	"composer.permissionProject": "{mode}：这个项目的 .plume/config.json 要求的",
+	"permission.projectNote": "这个项目的 .plume/config.json 要求「{mode}」，这里的对话都按它来。下面改的是本机设置，在这个项目里不会比「{mode}」宽。",
 	"permission.mode": "权限模式",
 	"permission.question": "应如何批准 Plume 操作？",
 	"permission.askDetail": "编辑文件和运行会改动东西的命令时始终询问",

@@ -27,6 +27,7 @@ import type {
 	HumanAnswer,
 	HumanRequest,
 	PendingRequest,
+	PermissionMode,
 	AssistantMessage,
 	CommandContext,
 	CompactionOutcome,
@@ -1030,6 +1031,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function applyProjectConfig(session: Session, configured: Awaited<ReturnType<typeof layerProjectSettings>>): void {
 		session.projectLayer = configured.layer;
+		// 放宽的已经拿掉了（`withoutLoosening`），留下的权限模式就是这个会话实际按的那一档；界面的权限签照它显示。
+		const required = configured.layer.permissionMode as PermissionMode | undefined;
+		if (required !== session.summary.projectPermission) {
+			if (required) session.summary.projectPermission = required;
+			else delete session.summary.projectPermission;
+			if (sessions.get(session.summary.id) === session) emit({ type: "sessions", sessions: summaries() });
+		}
 		const notices = JSON.stringify([configured.refused, configured.loosened, configured.error ?? ""]);
 		if (notices === session.projectNotices) return;
 		session.projectNotices = notices;
@@ -1053,6 +1061,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		});
 		session.projectRead = reading;
 		return reading;
+	}
+
+	/**
+	 * 一轮之外重读这个会话的项目配置，只为让摘要上的 `projectPermission` 跟上（打开会话、改了本机设置、设置页读了这个目录的配置）。
+	 * 不等、不报错：读不到时下一轮照样会读，到时候再说。
+	 */
+	function refreshProject(session: Session): void {
+		void readSessionSettings(session).catch(() => undefined);
 	}
 
 	/** 改设置是读、改、写三步，排成一队，两次保存挨得近时后一次不会覆盖掉前一次。 */
@@ -2265,6 +2281,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			return settingsView(await readSettings());
 		},
 		async projectLayer(cwd) {
+			// 人在设置页看这份项目配置时，同一目录里读过它的会话也重读一次：文件改过以后，输入框的权限签和这张卡说的是同一份。
+			for (const session of sessions.values()) if (session.projectLayer && session.summary.cwd === cwd) refreshProject(session);
 			return projectLayerView(await readSettings(), cwd);
 		},
 		saveProvider({ apiKey, ...provider }) {
@@ -2316,6 +2334,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			await changeSettings((settings) => {
 				settings.permissionMode = mode;
 			});
+			// 项目配置里哪一档算收紧是和本机比的（`withoutLoosening`）：本机换了档，读过项目配置的会话重新比一次。
+			for (const session of sessions.values()) if (session.projectLayer) refreshProject(session);
 		},
 		async revokeAlwaysAllow(grant) {
 			if (!grant || typeof grant.subject !== "string") throw new Error(text("alwaysAllow.invalid"));
@@ -2505,7 +2525,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		createSession: (target) => createPlain(target),
 		async getSession(sessionId): Promise<SessionView> {
 			const session = find(sessionId);
-			await recordOf(session);
+			// 打开会话时读一次它的项目配置，权限签一打开就是这个会话实际按的那一档（重开应用后还没跑过一轮的会话也是）。
+			await Promise.all([recordOf(session), readSessionSettings(session).catch(() => undefined)]);
 			return {
 				summary: session.summary,
 				messages: await messagesOf(session),
@@ -2575,6 +2596,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				host.sessionContextReset(each.summary.id);
 			}
 			emit({ type: "sessions", sessions: summaries() });
+			// 新目录里的项目配置可能定了另一档权限，不等下一轮，权限签现在就跟上。
+			for (const each of family) refreshProject(each);
 		},
 		async deleteArchivedSessions() {
 			return removeIdle(

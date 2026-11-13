@@ -154,6 +154,13 @@ export interface SessionSummary {
 	model?: ModelRef;
 	/** 这个会话选的思考档位；没选时用模型的默认档，模型没有这一档时就近取一档。 */
 	thinking?: ThinkingLevel;
+	/**
+	 * 工作目录里的项目配置（`.plume/config.json`）给这个会话定的权限模式，而且生效了：项目配置只能收紧权限，比本机设置宽的
+	 * 本体不认，所以有它时它就是这个会话实际按的那一档（不比本机的 `SettingsView.permissionMode` 宽），没有时按本机设置。
+	 * 本体每次读这个会话的设置时重算（每一轮、`AgentService.getSession`、本机换了权限模式、设置页读这个目录的项目配置），变了推一次 `sessions`。
+	 * 只在内存里，不存盘。
+	 */
+	projectPermission?: PermissionMode;
 	/** 上一轮是怎么结束的；正在跑、还没跑过、或者上次没来得及记下（进程崩了）时没有。 */
 	stop?: TurnStop;
 	/** 归档了：移出侧栏，记录和用量都还在，在设置 › 已归档的聊天里取消归档或删除。 */

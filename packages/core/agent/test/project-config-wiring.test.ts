@@ -170,6 +170,54 @@ it("几个项目同时执行各自模型、收紧的权限、个性化和新会�
 	expect(await readFile(join(dir, "settings.json"), "utf8")).toBe(before);
 });
 
+it("会话摘要给出项目配置收紧后实际生效的权限模式：放宽的不认时没有，本机换档、项目文件改了以后跟着变", async () => {
+	const strict = await project("strict", { permissionMode: "ask" });
+	const loose = await project("loose", { permissionMode: "full" });
+	const same = await project("same", { permissionMode: "auto" });
+	const service = await start();
+	const summary = (id: string) => service.listSessions().find((session) => session.id === id);
+	const [tightened, ignored, equal, plain] = await Promise.all([
+		service.createSession({ cwd: strict }),
+		service.createSession({ cwd: loose }),
+		service.createSession({ cwd: same }),
+		service.createSession({ cwd: dir }),
+	]);
+	// 本机帮我批准：项目要求请求批准照办，要求完全访问不认，照本机的走；没有项目配置的也没有这一项。
+	expect(summary(tightened.id)?.projectPermission).toBe("ask");
+	expect(summary(ignored.id)?.projectPermission).toBeUndefined();
+	expect(summary(equal.id)?.projectPermission).toBe("auto");
+	expect(summary(plain.id)?.projectPermission).toBeUndefined();
+	expect((await service.getSession(tightened.id)).summary.projectPermission).toBe("ask");
+
+	// 本机换成请求批准：项目的帮我批准比它宽了，不再生效；换成完全访问：项目的完全访问也只是不比本机宽，照它来。
+	await service.setPermissionMode("ask");
+	await expect.poll(() => summary(equal.id)?.projectPermission ?? null).toBeNull();
+	expect(summary(tightened.id)?.projectPermission).toBe("ask");
+	await service.setPermissionMode("full");
+	await expect.poll(() => summary(equal.id)?.projectPermission).toBe("auto");
+	await expect.poll(() => summary(ignored.id)?.projectPermission).toBe("full");
+	await service.setPermissionMode("auto");
+	await expect.poll(() => summary(ignored.id)?.projectPermission ?? null).toBeNull();
+
+	// 项目文件改了：设置页读这个目录的项目配置、打开会话时都重读，变了推一次会话列表。
+	await writeFile(projectConfigPath(loose), JSON.stringify({ permissionMode: "ask" }));
+	events.length = 0;
+	await service.projectLayer(loose);
+	await expect.poll(() => summary(ignored.id)?.projectPermission).toBe("ask");
+	expect(events.some((event) => event.type === "sessions" && event.sessions.find((session) => session.id === ignored.id)?.projectPermission === "ask")).toBe(
+		true,
+	);
+	await writeFile(projectConfigPath(strict), "{}");
+	expect((await service.getSession(tightened.id)).summary.projectPermission).toBeUndefined();
+	// 只在内存里：重开以后从项目配置重新算，不从库里读回旧值。
+	await agent!.shutdown();
+	await writeFile(projectConfigPath(strict), JSON.stringify({ permissionMode: "full" }));
+	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "settings.json"), plugins: [], log: () => {} });
+	expect(agent.service.listSessions().find((session) => session.id === ignored.id)?.projectPermission).toBeUndefined();
+	expect((await agent.service.getSession(ignored.id)).summary.projectPermission).toBe("ask");
+	expect((await agent.service.getSession(tightened.id)).summary.projectPermission).toBeUndefined();
+});
+
 it("已有会话在全局改动后仍保持项目覆盖，项目文件改动在下一次实际请求生效", async () => {
 	const cwd = await project("sticky", { defaultModel: "p/cheap", personalization: { tone: "concise" } });
 	const service = await start();

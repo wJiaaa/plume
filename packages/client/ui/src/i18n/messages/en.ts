@@ -888,6 +888,9 @@ export const en = {
 	"composer.permissionAsk": "Ask for approval",
 	"composer.permissionAuto": "Auto approve",
 	"composer.permissionFull": "Full access",
+	"composer.permissionProject": "{mode}, required by this project's .plume/config.json",
+	"permission.projectNote":
+		"This project's .plume/config.json asks for {mode}, so chats here run that way. The choices below are your own setting; in this project, nothing looser than {mode} applies.",
 	"permission.mode": "Permission mode",
 	"permission.question": "How should Plume approve actions?",
 	"permission.askDetail": "Always ask before editing files or running commands that change things",
