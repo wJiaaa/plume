@@ -70,101 +70,11 @@ Sub-agents for the `task` tool's `subagent_type`: pass the one whose description
 
 # tools
 
-## ask_user
-
-Ask the user for a clarification or a decision. Options may carry a description and a recommended badge. The user picks, writes an answer, or skips. Skipping is not consent: without an explicit default, continue only work that does not depend on the answer. Full access grants permissions, not answers.
-
-{"type":"object","properties":{"question":{"type":"string","description":"The question and the context needed to answer it."},"options":{"type":"array","items":{"anyOf":[{"type":"string"},{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"},"recommended":{"type":"boolean"}},"required":["label"],"additionalProperties":false}]}},"selectionMode":{"type":"string","enum":["single","multi"]},"allowCustomInput":{"type":"boolean"},"allowSkip":{"type":"boolean","description":"Allow an explicit skipped response. Defaults to true."},"defaultOptionIndex":{"type":"integer","description":"An explicit default used only when the user chooses Skip; a recommendation alone is not a default.\n\n{minimum: 0}"}},"required":["question","options"],"additionalProperties":false}
-
-## browser_open
-
-Open an http(s) URL, or a local .html file (absolute, ~/ or relative to the working directory), in the built-in browser beside the conversation; waits until the page shows content (at most about 5s) and returns tabId, the rendered text and interactive elements, as read does, so no separate wait or read is needed. A local file is served on its own: files beside it (styles, scripts, images) do not load, and reopening it after an edit reloads it. Reuses this session's selected tab unless newTab; a page already open here is reloaded in its own tab.
-
-{"type":"object","properties":{"url":{"type":"string"},"newTab":{"type":"boolean"},"maxChars":{"type":"number","description":"Characters of page text to return, default 8000, at most 40000."},"dialog":{"type":"string","enum":["accept","dismiss"],"description":"How to answer a confirm or leave-page prompt the page raises during this call. Default dismiss; alerts are always acknowledged."}},"required":["url"],"additionalProperties":false}
-
-## browser_act
-
-Operate this session's tab. read returns the rendered text and one line per interactive element with its ref; it waits for a page that shows nothing yet. The text comes 8000 characters at a time (maxChars, at most 40000); when truncated, read again with offset set to the returned nextOffset. read with a selector reads only that region, text and elements. click/type/hover take a ref from read (such as e12), or else a CSS selector seen in the current page, and wait up to 3s for the element to be visible, enabled and not covered; type replaces the field's value; scroll takes x/y pixel deltas; press, a named key; eval, a JavaScript expression; wait, until text appears, selector is visible or expression is truthy (timeout ms, default 10000, at most 30000), across navigations; back/forward/reload wait for the page and return it as read does. Pass read: true on any other action to get the page back with its result (after a click that leaves the page, the new page once it shows content), instead of spending a separate call on read. Steps already decided (fill several fields, then submit) can go as several browser_act calls in one reply; they run in order, and once one fails the rest are not run. Verify with read or wait, not fixed sleeps.
-
-{"type":"object","properties":{"action":{"type":"string","enum":["click","type","links","eval","read","scroll","press","hover","back","forward","reload","wait"]},"tabId":{"type":"string"},"ref":{"type":"string"},"selector":{"type":"string"},"text":{"type":"string"},"expression":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"timeout":{"type":"number"},"read":{"type":"boolean","description":"Also return the page as read does after this action."},"offset":{"type":"number","description":"read: start the text at this character, the nextOffset of the previous read."},"maxChars":{"type":"number","description":"Characters of page text to return, default 8000, at most 40000."},"dialog":{"type":"string","enum":["accept","dismiss"],"description":"How to answer a confirm or leave-page prompt the page raises during this call. Default dismiss; alerts are always acknowledged."}},"required":["action"],"additionalProperties":false}
-
-## browser_tabs
-
-List this session's browser tabs, or select/close one by tabId.
-
-{"type":"object","properties":{"action":{"type":"string","enum":["list","select","close"]},"tabId":{"type":"string"}},"required":["action"],"additionalProperties":false}
-
-## browser_screenshot
-
-Capture what this session's tab shows at its current scroll position and viewport, as a PNG one pixel per CSS pixel at zoom 1.
-
-{"type":"object","properties":{"tabId":{"type":"string"}},"additionalProperties":false}
-
-## browser_viewport
-
-Set zoom (0.25–3) and/or width and height in CSS pixels (240–3840 × 240–2160); reset restores the panel's viewport. Returns innerWidth, innerHeight and devicePixelRatio.
-
-{"type":"object","properties":{"tabId":{"type":"string"},"zoom":{"type":"number"},"width":{"type":"number"},"height":{"type":"number"},"reset":{"type":"boolean"}},"additionalProperties":false}
-
-## recall
-
-Search this session's full transcript, including what compaction removed: an earlier request's exact wording, a file's earlier contents, a command's exact output. Case-insensitive; every space-separated term must appear in the message. A long message is quoted as its opening, the passages around your terms and its ending — search again with a term from another part to see that part. Images cannot be replayed; ask the user to resend one.
-
-{"type":"object","properties":{"query":{"type":"string","description":"Terms that must all appear. Start with one distinctive word; add terms only if there are too many results."},"limit":{"type":"number","description":"Maximum messages to return (default 8, max 20)."},"offset":{"type":"number","description":"Newest matches to skip, to page backwards. Each answer's footer gives the offset of the next page."}},"required":["query"],"additionalProperties":false}
-
-## submit_plan
-
-Submit the plan for the user to approve. Available in plan mode only. Submit it only when it is decision complete: whoever carries it out has nothing left to decide. It is not a task list. Approval turns plan mode off. If the user asks for changes, submit a complete replacement.
-
-{"type":"object","properties":{"plan":{"type":"string","description":"The whole plan as Markdown, in the user's language: a title, a brief summary, the key changes, the test plan, the assumptions."}},"required":["plan"]}
-
-## spawn_session
-
-Suggest a new, separate conversation for follow-up work that deserves its own session: something you noticed that is worth doing but would bloat the current change — dead code, stale docs, missing tests, a TODO you confirmed, a security problem spotted in passing. How it differs from a sub-agent: the person sees it as a card and decides whether it starts; once started it is a conversation in their sidebar they can open, talk to and stop, with its own clean context, and it stays afterwards to be continued. A sub-agent is yours: it runs at once, the person cannot see or steer it, and it only hands its conclusion back to you. Work you need done now to finish the current task, that nobody has to watch, is a sub-agent's. Not for vague code smells, low-confidence guesses, small fixes you can make inline, or the current task itself — unless the person asks you to split their task across separate sessions; then each part is a spawn_session with report_back true, and edits_in_parallel true when the parts change the same repository. Returns immediately and starts nothing. Keep working on the current task afterwards. The prompt is the new conversation's first message and is all it will know: name the files and give enough context to act without this conversation.
-
-{"type":"object","properties":{"title":{"type":"string","description":"The card's title: an imperative phrase starting with a verb, at most 60 characters.\n\n{maxLength: 60}"},"summary":{"type":"string","description":"One or two sentences for the card: first why you are suggesting it now, then what the new conversation will do."},"prompt":{"type":"string","description":"The new conversation's first message. Self-contained: file paths and context, no references to this conversation."},"report_back":{"type":"boolean","description":"Default false. True when what it finds should change what you do here, and always when it carries out part of a task the person gave you (they asked you to split the work across sessions): you are the one they will ask how it went. When its first turn ends, its reply is delivered to this conversation and starts a turn here. Leave it off for independent follow-ups. The person can still change it on the card."},"edits_in_parallel":{"type":"boolean","description":"Default false. True when it will change files in this repository while this conversation or other suggested sessions are also changing them — the parts of a split task. The card then starts it in a worktree of its own, so no two sessions edit one checkout and none has to negotiate who owns which file; it merges back when done. The person can still change it on the card."}},"required":["title","summary","prompt"],"additionalProperties":false}
-
-## archive_session
-
-Archive this conversation once the current turn ends. Use it only when the person asked for this conversation to be archived, for example "archive it when you're done" — never on your own initiative. Your turn ends as soon as this returns and nothing you write after it is read, so put your final reply in the same message, before the call. The person can restore the conversation from Settings › Archived chats.
-
-{"type":"object","properties":{"reason":{"type":"string","description":"Optional: what was finished, in a few words."}},"additionalProperties":false}
-
-## task
-
-Run a sub-agent in its own context window. It starts from nothing — your `prompt` is all it knows, and it cannot ask you questions. It runs in the background and this call immediately returns its ID. When it finishes, its final message is delivered automatically; do not poll, resume or duplicate running work. The files it read and the commands it ran stay out of your context. Your conclusion depends on what they return: write no final answer or summary, and never guess what they will find, until every sub-agent you dispatched has reported. Two kinds of work are worth delegating: work whose intermediate output is large and whose conclusion is all you need (sweeping dozens of files for one answer, running something with long output for its failures), and a sizeable piece of work that does not depend on what you are doing. Do everything else yourself: a change of a step or two, part of what you are writing now (such as tests for the function you just wrote), or work you could only hand off after spelling out its interfaces and conventions — spelling those out costs as much as doing it. Agents with write tools edit files directly; their risky actions are asked of the user, like yours. Calls in one reply run in parallel (extra ones queue), so dispatch independent pieces together; have each skip builds, lints and tests, and verify once yourself after they have all reported. Pieces that need a shared interface which does not exist yet are not independent — write the interface first, or do not split. Each file has one writer: when sub-agents may edit files, name in each prompt the files it owns, and never give two of them the same file.
-
-{"type":"object","properties":{"description":{"type":"string","description":"3-5 word summary of the task."},"prompt":{"type":"string","description":"Self-contained instructions for the sub-agent."},"subagent_type":{"type":"string","description":"Which agent definition to use. Defaults to `general`."},"resume":{"type":"string","description":"ID of a stopped or finished sub-agent to continue in the same context. Keeps its original identity and tool restrictions."}},"required":["description","prompt"],"additionalProperties":false}
-
-## stop_subagent
-
-Stop one of this conversation's sub-agents, including queued work. Does not stop the parent or siblings. Do not restart stopped work unless the user asks.
-
-{"type":"object","properties":{"id":{"type":"string","description":"The sub-agent ID returned by task."}},"required":["id"],"additionalProperties":false}
-
-## todo_write
-
-Record the task list for work of three or more steps. Send the complete list every time — it replaces the previous one; exactly one item may be `in_progress`. Never let this be the only tool call in a reply: write the plan with your first real action, and mark steps done with the next one (or the one that finishes the work).
-
-{"type":"object","properties":{"todos":{"type":"array","description":"The full task list, in order.","items":{"type":"object","properties":{"content":{"type":"string","description":"Imperative description, e.g. 'Add the sync endpoint'."},"status":{"type":"string","enum":["pending","in_progress","completed"]},"activeForm":{"type":"string","description":"Present continuous form, e.g. 'Adding the sync endpoint'."}},"required":["content","status"],"additionalProperties":false}}},"required":["todos"],"additionalProperties":false}
-
 ## read
 
 Read a file. Text comes back under a `[path]` header as 1-indexed lines, `NNNN→content`; the `NNNN→` prefix is not part of the file. A long source file read without `offset`/`limit` comes back as its STRUCTURE: declarations and doc comments, each body folded to `⋯ N lines (from-to)`. Read that range to see a body — never guess at it. Short files, data files and `offset`/`limit` windows are verbatim. A line over 2000 characters comes back as a window; continue it with `char_offset`. Images come back as images. When you already know several files you need, read them all in one reply: calls sent together run in parallel.
 
 {"type":"object","properties":{"path":{"type":"string","description":"File path, absolute or relative to the workspace root."},"offset":{"type":"number","description":"1-indexed line to start from."},"limit":{"type":"number","description":"Maximum number of lines to return. Defaults to 2000."},"char_offset":{"type":"number","description":"1-indexed character to start from on each line, for a line read or grep said was over 2000 characters."}},"required":["path"],"additionalProperties":true}
-
-## write
-
-Write a whole file, creating parent directories. To change part of an existing file use `edit`; read an existing file before overwriting it.
-
-{"type":"object","properties":{"path":{"type":"string","description":"File path, absolute or relative to the workspace root."},"content":{"type":"string","description":"Complete file contents."}},"required":["path","content"],"additionalProperties":false}
-
-## edit
-
-Replace exact text in a file. `old_string` must match the file exactly, whitespace and indentation included, and be unique unless `replace_all` is set. Keep `old_string` as small as possible while still unique: when only a word changes, a few words around it are enough, even on a long line. Read the file before editing it; if it changed since, the edit is refused — re-read and redo it. If that read came back as an outline or was cut short, read the part you are changing with `offset`/`limit` first. For several separate changes, send several edit calls in one response.
-
-{"type":"object","properties":{"path":{"type":"string","description":"File path, absolute or relative to the workspace root."},"old_string":{"type":"string","description":"The exact text to replace."},"new_string":{"type":"string","description":"The text to put in its place."},"replace_all":{"type":"boolean","description":"Replace every occurrence instead of requiring a unique match."}},"required":["path","old_string","new_string"],"additionalProperties":false}
 
 ## ls
 
@@ -184,17 +94,23 @@ Search file contents with a regular expression. A matching line over 2000 charac
 
 {"type":"object","properties":{"pattern":{"type":"string","description":"Regular expression to search for."},"description":{"type":"string","description":"5-10 word description shown to the user, in plain words and the user's language — not the pattern."},"path":{"type":"string","description":"Directory or file to search. Defaults to the workspace root."},"glob":{"type":"string","description":"Only search files matching this glob, e.g. `**/*.ts`."},"case_insensitive":{"type":"boolean","description":"Ignore case."},"context":{"type":"number","description":"Lines of context around each match."},"files_only":{"type":"boolean","description":"List matching file paths instead of matching lines."},"limit":{"type":"number","description":"Maximum matches to return. Default 200."}},"additionalProperties":true}
 
+## write
+
+Write a whole file, creating parent directories. To change part of an existing file use `edit`; read an existing file before overwriting it.
+
+{"type":"object","properties":{"path":{"type":"string","description":"File path, absolute or relative to the workspace root."},"content":{"type":"string","description":"Complete file contents."}},"required":["path","content"],"additionalProperties":false}
+
+## edit
+
+Replace exact text in a file. `old_string` must match the file exactly, whitespace and indentation included, and be unique unless `replace_all` is set. Keep `old_string` as small as possible while still unique: when only a word changes, a few words around it are enough, even on a long line. Read the file before editing it; if it changed since, the edit is refused — re-read and redo it. If that read came back as an outline or was cut short, read the part you are changing with `offset`/`limit` first. For several separate changes, send several edit calls in one response.
+
+{"type":"object","properties":{"path":{"type":"string","description":"File path, absolute or relative to the workspace root."},"old_string":{"type":"string","description":"The exact text to replace."},"new_string":{"type":"string","description":"The text to put in its place."},"replace_all":{"type":"boolean","description":"Replace every occurrence instead of requiring a unique match."}},"required":["path","old_string","new_string"],"additionalProperties":false}
+
 ## bash
 
 Run a shell command. Prefer the dedicated tools: read over `cat`/`head`/`tail`, edit over `sed`, glob over `find`, grep over shell `grep`. Every call starts fresh in the workspace root — `cd`, variables and functions do not carry over — so chain dependent steps (`cd sub && make`). Commands that do not need each other's output (`git status`, `git diff`, `git log`) go out as separate calls in one reply; read-only ones run in parallel. Quote paths that may contain spaces. Use `run_in_background: true` for dev servers and slow commands you need not wait on, and keep working; the result says whether its exit will be reported to you, otherwise read it with `bash_output`. Before your final answer, kill the jobs you started that nobody needs any more; leave a server running only when the user is meant to use it.
 
 {"type":"object","properties":{"command":{"type":"string","description":"The command to run."},"description":{"type":"string","description":"What this command is for, in 5-10 words and the user's language — it is the line the user reads instead of the command. Say the purpose in plain words (\"Run the e2e tests\", \"Check which branches are merged\"), not the command, its flags or file paths; not a generic label (\"Run command\", \"Check output\"), and no names you coined yourself that the user has never seen."},"timeout":{"type":"number","description":"Hard limit in milliseconds, max 600000: the command is killed when it passes. Without it, a command still running after 120000 ms keeps running as a background job."},"run_in_background":{"type":"boolean","description":"Detach the process and return immediately."},"escalate":{"type":"string","enum":["workspace-write","danger-full-access"],"description":"Only valid as a one-shot retry of a command the sandbox just denied. The narrowest mode that would let it through. Requires justification, and asks the user."},"justification":{"type":"string","description":"One sentence on why the wider mode is needed. Shown to the user verbatim."}},"required":["command"],"additionalProperties":false}
-
-## bash_output
-
-Read a background job's new output since your last bash_output call (the first call returns everything so far), and optionally kill it. While it runs, a call within 30s of your last read waits until it ends or those 30s are up, and returns everything printed meanwhile.
-
-{"type":"object","properties":{"id":{"type":"string","description":"Job id returned by bash."},"kill":{"type":"boolean","description":"Terminate the job after reading its output."}},"required":["id"],"additionalProperties":false}
 
 ## monitor
 
@@ -202,11 +118,89 @@ Run a long-lived command — `tail -f` on a log, a build or test runner in watch
 
 {"type":"object","properties":{"command":{"type":"string","description":"The command to run. stdout and stderr both count; every non-empty line is an event."},"description":{"type":"string","description":"What this watches, in 5-10 words and the user's language — it is the line the user reads instead of the command (\"Watch the dev server for errors\"), not the command or its flags."},"max_events":{"type":"integer","description":"Stop after this many lines. Default 100, max 1000."},"idle_timeout":{"type":"integer","description":"Stop after this many milliseconds without output. Default 600000, max 3600000."}},"required":["command"],"additionalProperties":false}
 
-## schedule_wakeup
+## bash_output
 
-Come back to this conversation once, after a delay ("check the CI result in 10 minutes"). When it fires, a message arrives here and you carry on from it; nothing runs before then, so end this turn normally. Not needed for a background command or sub-agent: those already report back when done. Each wakeup costs a turn, so wait as long as the thing takes — 300-600 seconds for CI or a deploy. It lives in this conversation only: cancelled by Stop, gone if the app quits.
+Read a background job's new output since your last bash_output call (the first call returns everything so far), and optionally kill it. While it runs, a call within 30s of your last read waits until it ends or those 30s are up, and returns everything printed meanwhile.
 
-{"type":"object","properties":{"delay_seconds":{"type":"number","description":"Seconds from now, 60 to 86400."},"prompt":{"type":"string","description":"What to do when it fires, written to yourself: what to check and what to do with the answer."},"reason":{"type":"string","description":"A few words shown to the person (\"waiting for CI on PR 482\")."}},"required":["delay_seconds","prompt","reason"],"additionalProperties":false}
+{"type":"object","properties":{"id":{"type":"string","description":"Job id returned by bash."},"kill":{"type":"boolean","description":"Terminate the job after reading its output."}},"required":["id"],"additionalProperties":false}
+
+## ask_user
+
+Ask the user for a clarification or a decision. Options may carry a description and a recommended badge. The user picks, writes an answer, or skips. Skipping is not consent: without an explicit default, continue only work that does not depend on the answer. Full access grants permissions, not answers.
+
+{"type":"object","properties":{"question":{"type":"string","description":"The question and the context needed to answer it."},"options":{"type":"array","items":{"anyOf":[{"type":"string"},{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"},"recommended":{"type":"boolean"}},"required":["label"],"additionalProperties":false}]}},"selectionMode":{"type":"string","enum":["single","multi"]},"allowCustomInput":{"type":"boolean"},"allowSkip":{"type":"boolean","description":"Allow an explicit skipped response. Defaults to true."},"defaultOptionIndex":{"type":"integer","description":"An explicit default used only when the user chooses Skip; a recommendation alone is not a default.\n\n{minimum: 0}"}},"required":["question","options"],"additionalProperties":false}
+
+## browser_act
+
+Operate this session's tab. read returns the rendered text and one line per interactive element with its ref; it waits for a page that shows nothing yet. The text comes 8000 characters at a time (maxChars, at most 40000); when truncated, read again with offset set to the returned nextOffset. read with a selector reads only that region, text and elements. click/type/hover take a ref from read (such as e12), or else a CSS selector seen in the current page, and wait up to 3s for the element to be visible, enabled and not covered; type replaces the field's value; scroll takes x/y pixel deltas; press, a named key; eval, a JavaScript expression; wait, until text appears, selector is visible or expression is truthy (timeout ms, default 10000, at most 30000), across navigations; back/forward/reload wait for the page and return it as read does. Pass read: true on any other action to get the page back with its result (after a click that leaves the page, the new page once it shows content), instead of spending a separate call on read. Steps already decided (fill several fields, then submit) can go as several browser_act calls in one reply; they run in order, and once one fails the rest are not run. Verify with read or wait, not fixed sleeps.
+
+{"type":"object","properties":{"action":{"type":"string","enum":["click","type","links","eval","read","scroll","press","hover","back","forward","reload","wait"]},"tabId":{"type":"string"},"ref":{"type":"string"},"selector":{"type":"string"},"text":{"type":"string"},"expression":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"timeout":{"type":"number"},"read":{"type":"boolean","description":"Also return the page as read does after this action."},"offset":{"type":"number","description":"read: start the text at this character, the nextOffset of the previous read."},"maxChars":{"type":"number","description":"Characters of page text to return, default 8000, at most 40000."},"dialog":{"type":"string","enum":["accept","dismiss"],"description":"How to answer a confirm or leave-page prompt the page raises during this call. Default dismiss; alerts are always acknowledged."}},"required":["action"],"additionalProperties":false}
+
+## browser_open
+
+Open an http(s) URL, or a local .html file (absolute, ~/ or relative to the working directory), in the built-in browser beside the conversation; waits until the page shows content (at most about 5s) and returns tabId, the rendered text and interactive elements, as read does, so no separate wait or read is needed. A local file is served on its own: files beside it (styles, scripts, images) do not load, and reopening it after an edit reloads it. Reuses this session's selected tab unless newTab; a page already open here is reloaded in its own tab.
+
+{"type":"object","properties":{"url":{"type":"string"},"newTab":{"type":"boolean"},"maxChars":{"type":"number","description":"Characters of page text to return, default 8000, at most 40000."},"dialog":{"type":"string","enum":["accept","dismiss"],"description":"How to answer a confirm or leave-page prompt the page raises during this call. Default dismiss; alerts are always acknowledged."}},"required":["url"],"additionalProperties":false}
+
+## browser_screenshot
+
+Capture what this session's tab shows at its current scroll position and viewport, as a PNG one pixel per CSS pixel at zoom 1.
+
+{"type":"object","properties":{"tabId":{"type":"string"}},"additionalProperties":false}
+
+## browser_tabs
+
+List this session's browser tabs, or select/close one by tabId.
+
+{"type":"object","properties":{"action":{"type":"string","enum":["list","select","close"]},"tabId":{"type":"string"}},"required":["action"],"additionalProperties":false}
+
+## browser_viewport
+
+Set zoom (0.25–3) and/or width and height in CSS pixels (240–3840 × 240–2160); reset restores the panel's viewport. Returns innerWidth, innerHeight and devicePixelRatio.
+
+{"type":"object","properties":{"tabId":{"type":"string"},"zoom":{"type":"number"},"width":{"type":"number"},"height":{"type":"number"},"reset":{"type":"boolean"}},"additionalProperties":false}
+
+## recall
+
+Search this session's full transcript, including what compaction removed: an earlier request's exact wording, a file's earlier contents, a command's exact output. Case-insensitive; every space-separated term must appear in the message. A long message is quoted as its opening, the passages around your terms and its ending — search again with a term from another part to see that part. Images cannot be replayed; ask the user to resend one.
+
+{"type":"object","properties":{"query":{"type":"string","description":"Terms that must all appear. Start with one distinctive word; add terms only if there are too many results."},"limit":{"type":"number","description":"Maximum messages to return (default 8, max 20)."},"offset":{"type":"number","description":"Newest matches to skip, to page backwards. Each answer's footer gives the offset of the next page."}},"required":["query"],"additionalProperties":false}
+
+## submit_plan
+
+Submit the plan for the user to approve. Available in plan mode only. Submit it only when it is decision complete: whoever carries it out has nothing left to decide. It is not a task list. Approval turns plan mode off. If the user asks for changes, submit a complete replacement.
+
+{"type":"object","properties":{"plan":{"type":"string","description":"The whole plan as Markdown, in the user's language: a title, a brief summary, the key changes, the test plan, the assumptions."}},"required":["plan"]}
+
+## archive_session
+
+Archive this conversation once the current turn ends. Use it only when the person asked for this conversation to be archived, for example "archive it when you're done" — never on your own initiative. Your turn ends as soon as this returns and nothing you write after it is read, so put your final reply in the same message, before the call. The person can restore the conversation from Settings › Archived chats.
+
+{"type":"object","properties":{"reason":{"type":"string","description":"Optional: what was finished, in a few words."}},"additionalProperties":false}
+
+## spawn_session
+
+Suggest a new, separate conversation for follow-up work that deserves its own session: something you noticed that is worth doing but would bloat the current change — dead code, stale docs, missing tests, a TODO you confirmed, a security problem spotted in passing. How it differs from a sub-agent: the person sees it as a card and decides whether it starts; once started it is a conversation in their sidebar they can open, talk to and stop, with its own clean context, and it stays afterwards to be continued. A sub-agent is yours: it runs at once, the person cannot see or steer it, and it only hands its conclusion back to you. Work you need done now to finish the current task, that nobody has to watch, is a sub-agent's. Not for vague code smells, low-confidence guesses, small fixes you can make inline, or the current task itself — unless the person asks you to split their task across separate sessions; then each part is a spawn_session with report_back true, and edits_in_parallel true when the parts change the same repository. Returns immediately and starts nothing. Keep working on the current task afterwards. The prompt is the new conversation's first message and is all it will know: name the files and give enough context to act without this conversation.
+
+{"type":"object","properties":{"title":{"type":"string","description":"The card's title: an imperative phrase starting with a verb, at most 60 characters.\n\n{maxLength: 60}"},"summary":{"type":"string","description":"One or two sentences for the card: first why you are suggesting it now, then what the new conversation will do."},"prompt":{"type":"string","description":"The new conversation's first message. Self-contained: file paths and context, no references to this conversation."},"report_back":{"type":"boolean","description":"Default false. True when what it finds should change what you do here, and always when it carries out part of a task the person gave you (they asked you to split the work across sessions): you are the one they will ask how it went. When its first turn ends, its reply is delivered to this conversation and starts a turn here. Leave it off for independent follow-ups. The person can still change it on the card."},"edits_in_parallel":{"type":"boolean","description":"Default false. True when it will change files in this repository while this conversation or other suggested sessions are also changing them — the parts of a split task. The card then starts it in a worktree of its own, so no two sessions edit one checkout and none has to negotiate who owns which file; it merges back when done. The person can still change it on the card."}},"required":["title","summary","prompt"],"additionalProperties":false}
+
+## stop_subagent
+
+Stop one of this conversation's sub-agents, including queued work. Does not stop the parent or siblings. Do not restart stopped work unless the user asks.
+
+{"type":"object","properties":{"id":{"type":"string","description":"The sub-agent ID returned by task."}},"required":["id"],"additionalProperties":false}
+
+## task
+
+Run a sub-agent in its own context window. It starts from nothing — your `prompt` is all it knows, and it cannot ask you questions. It runs in the background and this call immediately returns its ID. When it finishes, its final message is delivered automatically; do not poll, resume or duplicate running work. The files it read and the commands it ran stay out of your context. Your conclusion depends on what they return: write no final answer or summary, and never guess what they will find, until every sub-agent you dispatched has reported. Two kinds of work are worth delegating: work whose intermediate output is large and whose conclusion is all you need (sweeping dozens of files for one answer, running something with long output for its failures), and a sizeable piece of work that does not depend on what you are doing. Do everything else yourself: a change of a step or two, part of what you are writing now (such as tests for the function you just wrote), or work you could only hand off after spelling out its interfaces and conventions — spelling those out costs as much as doing it. Agents with write tools edit files directly; their risky actions are asked of the user, like yours. Calls in one reply run in parallel (extra ones queue), so dispatch independent pieces together; have each skip builds, lints and tests, and verify once yourself after they have all reported. Pieces that need a shared interface which does not exist yet are not independent — write the interface first, or do not split. Each file has one writer: when sub-agents may edit files, name in each prompt the files it owns, and never give two of them the same file.
+
+{"type":"object","properties":{"description":{"type":"string","description":"3-5 word summary of the task."},"prompt":{"type":"string","description":"Self-contained instructions for the sub-agent."},"subagent_type":{"type":"string","description":"Which agent definition to use. Defaults to `general`."},"resume":{"type":"string","description":"ID of a stopped or finished sub-agent to continue in the same context. Keeps its original identity and tool restrictions."}},"required":["description","prompt"],"additionalProperties":false}
+
+## todo_write
+
+Record the task list for work of three or more steps. Send the complete list every time — it replaces the previous one; exactly one item may be `in_progress`. Never let this be the only tool call in a reply: write the plan with your first real action, and mark steps done with the next one (or the one that finishes the work).
+
+{"type":"object","properties":{"todos":{"type":"array","description":"The full task list, in order.","items":{"type":"object","properties":{"content":{"type":"string","description":"Imperative description, e.g. 'Add the sync endpoint'."},"status":{"type":"string","enum":["pending","in_progress","completed"]},"activeForm":{"type":"string","description":"Present continuous form, e.g. 'Adding the sync endpoint'."}},"required":["content","status"],"additionalProperties":false}}},"required":["todos"],"additionalProperties":false}
 
 ## cron_create
 
@@ -214,26 +208,32 @@ Like schedule_wakeup, but on a schedule ("check the deploy every 5 minutes until
 
 {"type":"object","properties":{"cron":{"type":"string","description":"5-field cron expression in local time."},"prompt":{"type":"string","description":"What to do each time it fires, written to yourself, including when to stop."},"recurring":{"type":"boolean","description":"Default true; false fires once at the next match."}},"required":["cron","prompt"],"additionalProperties":false}
 
-## cron_list
-
-List this conversation's pending wakeups and cron jobs, with ids and next firing times.
-
-{"type":"object","properties":{},"additionalProperties":false}
-
 ## cron_delete
 
 Cancel a pending wakeup or cron job by id.
 
 {"type":"object","properties":{"id":{"type":"string","description":"The id, e.g. \"cron-2\"."}},"required":["id"],"additionalProperties":false}
 
-## web_search
+## cron_list
 
-Search the web for pages: titles, snippets and URLs. Read one with web_fetch.
+List this conversation's pending wakeups and cron jobs, with ids and next firing times.
 
-{"type":"object","properties":{"query":{"type":"string","description":"What to search for."}},"required":["query"],"additionalProperties":true}
+{"type":"object","properties":{},"additionalProperties":false}
+
+## schedule_wakeup
+
+Come back to this conversation once, after a delay ("check the CI result in 10 minutes"). When it fires, a message arrives here and you carry on from it; nothing runs before then, so end this turn normally. Not needed for a background command or sub-agent: those already report back when done. Each wakeup costs a turn, so wait as long as the thing takes — 300-600 seconds for CI or a deploy. It lives in this conversation only: cancelled by Stop, gone if the app quits.
+
+{"type":"object","properties":{"delay_seconds":{"type":"number","description":"Seconds from now, 60 to 86400."},"prompt":{"type":"string","description":"What to do when it fires, written to yourself: what to check and what to do with the answer."},"reason":{"type":"string","description":"A few words shown to the person (\"waiting for CI on PR 482\")."}},"required":["delay_seconds","prompt","reason"],"additionalProperties":false}
 
 ## web_fetch
 
 Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.
 
 {"type":"object","properties":{"url":{"type":"string","description":"Absolute http(s) URL."},"format":{"type":"string","enum":["text","raw"],"description":"Output format. Default text."}},"required":["url"],"additionalProperties":false}
+
+## web_search
+
+Search the web for pages: titles, snippets and URLs. Read one with web_fetch.
+
+{"type":"object","properties":{"query":{"type":"string","description":"What to search for."}},"required":["query"],"additionalProperties":true}

@@ -182,7 +182,8 @@ describe("PluginHost", () => {
 				},
 			} satisfies Plugin),
 		]);
-		expect(names?.()).toEqual(["same", "own"]);
+		// 按插件名排（见下面的「工具表的顺序」）：same 生效的是 second 登记的那个。
+		expect(names?.()).toEqual(["own", "same"]);
 		await h.setEnabled("first", false);
 		expect(names?.()).toEqual(["same"]);
 	});
@@ -199,8 +200,8 @@ describe("PluginHost", () => {
 		expect(h.tool("read")).toMatchObject({ plugin: "shadow", definition: { description: "shadow" } });
 		expect(logs.some((line) => line.startsWith("info shadow") && line.includes("插件 base"))).toBe(true);
 		expect(h.toolOwners()).toEqual([
-			{ name: "read", plugin: "shadow" },
 			{ name: "own", plugin: "shadow", category: "checklist" },
+			{ name: "read", plugin: "shadow" },
 		]);
 		await h.setEnabled("shadow", false);
 		expect(h.tool("read")).toMatchObject({ plugin: "base", definition: { description: "read" } });
@@ -386,6 +387,77 @@ describe("PluginHost", () => {
 		// 卸下以后同一个 key 可以重新装（更新就是先卸再装）。
 		await h.add(late);
 		expect(h.tool("late_tool")?.plugin).toBe("late");
+	});
+});
+
+describe("工具表的顺序", () => {
+	/**
+	 * 两个内置插件、两个市场插件、一个注册 MCP 工具的内置插件。`swapped` 调换谁 inject 谁提供：加载（apply）的先后跟着变，
+	 * 登记工具的先后也跟着变。
+	 */
+	function plugins(swapped: boolean): PluginEntry[] {
+		const builtin = (plugin: Plugin): PluginEntry => ({ key: plugin.name, builtin: true, load: async () => plugin });
+		const provide = (ctx: PluginContext) => ctx.provide("echo", { say: (text: string) => text });
+		return [
+			builtin({
+				name: "b.files",
+				...(swapped ? { inject: ["echo"] } : {}),
+				apply: (ctx) => {
+					if (!swapped) provide(ctx);
+					ctx.tools.register(tool("cron"));
+					ctx.tools.register({ ...tool("bash"), kind: "command" });
+					ctx.tools.register({ ...tool("read"), kind: "view" });
+				},
+			}),
+			builtin({
+				name: "b.agent",
+				...(swapped ? {} : { inject: ["echo"] }),
+				apply: (ctx) => {
+					if (swapped) provide(ctx);
+					ctx.tools.register(tool("task"));
+				},
+			}),
+			builtin({
+				name: "b.mcp",
+				apply: (ctx) => {
+					ctx.tools.register({ ...tool("mcp__srv__b"), category: "mcp" });
+					ctx.tools.register({ ...tool("mcp__srv__a"), category: "mcp" });
+				},
+			}),
+			entry({
+				name: "m.zeta",
+				...(swapped ? { inject: ["echo"] } : {}),
+				apply: (ctx) => void (ctx.tools.register(tool("zeta_two")), ctx.tools.register(tool("zeta_one"))),
+			} satisfies Plugin),
+			entry({ name: "m.alpha", ...(swapped ? {} : { inject: ["echo"] }), apply: (ctx) => void ctx.tools.register(tool("alpha")) } satisfies Plugin),
+		];
+	}
+	const EXPECTED = ["read", "bash", "task", "cron", "alpha", "zeta_one", "zeta_two", "mcp__srv__a", "mcp__srv__b"];
+
+	it("打乱加载顺序、调换 inject 后工具表顺序不变：内置的读写跑命令在前，其余按插件名，MCP 在最后", async () => {
+		for (const swapped of [false, true]) {
+			for (const reversed of [false, true]) {
+				const entries = plugins(swapped);
+				const h = host();
+				await h.load(reversed ? entries.reverse() : entries);
+				expect(h.toolSpecs().map((spec) => spec.name)).toEqual(EXPECTED);
+				expect(h.toolOwners().map((owner) => owner.name)).toEqual(EXPECTED);
+				await h.dispose();
+			}
+		}
+	});
+
+	it("停用再启用、卸下再装上一个插件，它的工具回到原来的位置，不排到末尾", async () => {
+		const h = host();
+		const entries = plugins(false);
+		await h.load(entries);
+		await h.setEnabled("m.alpha", false);
+		await h.setEnabled("m.alpha", true);
+		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(EXPECTED);
+		await h.remove("m.zeta");
+		await h.add(entries.find((candidate) => candidate.key === "m.zeta")!);
+		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(EXPECTED);
+		await h.dispose();
 	});
 });
 

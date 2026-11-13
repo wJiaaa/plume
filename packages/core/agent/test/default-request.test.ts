@@ -4,6 +4,8 @@
  * 钉住的是「发给模型的文字没有被顺手改掉」：内置插件之间不点名、改成按声明在工具表里现查名字以后，默认情况下查到的就是原来写死的那个，
  * 发出去的字一个都不该变。有意改提示词、工具说明时，看一眼差异，再用 `pnpm --filter @plume/agent exec vitest run default-request -u` 更新。
  *
+ * 工具表的顺序由宿主按固定规则排（见 `host.ts` 的 `compareTools`），和插件的加载先后、依赖声明无关：倒着装一遍内置插件，工具表一个都不挪。
+ *
  * 内置插件按应用的加载顺序（`packages/builtin/` 下的目录名排序）全部装上。随机器变的部分换成占位：临时目录、会话 id、平台和 shell 那两行，
  * 以及只在 Windows 上才有的 shell 写法（它们跟着平台变，不跟着插件变）。家目录指到一个空的临时目录，本机装的技能不会混进来。
  */
@@ -90,4 +92,19 @@ it("默认会话发给模型的系统提示词和工具表和基准逐字相同"
 		(tool) => `## ${tool.name}\n\n${tool.description}\n\n${JSON.stringify(tool.input_schema)}`,
 	);
 	await expect(normalize(`# system\n\n${system}\n\n# tools\n\n${tools.join("\n\n")}\n`)).toMatchFileSnapshot("__snapshots__/default-request.txt");
+}, 30_000);
+
+it("倒着装一遍内置插件（加载先后、等服务的先后都变了），工具表的顺序不变", async () => {
+	const names = async (entries: PluginEntry[], name: string) => {
+		const other = await createAgent({ dataDir: join(dir, name), settingsFile: join(dir, `${name}.json`), plugins: entries, log: () => undefined });
+		try {
+			return (await other.service.listTools()).map((tool) => tool.name);
+		} finally {
+			await other.shutdown();
+		}
+	};
+	const forward = await builtins();
+	const listed = await names(forward, "forward");
+	expect(listed.length).toBeGreaterThan(10);
+	expect(await names([...forward].reverse(), "reversed")).toEqual(listed);
 }, 30_000);

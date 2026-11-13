@@ -40,6 +40,7 @@ import type {
 	SessionObservation,
 	RegisteredToolInfo,
 	ToolDefinition,
+	ToolKind,
 	ToolSpec,
 	WebPageEvent,
 	WebPages,
@@ -122,6 +123,36 @@ export interface RegisteredTool {
 	definition: ToolDefinition;
 	/** 注册它的插件。 */
 	plugin: string;
+	/** 注册它的插件是内置的：工具表里排在前面，见 `compareTools`。 */
+	builtin: boolean;
+}
+
+/** 第一组里按做的是哪种活排：先读、列、找、搜，再写、改，最后跑命令和管后台。 */
+const KIND_RANK = { view: 0, list: 1, find: 2, search: 3, create: 4, modify: 5, command: 6, watch: 7, job: 8 } satisfies Record<ToolKind, number>;
+
+/**
+ * 工具表的排法（发给模型的、`ctx.tools.list()`、界面的都是这一份）。只看工具自己的声明和注册它的插件的名字、是不是内置，
+ * 和依赖声明（`inject`）、安装和加载的先后、MCP 服务连上的先后都无关：调一次依赖、重装一个插件，表的顺序不变，
+ * 服务商的提示词缓存就不会因为工具挪了位置而作废。分四组，组内按名字（逐个码位比，不随系统语言变）：
+ * 1. 内置插件里声明了 `kind` 的（读写文件、跑命令这些最常用的）：按 `KIND_RANK`，同种按工具名；
+ * 2. 内置插件的其余工具：按插件名，再按工具名，一个插件的工具挨在一起；
+ * 3. 非内置插件的工具：同上。装上一个插件，它的工具作为一整块插进这一组，前两组不动；
+ * 4. MCP 的工具（`category: "mcp"`，不论哪个插件注册的）：按工具名，名字带着服务名，同一台服务的挨在一起。连上、断开最频繁，放在最后。
+ * 同一会话中途变了工具表时怎么接，归发请求的那一层（内置插件 plume.prompt 冻结着会话的那份，新的接在后面）。
+ */
+function compareTools(a: RegisteredTool, b: RegisteredTool): number {
+	const key = ({ definition, plugin, builtin }: RegisteredTool): [number, number, string] => {
+		if (definition.category === "mcp") return [3, 0, ""];
+		if (builtin && definition.kind) return [0, KIND_RANK[definition.kind] ?? 0, ""];
+		return [builtin ? 1 : 2, 0, plugin];
+	};
+	const [groupA, rankA, pluginA] = key(a);
+	const [groupB, rankB, pluginB] = key(b);
+	return groupA - groupB || rankA - rankB || compareText(pluginA, pluginB) || compareText(a.definition.name, b.definition.name);
+}
+
+function compareText(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** 钩子某一层出错。message 里带上插件名，交给模型和界面都能看出是谁。 */
@@ -463,16 +494,19 @@ export class PluginHost {
 		return this.tools.get(name)?.at(-1);
 	}
 
+	/** 工具表里生效的工具（同名的取最后登记的），按 `compareTools` 排好。 */
+	private effectiveTools(): RegisteredTool[] {
+		return [...this.tools.values()].flatMap((list) => list.slice(-1)).sort(compareTools);
+	}
+
 	/** 工具表里生效的工具、注册它们的插件和它们声明的种类、类别。 */
 	toolOwners(): RegisteredToolInfo[] {
-		return [...this.tools.values()]
-			.flatMap((list) => list.slice(-1))
-			.map(({ definition, plugin }) => ({
-				name: definition.name,
-				plugin,
-				...(definition.kind ? { kind: definition.kind } : {}),
-				...(definition.category ? { category: definition.category } : {}),
-			}));
+		return this.effectiveTools().map(({ definition, plugin }) => ({
+			name: definition.name,
+			plugin,
+			...(definition.kind ? { kind: definition.kind } : {}),
+			...(definition.category ? { category: definition.category } : {}),
+		}));
 	}
 
 	/**
@@ -546,9 +580,7 @@ export class PluginHost {
 	}
 
 	toolSpecs(): ToolSpec[] {
-		return [...this.tools.values()]
-			.flatMap((list) => list.slice(-1))
-			.map(({ definition: { name, description, parameters } }) => ({ name, description, parameters }));
+		return this.effectiveTools().map(({ definition: { name, description, parameters } }) => ({ name, description, parameters }));
 	}
 
 	/**
@@ -890,7 +922,7 @@ export class PluginHost {
 					const list = this.tools.get(tool.name) ?? [];
 					const taken = list.at(-1);
 					if (taken) log.info(`工具 ${tool.name} 覆盖了插件 ${taken.plugin} 的同名工具`);
-					const registered: RegisteredTool = { definition: tool, plugin: name };
+					const registered: RegisteredTool = { definition: tool, plugin: name, builtin: record.builtin };
 					// 插件自己撤下（MCP 服务断开、改了配置）时也从清理表里拿掉：反复连断不该让清理表一直长。
 					const unregister = () => {
 						const at = record.disposers.indexOf(unregister);
@@ -905,7 +937,7 @@ export class PluginHost {
 					this.options.toolsChanged?.();
 					return unregister;
 				},
-				names: () => [...this.tools.keys()],
+				names: () => this.effectiveTools().map((entry) => entry.definition.name),
 				list: () => this.toolOwners(),
 			},
 			plugins: {

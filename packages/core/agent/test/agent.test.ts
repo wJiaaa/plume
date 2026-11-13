@@ -310,20 +310,20 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 	expect(JSON.stringify(first?.system)).toContain("NOTES_HINT");
 	expect((first?.tools as Array<{ name: string }> | undefined)?.map((tool) => tool.name)).toEqual([
 		"read",
-		"write",
-		"edit",
 		"ls",
 		"glob",
 		"grep",
+		"write",
+		"edit",
 		"bash",
-		"bash_output",
 		"monitor",
-		"schedule_wakeup",
-		"cron_create",
-		"cron_list",
-		"cron_delete",
+		"bash_output",
 		"ask_user",
 		"recall",
+		"cron_create",
+		"cron_delete",
+		"cron_list",
+		"schedule_wakeup",
 		"note",
 	]);
 	expect(JSON.stringify(second?.messages)).toContain("Edited hello.txt: 1 replacement");
