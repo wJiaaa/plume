@@ -52,6 +52,8 @@ export const TRUNCATED_CALL =
 const CANCELLED_RUNNING = "Tool execution was cancelled. Anything it had already done may have taken effect.";
 // 等审批时被停的那个根本没开始，说「可能已经生效」会让模型去查一个不可能存在的结果。
 const CANCELLED_WAITING = "Tool call was stopped while it waited for approval, so it never ran.";
+// `run.request` 是工具跑到一半才问人（MCP 服务器要的表单）：这时它已经动了手，不能说没跑过。
+const CANCELLED_ASKING = "Tool call was stopped while it waited for the user's answer. Anything it had already done before asking may have taken effect.";
 const ARGUMENTS_LOST_REASON =
 	"every call in this reply arrived with empty arguments. That is the provider dropping the arguments of parallel tool calls, not something you left out. Make one tool call per reply from now on";
 
@@ -321,19 +323,21 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		if (push) pushedAt = Date.now();
 		scope.progress(call.id, shown, push);
 	};
-	// 停下的那一刻在不在等人（审批或 `request`）：在等的那个还没动手。
-	let asking = false;
-	const waitFor = async <T>(wait: () => Promise<T>): Promise<T> => {
-		asking = true;
+	/*
+	 * 停下的那一刻在不在等人、等的是什么：等审批的还没动手；等 `request` 的可能已经做了一半（工具跑着跑着才问）。
+	 */
+	let asking: "approval" | "request" | undefined;
+	const waitFor = async <T>(what: "approval" | "request", wait: () => Promise<T>): Promise<T> => {
+		asking = what;
 		try {
 			return await wait();
 		} finally {
 			// 因为停下才拿到答复的，留着这个标记；正常答复了就清掉。
-			if (!signal.aborted) asking = false;
+			if (!signal.aborted) asking = undefined;
 		}
 	};
 	const askWith = (content: ApprovalContent, grant: AlwaysAllow | undefined): Promise<ApprovalDecision> =>
-		waitFor(() => scope.ask({ toolCallId: call.id, tool: call.name, ...content }, grant));
+		waitFor("approval", () => scope.ask({ toolCallId: call.id, tool: call.name, ...content }, grant));
 	/** `ToolRun.request`：不经 tool.approve、不看权限模式，直接排进等人的那一队。 */
 	const request = async <T>(input: HumanRequestInput): Promise<HumanAnswer<T>> => {
 		const { kind, title, payload, waiting } = (input ?? {}) as Partial<HumanRequestInput>;
@@ -349,7 +353,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			...(payload !== undefined ? { payload: structuredClone(payload) } : {}),
 			...(typeof waiting === "string" && waiting ? { waiting } : {}),
 		};
-		return (await waitFor(() => scope.requestHuman(asked))) as HumanAnswer<T>;
+		return (await waitFor("request", () => scope.requestHuman(asked))) as HumanAnswer<T>;
 	};
 	/**
 	 * 这次调用经 `run.files`、`run.exec` 改了的文件，本体记的（`ToolOutput.changes`）。层可能把里层调了几次，几次的并起来；
@@ -561,7 +565,11 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 					toolResult(
 						call,
 						asking
-							? { output: CANCELLED_WAITING, isError: true, details: { cancelled: true } satisfies CancelledDetails }
+							? {
+									output: asking === "request" ? CANCELLED_ASKING : CANCELLED_WAITING,
+									isError: true,
+									details: { cancelled: true } satisfies CancelledDetails,
+								}
 							: { ...result, details: result.details ?? ({ cancelled: true } satisfies CancelledDetails) },
 						startedAt,
 					),

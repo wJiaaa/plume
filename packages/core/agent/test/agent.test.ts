@@ -1846,6 +1846,33 @@ it("request 没人答：拒绝是 declined，到时是 expired，停下这一轮
 	]);
 });
 
+it("request 时按停、工具因此报错：结果说它在等人时被停、之前做的可能已生效，不说没跑过", async () => {
+	const strict: Plugin = {
+		name: "test.strict",
+		apply(ctx) {
+			ctx.tools.register({
+				name: "half_done",
+				description: "做了一半要人填",
+				parameters: { type: "object", properties: {} },
+				async execute(_args, run) {
+					const answer = await run.request({ kind: "test-form", title: "填一下" });
+					if (!answer.answered) throw new Error("没填");
+					return { output: "好了" };
+				},
+			});
+		},
+	};
+	const { service, session, until, idle } = await start([{ toolCalls: [{ id: "call_half", name: "half_done", args: {} }] }], [strict]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "做" }] });
+	await until(isRequest);
+	service.stop(session.id);
+	await done;
+	const result = (await service.getSession(session.id)).messages.find((message) => message.role === "toolResult");
+	expect(result).toMatchObject({ isError: true, details: { cancelled: true } });
+	expect(textOf(result)).toBe("Tool call was stopped while it waited for the user's answer. Anything it had already done before asking may have taken effect.");
+});
+
 it("request 和审批同排一队：按问的先后弹，answer 只认弹着的那张 request", async () => {
 	const fill = { id: "call_fill", name: "fill", args: {} };
 	const decide = { id: "call_decide", name: "decide", args: {} };
