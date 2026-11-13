@@ -17,7 +17,6 @@
     "dump:session": "node --experimental-strip-types scripts/session-dump.ts",
     "audit:sessions": "node --experimental-strip-types scripts/session-audit.ts",
     "audit:prune": "node --experimental-strip-types scripts/session-prune-audit.ts",
-    "audit:interface": "node --experimental-strip-types scripts/interface-audit.ts",
     "probe:prune": "node --experimental-transform-types scripts/probe-prune-accuracy.ts",
     "tool-eval": "node --experimental-transform-types test/tool-eval/run.ts",
     "smoke": "node scripts/smoke.mjs",

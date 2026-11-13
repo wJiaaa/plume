@@ -12,13 +12,13 @@
         "scripts/**/*.{mjs,ts}",
         // Magpie 按 package.json 的 `magpie.agent` 加载它，不是 pnpm workspace 的包。
         "integrations/magpie/plume.agent.js",
-        // 工具评测：人手动跑的命令和它们起的子进程（MCP 假服务、Electron 里的预览检查）。
-        "test/tool-eval/{run,smoke,demo,wiring-scan,*-eval,formats.test,preview-inspect,mcp-fixture-server}.{ts,mjs}",
+        // 工具评测：人手动跑的命令和它们起的子进程（MCP 假服务）。
+        "test/tool-eval/{run,smoke,demo,wiring-scan,*-eval,formats.test,mcp-fixture-server}.{ts,mjs}",
       ],
       // dependency-cruiser 按名字动态加载它做解析器（见 .dependency-cruiser.cjs 的 parser），knip 看不见。
       // git-cliff 由 scripts/release.mjs 经 `pnpm exec` 调用。
-      // 工具评测：electron 是 preview-inspect.mjs 在 Electron 里跑时的内置模块，MCP SDK 经 createRequire 借 plume.mcp 的依赖。
-      "ignoreDependencies": ["@swc/core", "git-cliff", "electron", "@modelcontextprotocol/sdk"],
+      // 工具评测：MCP SDK 经 createRequire 借 plume.mcp 的依赖。
+      "ignoreDependencies": ["@swc/core", "git-cliff", "@modelcontextprotocol/sdk"],
     },
     "apps/desktop": {
       // 主进程、预加载、渲染进程的入口 knip 从 electron.vite.config.ts 读得到，这里只补它读不到的。

@@ -3,7 +3,7 @@
  * 变成机器查的规则，而不是只靠文档请人遵守。
  *
  * 插件那一侧（`packages/builtin/*` 只引用公开接口）由 `pnpm check:plugins` 查，这里不重复。市场插件在单独的插件仓库里，
- * 这里不引用它的任何文件（no-plugin-repo）；评测、审计要用插件源码时经 scripts/plugin-source.ts 在运行时按 PLUME_PLUGINS_DIR 加载。
+ * 这里不引用它的任何文件（no-plugin-repo）。
  *
  * 已有的违规登记在 `.dependency-cruiser-known-violations.json`，照常通过；新加的违规直接失败。基线只能
  * 有意地重新生成（`pnpm arch:baseline`），变小是清理，变大要说得出理由。
