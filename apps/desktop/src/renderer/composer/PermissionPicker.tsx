@@ -11,7 +11,7 @@
 import type { PermissionMode } from "@plume/contract";
 import { type Anchor, DialogAction, DialogFrame, MenuBody, MenuItem, MenuLabel, type MessageKey, Overlay, Popover, usePopover, useI18n } from "@plume/ui";
 import { Check, ChevronDown, CircleAlert, Folder, FolderLock, Globe, Hand, SquareTerminal, Terminal, TriangleAlert } from "@plume/ui/icons";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { modelsAgent, refreshModels, settingsView, subscribeModels } from "../models/store.ts";
 
 /** 菜单里每一档的名字就是签上的字，两处说的永远是同一个词。 */
@@ -22,9 +22,23 @@ const MODES: { value: PermissionMode; icon: typeof Hand; titleKey: MessageKey; d
 ];
 const TITLE: Record<PermissionMode, MessageKey> = { ask: "composer.permissionAsk", auto: "composer.permissionAuto", full: "composer.permissionFull" };
 
-export function PermissionChip({ required, onError }: { required?: PermissionMode; onError: (message: string) => void }) {
+/** `cwd` 是这个会话的工作目录，没有会话时不给。 */
+export function PermissionChip({ required, cwd, onError }: { required?: PermissionMode; cwd?: string; onError: (message: string) => void }) {
 	const { t } = useI18n();
 	const menu = usePopover();
+	/*
+	 * 窗口回到前台时让本体重读这个目录的项目配置：人多半是去编辑器里改了 `.plume/config.json` 再回来，签不必等到下一轮才跟上。
+	 * 不盯着文件：生效也是在下一轮开始时，回到窗口这一刻对上就够了。变了的那档经 `sessions` 事件回来。
+	 */
+	useEffect(() => {
+		if (!cwd) return;
+		const recheck = () =>
+			void modelsAgent()
+				.projectLayer(cwd)
+				.catch(() => undefined);
+		window.addEventListener("focus", recheck);
+		return () => window.removeEventListener("focus", recheck);
+	}, [cwd]);
 	const local = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
 	// 项目给的那档本体只在不比本机宽时才给，有它时就是生效的那档，这里不用再比。
 	const mode = required ?? local;

@@ -3254,7 +3254,11 @@ function Composer({ view, centered = false, cards = false }: { view?: SessionVie
 						left={
 							<>
 								{attachments.addButton}
-								<PermissionChip required={view?.summary.projectPermission} onError={(message) => notify(message, "error")} />
+								<PermissionChip
+									required={view?.summary.projectPermission}
+									{...(view ? { cwd: view.summary.cwd } : {})}
+									onError={(message) => notify(message, "error")}
+								/>
 								<ComposerItems side="start" {...item} />
 							</>
 						}
