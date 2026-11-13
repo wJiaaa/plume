@@ -7,6 +7,7 @@
  */
 
 import type {
+	AlwaysAllow,
 	ApprovalContent,
 	ApprovalDecision,
 	ApprovalRequest,
@@ -34,7 +35,7 @@ import type {
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { REJECTED } from "./declined.ts";
-import { type AlwaysAllow, sameGrant } from "./models.ts";
+import { sameGrant } from "./models.ts";
 import type { CallFileAccess, CallFiles } from "./run-files.ts";
 import { text } from "./i18n.ts";
 

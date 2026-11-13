@@ -42,6 +42,7 @@ import { checkComposerHistory } from "./smoke-composer-history.ts";
 import { checkQueueActions } from "./smoke-queue.ts";
 import { checkQuoteSideChat, prepareQuoteSideChat } from "./smoke-quote-side-chat.ts";
 import { checkProjectConfig } from "./smoke-project-config.ts";
+import { checkAlwaysAllow } from "./smoke-always-allow.ts";
 import { checkGallery } from "./smoke-gallery.ts";
 import { checkMessageEdits } from "./smoke-message-edits.ts";
 import { checkRevertFiles } from "./smoke-revert-files.ts";
@@ -947,6 +948,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "spawn-session") {
 			await checkSpawnSession({ window, agent, outDir, workspace, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "spawn-session" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "always-allow") {
+			await checkAlwaysAllow({ window, outDir, setModel: (next) => (override = next) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "always-allow" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();

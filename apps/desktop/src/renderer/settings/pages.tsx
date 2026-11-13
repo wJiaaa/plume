@@ -7,6 +7,7 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import type { ProjectEntry } from "@plume/contract";
 import { ProjectLayerCards } from "./ProjectOverrideNotice.tsx";
+import { AlwaysAllowSettings } from "./AlwaysAllowSettings.tsx";
 import { readFontSmoothing, setFontSmoothing } from "../appearance.ts";
 import { Blocks, type Icon, Info, Layers, Palette, Settings2 } from "../icons.tsx";
 import { resetAppearancePatch } from "../../shared/appearance.ts";
@@ -203,6 +204,7 @@ export function GeneralSettings({ projects }: { projects: readonly ProjectEntry[
 							/>
 						}
 					/>
+					<AlwaysAllowSettings />
 				</Card>
 			</section>
 			{/* 智能标题总结是内置插件经 `page: "general"` 画进来的一行，下一步建议是市场插件，开关就是它的启用、停用。 */}

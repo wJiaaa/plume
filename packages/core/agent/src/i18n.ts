@@ -15,6 +15,7 @@ const zhCN = {
 	"project.configNotObject": "{path} 的内容不是一个对象。",
 	"project.configInvalidJson": "{path} 不是合法的 JSON：{error}",
 	"project.configRefused": ".plume/config.json 里的 {keys} 被忽略了——凭证和供应商只能写在全局设置里。",
+	"alwaysAllow.invalid": "要撤销的批准不完整。",
 	"project.configLoosening": ".plume/config.json 里的 {keys} 被忽略了——仓库里的项目配置只能收紧权限，要放宽请在本机的设置里改。",
 	"files.outsideProject": "只能修改当前会话和项目源目录里的文件",
 	"files.copyIntoItself": "不能把文件夹复制到它自己里面",
@@ -199,6 +200,7 @@ const en: Record<TextKey, string> = {
 	"project.configNotObject": "{path} doesn't contain a JSON object.",
 	"project.configInvalidJson": "{path} isn't valid JSON: {error}",
 	"project.configRefused": "Ignored {keys} in .plume/config.json: credentials and providers belong in global settings.",
+	"alwaysAllow.invalid": "The approval to revoke is incomplete.",
 	"project.configLoosening":
 		"Ignored {keys} in .plume/config.json: a repository's project config can only tighten permissions. Loosen them in your own settings.",
 	"files.outsideProject": "Files must stay inside this session or its project folders",

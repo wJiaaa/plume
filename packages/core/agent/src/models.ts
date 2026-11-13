@@ -6,7 +6,7 @@
  * magpie 块由 Magpie 写，读入时合成一个供应商排在最后，写盘时再拿掉（见 magpie.ts）。
  */
 
-import type { ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
+import type { AlwaysAllow, ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
 import { isImageModel } from "@plume/llm/image-models";
 import { normalizeRetryPolicy, type RetryPolicy } from "@plume/llm/retry-policy";
 import { resolveModelThinkingOptions, resolveThinkingOption, THINKING_LEVELS } from "@plume/llm/thinking-options";
@@ -38,18 +38,6 @@ export interface StoredSettings {
 	thinking?: ThinkingLevel;
 	/** 模型请求的重试策略，读入时已按 `normalizeRetryPolicy` 收好；没设过用 `@plume/llm` 的默认策略。 */
 	retryPolicy?: RetryPolicy;
-}
-
-/**
- * 「以后不再问」的一条批准：`subject`（`ApprovalRequest.subject`）记在谁名下。
- * - 有 `plugin`：发起审批的那件工具的注册插件——插件经 `run.ask` 给的 subject（命令、文件路径、站点），本体替没写 `asks` 的
- *   会改动工具在执行前问的（subject 是工具名）。只放行同一个插件的工具再问同一个 subject，别的插件写出同样的字符串也不算。
- * - 没有 `plugin`：本体自己给的 subject（读边界的 `read:<项目>`），不管哪个工具来读都是同一份批准；插件给的 subject 碰不到它。
- * 插件的名字由本体按注册记，不取插件自己说的，所以插件冒充不了别的插件，也冒充不了本体。
- */
-export interface AlwaysAllow {
-	subject: string;
-	plugin?: string;
 }
 
 /** 两条批准是不是同一条：同一个名下、同一个 subject。 */
@@ -174,6 +162,7 @@ export function settingsView(settings: StoredSettings): SettingsView {
 		personalization: personalizationOf(settings),
 		thinking: settings.thinking ?? DEFAULT_THINKING,
 		retryPolicy: normalizeRetryPolicy(settings.retryPolicy),
+		alwaysAllow: settings.alwaysAllow ?? [],
 	};
 }
 

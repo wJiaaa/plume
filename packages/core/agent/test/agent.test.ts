@@ -1983,6 +1983,44 @@ it("「以后不再问」按发起审批的工具的插件分开：另一个插�
 	expect(stored.alwaysAllow).toEqual([{ plugin: "test.a", subject: "deploy" }]);
 });
 
+it("撤销「以后不再问」后同一件事重新弹卡，清空后一条不剩；在项目里点的只记到本机设置，不写项目配置", async () => {
+	await mkdir(join(workspace, ".plume"), { recursive: true });
+	const projectConfig = JSON.stringify({ thinking: "high" });
+	await writeFile(join(workspace, ".plume", "config.json"), projectConfig);
+	const call = (id: string) => ({ id, name: "a_do", args: { subject: "deploy" } });
+	const { service, session, events, until, idle } = await start(
+		[{ toolCalls: [call("call_1")] }, { toolCalls: [call("call_2")] }, { text: "好了" }, { toolCalls: [call("call_3")] }, { text: "好了" }],
+		[subjectAsker("test.a", "a_do")],
+	);
+	await service.setPermissionMode("ask");
+	const cards = () => [...new Set(events.filter(isApproval).flatMap((event) => (event.approval ? [event.approval.toolCallId] : [])))];
+
+	let done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "部署两次" }] });
+	await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_1");
+	service.respond(session.id, "call_1", "always");
+	await done;
+	expect(cards()).toEqual(["call_1"]);
+	expect((await service.getSettings()).alwaysAllow).toEqual([{ plugin: "test.a", subject: "deploy" }]);
+	expect(await readFile(join(workspace, ".plume", "config.json"), "utf8")).toBe(projectConfig);
+
+	// 撤销别的名下的同一个 subject 什么都不动；撤销这一条后再来要重新问。
+	await service.revokeAlwaysAllow({ subject: "deploy" });
+	expect((await service.getSettings()).alwaysAllow).toHaveLength(1);
+	await service.revokeAlwaysAllow({ plugin: "test.a", subject: "deploy" });
+	expect((await service.getSettings()).alwaysAllow).toEqual([]);
+	done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "再部署" }] });
+	await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_3");
+	service.respond(session.id, "call_3", "always");
+	await done;
+	expect(cards()).toEqual(["call_1", "call_3"]);
+
+	await service.clearAlwaysAllow();
+	expect((await service.getSettings()).alwaysAllow).toEqual([]);
+	expect((JSON.parse(await readFile(join(dir, "model.json"), "utf8")) as { alwaysAllow?: unknown }).alwaysAllow).toEqual([]);
+});
+
 it("本体读边界的批准记在本体名下：插件拿 read:<项目> 当 subject 得到的批准放不过读，读的批准也放不过插件", async () => {
 	// 家目录下的新目录：临时区本来就允许读，放那里测不到项目边界。
 	const outside = await realpath(await mkdtemp(join(homedir(), ".plume-approval-scope-test-")));

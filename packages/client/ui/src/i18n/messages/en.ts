@@ -954,6 +954,13 @@ export const en = {
 	"general.fullAccess": "Full access",
 	"general.fullAccessDetail":
 		"Plume can edit files, run commands, and access the network without approval. This materially increases the risk of data loss or unintended actions.",
+	"general.alwaysAllowDetail":
+		"Approvals you gave with “Stop asking” on an approval card. They live only on this computer. Revoke one and Plume asks again next time.",
+	"general.alwaysAllowEmpty": "None yet. Approvals you give with “Stop asking” on an approval card show up here, and you can revoke them any time.",
+	"general.alwaysAllowClear": "Revoke all",
+	"general.alwaysAllowRevoke": "Revoke",
+	"general.alwaysAllowCore": "Plume",
+	"general.alwaysAllowRead": "Read {path}",
 	"general.section": "General",
 	"general.hideEmptiedProjects": "Fold away emptied projects",
 	"general.hideEmptiedProjectsDetail":

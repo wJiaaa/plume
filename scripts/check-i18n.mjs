@@ -95,6 +95,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-steward.ts",
 	"apps/desktop/src/main/smoke-spawn-session.ts",
 	"apps/desktop/src/main/smoke-plan.ts",
+	// 「以后不再问」的冒烟按中文界面找审批卡和设置里的按钮，假模型的回复和断言是写给开发者的。
+	"apps/desktop/src/main/smoke-always-allow.ts",
 	// `/compact` 的冒烟按中文界面读压缩那一行，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-compact.ts",
 	// 使用统计的冒烟按中文界面找设置章节、读图例，假模型的回复和断言是写给开发者的。

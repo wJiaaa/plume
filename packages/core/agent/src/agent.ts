@@ -21,6 +21,7 @@ import type { MessageAttachment, ModelConfig, ProviderConfig, RequestOptions, Us
 import type {
 	AgentEvent,
 	AgentService,
+	AlwaysAllow,
 	ApprovalDecision,
 	ApprovalRequest,
 	HumanAnswer,
@@ -91,7 +92,6 @@ import { settlePrompt, validSections } from "./prompt/sections.ts";
 import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
 import {
-	type AlwaysAllow,
 	checkProvider,
 	DEFAULT_THINKING,
 	fileSettings,
@@ -2315,6 +2315,18 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			if (mode !== "ask" && mode !== "auto" && mode !== "full") throw new Error(text("permission.unknown", { mode: String(mode) }));
 			await changeSettings((settings) => {
 				settings.permissionMode = mode;
+			});
+		},
+		async revokeAlwaysAllow(grant) {
+			if (!grant || typeof grant.subject !== "string") throw new Error(text("alwaysAllow.invalid"));
+			const target: AlwaysAllow = grant.plugin === undefined ? { subject: grant.subject } : { subject: grant.subject, plugin: grant.plugin };
+			await changeSettings((settings) => {
+				settings.alwaysAllow = (settings.alwaysAllow ?? []).filter((one) => !sameGrant(one, target));
+			});
+		},
+		async clearAlwaysAllow() {
+			await changeSettings((settings) => {
+				settings.alwaysAllow = [];
 			});
 		},
 		async setDefaultThinking(thinking) {
