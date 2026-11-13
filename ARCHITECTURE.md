@@ -64,7 +64,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 `ctx`、`ui` 的成员和用法见写插件的 skill [skills/plume-plugin](skills/plume-plugin/SKILL.md)。
 
-加载顺序：先内置的，再本地上传的和市场装的，同名的只认先找到的；工具重名时后登记的生效（插件能覆盖 plume.tools 的 read、write、edit、ls、glob、grep、bash），它撤下后前一个恢复。钩子各层只按 `order` 排，小的在外层。`<数据目录>/plugins.json` 里写 `{ "disabled": ["插件名"] }` 关掉插件，「插件市场」里插件详情页的开关写的就是它。界面只加载 agent 进程报告为 active 的插件的界面入口；卡片渲染出错让给下一个注册者，最后用通用卡片。
+加载顺序：先内置的，再本地上传的和市场装的，同名的只认先找到的；工具重名时后登记的生效（插件能覆盖 plume.tools 的 read、write、edit、ls、glob、grep、bash），它撤下后前一个恢复。钩子各层只按 `order` 排，小的在外层。`<数据目录>/plugins.json` 里写 `{ "disabled": ["插件目录名"] }` 关掉插件（按目录名记：停用着的插件不导入，导入前还不知道插件名），「插件市场」里插件详情页的开关写的就是它。界面只加载 agent 进程报告为 active 的插件的界面入口；卡片渲染出错让给下一个注册者，最后用通用卡片。
 
 插件市场（`apps/desktop/src/main/market.ts`，界面在 `renderer/market/`，侧栏那一行叫「插件市场」）：页上分插件、技能、连接器三类，技能和连接器两类由 `plume.skills`、`plume.mcp` 经 `ui.settingsSection` 的 `page: "extensions-skills"`、`"extensions-connectors"` 画；插件那一类的目录在网上（`market-remote.ts`）：插件仓库 plume-plugins 的 CI 把插件按平台打包、发到 GitHub Pages，应用读它的 `marketplace.json`（格式见插件仓库的 `docs/distribution.md`；开发版、装好的应用和冒烟都用这一个；只认 https，本机 http 留给测试起的服务），每条的说明取自插件的 `package.json`（`description`、`author`、`keywords`、`homepage`，`plume.displayName`、`plume.category`），图标和 `README.md` 放在 `assets/<名字>/` 下、安装前就能看。安装下载这台机器那份包、核对大小和 SHA-256，解进暂存目录再换进数据目录的 `plugins/<目录名>`（冒烟验证装进 `.smoke/` 里），agent 进程当场加载；卸载当场撤下。「从本地上传」和 `plume-plugin install`/`dev` 装进 `local-plugins/<目录名>`，能卸、不跟市场更新；同名时按内置、`PLUME_PLUGIN_PATHS`、本地上传、市场装的顺序只认第一份，被压住的原样留着，前面的卸掉它就接着生效。更新按版本号比（插件仓库发布时保证同一版本内容不变）；目录五分钟内不重读，连不上时用上次读到的、界面提示原因；自动更新默认开，启动后一会儿、此后每半小时、每次读市场时各对一遍，有会话在跑一轮或在等后台的事时（agent 进程的 `busy`：派出去的后台运行、没结束的一次性后台任务；监视、开发服务器、唤醒不算）不换、每分钟再看一次，人点的「更新」不等；开关存在数据目录的 `market.json`。插件运行中装上、开关、卸下时，agent 进程推一条 `plugins` 事件，界面按它增减各插件的界面入口。
 

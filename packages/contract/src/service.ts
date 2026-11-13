@@ -785,8 +785,8 @@ export interface AgentService {
 	 * 图标和回复里的文件签，不认工具名；变了推 `tools` 事件。
 	 */
 	listTools(): RegisteredToolInfo[];
-	/** 启用或停用一个插件（按插件名），写进 plugins.json，立即生效。 */
-	setPluginEnabled(name: string, enabled: boolean): Promise<PluginStatus[]>;
+	/** 启用或停用一个插件（按 `PluginStatus.key`），写进 plugins.json，立即生效。停用着的插件不导入。 */
+	setPluginEnabled(key: string, enabled: boolean): Promise<PluginStatus[]>;
 	/** 界面语言变了：agent 进程之后给人看的报错、提示用这种语言。发给模型的文字不跟着变。 */
 	setLocale(locale: Locale): void;
 	/** 订阅所有会话的事件，直到调用方取消。 */

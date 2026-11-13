@@ -55,10 +55,10 @@ it("模型说明和只读工具随插件启停，不改变原始消息", async (
 		expect(active.sections.length).toBeGreaterThan(before.sections.length);
 		expect(host.toolSpecs().map((spec) => spec.name)).toEqual(["hint_help"]);
 		expect(input).toEqual(before);
-		await host.setEnabled(hint.name, false);
+		await host.setEnabled("hint", false);
 		expect(host.toolSpecs()).toEqual([]);
 		expect((await host.run("model.context", input, async (value) => value)).sections).toEqual(before.sections);
-		await host.setEnabled(hint.name, true);
+		await host.setEnabled("hint", true);
 		expect((await host.run("model.context", input, async (value) => value)).sections).toEqual(active.sections);
 	} finally {
 		await host.dispose();

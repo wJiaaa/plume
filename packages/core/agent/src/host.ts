@@ -177,6 +177,8 @@ interface Layer {
 interface PluginRecord {
 	status: PluginStatus;
 	disposers: Array<() => void | Promise<void>>;
+	/** 从哪导入。停用着的插件不导入（顶层代码也不跑），启用时才经它导入。 */
+	entry: PluginEntry;
 	/** 导入成功后的模块：停用了再启用时不用重新导入。 */
 	plugin?: Plugin;
 	builtin: boolean;
@@ -277,7 +279,7 @@ export class PluginHost {
 			dataDir: string;
 			/** Plume 自己的数据目录，插件的 `ctx.appDataDir`。 */
 			appDataDir: string;
-			/** 配置里关掉的插件名。 */
+			/** 配置里关掉的插件，按 `PluginEntry.key`（目录名）记：导入前就要知道它停用着，插件名得导入以后才有。 */
 			disabled?: ReadonlySet<string>;
 			log: Log;
 			/** 插件的 `ctx.model`：模型设置在 agent 那边，宿主只转交。 */
@@ -444,19 +446,22 @@ export class PluginHost {
 	}
 
 	/**
-	 * 启用或停用一个插件，立即生效。返回停用名单，由调用方存进配置。内置插件不能停用。
-	 * 加载失败（`failed`）的启用就是再试一次，停用就记成停用。
+	 * 启用或停用一个插件（按 `PluginStatus.key`），立即生效。返回停用名单（key），由调用方存进配置。内置插件不能停用。
+	 * 加载失败（`failed`）的启用就是再试一次（导入失败的连导入一起重来），停用就记成停用。
 	 */
-	setEnabled(name: string, enabled: boolean): Promise<string[]> {
+	setEnabled(key: string, enabled: boolean): Promise<string[]> {
 		return this.serial(async () => {
-			const record = this.records.find((candidate) => candidate.status.name === name);
-			if (!record) throw new Error(text("plugin.notFound", { name }));
-			if (record.builtin) throw new Error(text("plugin.builtinLocked", { name }));
+			const record = this.records.find((candidate) => candidate.status.key === key);
+			if (!record) throw new Error(text("plugin.notFound", { name: key }));
+			if (record.builtin) throw new Error(text("plugin.builtinLocked", { name: record.status.name }));
 			if (enabled) {
-				this.disabled.delete(name);
-				if ((record.status.state === "disabled" || record.status.state === "failed") && record.plugin) await this.activate(record, record.plugin);
+				this.disabled.delete(key);
+				if (record.status.state === "disabled" || record.status.state === "failed") {
+					const plugin = record.plugin ?? (await this.importOne(record));
+					if (plugin) await this.activate(record, plugin);
+				}
 			} else {
-				this.disabled.add(name);
+				this.disabled.add(key);
 				if (record.status.state === "active" || record.status.state === "waiting") {
 					await this.unwind(record);
 					record.status.state = "disabled";
@@ -634,31 +639,39 @@ export class PluginHost {
 	private async loadOne(entry: PluginEntry): Promise<void> {
 		const builtin = entry.builtin === true;
 		const status: PluginStatus = { name: entry.key, key: entry.key, state: "loading", ...(entry.ui ? { ui: entry.ui } : {}), ...(builtin ? { builtin } : {}) };
-		const record: PluginRecord = { status, disposers: [], builtin, bound: new Map(), ...(entry.dir ? { dir: entry.dir } : {}) };
+		const record: PluginRecord = { status, disposers: [], builtin, entry, bound: new Map(), ...(entry.dir ? { dir: entry.dir } : {}) };
 		this.records.push(record);
+		// 停用着的不导入：导入就会跑它的顶层代码。名字先用 key 顶着，启用时导入了再换成插件名。
+		if (this.disabled.has(entry.key) && !builtin) {
+			status.state = "disabled";
+			return;
+		}
+		const plugin = await this.importOne(record);
+		if (plugin) await this.activate(record, plugin);
+	}
+
+	/** 导入、校验插件模块，记下插件名；失败时状态记为 failed、交回 undefined。 */
+	private async importOne(record: PluginRecord): Promise<Plugin | undefined> {
+		const status = record.status;
 		const fail = (error: unknown) => {
 			status.state = "failed";
 			status.error = errorText(error);
 			this.options.log(status.name, "error", `加载失败：${status.error}`);
+			return undefined;
 		};
-
 		let plugin: Plugin;
 		try {
-			plugin = validPlugin(await entry.load());
+			plugin = validPlugin(await record.entry.load());
 		} catch (error) {
 			return fail(error);
 		}
 		status.name = plugin.name;
 		if (plugin.observe === "all") status.observe = "all";
 		if (this.records.some((other) => other !== record && other.status.name === plugin.name)) {
-			return fail(new Error(text("plugin.nameTaken", { name: plugin.name, key: entry.key })));
+			return fail(new Error(text("plugin.nameTaken", { name: plugin.name, key: record.entry.key })));
 		}
 		record.plugin = plugin;
-		if (this.disabled.has(plugin.name) && !builtin) {
-			status.state = "disabled";
-			return;
-		}
-		await this.activate(record, plugin);
+		return plugin;
 	}
 
 	/** 调 apply；要用的服务还缺就记为等待，出错时撤销已经注册的部分，状态记为 failed。 */

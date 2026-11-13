@@ -134,7 +134,7 @@ function DetailBody({
 								{enabled ? t("market.enabled") : t("market.disabled")}
 								<Toggle
 									checked={enabled}
-									onChange={(next) => item.status && void setPluginEnabled(item.status.name, item.name, next)}
+									onChange={(next) => item.status && void setPluginEnabled(item.status.key, item.name, next)}
 									ariaLabel={t("market.enableNamed", { name: item.name })}
 								/>
 							</label>

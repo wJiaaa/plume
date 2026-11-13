@@ -202,10 +202,10 @@ it("插件停用时本体替它撤下登记的 scheme", async () => {
 	cleanups.push(() => host.dispose());
 	await host.load([{ key: "docs", load: async () => docs }]);
 	expect(host.workspace.resources.list().map((entry) => entry.scheme)).toContain("docs");
-	await host.setEnabled(docs.name, false);
+	await host.setEnabled("docs", false);
 	expect(host.workspace.resources.list().map((entry) => entry.scheme)).not.toContain("docs");
 	// 重新启用能再登记同一个 scheme。
-	await host.setEnabled(docs.name, true);
+	await host.setEnabled("docs", true);
 	expect(host.workspace.resources.list().map((entry) => entry.scheme)).toContain("docs");
 });
 

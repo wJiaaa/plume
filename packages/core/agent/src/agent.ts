@@ -332,7 +332,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	const pluginsFile = join(dataDir, "plugins.json");
 	const config = (await files.read<{ disabled?: unknown }>(pluginsFile)) ?? {};
-	const disabled = new Set(Array.isArray(config.disabled) ? config.disabled.filter((name): name is string => typeof name === "string") : []);
+	const disabled = new Set(Array.isArray(config.disabled) ? config.disabled.filter((key): key is string => typeof key === "string") : []);
 	const watchers = new Set<(event: AgentEvent) => void>();
 	const emit = (event: AgentEvent) => {
 		for (const watcher of watchers) watcher(event);
@@ -2874,8 +2874,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			host.expandCommand(String(plugin), String(name), typeof rest === "string" ? rest : "", commandContext(context)),
 		listPlugins: () => host.status(),
 		listTools: () => host.toolOwners(),
-		async setPluginEnabled(name, enabled) {
-			const disabled = await host.setEnabled(name, enabled === true);
+		async setPluginEnabled(key, enabled) {
+			const disabled = await host.setEnabled(String(key), enabled === true);
 			await files.write(pluginsFile, { ...(await files.read<object>(pluginsFile)), disabled });
 			return pluginsChanged();
 		},

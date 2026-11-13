@@ -396,6 +396,22 @@ describe("PluginHost", () => {
 		expect(() => h.call("ui", "echo", ["hi"], context)).toThrow(/没有开放/);
 	});
 
+	it("配置里停用着的插件不导入，启用时才导入并 apply；名字先用 key 顶着", async () => {
+		let imported = 0;
+		const h = host(["off-dir"]);
+		const off: PluginEntry = {
+			key: "off-dir",
+			load: async () => (imported++, { name: "off", apply: (ctx) => void ctx.tools.register(tool("off_tool")) }) satisfies Plugin,
+		};
+		await h.load([off]);
+		expect(imported).toBe(0);
+		expect(h.status()).toEqual([expect.objectContaining({ key: "off-dir", name: "off-dir", state: "disabled" })]);
+		expect(await h.setEnabled("off-dir", true)).toEqual([]);
+		expect(imported).toBe(1);
+		expect(h.status()[0]).toMatchObject({ name: "off", state: "active" });
+		expect(h.tool("off_tool")?.plugin).toBe("off");
+	});
+
 	it("运行中装上、停用、再启用、卸下插件，注册随之出现和撤销", async () => {
 		let applied = 0;
 		const h = host();
@@ -409,10 +425,10 @@ describe("PluginHost", () => {
 		expect(h.tool("late_tool")?.plugin).toBe("late");
 		await expect(h.add(late)).rejects.toThrow(/已经加载过/);
 
-		expect(await h.setEnabled("late", false)).toEqual(["late"]);
+		expect(await h.setEnabled("late-dir", false)).toEqual(["late-dir"]);
 		expect(h.tool("late_tool")).toBeUndefined();
 		expect(h.status().find((status) => status.name === "late")?.state).toBe("disabled");
-		expect(await h.setEnabled("late", true)).toEqual([]);
+		expect(await h.setEnabled("late-dir", true)).toEqual([]);
 		expect(h.tool("late_tool")?.plugin).toBe("late");
 		expect(applied).toBe(2);
 

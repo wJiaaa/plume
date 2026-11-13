@@ -200,10 +200,10 @@ export async function setAutoUpdate(auto: boolean): Promise<void> {
 	await reloadMarket();
 }
 
-/** 开关一个插件，立即生效；新的状态经 plugins 事件回来。`label` 是出错时说给人听的名字。 */
-export async function setPluginEnabled(name: string, label: string, enabled: boolean): Promise<void> {
+/** 开关一个插件（按 `PluginStatus.key`），立即生效；新的状态经 plugins 事件回来。`label` 是出错时说给人听的名字。 */
+export async function setPluginEnabled(key: string, label: string, enabled: boolean): Promise<void> {
 	try {
-		await agent.setPluginEnabled(name, enabled);
+		await agent.setPluginEnabled(key, enabled);
 	} catch (error) {
 		set({ notice: { tone: "error", text: translate("install.failedWith", { name: label, message: errorText(error) }) } });
 	}
