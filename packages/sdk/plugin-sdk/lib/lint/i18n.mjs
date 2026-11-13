@@ -18,6 +18,7 @@ const CHINESE = /[一-鿿、，：；（）「」『』。！？]/;
 /**
  * 去掉注释，换行保留（块注释里的也一个换一个），行号才对得上，`i18n-exempt` 也按行认。
  * 认得字符串：示例 URL 里的 `//` 不是注释，当成注释会把那一行后面的文字都跳过去。
+ * 认得正则字面量：`/"/g` 里的引号不是字符串的开头，当成字符串会把后面的注释吞进去、报成文案。
  * 模板字符串会嵌套，`${…}` 里又可以有字符串和注释，所以用一个栈。
  */
 function stripComments(src) {
@@ -62,6 +63,15 @@ function stripComments(src) {
 			out += body.replace(/[^\n]/g, "");
 			continue;
 		}
+		if (char === "/" && regexMayStart(out)) {
+			const end = regexEnd(src, i);
+			if (end !== -1) {
+				// 正则不是给人读的字，内容遮成空格，后面认字符串时也不会再被里面的引号带偏。
+				out += `/${src.slice(i + 1, end).replace(/[^\n]/g, " ")}/`;
+				i = end + 1;
+				continue;
+			}
+		}
 		if (char === "'" || char === '"' || char === "`") stack.push(char);
 		else if (char === "{") stack.push("{");
 		else if (char === "}" && state === "{") stack.pop();
@@ -69,6 +79,36 @@ function stripComments(src) {
 		i += 1;
 	}
 	return out;
+}
+
+/** 斜杠前面是这些词时，它开始的是正则，不是除号（`return /x/.test(s)`）。 */
+const BEFORE_REGEX_WORDS = new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await"]);
+
+/**
+ * 代码里的 `/` 是不是正则的开头：看前一个有意义的字符。跟在值后面（标识符、数字、`)`、`]`、`}`）是除号，跟在运算符、
+ * 括号、逗号后面是正则。`<` 不算（`</p>` 是 JSX 的结束标签），`>` 只认箭头函数的 `=>`（`<p>/路径</p>` 里的是 JSX 文本）。
+ */
+function regexMayStart(out) {
+	const code = out.trimEnd();
+	const last = code.at(-1);
+	if (last === undefined) return true;
+	if (last === ">") return code.at(-2) === "=";
+	if (/[\w$]/.test(last)) return BEFORE_REGEX_WORDS.has(/[\w$]+$/.exec(code)[0]);
+	return "(,=:[!&|?{};+-*%~^".includes(last);
+}
+
+/** 从 `start` 的 `/` 起，正则收尾那个 `/` 的位置：认得转义和字符类 `[/]`；同一行里收不了尾就不是正则，返回 -1。 */
+function regexEnd(src, start) {
+	let inClass = false;
+	for (let i = start + 1; i < src.length; i++) {
+		const char = src[i];
+		if (char === "\n") return -1;
+		if (char === "\\") i += 1;
+		else if (char === "[") inClass = true;
+		else if (char === "]") inClass = false;
+		else if (char === "/" && !inClass) return i;
+	}
+	return -1;
 }
 
 /** 只进日志的调用：`console.*`，和 Plume 自己的日志函数（`log(…)`、`this.options.log(…)`、`ctx.log.warn(…)`）。 */
@@ -141,9 +181,7 @@ export function chineseFindings(source) {
 	}
 	const masked = stripped.replace(literal, (text) => text.replace(/[^\n]/g, " "));
 	masked.split("\n").forEach((line, index) => {
-		// 字符串已经遮住，剩下的 `//` 是注释（正则字面量里的引号可能让前面没认出它）。
-		const code = line.replace(/\/\/.*$/, "");
-		if (CHINESE.test(code)) keep(index + 1, code.trim().replace(/\s+/g, " ").slice(0, 80));
+		if (CHINESE.test(line)) keep(index + 1, line.trim().replace(/\s+/g, " ").slice(0, 80));
 	});
 	return found;
 }
