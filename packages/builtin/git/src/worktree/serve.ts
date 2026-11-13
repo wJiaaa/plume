@@ -12,10 +12,9 @@
  * 提供服务 `session.worktree`：别的插件开出来的会话也能要一棵。
  */
 
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { PluginContext, PromptSubmit } from "@plume/contract";
 import { canonicalPath } from "../git/paths.ts";
 import type { ListedWorktree, SessionWorktree, WorktreeApi, WorktreeSettings } from "./api.ts";
@@ -44,20 +43,6 @@ function resolveRoot(rootDir: string, fallback: string): string {
 function within(dir: string, root: string): boolean {
 	const inside = relative(canonicalPath(root), canonicalPath(dir));
 	return inside === "" || (!inside.startsWith("..") && !isAbsolute(inside));
-}
-
-/** 在系统的文件管理器里显示，选中它。 */
-function reveal(path: string): Promise<void> {
-	const [command, args] =
-		process.platform === "darwin" ? ["open", ["-R", path]] : process.platform === "win32" ? ["explorer", [`/select,${path}`]] : ["xdg-open", [dirname(path)]];
-	return new Promise((done, fail) => {
-		const child = spawn(command, args, { stdio: "ignore", detached: true });
-		child.once("error", fail);
-		child.once("spawn", () => {
-			child.unref();
-			done();
-		});
-	});
 }
 
 export function serveWorktrees(ctx: PluginContext): WorktreeApi {
@@ -234,7 +219,6 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 				if (!tree || (await running(sessionId))) return false;
 				return abortSync(tree);
 			}),
-		reveal: (path) => reveal(path),
 		worktreeSettings: async () => ({ ...(await store.settings()), defaultRoot }),
 		saveWorktreeSettings: async (patch) => ({ ...(await store.saveSettings(patch)), defaultRoot }),
 		async linkedWorktrees(projects) {

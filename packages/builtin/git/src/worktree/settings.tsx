@@ -9,7 +9,7 @@ import { field } from "@plume/styles";
 import type { UiContext } from "@plume/contract/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ListedWorktree, SettingsView, WorktreeSettings } from "./api.ts";
-import { notify, reasonOf, useText, worktree } from "./remote.ts";
+import { notify, reasonOf, revealPath, useText, worktree } from "./remote.ts";
 
 export function WorktreesSettings({ useProjects }: { useProjects: UiContext["useProjects"] }) {
 	const text = useText();
@@ -84,10 +84,7 @@ export function WorktreesSettings({ useProjects }: { useProjects: UiContext["use
 		}
 	};
 
-	const reveal = (path: string) =>
-		worktree()
-			.reveal(path)
-			.then(undefined, (error: unknown) => notify(text.revealFailed(reasonOf(error)), "error"));
+	const reveal = (path: string) => revealPath(path).then(undefined, (error: unknown) => notify(text.revealFailed(reasonOf(error)), "error"));
 
 	if (loadError) {
 		return (

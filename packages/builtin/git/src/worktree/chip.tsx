@@ -27,7 +27,7 @@ import { Archive, Check, ChevronDown, CircleAlert, FolderOpen, GitFork, GitMerge
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MergeOutcome, SessionRecord, SessionWorktree, SyncOutcome, WorktreeState } from "./api.ts";
 import type { WorktreeMessages as Messages } from "../messages.ts";
-import { notify, reasonOf, useText, worktree } from "./remote.ts";
+import { notify, reasonOf, revealPath, useText, worktree } from "./remote.ts";
 
 const ICON = { size: 13, strokeWidth: 1.8 } as const;
 /** 冲突的文件先点名这么几个，其余的数一个数：认得出，又读得完。 */
@@ -305,9 +305,7 @@ function WorktreeMenu({
 
 	const reveal = () => {
 		onClose();
-		worktree()
-			.reveal(tree.cwd)
-			.then(undefined, (error: unknown) => notify(text.revealFailed(reasonOf(error)), "error"));
+		revealPath(tree.cwd).then(undefined, (error: unknown) => notify(text.revealFailed(reasonOf(error)), "error"));
 	};
 
 	const present = state?.present ?? true;

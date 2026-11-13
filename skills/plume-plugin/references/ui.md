@@ -80,6 +80,7 @@ export default {
 | `ui.pageBadge(id, { count, label } \| null)` | 侧栏去处里本插件那一页的那一行右端挂一个数（没人看见的失败），`label` 给读屏和悬停提示；`null` 或 0 拿掉，人正在那一页上时不画，停用时一起拿掉 |
 | `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
 | `ui.openPath(path)` | 用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令 |
+| `ui.revealPath(path)` | 用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回 |
 | `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开：有插件接手点击（`takesClicks`，内置浏览器）时开在它那里，否则系统浏览器；限制同 `ui.openExternal` |
 | `ui.settingsSection(id, Component, options)` | 加一节设置：默认画进本插件详情的「设置」一节；`page: "nav"` 时单独占设置导航一行（`group` 选「Agent 能力」「数据」「代码与版本控制」组），给别的 `page` 时画进产品的那一页（「个性化」「智能体」，或「智能体」里「会话」那张卡的一行，或「插件市场」的「技能」「连接器」两类），见下文 |
 | `ui.ModelSelect` | 产品的模型下拉：`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说 |

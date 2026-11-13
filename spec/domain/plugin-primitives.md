@@ -30,7 +30,7 @@
 | --- | --- | --- |
 | 槽位 | 位置是本体的，插件往里放内容 | `ui.panel`、`ui.page`、`ui.composerItem`、`ui.conversationCard`、`ui.settingsSection`、`ui.replyAction` |
 | 接手者 | 某一类东西由谁画、谁打开，按工具名、`kind`、扩展名登记，没人登记时本体有通用的 | `ui.toolCard`、`ui.toolLine`、`ui.requestCard`、`ui.agentDelivery`、`ui.documentViewer`、`ui.linkOpener` |
-| 导航 | 人点了按钮以后去哪 | `ui.openPanel`、`ui.openPage`、`ui.openSettings`、`ui.openSession`、`ui.draftInSession`，交给系统的 `ui.openExternal`、`ui.openPath` |
+| 导航 | 人点了按钮以后去哪 | `ui.openPanel`、`ui.openPage`、`ui.openSettings`、`ui.openSession`、`ui.draftInSession`，交给系统的 `ui.openExternal`、`ui.openPath`、`ui.revealPath` |
 | 数据 | 界面拿数据只有三个来源 | 工具结果的 `details`（随会话保存）、本体的实时状态（`ui.useSession`、`ui.contextBreakdown`）、插件自己的逻辑入口（`ctx.serve` / `ui.remote()`） |
 | 服务 | 插件的界面入口之间按名字配合，本体只记账、不用它 | `ui.provide`，用的一方 `ui.useService`；类型在 `UiServices` |
 

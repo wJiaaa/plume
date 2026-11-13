@@ -1567,6 +1567,12 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			// 主进程改成了在文件夹里指出来（直接打开会运行它）：说出来，不然这一下看起来像点错了。
 			if (outcome === "revealed") notify(translate("attachment.revealedInstead", { name: path.split(/[/\\]/).at(-1) ?? path }), "warn");
 		},
+		revealPath: async (path) => {
+			if (typeof path !== "string" || !path) throw new Error(translate("filePanel.unreadable"));
+			// 系统对不存在的路径不报错、改开它的上级目录，看起来像指错了，先问一声。
+			if (!(await window.plume.files.exists(path).catch(() => false))) throw new Error(translate("filePanel.unreadableAt", { path }));
+			await window.plume.files.reveal(path);
+		},
 		openLink: async (url, sessionId) => {
 			const href = externalWebUrl(url);
 			const opener = clickOpener();

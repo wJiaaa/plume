@@ -1176,6 +1176,12 @@ export interface UiContext {
 	 */
 	openPath(path: string): Promise<void>;
 	/**
+	 * 用户点击时在系统的文件管理器里打开 `path` 的上级目录，并把它选中（「在访达中显示」）。和 `openPath` 的区别：
+	 * `openPath` 打开文件夹是进到它里面、打开文件是交给默认程序；这里不打开它本身，文件、文件夹都只是在上级目录里指出来，
+	 * 所以也不会运行它。不存在时抛错，话是给人看的。
+	 */
+	revealPath(path: string): Promise<void>;
+	/**
 	 * 像人点了回复里的网址那样打开 HTTP(S) 链接：有插件接手点击（`LinkOpener.takesClicks`，比如内置浏览器）时开在它那里，否则系统浏览器。
 	 * `sessionId` 是链接所在的会话；规则同 `openExternal`，只在用户点击时调。
 	 */

@@ -103,8 +103,6 @@ export interface WorktreeApi {
 	archiveSession(sessionId: string): Promise<void>;
 	/** 放弃停在冲突上的同步。没什么在等时也是 true。 */
 	abortWorktreeSync(sessionId: string): Promise<boolean>;
-	/** 在访达（或系统的文件管理器）里显示。 */
-	reveal(path: string): Promise<void>;
 	worktreeSettings(): Promise<SettingsView>;
 	saveWorktreeSettings(patch: Partial<WorktreeSettings>): Promise<SettingsView>;
 	/** 这些项目目录的仓库上挂着的链接工作树。 */
