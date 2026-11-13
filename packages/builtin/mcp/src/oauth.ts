@@ -4,7 +4,7 @@
  * 整份经 `ctx.secrets` 加密），之后连接时带上、过期了用刷新令牌换新的。令牌只在 agent 进程里，不进界面。
  *
  * 后台连接用的 `BackgroundOAuthProvider` 从不开浏览器：要人做的事（第一次授权、刷新失效、要更大的权限）一律抛
- * `McpNeedsLogin`，等人点「登录」走 `login`。
+ * `McpNeedsLogin`，等人点「登录」走 `login`。`login` 自己也不开浏览器：它把授权页的地址交回去，由设置页经 `ui.openExternal` 打开。
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -321,7 +321,8 @@ export class BackgroundOAuthProvider implements OAuthClientProvider {
 
 /** 登录时出的、要给人看的错：设置页按 `code` 说话，`detail` 是授权服务器的原话。 */
 export class LoginError extends Error {
-	readonly code: "timeout" | "denied" | "noCode" | "badUrl" | "noMetadata";
+	/** `replaced`：同一台服务又点了一次「登录」，这一趟作废。 */
+	readonly code: "timeout" | "denied" | "noCode" | "badUrl" | "noMetadata" | "replaced";
 	readonly detail: string;
 	constructor(code: LoginError["code"], detail = "") {
 		super(`${code}${detail ? `: ${detail}` : ""}`);
@@ -331,22 +332,36 @@ export class LoginError extends Error {
 	}
 }
 
-const loggingIn = new Map<string, Promise<void>>();
+/**
+ * 每台服务正在走的那一趟登录。再点一次「登录」时前一趟作废、新开一趟：人多半是关掉了授权页，或者换了个窗口点，
+ * 等着前一趟只会让他对着一个看不见的页面等五分钟。前一趟关掉回调端口后新的才开始，好接着用注册过的那个端口。
+ */
+const loggingIn = new Map<string, { abort: AbortController; settled: Promise<void> }>();
 
 /**
- * 在浏览器里登录：本机起一个回调地址，开授权页，等授权服务器带着授权码跳回来，换成令牌存下。
- * 同一台服务同时只走一趟：人连点两下「登录」不开两个页面。
+ * 登录：本机起一个回调地址，交出授权页的地址（调用方让人在浏览器里打开），等授权服务器带着授权码跳回来，换成令牌存下。
+ * 已经有令牌、不用人授权时什么也不交就结束。`signal` 中止时立刻放弃，回调端口一起关掉。
  */
-export function login(store: OAuthStore, server: HttpServer, open: (url: string) => Promise<void>): Promise<void> {
-	const existing = loggingIn.get(server.id);
-	if (existing) return existing;
-	const run = loginOnce(store, server, open).finally(() => loggingIn.delete(server.id));
-	loggingIn.set(server.id, run);
-	return run;
+export async function* login(store: OAuthStore, server: HttpServer, signal: AbortSignal): AsyncGenerator<string, void> {
+	const previous = loggingIn.get(server.id);
+	const abort = new AbortController();
+	let settle = () => {};
+	const mine = { abort, settled: new Promise<void>((resolve) => (settle = resolve)) };
+	loggingIn.set(server.id, mine);
+	try {
+		previous?.abort.abort(new LoginError("replaced"));
+		await previous?.settled;
+		yield* loginOnce(store, server, AbortSignal.any([signal, abort.signal]));
+	} finally {
+		if (loggingIn.get(server.id) === mine) loggingIn.delete(server.id);
+		settle();
+	}
 }
 
-async function loginOnce(store: OAuthStore, server: HttpServer, open: (url: string) => Promise<void>): Promise<void> {
-	const challenge = await challengeOf(server);
+async function* loginOnce(store: OAuthStore, server: HttpServer, signal: AbortSignal): AsyncGenerator<string, void> {
+	signal.throwIfAborted();
+	const challenge = await challengeOf(server, signal);
+	signal.throwIfAborted();
 	// 上次发现的授权服务器可能已经换了：重新发现。
 	await store.update(server, ({ discovery: _stale, ...rest }) => rest);
 	const before = await store.read(server);
@@ -359,14 +374,18 @@ async function loginOnce(store: OAuthStore, server: HttpServer, open: (url: stri
 	});
 	try {
 		if (registered !== undefined && callback.port !== registered) await store.update(server, ({ client: _old, ...rest }) => rest);
-		const provider = new LoginProvider(store, server, await store.read(server), `http://127.0.0.1:${callback.port}${CALLBACK_PATH}`, scope, open);
+		const provider = new LoginProvider(store, server, await store.read(server), `http://127.0.0.1:${callback.port}${CALLBACK_PATH}`, scope);
 		const request = {
 			serverUrl: server.url,
 			...(scope ? { scope } : {}),
 			...(challenge.resourceMetadataUrl ? { resourceMetadataUrl: challenge.resourceMetadataUrl } : {}),
+			// 发现、注册、换令牌的请求也跟着放弃：授权服务器不答时不用等到系统超时。
+			fetchFn: (url: string | URL, init?: RequestInit) => fetch(url, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal }),
 		};
 		if ((await auth(provider, request)) === "AUTHORIZED") return;
-		const code = await callback.code(provider.expectedState, LOGIN_TIMEOUT_MS);
+		if (!provider.authorization) throw new Error("The MCP SDK asked for a redirect without giving an authorization URL");
+		yield provider.authorization;
+		const code = await callback.code(provider.expectedState, LOGIN_TIMEOUT_MS, signal);
 		await auth(provider, { ...request, authorizationCode: code });
 	} finally {
 		callback.close();
@@ -374,9 +393,11 @@ async function loginOnce(store: OAuthStore, server: HttpServer, open: (url: stri
 }
 
 /** 先不带令牌敲一下门，看它在 `WWW-Authenticate` 里说要哪份元数据、什么范围。 */
-async function challengeOf(server: HttpServer): Promise<{ resourceMetadataUrl?: URL; scope?: string }> {
+async function challengeOf(server: HttpServer, cancel: AbortSignal): Promise<{ resourceMetadataUrl?: URL; scope?: string }> {
 	const abort = new AbortController();
 	const timer = setTimeout(() => abort.abort(), 15_000);
+	const stop = () => abort.abort();
+	cancel.addEventListener("abort", stop, { once: true });
 	try {
 		const response =
 			server.transport === "sse"
@@ -400,6 +421,7 @@ async function challengeOf(server: HttpServer): Promise<{ resourceMetadataUrl?: 
 		return {};
 	} finally {
 		clearTimeout(timer);
+		cancel.removeEventListener("abort", stop);
 		abort.abort();
 	}
 }
@@ -417,7 +439,8 @@ function loopbackPort(client: OAuthClientInformationMixed | undefined): number |
 
 interface Callback {
 	port: number;
-	code(state: string, timeoutMs: number): Promise<string>;
+	/** 等跳回来的授权码；超时或 `signal` 中止时失败（中止时是 `signal.reason`）。 */
+	code(state: string, timeoutMs: number, signal: AbortSignal): Promise<string>;
 	close(): void;
 }
 
@@ -450,13 +473,27 @@ function listen(port: number): Promise<Callback> {
 			const address = server.address();
 			resolve({
 				port: typeof address === "object" && address ? address.port : port,
-				code: (state, timeoutMs) =>
+				code: (state, timeoutMs, signal) =>
 					new Promise<string>((done, fail) => {
-						const timer = setTimeout(() => fail(new LoginError("timeout")), timeoutMs);
+						const stop = () => {
+							clearTimeout(timer);
+							deliver = undefined;
+							fail(signal.reason);
+						};
+						const timer = setTimeout(() => {
+							signal.removeEventListener("abort", stop);
+							fail(new LoginError("timeout"));
+						}, timeoutMs);
+						if (signal.aborted) {
+							stop();
+							return;
+						}
+						signal.addEventListener("abort", stop, { once: true });
 						deliver = (query) => {
 							// 别的页面、旧的登录跳回来的不算。
 							if (query.get("state") !== state) return;
 							clearTimeout(timer);
+							signal.removeEventListener("abort", stop);
 							const error = query.get("error");
 							const code = query.get("code");
 							if (error) fail(new LoginError("denied", query.get("error_description") ?? error));
@@ -486,15 +523,15 @@ class LoginProvider implements OAuthClientProvider {
 	private record: OAuthRecord;
 	private readonly redirect: string;
 	private readonly scope: string | undefined;
-	private readonly open: (url: string) => Promise<void>;
+	/** SDK 要人去授权时给的授权页地址，由 `login` 交出去。 */
+	authorization: string | undefined;
 
-	constructor(store: OAuthStore, server: HttpServer, record: OAuthRecord, redirect: string, scope: string | undefined, open: (url: string) => Promise<void>) {
+	constructor(store: OAuthStore, server: HttpServer, record: OAuthRecord, redirect: string, scope: string | undefined) {
 		this.store = store;
 		this.server = server;
 		this.record = record;
 		this.redirect = redirect;
 		this.scope = scope;
-		this.open = open;
 	}
 
 	get redirectUrl(): string {
@@ -527,9 +564,9 @@ class LoginProvider implements OAuthClientProvider {
 		await this.store.update(this.server, ({ stepUpScope: _granted, ...record }) => withTokens(record, tokens));
 	}
 
-	async redirectToAuthorization(url: URL): Promise<void> {
+	redirectToAuthorization(url: URL): void {
 		if (url.protocol !== "https:" && url.protocol !== "http:") throw new LoginError("badUrl", url.protocol);
-		await this.open(url.href);
+		this.authorization = url.href;
 	}
 
 	saveCodeVerifier(verifier: string): void {

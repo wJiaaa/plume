@@ -7,7 +7,6 @@
  * 能开关、填值，启动方式不能改、不能删（卸载插件就没了）；插件装上、卸下、启停时当场重读、重连。
  */
 
-import { execFile } from "node:child_process";
 import { join } from "node:path";
 import type { Plugin, SlashCommand } from "@plume/contract";
 import type { McpApi, McpView, ServerView, VarView } from "./api.ts";
@@ -50,20 +49,6 @@ function slotsView(server: ServerConfig): VarView[] {
 		const value = server.env?.[name] ?? "";
 		return { ...varView(name, hasPlaceholder(value) ? "" : value), ...(optional ? { optional } : {}) };
 	});
-}
-
-/**
- * 交给系统的默认浏览器。Windows 上不经 cmd 的 `start`：网址里的 `&` 会被它当成命令分隔符，登录地址的后半截被当成命令跑；
- * `url.dll` 的 FileProtocolHandler 把整条网址原样交给系统的默认浏览器。
- */
-function openUrl(url: string): Promise<void> {
-	const [command, args] =
-		process.platform === "darwin"
-			? ["open", [url]]
-			: process.platform === "win32"
-				? ["rundll32.exe", ["url.dll,FileProtocolHandler", url]]
-				: ["xdg-open", [url]];
-	return new Promise((resolve, reject) => execFile(command as string, args as string[], (error) => (error ? reject(error) : resolve())));
 }
 
 /** `/` 菜单里的 prompt 命令：`mcp:<服务>:<prompt>`，折过以后撞名的加编号。 */
@@ -307,15 +292,17 @@ export default {
 					return servers.map((server) => (server === target ? withValues(server, values) : server));
 				});
 			},
-			async login(id) {
+			async *login(id, call) {
 				const target = known((await read()).servers, id);
 				try {
-					await connections.login(target, openUrl);
+					yield* connections.login(target, call.signal);
 				} catch (error) {
+					// 设置页取消的：它知道是自己取消的，不用再说一遍。
+					call.signal.throwIfAborted();
 					if (error instanceof LoginError) throw new Error(text().loginProblem[error.code](error.detail), { cause: error });
 					throw error;
 				}
-				return view();
+				return await view();
 			},
 			async logout(id) {
 				await connections.logout(known((await read()).servers, id));

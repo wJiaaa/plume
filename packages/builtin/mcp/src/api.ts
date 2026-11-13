@@ -66,7 +66,10 @@ export interface McpApi {
 	reconnect(id: string): Promise<McpView>;
 	/** 填 `${NAME}` 空位的值；值是空的就是清掉。 */
 	fill(id: string, values: { name: string; value: string }[]): Promise<McpView>;
-	/** 在浏览器里登录，等人授权完（最多五分钟）才返回。 */
-	login(id: string): Promise<McpView>;
+	/**
+	 * 登录：先交出授权页的地址（界面经 `ui.openExternal` 在浏览器里打开；已经有令牌、不用人授权时不交），再等人授权完
+	 * （最多五分钟），返回登录后的视图。界面取消这次调用就放弃这一趟；同一台服务又调一次时，前一趟作废（报 `replaced` 那句话）。
+	 */
+	login(id: string, call: CallContext): AsyncGenerator<string, McpView>;
 	logout(id: string): Promise<McpView>;
 }

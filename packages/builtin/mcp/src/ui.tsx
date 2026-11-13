@@ -1,12 +1,12 @@
 /**
  * plume.mcp 的界面入口，跑在渲染进程：「插件市场 › 连接器 › 已安装」。每台服务一张卡片：它在不在跑、怎么启动、带来了哪些工具；
  * 添加在弹窗里（市场页头的「添加连接器」经 `actions` 打开），改已有的在卡片里就地改；开关、重连、填值、登录、删除都经逻辑入口（`ui.remote()`）改插件数据目录里的
- * `servers.json`。服务中途要人填的表画成一张等人填的卡（`ui.requestCard`，`FormCard.tsx`）。
+ * `servers.json`。登录时逻辑入口交回授权页的地址，这里经 `ui.openExternal` 在浏览器里打开，再等它登录完。服务中途要人填的表画成一张等人填的卡（`ui.requestCard`，`FormCard.tsx`）。
  *
  * 像密钥的环境变量、请求头，界面只知道填没填，原值不出 agent 进程。
  */
 
-import type { ExtensionsSectionProps, Remote, UiPlugin } from "@plume/contract/ui";
+import type { ExtensionsSectionProps, Remote, UiContext, UiPlugin } from "@plume/contract/ui";
 import {
 	Button,
 	Collapse,
@@ -25,7 +25,7 @@ import {
 	usePopover,
 } from "@plume/ui";
 import { Globe, LogIn, LogOut, MoreHorizontal, Plug, Plus, RefreshCw, SlidersHorizontal, SquareTerminal, Trash2 } from "@plume/ui/icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { McpApi, McpView, ServerDraft, ServerView, VarDraft, VarView } from "./api.ts";
 import { formCard } from "./FormCard.tsx";
 import { documentCard } from "./DocumentCard.tsx";
@@ -60,10 +60,24 @@ function requestAdd(): void {
 	for (const listener of addListeners) listener();
 }
 
-function McpSettings({ api, notify, refreshKey = 0 }: { api: Remote<McpApi>; notify: Notify } & ExtensionsSectionProps) {
+/** 一趟进行中的登录：人点「取消」时 `cancelled`；这一节画没了时 `detached`，之后的结果不再提示（下次画出来时重读）。 */
+interface SignIn {
+	cancel(): void;
+	cancelled: boolean;
+	detached: boolean;
+}
+
+function McpSettings({
+	api,
+	notify,
+	openExternal,
+	refreshKey = 0,
+}: { api: Remote<McpApi>; notify: Notify; openExternal: UiContext["openExternal"] } & ExtensionsSectionProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const [view, setView] = useState<McpView | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
+	const [signingIn, setSigningIn] = useState<string | null>(null);
+	const signIns = useRef(new Map<string, SignIn>());
 	const [adding, setAdding] = useState(false);
 	const confirmer = useConfirmer();
 
@@ -102,6 +116,59 @@ function McpSettings({ api, notify, refreshKey = 0 }: { api: Remote<McpApi>; not
 			return false;
 		} finally {
 			setBusy(null);
+		}
+	};
+
+	/*
+	 * 离开这一节不取消登录：人这时多半正在浏览器里授权，取消了跳回来就落空。逻辑入口接着等，登录成了下次画出来时就能看到；
+	 * 再点一次「登录」时逻辑入口作废前一趟。
+	 */
+	useEffect(() => {
+		const current = signIns.current;
+		return () => {
+			for (const attempt of current.values()) attempt.detached = true;
+		};
+	}, []);
+
+	/** 逻辑入口先交回授权页的地址，这里经 `ui.openExternal` 打开；打不开就放弃这一趟。然后等它登录完交回新的视图。 */
+	const signIn = async (id: string) => {
+		const call = api.login(id);
+		const attempt: SignIn = {
+			cancel: () => {
+				attempt.cancelled = true;
+				call.cancel();
+			},
+			cancelled: false,
+			detached: false,
+		};
+		signIns.current.set(id, attempt);
+		setBusy(id);
+		setSigningIn(id);
+		let openFailed: string | undefined;
+		try {
+			for await (const url of call) {
+				try {
+					await openExternal(url);
+				} catch (error) {
+					// 跳出循环就取消了这次调用，逻辑入口那边关掉回调端口。
+					openFailed = reasonOf(error);
+					break;
+				}
+			}
+			if (openFailed === undefined) {
+				const next = await call;
+				if (!attempt.detached) setView(next);
+			}
+		} catch (error) {
+			if (!attempt.detached && !attempt.cancelled) notify(text.actionFailed(reasonOf(error)), "error");
+		} finally {
+			if (signIns.current.get(id) === attempt) signIns.current.delete(id);
+			if (!attempt.detached) {
+				if (openFailed !== undefined) notify(text.loginOpenFailed(openFailed), "error");
+				else if (attempt.cancelled) notify(text.loginCancelled);
+				setSigningIn((current) => (current === id ? null : current));
+				setBusy((current) => (current === id ? null : current));
+			}
 		}
 	};
 
@@ -145,13 +212,15 @@ function McpSettings({ api, notify, refreshKey = 0 }: { api: Remote<McpApi>; not
 							key={server.id}
 							server={server}
 							busy={busy === server.id}
+							signingIn={signingIn === server.id}
 							taken={servers.filter((other) => other.id !== server.id).map((other) => other.name)}
 							text={text}
 							onSave={(draft) => run(server.id, async () => await api.save(server.id, draft))}
 							onFill={(values) => void run(server.id, async () => await api.fill(server.id, values))}
 							onToggle={(enabled) => void run(server.id, async () => await api.setEnabled(server.id, enabled))}
 							onReconnect={() => void run(server.id, async () => await api.reconnect(server.id))}
-							onLogin={() => void run(server.id, async () => await api.login(server.id))}
+							onLogin={() => void signIn(server.id)}
+							onCancelLogin={() => signIns.current.get(server.id)?.cancel()}
 							onLogout={() => void run(server.id, async () => await api.logout(server.id))}
 							onRemove={() => remove(server)}
 						/>
@@ -186,6 +255,8 @@ interface CardActions {
 	onToggle: (enabled: boolean) => void;
 	onReconnect: () => void;
 	onLogin: () => void;
+	/** 放弃正在等的那一趟登录。 */
+	onCancelLogin: () => void;
 	onLogout: () => void;
 	onRemove: () => void;
 }
@@ -214,6 +285,7 @@ function stateOf(server: ServerView, text: Messages): { tone: string; label: str
 function ServerCard({
 	server,
 	busy,
+	signingIn,
 	taken,
 	text,
 	onSave,
@@ -221,9 +293,10 @@ function ServerCard({
 	onToggle,
 	onReconnect,
 	onLogin,
+	onCancelLogin,
 	onLogout,
 	onRemove,
-}: CardActions & { server: ServerView; busy: boolean; taken: string[]; text: Messages }) {
+}: CardActions & { server: ServerView; busy: boolean; signingIn: boolean; taken: string[]; text: Messages }) {
 	const menu = usePopover();
 	const [toolsOpen, setToolsOpen] = useState(false);
 	const [editing, setEditing] = useState(false);
@@ -315,15 +388,21 @@ function ServerCard({
 							<Text as="p" size="detail" tone="muted">
 								{status.loginReason ? text.loginBecause(text.loginReason[status.loginReason]) : text.loginHint}
 							</Text>
-							{busy && (
+							{signingIn && (
 								<Text as="p" size="caption" tone="faint">
 									{text.loginWaiting}
 								</Text>
 							)}
 						</span>
-						<Button variant="primary" size="sm" loading={busy} icon={<LogIn size={12} strokeWidth={1.9} aria-hidden />} onClick={onLogin}>
-							{text.login}
-						</Button>
+						{signingIn ? (
+							<Button variant="subtle" size="sm" onClick={onCancelLogin} data-mcp-login-cancel="">
+								{text.cancel}
+							</Button>
+						) : (
+							<Button variant="primary" size="sm" loading={busy} icon={<LogIn size={12} strokeWidth={1.9} aria-hidden />} onClick={onLogin}>
+								{text.login}
+							</Button>
+						)}
 					</div>
 				</div>
 			)}
@@ -965,7 +1044,8 @@ export default {
 		ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" });
 		ui.toolCard("mcp_call", Documents, { inline: true });
 		const notify = ui.notify.bind(ui);
-		ui.settingsSection("mcp", (props) => <McpSettings api={api} notify={notify} {...props} />, {
+		const openExternal = ui.openExternal.bind(ui);
+		ui.settingsSection("mcp", (props) => <McpSettings api={api} notify={notify} openExternal={openExternal} {...props} />, {
 			title: (locale) => MESSAGES[locale].settingsTitle,
 			icon: Plug,
 			page: "extensions-connectors",

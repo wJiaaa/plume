@@ -275,11 +275,11 @@ export class Connections implements McpResources {
 		return this.oauth.signedIn(resolveServer(server, env));
 	}
 
-	/** 在浏览器里登录，成功后重连。`open` 开授权页。 */
-	async login(server: ServerConfig, open: (url: string) => Promise<void>): Promise<void> {
+	/** 登录（见 oauth.ts 的 `login`）：交出授权页的地址，等人授权完，成功后重连。 */
+	async *login(server: ServerConfig, signal: AbortSignal): AsyncGenerator<string, void> {
 		const resolved = resolveServer(server, await commandEnv());
 		if (!usesOAuth(resolved)) return;
-		await login(this.oauth, resolved, open);
+		yield* login(this.oauth, resolved, signal);
 		await this.reconnect(server.id);
 	}
 
