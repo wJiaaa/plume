@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -239,6 +239,42 @@ test("循环依赖只复制一次，移走源目录后仍按 Node 解析运行",
 	assert.deepEqual(value, { name: "a", partner: "b", cycle: "a" });
 	assert.deepEqual((await readdir(join(installed, "node_modules"))).sort(), ["fixture-cycle-a", "fixture-cycle-b"]);
 	for (const name of ["fixture-cycle-a", "fixture-cycle-b"]) assert.ok(!existsSync(join(installed, "node_modules", name, "node_modules")));
+});
+
+test("复制出的 Mach-O、ELF 补上执行位，其余文件权限不变", { skip: process.platform === "win32" }, async (t) => {
+	const f = await fixture(t, { "fixture-pty": "1.0.0" });
+	const pty = await f.package("pty", { name: "fixture-pty", dependencies: { "fixture-elf": "1.0.0" } });
+	const elf = await f.package("elf", { name: "fixture-elf" });
+	await f.link(f.plugin, "fixture-pty", pty);
+	await f.link(pty, "fixture-elf", elf);
+	const host = `${process.platform}-${process.arch}`;
+	// 发布包里没带执行位的预编译程序（node-pty 1.1.0 的 spawn-helper），以及传递依赖里的 ELF。
+	const files = {
+		[`fixture-pty/prebuilds/${host}/spawn-helper`]: [pty, `prebuilds/${host}/spawn-helper`, Buffer.from("cffaedfe0c000001", "hex"), 0o644],
+		"fixture-pty/fat": [pty, "fat", Buffer.from("cafebabe00000002", "hex"), 0o600],
+		"fixture-elf/elf.so": [elf, "elf.so", Buffer.from("7f454c4602010100", "hex"), 0o644],
+		"fixture-pty/readme.txt": [pty, "readme.txt", "plain text", 0o644],
+		"fixture-pty/short": [pty, "short", Buffer.from("7f45", "hex"), 0o644],
+		"fixture-pty/script.sh": [pty, "script.sh", "#!/bin/sh\n", 0o755],
+	};
+	for (const [dir, path, content, mode] of Object.values(files)) {
+		await mkdir(dirname(join(dir, path)), { recursive: true });
+		await writeFile(join(dir, path), content);
+		await chmod(join(dir, path), mode);
+	}
+
+	await buildPlugin(f.plugin);
+	const modules = join(f.plugin, "dist/node_modules");
+	const expected = {
+		[`fixture-pty/prebuilds/${host}/spawn-helper`]: 0o755,
+		"fixture-pty/fat": 0o711,
+		"fixture-elf/elf.so": 0o755,
+		"fixture-pty/readme.txt": 0o644,
+		"fixture-pty/short": 0o644,
+		"fixture-pty/script.sh": 0o755,
+	};
+	for (const [path, mode] of Object.entries(expected)) assert.equal((await stat(join(modules, path))).mode & 0o777, mode, path);
+	assert.deepEqual(await readFile(join(modules, "fixture-elf/elf.so")), Buffer.from("7f454c4602010100", "hex"));
 });
 
 test("直接或传递的必需依赖缺失时报错", async (t) => {

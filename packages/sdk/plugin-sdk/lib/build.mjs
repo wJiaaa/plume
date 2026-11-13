@@ -6,6 +6,7 @@
  *   打不进去的（node-pty 这类原生模块）写在那里，不打包，原样复制进 dist/node_modules，运行时按 Node 的解析找到。
  *   一并复制实际安装的运行依赖闭包；按平台分的预编译（`os`/`cpu` 分包、prebuilds/<平台>-<架构>）带上 targets.mjs 里
  *   那几个平台、架构装了的每一份：dist/ 会进 Plume 的多架构安装包，打包时再按目标裁（见 targets.mjs）。
+ *   复制出的 Mach-O、ELF 文件补上执行位，不靠依赖的安装脚本（见 markExecutable）。
  * - 界面入口：浏览器 ESM；react、react/jsx-runtime、@plume/ui、@plume/styles 留作外部，运行时经宿主的 import map 用产品的实例。
  *   只认这几个模块名本身：@plume/ui/icons 不在 import map 里，指到 SDK 自带的图标库打进插件（只打用到的那几个图标）。
  *   引入的 .css 是一段文字，插件自己挂到页面上（宿主不加载插件的样式表）。
@@ -14,7 +15,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { cp, readFile, realpath, rm } from "node:fs/promises";
+import { cp, open, readdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { build } from "esbuild";
@@ -33,6 +34,29 @@ const shared = {
 	},
 };
 const HOST = `${process.platform}-${process.arch}`;
+
+/** Mach-O（单架构 32、64 位的两种字节序，通用二进制）和 ELF 的文件头。 */
+const NATIVE_MAGIC = new Set(["feedface", "feedfacf", "cefaedfe", "cffaedfe", "cafebabe", "7f454c46"]);
+
+/**
+ * 给 dir 下的 Mach-O、ELF 文件补上执行位。复制保留依赖安装时的权限，有的预编译包发布时就没带执行位、靠安装脚本补
+ * （node-pty 1.1.0 的 spawn-helper）；依赖按 `--ignore-scripts` 装时它是 0644，`plume-plugin dev` / `install` 原样装进去，
+ * 终端起 shell 报 `posix_spawnp failed.`。按文件头认、不按包名认；动态库（`.node`、`.dylib`、`.so`）一起加上无害。
+ * 只改权限、不改内容。Windows 没有执行位，跳过。
+ */
+async function markExecutable(dir) {
+	if (process.platform === "win32") return;
+	for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+		if (!entry.isFile()) continue;
+		const file = await open(join(entry.parentPath, entry.name), "r");
+		try {
+			const { bytesRead, buffer } = await file.read(Buffer.alloc(4), 0, 4, 0);
+			if (bytesRead === 4 && NATIVE_MAGIC.has(buffer.toString("hex"))) await file.chmod((await file.stat()).mode | 0o111);
+		} finally {
+			await file.close();
+		}
+	}
+}
 
 /** 复制实际安装的运行依赖，顶层同名冲突时放到依赖它的包下面。 */
 async function copyDependencies(dir, names) {
@@ -105,6 +129,7 @@ async function copyDependencies(dir, names) {
 		roots.push({ pkg, destination });
 	}
 	for (const { pkg, destination } of roots) await copyPackage(pkg, destination);
+	if (roots.length > 0) await markExecutable(target);
 }
 
 /**

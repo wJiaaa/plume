@@ -111,7 +111,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 - README 里的图片：插件目录里的写相对路径（放在 `images/` 下，支持 PNG、JPEG、GIF、WebP、SVG，每张不超过 5 MiB），网上的写 https 地址；带深色版本的 `<picture>` 按窗口明暗选。
 - 根目录的 `icon.png` 会自动作为插件图标，不用配置；使用正方形 PNG，建议 192×192，文件不超过 1 MiB。不提供或图片损坏时显示默认标记。
 - `devDependencies` 只用于类型和打包：逻辑入口用到的第三方包全部打进 `dist/index.mjs`。
-- `dependencies` 只放打不进去的原生模块（如 `node-pty`）：构建时连同实际安装的运行依赖、可选依赖和 peer 依赖一起复制进 `dist/node_modules`，只保留 Plume 发包的平台、架构（darwin、win32 的 arm64、x64，加上构建机）的包与预编译文件，随 `dist/` 一起装。
+- `dependencies` 只放打不进去的原生模块（如 `node-pty`）：构建时连同实际安装的运行依赖、可选依赖和 peer 依赖一起复制进 `dist/node_modules`，只保留 Plume 发包的平台、架构（darwin、win32 的 arm64、x64，加上构建机）的包与预编译文件，随 `dist/` 一起装。复制出的 Mach-O、ELF 文件（如 node-pty 的 `spawn-helper`）由构建补上执行位，不用为此写 postinstall。
 - 引入 `.css` 时加一个 `src/css.d.ts`（写法见 style-i18n.md）。
 
 ## 自检清单
