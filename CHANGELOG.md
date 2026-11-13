@@ -2,6 +2,70 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.2.0] - 2026-11-13
+
+<!-- plume:notes en -->
+### Changes
+
+- **A repository can no longer loosen your permissions.** A `.plume/config.json` committed to a repository used to be able to switch you to Full access or pre-approve "Don't ask again" for you, just by being opened. Now it can only make permissions stricter (for example, require approval for every change in that project). Settings it can't apply are listed in the project config card in Settings › General, and you get a notice once in the conversation.
+- **The permission chip shows what actually applies.** When a project's config makes permissions stricter than yours, the chip above the input shows the stricter level with a lock icon and says it comes from the project, instead of your own setting.
+- **"Don't ask again" can be reviewed and undone.** Settings › General › Permissions lists everything you approved with "Don't ask again"; revoke one or all, and Plume asks again next time. Approvals are remembered per plugin, so another plugin asking for the same thing is asked about separately.
+- **Stop everything in one click.** The environment card has "Stop all", which stops a conversation's background tasks, watches and scheduled wake-ups together.
+- **Conversations no longer look busy forever.** A conversation that only has a dev server, a watch or a scheduled wake-up left counts as done; only background work that will report back keeps it running.
+- **Chinese text is counted properly.** The context meter, usage statistics and compaction used to count Chinese at about a third of its real size, so long Chinese conversations hit the limit unexpectedly. Compaction summaries of Chinese conversations no longer take up a fifth of the window.
+- The context meter shows one color per part when opened, with how full it is at the top.
+- The file panel previews PowerPoint and more Office formats page by page; binary files it can't preview open in their default app.
+- On the plan card, ⌘↵ accepts the plan; ⇧⌘↵ accepts it and switches to auto approval.
+- Plugins can run a conversation for you (for example from a chat app). Such conversations are marked in the title bar, messages and approvals passed in by the plugin say so, and "Stop managing" in the conversation menu takes it back.
+- Finding files for the file panel and for file links in replies no longer runs programs configured by the repository (such as fsmonitor or filters) on your machine. Pages shown in the main window can't open new windows or navigate it away.
+- Reinstalling or reordering plugins no longer makes the model re-read the whole conversation. Signing in to an MCP server can be cancelled while waiting.
+- Installing or updating a plugin while the @ menu is closed no longer crashes the window.
+
+Marketplace plugins have moved to the new plugin interface; installed ones update automatically. Plugins built for 0.1 need rebuilding.
+
+### For plugin authors
+
+Rebuild with `@plumeai/plugin-sdk` 0.2.0. The interface changed in ways that break 0.1 plugins:
+
+- What a tool does to this machine now goes through Plume: run commands with `run.exec` / `run.shell` (sandbox level picked by the permission mode, `run.escalate` to leave it), read and write files with `run.files`, register addresses with `ctx.resources`, and reach the workspace and change records through `ctx.workspace` and `ctx.changes`. The `plume.sandbox` and `plume.secrets` services are gone; secrets are `ctx.secrets`.
+- Background work and wake-ups are registered with `run.track` and `run.schedule` (`TrackedJob.stand()` for long-running servers).
+- Plume no longer recognizes tools or prompt sections by name. Tools declare `kind` and `category` (including `delegate` and the progress checklist); sections declare a category. File diffs, cancellation and changed files have public shapes: `FileDiffDetails`, `CancelledDetails`, `ChangeHunk`, `ToolOutput.changes`.
+- To wait for a person's answer, use `run.request`; `userOnly` and plugin-supplied waiting states are removed. A person's rejection text is `run.rejection`.
+- `ctx.sessions.observe` only reports sessions related to your plugin unless you declare `observe: "all"`. Plugins can manage a conversation with `launch({ steward: true })` and `ctx.sessions.post`.
+- Requests between conversations are paired and answered by Plume; `run.letter` throws once a chain of replies grows too long.
+- New: `ui.openPath`, `ui.revealPath`, `ctx.appDataDir`. The tool list sent to the model is in a fixed order.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **仓库不能再替你放宽权限。** 以前，仓库里提交的 `.plume/config.json` 只要一打开，就能把你切到完全访问，或者替你点好「以后不再问」。现在它只能把权限往严了收，比如要求这个项目里每次改动都先问你。被忽略的项会列在设置 › 常规的项目配置卡里，对话里也会提示一次。
+- **权限签显示实际生效的那一档。** 项目配置把权限收得比你的设置更严时，输入框上的权限签显示更严的那一档，换成带锁的图标，并写明是项目要求的，不再显示你自己的设置。
+- **「以后不再问」能查看、能撤销。** 设置 › 常规 › 权限里列出所有点过「以后不再问」的批准，可以逐条撤销，也可以全部撤销，撤销后下次会重新问你。批准按插件分开记，换一个插件来要同样的东西，会单独问你。
+- **一键全部停止。** 环境卡片里有「全部停止」，一个会话的后台任务、监视和定时唤醒一起停掉。
+- **会话不会一直显示在忙。** 只剩开发服务器、监视或定时唤醒挂着的会话算已完成，只有之后还会回来报结果的后台任务才让它保持运行中。
+- **中文按实际大小计算。** 以前上下文用量、使用统计和压缩把中文估成实际的三成左右，长的中文对话会出乎意料地撞到上限。中文对话压缩后的摘要也不再占掉五分之一的窗口。
+- 上下文用量点开后一段一种颜色，顶上写着用了多少。
+- 文件面板能逐页预览 PowerPoint 和更多 Office 格式；预览不了的二进制文件可以用默认应用打开。
+- 计划卡上 ⌘↵ 是接受计划，⇧⌘↵ 是接受并切到自动批准。
+- 插件可以替你代管一个会话，比如从聊天软件里接进来的对话。这类会话在标题栏上有标记，插件转来的话、代答的卡都写明出处，会话菜单里「停止代管」随时收回。
+- 文件面板和回复里的文件签找文件时，不再在你的电脑上执行仓库配置的程序（比如 fsmonitor、过滤器）。主窗口里打开的页面不能再弹出新窗口，也不能把主窗口带到别的地址。
+- 重装插件、调整插件后，模型不会再把整段对话重读一遍。登录 MCP 服务时，等授权的过程中可以取消。
+- 输入框的 @ 菜单收着时装上或更新插件，窗口不会再崩掉。
+
+插件市场里的插件都已换成新的插件接口，装过的会自动更新。按 0.1 构建的插件需要重新构建。
+
+### 给插件作者
+
+请用 `@plumeai/plugin-sdk` 0.2.0 重新构建。这一版接口有不兼容的改动，0.1 的插件不能直接用：
+
+- 工具在这台机器上做的事都经 Plume 本体：跑命令用 `run.exec`、`run.shell`（沙箱档按权限模式定，要离开沙箱用 `run.escalate`），读写文件用 `run.files`，登记资源地址用 `ctx.resources`，工作区和改动记录经 `ctx.workspace`、`ctx.changes`。`plume.sandbox`、`plume.secrets` 两个服务删了，密钥改用 `ctx.secrets`。
+- 后台任务和定时唤醒经 `run.track`、`run.schedule` 登记；一直开着的服务用 `TrackedJob.stand()` 标出来。
+- 本体不再按名字认工具和提示词段。工具在定义上声明 `kind` 和 `category`（包括派子智能体的 `delegate` 和进度清单），段声明类别。diff、人按了停、改了哪些文件都有公开的形状：`FileDiffDetails`、`CancelledDetails`、`ChangeHunk`、`ToolOutput.changes`。
+- 要等人给答案，用 `run.request`；`userOnly` 和插件自己给的等待状态删了。人拒绝调用后交给模型的话是 `run.rejection`。
+- `ctx.sessions.observe` 默认只报和你的插件有关的会话，要全部得声明 `observe: "all"`。插件可以经 `launch({ steward: true })` 和 `ctx.sessions.post` 代管会话。
+- 会话之间的请求由本体配对、兜底代答；往来链太长时 `run.letter` 会抛错。
+- 新增 `ui.openPath`、`ui.revealPath`、`ctx.appDataDir`。发给模型的工具表按固定顺序排。
+
 ## [0.1.8] - 2026-11-12
 
 <!-- plume:notes en -->
