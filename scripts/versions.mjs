@@ -2,13 +2,13 @@
  * 版本号写在哪些地方。
  *
  * 应用自己报的版本（`app.getVersion()`、安装包名、自动更新的比较）取 `apps/desktop/package.json`，它说了算；
- * 别的产品包跟着它一起改，免得几份 package.json 各说各的。插件（`packages/builtin/`、插件仓库的 `plugins/`）不在里面：
- * 插件经市场单独发版，版本归插件自己。
+ * 别的产品包跟着它一起改，免得几份 package.json 各说各的。插件（`package.json` 里有 `plume` 字段的：`packages/builtin/`、
+ * 冒烟用的 `packages/testing/` 里的测试插件、插件仓库的 `plugins/`）不在里面：插件经市场单独发版，版本归插件自己。
  *
  * 清单按目录现算，不手写：新加一个包不用记得来这里登记。内部依赖写的是 `workspace:*`，不受影响。
  */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,18 +18,19 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** 说了算的那份，别的都改成和它一样。 */
 export const SOURCE = "apps/desktop/package.json";
 
-/** `<目录>/*` 下带 package.json 的子目录。 */
+/** `<目录>/*` 下带 package.json 的子目录，插件除外：按 `plume` 字段认，不按目录认，测试插件放在哪都不会被算进来。 */
 function packagesUnder(relative) {
 	return readdirSync(join(ROOT, relative), { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && existsSync(join(ROOT, relative, entry.name, "package.json")))
-		.map((entry) => `${relative}/${entry.name}/package.json`);
+		.map((entry) => `${relative}/${entry.name}/package.json`)
+		.filter((manifest) => JSON.parse(readFileSync(join(ROOT, manifest), "utf8")).plume === undefined);
 }
 
 export const MANIFESTS = [
 	...packagesUnder("apps"),
 	"packages/contract/package.json",
 	...readdirSync(join(ROOT, "packages"), { withFileTypes: true })
-		.filter((entry) => entry.isDirectory() && entry.name !== "builtin" && entry.name !== "contract")
+		.filter((entry) => entry.isDirectory() && entry.name !== "contract")
 		.flatMap((entry) => packagesUnder(`packages/${entry.name}`)),
 ].sort();
 
