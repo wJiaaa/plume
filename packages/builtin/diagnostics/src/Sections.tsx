@@ -6,7 +6,8 @@
  * 后台任务、定时唤醒两节带 `attention`：卡片收着时，会自己叫醒这个会话的东西让开关挂圆点——在跑的监视命令（`wakes`，有输出就开一轮）、
  * 待触发的唤醒（过一会儿自己开一轮）。普通后台命令不算：开着一个开发服务器是常态，算进去圆点就一直亮着。
  *
- * 两节合起来有不止一项时，排在前面的那一节标题行上有「全部停止」（`StopAll`），一次停掉这个会话列在这两节里的全部。
+ * 两节合起来有不止一项时，显示着的、排在前面的那一节标题行上有「全部停止」（`StopAll`），一次停掉这个会话这两节里的全部：
+ * 后台任务一节显示着、有在跑的任务时放在它上面，否则放在定时唤醒一节上；两节都被藏起来就不出。
  * 会话闲着时输入框上没有停止键，挂着的服务、监视、唤醒只能在这里停；入口不另放到输入框上：开关上的圆点和计数已经指到这里。
  */
 
@@ -14,7 +15,7 @@ import type { SessionView, SessionWakeup } from "@plume/contract";
 import type { EnvironmentSectionProps } from "@plume/contract/ui";
 import { Button, IconButton, ScrollText, Text, useConfirmer, useI18n } from "@plume/ui";
 import { AlarmClock, History, Square, X } from "@plume/ui/icons";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MESSAGES } from "./messages.ts";
 import type { Runtime } from "./state.tsx";
 
@@ -44,6 +45,25 @@ function wakeupLabel(wakeup: SessionWakeup): string {
 }
 
 export function environmentSections(runtime: Runtime) {
+	/**
+	 * 哪些会话的后台任务一节此刻画着（按会话数挂着的个数）。卡片的「显示哪些内容」藏掉的节根本不挂上，这里不读卡片的偏好，
+	 * 只看挂没挂：定时唤醒一节据此知道「全部停止」该不该落到自己身上。
+	 */
+	const jobsShown = new Map<string, number>();
+	const jobsListeners = new Set<() => void>();
+	const subscribeJobs = (listener: () => void) => {
+		jobsListeners.add(listener);
+		return () => {
+			jobsListeners.delete(listener);
+		};
+	};
+	const markJobsShown = (sessionId: string, delta: number) => {
+		const next = (jobsShown.get(sessionId) ?? 0) + delta;
+		if (next > 0) jobsShown.set(sessionId, next);
+		else jobsShown.delete(sessionId);
+		for (const listener of jobsListeners) listener();
+	};
+
 	/**
 	 * 一次停掉这个会话的全部后台事：还在跑的后台任务（开发服务器、监视、没跑完的命令）和待触发的定时唤醒。停了拿不回来
 	 * （服务要 agent 重新起，唤醒要它重新约），所以先问一句，问题里数清各有几项。逐项的停止、取消不问，和原来一样。
@@ -86,6 +106,10 @@ export function environmentSections(runtime: Runtime) {
 		const id = session.summary.id;
 		const data = runtime.state.useSnapshot(id, true, true);
 		const [busy, setBusy] = useState<string>();
+		useEffect(() => {
+			markJobsShown(id, 1);
+			return () => markJobsShown(id, -1);
+		}, [id]);
 		const jobs = data.jobs.filter((job) => job.finishedAt === undefined);
 		if (jobs.length === 0 && !data.error) return null;
 		const everything = jobs.length + data.wakeups.length;
@@ -157,9 +181,11 @@ export function environmentSections(runtime: Runtime) {
 		const words = MESSAGES[resolvedLocale];
 		const id = session.summary.id;
 		const { wakeups, jobs } = runtime.state.useSnapshot(id, true);
+		const jobsHere = useSyncExternalStore(subscribeJobs, () => jobsShown.has(id));
 		if (wakeups.length === 0) return null;
-		// 有在跑的任务时「全部停止」在排在前面的后台任务那一节，这里不再放一个。
-		const running = jobs.some((job) => job.finishedAt === undefined);
+		// 后台任务一节显示着、有在跑的任务时，「全部停止」在排在前面的它那里；它被藏起来时落到这一节，任务照样一起停。
+		const running = jobs.filter((job) => job.finishedAt === undefined).length;
+		const owner = !(jobsHere && running > 0);
 		const cancel = (wakeupId: string) =>
 			void runtime.api
 				.cancelWakeup(id, wakeupId)
@@ -167,7 +193,7 @@ export function environmentSections(runtime: Runtime) {
 				.catch((error: unknown) => runtime.ui.notify(String(error), "error"));
 		return (
 			<>
-				<Label action={!running && wakeups.length > 1 && <StopAll sessionId={id} jobs={0} wakeups={wakeups.length} />}>{words.wakeups}</Label>
+				<Label action={owner && running + wakeups.length > 1 && <StopAll sessionId={id} jobs={running} wakeups={wakeups.length} />}>{words.wakeups}</Label>
 				{wakeups.map((wakeup) => {
 					const meta = [
 						when(wakeup.nextAt, resolvedLocale),

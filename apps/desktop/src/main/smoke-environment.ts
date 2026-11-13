@@ -185,6 +185,24 @@ export async function checkEnvironment(options: {
 
 		// 全部停止：服务、监视、新约的唤醒一起清空，先问一句；之后它们都不再叫醒会话。
 		await until(`document.querySelectorAll('[data-environment-job]').length === 2`, "服务和监视还在跑");
+		// 「全部停止」在显示着的、排在前面的那一节：后台任务一节在时在它上面；把它藏起来，落到定时唤醒一节上；再显示回来，回到后台任务一节。
+		const stopAllIn = (section: string) =>
+			`document.querySelectorAll('[data-environment-stop-all]').length === 1 && document.querySelector('[data-environment-section$="/${section}"] [data-environment-stop-all]') !== null`;
+		const toggleJobsSection = async () => {
+			await clickVisible(page, `[data-environment] button[aria-label="显示哪些内容"]`);
+			await clickVisible(page, `[role=menuitemcheckbox]`, /^后台任务$/);
+			await page(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+			await until(`document.querySelector('[role=menuitemcheckbox]') === null`, "收起显示哪些内容的菜单");
+		};
+		await until(stopAllIn("jobs"), "「全部停止」在后台任务一节");
+		await toggleJobsSection();
+		await until(
+			`document.querySelector('[data-environment-section$="/jobs"]') === null && ${stopAllIn("wakeups")}`,
+			"藏起后台任务一节后「全部停止」落到定时唤醒一节",
+		);
+		await capture("smoke-environment-stop-all-hidden.png");
+		await toggleJobsSection();
+		await until(stopAllIn("jobs"), "后台任务一节显示回来，「全部停止」回到它上面");
 		await clickVisible(page, `[data-environment-stop-all]`);
 		await until(`document.querySelector('[role=dialog]')?.textContent.includes('停掉 2 个后台任务') === true`, "确认框数清两个后台任务");
 		if (!(await page<boolean>(`document.querySelector('[role=dialog]').textContent.includes('取消 1 个定时唤醒')`))) throw new Error("确认框没数唤醒");
