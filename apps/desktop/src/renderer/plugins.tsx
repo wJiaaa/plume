@@ -426,6 +426,8 @@ export async function checkPanels(cwd?: string, session?: boolean): Promise<void
 				}),
 			);
 			asked.forEach((panel, index) => {
+				// 问着的时候插件撤下或换了版本：这是旧面板的答案，不记。
+				if (panelEntry(panel.key)?.available !== panel.available) return;
 				const key = availabilityKey(panel.key, scope.cwd, scope.session);
 				if (availability.get(key) === answers[index]) return;
 				availability.set(key, answers[index]!);
@@ -1632,6 +1634,8 @@ function unloadPluginUi(name: string): void {
 	for (const panel of panels) if (panel.plugin === name) wantedShortcuts.delete(panel.key);
 	panels = assignShortcuts(panels.filter((panel) => panel.plugin !== name));
 	for (const key of pageBadges.keys()) if (key.startsWith(`${name}/`)) pageBadges.delete(key);
+	// 面板答过的可不可用也是这个插件的：不清的话更新后同一个面板键先用旧版本的答案，要等下一次 checkPanels 才换。
+	for (const key of availability.keys()) if (key.startsWith(`${name}/`)) availability.delete(key);
 	removeUiServices(name);
 	mentionProviders.delete(name);
 	singles.screenOverlay = singles.screenOverlay.filter((entry) => entry.plugin !== name);
