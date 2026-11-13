@@ -189,6 +189,20 @@ export function canonicalCalls(reply: AssistantMessage, host: PluginHost): Assis
 	return changed ? { ...reply, content } : reply;
 }
 
+/**
+ * tool.execute 每一层往里交时再换一次规范名：外层改写参数（钩子插件把脚本回的参数写回去）时可能又写成别名，里层的守卫和工具
+ * 得照样看到规范名。`settle` 也会过一遍各层交回的结果，只动带 `call` 的交接（`ToolExecution`），结果原样放过。
+ */
+function canonicalHandoff(aliases: ToolDefinition["aliases"]): ((value: unknown) => unknown) | undefined {
+	if (!aliases) return undefined;
+	return (value) => {
+		const input = value as Partial<ToolExecution> | undefined;
+		if (!input?.call || typeof input.call !== "object") return value;
+		const args = canonicalArgs(input.call.args, aliases);
+		return args === input.call.args ? value : { ...input, call: { ...input.call, args } };
+	};
+}
+
 /** 规范名没给（或是 null）时取第一个给了的别名；别名都删掉，规范名给了时也删，免得层读一个、工具读另一个。没有别名时原样返回。 */
 function canonicalArgs(args: Record<string, unknown>, aliases: ToolDefinition["aliases"]): Record<string, unknown> {
 	if (!aliases || !args || typeof args !== "object") return args;
@@ -480,7 +494,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	const startedAt = Date.now();
 	try {
 		scope.started(call.id);
-		let result = await scope.host.run("tool.execute", execution, execute, undefined, readOnlyStop);
+		let result = await scope.host.run("tool.execute", execution, execute, canonicalHandoff(tool.definition.aliases), readOnlyStop);
 		if (typeof result?.output !== "string") throw new Error("tool.execute 返回的结果没有 output");
 		if (result.images !== undefined && !(Array.isArray(result.images) && result.images.every(validImage)))
 			throw new Error("tool.execute 返回的 images 不是 { data, mimeType } 的数组");

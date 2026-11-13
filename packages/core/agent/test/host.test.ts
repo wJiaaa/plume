@@ -92,6 +92,41 @@ describe("PluginHost", () => {
 		expect((failure as HookError).message).toContain("坏了");
 	});
 
+	it("注册时拒绝不合规矩的 aliases：不是对象、别名不是数组、别名是参数里的名字、重复、空串", async () => {
+		const parameters = { type: "object", properties: { path: { type: "string" }, offset: { type: "number" } } };
+		const cases: Record<string, unknown> = {
+			notObject: ["file"],
+			nullAliases: null,
+			notArray: { path: "file" },
+			isParameter: { path: ["offset"] },
+			repeated: { path: ["file"], offset: ["file"] },
+			empty: { path: [""] },
+			notString: { path: [1] },
+		};
+		const refused: string[] = [];
+		let accepted = false;
+		const h = host();
+		await h.load([
+			entry({
+				name: "aliases",
+				apply(ctx) {
+					for (const [label, aliases] of Object.entries(cases)) {
+						try {
+							ctx.tools.register({ ...tool(`t_${label}`), parameters, aliases } as never);
+						} catch (error) {
+							if (/aliases/.test(String(error))) refused.push(label);
+						}
+					}
+					ctx.tools.register({ ...tool("t_fine"), parameters, aliases: { path: ["file", "filePath"], offset: ["charOffset"] } });
+					accepted = true;
+				},
+			} satisfies Plugin),
+		]);
+		expect(refused).toEqual(Object.keys(cases));
+		expect(accepted).toBe(true);
+		expect(h.toolSpecs().map((spec) => spec.name)).toEqual(["t_fine"]);
+	});
+
 	it("apply 抛错时撤销已做的注册并标为 failed，不影响其他插件", async () => {
 		const disposed: string[] = [];
 		const h = host();

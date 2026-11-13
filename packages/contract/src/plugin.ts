@@ -29,7 +29,7 @@ export type Locale = "zh-CN" | "en";
 export interface ToolCall {
 	id: string;
 	name: string;
-	/** 模型给的参数，别名已换成规范名（`ToolDefinition.aliases`）；外层改过的照改过的。 */
+	/** 模型给的参数，别名已换成规范名（`ToolDefinition.aliases`）；外层改过的照改过的，改成别名的也换回规范名。 */
 	args: Record<string, unknown>;
 }
 
@@ -492,8 +492,8 @@ export interface ToolDefinition {
 	parameters: Record<string, unknown>;
 	/**
 	 * 模型常把参数名写错时，宽容地认哪些：规范名（`parameters` 里的）→ 模型会写成的别名（`{ path: ["file", "filePath"] }`）。
-	 * 宿主在这一步的回复写进会话之前就换好：规范名没给（或是 null）时取第一个给了的别名，别名一律从参数里删掉。
-	 * 于是 tool.execute、tool.approve 的各层、审批卡、转录、导出、压缩和工具自己看到、存下的都是规范名：按参数拦调用的守卫
+	 * 宿主在这一步的回复写进会话之前就换好：规范名没给（或是 null）时取第一个给了的别名，别名一律从参数里删掉；
+	 * tool.execute 的层改写参数往里交时又写成别名的，交给里层之前再换一次。于是 tool.execute、tool.approve 的各层、审批卡、转录、导出、压缩和工具自己看到、存下的都是规范名：按参数拦调用的守卫
 	 * 不会因为模型换了个写法就读不到，工具和别处也不用各抄一份别名表。别名不能是 `parameters.properties` 里的名字。
 	 */
 	aliases?: Record<string, readonly string[]>;

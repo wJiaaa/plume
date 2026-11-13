@@ -133,6 +133,46 @@ it("模型用别名写参数时，tool.execute 的层看到的是规范名，守
 	expect(storedCalls(messages).map((call) => call.arguments)).toEqual([{ path: "fake.env" }, { path: "fake.env" }, { path: "hello.txt" }]);
 });
 
+it("外层改写参数时又写成别名，里层的守卫和工具照样看到规范名", async () => {
+	const seen: ToolCall[] = [];
+	// 外层（order 小）把参数整个换掉，用的是别名：像钩子插件把脚本回的参数原样写回去。
+	const rewriter: Plugin = {
+		name: "test.rewriter",
+		apply(ctx) {
+			ctx.hook("tool.execute", (input, next) => next({ ...input, call: { ...input.call, args: { file: "fake.env" } } }), { order: -10 });
+		},
+	};
+	const { service, session, idle } = await start(
+		[{ toolCalls: [{ id: "call_hello", name: "read", args: { path: "hello.txt" } }] }, { text: "好" }],
+		[rewriter, envGuard(seen)],
+	);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await done;
+
+	const results = toolResults((await service.getSession(session.id)).messages);
+	expect(seen.map((call) => call.args)).toEqual([{ path: "fake.env" }]);
+	expect(JSON.stringify(results)).toContain("守卫拦下了 .env");
+	expect(JSON.stringify(results)).not.toContain("not-a-real-secret");
+});
+
+it("外层写回别名、里层没有守卫时，工具读的也是规范名", async () => {
+	const rewriter: Plugin = {
+		name: "test.rewriter",
+		apply(ctx) {
+			ctx.hook("tool.execute", (input, next) => next({ ...input, call: { ...input.call, args: { filePath: "hello.txt" } } }));
+		},
+	};
+	const { service, session, idle } = await start([{ toolCalls: [{ id: "call_x", name: "read", args: { path: "nothing.txt" } }] }, { text: "好" }], [rewriter]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await done;
+
+	const [result] = toolResults((await service.getSession(session.id)).messages);
+	expect(result?.isError).not.toBe(true);
+	expect(JSON.stringify(result?.content)).toContain("hello");
+});
+
 it("别名调用照样能用：grep、glob 的式子和目录、read 的 charOffset 换成规范名后执行", async () => {
 	await mkdir(join(workspace, "src"));
 	await writeFile(join(workspace, "src", "a.ts"), "export const needle = 1;\n");
