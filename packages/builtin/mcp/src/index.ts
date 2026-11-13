@@ -22,6 +22,7 @@ import {
 	writeServers,
 } from "./config.ts";
 import { Connections } from "./connections.ts";
+import { DeferredSessions } from "./deferred.ts";
 import { Documents } from "./documents.ts";
 import { LoginError, usesOAuth } from "./oauth.ts";
 import { MESSAGES } from "./messages.ts";
@@ -86,10 +87,9 @@ export default {
 		ctx.effect(() => connections.closeAll());
 		ctx.resources.register(mcpResource(connections));
 
-		/** 已经改成按需搜索的会话：改过去就不改回来，免得工具表在会话中途来回变。 */
-		const deferred = new Set<string>();
+		const deferred = new DeferredSessions(join(ctx.dataDir, "deferred-sessions.json"));
 		ctx.sessions.onDeleted((sessionId) => {
-			deferred.delete(sessionId);
+			void deferred.delete(sessionId);
 			connections.closeSession(sessionId);
 			documents.remove(sessionId);
 		});
@@ -99,8 +99,8 @@ export default {
 
 		ctx.hook("model.context", async (input, next) => {
 			const movable = connections.tools().filter((tool) => !tool.pinned);
-			if (movable.length > 0 && (deferred.has(input.sessionId) || toolTokens(movable) >= DEFER_TOKENS)) {
-				deferred.add(input.sessionId);
+			if (movable.length > 0 && ((await deferred.has(input.sessionId)) || toolTokens(movable) >= DEFER_TOKENS)) {
+				await deferred.add(input.sessionId);
 				const hidden = new Set(movable.map((tool) => tool.name));
 				return next({
 					...input,
