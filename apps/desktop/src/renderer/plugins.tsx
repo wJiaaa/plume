@@ -1309,14 +1309,16 @@ export function pinnedShotComponent(): ComponentType<PinnedShotProps> | undefine
 }
 
 /** 截屏的宿主能力：都在主进程，经预加载脚本调。快捷键按插件记，插件停用时撤掉。 */
-function screenFor(plugin: string): ScreenCapture {
+function screenFor(plugin: string, active: () => boolean): ScreenCapture {
 	return {
 		start: async () => {
 			// i18n-exempt：给插件作者的报错。
 			if (singles.screenOverlay.length === 0) throw new Error("还没有插件注册截屏浮层（ui.screenOverlay）");
 			return window.plume.screen.start();
 		},
-		setShortcut: (accelerator) => window.plume.screen.setShortcut(plugin, accelerator),
+		// 撤下时已经清掉了这个插件的快捷键，晚到的不再登记回去。
+		setShortcut: (accelerator) =>
+			active() ? window.plume.screen.setShortcut(plugin, accelerator) : Promise.reject(new Error("The plugin UI has been unloaded.")),
 		pickDirectory: (title) => window.plume.screen.pickDirectory(title),
 		desktopDirectory: () => window.plume.screen.desktopDirectory(),
 	};
@@ -1389,6 +1391,15 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		}
 		lifetime.effect(dispose);
 	};
+	/**
+	 * 登记界面的接口包一层：插件撤下后（定时器里、`await` 之后才登记的）不再写进表。表在撤下时已按插件名清过，晚到的会一直留到
+	 * 这个名字下次被撤；插件更新时新旧版本同名，所以按这次加载的 `lifetime` 认，不按名字认。新加登记类的接口也包上。
+	 */
+	const live =
+		<A extends unknown[]>(write: (...args: A) => unknown) =>
+		(...args: A): void => {
+			if (lifetime.active) write(...args);
+		};
 	// i18n-exempt：注册表的种类名只拼进给插件作者的报错和日志。
 	return {
 		name,
@@ -1396,21 +1407,21 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (!host) throw new Error("The conversation interface is not ready.");
 			await host.openSession(String(sessionId));
 		},
-		codeBlock: (language, component, options) => {
+		codeBlock: live((language, component, options) => {
 			if (options?.copyText !== undefined && typeof options.copyText !== "function") throw new Error("copyText must be a function");
 			const entry = register(codeBlocks, "正文代码块", name, language.trim().toLowerCase(), component, options, "语言");
 			if (options?.copyText) codeCopies.set(entry, options.copyText);
-		},
-		toolCard: (tool, component, options) => {
+		}),
+		toolCard: live((tool, component, options) => {
 			const entry = register(options?.match === "prefix" ? toolPrefixes : toolCards, "工具卡片", name, tool, component, options);
 			const inline = options?.inline;
 			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
-		},
-		toolLine: (tool, line, options) => registerToolLine(name, tool, line, options),
-		approvalCard: (tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options),
-		requestCard: (kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind"),
-		panel: (id, component, options) => registerPanel(name, id, component, options),
-		page: (id, component, options) => registerPage(name, id, component, options),
+		}),
+		toolLine: live((tool, line, options) => registerToolLine(name, tool, line, options)),
+		approvalCard: live((tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options)),
+		requestCard: live((kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind")),
+		panel: live((id, component, options) => registerPanel(name, id, component, options)),
+		page: live((id, component, options) => registerPage(name, id, component, options)),
 		skin: (skin) => {
 			if (lifetime.active) skins.set(name, skin);
 		},
@@ -1420,44 +1431,46 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (lifetime.active) updateAppearance({ theme });
 		},
 		effect: lifetime.effect,
-		composerItem: (id, component, options) => registerComposerItem(name, id, component, options),
-		composerChip: (id, component, options) => registerComposerChip(name, id, component, options),
-		composerAbove: (id, component, options) => registerComposerAbove(name, id, component, options),
-		conversationCard: (id, component, options) => registerConversationCard(name, id, component, options),
-		environmentSection: (id, component, options) => registerEnvironmentSection(name, id, component, options),
+		composerItem: live((id, component, options) => registerComposerItem(name, id, component, options)),
+		composerChip: live((id, component, options) => registerComposerChip(name, id, component, options)),
+		composerAbove: live((id, component, options) => registerComposerAbove(name, id, component, options)),
+		conversationCard: live((id, component, options) => registerConversationCard(name, id, component, options)),
+		environmentSection: live((id, component, options) => registerEnvironmentSection(name, id, component, options)),
 		useEnvironmentSections,
-		sessionToolbar: (id, component) => {
+		sessionToolbar: live((id, component) => {
 			sessionToolbar.delete(`${name}/${id}`);
 			register(sessionToolbar, "sessionToolbar", name, `${name}/${id}`, component);
-		},
-		sessionMenuItem: (id, item) => {
+		}),
+		sessionMenuItem: live((id, item) => {
 			if (!id || !validTitle(item?.label) || typeof item?.run !== "function") throw new Error("Invalid sessionMenuItem");
 			const key = `${name}/${id}`;
 			sessionMenuItems.put(name, { key, plugin: name, item }, { key });
+		}),
+		provide: (service, implementation) => {
+			if (lifetime.active) provideUiService(name, service, implementation);
 		},
-		provide: (service, implementation) => provideUiService(name, service, implementation),
 		useService: useUiService,
-		agentDelivery: (component) => {
+		agentDelivery: live((component) => {
 			if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error("Invalid agentDelivery");
 			agentDeliveries.put(name, { plugin: name, component });
-		},
+		}),
 		ProjectOpener,
-		mentions: (provider) => {
+		mentions: live((provider) => {
 			// i18n-exempt：只给插件作者的接口错误。
 			if (typeof provider !== "function") throw new Error("mentions 需要一个函数");
 			mentionProviders.set(name, provider);
-		},
-		composerHint: (hint) => registerComposerHint(name, hint),
-		welcomeLine: (line) => registerWelcomeLine(name, line),
-		replyText: (transform) => registerReplyText(name, transform),
-		sessionMark: (component) => registerSessionMark(name, component),
-		deleteNote: (note) => registerDeleteNote(name, note),
-		linkOpener: (opener) => registerLinkOpener(name, opener),
-		queueAction: (action) => registerQueueAction(name, action),
-		quoteAction: (action) => {
+		}),
+		composerHint: live((hint) => registerComposerHint(name, hint)),
+		welcomeLine: live((line) => registerWelcomeLine(name, line)),
+		replyText: live((transform) => registerReplyText(name, transform)),
+		sessionMark: live((component) => registerSessionMark(name, component)),
+		deleteNote: live((note) => registerDeleteNote(name, note)),
+		linkOpener: live((opener) => registerLinkOpener(name, opener)),
+		queueAction: live((action) => registerQueueAction(name, action)),
+		quoteAction: live((action) => {
 			if (!validTitle(action?.label) || typeof action?.run !== "function") throw new Error("quoteAction requires label and run");
 			quoteActions.put(name, { plugin: name, action });
-		},
+		}),
 		quoteInPanel: (id, sessionId, quote) => {
 			const key = `${name}/${String(id)}`;
 			if (!panels.some((panel) => panel.key === key)) throw new Error("The plugin panel is not registered.");
@@ -1506,8 +1519,8 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		FilePreview: PluginFilePreview,
 		DocumentPreview,
 		documentViewer: (extensions, component) => owned(registerDocumentViewer(extensions, component)),
-		turnFooter: (id, component, options) => registerTurnFooter(name, id, component, options),
-		replyAction: (id, component, options) => registerReplyAction(name, id, component, options),
+		turnFooter: live((id, component, options) => registerTurnFooter(name, id, component, options)),
+		replyAction: live((id, component, options) => registerReplyAction(name, id, component, options)),
 		draftInSession: async (sessionId, draft: SessionDraft) => {
 			if (!host) throw new Error("The conversation interface is not ready.");
 			// 替人发出去只认人刚点过：插件在没人点的时候要求发，只放进草稿。先记下，打开会话要等一会儿。
@@ -1567,7 +1580,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (!pages.has(key)) throw new Error("The plugin page is not registered.");
 			host?.openPage(key);
 		},
-		pageBadge: (id, badge) => setPageBadge(name, id, badge),
+		pageBadge: live((id, badge) => setPageBadge(name, id, badge)),
 		openExternal: async (url) => {
 			await window.plume.openExternal(externalWebUrl(url));
 		},
@@ -1590,10 +1603,10 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (opener) opener.open({ url: href }, typeof sessionId === "string" ? sessionId : undefined);
 			else await window.plume.openExternal(href);
 		},
-		settingsSection: (id, component, options) => registerSettingsSection(name, id, component, options),
-		screen: screenFor(name),
-		screenOverlay: (component) => registerSingle("screenOverlay", name, component),
-		pinnedShot: (component) => registerSingle("pinnedShot", name, component),
+		settingsSection: live((id, component, options) => registerSettingsSection(name, id, component, options)),
+		screen: screenFor(name, () => lifetime.active),
+		screenOverlay: live((component) => registerSingle("screenOverlay", name, component)),
+		pinnedShot: live((component) => registerSingle("pinnedShot", name, component)),
 		useSession: useLiveSession,
 		useSessionActivity,
 		listCommands: async (given) => {
