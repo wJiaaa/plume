@@ -111,8 +111,8 @@ async function start(replies: Parameters<typeof fakeAnthropic>[0] = [{ text: "do
 	return agent.service;
 }
 
-it("两个项目同时执行各自模型、权限、白名单、个性化和新会话思考默认，全局文件不变", async () => {
-	const a = await project("a", { defaultModel: "p/cheap", permissionMode: "ask", alwaysAllow: [], thinking: "high", personalization: { tone: "concise" } });
+it("几个项目同时执行各自模型、收紧的权限、个性化和新会话思考默认，放宽权限的批准名单和完全访问不认，全局文件不变", async () => {
+	const a = await project("a", { defaultModel: "p/cheap", permissionMode: "ask", thinking: "high", personalization: { tone: "concise" } });
 	const b = await project("b", {
 		defaultModel: "p/strong",
 		alwaysAllow: [{ plugin: "test.project-config", subject: "probe" }],
@@ -141,8 +141,14 @@ it("两个项目同时执行各自模型、权限、白名单、个性化和新�
 	expect(
 		contexts.filter((item) => item.cwd === b).every((item) => item.model.id === "p/strong" && item.personalization.customInstructions === "b instruction"),
 	).toBe(true);
-	// a 按项目的请求批准经钩子问；b 的项目名单放行、c 的项目完全访问放行，都到不了钩子。
-	expect(permissions.map((item) => [item.cwd, item.permissionMode])).toEqual([[a, "ask"]]);
+	// a 按项目收紧成请求批准，经钩子问；b 项目里写的批准名单、c 项目里的完全访问都会放宽权限，不认：照本机的帮我批准经钩子问。
+	expect(permissions.map((item) => [item.cwd, item.permissionMode]).sort()).toEqual(
+		[
+			[a, "ask"],
+			[b, "auto"],
+			[c, "auto"],
+		].sort(),
+	);
 	const outputs = await Promise.all(
 		[left, right, full].map(async ({ session }) =>
 			(await ctx.sessions.messages(session.id)).flatMap((message) =>
@@ -150,7 +156,15 @@ it("两个项目同时执行各自模型、权限、白名单、个性化和新�
 			),
 		),
 	);
-	expect(outputs).toEqual([["ask"], ["auto"], ["full"]]);
+	expect(outputs).toEqual([["ask"], ["auto"], ["auto"]]);
+	// 不认的放宽项每个会话说一次，写明是哪几个键；a 只收紧，不提醒。
+	const loosening = (sessionId: string) =>
+		events
+			.filter((event) => event.type === "notice" && event.sessionId === sessionId && event.text.includes("只能收紧权限"))
+			.map((event) => (event as { text: string }).text);
+	expect(loosening(left.session.id)).toEqual([]);
+	expect(loosening(right.session.id)).toEqual([expect.stringContaining("alwaysAllow")]);
+	expect(loosening(full.session.id)).toEqual([expect.stringContaining("permissionMode")]);
 	expect(new Set(model!.requests.map((request) => request.model))).toEqual(new Set(["cheap", "strong"]));
 	expect((await service.getSettings()).permissionMode).toBe("auto");
 	expect(await readFile(join(dir, "settings.json"), "utf8")).toBe(before);

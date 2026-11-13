@@ -24,6 +24,7 @@ export const zhCN = {
 	"override.projectValue": "项目值",
 	"override.globalValue": "全局值",
 	"override.overriddenNote": "⚠ 被项目值{mode}，不生效",
+	"override.looseningIgnored": "会放宽权限，已被忽略：仓库里的配置只能收紧权限，放宽要在本机的设置里改",
 	"override.repoBanned": "不允许放在仓库文件里，已被忽略",
 	"fileAction.exists": "「{name}」已存在",
 	"fileAction.noTerminal": "请先安装并启用终端插件。",

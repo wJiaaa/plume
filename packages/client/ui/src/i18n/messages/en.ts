@@ -28,6 +28,7 @@ export const en = {
 	"override.projectValue": "Project value",
 	"override.globalValue": "Global value",
 	"override.overriddenNote": "⚠ the project value {mode} it — no effect",
+	"override.looseningIgnored": "would loosen permissions — ignored. A repository file can only tighten them; loosen them in your own settings",
 	"override.repoBanned": "not allowed in a repository file — ignored",
 	"fileAction.exists": "“{name}” already exists",
 	"fileAction.replaceDetail": "Replacing overwrites what is there, and cannot be undone.",

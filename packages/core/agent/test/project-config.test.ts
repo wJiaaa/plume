@@ -84,6 +84,36 @@ it("项目值与全局共用校验，保留全局供应商和嵌套的其他值"
 	expect(withProjectLayer(global, {})).toBe(global);
 });
 
+it("项目配置只能收紧权限：放宽权限模式、写批准名单都不认并报出键名，收紧的照常生效", async () => {
+	const global: StoredSettings = normalizeSettings({ providers: [], permissionMode: "auto", alwaysAllow: [{ plugin: "p", subject: "mine" }] });
+	const grants = [{ subject: "read:/" }, { plugin: "plume.tools", subject: "rm -rf /" }];
+	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "full", alwaysAllow: grants, thinking: "high" }));
+	const loose = await layerProjectSettings(global, dir);
+	expect(loose.settings).toEqual({ ...global, thinking: "high" });
+	expect(loose.loosened).toEqual(["alwaysAllow", "permissionMode"]);
+	expect(loose.layer).toEqual({ thinking: "high" });
+	const view = await projectLayerView(global, dir);
+	expect(view.loosened).toEqual(["alwaysAllow", "permissionMode"]);
+	expect(view.overrides.map((one) => one.key)).toEqual(["thinking"]);
+	// 撤销批准也不归项目配置管：空数组同样不认，本机的批准留着。
+	await writeFile(projectConfigPath(dir), JSON.stringify({ alwaysAllow: [] }));
+	expect((await layerProjectSettings(global, dir)).settings.alwaysAllow).toEqual([{ plugin: "p", subject: "mine" }]);
+	// 收紧：本机帮我批准，项目要求请求批准，照常生效；和本机一样宽的也照常，不算放宽。
+	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "ask" }));
+	expect(await layerProjectSettings(global, dir)).toMatchObject({ settings: { permissionMode: "ask" }, loosened: [] });
+	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "auto" }));
+	expect(await layerProjectSettings(global, dir)).toMatchObject({ settings: { permissionMode: "auto" }, loosened: [] });
+	// 本机是请求批准时，项目的帮我批准、认不出的值（合并后会落回缺省的帮我批准）都是放宽。
+	const strict: StoredSettings = { providers: [], permissionMode: "ask" };
+	for (const permissionMode of ["auto", "full", "bogus", null]) {
+		await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode }));
+		expect(await layerProjectSettings(strict, dir)).toMatchObject({ settings: { permissionMode: "ask" }, loosened: ["permissionMode"] });
+	}
+	// 本机完全访问时项目的任何一档都不比它宽。
+	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "full" }));
+	expect(await layerProjectSettings({ providers: [], permissionMode: "full" }, dir)).toMatchObject({ settings: { permissionMode: "full" }, loosened: [] });
+});
+
 it("坏 JSON 和非对象回落全局并报告，错误不带文件原文", async () => {
 	const global: StoredSettings = { providers: [], permissionMode: "auto" };
 	await writeFile(projectConfigPath(dir), "secret-never-in-error");
@@ -102,6 +132,7 @@ it("设置页报告生效默认值的覆盖和拒绝键，不传密钥", async (
 		path: projectConfigPath(dir),
 		exists: true,
 		refused: ["apiKey", "magpie"],
+		loosened: [],
 		overrides: [{ key: "permissionMode", kind: "scalar", global: "auto", project: "ask" }],
 	});
 	expect(JSON.stringify(view)).not.toContain("private-key");

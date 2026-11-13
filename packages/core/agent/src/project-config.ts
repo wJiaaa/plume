@@ -1,8 +1,17 @@
-/** 项目配置只覆盖当前工作目录的设置；可共享的文件里不接受供应商和密钥。 */
+/**
+ * 项目配置只覆盖当前工作目录的设置；可共享的文件里不接受供应商和密钥，也不能替人放宽权限。
+ *
+ * `.plume/config.json` 随仓库提交、被别人克隆，打开就生效，写它的人不是在这台机器上用 Plume 的人。各键按对权限的影响分三类：
+ * - 放宽权限：`alwaysAllow`（事先替人答了「以后不再问」，连本体名下读项目外的 `read:<路径>` 也能写）、比本机宽的 `permissionMode`
+ *   （帮我批准 → 完全访问之类）。一律不认，见 `withoutLoosening`；要放宽只能人在本机的设置里改、在审批卡上点。
+ * - 收紧权限：比本机严的 `permissionMode`（团队要求这个仓库里每次改动都先问）。照常生效。
+ * - 与权限无关：`defaultModel`、`favoriteModels`、`imageModel`、`thinking`、`personalization`、`retryPolicy`。照常生效。
+ * 供应商、密钥（`PROJECT_FORBIDDEN`）和 `hooks`（钩子插件自己读、要人逐条信任）不进设置。
+ */
 
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { ConfigProblem, LayerOverride, ProjectLayerView } from "@plume/contract";
+import type { ConfigProblem, LayerOverride, PermissionMode, ProjectLayerView } from "@plume/contract";
 import { normalizeSettings, settingsView, type StoredSettings } from "./models.ts";
 import { text } from "./i18n.ts";
 
@@ -68,31 +77,61 @@ export async function loadProjectLayer(cwd: string | null): Promise<{ config: Pl
 	}
 }
 
+/** 权限模式由严到宽。 */
+const PERMISSION_ORDER: readonly PermissionMode[] = ["ask", "auto", "full"];
+
+/**
+ * 拿掉项目层里放宽权限的键，返回剩下的和拿掉的键名（给人看的提示用）。和本机设置比：本机设置随时会改，每次读设置都重新比一次。
+ * - `alwaysAllow`：「以后不再问」是人在这台机器上对自己的插件、路径答的，项目里写的一律不认（写成空数组也不认：
+ *   它也不该替人撤销批准，撤销在设置页）。
+ * - `permissionMode`：比本机的宽、或者认不出时不认。认不出的值合并后会被校验丢掉、落回缺省的帮我批准，本机是请求批准时
+ *   等于放宽，所以也算。
+ */
+function withoutLoosening(global: StoredSettings, layer: Plain): { layer: Plain; loosened: string[] } {
+	const loosened: string[] = [];
+	const kept = { ...layer };
+	if (Object.hasOwn(kept, "alwaysAllow")) {
+		delete kept.alwaysAllow;
+		loosened.push("alwaysAllow");
+	}
+	if (Object.hasOwn(kept, "permissionMode") && kept.permissionMode !== undefined) {
+		const rank = PERMISSION_ORDER.indexOf(kept.permissionMode as PermissionMode);
+		if (rank < 0 || rank > PERMISSION_ORDER.indexOf(global.permissionMode ?? "auto")) {
+			delete kept.permissionMode;
+			loosened.push("permissionMode");
+		}
+	}
+	return { layer: kept, loosened };
+}
+
 /** 重新经过全局设置同一套校验，项目值不能绕过范围和格式限制。 */
 export function withProjectLayer(global: StoredSettings, layer: Plain): StoredSettings {
 	return Object.keys(layer).length === 0 ? global : normalizeSettings(mergeLayer({ ...global }, layer));
 }
 
 export async function layerProjectSettings(global: StoredSettings, cwd: string | null) {
-	const { config: layer, ...result } = await loadProjectLayer(cwd);
-	return { settings: withProjectLayer(global, layer), layer, ...result };
+	const { config, ...result } = await loadProjectLayer(cwd);
+	const { layer, loosened } = withoutLoosening(global, config);
+	return { settings: withProjectLayer(global, layer), layer, loosened, ...result };
 }
 
-/** 设置页只拿覆盖项和拒绝的键名，禁止项的值从不跨进程。 */
+/** 设置页只拿覆盖项、拒绝和不认的键名，禁止项的值从不跨进程。 */
 export async function projectLayerView(global: StoredSettings, cwd: string): Promise<ProjectLayerView> {
 	const path = projectConfigPath(cwd);
 	const exists = await stat(path).then(
 		() => true,
 		() => false,
 	);
-	if (!exists) return { path, exists: false, refused: [], overrides: [] };
+	if (!exists) return { path, exists: false, refused: [], loosened: [], overrides: [] };
 	const { config, refused, error, problem } = await loadProjectLayer(cwd);
+	const { layer, loosened } = withoutLoosening(global, config);
 	return {
 		path,
 		exists,
 		refused,
+		loosened,
 		...(error ? { error } : {}),
 		...(problem ? { problem } : {}),
-		overrides: layerOverrides({ ...global, ...settingsView(global) }, config),
+		overrides: layerOverrides({ ...global, ...settingsView(global) }, layer),
 	};
 }

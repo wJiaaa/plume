@@ -787,6 +787,8 @@ export interface ProjectLayerView {
 	error?: string;
 	problem?: ConfigProblem;
 	refused: string[];
+	/** 写了、但会放宽权限所以不认的键（`alwaysAllow`、比本机宽的 `permissionMode`）：仓库里的配置只能收紧权限。 */
+	loosened: string[];
 	overrides: LayerOverride[];
 }
 export type FileOperation =

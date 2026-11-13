@@ -60,7 +60,9 @@ function ProjectLayerCard({ path, name }: { path: string; name: string }) {
 				<div className="mb-1 text-label text-ink">{t("override.projectConfig", { name })}</div>
 				<p className="mb-2 font-mono text-caption text-ink-faint break-all">{view.path}</p>
 				{error && <p className="mb-2 text-detail text-danger break-words">{error}</p>}
-				{view.overrides.length === 0 && view.refused.length === 0 && !error && <p className="text-detail text-ink-muted">{t("override.nothingOverridden")}</p>}
+				{view.overrides.length === 0 && view.refused.length === 0 && view.loosened.length === 0 && !error && (
+					<p className="text-detail text-ink-muted">{t("override.nothingOverridden")}</p>
+				)}
 				{view.overrides.map((one) => (
 					<div key={one.key} className="py-0.5 text-detail break-words" data-project-layer-key={one.key}>
 						<span className="font-mono text-ink">{one.key}</span>
@@ -71,6 +73,11 @@ function ProjectLayerCard({ path, name }: { path: string; name: string }) {
 							{t("override.globalValue")} <span className="font-mono">{brief(one.global)}</span>{" "}
 							<span className="text-accent">{t("override.overriddenNote", { mode: t(one.kind === "array" ? "override.replaced" : "override.overrode") })}</span>
 						</div>
+					</div>
+				))}
+				{view.loosened.map((key) => (
+					<div key={key} className="py-0.5 text-detail text-ink-muted" data-project-layer-loosened={key}>
+						<span className="font-mono text-ink">{key}</span> {t("override.looseningIgnored")}
 					</div>
 				))}
 				{view.refused.map((key) => (

@@ -1030,11 +1030,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function applyProjectConfig(session: Session, configured: Awaited<ReturnType<typeof layerProjectSettings>>): void {
 		session.projectLayer = configured.layer;
-		const notices = JSON.stringify([configured.refused, configured.error ?? ""]);
+		const notices = JSON.stringify([configured.refused, configured.loosened, configured.error ?? ""]);
 		if (notices === session.projectNotices) return;
 		session.projectNotices = notices;
 		if (configured.refused.length > 0)
 			emit({ type: "notice", sessionId: session.summary.id, text: text("project.configRefused", { keys: configured.refused.join(", ") }), level: "warn" });
+		// 放宽权限的键不认，说一声：不然人照着仓库的说明以为已经是完全访问、已经批准过，却还在弹卡。
+		if (configured.loosened.length > 0)
+			emit({ type: "notice", sessionId: session.summary.id, text: text("project.configLoosening", { keys: configured.loosened.join(", ") }), level: "warn" });
 		if (configured.error) emit({ type: "notice", sessionId: session.summary.id, text: configured.error, level: "warn" });
 	}
 
