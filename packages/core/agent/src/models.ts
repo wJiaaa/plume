@@ -28,8 +28,8 @@ export interface StoredSettings {
 	imageModel?: ModelRef;
 	/** 没设过时是 `auto`。 */
 	permissionMode?: PermissionMode;
-	/** 人答过「以后不再问」的命令和文件路径，见 `ApprovalRequest.subject`。 */
-	alwaysAllow?: string[];
+	/** 人答过「以后不再问」的东西，按发起审批的一方分开记，见 `AlwaysAllow`。 */
+	alwaysAllow?: AlwaysAllow[];
 	/** Magpie 写的网关，原样留着，写盘时原样写回。 */
 	magpie?: unknown;
 	/** 没设过的项用 `DEFAULT_PERSONALIZATION`。 */
@@ -38,6 +38,31 @@ export interface StoredSettings {
 	thinking?: ThinkingLevel;
 	/** 模型请求的重试策略，读入时已按 `normalizeRetryPolicy` 收好；没设过用 `@plume/llm` 的默认策略。 */
 	retryPolicy?: RetryPolicy;
+}
+
+/**
+ * 「以后不再问」的一条批准：`subject`（`ApprovalRequest.subject`）记在谁名下。
+ * - 有 `plugin`：发起审批的那件工具的注册插件——插件经 `run.ask` 给的 subject（命令、文件路径、站点），本体替没写 `asks` 的
+ *   会改动工具在执行前问的（subject 是工具名）。只放行同一个插件的工具再问同一个 subject，别的插件写出同样的字符串也不算。
+ * - 没有 `plugin`：本体自己给的 subject（读边界的 `read:<项目>`），不管哪个工具来读都是同一份批准；插件给的 subject 碰不到它。
+ * 插件的名字由本体按注册记，不取插件自己说的，所以插件冒充不了别的插件，也冒充不了本体。
+ */
+export interface AlwaysAllow {
+	subject: string;
+	plugin?: string;
+}
+
+/** 两条批准是不是同一条：同一个名下、同一个 subject。 */
+export function sameGrant(a: AlwaysAllow, b: AlwaysAllow): boolean {
+	return a.subject === b.subject && a.plugin === b.plugin;
+}
+
+function normalizeGrant(raw: unknown): AlwaysAllow | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const { subject, plugin } = raw as { subject?: unknown; plugin?: unknown };
+	if (typeof subject !== "string") return undefined;
+	if (plugin !== undefined && (typeof plugin !== "string" || !plugin)) return undefined;
+	return plugin === undefined ? { subject } : { subject, plugin };
 }
 
 /** 默认中档：几乎所有推理接口都认，模型没有这一档时就近取。 */
@@ -90,7 +115,7 @@ export function normalizeSettings(raw: unknown): StoredSettings {
 		...(Array.isArray(favoriteModels) ? { favoriteModels: favoriteModels.filter((ref): ref is string => typeof ref === "string") } : {}),
 		...(typeof imageModel === "string" ? { imageModel } : {}),
 		...(permissionMode === "ask" || permissionMode === "auto" || permissionMode === "full" ? { permissionMode } : {}),
-		...(Array.isArray(alwaysAllow) ? { alwaysAllow: alwaysAllow.filter((subject): subject is string => typeof subject === "string") } : {}),
+		...(Array.isArray(alwaysAllow) ? { alwaysAllow: alwaysAllow.map(normalizeGrant).filter((grant): grant is AlwaysAllow => grant !== undefined) } : {}),
 		...(magpie === undefined ? {} : { magpie }),
 		...(tuned ? { personalization: tuned } : {}),
 		...(THINKING_LEVELS.includes(thinking as ThinkingLevel) ? { thinking: thinking as ThinkingLevel } : {}),

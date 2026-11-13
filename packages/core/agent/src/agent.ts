@@ -91,6 +91,7 @@ import { settlePrompt, validSections } from "./prompt/sections.ts";
 import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
 import {
+	type AlwaysAllow,
 	checkProvider,
 	DEFAULT_THINKING,
 	fileSettings,
@@ -98,6 +99,7 @@ import {
 	normalizeSettings,
 	personalizationOf,
 	resolveModel,
+	sameGrant,
 	type StoredSettings,
 	settingsView,
 	stripForeignHandles,
@@ -1271,16 +1273,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 人一次也只回答一个问题；卡上写着后面还排着几张（+N）。
 	 * 每张从问出来起计时，没人答到时按拒绝收场（时长见 `PERMISSION_TIMEOUT_MS`；`request` 的见 `QUESTION_TIMEOUT_MS`），排着的也在走：
 	 * 截止时刻随卡片发给界面画倒计时。这一轮停了，排着的、弹着的一起收掉，都得到拒绝。
-	 * 答「以后不再问」的记进设置再放行；提权只管这一次，不记。
+	 * 答「以后不再问」的把 `grant`（`tool-run.ts` 的 `approve` 已经按发起审批的一方归好名下）记进设置再放行；没有 `grant` 的
+	 * （提权、层自己问的、没给 subject 的）只管这一次，不记。
 	 */
-	async function askUser(session: Session, request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
+	async function askUser(session: Session, request: ApprovalRequest, grant: AlwaysAllow | undefined, signal: AbortSignal): Promise<ApprovalDecision> {
 		const outcome = await waitForAnswer(session, request, options.approvalTimeoutMs?.permission ?? PERMISSION_TIMEOUT_MS, signal);
 		relayedBy(session, request.toolCallId, outcome);
 		const decision = "decision" in outcome ? outcome.decision : "reject";
-		const subject = request.subject;
-		if (decision === "always" && subject !== undefined && request.escalation === undefined) {
+		if (decision === "always" && grant) {
 			await changeSettings((settings) => {
-				settings.alwaysAllow = [...new Set([...(settings.alwaysAllow ?? []), subject])];
+				const granted = settings.alwaysAllow ?? [];
+				if (!granted.some((one) => sameGrant(one, grant))) settings.alwaysAllow = [...granted, grant];
 			}).catch((error: unknown) => log("agent", "error", `「以后不再问」没存上：${errorText(error)}`));
 		}
 		return decision;
@@ -2098,7 +2101,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						const settings = await readSessionSettings(session);
 						return { mode: settings.permissionMode ?? "auto", alwaysAllow: settings.alwaysAllow ?? [] };
 					},
-					ask: (approval) => askUser(session, approval, controller.signal),
+					ask: (approval, grant) => askUser(session, approval, grant, controller.signal),
 					requestHuman: (request) => requestUser(session, request, controller.signal),
 					answeredBy: (toolCallId) => {
 						const plugin = session.answeredBy?.get(toolCallId);

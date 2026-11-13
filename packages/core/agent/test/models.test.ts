@@ -30,6 +30,11 @@ describe("normalizeSettings", () => {
 			defaultModel: "a/m1",
 		});
 	});
+
+	it("「以后不再问」只认带 subject 的条目：没名字的是本体的，带插件名的是那个插件的；光秃秃的字符串不认，免得落进本体名下", () => {
+		const alwaysAllow = ["echo hi", { subject: "read:/a" }, { plugin: "test.a", subject: "deploy" }, { plugin: "", subject: "x" }, { plugin: "test.a" }];
+		expect(normalizeSettings({ providers: [], alwaysAllow }).alwaysAllow).toEqual([{ subject: "read:/a" }, { plugin: "test.a", subject: "deploy" }]);
+	});
 });
 
 describe("personalizationOf", () => {

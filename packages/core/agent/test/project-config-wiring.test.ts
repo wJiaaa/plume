@@ -67,7 +67,7 @@ async function start(replies: Parameters<typeof fakeAnthropic>[0] = [{ text: "do
 			],
 			defaultModel: "p/global",
 			permissionMode: "auto",
-			alwaysAllow: ["global"],
+			alwaysAllow: [{ plugin: "test.project-config", subject: "global" }],
 			thinking: "medium",
 			personalization: { customInstructions: "global instruction", tone: "friendly" },
 			retryPolicy: { upstream: { retries: 1, intervalMs: 1000 } },
@@ -115,7 +115,7 @@ it("两个项目同时执行各自模型、权限、白名单、个性化和新�
 	const a = await project("a", { defaultModel: "p/cheap", permissionMode: "ask", alwaysAllow: [], thinking: "high", personalization: { tone: "concise" } });
 	const b = await project("b", {
 		defaultModel: "p/strong",
-		alwaysAllow: ["probe"],
+		alwaysAllow: [{ plugin: "test.project-config", subject: "probe" }],
 		personalization: { customInstructions: "b instruction" },
 	});
 	const c = await project("c", { defaultModel: "p/cheap", permissionMode: "full" });

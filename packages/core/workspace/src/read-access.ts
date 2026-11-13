@@ -208,7 +208,8 @@ const REDIRECT_WRITE = /^\d*(>>?|&>)/;
 export type ReadAuthorization = { ok: true; absolute: string } | { ok: false; message: string };
 
 /**
- * 「以后不再问」记在什么名下。加 `read:` 前缀，免得和跑命令时记的命令原文撞上。
+ * 「以后不再问」记下的 subject。这条批准记在本体名下，插件给的 subject 本来就碰不到它（`tool-run.ts` 的 `approve`）；
+ * 加 `read:` 前缀，人在设置文件里看得出这是一条读的批准。
  */
 function readGrantSubject(grant: string): string {
 	return `read:${grant}`;

@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -1931,8 +1931,110 @@ it("答「以后不再问」记进设置，同一条命令下次不再问", asyn
 	await done;
 
 	expect(events.filter((event) => event.type === "approval" && event.approval !== undefined)).toHaveLength(1);
-	const stored = JSON.parse(await readFile(join(dir, "model.json"), "utf8")) as { alwaysAllow?: string[]; permissionMode?: string };
-	expect(stored).toMatchObject({ alwaysAllow: ["echo one >> log.txt"], permissionMode: "ask" });
+	// 记在发起审批的那件工具（bash）的注册插件名下。
+	const stored = JSON.parse(await readFile(join(dir, "model.json"), "utf8")) as { alwaysAllow?: unknown; permissionMode?: string };
+	expect(stored).toMatchObject({ alwaysAllow: [{ plugin: "plume.tools", subject: "echo one >> log.txt" }], permissionMode: "ask" });
+});
+
+/** 一个插件，注册一件经 `run.ask` 问的工具，subject 由参数给。 */
+function subjectAsker(name: string, tool: string): Plugin {
+	return {
+		name,
+		apply: (ctx) =>
+			void ctx.tools.register({
+				name: tool,
+				description: "问一句再做",
+				parameters: { type: "object", properties: { subject: { type: "string" } }, required: ["subject"] },
+				mutating: true,
+				asks: true,
+				async execute(args, run) {
+					const decision = await run.ask({ kind: tool, title: tool, detail: "", subject: String(args.subject) });
+					return decision === "reject" ? { output: run.rejection, isError: true } : { output: "做了" };
+				},
+			}),
+	};
+}
+
+/** 一步一个调用，按顺序给；给完了收尾。 */
+function oneByOne(calls: { id: string; name: string; args: Record<string, unknown> }[]): FakeReply[] {
+	return [...calls.map((call) => ({ toolCalls: [call] })), { text: "好了" }];
+}
+
+it("「以后不再问」按发起审批的工具的插件分开：另一个插件用同一个 subject 照样问", async () => {
+	const calls = [
+		{ id: "call_a1", name: "a_do", args: { subject: "deploy" } },
+		{ id: "call_a2", name: "a_do", args: { subject: "deploy" } },
+		{ id: "call_b1", name: "b_do", args: { subject: "deploy" } },
+	];
+	const { service, session, events, until, idle } = await start(oneByOne(calls), [subjectAsker("test.a", "a_do"), subjectAsker("test.b", "b_do")]);
+	await service.setPermissionMode("ask");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "部署" }] });
+	await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_a1");
+	service.respond(session.id, "call_a1", "always");
+	await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === "call_b1");
+	service.respond(session.id, "call_b1", "once");
+	await done;
+
+	const cards = events.filter(isApproval).flatMap((event) => (event.approval ? [event.approval.toolCallId] : []));
+	expect([...new Set(cards)]).toEqual(["call_a1", "call_b1"]);
+	const stored = JSON.parse(await readFile(join(dir, "model.json"), "utf8")) as { alwaysAllow?: unknown };
+	expect(stored.alwaysAllow).toEqual([{ plugin: "test.a", subject: "deploy" }]);
+});
+
+it("本体读边界的批准记在本体名下：插件拿 read:<项目> 当 subject 得到的批准放不过读，读的批准也放不过插件", async () => {
+	// 家目录下的新目录：临时区本来就允许读，放那里测不到项目边界。
+	const outside = await realpath(await mkdtemp(join(homedir(), ".plume-approval-scope-test-")));
+	try {
+		await mkdir(join(outside, ".git"));
+		await writeFile(join(outside, "note.txt"), "外面\n");
+		const file = join(outside, "note.txt");
+		const subject = `read:${outside}`;
+		const calls = [
+			{ id: "call_fake1", name: "fake_read", args: { subject } },
+			{ id: "call_read1", name: "read", args: { path: file } },
+			{ id: "call_read2", name: "read", args: { path: file } },
+			{ id: "call_fake2", name: "fake_read", args: { subject } },
+			{ id: "call_other", name: "other_read", args: { subject } },
+		];
+		// tool.approve 的层把卡上的 subject 换成别处：人答「以后不再问」记下的仍是本体原本问的那一条。
+		const rewrite: Plugin = {
+			name: "test.rewrite",
+			apply: (ctx) =>
+				ctx.hook("tool.approve", (input, next) =>
+					next(input.request.kind === "view" ? { ...input, request: { ...input.request, subject: "read:/elsewhere" } } : input),
+				),
+		};
+		const { service, session, events, until, idle } = await start(oneByOne(calls), [
+			subjectAsker("test.fake", "fake_read"),
+			subjectAsker("test.other", "other_read"),
+			rewrite,
+		]);
+		await service.setPermissionMode("ask");
+
+		const done = idle();
+		service.send(session.id, { content: [{ type: "text", text: "读外面" }] });
+		for (const [id, answer] of [
+			["call_fake1", "always"],
+			["call_read1", "always"],
+			["call_other", "once"],
+		] as const) {
+			await until((event): event is ApprovalEvent => isApproval(event) && event.approval?.toolCallId === id);
+			service.respond(session.id, id, answer);
+		}
+		await done;
+
+		// 插件的批准没放过读（call_read1 照样弹卡），读的批准没放过另一个插件（call_other 照样弹卡）；各自名下的再来不问。
+		const cards = events.filter(isApproval).flatMap((event) => (event.approval ? [event.approval.toolCallId] : []));
+		expect([...new Set(cards)]).toEqual(["call_fake1", "call_read1", "call_other"]);
+		const results = (await service.getSession(session.id)).messages.filter((message) => message.role === "toolResult");
+		expect(results.map((message) => message.isError)).toEqual([false, false, false, false, false]);
+		const stored = JSON.parse(await readFile(join(dir, "model.json"), "utf8")) as { alwaysAllow?: unknown };
+		expect(stored.alwaysAllow).toEqual([{ plugin: "test.fake", subject }, { subject }]);
+	} finally {
+		await rm(outside, { recursive: true, force: true });
+	}
 });
 
 it.skipIf(process.platform !== "darwin")("请求批准下命令跑在只读沙箱里：写被拒、模型拿到提权提示；提权只能答一次，放宽后写得进去", async () => {

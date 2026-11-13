@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 钩子与工具 | 在循环的固定时机插入行为；给模型加能力 | `ctx.hook`（`prompt.submit`、`model.context`、`tool.execute`、`tool.approve`、`step.end`、`context.compact`），`ctx.tools.register` |
 | 等人 | 一次工具调用停下来，等人给一份数据（提问、计划、表单）；不是审批，权限模式管不着 | `run.request`，界面 `ui.requestCard` 按 `kind` 画 |
-| 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的，人拒绝以后交给模型的话也是（`run.ask` 得到 `"reject"` 时交回 `run.rejection`） | `run.ask`、`run.rejection`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
+| 过闸 | 会改动的调用放不放行；哪些要问、权限模式的含义、提权只认人答（或代管插件转达）是本体的，人拒绝以后交给模型的话也是（`run.ask` 得到 `"reject"` 时交回 `run.rejection`）；「以后不再问」按发起审批的一方分开记（插件给的 `subject` 落在注册这件工具的插件名下，本体读边界的落在本体名下），插件不用给 `subject` 加前缀，也冒充不了别的插件和本体 | `run.ask`、`run.rejection`、`ToolExecution.ask`、钩子 `tool.approve`，界面 `ui.approvalCard` |
 | 跑命令 | 在权限模式对应的那一档沙箱里起命令、认出被沙箱拒了并给出交给模型的说明（`RunProcess.denied`）、申请这次调用更宽的一档（提权，经过闸只认人答、批了才换档）；外层设 `readOnly` 时一律只读，写、改文件的工具（`kind` 是 `create`、`modify`）不往里交。档位、shell 由本体选，插件换不掉 | `run.exec`、`run.escalate`、`run.shell`，`ToolExecution.readOnly`，`ModelContext.shell` |
 | 读文件 | 替模型读这台机器：路径能不能读、要不要问人（工作区、项目目录、临时目录、附件不问，密钥按文件问、别处按项目问，经过闸），资源地址读到什么，一行命令写明要读的路径；列项目文件时在隔离视图里问 git。边界由本体守，所有读文件的工具是同一个答案，插件换不掉 | `run.files.read`、`run.files.readCommand`、`run.files.resolve`，`ctx.resources`（登记只读的 scheme、`keepArtifact`），`ctx.workspace.files` |
 | 写文件、记改动 | 替模型改这台机器上的文件：哪里不写（Plume 自己的目录、别的会话的临时目录、链接出工作区），同一个文件排队、写前复核，改了什么记成快照、记在调用结果上；命令改的由本体前后对比工作区记下。撤回时连文件一起退、交付卡的汇总和撤销都认这一份记录，全有或全无、不覆盖别人后来的改动。插件换不掉、伪造不了 | `run.files.change`、`run.files.write`（`scratch://`）、`run.exec` 的 `recordChanges`、`run.files.includeChanges`，结果上的 `ToolOutput.changes` / `ToolResultMessage.changes`，`ctx.changes`（`collect`、`undo`） |

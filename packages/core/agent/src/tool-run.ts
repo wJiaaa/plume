@@ -34,6 +34,7 @@ import type {
 import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { REJECTED } from "./declined.ts";
+import { type AlwaysAllow, sameGrant } from "./models.ts";
 import type { CallFileAccess, CallFiles } from "./run-files.ts";
 import { text } from "./i18n.ts";
 
@@ -69,8 +70,9 @@ export interface ToolScope {
 	host: PluginHost;
 	log: Log;
 	/** 现在的权限模式和人答过「以后不再问」的东西，每个调用执行前读一次：中途改了，下一个调用就照新的来。 */
-	permission(): Promise<{ mode: PermissionMode; alwaysAllow: readonly string[] }>;
-	ask(request: ApprovalRequest): Promise<ApprovalDecision>;
+	permission(): Promise<{ mode: PermissionMode; alwaysAllow: readonly AlwaysAllow[] }>;
+	/** 把卡弹给人。`grant` 是人答「以后不再问」时记下的那一条（subject 已经按发起审批的一方归好名下）；没有时只能答这一次。 */
+	ask(request: ApprovalRequest, grant: AlwaysAllow | undefined): Promise<ApprovalDecision>;
 	/** 等人给一份数据（`ToolRun.request`），和 `ask` 同一队。 */
 	requestHuman(request: HumanRequest): Promise<HumanAnswer>;
 	/**
@@ -111,7 +113,7 @@ export interface CallCommands {
 	readOnly: boolean;
 	/** 现在的权限模式，这次调用里只读一次设置。 */
 	permission(): Promise<PermissionMode>;
-	/** 经过闸问一次（`ToolRun.ask` 那一条路）：带 `escalation` 的只认人答，见 `tool-run.ts` 的 `approve`。 */
+	/** 经过闸问一次（和 `ToolRun.ask` 同一个闸，subject 记在本体名下）：带 `escalation` 的只认人答，见 `tool-run.ts` 的 `approve`。 */
 	ask(content: ApprovalContent): Promise<ApprovalDecision>;
 	/** 调用答完以后再用就抛错。 */
 	alive(what: string): void;
@@ -329,7 +331,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			if (!signal.aborted) asking = false;
 		}
 	};
-	const askWith = (content: ApprovalContent): Promise<ApprovalDecision> => waitFor(() => scope.ask({ toolCallId: call.id, tool: call.name, ...content }));
+	const askWith = (content: ApprovalContent, grant: AlwaysAllow | undefined): Promise<ApprovalDecision> =>
+		waitFor(() => scope.ask({ toolCallId: call.id, tool: call.name, ...content }, grant));
 	/** `ToolRun.request`：不经 tool.approve、不看权限模式，直接排进等人的那一队。 */
 	const request = async <T>(input: HumanRequestInput): Promise<HumanAnswer<T>> => {
 		const { kind, title, payload, waiting } = (input ?? {}) as Partial<HumanRequestInput>;
@@ -376,13 +379,18 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	 * - 完全访问直接放行；
 	 * - tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的直接放行；层自己问的（`byLayer`）没有 `subject`，不归这两条；
 	 * - 其余经钩子 tool.approve（插件替人答、帮我批准的风险规则在那里），最里层把审批卡弹给人。
-	 * `from` 是这时的调用（外层可能改过参数、设了 approved）。
+	 * `from` 是这时的调用（外层可能改过参数、设了 approved）。`asker` 是谁要问：`plugin` 是这件工具（`run.ask`，和替没写 `asks`
+	 * 的工具在执行前问的），subject 记在注册它的插件名下；`core` 是本体（`run.files` 的读边界、`run.escalate`），记在本体名下；
+	 * `layer` 是 tool.execute 的某一层（`ToolExecution.ask`）。两个名下的批准互不放行，见 `AlwaysAllow`。
 	 */
-	const approve = async (from: ToolExecution, request: ApprovalContent, byLayer: boolean): Promise<ApprovalDecision> => {
+	const approve = async (from: ToolExecution, request: ApprovalContent, asker: "plugin" | "core" | "layer"): Promise<ApprovalDecision> => {
 		const { mode, alwaysAllow } = await permission();
 		const humanOnly = request.escalation !== undefined;
+		const byLayer = asker === "layer";
+		const grant: AlwaysAllow | undefined =
+			byLayer || humanOnly || request.subject === undefined ? undefined : { subject: request.subject, ...(asker === "plugin" ? { plugin: tool.plugin } : {}) };
 		if (!humanOnly && mode === "full") return "once";
-		if (!humanOnly && !byLayer && (from.approved || (request.subject !== undefined && alwaysAllow.includes(request.subject)))) return "once";
+		if (!humanOnly && !byLayer && (from.approved || (grant && alwaysAllow.some((granted) => sameGrant(granted, grant))))) return "once";
 		let asked = false;
 		const decision = await scope.host.run(
 			"tool.approve",
@@ -400,12 +408,15 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			},
 			async (approval) => {
 				asked = true;
-				return await askWith(approval.request);
+				// 记下的是本体按工具原本问的那一条归好的名下和 subject，层改不了它；层把卡改成答不了「以后不再问」的（拿掉 subject、
+				// 加上提权），人看到的卡上没有这个按钮，也就不记。
+				const shown = approval.request;
+				return await askWith(shown, shown.subject !== undefined && shown.escalation === undefined ? grant : undefined);
 			},
 		);
 		// i18n-exempt：抛出去会作为工具结果交给模型。
 		if (decision !== "once" && decision !== "always" && decision !== "reject") throw new Error(`tool.approve 给的结论不认得：${String(decision)}`);
-		if (humanOnly && !asked && decision !== "reject") return await askWith(request);
+		if (humanOnly && !asked && decision !== "reject") return await askWith(request, undefined);
 		return decision;
 	};
 	const execution: ToolExecution = {
@@ -415,7 +426,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		call: { id: call.id, name: call.name, args: call.arguments },
 		tool: { name: tool.definition.name, mutating: tool.definition.mutating === true, plugin: tool.plugin },
 		signal,
-		ask: async (reason) => (await approve(execution, { ...generic, reason: String(reason) }, true)) !== "reject",
+		ask: async (reason) => (await approve(execution, { ...generic, reason: String(reason) }, "layer")) !== "reject",
 		progress,
 	};
 	/*
@@ -433,10 +444,18 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		let access: CallFileAccess | undefined;
 		let output: ToolOutput;
 		try {
-			const ask = (content: ApprovalContent) => approve(input, content, false);
+			const ask = (content: ApprovalContent) => approve(input, content, "plugin");
+			// 本体替工具问的（读边界、提权）：subject 是本体定的，记在本体名下，插件给的 subject 碰不到它。
+			const coreAsk = (content: ApprovalContent) => approve(input, content, "core");
 			const parent = boundParent(scope.parent?.(tool.plugin), alive);
 			const allowedPaths = (await scope.allowedPaths?.()) ?? [];
-			const commands = scope.commands({ cwd: input.cwd, readOnly: Boolean(input.readOnly), permission: async () => (await permission()).mode, ask, alive });
+			const commands = scope.commands({
+				cwd: input.cwd,
+				readOnly: Boolean(input.readOnly),
+				permission: async () => (await permission()).mode,
+				ask: coreAsk,
+				alive,
+			});
 			access = scope.files({
 				sessionId: input.sessionId,
 				cwd: input.cwd,
@@ -447,7 +466,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				...(allowedPaths.length > 0 ? { allowedPaths } : {}),
 				signal: input.signal,
 				shell: commands.shell,
-				ask,
+				ask: coreAsk,
 				alive,
 			});
 			const run: ToolRun = {
