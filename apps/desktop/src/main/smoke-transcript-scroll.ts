@@ -35,7 +35,7 @@ interface Phase {
  * 转录里点开、收起工具组时滚动面稳不稳（`PLUME_SMOKE_ONLY=transcript-scroll`）。
  *
  * 假模型先调六次 `ls` 合成一个工具组，再慢慢写一段长回复。回复写着的时候真点（`sendInputEvent`，`onPointerDown` 才收得到）
- * 工具组标题展开、再收起；写完以后贴着底部再点一遍。每一帧记下滚动位置、标题高度、视口底下的空白，量出来的数写进
+ * 工具组标题展开、再收起；写完以后贴着底部再点一遍，点字和点箭头各一遍（箭头是 SVG，按下时的目标不是 HTMLElement）。每一帧记下滚动位置、标题高度、视口底下的空白，量出来的数写进
  * `transcript-scroll.json`，超出的直接失败：
  *
  * - 被点的标题在展开、收起的那段时间里不能被推着走，跟着底部时点开也一样（不再跟着底部，见 `useFollowBottom` 的 `hold`）；
@@ -124,9 +124,11 @@ export async function checkTranscriptScroll(options: {
 			);
 		// 脚本自己要滚动、发话之前先停下记录：那些位置变化是脚本做的，不算在点的那一下头上。
 		const stop = () => page(`window.__scroll.phase = null`);
-		const press = async () => {
+		const press = async (on: "words" | "chevron" = "words") => {
 			const point = await page<{ x: number; y: number }>(
-				`(() => { const r = ${head}.getBoundingClientRect(); return { x: Math.round(r.left + 24), y: Math.round(r.top + r.height / 2) }; })()`,
+				on === "chevron"
+					? `(() => { const r = ${head}.querySelector('.tool-chevron').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`
+					: `(() => { const r = ${head}.getBoundingClientRect(); return { x: Math.round(r.left + 24), y: Math.round(r.top + r.height / 2) }; })()`,
 			);
 			window.webContents.sendInputEvent({ type: "mouseDown", button: "left", clickCount: 1, ...point });
 			window.webContents.sendInputEvent({ type: "mouseUp", button: "left", clickCount: 1, ...point });
@@ -224,6 +226,20 @@ export async function checkTranscriptScroll(options: {
 			throw new Error(`贴底收起后上下滚一下，底下还空着 ${Math.round(slackAfter)}px`);
 		}
 
+		// 同样贴着底部，点在箭头上：和点字一样，标题留在原处。
+		await phase("idle-expand-at-bottom-chevron");
+		await press("chevron");
+		await sleep(900);
+		await stop();
+		await page(
+			`(() => { const e = window.__scroller; e.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true })); e.scrollTop = e.scrollHeight; })()`,
+		);
+		await sleep(400);
+		await phase("idle-collapse-at-bottom-chevron");
+		await press("chevron");
+		await sleep(900);
+		await stop();
+
 		const phases = await page<Phase[]>(`window.__scroll.phases.map(p => ({ name: p.name, frames: p.frames }))`);
 		const report = phases.map(({ name, frames }) => {
 			const steps = frames.slice(1).map((frame, index) => frame.top - frames[index]!.top);
@@ -233,7 +249,7 @@ export async function checkTranscriptScroll(options: {
 				frames: frames.length,
 				maxBlank: Math.round(Math.max(0, ...frames.map((frame) => frame.blank))),
 				blankFrames: frames.filter((frame) => frame.blank > 4).length,
-				headDrift: heads.length ? Math.round(Math.max(...heads) - Math.min(...heads)) : null,
+				headDrift: heads.length ? Math.round((Math.max(...heads) - Math.min(...heads)) * 10) / 10 : null,
 				backSteps: steps.filter((step) => step < -2).length,
 				maxBack: Math.round(Math.max(0, ...steps.map((step) => -step))),
 				maxStep: Math.round(Math.max(0, ...steps.map(Math.abs))),
@@ -242,8 +258,13 @@ export async function checkTranscriptScroll(options: {
 		});
 		await writeFile(join(outDir, "transcript-scroll.json"), JSON.stringify({ report, phases }, null, 1));
 		console.log("PLUME_SMOKE_SCROLL", JSON.stringify(report));
-		// 每一段被点的标题都留在原处、位置不往回跳；贴着底部收起那一段的底下许空着，别的不许。
-		const bad = report.filter((one) => (one.name !== "idle-collapse-at-bottom" && one.maxBlank > 4) || one.backSteps > 0 || (one.headDrift ?? 0) > 2);
+		/*
+		 * 每一段被点的标题都留在原处（不到半个像素：差 1px 的那种是位置在两个设备像素间来回跳）、位置不往回跳；
+		 * 贴着底部收起的那几段底下许空着，别的不许。
+		 */
+		const bad = report.filter(
+			(one) => (!one.name.startsWith("idle-collapse-at-bottom") && one.maxBlank > 4) || one.backSteps > 0 || (one.headDrift ?? 0) > 0.5,
+		);
 		if (bad.length) throw new Error(`转录滚动不稳：${JSON.stringify(bad)}`);
 	} catch (error) {
 		// 失败时也把已经记下的帧留下，好看是哪一步、哪一帧出的事。

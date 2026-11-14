@@ -254,7 +254,7 @@ export function useFollowBottom({
 	 * 按下时记住它的位置，长高之后把它放回原处——点开的那一段自然向下延展，手指底下的东西一动
 	 * 不动。这是「跟随底部」唯一该让路的时候：读者正在看的是手里这一块，不是末尾。
 	 */
-	const anchor = useRef<{ el: HTMLElement; top: number; until: number } | null>(null);
+	const anchor = useRef<{ el: Element; top: number; until: number } | null>(null);
 
 	/*
 	 * 读者眼前那一块（见 `firstInView`）、它离视口顶多远，以及记下时视口有多宽。
@@ -311,15 +311,18 @@ export function useFollowBottom({
 			 * 底部那张文件卡（36px）它整整漏掉 36px，按钮被推走多少就是多少。两种一起量才看得出
 			 * 来——只测大的那个会得出「原生的就够了」这个错结论。
 			 */
+			// 门槛是半个像素：`scrollHeight` 是整数、位置按设备像素对齐，差 1px 才挪的话，剩下的那点没人管，
+			// 贴底收起时量到标题在 162.6、163.1、163.6 之间来回跳，最后低 1px 停住。
 			const drift = held.el.getBoundingClientRect().top - held.top;
-			if (Math.abs(drift) < 1) return true;
+			if (Math.abs(drift) < 0.5) return true;
 			/*
 			 * 要放回去的位置超过了末尾：按住的东西下面收短了、又没有东西往上补，浏览器已经把位置夹了回来。不跟着掉，
 			 * 垫高末尾那块空白、留在原处——同一帧、画之前，见 `FollowBottom.slackRef`。
 			 */
 			const want = el.scrollTop + drift;
 			const past = want - (el.scrollHeight - el.clientHeight);
-			if (past > 0.5) setSlack(slack.current, slack.current.height + Math.ceil(past));
+			// 多垫 1px：末尾是取整过的，正好垫够的话位置还会被夹掉零点几像素。
+			if (past > 0) setSlack(slack.current, slack.current.height + Math.ceil(past) + 1);
 			write(el, want);
 			return true;
 		},
@@ -653,18 +656,24 @@ export function useFollowBottom({
 	 *
 	 * 跟着底部时按的是展开收起的开关（`aria-expanded`，转录里的折叠区都标着它）：读者要看手里这一块了，
 	 * 不再跟着底部，由锚把它留在原处，新写出来的字照样在下面长，「回到最新」会亮。只是让路的话，锚一过期
-	 * 跟随底部就把攒下的一截一口气追回去，点开的那一块又被带走。停在末尾收起的，收完浏览器把位置夹回
-	 * 末尾，`onScroll` 读到 `arrived` 又跟上。
+	 * 跟随底部就把攒下的一截一口气追回去，点开的那一块又被带走。停在末尾收起的，位置也留在原处，收起的那截
+	 * 由空白垫撑着（`FollowBottom.slackRef`）。
+	 *
+	 * 按到的可能是开关里的 SVG（箭头、行首图标），所以按 `Element` 认，不按 `HTMLElement`：按后者时点在箭头上
+	 * 直接 return，锚没记、也没停止跟随，同一个工具组点字稳、点箭头整页被追到底再掉回来（量到 205px）。有开关
+	 * 时锚记在开关上：箭头展开时转 90°，它的外框跟着变，拿它量会把转动算成漂移。
 	 */
 	const hold = useCallback((target: EventTarget | null) => {
-		if (!(target instanceof HTMLElement)) return;
-		if (state.current !== "detached" && target.closest("[aria-expanded]")) {
+		if (!(target instanceof Element)) return;
+		const toggle = target.closest("[aria-expanded]");
+		if (state.current !== "detached" && toggle) {
 			cancelAnimationFrame(glide.current);
 			cancelAnimationFrame(chase.current);
 			chase.current = 0;
 			state.current = "detached";
 		}
-		anchor.current = { el: target, top: target.getBoundingClientRect().top, until: performance.now() + HOLD_MS };
+		const el = toggle ?? target;
+		anchor.current = { el, top: el.getBoundingClientRect().top, until: performance.now() + HOLD_MS };
 	}, []);
 
 	const keep = useCallback(
