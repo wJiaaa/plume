@@ -1,6 +1,6 @@
 import type { Message } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
-import { StatusSpinner, translate, useCountUp, useNow } from "@plume/ui";
+import { StatusSpinner, translate, useCountUp, useI18n, useNow } from "@plume/ui";
 import { memo, useEffect, useRef, useState } from "react";
 import { pushSample, type RateSample, rateFrom, trustworthy } from "./live-rate.ts";
 import { formatElapsed, formatTokens } from "./running-line.ts";
@@ -40,6 +40,8 @@ export const RunningIndicator = memo(function RunningIndicator({
 	/** 连接断了，在等重连。 */
 	retrying: boolean;
 }) {
+	// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
+	useI18n();
 	const meter = liveTurnMeter(messages);
 	const startedAt = meter?.startedAt ?? null;
 	// 四分之一秒一拍，秒数看上去不会跳过一个。

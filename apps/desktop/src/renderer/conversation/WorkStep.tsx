@@ -12,7 +12,7 @@
  * - **回来的后台命令结果**挂在竖线上，失败的给这一行挂失败记号；连着查同一个后台任务的几次是一行（`foldPolls`）。
  */
 
-import { Collapse, FlowRow, RollWords, translate, useHeldKey } from "@plume/ui";
+import { Collapse, FlowRow, RollWords, translate, useHeldKey, useI18n } from "@plume/ui";
 import { CircleX, Layers } from "@plume/ui/icons";
 import { Fragment, memo, type ReactNode, useRef } from "react";
 import { AnsweredBy } from "./AnsweredBy.tsx";
@@ -44,6 +44,8 @@ function WorkStepRow({
 	/** 推理那一行怎么画，交给转录自己（`MessageRow`），这里不另做一份。 */
 	draw: (run: Run) => ReactNode;
 }) {
+	// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
+	useI18n();
 	const tail = step.members[step.members.length - 1];
 	const writing = live && tail?.kind === "thinking" && thinkingLive(tail.run) ? tail.run : null;
 	const thinking = writing ? <LiveThought startedAt={startedAt(writing)} /> : undefined;

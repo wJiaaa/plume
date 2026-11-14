@@ -5,6 +5,7 @@
 
 import type { AssistantMessage, Message } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
+import { useI18n } from "@plume/ui";
 import { memo, useContext } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { copyCodeBlock, ReplyActions, replyText as pluginReplyText } from "../plugins.tsx";
@@ -52,6 +53,8 @@ type RowProps = Pick<ConversationProps, "renderUserMessage" | "replyText"> & {
  * `turnStats` 每次分组都是新对象，按数比，见 `sameRow`。
  */
 export const MessageRow = memo(function MessageRow(props: RowProps) {
+	// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
+	useI18n();
 	const { message } = props;
 	const transcript = useContext(Transcript);
 	if (message.role === "user") {

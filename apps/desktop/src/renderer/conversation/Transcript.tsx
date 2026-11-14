@@ -5,7 +5,7 @@
 
 import type { Message, SessionView, ToolResultMessage } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
-import { BackToLatest, Button, motionReduced, Scroller, tailSignature, translate, useFollowBottom } from "@plume/ui";
+import { BackToLatest, Button, motionReduced, Scroller, tailSignature, translate, useFollowBottom, useI18n } from "@plume/ui";
 import { ChevronDown, ChevronUp } from "@plume/ui/icons";
 import { Fragment, memo, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Superseded } from "../markdown/useSmoothText.ts";
@@ -447,6 +447,8 @@ export function Transcript({
  * `live`：这一轮还在跑。
  */
 const ProcessBlock = memo(function ProcessBlock({ block, live, draw }: { block: TurnBlock; live: boolean; draw: (run: Run) => ReactNode }) {
+	// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
+	useI18n();
 	const tail = block.items[block.items.length - 1];
 	const entries: TurnEntry[] = block.items.map((item) => ({
 		key: item.key,

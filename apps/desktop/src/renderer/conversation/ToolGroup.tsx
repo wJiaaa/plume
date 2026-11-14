@@ -12,7 +12,7 @@
  * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种一行一个图标、点开挂在竖线上的画法是 `WorkStep`。
  */
 
-import { Collapse, translate, useHeldKey } from "@plume/ui";
+import { Collapse, translate, useHeldKey, useI18n } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
 import { type AnimationEvent, Fragment, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
@@ -42,6 +42,8 @@ type MessageRun = Extract<Run, { kind: "message" }>;
 /** 只在这一段自己变了时重画，见 `sameStep`；和 `WorkStep` 的比法一样。 */
 export const ToolStep = memo(
 	function ToolStep({ step, live, draw }: { step: Step; live: boolean; draw: (run: Run) => ReactNode }) {
+		// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
+		useI18n();
 		usePluginRegistrations();
 		const only = step.members.length === 1 ? step.calls[0] : undefined;
 		const group = <ToolGroup id={step.key} calls={step.calls} members={step.members} live={live} draw={draw} category={step.category} />;
