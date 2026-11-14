@@ -6,8 +6,11 @@ import { cancelTick, requestTick, windowMinimized } from "./ticker.ts";
 export const GLIDE: ReadonlySet<string> = new Set(["plume-glide"]);
 
 /**
- * 没有终点的装饰动画（侧栏的呼吸点、运行行上的扫光）改成按拍走：关键帧和曲线还在 CSS 里，只是
- * 不再由浏览器每帧推，而是暂停住、每拍把 `currentTime` 往前拨一次（`ticker.ts`）。
+ * 没有终点的装饰动画（侧栏的呼吸点、运行行上的扫光、两种转圈记号、干活的脸、图片占位）改成按拍走：关键帧和
+ * 曲线还在 CSS 里，只是不再由浏览器每帧推，而是暂停住、每拍把 `currentTime` 往前拨一次（`ticker.ts`）。
+ *
+ * SVG 里的元素（转圈的 `<circle>`、脸的 `<g>`）动 `transform` 也不交给合成器，每帧要重排：量过一个 14px 的
+ * 虚线环，逐帧 27.5ms/s 主线程，按拍走 9.2ms/s；把动画挪到 `<svg>` 根上也还是 23ms/s。
  *
  * 为什么不留给浏览器：呼吸点动 `border-color` / `background`、扫光动 `background-position`，都只能
  * 在主线程逐帧重绘；120Hz 屏上只要一个会话在跑，整页就每秒重画 120 次，哪怕正文一个字没动。量过：
@@ -25,7 +28,7 @@ export const GLIDE: ReadonlySet<string> = new Set(["plume-glide"]);
  *
  * 只认 `names` 里点名的：同一个元素上可能还有要跟手的动画（摘要悬停时的滚动），那些照常逐帧。
  */
-export function useTickedAnimations(ref: RefObject<HTMLElement | null>, names: ReadonlySet<string>, active = true): void {
+export function useTickedAnimations(ref: RefObject<Element | null>, names: ReadonlySet<string>, active = true): void {
 	useEffect(() => {
 		if (!active || motionReduced()) return;
 		const entry: Entry = { ref, names, clocks: new Map() };
@@ -46,7 +49,7 @@ export function useTickedAnimations(ref: RefObject<HTMLElement | null>, names: R
 
 /** 一个挂着的元素，和它名下每个动画自己走到了哪。按拍子的时间差往前拨，各自的相位不变。 */
 interface Entry {
-	ref: RefObject<HTMLElement | null>;
+	ref: RefObject<Element | null>;
 	names: ReadonlySet<string>;
 	clocks: Map<Animation, number>;
 }

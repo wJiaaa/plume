@@ -19,6 +19,7 @@ import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { blinkPause, type Avatar } from "../lib/agent-avatar.ts";
 import type { DispatchState } from "../lib/dispatches.ts";
 import { motionReduced } from "../motion/reduced.ts";
+import { useTickedAnimations } from "../motion/ticked.ts";
 import { COLOR_ART, EYE_ART, SHAPE_ART } from "./art.ts";
 
 export type AvatarMood = "idle" | DispatchState;
@@ -72,11 +73,16 @@ function blink(node: HTMLElement): () => void {
 	return () => clearTimeout(again);
 }
 
+const LOOPS: ReadonlySet<string> = new Set(["plume-avatar-bob", "plume-avatar-scan", "plume-avatar-breathe"]);
+
 export function AgentAvatar({ avatar, size = 20, mood = "idle", interactive = true, host, seed = "", label, cheer = null, className = "" }: AgentAvatarProps) {
 	const root = useRef<HTMLSpanElement>(null);
 	const art = SHAPE_ART[avatar.shape];
 	const colour = COLOR_ART[avatar.color];
 	const previous = useRef(mood);
+	// 干活时的颠、扫和排队时的喘气没有终点，按拍走：SVG 里的变换每帧都要重排，见 `motion/ticked.ts`。
+	// 眨眼、果冻、蹦、摇头是一次性的，照常逐帧。
+	useTickedAnimations(root, LOOPS, mood === "working" || mood === "waiting");
 
 	// 自己排自己的眨眼。看不见（滚出去了、窗口在后台、减少动态效果）的时候那一次跳过。
 	useEffect(() => {

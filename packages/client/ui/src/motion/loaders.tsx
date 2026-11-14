@@ -22,8 +22,13 @@ import { useTickedAnimations } from "./ticked.ts";
  *
  * 前两个都是 r=10 的描边圆，和 lucide 的 `CheckCircle2`、`XCircle`、`Clock` 精确重合——它们
  * 就是那一列里的邻居。换成星芒之类的别的形状，一列圆里混一个星，每次都会从队列里跳出来一次。
+ *
  * 几何和那些数字怎么定的，写在 `@plume/styles` 的 `ui/motion.css` 的加载记号一节。
+ *
+ * 三个都按拍走（`ticked.ts`），和正文、扫光共用一拍。
  */
+
+const SPIN: ReadonlySet<string> = new Set(["plume-spin"]);
 
 /**
  * 一圈虚线，匀速转：这一条正在跑，顶替的是状态图标（任务清单的一步、工具卡的运行中）。颜色跟着周围的文字。
@@ -35,8 +40,11 @@ import { useTickedAnimations } from "./ticked.ts";
  * 那一步、流水线里排队的那一条）自己传 `text-accent`、`text-warning`。
  */
 export function StatusSpinner({ size = 14, className = "" }: { size?: number; className?: string }) {
+	// 按拍走，不按帧：SVG 里的转动每帧都要重排，见 `ticked.ts`。
+	const box = useRef<SVGSVGElement>(null);
+	useTickedAnimations(box, SPIN);
 	return (
-		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={`plume-dash shrink-0 ${className}`}>
+		<svg ref={box} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={`plume-dash shrink-0 ${className}`}>
 			<circle cx="12" cy="12" r="10" />
 		</svg>
 	);
@@ -49,8 +57,10 @@ export function StatusSpinner({ size = 14, className = "" }: { size?: number; cl
  * 之间会读成「有东西在里面甩」。垫一圈淡的，形状就恒定是一个完整的圆，动的只有亮处。
  */
 export function ActionSpinner({ size = 14, className = "" }: { size?: number; className?: string }) {
+	const box = useRef<SVGSVGElement>(null);
+	useTickedAnimations(box, SPIN);
 	return (
-		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={`plume-arc shrink-0 ${className}`}>
+		<svg ref={box} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={`plume-arc shrink-0 ${className}`}>
 			<circle className="plume-arc-track" cx="12" cy="12" r="10" />
 			<circle className="plume-arc-head" cx="12" cy="12" r="10" />
 		</svg>
