@@ -18,50 +18,110 @@ export default {
 | 成员 | 用途 |
 | --- | --- |
 | `ctx.name` | 插件名 |
-| `ctx.fetch(url, init?)` | 逻辑入口的标准 Fetch HTTP(S) 请求，桌面版走 Chromium 系统代理；禁止 URL 凭据、自动重定向和共享浏览器 cookie。init.signal 或插件停用会取消，请插件自己设置超时和响应大小上限；认证头只在逻辑入口使用，不把请求对象传到界面 |
-| `ctx.trash(path)` | 把文件或目录移到系统的废纸篓（Windows 上是回收站），删人写的东西时用它而不是直接删，删错了还能拿回来；宿主没有这个能力（agent 不在桌面应用里跑）或插件已停用时抛错。界面上的叫法按平台写：macOS「废纸篓」，Windows「回收站 / Recycle Bin」 |
+| `ctx.fetch(url, init?)`、`ctx.trash(path)`、`ctx.secrets.seal(value)` / `unseal(sealed)` / `isSealed(value)` | 走系统代理的 HTTP(S) 请求、把文件移到废纸篓、加解密插件要存的密钥，见下面「网络、废纸篓、密钥」 |
 | `ctx.dataDir` | 插件私有的数据目录，加载前已创建。插件自己的文件都放这里 |
 | `ctx.appDataDir` | Plume 自己的数据目录（设置、会话、插件都在这里）。给模型用的工具不要写这里：写得到设置，就改得了自己的权限 |
-| `ctx.secrets.seal(value)` / `unseal(sealed)` / `isSealed(value)` | 插件要存的密钥（令牌、密码、请求头里的凭据）不要明文写进配置：`seal` 加密成带 `plume-sealed:v1:` 前缀的文本，写回你自己的配置；`unseal` 解回来，不是密文、不是你这个插件封的、钥匙打不开时是 null（当成没填、让人重新填），钥匙文件读不出来时抛错（这时别把空值写回去盖掉密文）；`isSealed` 分出手写的明文和密文。本体给、换不掉，钥匙是本体的 `vault.key` 按插件名派生的，别的插件解不开你的密文。只加解密、不替你存，删配置就是删密钥。挡的是配置被同步、拷走时带出明文，挡不住同一用户的程序 |
-| `ctx.tools.register(tool)` | 注册工具，停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
+| `ctx.tools.register(tool)` | 注册工具（见「工具」），停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
 | `ctx.tools.names()` | 现在登记着的工具名（各插件的，同名只算一个，停用的不算），给「让人挑工具」的设置用 |
-| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、它声明的种类（`kind`）和类别（`category`）。在钩子里按种类、类别找别的插件的工具（「记清单的那件叫什么」「读文件的那件叫什么」）时用，见「按类别找工具」 |
+| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、种类（`kind`）和类别（`category`），在钩子里按它们找别的插件的工具（「记清单的那件叫什么」「读文件的那件叫什么」）时用，见「按类别找工具」 |
 | `ctx.hook(name, layer, { order })` | 往钩子里加一层，停用时自动移除 |
 | `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
-| `ctx.serve(api)` | 把一个对象开给自己的界面入口；一个插件只能开一个，停用时收回 |
+| `ctx.serve(api)` | 把一个对象开给自己的界面入口（见「serve」）；一个插件只能开一个，停用时收回 |
 | `ctx.log` | `info` / `warn` / `error`，自动带插件名 |
 | `ctx.locale()` | 当前界面语言 `"zh-CN"` 或 `"en"`，给人看的文字按它选 |
 | `ctx.notice(sessionId, text, level?)` | 在界面上弹一条提示条，`level` 是 `"info"`（默认）、`"warn"`、`"error"`；不管那个会话是不是正开着 |
-| `ctx.model.complete({ systemPrompt, prompt, messages?, sessionId?, maxTokens, signal, requireComplete? })` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要），回一段字；不带工具、不思考、不写进会话、不经 `model.context`。`messages` 是接在 `prompt` 前面的一段对话；给了 `sessionId` 用那个会话现在的模型、花销记在它名下，不给用默认模型；给了 `model`（`SessionModel.id`，人在设置里选的）就用它，优先于会话的模型，不在目录里时抛错、不悄悄换成别的。没配模型、服务商报错时抛错，message 是给人看的话。`onRetry({ delayMs })` 在等一会儿再试时调。`fork: true`（必须给 `sessionId`）从这个会话上一次发出去的主请求分叉：系统提示词、工具表、思考档位、缓存键照那一次，`messages` 给下一次要发的历史（`context.compact` 的 `request.messages`），末尾接上 `prompt`，缓存照常命中；那一次不是这一次的前缀、没发过主请求、换了模型、回复里调了工具时抛错。结果将覆盖持久化内容时传 `requireComplete: true`，只有 `stopReason === "stop"` 才返回文字；截断、工具调用等非正常完成抛错，调用方保留原内容与处理游标。主请求分叉也遵守该选项，失败回复仍计入用量 |
-| `ctx.model.usage()` | 只读的花销：每次计费的模型调用（回复、压缩摘要、插件的 `complete`）按小时、供应商、模型合好（`requests`，最早的在前），带供应商 id 到现在名字的对照（`providerNames`，删掉的供应商不在里面）和已归档的顶层会话 id（`archived`）。会话里一步步发的请求（不含压缩摘要、分叉、`complete`）每格还带：计费 token 按来源分摊的十类（`parts`：系统提示词、项目说明与记忆、技能与智能体、工具定义、用户消息、注入内容、助手消息、工具结果，输出的思考和回复，加起来是这些请求的账单数）、发请求的会话（`sessions`，子会话记成顶层会话，已删的不在，跨格数会话要去重）、轮次、计时（`timedReplies`、`modelMs`、`generateMs`、`thinkingMs`，等首字 = `modelMs − generateMs`）、工具次数、出错和毫秒，以及缓存未命中（`cacheMiss`：和同一会话上一次请求比本该读到却没读到的 token、按当时费率多花的钱、没费率的 token，`byCause` 按原因分：工具定义、系统提示词、改写消息、服务商没读到、分不清、压缩、撤回、换模型）。删会话不影响这些数；读会话库失败时抛错。给画使用统计的插件用，经 `ctx.serve` 转给界面入口 |
-| `ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image({ model, prompt, images?, aspectRatio?, quality?, count?, background?, signal?, onRetry? })` | 生图：按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个；`image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错 |
-| `ctx.media.save({ data, mimeType })` / `read(name)` / `nameOf(path)` | 会话媒体目录：存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；按名字读回 base64；一个路径要是这个目录里的图，交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示 |
-| `ctx.sessions.list()` / `ctx.sessions.get(sessionId)` / `ctx.sessions.messages(sessionId)` | 读会话：全部会话的摘要（含归档的、子会话，最近活动的在前；有 `kind`、`cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来、交回的结果还没送进会话，或登记的一次性后台任务还在跑；挂着的监视、开发服务器、约好的唤醒不算），子会话还有 `parentId`、`owner`）；只要一个会话的摘要用 `get`（没有这个会话时是 `undefined`），钩子和工具里直接看输入的 `session`，不用为找自己那条去 `list()`。`kind` 是 `"top"`（侧栏里的会话）、`"child"`（插件的子会话）或 `"standalone"`（插件的独立会话），由本体按 `parentId`、`owner` 算出，判断「是不是人的那段对话」只看它。一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。给的是副本，改了不影响会话 |
-| `ctx.sessions.compact(sessionId, { instructions }?)` | 现在就压缩这个会话（`/compact` 用它）：照常经 `context.compact`（`force` 为真、带 `manual`），转录里画一行 `/compact` 和进度、结果。开始了就返回 `{ done }`，`done` 压完时给出 `{ ok: true, before, after }` 或 `{ ok: false, code, error? }`；会话正在跑、正在压、没有可用模型、没有这个会话时抛错，message 是给人看的话 |
-| `ctx.sessions.setTitle(sessionId, title, { automatic }?)` | 改会话的标题（侧栏和标题栏上那行字），给起标题的插件用；宿主默认取第一条消息的开头。空白压成一个空格、最长 80 个字，空串不起作用；没有这个会话时抛错。自动总结传 `automatic: true`，用户手动命名过就不覆盖；不传仍是显式设置标题 |
-| `ctx.sessions.onDeleted(listener)` | 会话被删掉时调 `listener(sessionId)`：按会话记的东西该清了、按会话起的进程该停了。停用时自动撤下 |
-| `ctx.sessions.onContextReset(listener)` | 会话成功压缩或实际裁剪、撤回、重新载入历史，以及模型或工作目录切换后通知 `listener(sessionId)`；用于作废插件按会话冻结的上下文快照，下次请求再读。失败的压缩不通知；每次拿到的是会话 id，不是历史正文。返回提前取消订阅的函数，插件停用时自动撤下；监听异常只记日志，不改变会话操作 |
-| `ctx.sessions.setArchived(sessionId, archived)` | 归档、取消归档一个会话，和侧栏上的归档按钮一样，`onArchived` 照常通知各插件。只在人点了插件界面上的按钮时调（工作树合回去之后的「归档这个对话」），不拿来替人收拾侧栏；子会话跟着父会话，传子会话、没有这个会话时抛错 |
-| `ctx.sessions.onArchived(listener)` | 会话归档、取消归档时调 `listener(sessionId, archived)`：按会话占着的东西该收起、该放回了（`plume.git` 收回对话的工作树目录、检出回来）。状态没变不调；停用时自动撤下 |
-| `ctx.sessions.onEnded(listener)` | 会话在这次运行里不再活着时调 `listener(sessionId, reason)`，`reason` 是 `deleted`、`archived`、`moved`（换到工作目录不同的项目）或 `quit`（退出应用），子会话跟着父会话各调一次。删除、归档、换项目时不等监听；退出时等这一轮停稳后再调，最多等 2 秒就接着退出，收尾要快。监听抛错只记日志；停用时自动撤下（`plume.hooks` 的 SessionEnd） |
-| `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话，见「子会话」「独立会话」）：建、发一句并等结束、停、删。message 可为字符串或 `SessionMessage`（完整内容与附件；派发任务带 `origin: "parent"`），只能动自己建的 |
-| `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 后台运行立即交回 `{ id, sessionId }`；等待该次结束后，把结果送给它的真实父会话。父忙时安全步骤边界读入，闲时唤起；停止、过期、重复的结果返回 false，不能任意向会话发消息。`frame`（`{ head, tail?() }`）：同一次送达里本插件带 `frame` 的几份合成一段，`head` 写一次，接着各份正文，最后是最后一份的 `tail()`（送出那一刻才取，比如「还在等谁」）。`delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON）写进送达消息，宿主只留这几个字段、记下是哪个插件交的，界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行，没登记就按 `title` 画默认的一行；不给就只有模型看得到 |
-| `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话，空闲时拒绝；明确停止会话时通知插件，清理尚未启动的排队工作，监听随插件卸载 |
-| `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title? })` | 开一个新的顶层会话并发出第一句话（`model`、`thinking` 不给用默认模型、默认推理强度；不认识的模型、档位抛错），返回 `{ session, done, idle, reportBack }`（`done` 是第一轮为什么结束，`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复），`reportBack(text, delivery)` 把结果作为一条运行时送达交回 `spawnedFrom` 那个会话一次（`delivery` 和 `report` 的同一个形状，宿主填上新会话的 id，默认画成「来自新会话」一行、点了过去），来处删了、归档了返回 false；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时抛错）；会话进侧栏、不记在插件名下，人能接着聊，插件之后不能再往里发（`steward: true` 开出来的由你代管，见下一行）。只能开新的，碰不到已有会话。见下文「开新会话」 |
-| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 只对你经 `launch({ …, steward: true })` 开出、人还没停止代管的会话：`post` 往里转一句话（排进和人同一条队，闲着当场开一轮，返回 `{ started }`）；`respond`、`answer` 替人答它和挂在它下面的子会话弹着的那张卡（审批卡含提权用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答；子会话的卡传子会话的 id），答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的、人停止了代管、你停用了时抛错；`post` 不能往子会话里转。见下文「代管会话」 |
+| `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
+| `ctx.sessions.list()` / `get` / `messages`、`compact`、`setTitle`、`setArchived`、`onDeleted` / `onArchived` / `onEnded` / `onContextReset` | 读会话的摘要和消息，现在就压缩（`/compact`）、改标题（侧栏和标题栏上那行字）、归档，会话删掉、归档、在这次运行里不再活着、上下文被重置时收通知，见下面「读会话、改会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
-| `ctx.pages` | 驱动界面入口画的网页（`<webview>`）：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`、`chromeLogins`，`onEvent` 收页面的事件。见下文「网页」 |
-| `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见下面「`/` 命令」），停用时撤下 |
+| `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话）：建、发一句并等结束、停、删，见「子会话」「独立会话」 |
+| `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 子会话的后台运行：派出去、等它结束、把结果送给父会话，见「子会话」 |
+| `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
+| `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title?, steward? })` | 开一个新的顶层会话并发出第一句话，见「开新会话」 |
+| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 往自己代管的会话里转话、替人答它弹着的卡，见「代管会话」 |
+| `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……），见「只读运行观察和后台任务」 |
+| `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 列出、读输出、停掉工具登记的后台任务，列出、取消定时唤醒，见「只读运行观察和后台任务」 |
+| `ctx.pages` | 驱动界面入口画的网页（`<webview>`）、在临时沙箱里检查一页，见「网页」 |
+| `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见「`/` 命令」），停用时撤下 |
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
 | `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
-| `ctx.resources.register(handler)` / `list()` / `keepArtifact(sessionId, tool, content)` | 资源地址 `scheme://路径[:行-行]`，本体给、换不掉，解析统一走 `run.files.read`（见「工具」），类型在 `@plume/contract` 的 `ResourceHandler` 等。`register` 加一个只读的 scheme（`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置），返回撤下的函数，停用时本体替你撤下；塞了 `write` 也写不进去。内容不是你写的（第三方文档、外部服务）时给 `origin`，plume.tools 的 read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。`list()` 是现在登记着的（`{ scheme, describe, writable }`，只有 `scratch://` 可写）。`keepArtifact` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；存在会话的临时目录里，每个会话最多 30 份，重开应用后还在，会话删掉时一起删；和 `run.files.spill` 是同一处）。本体自带 `scratch://`（会话的临时目录）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://` |
-| `ctx.changes.collect(sessionId, ids)` / `undo(sessionId, ids, path?)` | 本体记下的文件改动（工具经 `run.files.change` 写的、带 `recordChanges` 的命令改的），`ids` 取工具结果上的 `changes.ids`（`ToolResultMessage.changes`，本体填，按这个认，不认是哪个工具交的），工作目录用会话自己的。`collect` 交回按文件合并的净变化（`FileChangesSummary`：`files` 每项 `{ path, added, removed, hunks, canUndo, undoReason?, undoProblem? }`，`warnings`），改了又改回原样的不列；`undo` 撤销整批或其中一个文件：重新读快照，不收界面给的原文，查当前内容、连续的修改链和项目边界，有一个不对就都不写，命令改的不能自动撤销；撤销进行中、同一个或嵌套的项目里还有会话在跑一轮时抛错，`message` 给人看。界面先问人再调，显示状态不是写入许可。例子是 plume.delivery、plume.side-chat |
-| `ctx.workspace.files(root)` | `root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里、git 答不上来时是 null，自己走目录。本体在隔离视图里问 git，不执行仓库能控制的程序（`core.fsmonitor`、过滤器、钩子：沙箱里的命令写得到 `.git/config`），插件要列项目文件就用它，不要自己跑 `git ls-files` |
-| `ctx.workspace.git(root, work)` | 在一个隔离视图里跑一组 git 读，`work` 结束即删；`root` 不在检出里时 `work` 不跑、交回 null。视图（`PluginGitView`）的 `git`、`gitBuffer`（二进制，如 `show HEAD:logo.png`）、`gitWithInput`（要写 stdin 的，如 `cat-file --batch`）在 `cwd` 下跑，失败时抛错；HEAD、引用、上游、远端地址、浅克隆边界照真实仓库抄好，分支、ahead / behind、日志装饰和直接跑一样，读不到仓库自己的配置和钩子、不连网。`fetch({ signal, timeoutMs })` 是没人点的那种获取：在视图里 `fetch --prune`，再把变了的引用搬回真实仓库，交回 `PluginGitFetch`（`cancelled`、`timedOut`、git 的原话 `stderr`，怎么跟人说归插件）。一组读共用一个视图，别每条命令各开一个。只读：暂存、提交、推送、切分支这些人点了才做的事由插件自己在真实仓库上跑，那样钩子和凭据助手正是人要的。例子是 plume.git |
+| `ctx.resources.register(handler)` / `list()` / `keepArtifact(sessionId, tool, content)` | 资源地址 `scheme://路径[:行-行]`：加一种 scheme、列出登记着的、存一大块原文换回地址，见下面「资源地址」 |
+| `ctx.changes.collect(sessionId, ids)` / `undo(sessionId, ids, path?)`、`ctx.workspace.files(root)`、`ctx.workspace.git(root, work)` | 读、撤销本体记下的文件改动，列项目文件，在隔离视图里跑一组只读的 git 命令，见下面「改动和工作区」 |
 | `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
 | `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
-| `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；默认只收和自己有关的会话的，要看全部在默认导出上写 `observe: "all"`。见下文「只读运行观察和后台任务」 |
-| `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒：列出、读输出、停一个、取消一个。见下文「只读运行观察和后台任务」 |
+
+### 网络、废纸篓、密钥
+
+- `ctx.fetch(url, init?)`：逻辑入口的标准 Fetch HTTP(S) 请求，桌面版走 Chromium 系统代理；禁止 URL 凭据、自动重定向和共享浏览器 cookie。`init.signal` 或插件停用会取消，请插件自己设置超时和响应大小上限；认证头只在逻辑入口使用，不把请求对象传到界面。
+- `ctx.trash(path)`：把文件或目录移到系统的废纸篓（Windows 上是回收站），删人写的东西时用它而不是直接删，删错了还能拿回来；宿主没有这个能力（agent 不在桌面应用里跑）或插件已停用时抛错。界面上的叫法按平台写：macOS「废纸篓」，Windows「回收站 / Recycle Bin」。
+- `ctx.secrets`：插件要存的密钥（令牌、密码、请求头里的凭据）不要明文写进配置。
+  - `seal` 加密成带 `plume-sealed:v1:` 前缀的文本，写回你自己的配置；`unseal` 解回来，不是密文、不是你这个插件封的、钥匙打不开时是 null（当成没填、让人重新填），钥匙文件读不出来时抛错（这时别把空值写回去盖掉密文）；`isSealed` 分出手写的明文和密文。
+  - 本体给、换不掉，钥匙是本体的 `vault.key` 按插件名派生的，别的插件解不开你的密文。只加解密、不替你存，删配置就是删密钥。挡的是配置被同步、拷走时带出明文，挡不住同一用户的程序。
+
+### 模型、花销、生图
+
+`ctx.model.complete({ systemPrompt, prompt, messages?, sessionId?, model?, maxTokens, signal, onRetry?, fork?, requireComplete? })` 调一次模型、回一段字：
+
+- 不带工具、不思考、不写进会话、不经 `model.context`。`messages` 是接在 `prompt` 前面的一段对话。
+- 用哪个模型：给了 `sessionId` 用那个会话现在的模型、花销记在它名下，不给用默认模型；给了 `model`（`SessionModel.id`，人在设置里选的）就用它，优先于会话的模型，不在目录里时抛错、不悄悄换成别的。
+- 没配模型、服务商报错时抛错，message 是给人看的话。`onRetry({ delayMs })` 在等一会儿再试时调。
+- `fork: true`（必须给 `sessionId`）从这个会话上一次发出去的主请求分叉：系统提示词、工具表、思考档位、缓存键照那一次，`messages` 给下一次要发的历史（`context.compact` 的 `request.messages`），末尾接上 `prompt`，缓存照常命中；那一次不是这一次的前缀、没发过主请求、换了模型、回复里调了工具时抛错。
+- 结果将覆盖持久化内容时传 `requireComplete: true`，只有 `stopReason === "stop"` 才返回文字；截断、工具调用等非正常完成抛错，调用方保留原内容与处理游标。主请求分叉也遵守该选项，失败回复仍计入用量。
+
+`ctx.model.usage()` 是只读的花销，给画使用统计的插件用，经 `ctx.serve` 转给界面入口。删会话不影响这些数；读会话库失败时抛错。
+
+- 每次计费的模型调用（回复、压缩摘要、插件的 `complete`）按小时、供应商、模型合好（`requests`，最早的在前），带供应商 id 到现在名字的对照（`providerNames`，删掉的供应商不在里面）和已归档的顶层会话 id（`archived`）。
+- 会话里一步步发的请求（不含压缩摘要、分叉、`complete`）每格还带：
+  - 计费 token 按来源分摊的十类（`parts`：系统提示词、项目说明与记忆、技能与智能体、工具定义、用户消息、注入内容、助手消息、工具结果，输出的思考和回复，加起来是这些请求的账单数）；
+  - 发请求的会话（`sessions`，子会话记成顶层会话，已删的不在，跨格数会话要去重）；
+  - 轮次、计时（`timedReplies`、`modelMs`、`generateMs`、`thinkingMs`，等首字 = `modelMs − generateMs`）、工具次数、出错和毫秒；
+  - 缓存未命中（`cacheMiss`：和同一会话上一次请求比本该读到却没读到的 token、按当时费率多花的钱、没费率的 token，`byCause` 按原因分：工具定义、系统提示词、改写消息、服务商没读到、分不清、压缩、撤回、换模型）。
+
+生图用 `ctx.model.findImageModel(name?, sessionId?)` 和 `ctx.model.image({ model, prompt, images?, aspectRatio?, quality?, count?, background?, signal?, onRetry? })`：
+
+- `findImageModel` 按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个。
+- `image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错。
+
+`ctx.media` 是会话媒体目录：`save({ data, mimeType })` 存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；`read(name)` 按名字读回 base64；`nameOf(path)` 在一个路径是这个目录里的图时交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示。
+
+### 读会话、改会话
+
+- `ctx.sessions.list()` 是全部会话的摘要（含归档的、子会话，最近活动的在前）：有 `kind`、`cwd`、`project`、`updatedAt`、`running`、`background`（它派出去的后台运行还没都回来、交回的结果还没送进会话，或登记的一次性后台任务还在跑；挂着的监视、开发服务器、约好的唤醒不算），子会话还有 `parentId`、`owner`。`kind` 是 `"top"`（侧栏里的会话）、`"child"`（插件的子会话）或 `"standalone"`（插件的独立会话），由本体按 `parentId`、`owner` 算出，判断「是不是人的那段对话」只看它。
+- 只要一个会话的摘要用 `get`（没有这个会话时是 `undefined`）；钩子和工具里直接看输入的 `session`，不用为找自己那条去 `list()`。
+- `messages(sessionId)` 是一个会话存下的全部消息（原文，不受压缩影响；没有这个会话时抛错）。
+- 读到的都是副本，改了不影响会话。
+- `compact(sessionId, { instructions }?)`：照常经 `context.compact`（`force` 为真、带 `manual`），转录里画一行 `/compact` 和进度、结果。开始了就返回 `{ done }`，`done` 压完时给出 `{ ok: true, before, after }` 或 `{ ok: false, code, error? }`；会话正在跑、正在压、没有可用模型、没有这个会话时抛错，message 是给人看的话。
+- `setTitle(sessionId, title, { automatic }?)`：给起标题的插件用；宿主默认取第一条消息的开头。空白压成一个空格、最长 80 个字，空串不起作用；没有这个会话时抛错。自动总结传 `automatic: true`，用户手动命名过就不覆盖；不传仍是显式设置标题。
+- `setArchived(sessionId, archived)`：归档、取消归档一个会话，和侧栏上的归档按钮一样，`onArchived` 照常通知各插件。只在人点了插件界面上的按钮时调（工作树合回去之后的「归档这个对话」），不拿来替人收拾侧栏；子会话跟着父会话，传子会话、没有这个会话时抛错。
+- `onDeleted(listener)`：会话被删掉时调 `listener(sessionId)`：按会话记的东西该清了、按会话起的进程该停了。停用时自动撤下。
+- `onArchived(listener)`：会话归档、取消归档时调 `listener(sessionId, archived)`：按会话占着的东西该收起、该放回了（`plume.git` 收回对话的工作树目录、检出回来）。状态没变不调；停用时自动撤下。
+- `onEnded(listener)`：会话在这次运行里不再活着时调 `listener(sessionId, reason)`，`reason` 是 `deleted`、`archived`、`moved`（换到工作目录不同的项目）或 `quit`（退出应用），子会话跟着父会话各调一次。删除、归档、换项目时不等监听；退出时等这一轮停稳后再调，最多等 2 秒就接着退出，收尾要快。监听抛错只记日志；停用时自动撤下（`plume.hooks` 的 SessionEnd）。
+- `onContextReset(listener)`：会话成功压缩或实际裁剪、撤回、重新载入历史，以及模型或工作目录切换后通知 `listener(sessionId)`；用于作废插件按会话冻结的上下文快照，下次请求再读。失败的压缩不通知；每次拿到的是会话 id，不是历史正文。返回提前取消订阅的函数，插件停用时自动撤下；监听异常只记日志，不改变会话操作。
+
+### 资源地址
+
+资源地址是 `scheme://路径[:行-行]`，本体给、换不掉，解析统一走 `run.files.read`（见「读文件」），类型在 `@plume/contract` 的 `ResourceHandler` 等。本体自带 `scratch://`（会话的临时目录）、`artifact://`、`session://`（别的会话的转录）、`plugin://`（插件的 README 和目录里的文件），技能插件加了 `skill://`。
+
+- `register(handler)` 加一个只读的 scheme：`describe` 写进系统提示词的地址清单，`resolve` 读一个地址、找不到时抛错，错误信息直接交给模型；可选 `list` 给 `read scheme://` 列目录、`locate` 给 ls 一个磁盘位置。返回撤下的函数，停用时本体替你撤下；塞了 `write` 也写不进去。
+- 内容不是你写的（第三方文档、外部服务）时给 `origin`，plume.tools 的 read 把它包进 `<resource origin="…">`。路径的越界（`..`、软链出去）由 scheme 自己挡。
+- `list()` 是现在登记着的（`{ scheme, describe, writable }`，只有 `scratch://` 可写）。
+- `keepArtifact(sessionId, tool, content)` 存一大块原文换回 `artifact://<id>`（按内容算，同一段每次同一个地址；存在会话的临时目录里，每个会话最多 30 份，重开应用后还在，会话删掉时一起删；和 `run.files.spill` 是同一处）。
+
+### 改动和工作区
+
+`ctx.changes` 读、撤销本体记下的文件改动（工具经 `run.files.change` 写的、带 `recordChanges` 的命令改的）。例子是 plume.delivery、plume.side-chat。
+
+- `ids` 取工具结果上的 `changes.ids`（`ToolResultMessage.changes`，本体填，按这个认，不认是哪个工具交的），工作目录用会话自己的。
+- `collect(sessionId, ids)` 交回按文件合并的净变化（`FileChangesSummary`：`files` 每项 `{ path, added, removed, hunks, canUndo, undoReason?, undoProblem? }`，`warnings`），改了又改回原样的不列。
+- `undo(sessionId, ids, path?)` 撤销整批或其中一个文件：重新读快照，不收界面给的原文，查当前内容、连续的修改链和项目边界，有一个不对就都不写，命令改的不能自动撤销；撤销进行中、同一个或嵌套的项目里还有会话在跑一轮时抛错，`message` 给人看。界面先问人再调，显示状态不是写入许可。
+
+`ctx.workspace.files(root)` 交回 `root` 之下 git 认为该看的文件（已跟踪的加上未跟踪且没被忽略的），绝对路径；不在 git 仓库里、git 答不上来时是 null，自己走目录。本体在隔离视图里问 git，不执行仓库能控制的程序（`core.fsmonitor`、过滤器、钩子：沙箱里的命令写得到 `.git/config`），插件要列项目文件就用它，不要自己跑 `git ls-files`。
+
+`ctx.workspace.git(root, work)` 在一个隔离视图里跑一组 git 读，`work` 结束即删；`root` 不在检出里时 `work` 不跑、交回 null。例子是 plume.git。
+
+- 视图（`PluginGitView`）的 `git`、`gitBuffer`（二进制，如 `show HEAD:logo.png`）、`gitWithInput`（要写 stdin 的，如 `cat-file --batch`）在 `cwd` 下跑，失败时抛错。
+- HEAD、引用、上游、远端地址、浅克隆边界照真实仓库抄好，分支、ahead / behind、日志装饰和直接跑一样，读不到仓库自己的配置和钩子、不连网。
+- `fetch({ signal, timeoutMs })` 是没人点的那种获取：在视图里 `fetch --prune`，再把变了的引用搬回真实仓库，交回 `PluginGitFetch`（`cancelled`、`timedOut`、git 的原话 `stderr`，怎么跟人说归插件）。
+- 一组读共用一个视图，别每条命令各开一个。只读：暂存、提交、推送、切分支这些人点了才做的事由插件自己在真实仓库上跑，那样钩子和凭据助手正是人要的。
 
 ## 工具
 
@@ -72,7 +132,9 @@ ctx.tools.register({
 	parameters: { type: "object", properties: { /* JSON Schema */ }, required: [] },
 	mutating: false,                 // 会改工作区（写文件、执行命令）就写 true：不和相邻的调用同时跑，宿主在执行前把参数拿给用户看、问一次
 	describe: (args) => `Search ${String(args.query ?? "")}`, // 可选：导出会话成 Markdown 时这次调用写成的一行（英文）；不给就写工具名。界面上的说法用界面入口的 ui.toolLine
-	// 下面三个也只在有需要时给，宿主不认工具名，只认这些声明：
+	// 下面几个也只在有需要时给，宿主不认工具名，只认这些声明：
+	// readsOnly: (args) => true,               // mutating 的工具能证明某次调用什么都不改（只读的命令）时返回 true，那次调用就和相邻的只读调用同时跑
+	// asks: true,                              // 自己在 execute 里经 run.ask 问人，宿主不再在执行前替你问，见「问人」
 	// exportResult: (result) => conclusion,   // 导出时结果里要引在这一行下面的那段（子智能体交回的结论）；不给就不引
 	// forwards: (args) => ({ name, args }),    // 这次调用是替另一个工具调的（按需加载时的总入口）：导出时这一行按被调的写
 	// aliases: { path: ["file", "filePath"] }, // 模型常写错的参数名（规范名 → 别名）：宿主在钩子、审批、转录看到参数之前换成规范名、删掉别名，execute 只读规范名
@@ -80,31 +142,100 @@ ctx.tools.register({
 	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"、"delegate"，见「按类别找工具」
 	async execute(args, run) {
 		// args 是模型给的，没校验过：先自己校验，不对就返回 isError（写了 aliases 的，别名已换成规范名）
-		// run.sessionId、run.cwd：哪个会话、工作目录；run.session.kind：是不是侧栏里的会话（见「钩子」开头的 session）；run.signal：用户停止这一轮时中止；run.progress(chunk)：执行中的输出推给界面
+		// run：这次调用的会话、目录和本体给的能力，见下面「run」
 		return { output: "交给模型的结果", details: { /* 给卡片用 */ } };
 	},
 });
 ```
 
-想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation? })`（`kind` 是卡片右上角的小标签：`command`、`create`、`modify`、`view` 宿主写成「执行命令」「写入文件」「修改文件」「读取文件」，别的照原样写）：宿主不再在执行前替你问，`run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。得到 `"reject"` 时不执行，把 `run.rejection` 原样作为错误结果交回（`{ output: run.rejection, isError: true }`）：那是本体给的一句，说这次调用被人拒了、别原样重试也别换个工具达到同样效果，本体自己拒绝时也是这一句，不自己另写一份。完全访问、外层设了 `approved`、答过「以后不再问」（`subject` 对得上）的由本体直接得到 `"once"`，`escalation`（申请更宽的沙箱）总是问人；其余要不要真弹给人由钩子 `tool.approve` 定（见下面）。`subject` 照原样写（命令、路径、站点），不用加自己的插件名：本体把人答的「以后不再问」记在注册这件工具的插件名下，只放行你自己的工具再问同一个 `subject`，别的插件写出同样的字符串不算，你写 `read:<目录>` 也碰不到本体读边界的批准（那是本体名下的）。等这张卡时对话末尾、侧栏悬停和系统通知说「等待你的批准」。弹给人的卡没人答会过期：等 5 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）。问的是人的决定而不是放不放行（回答问题、批准计划、填表）时不用 `run.ask`，用下面的 `run.request`：完全访问、层的放行都不替人答。
+### `run`
 
-要人给一份数据而不是批准一次操作（回答问题、批准一份计划、填一张表）时调 `run.request({ kind, title, payload?, waiting? })`，不用写 `asks`。它不是权限：不经钩子 `tool.approve`，完全访问、「以后不再问」都不替人答，总是弹给人；和审批同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方、写明是谁在问。`payload` 是卡片要画的数据（问题、计划文本、表单字段），要能结构化克隆，不用序列化成字符串；卡片由界面入口按 `kind` 登记（`ui.requestCard`，见 ui.md），没登记时产品画一张只能「不答」的通用卡。返回 `{ answered: true, value }`，或 `{ answered: false, reason }`：`"declined"` 人点了不答，`"expired"` 等了 30 分钟没人答，`"stopped"` 这一轮停了（会话删了也算）。`value` 来自渲染进程，不可信：用之前按 `payload` 再核一遍（界面里的检查拦得住手误，拦不住一个不照着问题答的客户端），核不过就当没回答。`waiting` 不给时宿主说「等待你的回答」。例子是 `plume.ask-user`、`plan` 和 `mcp` 插件的表单。
+| 成员 | 用途 |
+| --- | --- |
+| `run.sessionId`、`run.cwd` | 哪个会话、工作目录 |
+| `run.session` | 调用所在的会话；`run.session.kind` 说是不是侧栏里的会话（见「钩子」开头的 `session`） |
+| `run.toolCallId` | 这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`） |
+| `run.signal` | 用户停止这一轮时中止；长时间的操作接上它，用户点停止时能停下 |
+| `run.progress(chunk)` | 执行中的输出推给界面 |
+| `run.projectRoots`、`run.allowedPaths` | 本体授予读取的源文件夹、人拖进来的文件，见下面 |
+| `run.scratchDir`、`run.scratchDirs` | 这个会话的临时目录、同一脉会话的临时目录，见下面 |
+| `run.permissionMode()` | 读设置里现在的权限模式：`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问 |
+| `run.tools()` | 工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`） |
+| `run.calls` | 这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它 |
+| `run.readOnly` | 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批 |
+| `run.ask(…)`、`run.rejection` | 问人放不放行这次调用、被拒时交回的那句，见「问人」 |
+| `run.request(…)` | 要人给一份数据（回答问题、批准计划、填表），见「问人」 |
+| `run.exec(…)`、`run.shell()`、`run.escalate(…)` | 跑 shell 命令、命令跑在哪个 shell、申请更宽的沙箱，见「命令」 |
+| `run.files.read`、`run.files.readCommand` | 按本体的读边界判能不能读，见「读文件」 |
+| `run.files.change`、`run.files.write`、`run.files.resolve`、`run.files.includeChanges` | 按本体的写边界写文件、记改动快照，见「写文件」 |
+| `run.background?.()`、`run.track(…)`、`run.schedule?.(…)`、`run.letter?.(to, letter)` | 后台结果送回会话、登记后台任务、约定时唤醒、给另一个顶层会话寄信，见「后台与会话间递话」 |
+| `run.archiveAfterTurn?.()` | 要求这一轮完成后归档这次调用所在的会话，见下面「结果」 |
+| `run.parent` | 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」 |
+
+`run.background`、`run.letter`、`run.archiveAfterTurn`、`run.schedule` 只有顶层会话有，子会话里是 `undefined`。
+
+`run.projectRoots` 是宿主从会话所属项目推导出的源文件夹（只授予读取）；工作目录已移入独立工作树时为空，插件不能据此放宽写入权限。`run.allowedPaths` 是人在这个会话里（子会话连同它的上级会话）拖进来的文件的绝对路径，取自用户消息的附件，没有附件时不给：只授予读取这几个文件本身，不能据此改它们，也不能扩大到所在目录。
+
+`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它。`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）。
+
+### 问人
+
+想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation? })`：宿主不再在执行前替你问。
+
+- `kind` 是卡片右上角的小标签：`command`、`create`、`modify`、`view` 宿主写成「执行命令」「写入文件」「修改文件」「读取文件」，别的照原样写。
+- `run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。得到 `"reject"` 时不执行，把 `run.rejection` 原样作为错误结果交回（`{ output: run.rejection, isError: true }`）：那是本体给的一句，说这次调用被人拒了、别原样重试也别换个工具达到同样效果，本体自己拒绝时也是这一句，不自己另写一份。
+- 哪些不弹给人、由本体直接得到 `"once"`（完全访问、外层设了 `approved`、答过「以后不再问」），见钩子 `tool.approve`；`escalation`（申请更宽的沙箱）总是问人；其余要不要真弹给人由钩子 `tool.approve` 定。
+- `subject` 照原样写（命令、路径、站点），不用加自己的插件名：本体把人答的「以后不再问」记在注册这件工具的插件名下，只放行你自己的工具再问同一个 `subject`，别的插件写出同样的字符串不算，你写 `read:<目录>` 也碰不到本体读边界的批准（那是本体名下的）。
+- 等这张卡时对话末尾、侧栏悬停和系统通知说「等待你的批准」。弹给人的卡没人答会过期：等 5 分钟，到时 `run.ask` 得到 `"reject"`（和人点拒绝、停下这一轮一样）。
+
+要人给一份数据而不是批准一次操作（回答问题、批准一份计划、填一张表）时调 `run.request({ kind, title, payload?, waiting? })`，不用写 `asks`。例子是 `plume.ask-user`、`plan` 和 `mcp` 插件的表单。
+
+- 它不是权限：不经钩子 `tool.approve`，完全访问、「以后不再问」、层的放行都不替人答，总是弹给人；和审批同排一队、同占输入框上方那一格，子会话问时卡片压在上级会话的输入框上方、写明是谁在问。
+- `payload` 是卡片要画的数据（问题、计划文本、表单字段），要能结构化克隆，不用序列化成字符串；卡片由界面入口按 `kind` 登记（`ui.requestCard`，见 ui.md），没登记时产品画一张只能「不答」的通用卡。`waiting` 不给时宿主说「等待你的回答」。
+- 返回 `{ answered: true, value }`，或 `{ answered: false, reason }`：`"declined"` 人点了不答，`"expired"` 等了 30 分钟没人答，`"stopped"` 这一轮停了（会话删了也算）。
+- `value` 来自渲染进程，不可信：用之前按 `payload` 再核一遍（界面里的检查拦得住手误，拦不住一个不照着问题答的客户端），核不过就当没回答。
 
 ```ts
 const reply = await run.request({ kind: "ask_user", title: "需要你的意见", payload: question });
 const answer = reply.answered ? checkReply(question, reply.value) : undefined; // 核不过、没答都是 undefined
 ```
 
-`run.projectRoots` 是宿主从会话所属项目推导出的源文件夹（只授予读取）；工作目录已移入独立工作树时为空，插件不能据此放宽写入权限。`run.allowedPaths` 是人在这个会话里（子会话连同它的上级会话）拖进来的文件的绝对路径，取自用户消息的附件，没有附件时不给：只授予读取这几个文件本身，不能据此改它们，也不能扩大到所在目录。
+### 命令
 
-`run` 上还有：`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批；`run.background?.()` 给一条把后台结果送回这个会话的渠道（只有顶层会话有，子会话里是 `undefined`，见下面）；`run.letter?.(to, letter)` 给另一个顶层会话寄信（也只有顶层会话有、只在这次调用里能用，见下面）；`run.archiveAfterTurn?.()` 要求这一轮完成后归档这次调用所在的会话（也只有顶层会话有，见下面）。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
-`run.toolCallId` 是这次调用的 id（和工具结果的 `toolCallId` 同一个，从这次调用开出去的会话记进 `spawnedFrom`）；`run.parent` 只在这次调用所在的会话是你自己建的子会话时才有，见「子会话」；`run.scratchDir` 是这个会话的临时目录（`<数据目录>/scratch/<会话 id>`，宿主不预先建、谁先写谁 `mkdir`，会话删掉时连目录一起删）：只为得出这次答案而写的文件放这里——太大不值得交给模型的图、截断前的全文、只看一次的日志；read 读它不用问人，模型也能经 `scratch://` 地址读写它；`run.scratchDirs` 是和这个会话同一脉的会话（沿子会话、分叉、建议开出的新会话的来处连在一起的，两头都算）的临时目录，含 `run.scratchDir`，宿主每次调用现算：它们互相交接草稿（子智能体把报告写进父会话的临时目录，分叉接着改来源里的那份），往这些里写不用问人，别的会话的临时目录写不进（读哪个会话的临时目录都不问）；`run.permissionMode()` 读设置里现在的权限模式（`"ask"` 请求批准、`"auto"` 帮我批准（默认）或 `"full"` 完全访问）；`run.tools()` 是工具表里生效的工具、注册它们的插件和它们声明的种类、类别（`{ name, plugin, kind?, category? }`）；`run.calls` 是这一步回复里的全部调用（含这一次，按回复里的顺序），要知道这一步是不是只做了这一件事时看它；`run.readOnly` 为真时外层要求这次调用不改动工作区（计划模式），本体让 `run.exec` 只在只读沙箱里跑、`run.escalate` 不批。`mutating` 的工具能证明某次调用什么都不改（只读的命令）时，写 `readsOnly(args)` 返回 `true`，那次调用就和相邻的只读调用同时跑。
+跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。
 
-跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程：本体按权限模式选沙箱档（请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错），用用户的 shell、向登录 shell 要的环境起命令，返回 `RunProcess`（`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像被沙箱拒了时交回本体给模型的那句说明（说出实际跑的那一档、说清是策略拒绝不是命令出错），原样放进结果，不像交回 `undefined`）。`run.shell()` 告诉你这次调用的命令跑在哪个 shell（`{ kind: "posix" | "powershell", label, sandbox }`），照它的写法拼命令。问不问人不归 `exec`：要问的自己先经 `run.ask` 问。命令被沙箱拒了、要更宽的一档时调 `run.escalate({ mode, justification, title, detail })`（`mode` 是 `"workspace-write"` 或 `"danger-full-access"`，`justification` 是模型给的理由、原样给人看，`title`、`detail` 是卡上的标题和正文）：本体查申请合不合规矩（只读下、没理由、不比当前宽的直接拒），弹提权卡、只认人答（或代管插件转达），批了这次调用之后的 `run.exec` 才跑在那一档，返回 `{ granted: true }`；不批返回 `{ granted: false, message }`，把 `message` 原样交给模型。批准只管这一次调用，调用答完 `exec`、`escalate` 都不能再用。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。命令可能改文件时带 `recordChanges: true`：本体在命令起来之前、结束以后（连它留下的进程一起退出）各对比一次 git 工作区，改了的记成快照、记进这次调用的结果（`changes`），撤回、交付卡据此认；太多、太大、二进制、像密钥的文件不记，结果上带一句没记全（`changes.warning`）；观测期间挡着撤销，所以只读的命令（`git log`、`rg`）别带。不在 git 仓库里时什么都不记。
+- 本体按权限模式选沙箱档：请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错。用用户的 shell、向登录 shell 要的环境起命令。
+- 返回 `RunProcess`：`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像被沙箱拒了时交回本体给模型的那句说明（说出实际跑的那一档、说清是策略拒绝不是命令出错），原样放进结果，不像交回 `undefined`。
+- `run.shell()` 告诉你这次调用的命令跑在哪个 shell（`{ kind: "posix" | "powershell", label, sandbox }`），照它的写法拼命令。
+- 问不问人不归 `exec`：要问的自己先经 `run.ask` 问。
+- 命令被沙箱拒了、要更宽的一档时调 `run.escalate({ mode, justification, title, detail })`：`mode` 是 `"workspace-write"` 或 `"danger-full-access"`，`justification` 是模型给的理由、原样给人看，`title`、`detail` 是卡上的标题和正文。本体查申请合不合规矩（只读下、没理由、不比当前宽的直接拒），弹提权卡、只认人答（或代管插件转达），批了这次调用之后的 `run.exec` 才跑在那一档，返回 `{ granted: true }`；不批返回 `{ granted: false, message }`，把 `message` 原样交给模型。批准只管这一次调用，调用答完 `exec`、`escalate` 都不能再用。
+- 命令可能改文件时带 `recordChanges: true`：本体在命令起来之前、结束以后（连它留下的进程一起退出）各对比一次 git 工作区，改了的记成快照、记进这次调用的结果（`changes`），撤回、交付卡据此认；太多、太大、二进制、像密钥的文件不记，结果上带一句没记全（`changes.warning`）；观测期间挡着撤销，所以只读的命令（`git log`、`rg`）别带。不在 git 仓库里时什么都不记。
 
-读用户的文件经 `run.files`，不要自己判能不能读：本体守读的边界，和 read、ls、grep、glob、bash 是同一个答案、同一份批准记录。`run.files.read(target, { directory? })` 收路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）或资源地址：工作区、同一个项目的其他源码目录（`run.projectRoots`）、各会话的临时目录、系统临时目录和工具链的系统目录、人拖进来的文件（`run.allowedPaths`）不问；密钥文件（`~/.ssh/id_*`、`~/.aws/credentials`、Plume 自己的设置和钥匙……）在哪都问、只批这一个；别处按所在的项目问（过闸，卡片 `kind` 是 `view`，「以后不再问」记成本体名下的 `read:<项目>`，所有工具共用这一份）。判定前顺着符号链接走到真实位置，源码目录内指向外面的链接照问。过了交回 `{ ok: true, path }`，实际读就读这个 `path`；不存在的普通路径不问、照样交回，由你报「找不到」。人拒绝了、没人可问时交回 `{ ok: false, message }`，把 `message` 原样交给模型，不要改用别的路径或工具去读。有人登记了 scheme 的地址不问人：交回读到的 `resource`（`url`、`content`、`label?`、`origin?`，带行范围的已经切好，`scheme://` 是清单），`scratch://<路径>`（不带行范围）交回临时目录里那个文件的 `path`；`directory: true` 时要的是一个目录（列目录），地址交回 scheme 给的磁盘位置。没人登记的 `foo://` 照路径判。`run.files.readCommand(command)` 把一行命令写明要读的路径（照 `run.shell()` 的语法拆，只认字面写的）按同一个边界判，同一个批准范围只问一次：跑命令的工具在审批、起命令之前调它（`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥）。只管能不能读，不授予写，也不把文件记作「模型已读过」；调用答完再用就抛错。plume.tools 的 read、ls、grep、glob、bash 就是这么用的。
+### 读文件
 
-写、改用户的文件也经 `run.files`，不要自己 `writeFile`：本体守写的边界，并把改动记成快照，撤回时连文件一起退、交付卡能看和撤销靠的就是它。`run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件）不写，同一脉会话的临时目录能写、别的会话的不能，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。同一个文件（包括经硬链接、别名）的几次 `change` 排队；`edit(current)` 拿到 `{ path, text, stamp }`（`path` 是真正要写的那个文件，`text` 是现在的内容、不存在时是 null，`stamp` 是 `{ mtimeMs, size }`），交回 `{ text?, value }`：给了 `text` 本体就在写之前再核一遍文件没被别处改过（期间被改了、被换成别的文件、新文件被别人先建了都抛错，一个字节不写）、写下、记快照；不给就不写，`value` 原样交回。返回 `{ value, path, written? }`，`written` 是写下以后的 `stamp`（给「读过以后有没有变」的检查用）。撤销进行中、外层要求只读（`run.readOnly`）时抛错；快照存不下来时抛错，文件已经写下，`message` 照实说。`run.files.write(address, content)` 写资源地址（只有 `scratch://` 可写），交回 `{ ok: true, path? }` 或 `{ ok: false, message }`。`run.files.resolve(path)` 把模型写的路径照同样的写法换成绝对路径（不追链接），只是解析、不判边界。改了哪些文件由本体记在这次调用的结果上（`ToolOutput.changes`：`{ ids, paths, warning? }`，`paths` 是解析好的绝对路径），工具交回的 `changes` 不算数，`tool.execute` 的层读得到、改不了。后台命令改的文件到起它的那次调用答完还没记下（结果上是一句「结束后才记」），读它输出的调用经 `run.files.includeChanges(process)` 把它记下的算进自己的结果（`process` 是那次 `run.exec` 交回的，或它留下的进程；别的会话的不认）。plume.tools 的 write、edit、bash、bash_output 就是这么用的。
+读用户的文件经 `run.files`，不要自己判能不能读：本体守读的边界，和 read、ls、grep、glob、bash 是同一个答案、同一份批准记录。plume.tools 的 read、ls、grep、glob、bash 就是这么用的。
+
+- `run.files.read(target, { directory? })` 收路径（相对 `cwd`、`~/`、Windows 上 shell 的几种写法）或资源地址。
+- 不问的：工作区、同一个项目的其他源码目录（`run.projectRoots`）、各会话的临时目录、系统临时目录和工具链的系统目录、人拖进来的文件（`run.allowedPaths`）。密钥文件（`~/.ssh/id_*`、`~/.aws/credentials`、Plume 自己的设置和钥匙……）在哪都问、只批这一个。别处按所在的项目问（过闸，卡片 `kind` 是 `view`，「以后不再问」记成本体名下的 `read:<项目>`，所有工具共用这一份）。
+- 判定前顺着符号链接走到真实位置，源码目录内指向外面的链接照问。
+- 过了交回 `{ ok: true, path }`，实际读就读这个 `path`；不存在的普通路径不问、照样交回，由你报「找不到」。人拒绝了、没人可问时交回 `{ ok: false, message }`，把 `message` 原样交给模型，不要改用别的路径或工具去读。
+- 有人登记了 scheme 的地址不问人：交回读到的 `resource`（`url`、`content`、`label?`、`origin?`，带行范围的已经切好，`scheme://` 是清单），`scratch://<路径>`（不带行范围）交回临时目录里那个文件的 `path`；`directory: true` 时要的是一个目录（列目录），地址交回 scheme 给的磁盘位置。没人登记的 `foo://` 照路径判。
+- `run.files.readCommand(command)` 把一行命令写明要读的路径（照 `run.shell()` 的语法拆，只认字面写的）按同一个边界判，同一个批准范围只问一次：跑命令的工具在审批、起命令之前调它（`cat ~/.ssh/id_ed25519` 什么都不改，却是在读密钥）。
+- 只管能不能读，不授予写，也不把文件记作「模型已读过」；调用答完再用就抛错。
+
+### 写文件
+
+写、改用户的文件也经 `run.files`，不要自己 `writeFile`：本体守写的边界，并把改动记成快照，撤回时连文件一起退、交付卡能看和撤销靠的就是它。plume.tools 的 write、edit、bash、bash_output 就是这么用的。
+
+- `run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件）不写，同一脉会话的临时目录能写、别的会话的不能，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。
+- 同一个文件（包括经硬链接、别名）的几次 `change` 排队；`edit(current)` 拿到 `{ path, text, stamp }`（`path` 是真正要写的那个文件，`text` 是现在的内容、不存在时是 null，`stamp` 是 `{ mtimeMs, size }`），交回 `{ text?, value }`：给了 `text` 本体就在写之前再核一遍文件没被别处改过（期间被改了、被换成别的文件、新文件被别人先建了都抛错，一个字节不写）、写下、记快照；不给就不写，`value` 原样交回。
+- 返回 `{ value, path, written? }`，`written` 是写下以后的 `stamp`（给「读过以后有没有变」的检查用）。撤销进行中、外层要求只读（`run.readOnly`）时抛错；快照存不下来时抛错，文件已经写下，`message` 照实说。
+- `run.files.write(address, content)` 写资源地址（只有 `scratch://` 可写），交回 `{ ok: true, path? }` 或 `{ ok: false, message }`。
+- `run.files.resolve(path)` 把模型写的路径照同样的写法换成绝对路径（不追链接），只是解析、不判边界。
+- 改了哪些文件由本体记在这次调用的结果上（`ToolOutput.changes`：`{ ids, paths, warning? }`，`paths` 是解析好的绝对路径），工具交回的 `changes` 不算数，`tool.execute` 的层读得到、改不了。
+- 后台命令改的文件到起它的那次调用答完还没记下（结果上是一句「结束后才记」），读它输出的调用经 `run.files.includeChanges(process)` 把它记下的算进自己的结果（`process` 是那次 `run.exec` 交回的，或它留下的进程；别的会话的不认）。
+
+### 结果
 
 - `output` 发给模型；`details` 存进会话、不发给模型，给工具卡片和插件自己用。会话重新打开时卡片还能从 `details` 画出来。
 - 要让模型看图（截图）时带上 `images: [{ data, mimeType }]`：`data` 是 base64、不带 `data:` 前缀，`mimeType` 是 png、jpeg、webp、gif、bmp 之一，跟在 `output` 后面交给模型（bmp 模型不收：照样存下、画给人看，发请求时换成一句 `[unsupported image: image/bmp]`）；大图由本体存进会话的媒体目录。格式不对的整个结果判失败。
@@ -113,20 +244,11 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 - 结果带上 `terminate: "done"` 或 `"stalled"`：这一步的结果都写进会话以后，这一轮就以完成或卡住结束，不再把结果交给模型（一步里有几个都带了，有 `stalled` 就按 `stalled`）。工具和 `tool.execute` 的层都能设。
 - 结果带上 `uneventful: true`（没搜到、空目录）：以后不会再有人要读，压缩剪枝时它发给模型的正文换成一句「无结果」，卡片照旧是原文。
 - 结果带上 `instructions: true`（载入的技能正文这类要照着做的说明，不是一次观察）：压缩时原样留着，不按大小剪，也不当作被后来的结果顶替的旧观察清掉。例子是 `plume.skills`。
-- 长时间的操作接上 `run.signal`，用户点停止时能停下。
-- 调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型：`channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）——会话闲着时开一轮，忙着时在下一个步骤边界读入。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）；`delivery`（和 `ctx.sessions.report` 同一个形状 `DeliveryInput`）让界面在对话里画一行，宿主只留认得的字段，不给就只有模型看得到；那一行由你经 `ui.agentDelivery` 画（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），标 `inline: true` 的插在一段活中间时并进那段活。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。人按停、删会话、退出应用时渠道作废：`channel.signal` 触发，之后 `report` 返回 `false`、攒着的丢掉；撤回、编辑重发时只作废截掉的那段里的调用拿到的渠道，留下那段里拿到的照常送达。停不停后台的事本身由你定（plume.tools 的后台命令照跑、monitor 跟着停）。之后的调用拿到的是新的一条。子会话没有渠道，结果写进 `output` 叫模型自己去读。
-- 调用答完以后还在跑的任务（后台命令、监视）经 `run.track({ command, description?, pid?, wakes?, output, stop })` 登记进本体，拿回 `{ id, done(exitCode, error?), stand() }`：任务结束时调 `done`（有结果要送就先 `report` 再 `done`，中间才没有一刻算闲）。顶层会话里起它的那次调用的渠道还有效、任务又没 `done` 时，会话不算闲（`launch` 的 `idle`、`ParentStatus`、摘要的 `background`、`idle` 事件都等它）——只算会自己结束、结束后要叫醒会话的；挂着的不算：登记时带 `wakes: true` 的监视（有输出就叫醒会话，没有「做完」），和跑起来以后你认出是长跑服务、调了 `stand()` 的（plume.tools 看到后台命令打印出本机带端口的地址就标上）；人按停、撤回截掉那次调用后不再算（本体不替你停它）。本体在删会话、退出应用、你的插件停用时调 `stop(true)`，在子会话经 `sessions.start` 派出去的那次运行结束时调 `stop(true)` 停掉子会话里起的；人在任务面板里停它也走 `stop`。`output()` 给任务面板读输出。子会话里也能登记（列得出、停得掉），只是不算谁在等。
-- 让会话过一会儿接着做：`run.schedule?.({ at?, cron?, recurring?, expiresAt?, prompt, reason?, message })` 登记一次唤醒（`at` 是毫秒时间戳，和 `cron` 二选一），交回 `SessionWakeup`；cron 写错抛错，在 `expiresAt` 之前一次也对不上（第一次至少在一分钟以后）时不登记、返回 `undefined`。到点时本体调 `message(wakeup, { next, skipped })` 要送进去的话和那一行（`{ text, delivery? }`），经这次调用的渠道送，那一行记在你名下；上一次开的那一轮还没收场时跳过、下一次告诉你跳过了几次。唤醒是挂着的：没触发的唤醒不挡会话闲下来，到点照样叫醒它。上限、下限、措辞归你管（plume.tools 的 `schedule_wakeup`、`cron_create` 做了一份）。只有顶层会话有，子会话里是 `undefined`。
-- 给另一个顶层会话寄一封信：`run.letter(to, { from, text, request?, answer?, re?, recipient?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。这些标记是什么意思（请求没答会被代答、`answer` 的几种值）本体自己会跟模型说；`guide` 只写和你的工具有关的处理说明（用哪件工具回），一次送达里一样的只写一遍。
-  - 请求（`request: true`）总会有一封答复，配对和代答都在本体，你不用记账：收件方读到以后寄回一封 `answer: "replied"` 的信，本体把它对上收件方读到了、还没答的、你问它的全部请求（`re` 不给就按那几封的开头填；一封也对不上——都答过了、根本没问过——就按通知送，`answer`、`re` 都去掉，回执的 `answered` 是 0）；读到它的那一轮收场了还没答（完成、人按停、出错、步数上限、原地打转都算），本体拿那一轮读到它以后最后一段回复代答 `unreplied`（最多 4000 字，没以完成收场的前面注一句怎么收场的）；没读到（对方的人先按了停、`prompt.submit` 拦下了）代答 `dropped`；对方删掉了（读没读到都算）代答 `closed`；你这边的会话删掉了、应用退出了就不答。代答署的名是请求的 `recipient`（收件方的地址，写法和 `from` 一样由你定；不给用它的标题）。所以收件方没有专门回信的工具也行：它在那一轮最后的回复里写清楚，就原样交回来。
-  - 回执 `{ id, read, answered, answer }`：`read` 兑现成 `{ status: "read" }`、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answered` 是这封作为答复答掉了几封请求；`answer(letter)` 替收件方答这一封请求（只答这一封、只能一次，`answer` 不给就是 `replied`），请求已经有了答复（对方答了、本体代答了）、一方不在了时返回 `undefined`、什么也不寄，所以重复代答是无害的。请求有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）。
-  - 往来链防几个会话原地来回，由本体数，你不用记账：一封信叫起对方一轮（不是插进一轮已经在跑的）时，那一轮里经 `run.letter` 寄出的信接着它的链再加一跳，人在那一轮里开口以后从头算；本体的代答、回执的 `answer` 也接着它答的那封信的链往下数，所以对方总不正面回答时照样数到上限。一条链超过 28 跳、或同一个会话经手超过 10 次时 `run.letter` 抛错不寄，message 是给模型的话（别再转、回去告诉人），原样交给模型就行。
-  - 对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。一封多长、发得多快、重复的发不发归你管（plume.sessions 做了一份）。
-- 照人的要求归档这次调用所在的对话（「做完就归档」）：调 `run.archiveAfterTurn()`，结果带上 `terminate: "done"`。本体不当场归档（这一轮还在等你的结果），这一轮以完成收场后才归档，和人在侧栏上点归档一样（界面离开它，`onArchived`、`onEnded` 照常）；这一轮被人停下、出错、卡住收场时不归档、请求作废。只够得着这次调用所在的会话，子会话里是 `undefined`。例子是 plume.spawn-session 的 `archive_session`。
+- 照人的要求归档这次调用所在的对话（「做完就归档」）：调 `run.archiveAfterTurn()`，结果带上 `terminate: "done"`。本体不当场归档（这一轮还在等你的结果），这一轮以完成收场后才归档，和人在侧栏上点归档一样（界面离开它，`onArchived`、`onEnded` 照常）；这一轮被人停下、出错、卡住收场时不归档、请求作废。只够得着这次调用所在的会话。例子是 plume.spawn-session 的 `archive_session`。
 
 ### 工具结果里的通用声明
 
-`details` 归插件，宿主不看里面，只认这几个通用声明（类型在 `@plume/contract`）；插件之间另认几个（读了文件的哪一块）。改了哪些文件不在 `details` 里，是本体记在结果上的 `changes`（见上面「工具」）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
+`details` 归插件，宿主不看里面，只认这几个通用声明（类型在 `@plume/contract`）；插件之间另认几个（读了文件的哪一块）。改了哪些文件不在 `details` 里，是本体记在结果上的 `changes`（见「写文件」）。宿主和别的插件都不认工具名：换一个插件提供同类能力，照样声明就行。
 
 - `checklist`（`ChecklistDetails`）：这是这件事最新的一份进度清单，每项 `{ content, status: "pending" | "in_progress" | "completed", activeForm? }`，每次给整张。一轮干净地收了尾、最新那份还有没勾的，转录底下出「继续，把清单里没做完的做完」。记清单的工具在定义上标 `category: "checklist"`（见下面「按类别找工具」），转录据它把这次调用并进一段活。例子是 `plume.todo`。
 - `job`（`BackgroundJobDetails`）：这次调用在后台起了一个任务 `{ id, command? }`。之后查它输出的那几行（`bash_output`）说的是起它那次调用写的说明。例子是 `plume.tools` 的后台 `bash` 和 `monitor`。
@@ -137,6 +259,31 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 ```ts
 return { output: "Task list updated (1/3 done)", details: { checklist: todos } satisfies ChecklistDetails };
 ```
+
+### 后台与会话间递话
+
+调用答完以后还在后台接着做的事、过一会儿再叫醒会话、给另一个顶层会话寄信，都由本体送进会话：会话闲着时开一轮，忙着时在下一个步骤边界读入。
+
+**送达在对话里的那一行**：`channel.report`、`ctx.sessions.report`、`reportBack` 都可以带 `delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON），写进送达消息，宿主只留认得的字段、记下是哪个插件交的；界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），没登记就按 `title` 画默认的一行，标 `inline: true` 的插在一段活中间时并进那段活；不给 `delivery` 就只有模型看得到。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。
+
+- **后台结果**：调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型。
+  - `channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）。
+  - 人按停、删会话、退出应用时渠道作废：`channel.signal` 触发，之后 `report` 返回 `false`、攒着的丢掉；撤回、编辑重发时只作废截掉的那段里的调用拿到的渠道，留下那段里拿到的照常送达。停不停后台的事本身由你定（plume.tools 的后台命令照跑、monitor 跟着停）。之后的调用拿到的是新的一条。
+  - 子会话没有渠道，结果写进 `output` 叫模型自己去读。
+- **后台任务**：调用答完以后还在跑的任务（后台命令、监视）经 `run.track({ command, description?, pid?, wakes?, output, stop })` 登记进本体，拿回 `{ id, done(exitCode, error?), stand() }`。
+  - 任务结束时调 `done`（有结果要送就先 `report` 再 `done`，中间才没有一刻算闲）。
+  - 顶层会话里起它的那次调用的渠道还有效、任务又没 `done` 时，会话不算闲（`launch` 的 `idle`、`ParentStatus`、摘要的 `background`、`idle` 事件都等它）——只算会自己结束、结束后要叫醒会话的；挂着的不算：登记时带 `wakes: true` 的监视（有输出就叫醒会话，没有「做完」），和跑起来以后你认出是长跑服务、调了 `stand()` 的（plume.tools 看到后台命令打印出本机带端口的地址就标上）；人按停、撤回截掉那次调用后不再算（本体不替你停它）。
+  - 本体在删会话、退出应用、你的插件停用时调 `stop(true)`，在子会话经 `sessions.start` 派出去的那次运行结束时调 `stop(true)` 停掉子会话里起的；人在任务面板里停它也走 `stop`。`output()` 给任务面板读输出。子会话里也能登记（列得出、停得掉），只是不算谁在等。
+- **定时唤醒**：让会话过一会儿接着做，`run.schedule?.({ at?, cron?, recurring?, expiresAt?, prompt, reason?, message })` 登记一次唤醒（`at` 是毫秒时间戳，和 `cron` 二选一），交回 `SessionWakeup`。
+  - cron 写错抛错，在 `expiresAt` 之前一次也对不上（第一次至少在一分钟以后）时不登记、返回 `undefined`。
+  - 到点时本体调 `message(wakeup, { next, skipped })` 要送进去的话和那一行（`{ text, delivery? }`），经这次调用的渠道送，那一行记在你名下；上一次开的那一轮还没收场时跳过、下一次告诉你跳过了几次。
+  - 唤醒是挂着的：没触发的唤醒不挡会话闲下来，到点照样叫醒它。上限、下限、措辞归你管（plume.tools 的 `schedule_wakeup`、`cron_create` 做了一份）。
+- **寄信**：给另一个顶层会话寄一封信，`run.letter(to, { from, text, request?, answer?, re?, recipient?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。一封多长、发得多快、重复的发不发归你管（plume.sessions 做了一份）。
+  - 信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。这些标记是什么意思（请求没答会被代答、`answer` 的几种值）本体自己会跟模型说；`guide` 只写和你的工具有关的处理说明（用哪件工具回），一次送达里一样的只写一遍。
+  - 请求（`request: true`）总会有一封答复，配对和代答都在本体，你不用记账：收件方读到以后寄回一封 `answer: "replied"` 的信，本体把它对上收件方读到了、还没答的、你问它的全部请求（`re` 不给就按那几封的开头填；一封也对不上——都答过了、根本没问过——就按通知送，`answer`、`re` 都去掉，回执的 `answered` 是 0）；读到它的那一轮收场了还没答（完成、人按停、出错、步数上限、原地打转都算），本体拿那一轮读到它以后最后一段回复代答 `unreplied`（最多 4000 字，没以完成收场的前面注一句怎么收场的）；没读到（对方的人先按了停、`prompt.submit` 拦下了）代答 `dropped`；对方删掉了（读没读到都算）代答 `closed`；你这边的会话删掉了、应用退出了就不答。代答署的名是请求的 `recipient`（收件方的地址，写法和 `from` 一样由你定；不给用它的标题）。所以收件方没有专门回信的工具也行：它在那一轮最后的回复里写清楚，就原样交回来。
+  - 回执 `{ id, read, answered, answer }`：`read` 兑现成 `{ status: "read" }`、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answered` 是这封作为答复答掉了几封请求；`answer(letter)` 替收件方答这一封请求（只答这一封、只能一次，`answer` 不给就是 `replied`），请求已经有了答复（对方答了、本体代答了）、一方不在了时返回 `undefined`、什么也不寄，所以重复代答是无害的。请求有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）。
+  - 往来链防几个会话原地来回，由本体数，你不用记账：一封信叫起对方一轮（不是插进一轮已经在跑的）时，那一轮里经 `run.letter` 寄出的信接着它的链再加一跳，人在那一轮里开口以后从头算；本体的代答、回执的 `answer` 也接着它答的那封信的链往下数，所以对方总不正面回答时照样数到上限。一条链超过 28 跳、或同一个会话经手超过 10 次时 `run.letter` 抛错不寄，message 是给模型的话（别再转、回去告诉人），原样交给模型就行。
+  - 对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。
 
 ## 钩子
 
@@ -163,10 +310,10 @@ ctx.hook("model.context", async (input, next) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 调用所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见上面 |
+| `session` | 调用所在的会话，见「钩子」开头 |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具，`plugin` 是注册它的插件 |
-| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权和层自己问的除外；`run.request` 不是审批，不受它管） |
+| `approved` | 外层已经放行的理由；设了它本体就不再问人，也不经 `tool.approve`（提权和层自己问的除外） |
 | `readOnly` | `{ refusal }`：外层要求这次调用不改动工作区（计划模式）。本体从设上它的那一层往里交时，`kind` 是 `create`、`modify` 的工具不再往里交（里层的钩子看不到这次调用），以 `refusal` 作错误结果；别的照常交下去，交给工具的 `run.readOnly` 为真，`run.exec` 一律在只读沙箱里跑，`run.escalate` 直接拒、不弹卡。只能收紧，里层不去掉它 |
 | `signal` | 用户停止这一轮时中止 |
 | `ask(reason)` | 弹审批卡等用户决定，卡上是这次调用的参数和 `reason`，只能答这一次；返回是否允许，用户停止这一轮时得到 `false`。完全访问下本体直接允许，其余经过钩子 `tool.approve`（`byLayer` 为真） |
@@ -176,13 +323,24 @@ ctx.hook("model.context", async (input, next) => {
 
 已有的层（`plume.lsp` 在 edit、write 的结果后面附上文件的错误，`plume.hooks`、`plume.plan`、`plume.skills` 等）都用默认的 order 0，按加载顺序叠。要看交给模型的最终结果（比如把结果里的密钥换掉）就用很小的 order（如 -100）套在最外层，里面任何一层的输出都经过它。
 
-审批在所有层里面：写了 `asks` 的工具（plume.tools 的 write、edit、bash）校验完参数再经 `run.ask` 问，其余 `mutating` 工具在执行前按参数问，问的时候经过钩子 `tool.approve`。用户拒绝就不执行。所以任何一层都在审批之前，想预先放行就设 `approved`，想拦截就直接返回、不调 `next`；想按工具或参数改审批的规矩，写在 `tool.approve` 里。
-- 想改交给模型的最终结果：放到最外面（比 -100 更小或相同位置之外）。
-- 只关心某个工具：先判断 `input.call.name`，不是就原样 `return next(input)`。
+审批在所有层里面：写了 `asks` 的工具（plume.tools 的 write、edit、bash）校验完参数再经 `run.ask` 问，其余 `mutating` 工具在执行前按参数问，问的时候经过钩子 `tool.approve`。用户拒绝就不执行。所以任何一层都在审批之前，想预先放行就设 `approved`，想拦截就直接返回、不调 `next`；想按工具或参数改审批的规矩，写在 `tool.approve` 里。只关心某个工具：先判断 `input.call.name`，不是就原样 `return next(input)`。
 
 ### `model.context`
 
-每次调模型前经过一次。最里层原样返回。输入输出都是 `{ sessionId, session, parentId?, owner?, cwd, projectRoots, scratchDir, permissionMode, systemPrompt, sections, messages, tools }`（`session` 见「钩子」开头；`parentId`、`owner` 同 `session` 里的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带；按「是不是侧栏里的会话」藏工具时看 `session.kind`，不用每次去 `ctx.sessions.list()`；`scratchDir` 同 `run.scratchDir`，`projectRoots` 同 `run.projectRoots`；`permissionMode` 是这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()`；`shell` 是这一轮命令跑在哪个 shell、哪一档沙箱（`{ kind, label, sandbox }`，同 `run.shell()`），本体按 `permissionMode` 和 `readOnly` 算、每层交接时重算，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell；外层要求这一轮的命令都只读时设 `readOnly: true`，宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，交给 plume.prompt 时 `shell` 已经是只读那档的），只作用于这一次请求，会话里存的不变。
+每次调模型前经过一次。最里层原样返回。输入输出同一个形状，只作用于这一次请求，会话里存的不变。
+
+| 字段 | 说明 |
+| --- | --- |
+| `sessionId`、`cwd` | 哪个会话、工作目录 |
+| `session` | 所在的会话，见「钩子」开头；按「是不是侧栏里的会话」藏工具时看 `session.kind`，不用每次去 `ctx.sessions.list()` |
+| `parentId`、`owner` | 同 `session` 里的同名字段：插件的子会话两个都有，插件的独立会话只有 `owner`，侧栏里的会话都不带 |
+| `projectRoots`、`scratchDir` | 同 `run.projectRoots`、`run.scratchDir` |
+| `permissionMode` | 这个会话现在的权限模式，含项目覆盖，取值同 `run.permissionMode()` |
+| `shell` | 这一轮命令跑在哪个 shell、哪一档沙箱（`{ kind, label, sandbox }`，同 `run.shell()`）：本体按 `permissionMode` 和 `readOnly` 算、每层交接时重算，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell |
+| `readOnly` | 外层要求这一轮的命令都只读时设 `true`：宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，交给 plume.prompt 时 `shell` 已经是只读那档的 |
+| `systemPrompt`、`sections` | 系统提示词和它分成的段，见下面 |
+| `messages` | 这次要发给模型的消息 |
+| `tools` | 这次给模型的工具表，见下面「工具表也按会话冻结」 |
 
 系统提示词按段给在 `sections` 里（`{ id, text, category?, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（`ctx.resources.list()` 的地址清单）。加自己的说明就加一段，段名用自己的。段名是提供它的插件自己的：要换掉或补充别的插件的某一类段（身份、准则），按段上的 `category` 找，不认段名：
 
@@ -197,7 +355,9 @@ ctx.hook("model.context", (input, next) =>
 
 `systemPrompt` 只读：宿主在每一层交接时按 `sections` 重拼，直接改它不作数。
 
-系统提示词在会话里冻结：plume.prompt 在最外层把里层交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。工具表也按会话冻结：`ctx.tools.register` 和撤下、插件装卸带来的变化（包括里层经 `model.context` 改的 `tools`）在下一轮开头才发给模型，原有工具的顺序不变、新的接在后面；一轮中间撤下的工具还留在表里，模型调它会拿到「没有这个工具」。宿主给的工具表（`input.tools`、`ctx.tools.list()`、`ctx.tools.names()`、`run.tools()` 都是这个顺序）按固定规则排，和 `inject`、装上的先后、加载的先后无关：内置插件里声明了 `kind` 的工具在最前，再是内置插件的其余工具、非内置插件的工具（按插件名、再按工具名，一个插件的工具挨在一起），`category: "mcp"` 的工具（按工具名）在最后。所以调整依赖、重装插件不会让工具挪位置。
+系统提示词在会话里冻结：plume.prompt 在最外层把里层交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。
+
+工具表也按会话冻结：`ctx.tools.register` 和撤下、插件装卸带来的变化（包括里层经 `model.context` 改的 `tools`）在下一轮开头才发给模型，原有工具的顺序不变、新的接在后面；一轮中间撤下的工具还留在表里，模型调它会拿到「没有这个工具」。宿主给的工具表（`input.tools`、`ctx.tools.list()`、`ctx.tools.names()`、`run.tools()` 都是这个顺序）按固定规则排，和 `inject`、装上的先后、加载的先后无关：内置插件里声明了 `kind` 的工具在最前，再是内置插件的其余工具、非内置插件的工具（按插件名、再按工具名，一个插件的工具挨在一起），`category: "mcp"` 的工具（按工具名）在最后。所以调整依赖、重装插件不会让工具挪位置。
 
 段上标 `category`，宿主按它分段统计，不认段名，不标的算系统提示词：
 
@@ -252,7 +412,7 @@ next({ ...input, sections: [...input.sections, { id: "projectMemory", text, cate
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见「钩子」开头 |
+| `session` | 所在的会话，见「钩子」开头 |
 | `step` | 这一轮的第几步，从 1 数；是 1 时就是新的一轮，按轮计数的状态在这里清零 |
 | `stepsLeft` | 后面还能跑几步；是 0 时要接着做，这一轮也会以「用满步数」结束 |
 | `reply` | 这一步的回复（`stopReason` 是 `"length"` 时是撞上了输出上限） |
@@ -290,7 +450,7 @@ ctx.hook("step.end", async (input, next) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见「钩子」开头 |
+| `session` | 所在的会话，见「钩子」开头 |
 | `text` | 这条消息的文字；发的是 `/` 命令时是展开后的那段 |
 | `attachments` | 附件的名字，按顺序 |
 | `synthetic` | 是界面替人说的话（「继续」按钮） |
@@ -323,7 +483,7 @@ ctx.hook("prompt.submit", async (input, next) => {
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见「钩子」开头 |
+| `session` | 所在的会话，见「钩子」开头 |
 | `model` | `{ id, name, contextWindow, maxOutputTokens, tierLines? }`：这个会话现在用的模型；`tierLines` 是价格分档线（输入越过就整次按高一档计），从低到高 |
 | `history` | 现在发给模型的历史（插件改之前的那份），副本。压缩过的，前面是上一次换上的那几条（摘要和一句确认，或按条丢弃时的一条说明），之后是边界以后的原文；剪过的工具结果是剪过的那份 |
 | `previous` | 上一次压缩的 `{ head }`：上一次换上的那几条占了 `history` 开头几条，新的 `keep` 要大于它；没压缩过没有。上一份摘要就在 `history` 开头 |
@@ -366,12 +526,12 @@ ctx.hook("context.compact", async (input) => {
 
 一个工具调用要问人放不放行时经过一次：工具自己经 `run.ask` 问的、会改动工作区却没写 `asks` 的工具在执行前问的、`tool.execute` 的层自己经 `ask` 问的都算。最里层照着 `request` 把审批卡弹给人、等人答。工具经 `run.request` 要人给数据（提问、计划、表单）的不是审批，不到这里，层拦不下它。
 
-权限模式的含义在本体，到不了这里：完全访问、设了 `approved`、`subject` 答过「以后不再问」的（插件给的 subject 按注册这件工具的插件分开记，本体读边界的记在本体名下），本体直接放行（层自己问的只认完全访问）。提权（`request.escalation`）只能由人答：完全访问下也到这里，层答放行本体不认、照样弹卡，层答拒绝照算。`run.request` 不是审批，不到这里。
+权限模式的含义在本体，到不了这里：完全访问、设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行（层自己问的只认完全访问）。提权（`request.escalation`）只能由人答：完全访问下也到这里，层答放行本体不认、照样弹卡，层答拒绝照算。
 
 | 输入字段 | 说明 |
 | --- | --- |
 | `sessionId`、`cwd` | 哪个会话、工作目录 |
-| `session` | 所在的会话：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，见「钩子」开头 |
+| `session` | 所在的会话，见「钩子」开头 |
 | `scratchDirs` | 同 `run.scratchDirs`：同一脉的会话的临时目录，往里写、删里面的东西算正当干活（plume.approval 这么判） |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具 |
@@ -380,9 +540,9 @@ ctx.hook("context.compact", async (input) => {
 | `permissionMode` | 这次调用所在项目现在的权限模式；`full` 只有提权会带到这里 |
 | `signal` | 用户停止这一轮时中止 |
 
-输出是 `"once"`、`"always"` 或 `"reject"`。不调 `next` 就是替人答了，卡不弹；人在卡上答「以后不再问」时宿主把 `subject` 连同它的名下（注册这件工具的插件，或本体）记进设置（提权的不记）；层自己返回 `"always"` 只算放行这一次，不记。
+输出是 `"once"`、`"always"` 或 `"reject"`。不调 `next` 就是替人答了，卡不弹；人在卡上答「以后不再问」时宿主把 `subject` 连同它的名下（注册这件工具的插件；本体读边界的记在本体名下，见「问人」）记进设置（提权的不记）；层自己返回 `"always"` 只算放行这一次，不记。
 
-`plume.hooks` 在 order 2000（plume.approval 里面，只有真要弹给人的才到）跑 PermissionRequest 钩子：`byLayer` 的不问钩子（`run.request` 本来就不经这里）；钩子拒绝就 `"reject"`，放行就 `"once"`（提权的放行本体不认），没表态交给里层问人。
+`plume.hooks` 在 order 2000（plume.approval 里面，只有真要弹给人的才到）跑 PermissionRequest 钩子：`byLayer` 的不问钩子；钩子拒绝就 `"reject"`，放行就 `"once"`（提权的放行本体不认），没表态交给里层问人。
 
 内置插件 plume.approval 在 order 1000，只管帮我批准（`auto`）的风险规则：请求批准档、提权、层自己问的、没有 `subject` 的交给里层；其余按风险规则判：本体的 bash、write、edit 看不出风险的直接放行，命中规则的把理由写进 `request.reason`（按界面语言）交给里层，读项目外、插件的工具一律交给里层；其余交给里层。要放行自己的工具或改严、放宽规则，在外层（默认 order 0）判断，不关心的原样 `return next(input)`；要整个换掉风险规则，在外层不调 `next`。这一层抛错时这次调用以出错结束，不会当作放行。
 
@@ -428,9 +588,10 @@ const reply = (await ctx.sessions.messages(child.id)).findLast((message) => mess
 ```
 
 - 工作目录、项目随父会话；没另选模型时用父会话的模型和思考档位。子会话不进侧栏，不能再挂子会话，父会话删掉时一起删（`onDeleted` 每个都会收到）。
-- `send` 的这句话照常经 `prompt.submit`；默认是人的气泡，派发任务传带 `origin: "parent"` 的 `SessionMessage`。正在跑时抛错，运行中插话用 `steer`，宿主等工具结果完整后再交给模型。`signal` 中止、`stop` 都让这一轮以 `aborted` 结束。
-- 后台用 `start`，它只等运行登记，不等回答；工具先交回子会话 id，后台用 `wait(run.id)` 等结果、`report(run.id, text)` 交给父会话。每次续跑是新的运行句柄，不能按子会话 id 重复交差。所有异步错误都要处理；不要用轮询或直接改会话库模拟送达。
-- 父轮正常结束不取消后台，明确停止父会话会取消后台及待送达结果，不连带停止独立 `send` 的侧边聊天。插件停用、父会话删除或应用退出也会取消。插件自己的排队名额和未启动项经 `onStopped`、`onDeleted`、`ctx.effect` 清理。
+- `send` 发一句并等这一轮结束，这句话照常经 `prompt.submit`；`message` 可为字符串或 `SessionMessage`（完整内容与附件），默认是人的气泡，派发任务传带 `origin: "parent"` 的 `SessionMessage`。正在跑时抛错，运行中插话用 `steer`（空闲时拒绝），宿主等工具结果完整后再交给模型。`signal` 中止、`stop` 都让这一轮以 `aborted` 结束。这些方法只能动自己建的会话。
+- 后台用 `start`，它只等运行登记，不等回答，立即交回 `{ id, sessionId }`；工具先交回子会话 id，后台用 `wait(run.id)` 等该次结束、`report(run.id, text)` 把结果送给它的真实父会话：父会话忙时在安全的步骤边界读入，闲时唤起；停止、过期、重复的结果返回 false，不能任意向会话发消息。每次续跑是新的运行句柄，不能按子会话 id 重复交差。所有异步错误都要处理；不要用轮询或直接改会话库模拟送达。
+- `report` 的 `frame`（`{ head, tail?() }`）：同一次送达里本插件带 `frame` 的几份合成一段，`head` 写一次，接着各份正文，最后是最后一份的 `tail()`（送出那一刻才取，比如「还在等谁」）。`delivery` 让界面在对话里画一行，见「后台与会话间递话」。
+- 父轮正常结束不取消后台，明确停止父会话会取消后台及待送达结果，不连带停止独立 `send` 的侧边聊天。插件停用、父会话删除或应用退出也会取消。插件自己的排队名额和未启动项经 `onStopped`（会话被明确停止时通知，监听随插件卸载）、`onDeleted`、`ctx.effect` 清理。
 - 续跑复用原子会话，重建该种类的提示词与工具限制后再次 `start`；别创建新会话丢掉上下文。种类、排队状态和模型偏好由插件存到 `ctx.dataDir`，宿主不识别这些业务字段。
 - 子会话用什么提示词、哪些工具，经 `model.context`、`tool.execute` 按 `sessionId` 认出自己的会话来改（建的时候记下 id；重启后从 `list()` 里按 `owner` 找回）。各钩子的输入和 `run` 直接带着 `session`（`kind`、`parentId`、`owner`），只想分清子会话和顶层会话时看它就够。隐藏不等于禁用：藏起的工具在 `tool.execute` 里再拦一次。
 - 子会话要人批准时，审批卡压在主输入框上方，卡上写着子会话的标题；界面入口用 `ui.Conversation` 画它、`ui.useSession` 读它（见 ui.md）。
@@ -473,9 +634,10 @@ const stop = await done; // 第一轮为什么结束：done、error、stalled、
 await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的后台命令都回来了，问出去的请求都有了答复，结果唤起的几轮也做完了（挂着的开发服务器、监视、约好的唤醒不等）
 ```
 
-- 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`、模型不给就用默认模型。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它，`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
+- 返回 `{ session, done, idle, reportBack }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）；`reportBack(text, delivery)` 把结果作为一条运行时送达交回 `spawnedFrom` 那个会话一次（`delivery` 和 `report` 的同一个形状，宿主填上新会话的 id，默认画成「来自新会话」一行、点了过去），来处删了、归档了返回 false。
+- 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
-- `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话。不对时抛错，message 是给人看的话。
+- `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
 - 什么时候开由插件定，但开出来的每个会话都是实打实的一轮模型调用：只在到点了、人点了按钮时开，不在渲染、循环里开。界面上要把人带过去，用 `ui.openSession(session.id)`（人点了按钮时）。
 
 ## 代管会话
@@ -497,6 +659,7 @@ await ctx.sessions.respond(asker, approval.toolCallId, "once"); // 审批卡（�
 await ctx.sessions.answer(asker, request.toolCallId, { answer: "先备份" }); // 等人给数据的卡：值由那个工具核
 ```
 
+- `post` 往里转一句话：排进和人同一条队，闲着当场开一轮，返回 `{ started }`。`respond`、`answer` 替人答它和挂在它下面的子会话弹着的那张卡：审批卡（含提权）用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答；答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的会话抛错。
 - 会话还是人的顶层会话：进侧栏，人能接着聊，标题旁写着「由 你的显示名 代管」；权限照这个会话的设置，不因话是你转来的而变。钩子里 `session.steward` 是代管它的插件。
 - 转来的话画成人的气泡、标着「你的显示名 转来」，模型读到的前面有一句本体写的来处说明（插件从 Plume 之外转来、发送者 Plume 没核实）；`prompt.submit` 的 `launched` 为 true。
 - 卡只答弹着的那一张（`approval` 事件里的那张），人在桌面上照样能点，谁先到算谁的。「以后不再问」不给插件，只有 `once`、`reject`。你答的那次调用底下写「由 你的显示名 代答」，模型读到的结果里也写明是你转达的。外面答的人是不是该答的人，由你确认，本体不核。
@@ -543,7 +706,7 @@ Plume 自带的服务：
 
 ## 网页
 
-浏览器这类插件自己画网页：界面入口在面板里放一个 `<webview>`，页面怎么走、读什么、点哪里都由逻辑入口经 `ctx.pages` 驱动。宿主只管主进程才做得到的事，不认识地址栏、标签、书签这些。
+浏览器这类插件自己画网页：界面入口在面板里放一个 `<webview>`，页面怎么走、读什么、点哪里都由逻辑入口经 `ctx.pages` 驱动。宿主只管主进程才做得到的事，不认识地址栏、标签、书签这些。`ctx.pages` 的方法：`attach` 认下、`load`、`go`、`evaluate`、`input`、`insertText`、`capture`、`setZoom`、`emulate`、`devtools`、`answerDialogs`、`chromeLogins`，`onEvent` 收页面的事件，`inspect` 见「隐藏页面检查」。
 
 - **认下一页**：`<webview>` 挂上（`did-attach`）以后，界面入口读 `getWebContentsId()`，经 `ui.remote()` 交给逻辑入口，逻辑入口调 `ctx.pages.attach(id, contentsId)`；`id` 是插件自己起的页面名（浏览器用面板标签的 id）。之后的方法都按这个 `id` 找页面，只找得到自己认下的。一个 `<webview>` 只能认作一页；它被卸掉（标签关了、组件卸了）就收到 `detached`，页面没了。同一个 `id` 再认另一个 `<webview>` 时换成新的（标签弹到独立窗口、接回来时就是这样），旧的不再算、卸掉时不报 `detached`。
 - **宿主管着的**：主窗口和弹出去的面板窗口能挂 `<webview>`（面板 `detachable` 时弹出去的那边画一个新的，按地址重新加载、重新 `attach`）；页面一律沙箱、不开 Node、不带 preload，存在单独的一份浏览数据（`persist:plume-web`）里；只放 http、https 和 `about:blank`，跳去别的协议的被拦下，报 `blocked`；页面要开新窗口不开，报 `popup`（插件自己决定开成一个标签还是不管），脚本按尺寸开的小窗（第三方登录、支付）例外：宿主开成挂在 Plume 窗口上的小窗口、和开它的页面连着，报 `popup` 时带 `window: true`，插件不用再开、也驱动不了它；页面要的权限（摄像头、通知……）一律拒。
@@ -612,7 +775,7 @@ export default {
 } satisfies Plugin;
 ```
 
-工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒（见「工具」一节），任何插件都经 `ctx.sessions` 读、停、取消，不用声明 `inject`：
+工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒（见「后台与会话间递话」），任何插件都经 `ctx.sessions` 读、停、取消，不用声明 `inject`：
 
 - `jobs(sessionId)` 只返回该会话的任务元数据（`BackgroundJobInfo`），包括已结束的任务；表跟随当前进程，历史命令仍在会话消息里。
 - `jobOutput(sessionId, jobId)` 读取登记它的工具给的输出（plume.tools 的后台命令是日志末尾至多 256 KiB），返回 `text`、`done`、`truncated` 和可选 `error`，不消耗模型未读输出、不抑制送达；这个会话里没有这个任务时抛错。
