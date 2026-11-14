@@ -150,7 +150,7 @@ function ToolGroup({
 		words = (
 			<>
 				{summary}
-				<Marks failed={failedLater && failedIds.size === 0} stopped={false} added={added} removed={removed} />
+				<Marks failed={failedLater || failedIds.size > 0} stopped={false} added={added} removed={removed} />
 			</>
 		);
 		text = summary;

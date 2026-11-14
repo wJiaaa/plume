@@ -121,6 +121,9 @@ export async function checkBrowser(options: {
 			const row = /(e\d+) div #row Open row/.exec(messages)?.[1];
 			if (row && !messages.includes("toolu_browser_row"))
 				return { toolCalls: [{ id: "toolu_browser_row", name: "browser_act", args: { action: "click", ref: row, read: true } }] };
+			// 自定义动作的一次失败也要留在收起的工具组标题上，不能被后续成功调用盖掉。
+			if (!messages.includes("toolu_browser_missing"))
+				return { toolCalls: [{ id: "toolu_browser_missing", name: "browser_act", args: { action: "click", selector: "#missing" } }] };
 			if (!messages.includes("toolu_browser_press"))
 				return { toolCalls: [{ id: "toolu_browser_press", name: "browser_act", args: { action: "click", selector: "#go" } }] };
 			if (!messages.includes("toolu_browser_login"))
@@ -158,6 +161,18 @@ export async function checkBrowser(options: {
 		await waitMain(() => titled("Next page") !== undefined, "页面换到了下一页");
 		await until(`document.querySelector('${panel} [data-browser-cursor]') !== null`, "面板上画出 agent 的光标");
 		await capture("smoke-browser-agent.png");
+		const group = '[data-plume-step="group:browser"]';
+		await until(
+			`document.querySelector('${group} > button')?.getAttribute('aria-expanded') === 'false' && document.querySelector('${group} > button')?.textContent.includes('次')`,
+			"浏览器工具组结束后保持收起",
+		);
+		assert.equal(await page(`document.querySelector('${group} > button .text-danger')?.textContent`), "失败", "收起的自定义动作工具组仍提示失败");
+		await clickVisible(page, `${group} > button`);
+		await until(
+			`document.querySelector('${group} [data-tool-call="toolu_browser_missing"][data-status="failed"]') !== null && document.querySelector('${group} [data-tool-call="toolu_browser_press"][data-status="done"]') !== null`,
+			"组内确有一次失败及其后成功的调用",
+		);
+		await capture("smoke-browser-group-failed.png");
 
 		// 地址栏打开磁盘上的 `.html`：逻辑入口换成本机页面的地址。
 		await page(`document.querySelector('${panel} [data-browser-omnibox] input').focus()`);
