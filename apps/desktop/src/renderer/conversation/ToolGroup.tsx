@@ -9,15 +9,15 @@
  *   一组跑着时新来的行淡入。
  * - **末尾的推理还在写**：标题后面接一句「正在思考 · 5s」，句子本身不动。推理和回来的后台命令结果在卡片里各占一行。
  *
- * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题是一枚「一组」（Layers），
- *   跑着说正在做的那一次时也不换，免得图标跟着每一句跳。
+ * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题不画图标，
+ *   跑着说正在做的那一次时也不画，免得图标跟着每一句跳。
  *
  * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种点开挂在竖线上的画法是 `WorkStep`。
  */
 
 import type { UnansweredDetails } from "@plume/contract";
 import { Collapse, translate, useHeldKey, useI18n } from "@plume/ui";
-import { ChevronRight, Layers } from "@plume/ui/icons";
+import { ChevronRight } from "@plume/ui/icons";
 import { type AnimationEvent, Fragment, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
@@ -187,13 +187,7 @@ function ToolGroup({
 				data-open={open && expandable ? "" : undefined}
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
-				{only ? (
-					<RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0] && !unanswered[0]) || failedLater} />
-				) : (
-					<span className="tool-icon">
-						<Layers size={13} strokeWidth={1.8} />
-					</span>
-				)}
+				{only && <RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0] && !unanswered[0]) || failedLater} />}
 				<SwapText swapKey={swapKey} glide={glide}>
 					{words}
 				</SwapText>
