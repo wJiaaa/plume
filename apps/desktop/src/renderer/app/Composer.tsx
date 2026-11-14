@@ -1,6 +1,6 @@
 import type { CommandExpansion, Message, OutgoingMessage, QueuedMessage, SessionSummary, SessionView, UserMessage } from "@plume/contract";
 import { type EditorView, keymap } from "@codemirror/view";
-import { Button, formatList, useI18n } from "@plume/ui";
+import { Button, formatList, shortcutLabel, useI18n } from "@plume/ui";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { layoutMode } from "../layout.ts";
 import { notify } from "../toast/index.ts";
@@ -71,6 +71,10 @@ function pickSent(outgoing: OutgoingMessage): Pick<UserMessage, "displayText" | 
 const NO_MESSAGES: Message[] = [];
 const NO_QUEUE: QueuedMessage[] = [];
 const COMPOSER_ARRIVAL_WINDOW = 1000;
+/** 输入框连同它那一排按钮：用鼠标点发送的，焦点落在发送键上，也算人在这里。 */
+const COMPOSER_AREA = "main .plume-composer-dock";
+/** 换会话（或输入框换了一个挂上）的那一刻，焦点在不在输入框那一块：卸下旧的时记下，新的挂上时用掉。 */
+let carryFocus = false;
 
 /** `cards`：跟着会话的卡片放不下浮在转录上，画在输入框正上方。 */
 export function Composer({ view, centered = false, cards = false }: { view?: SessionView; centered?: boolean; cards?: boolean }) {
@@ -114,7 +118,21 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 			]),
 		[],
 	);
-	useEffect(focusComposer, [scope]);
+	/*
+	 * 换会话不抢焦点：人在侧栏点了一个会话，多半是去看的，键盘还该归侧栏。新对话的空白页（`centered`）聚焦，那里就是等人打字；
+	 * 焦点本来就在输入框那一块时跟过去（空白页发出第一句后进了新建的会话，输入框换了一个挂上）。
+	 */
+	useLayoutEffect(
+		() => () => {
+			carryFocus = document.activeElement instanceof Element && document.activeElement.closest(COMPOSER_AREA) !== null;
+		},
+		[scope],
+	);
+	useEffect(() => {
+		if (centered || carryFocus) focusComposer();
+		carryFocus = false;
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 只在换了会话（或刚挂上）时看一次
+	}, [scope]);
 	const column = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		if (centered) return;
@@ -251,7 +269,8 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 		}
 		return result;
 	};
-	const send = async () => {
+	/** `later`：⌘回车，会话正忙时排到这一轮之后，不插进去。 */
+	const send = async (later = false) => {
 		if (!canSend || state.sending || !settings?.defaultModel || expanding.current) return;
 		let command: CommandExpansion | null | undefined;
 		expanding.current = true;
@@ -272,11 +291,13 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 			references,
 		);
 		/*
-		 * 忙的时候排队；队里还有前面的也排，否则这句会越过前面那几句先到。命令自己声明了 `steer` 的除外：写命令的人说清楚了
-		 * 「这条就是要插进正在跑的那一轮」，队列不该替他改主意。
+		 * 忙的时候：打的话插进正在跑的这一轮（读到之前在排队条上标着插话），按 ⌘回车的排到这一轮之后。
+		 * 命令按它自己声明的：声明了 `steer` 的插进去，别的排队——展开以后是一件要单独做的事，不是对眼前这一步的纠偏。
+		 * 停着、队里还有前面的时照样排：否则这句会越过前面那几句先到；排进去会把队伍推起来。
 		 */
-		const steering = command?.deliver === "steer";
-		if (view && !steering && (running || queued.length > 0)) {
+		const declared = command?.deliver === "steer";
+		const steering = !later && (command ? declared : true);
+		if (view && (running ? !steering : !declared && queued.length > 0)) {
 			// 先清空再等排队的结果：连按两下回车不会把同一句排两遍；排不上再放回来。
 			const draft: QueuedDraft = { text: value, attachments: attachments.attachments, quotes: quoted, sessionRefs: references };
 			void enqueue(
@@ -293,7 +314,6 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 			attachments.clear();
 			return;
 		}
-		if (running && !steering) return;
 		update({ sending: scope });
 		let id = view?.summary.id;
 		try {
@@ -380,6 +400,7 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 						items={queued}
 						running={running}
 						onSendNow={(id) => void agent.sendQueued(view.summary.id, id).catch((error: unknown) => notify(errorText(error), "error"))}
+						onSteer={(id) => void agent.steerQueued(view.summary.id, id).catch((error: unknown) => notify(errorText(error), "error"))}
 						onRemove={(id) => void takeQueued(view.summary.id, id)}
 						onEdit={async (id) => {
 							const taken = await takeQueued(view.summary.id, id);

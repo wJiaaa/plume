@@ -30,13 +30,14 @@ function ariaAttributes(label: string, combobox: ComboboxState | undefined): Rec
 /**
  * 主输入框里打字的那一块：值是 Markdown 原文，就地渲染见 `live-markdown.ts`。
  *
- * Enter 发送，Shift+Enter 换行（在列表、引用里接着写下一项的标记）。输入法组字时的按键一律不接：
+ * Enter 发送，Shift+Enter 换行（在列表、引用里接着写下一项的标记），给了 `onSubmitLater` 时 ⌘Enter 是它。输入法组字时的按键一律不接：
  * 选词的那下 Enter 不是发送。高度随字长，到八行或窗口的三分之一为止，再多就在框里滚。
  */
 export function MarkdownField({
 	value,
 	onChange,
 	onSubmit,
+	onSubmitLater,
 	placeholder,
 	label,
 	extensions = NO_EXTENSIONS,
@@ -47,6 +48,8 @@ export function MarkdownField({
 	/** 人改了字。外面改的值同步进来时不调。 */
 	onChange: (value: string) => void;
 	onSubmit: () => void;
+	/** ⌘Enter（PC 键盘上 Ctrl+Enter）：会话正忙时排到这一轮之后，不插进去。不给时 ⌘Enter 照编辑器的默认另起一行。 */
+	onSubmitLater?: () => void;
 	placeholder: string;
 	label: string;
 	/** 建编辑器时加上的扩展（附件标记），之后不换。 */
@@ -60,8 +63,8 @@ export function MarkdownField({
 	const scroller = useRef<HTMLElement | null>(null);
 	const [view, setView] = useState<EditorView | null>(null);
 	// 编辑器只建一次，回调和文案经 ref、compartment 换新，不重建（重建会丢光标和撤销历史）。
-	const handlers = useRef({ onChange, onSubmit });
-	handlers.current = { onChange, onSubmit };
+	const handlers = useRef({ onChange, onSubmit, onSubmitLater });
+	handlers.current = { onChange, onSubmit, onSubmitLater };
 	const prompt = useRef(new Compartment());
 	const aria = useRef(new Compartment());
 
@@ -77,6 +80,14 @@ export function MarkdownField({
 							key: "Enter",
 							run: () => {
 								handlers.current.onSubmit();
+								return true;
+							},
+						},
+						{
+							key: "Mod-Enter",
+							run: () => {
+								if (!handlers.current.onSubmitLater) return false;
+								handlers.current.onSubmitLater();
 								return true;
 							},
 						},

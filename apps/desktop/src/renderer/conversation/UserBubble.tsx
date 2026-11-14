@@ -63,9 +63,12 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 	 * 刚发出去的这一条从右下角长出来（`.plume-user-arrive`）。打开、切回会话时已有的气泡不演（`Arrival.fresh`）；
 	 * 新对话的第一句是随整页一起挂上的，同样算刚露面，那一下演的是输入框升起。
 	 * 演完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
+	 *
+	 * 插话（`steered`）不演：它是人看着自己的排队条按下去的那一句，不是发出去以后才见到的一句话；而且它落在
+	 * 正在跑的这一轮中间，上下都在动，再来一下从零长出来会像整块重画了一遍。
 	 */
 	const arrival = useContext(Arrival);
-	const [arriving, setArriving] = useState(() => !arrival.fresh && Date.now() - message.timestamp < SENT_JUST_NOW);
+	const [arriving, setArriving] = useState(() => !arrival.fresh && !message.steered && Date.now() - message.timestamp < SENT_JUST_NOW);
 
 	/** 看图器里的这几张：已经发出去，不能改写；标注完的副本放回这个会话的输入框（没有输入框的转录照旧复制）。 */
 	const viewerImages = () =>

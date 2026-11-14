@@ -20,6 +20,7 @@ export function ComposerShell({
 	value,
 	onChange,
 	onSubmit,
+	onSubmitLater,
 	placeholder,
 	left,
 	right,
@@ -33,6 +34,8 @@ export function ComposerShell({
 	value: string;
 	onChange: (value: string) => void;
 	onSubmit: () => void;
+	/** ⌘Enter，见 `MarkdownField`。 */
+	onSubmitLater?: () => void;
 	placeholder: string;
 	left?: ReactNode;
 	right?: ReactNode;
@@ -194,6 +197,7 @@ export function ComposerShell({
 				value={value}
 				onChange={onChange}
 				onSubmit={onSubmit}
+				{...(onSubmitLater ? { onSubmitLater } : {})}
 				placeholder={placeholder}
 				label={t("composer.message")}
 				{...(extensions ? { extensions } : {})}

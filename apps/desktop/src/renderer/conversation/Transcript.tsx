@@ -175,8 +175,9 @@ export function Transcript({
 	/*
 	 * 人发了一句话就回到底部，不管翻到了哪儿：回答在末尾，留在原处就是盯着一块什么都不发生的屏幕。
 	 * 按最后一句人说的话认：换会话时它也变，但那时 `useFollowBottom` 自己会恢复位置，所以只认同一个会话里的变化。
+	 * 插话（`steered`）不算：它不是新开的一问，这一轮本来就贴着底部，跟着跳一次会在转录末尾闪一帧。
 	 */
-	const lastAsk = messages.findLast((message) => message.role === "user" && !message.synthetic)?.timestamp;
+	const lastAsk = messages.findLast((message) => message.role === "user" && !message.synthetic && !message.steered)?.timestamp;
 	const asked = useRef({ id, lastAsk });
 	const { returnToBottom } = follow;
 	useLayoutEffect(() => {

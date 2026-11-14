@@ -11,6 +11,7 @@ import type { CompactionRun, Hiccup, Message } from "@plume/contract";
 import { runs } from "../src/renderer/conversation/grouping.ts";
 import { RunsCache, TurnBlocksCache } from "../src/renderer/conversation/transcript-shape.ts";
 import { turnBlocks, withoutThinking } from "../src/renderer/conversation/turn-blocks.ts";
+import { liveTurnMeter } from "../src/renderer/conversation/turns.ts";
 import { CARRY_ON_PROMPTS } from "../src/renderer/conversation/turn-stop.ts";
 
 /** 可复现的随机数（mulberry32）。 */
@@ -170,6 +171,38 @@ function compare(seed: number, steps: number) {
 
 test("每拍只重算最后一轮的结果，和从头算逐步逐项相同", () => {
 	for (let seed = 1; seed <= 160; seed++) compare(seed, 220);
+});
+
+test("插话不开新一轮：落在正在跑的那一块里，块和计时都不变", () => {
+	const at = (n: number) => 1_700_000_000_000 + n * 1000;
+	const asked: Message = { role: "user", content: [{ type: "text", text: "读一下" }], timestamp: at(0) };
+	const tools: Message = {
+		role: "assistant",
+		content: [{ type: "toolCall", id: "c1", name: "read", arguments: { path: "a.ts" } }],
+		stopReason: "toolUse",
+		timestamp: at(1),
+		provider: "p",
+		model: "m",
+		usage,
+	} as Assistant;
+	const result: Message = {
+		role: "toolResult",
+		toolCallId: "c1",
+		toolName: "read",
+		content: [{ type: "text", text: "ok" }],
+		isError: false,
+		timestamp: at(2),
+	} as Message;
+	const steered: Message = { role: "user", content: [{ type: "text", text: "只看 src/" }], timestamp: at(3), steered: true };
+	const list: Message[] = [asked, tools, result, steered];
+	const rows = runs(list);
+	const blocks = turnBlocks(rows, true);
+	// 一块是开头那句话，一块是这一轮的过程：插话进来不另起一轮，也不另起一块。
+	assert.equal(blocks.length, 2);
+	const steeredRow = rows.find((run) => run.kind === "message" && run.message === steered);
+	assert.ok(steeredRow && blocks.some((block) => block.runs.includes(steeredRow)), "插话落在这一轮的块里，不另起一块");
+	// 计时也不从插话重新起。
+	assert.equal(liveTurnMeter(list)?.startedAt, asked.timestamp);
 });
 
 test("回复在流的时候，前面那几轮的行和块原样沿用", () => {

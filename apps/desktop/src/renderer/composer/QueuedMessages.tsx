@@ -1,9 +1,11 @@
 /**
- * 排在输入框上方、等着轮到自己的那几条。会话正忙时按下回车，话不插进正在跑的那一轮，落在这里：
- * 一条一行，看得见、改得了，也排得出先后。
+ * 排在输入框上方、还没被读到的那几条：一条一行，看得见、改得了，也排得出先后。
  *
- *   现在就发     停下这一轮、拿这一条重新开始。不做成插进这一轮：插话要等模型写完手上这一步才被读到，
- *                那可以是好几分钟，按下去像什么也没发生。
+ * 会话正忙时按回车，话插进正在跑的这一轮：模型做完手上这一步才读到，那可以是好几分钟，所以读到之前它在这里，
+ * 标着「插话」，排在最前、按说的先后，不能拖。按 ⌘回车的、子会话交过来的排在它们后面，等这一轮结束再发。
+ *
+ *   插进这一轮   排着的一条改成插话（会话在跑时才有）。
+ *   现在就发     停下这一轮、拿这一条重新开始，不等手上这一步做完。
  *   删除         不想说了。
  *   编辑         这一条整份退回输入框，连同附件和引用：它先从条上收掉，再落进输入框。
  *   插件的项     「更多」菜单里排在编辑后面（在侧边聊天中打开）：这一条从条上收掉，交给插件拿到别处去发。
@@ -16,7 +18,7 @@
  */
 
 import { DURATION, IconButton, MenuBody, MenuItem, motionReduced, Popover, useI18n, usePopover } from "@plume/ui";
-import { CornerDownLeft, GripVertical, MoreHorizontal, PencilLine, Trash2 } from "@plume/ui/icons";
+import { CornerDownLeft, CornerDownRight, GripVertical, MoreHorizontal, PencilLine, Trash2 } from "@plume/ui/icons";
 import { type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { QueueChoice } from "../plugins.tsx";
 import { queueMove } from "./queue-move.ts";
@@ -25,6 +27,8 @@ export interface QueuedMessage {
 	id: string;
 	/** 行里显示的那句话。 */
 	preview: string;
+	/** 插进这一轮、还没读到的话。 */
+	steered?: true;
 }
 
 /** 还在播退场的那一条，连同它走之前站的位置：补回原处，队伍才不会在它头上先塌一格。 */
@@ -39,6 +43,7 @@ export function QueuedMessages<T extends QueuedMessage>({
 	items,
 	running,
 	onSendNow,
+	onSteer,
 	onRemove,
 	onEdit,
 	onMove,
@@ -48,6 +53,8 @@ export function QueuedMessages<T extends QueuedMessage>({
 	items: readonly T[];
 	running: boolean;
 	onSendNow: (id: string) => void;
+	/** 插进这一轮：会话在跑时，没标插话的那几行上有。 */
+	onSteer?: (id: string) => void;
 	onRemove: (id: string) => void;
 	/** 编辑：从队里拿走，整份退回输入框。 */
 	onEdit: (id: string) => void;
@@ -110,6 +117,7 @@ export function QueuedMessages<T extends QueuedMessage>({
 			status={running ? t("composer.queueWaiting") : t("composer.queueHeld")}
 			nowLabel={running ? t("composer.queueNow") : t("composer.queueSendNow")}
 			onSendNow={onSendNow}
+			{...(running && onSteer ? { onSteer } : {})}
 			onRemove={(id) => {
 				dismissed.current.add(id);
 				onRemove(id);
@@ -147,6 +155,7 @@ function Rows<T extends QueuedMessage>({
 	status,
 	nowLabel,
 	onSendNow,
+	onSteer,
 	onRemove,
 	onEdit,
 	onMove,
@@ -159,6 +168,7 @@ function Rows<T extends QueuedMessage>({
 	status: string;
 	nowLabel: string;
 	onSendNow: (id: string) => void;
+	onSteer?: (id: string) => void;
 	onRemove: (id: string) => void;
 	onEdit: (id: string) => void;
 	onMove: (id: string, targetId: string, placement: "before" | "after") => void;
@@ -173,14 +183,15 @@ function Rows<T extends QueuedMessage>({
 	/** 一行到下一行的距离，拖动开始时量一次：行高固定，拖动中再量会读到让位后的位置。 */
 	const step = useRef(0);
 	const origin = useRef({ y: 0, index: 0 });
-	// 拖动、↑↓ 的位置都按还排着的那几条数，正在收起的不算：见 `queueMove`。
-	const staying = rows.filter((row) => !row.leaving);
+	// 拖动、↑↓ 的位置都按还排着、没标插话的那几条数：正在收起的不算（见 `queueMove`），插话按说的先后、总在最前，不参与排序。
+	const ordered = rows.filter((row) => !row.entry.steered);
+	const staying = ordered.filter((row) => !row.leaving);
 	const sortable = staying.length > 1;
 
 	const startDrag = (index: number, id: string, event: PointerEvent) => {
 		// 触摸留给页面自己滚；只有主键起拖。
 		if (!sortable || event.button !== 0 || event.pointerType === "touch") return;
-		const elements = [...(list.current?.querySelectorAll("[data-queue-row]:not([data-leaving])") ?? [])];
+		const elements = [...(list.current?.querySelectorAll("[data-queue-row]:not([data-leaving]):not([data-steered])") ?? [])];
 		const first = elements[0]?.getBoundingClientRect();
 		const second = elements[1]?.getBoundingClientRect();
 		step.current = first && second ? second.top - first.top : 0;
@@ -207,7 +218,7 @@ function Rows<T extends QueuedMessage>({
 
 	const endDrag = () => {
 		if (!drag) return;
-		const move = queueMove(rows, drag.from, drag.to);
+		const move = queueMove(ordered, drag.from, drag.to);
 		if (move) {
 			// 新顺序和 transform 归零同一帧生效，这一帧关掉过渡，不然行会从新位置再偏出去一截、滑回来。
 			setSettling(true);
@@ -227,7 +238,7 @@ function Rows<T extends QueuedMessage>({
 	};
 
 	const nudge = (index: number, by: -1 | 1) => {
-		const move = queueMove(rows, index, index + by);
+		const move = queueMove(ordered, index, index + by);
 		if (move) onMove(move.id, move.targetId, move.placement);
 	};
 
@@ -248,13 +259,14 @@ function Rows<T extends QueuedMessage>({
 					leaving={row.leaving}
 					recalled={recalled.has(row.entry.id)}
 					index={staying.indexOf(row)}
-					sortable={sortable}
+					sortable={sortable && !row.entry.steered}
 					dragging={drag?.id === row.entry.id}
 					settling={settling}
-					offset={row.leaving ? 0 : offsetOf(staying.indexOf(row))}
-					status={status}
+					offset={row.leaving || row.entry.steered ? 0 : offsetOf(staying.indexOf(row))}
+					status={row.entry.steered ? t("composer.queueSteered") : status}
 					nowLabel={nowLabel}
 					onSendNow={onSendNow}
+					{...(onSteer && !row.entry.steered ? { onSteer } : {})}
 					onRemove={onRemove}
 					onEdit={onEdit}
 					onGone={onGone}
@@ -282,6 +294,7 @@ function Row({
 	status,
 	nowLabel,
 	onSendNow,
+	onSteer,
 	onRemove,
 	onEdit,
 	onGone,
@@ -303,6 +316,7 @@ function Row({
 	status: string;
 	nowLabel: string;
 	onSendNow: (id: string) => void;
+	onSteer?: (id: string) => void;
 	onRemove: (id: string) => void;
 	onEdit: (id: string) => void;
 	onGone: (id: string) => void;
@@ -323,6 +337,7 @@ function Row({
 	return (
 		<div
 			data-queue-row=""
+			data-steered={entry.steered || undefined}
 			role="listitem"
 			className="plume-queue-row"
 			data-leaving={leaving || undefined}
@@ -363,10 +378,20 @@ function Row({
 					>
 						<GripVertical size={13} strokeWidth={1.9} aria-hidden />
 					</button>
+					{entry.steered && <span className="shrink-0 text-caption text-ink-faint">{t("composer.queueSteeredTag")}</span>}
 					<span className="min-w-0 flex-1 truncate text-ink-muted" data-plume-tip={`${entry.preview}\n\n${status}`}>
 						{entry.preview}
 					</span>
 					<div className="flex shrink-0 items-center gap-1 text-ink-faint">
+						{onSteer && (
+							<IconButton
+								size="sm"
+								data-queue-steer=""
+								label={t("composer.queueSteer")}
+								onClick={() => onSteer(entry.id)}
+								icon={<CornerDownRight size={13.5} strokeWidth={1.9} aria-hidden />}
+							/>
+						)}
 						<IconButton
 							size="sm"
 							data-queue-now=""

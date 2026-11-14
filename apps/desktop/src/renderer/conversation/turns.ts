@@ -53,9 +53,13 @@ export function newClock(start = 0): Clock {
 /**
  * 人开口了，新的一轮从这里起。界面替人说的（「继续」、续写的催促）都是 `synthetic`，接着的是上一轮：
  * 停下又按了继续，做的还是同一件事，算成新的一轮，一段没做完的活就被切成两段。
+ *
+ * 插话（`steered`）是人对正在跑的这一轮说的半句话，不是新的一轮：算成开轮的话，那一轮在插话处断成两截，
+ * 后半截是新的块、新的 `runKey`，整块卸掉重挂（气泡再演一遍进场），计时也从插话重新起（「0s」），
+ * 转录还会跟着 `lastAsk` 跳回底部。
  */
 export function opensTurn(message: Message): boolean {
-	return message.role === "user" && !message.synthetic;
+	return message.role === "user" && !message.synthetic && !message.steered;
 }
 
 /**

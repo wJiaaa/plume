@@ -273,6 +273,11 @@ export function walkRuns(
 		if (message.role === "toolResult") continue;
 		// 界面替人说的话（「继续」、续写的催促）不画，也不该把它两边的活切成两段：那是一段没断过的工作。送达除外，见下面。
 		if (message.role === "user") {
+			// 插进这一轮的话和「继续」一样不切轮，但它是人说的话，要画：原地一行，不在这一轮开头。
+			if (message.steered) {
+				out.push({ kind: "message", message, index, upTo: message.content.length });
+				continue;
+			}
 			if (!opensTurn(message)) {
 				// 后台送回来的结果、别的会话的信画成一行（`DeliveryRow`、`PeerLetterRow`）：不画，读的人看到的是 agent 说完一段话、隔了一阵又自己动了起来。
 				// 送达紧挨着一句说完了的话：那句话就是一段的结尾。

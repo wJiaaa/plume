@@ -31,8 +31,8 @@ export function questionsIn(messages: readonly Message[], imageLabel: string): Q
 			if (question && answer) question.answer = answer.slice(0, 600);
 			continue;
 		}
-		// 界面替人说的「继续」不是一个问题。
-		if (message.role !== "user" || message.synthetic) continue;
+		// 界面替人说的「继续」不是一个问题；插进这一轮的话也不是新的一问，它答的是同一件事。
+		if (message.role !== "user" || message.synthetic || message.steered) continue;
 		const text = spokenText(message).trim();
 		questions.push({ index, text: text || imageLabel, answer: "" });
 	}
@@ -58,7 +58,8 @@ export function timeSeparators(messages: readonly Message[]): Set<number> {
 	let previous: number | undefined;
 	for (const [index, message] of messages.entries()) {
 		if (!readable(message)) continue;
-		if (message.role === "user" && !message.synthetic) {
+		// 插进这一轮的话落在这一轮中间，不是人隔了一阵回来接着聊。
+		if (message.role === "user" && !message.synthetic && !message.steered) {
 			if (
 				previous === undefined ||
 				message.timestamp - previous >= PAUSE_MS ||
@@ -66,8 +67,8 @@ export function timeSeparators(messages: readonly Message[]): Set<number> {
 			)
 				result.add(index);
 		}
-		// 界面替人说的话不算人回来过。
-		if (message.role === "user" && message.synthetic) continue;
+		// 界面替人说的话、插话都不算人回来过。
+		if (message.role === "user" && (message.synthetic || message.steered)) continue;
 		previous = message.timestamp;
 	}
 	return result;
