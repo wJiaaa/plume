@@ -358,6 +358,44 @@
 }
 
 /*
+ * 同一道光，底色跟着字自己的颜色走（运行行行尾的那几段状态）：等第一个字时字是灰的，光在灰上走；变成警示色时说黄色的话，
+ * 光也在黄色上走。底色用 `currentColor`，亮处是当前色和正文色各一半——换成整档走正文色的话，黄字会被洗成灰白，警示就没了。
+ *
+ * 和 `.plume-glide` 一样，这一行每一刻都读得清：动的是强调，不是存在。
+ */
+.plume-glide-status {
+	background-image: linear-gradient(
+		100deg,
+		currentColor 0%,
+		currentColor 42%,
+		color-mix(in srgb, currentColor 50%, var(--plume-ink)) 50%,
+		currentColor 58%,
+		currentColor 100%
+	);
+	background-size: 300% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: plume-glide 2.6s linear infinite;
+}
+
+/* 没有动效时，它就是这一行平常的颜色。 */
+@media (prefers-reduced-motion: reduce) {
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-glide-status {
+		background: none;
+		color: currentColor;
+		-webkit-background-clip: border-box;
+		background-clip: border-box;
+	}
+}
+
+:root[data-reduce-motion="on"] .plume-glide-status {
+	background: none;
+	-webkit-background-clip: border-box;
+	background-clip: border-box;
+}
+
+/*
  * 流水行上换掉的那句话（`RollWords`）。
  *
  * 宽度由组件在换句时钉成像素再放开，这里只给它过渡；`overflow: hidden` 让变宽的那段时间里新句不压到

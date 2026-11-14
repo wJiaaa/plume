@@ -1,6 +1,6 @@
 import type { Message } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
-import { RollWords, StatusSpinner, translate, useCountUp, useI18n, useNow } from "@plume/ui";
+import { GLIDE, StatusSpinner, translate, useCountUp, useI18n, useNow, useTickedAnimations } from "@plume/ui";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import { estimateTokens, pushSample, type RateSample, rateFrom, trustworthy } from "./live-rate.ts";
 import { formatElapsed, formatTokens } from "./running-line.ts";
@@ -161,6 +161,22 @@ function statusFor(stage: Stage, quiet: number): Status | null {
 }
 
 /**
+ * 状态那段字上的扫光：等第一个字、没有新输出，那道光照样一直走——行上别的东西（思考球）也在动，字不动的话像没在等。
+ *
+ * 底色跟着字自己的颜色（`.plume-glide-status`）：灰字走灰光，警示色的字走黄光。不用现成的 `.plume-glide`：那道光的亮处
+ * 固定走到正文色，灰字会被提亮一档、黄字会被洗成灰白。扫光按拍推，不交给浏览器每帧重绘（和思考球、工具标题同一拍）。
+ */
+function GlideText({ children }: { children: ReactNode }) {
+	const box = useRef<HTMLSpanElement>(null);
+	useTickedAnimations(box, GLIDE);
+	return (
+		<span className="inline-block plume-glide-status" ref={box}>
+			{children}
+		</span>
+	);
+}
+
+/**
  * 行尾的那句状态。开头那句话是程序的自言自语、按钟点换，事实另起一段放在最后：秒数每秒在变，放在行尾，它变宽变窄不推动别的读数。
  * `key` 换了才滚，停住时秒数在走只缓宽度；收起的那一阵留着最后一句，有东西可演。
  */
@@ -172,9 +188,7 @@ function StageStatus({ status }: { status: Status | null }) {
 		<Readout open={status !== null}>
 			{shown && (
 				<span className={`transition-colors duration-[var(--plume-t-slow)] ${shown.warn ? "text-warning" : "text-ink-faint"}`}>
-					<RollWords rollKey={shown.key} text={shown.text}>
-						{shown.text}
-					</RollWords>
+					<GlideText>{shown.text}</GlideText>
 				</span>
 			)}
 		</Readout>
