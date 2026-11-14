@@ -94,6 +94,23 @@
 		transform: rotate(90deg);
 	}
 
+	/* 行首图标：比字淡一档，悬停、点开时跟字一起深；失败的标红。 */
+	.tool-icon {
+		display: inline-flex;
+		flex: none;
+		color: var(--plume-ink-faint);
+		transition: color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	[aria-expanded]:hover > .tool-icon,
+	[data-open] > .tool-icon {
+		color: inherit;
+	}
+
+	.tool-icon[data-failed] {
+		color: var(--plume-danger);
+	}
+
 	/* 点名的对象深一档，附注淡一档。跑着时字上扫光，它们跟着一起扫，不各自是实色。 */
 	.tool-label-subject {
 		color: var(--plume-ink);

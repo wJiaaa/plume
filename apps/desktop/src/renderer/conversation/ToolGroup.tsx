@@ -9,11 +9,14 @@
  *   一组跑着时新来的行淡入。
  * - **末尾的推理还在写**：标题后面接一句「正在思考 · 5s」，句子本身不动。推理和回来的后台命令结果在卡片里各占一行。
  *
- * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种一行一个图标、点开挂在竖线上的画法是 `WorkStep`。
+ * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题是一枚「一组」（Layers），
+ *   跑着说正在做的那一次时也不换，免得图标跟着每一句跳。
+ *
+ * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种点开挂在竖线上的画法是 `WorkStep`。
  */
 
 import { Collapse, translate, useHeldKey, useI18n } from "@plume/ui";
-import { ChevronRight } from "@plume/ui/icons";
+import { ChevronRight, Layers } from "@plume/ui/icons";
 import { type AnimationEvent, Fragment, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
@@ -24,6 +27,7 @@ import { lineNote } from "./tool-lines.ts";
 import { SwapText } from "./SwapText.tsx";
 import { ToolBody } from "./ToolBody.tsx";
 import { PluginToolCard, sameJob, SLOT_STATUS, writeDraft } from "./ToolCard.tsx";
+import { ToolIcon } from "./tool-icons.tsx";
 import { foldPolls, polledJob, sameStep, type Step, type StepMember, thinkingLive } from "./turn-blocks.ts";
 import {
 	type CallState,
@@ -178,6 +182,13 @@ function ToolGroup({
 				data-open={open && expandable ? "" : undefined}
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
+				{only ? (
+					<RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0]) || failedLater} />
+				) : (
+					<span className="tool-icon">
+						<Layers size={13} strokeWidth={1.8} />
+					</span>
+				)}
 				<SwapText swapKey={swapKey} glide={glide}>
 					{words}
 				</SwapText>
@@ -274,6 +285,7 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 				data-open={open && expandable ? "" : undefined}
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
+				<RowIcon name={call.block.name} failed={failed} />
 				<SwapText swapKey={`${live ? "now" : "done"}:${lineNote(draft.block.name, draft.block.arguments) ? "note" : ""}`} glide={live}>
 					<LabelWords label={label} />
 					{!live && <Marks failed={failed} stopped={stopped} added={added} removed={removed} />}
@@ -313,6 +325,15 @@ function useArrival(initial: boolean): { className?: string; onAnimationEnd?: (e
 			if (event.target === event.currentTarget) setFresh(false);
 		},
 	};
+}
+
+/** 一次调用的图标：比字淡一档，失败的标红。 */
+function RowIcon({ name, failed }: { name: string; failed: boolean }) {
+	return (
+		<span className="tool-icon" data-failed={failed ? "" : undefined}>
+			<ToolIcon name={name} />
+		</span>
+	);
 }
 
 /** 展开箭头：能点开时才出现，打开时转 90°。 */

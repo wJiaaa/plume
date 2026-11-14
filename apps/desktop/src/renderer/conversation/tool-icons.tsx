@@ -1,6 +1,5 @@
 /*
- * 工具行行首那枚图标，`ToolCard` 和 `WorkStep` 共用：一段几次调用合成的那一行用的是它第一次调用的图标，
- * 和它只有一次调用时那一行是同一枚——从一次长到两次，行首不换。
+ * 工具行行首那枚图标，工具组（`ToolGroup`）里每一行和只有一次调用的标题用它，旧的 `ToolCard`、`WorkStep` 也用它。
  */
 
 import type { ToolKind } from "@plume/contract";
