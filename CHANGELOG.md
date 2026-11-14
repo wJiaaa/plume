@@ -2,6 +2,48 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.3.0] - 2026-11-14
+
+<!-- plume:notes en -->
+### Changes
+
+- **In Full access, the model looks things up instead of guessing.** The system prompt used to say that reading or writing outside the workspace needs approval, even in Full access where it doesn't. Models took that as off-limits and guessed instead, for example picking a server by hand rather than reading `~/.ssh/config`. In Full access the prompt now says the whole machine can be read and written without asking; in the other modes it adds that needing approval is no reason to guess.
+- **The "+/-" diff markers now cover expanded tool cards too.** With Settings › Appearance › Diff markers set to "+/-", only the Git panel used symbols; the diffs inside expanded tool cards and in plugins were still told apart by red and green alone. They now mark added and removed lines with + and − as well.
+- **Run diagnostics show which plugins a call went through.** The call trace details list every plugin hooked into a tool call or model request, from outside in: whether each one passed it on, changed the input or result, answered on its own or failed, and whether Plume itself ran the call in the end.
+- **A plugin's details show the services it provides.** When two plugins provide a service with the same name, the details say which one is in effect and which it replaced, so you can tell which plugin changed a built-in behaviour.
+- The model list bundled for first launch and offline use is up to date.
+
+### For plugin authors
+
+Breaking changes to `UiContext`; rebuild with SDK 0.3.0:
+
+- `ui.approvalCard` is gone: the approval card is Plume's own. Cards for `run.request` still go through `ui.requestCard`.
+- `ui.openMediaFile`, `ui.revealMediaFile` and `ui.revealMediaLabel` are gone. Open or reveal a saved image with `ui.openFile` / `ui.revealPath` and the path `ctx.media.save` returned.
+- `ui.stopSession` is gone, and `ui.ComposerSend` takes `sessionId` instead of `onStop`: Plume stops that session when the person presses the button.
+- The `@` menu's agent entries now have `kind: "agent"` (was `"subagent"`).
+
+New: `PluginStatus.provides` (`ProvidedService`), and `hooks` events (`HookTrace`) in `ctx.sessions.observe`.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **完全访问下，模型会去本机查，不再瞎猜。** 以前系统提示词不分权限档，一律说读写工作区以外要批准，完全访问下其实不用。模型把这句当成禁区，宁可猜：比如要连服务器时不去读 `~/.ssh/config`，而是让你从几台机器里挑。现在完全访问下提示词说本机哪里都能直接读写；其他档位补了一句：要批准不是改用猜的理由。
+- **「+/-」差异标记也管工具卡片里的 diff 了。** 设置 › 外观 › 差异标记选「+/-」后，以前只有 Git 面板换成符号，工具卡片展开后的 diff 和插件画的 diff 还是只靠红绿区分。现在也用 + 和 − 标出增删的行。
+- **运行诊断里看得到一次调用经过了哪些插件。** 调用轨迹的详情里，从外到内列出挂在这次工具调用或模型请求上的插件：每个是往里交了、改了参数或结果、自己给了结果还是出错，最后 Plume 本身有没有执行。
+- **插件详情写出它提供哪些服务。** 两个插件提供同名服务时，详情里写明哪个在生效、替换了谁，装了插件后内置的某样行为变了，看得出是谁换的。
+- 首次启动和离线时用的模型列表更新到了最新。
+
+### 给插件作者
+
+`UiContext` 有不兼容的改动，请用 SDK 0.3.0 重新构建：
+
+- 删掉 `ui.approvalCard`：审批卡只有 Plume 自己的一张。`run.request` 的卡照旧经 `ui.requestCard` 画。
+- 删掉 `ui.openMediaFile`、`ui.revealMediaFile`、`ui.revealMediaLabel`。打开、指出存好的图用 `ui.openFile`、`ui.revealPath`，路径取 `ctx.media.save` 交回的那个。
+- 删掉 `ui.stopSession`；`ui.ComposerSend` 不再收 `onStop`，改收 `sessionId`，人按下按钮时由 Plume 停下那个会话。
+- `@` 菜单里智能体那类的 `kind` 从 `"subagent"` 改成 `"agent"`。
+
+新增：`PluginStatus.provides`（`ProvidedService`），`ctx.sessions.observe` 里的 `hooks` 事件（`HookTrace`）。
+
 ## [0.2.1] - 2026-11-13
 
 <!-- plume:notes en -->
