@@ -1184,6 +1184,10 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			const loaded = await agent.plugins();
 			const missing = examples.filter((key) => loaded.find((plugin) => plugin.key === key)?.state !== "active");
 			if (missing.length > 0) throw new Error(`装上以后没加载起来：${missing.join()}`);
+			// 插件状态写着它提供的服务（`PluginStatus.provides`）：内置的 Git 插件提供开工作树的那一项，没人替换它。
+			const worktree = loaded.find((plugin) => plugin.builtin && plugin.provides?.some((service) => service.name === "session.worktree"));
+			if (!worktree || worktree.provides?.some((service) => service.replacedBy || service.replaces))
+				throw new Error(`插件状态里没写对谁提供 session.worktree：${JSON.stringify(loaded.map((plugin) => [plugin.name, plugin.provides]))}`);
 			await click(`[data-card="scheduled"] > button`);
 			await until(`document.querySelector('[data-plugin-detail="scheduled"] [data-readme] h1') !== null`, "详情页画出 README");
 			await delay(300);

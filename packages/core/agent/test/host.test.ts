@@ -633,10 +633,19 @@ describe("服务", () => {
 		const h = host();
 		await h.load([echo("builtin-echo", "内置", true), consumer(heard)]);
 		expect(heard).toEqual(["内置:hi"]);
+		const provides = () => Object.fromEntries(h.status().map((status) => [status.name, status.provides]));
+		expect(provides()).toEqual({ "builtin-echo": [{ name: "echo" }], listener: undefined });
 		await h.add(echo("market-echo", "市场"));
 		expect(heard).toEqual(["内置:hi", "市场:hi"]);
+		// 状态里写明谁替换了谁：生效的写被它顶下的，没生效的写生效的是谁。
+		expect(provides()).toEqual({
+			"builtin-echo": [{ name: "echo", replacedBy: "market-echo" }],
+			listener: undefined,
+			"market-echo": [{ name: "echo", replaces: ["builtin-echo"] }],
+		});
 		await h.remove("market-echo");
 		expect(heard).toEqual(["内置:hi", "市场:hi", "内置:hi"]);
+		expect(provides()).toEqual({ "builtin-echo": [{ name: "echo" }], listener: undefined });
 	});
 
 	it("两个非内置的提供同一项服务，先加载的生效，另一个记一条警告", async () => {
@@ -645,6 +654,11 @@ describe("服务", () => {
 		await h.load([echo("first", "一"), echo("second", "二"), consumer(heard)]);
 		expect(heard).toEqual(["一:hi"]);
 		expect(logs).toContainEqual(expect.stringContaining("服务 echo 由插件 first 提供"));
+		expect(h.status().map((status) => [status.name, status.provides])).toEqual([
+			["first", [{ name: "echo", replaces: ["second"] }]],
+			["second", [{ name: "echo", replacedBy: "first" }]],
+			["listener", undefined],
+		]);
 	});
 
 	it("提供方停用，用它的插件回到等待；再启用又加载上", async () => {
@@ -653,6 +667,8 @@ describe("服务", () => {
 		await h.load([echo("speaker", "a"), consumer(heard)]);
 		await h.setEnabled("speaker", false);
 		expect(h.status()[1]).toEqual(expect.objectContaining({ name: "listener", state: "waiting", waitingFor: ["echo"] }));
+		// 停用了就不再提供。
+		expect(h.status()[0]?.provides).toBeUndefined();
 		await h.setEnabled("speaker", true);
 		expect(heard).toEqual(["a:hi", "a:hi"]);
 		expect(h.status()[1]?.state).toBe("active");

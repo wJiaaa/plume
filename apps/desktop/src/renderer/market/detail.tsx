@@ -28,7 +28,21 @@ import {
 	useI18n,
 	usePopover,
 } from "@plume/ui";
-import { ArrowUp, ArrowUpRight, CircleAlert, Clock, Download, ExternalLink, Eye, FolderOpen, Globe, MoreHorizontal, Settings2, Trash2 } from "@plume/ui/icons";
+import {
+	ArrowUp,
+	ArrowUpRight,
+	CircleAlert,
+	Clock,
+	Download,
+	ExternalLink,
+	Eye,
+	FolderOpen,
+	Globe,
+	MoreHorizontal,
+	Plug,
+	Settings2,
+	Trash2,
+} from "@plume/ui/icons";
 import { type ReactNode, useEffect, useState } from "react";
 import { listPluginSettingsSections, localized, type SettingsSectionEntry, usePluginUis } from "../plugins.tsx";
 import { Toggle } from "../settings/controls.tsx";
@@ -183,6 +197,29 @@ function DetailBody({
 				<p className="mt-4 flex items-start gap-2 rounded-panel bg-card-hover px-4 py-2.5 text-detail text-ink-muted" data-plugin-observes-all="">
 					<Eye size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
 					<span className="min-w-0 break-words">{t("plugins.observesAll")}</span>
+				</p>
+			)}
+
+			{/*
+			 * 它经 `ctx.provide` 提供的服务（`PluginStatus.provides`）：别的插件 `inject` 了就用得上。同名的有几份时说清谁替换了谁，
+			 * 装了一个插件之后内置的哪样行为变了，从这里看得出来。和上面那条一样，只有装上的才知道。
+			 */}
+			{item.status?.provides && (
+				<p className="mt-4 flex items-start gap-2 rounded-panel bg-card-hover px-4 py-2.5 text-detail text-ink-muted" data-plugin-provides="">
+					<Plug size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
+					<span className="min-w-0 break-words">
+						{t("plugins.provides", {
+							services: formatList(
+								item.status.provides.map((service) =>
+									service.replacedBy
+										? t("plugins.serviceReplacedBy", { service: service.name, plugin: service.replacedBy })
+										: service.replaces
+											? t("plugins.serviceReplaces", { service: service.name, plugins: formatList(service.replaces) })
+											: service.name,
+								),
+							),
+						})}
+					</span>
 				</p>
 			)}
 

@@ -37,6 +37,7 @@ import type {
 	PluginEntry,
 	PluginSecrets,
 	PluginStatus,
+	ProvidedService,
 	SessionAccess,
 	SessionEndReason,
 	SessionObservation,
@@ -217,6 +218,9 @@ interface Offer {
 	/** 交给用它的插件的那一份：只有方法，冻住了。 */
 	facade: object;
 }
+
+/** 正在加载或已加载的插件提供的：只有这些算得上生效的提供方。 */
+const liveOffer = (offer: Offer) => offer.record.status.state === "active" || offer.record.status.state === "loading";
 
 const NAME = /^[a-z0-9][a-z0-9._-]*$/i;
 /** 服务名：小写字母开头，可以用点分段（`fs`、`git.status`）。 */
@@ -441,7 +445,30 @@ export class PluginHost {
 	}
 
 	status(): PluginStatus[] {
-		return this.records.map((record) => ({ ...record.status, ...(record.status.waitingFor ? { waitingFor: [...record.status.waitingFor] } : {}) }));
+		return this.records.map((record) => {
+			const provides = this.provided(record);
+			return {
+				...record.status,
+				...(record.status.waitingFor ? { waitingFor: [...record.status.waitingFor] } : {}),
+				...(provides.length > 0 ? { provides } : {}),
+			};
+		});
+	}
+
+	/** 一个插件现在提供着的服务，和同名的另几份谁顶下了谁（按 `current` 的规则）。停用、卸下后它的那几份已经撤了，不在这里。 */
+	private provided(record: PluginRecord): ProvidedService[] {
+		const list: ProvidedService[] = [];
+		for (const [service, offers] of this.offers) {
+			const own = offers.find((offer) => offer.record === record);
+			if (!own) continue;
+			const winner = this.current(service);
+			if (!winner) continue;
+			if (winner === own) {
+				const others = offers.filter((offer) => offer !== own && liveOffer(offer)).map((offer) => offer.record.status.name);
+				list.push({ name: service, ...(others.length > 0 ? { replaces: others } : {}) });
+			} else list.push({ name: service, replacedBy: winner.record.status.name });
+		}
+		return list.sort((a, b) => compareText(a.name, b.name));
 	}
 
 	/** 运行中装上一个插件（插件市场安装、更新后），排在已加载的插件后面。key 已经在用时报错。 */
@@ -1075,8 +1102,7 @@ export class PluginHost {
 	 * 内置的是缺省实现，装上同名服务的插件就是要替换它。
 	 */
 	private current(service: string): Offer | undefined {
-		const live = (this.offers.get(service) ?? []).filter((offer) => offer.record.status.state === "active" || offer.record.status.state === "loading");
-		const ordered = live.sort((a, b) => this.records.indexOf(a.record) - this.records.indexOf(b.record));
+		const ordered = (this.offers.get(service) ?? []).filter(liveOffer).sort((a, b) => this.records.indexOf(a.record) - this.records.indexOf(b.record));
 		return ordered.find((offer) => !offer.record.builtin) ?? ordered[0];
 	}
 

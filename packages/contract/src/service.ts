@@ -546,6 +546,20 @@ export interface PluginStatus {
 	waitingFor?: string[];
 	/** 插件声明了要看全部会话的运行观察（`Plugin.observe`）。 */
 	observe?: "all";
+	/** 这个插件经 `ctx.provide` 提供的服务，按服务名排；没提供时没有。 */
+	provides?: ProvidedService[];
+}
+
+/**
+ * 插件提供的一项服务。同名服务只有一个生效的提供方（非内置的优先，同类里先加载的优先），别的插件 `ctx.use` 拿到的是它那一份。
+ * 同名的还有别的插件在提供时，生效的那一份写 `replaces`、没生效的写 `replacedBy`。
+ */
+export interface ProvidedService {
+	name: string;
+	/** 这一份生效，同名服务另几个提供方的插件名被它顶下（装一个提供同名服务的插件替换内置的，就是这样）。 */
+	replaces?: string[];
+	/** 这一份没生效：生效的是这个插件的。 */
+	replacedBy?: string;
 }
 
 export type AgentEvent =
