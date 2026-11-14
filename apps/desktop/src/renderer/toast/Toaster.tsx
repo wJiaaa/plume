@@ -9,15 +9,18 @@
  * 哪些卡片存在全在 `stack.ts`；这里只管画、计时和指针。
  */
 
-import { portal, useI18n } from "@plume/ui";
+import { DURATION, EASING, motionReduced, portal, useI18n } from "@plume/ui";
 import { ArrowRight, CircleAlert, FolderOpen, Info, MessageCirclePlus, TriangleAlert, X } from "@plume/ui/icons";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { revealLabel } from "../files/open-targets.ts";
 import { groupNotices, schedule, TOAST_Z, visibleToasts, type Deadline, type ToastGroup } from "./stack.ts";
 import { currentNotices, dismissNotice, subscribeNotices } from "./store.ts";
 
 /** 和 styles.css 里 `.plume-toast-out` 的时长一致：动画放完再把卡片拿掉。 */
 const LEAVE_MS = 170;
+
+/** 卡片换位置时那一段滑动的名字：再变一次时找到它、从它画到的地方接着滑。 */
+const SHIFT = "toast-shift";
 
 /** 多久看一次表。粗一点无妨：没人看得出一张提示条早走了 200ms。 */
 const TICK_MS = 200;
@@ -109,11 +112,43 @@ export function Toaster({
 		return () => window.clearInterval(tick);
 	}, [groups, held, dismiss]);
 
+	/*
+	 * 一张走了、一张来了，其余的卡片换了位置：从原来的位置滑过去，不在卡片被拿掉的那一帧整段跳上去（FLIP）。
+	 * 动的是 `translate`，和进场动画的 `transform` 是两个属性，叠得上、不互相盖。上一段还没滑完又变了的，
+	 * 从此刻画着的位置接着滑。
+	 */
+	const column = useRef<HTMLDivElement>(null);
+	const tops = useRef(new Map<string, number>());
+	useLayoutEffect(() => {
+		const before = tops.current;
+		const after = new Map<string, number>();
+		tops.current = after;
+		const cards = column.current ? [...column.current.children].filter((card): card is HTMLElement => card instanceof HTMLElement) : [];
+		const reduced = motionReduced();
+		for (const card of cards) {
+			const key = card.dataset.toastKey;
+			if (!key) continue;
+			const top = card.offsetTop;
+			after.set(key, top);
+			const was = before.get(key);
+			if (was === undefined || reduced) continue;
+			const sliding = card.getAnimations().find((animation) => animation.id === SHIFT);
+			let from = was - top;
+			if (sliding) {
+				from += Number.parseFloat(getComputedStyle(card).translate.split(" ")[1] ?? "0") || 0;
+				sliding.cancel();
+			}
+			if (Math.abs(from) < 0.5) continue;
+			card.animate([{ translate: `0 ${from}px` }, { translate: "0 0" }], { id: SHIFT, duration: DURATION.base, easing: EASING.out });
+		}
+	});
+
 	if (shown.length === 0) return null;
 
 	return portal(
 		/* 这一列不接指针，只有卡片本身接；`no-drag` 防着它长进标题栏那一条时点不到。 */
 		<div
+			ref={column}
 			data-plume-toaster=""
 			style={{ zIndex: TOAST_Z }}
 			className="[app-region:no-drag] pointer-events-none fixed inset-x-0 top-[52px] flex flex-col items-center gap-2 px-4"
@@ -129,6 +164,7 @@ export function Toaster({
 				return (
 					<div
 						key={group.key}
+						data-toast-key={group.key}
 						/* 出错的用 `alert`，其余用 `status`：差别在于读屏要不要打断正在念的东西。 */
 						role={group.level === "error" ? "alert" : "status"}
 						onMouseEnter={hold}
