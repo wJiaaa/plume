@@ -720,6 +720,8 @@ export const en = {
 	"session.running": "Running",
 	"chat.noModel": "No model is available yet. Add a provider in Model settings, with its base URL, API key and models.",
 	"toolCard.stopped": "Stopped",
+	"toolCard.declined": "Cancelled",
+	"toolCard.expired": "Unanswered",
 	"toolCard.args": "Arguments",
 	"toolCard.outputRunning": "Output (still running)",
 	"toolCard.waiting": "Waiting for output…",

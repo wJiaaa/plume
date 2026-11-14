@@ -8,7 +8,7 @@
  * 跳过不是同意：没给默认项时，模型只能接着做不依赖这个答案的事。
  */
 
-import type { Plugin, ToolOutput } from "@plume/contract";
+import type { HumanAnswer, Plugin, ToolOutput, UnansweredDetails } from "@plume/contract";
 import { MESSAGES } from "./messages.ts";
 import { ASK_USER, type CheckedReply, checkReply, readArgs } from "./question.ts";
 
@@ -32,14 +32,20 @@ const RESULTS = {
 const spoken = (answer: string | string[]) => (Array.isArray(answer) ? JSON.stringify(answer) : answer);
 
 /** 人怎么答的变成交给模型的结果。`details` 给工具卡片和以后读会话的插件。 */
-function answerOutput(reply: CheckedReply | undefined): ToolOutput {
-	if (!reply) return { output: RESULTS.unanswered, isError: true };
+function answerOutput(reply: CheckedReply | undefined, unanswered?: UnansweredDetails["unanswered"]): ToolOutput {
+	// 人没答不是失败：带上声明，转录画成「已取消」「没人回答」而不是出错。停下这一轮由本体标成「已停止」，这里不重复。
+	if (!reply) return { output: RESULTS.unanswered, isError: true, ...(unanswered ? { details: { kind: "question", unanswered } } : {}) };
 	if (!("answer" in reply)) return { output: RESULTS.skipped, details: { kind: "question", skipped: true } };
 	const skipped = reply.skipped === true;
 	return {
 		output: skipped ? RESULTS.defaulted(spoken(reply.answer)) : spoken(reply.answer),
 		details: { kind: "question", answer: reply.answer, skipped },
 	};
+}
+
+/** 没交来答案的三种原因里，哪两种是「人做的选择」而不是这一轮被停下。 */
+function unansweredReason(reply: HumanAnswer): UnansweredDetails["unanswered"] | undefined {
+	return reply.answered || reply.reason === "stopped" ? undefined : reply.reason;
 }
 
 export default {
@@ -85,7 +91,7 @@ export default {
 				if (typeof question === "string") return { output: question, isError: true };
 				// 到时没人答、停下这一轮、人取消，都没有回答。
 				const reply = await run.request({ kind: ASK_USER, title: MESSAGES[ctx.locale()].title, payload: question });
-				return answerOutput(reply.answered ? checkReply(question, reply.value) : undefined);
+				return answerOutput(reply.answered ? checkReply(question, reply.value) : undefined, unansweredReason(reply));
 			},
 		});
 	},

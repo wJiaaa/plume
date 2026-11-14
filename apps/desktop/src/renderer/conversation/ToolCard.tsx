@@ -5,7 +5,7 @@
  * 失败和停下各带一个记号。插件给工具登记了自己的卡片时，整张卡照原样画（`PluginToolCard`），这一行是它的通用卡片。
  */
 
-import type { FileDiffDetails, ImageContent, ToolOutput, ToolResultMessage } from "@plume/contract";
+import type { FileDiffDetails, ImageContent, ToolOutput, ToolResultMessage, UnansweredDetails } from "@plume/contract";
 import type { ToolCardProps } from "@plume/contract/ui";
 import { Collapse, FlowRow, RollWords, Scroller, translate, useI18n, useNow } from "@plume/ui";
 import { Ban, CircleX } from "@plume/ui/icons";
@@ -29,7 +29,9 @@ import {
 	type CallStatus,
 	callStatus,
 	callStopped,
+	callUnanswered,
 	sameItems,
+	unansweredMark,
 	useCallLive,
 	useCalls,
 	useTranscript,
@@ -205,9 +207,10 @@ export function ToolCard({
 	const { progress, startedAt } = useCallLive(latest.block.id);
 	const now = useNow(running && startedAt !== undefined, 250);
 	const elapsed = startedAt === undefined ? 0 : now - startedAt;
-	// 停下不是失败：中性的说法，不用红色。
+	// 停下、人没答都不是失败：中性的说法，不用红色。
 	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
-	const failed = status === "error" && !stopped;
+	const unanswered = useCalls((calls) => callUnanswered(calls, latest.block.id));
+	const failed = status === "error" && !stopped && unanswered === undefined;
 	const summary = job ? describePolls(started?.description, polls?.length ?? 1) : describeOne(block, state.cwd, started?.description, result?.details);
 	/*
 	 * 还没开跑的调用没有可看的：不能展开。参数还在写的、写完了排在前面的调用后面等着的，都没有开始时刻；从前点开是
@@ -232,6 +235,11 @@ export function ToolCard({
 		failed ? <CircleX key="failed" size={13} strokeWidth={1.9} className={`${pop}text-danger/85`} /> : null,
 		stopped ? (
 			<span key="stopped" data-plume-tip={t("toolCard.stopped")} aria-label={t("toolCard.stopped")} className={`${pop}flex`}>
+				<Ban size={13} strokeWidth={1.9} aria-hidden />
+			</span>
+		) : null,
+		unanswered ? (
+			<span key="unanswered" data-plume-tip={t(unansweredMark(unanswered))} aria-label={t(unansweredMark(unanswered))} className={`${pop}flex text-ink-faint`}>
 				<Ban size={13} strokeWidth={1.9} aria-hidden />
 			</span>
 		) : null,
@@ -271,6 +279,7 @@ export function ToolCard({
 							hunks={hunks}
 							running={running}
 							stopped={stopped}
+							unanswered={unanswered}
 							failed={failed}
 							summary={summary}
 						/>
@@ -303,6 +312,7 @@ function ToolCardBody({
 	hunks,
 	running,
 	stopped,
+	unanswered,
 	failed,
 	summary,
 }: {
@@ -317,6 +327,7 @@ function ToolCardBody({
 	hunks: FileDiffDetails["hunks"] | undefined;
 	running: boolean;
 	stopped: boolean;
+	unanswered: UnansweredDetails["unanswered"] | undefined;
 	failed: boolean;
 	summary: string;
 }) {
@@ -350,7 +361,17 @@ function ToolCardBody({
 			{/* 有结果就有这一节，哪怕没有一个字：只回了图、或者什么都没回，也要说出它跑完了、结果是什么样。 */}
 			{(result || output !== "") && (
 				<Section
-					title={stopped ? t("toolCard.stopped") : failed ? t("common.error") : running ? t("toolCard.outputRunning") : t("common.result")}
+					title={
+						stopped
+							? t("toolCard.stopped")
+							: unanswered
+								? t(unansweredMark(unanswered))
+								: failed
+									? t("common.error")
+									: running
+										? t("toolCard.outputRunning")
+										: t("common.result")
+					}
 					mono={output !== ""}
 					tone={failed ? "danger" : "muted"}
 				>

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BackgroundCallState, SessionView, ToolResultMessage } from "@plume/contract";
 import { viewChange } from "../src/renderer/session-live.ts";
-import { type CallState, callStatus, callStopped } from "../src/renderer/conversation/view-state.ts";
+import { type CallState, callStatus, callStopped, callUnanswered } from "../src/renderer/conversation/view-state.ts";
 
 function result(toolCallId: string, extra: Partial<ToolResultMessage> = {}): ToolResultMessage {
 	return { role: "toolResult", toolCallId, toolName: "bash", content: [{ type: "text", text: "ok" }], isError: false, timestamp: 0, ...extra };
@@ -41,6 +41,21 @@ test("调用自己出错的照它自己的结果：后台那份不改它；人�
 	assert.equal(callStatus(state, "failed", "toolUse"), "error");
 	assert.equal(callStopped(state, "failed"), false);
 	assert.equal(callStopped(state, "cut"), true);
+});
+
+test("人没答的调用也不是失败：取消、到时分得开，停下、出错的不算", () => {
+	const state = calls({}, [
+		result("declined", { isError: true, details: { kind: "question", unanswered: "declined" } }),
+		result("expired", { isError: true, details: { kind: "question", unanswered: "expired" } }),
+		result("stopped", { isError: true, details: { cancelled: true } }),
+		result("broke", { isError: true }),
+		result("ok"),
+	]);
+	assert.equal(callUnanswered(state, "declined"), "declined");
+	assert.equal(callUnanswered(state, "expired"), "expired");
+	assert.equal(callUnanswered(state, "stopped"), undefined);
+	assert.equal(callUnanswered(state, "broke"), undefined);
+	assert.equal(callUnanswered(state, "ok"), undefined);
 });
 
 test("会话事件把这个会话后台那份整份换掉", () => {

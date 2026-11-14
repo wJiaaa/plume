@@ -8,7 +8,8 @@
  * 展示状态按会话记、不跟着 DOM 和消息走：挂载了哪一段历史、哪些思考和工具组被点开过。最多记 12 个会话。
  */
 
-import type { BackgroundCallState, CancelledDetails, ToolResultMessage } from "@plume/contract";
+import type { BackgroundCallState, CancelledDetails, ToolResultMessage, UnansweredDetails } from "@plume/contract";
+import type { MessageKey } from "@plume/ui";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 
 export interface TranscriptState {
@@ -189,6 +190,22 @@ export function callStopped(calls: CallState, id: string): boolean {
 /** 结果出错是因为人按了停，不是失败：按结果 `details` 里的通用声明 `CancelledDetails` 认。 */
 function stoppedByUser(result: ToolResultMessage | undefined): boolean {
 	return result?.isError === true && (result.details as Partial<Record<keyof CancelledDetails, unknown>> | undefined)?.cancelled === true;
+}
+
+/**
+ * 这次调用停下来等人答，人没答：结果带 `details` 里的通用声明 `UnansweredDetails`。`declined` 是人把卡取消了，`expired` 是到时没人答，
+ * 都不是工具失败。没带声明（真正的错、人按了停）时是 undefined。
+ */
+export function callUnanswered(calls: CallState, id: string): UnansweredDetails["unanswered"] | undefined {
+	const result = calls.results.get(id);
+	if (result?.isError !== true) return undefined;
+	const reason = (result.details as Partial<Record<keyof UnansweredDetails, unknown>> | undefined)?.unanswered;
+	return reason === "declined" || reason === "expired" ? reason : undefined;
+}
+
+/** 人没答的这次调用该怎么标：不出错，说成「已取消」或「没人回答」。 */
+export function unansweredMark(reason: UnansweredDetails["unanswered"]): MessageKey {
+	return reason === "declined" ? "toolCard.declined" : "toolCard.expired";
 }
 
 interface View {

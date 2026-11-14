@@ -5,7 +5,8 @@ import type { ModelOverride } from "./smoke-browser.ts";
 
 /**
  * 内置插件 plume.ask-user 的提问卡，经真界面走一遍：新对话里让假模型调 `ask_user`，卡片压在输入框上方，标题、说明、推荐、
- * 倒计时、「跳过将采用」都在；深浅色各截一张，按数字键选第二项、确认，模型拿到的结果就是那一项。最后回到原会话。
+ * 倒计时、「跳过将采用」都在；深浅色各截一张，按数字键选第二项、确认，模型拿到的结果就是那一项。再问一次、点「取消」：
+ * 模型拿到的还是没有答案，转录那一次调用标「已取消」，不标「失败」。最后回到原会话。
  */
 /** 请求里这次调用的结果的文字；还没有结果时是 undefined。计划模式那段（`smoke-plan.ts`）也用它。 */
 export function toolResult(request: Record<string, unknown>, id: string): string | undefined {
@@ -36,11 +37,20 @@ export async function checkQuestion(options: {
 	const chat = "[data-screen=chat]";
 	const card = "[data-approval-card]";
 	let answered = "";
+	let declined = "";
 	setModel((request) => {
 		const result = toolResult(request, "toolu_ask");
 		if (result !== undefined) {
 			answered = result;
-			return { text: "按你选的来。" };
+			// 答完再问一次，这次人点取消；取消的结果回来了就收尾。
+			const cancelled = toolResult(request, "toolu_ask_cancel");
+			if (cancelled !== undefined) {
+				declined = cancelled;
+				return { text: "那就不删了。" };
+			}
+			return {
+				toolCalls: [{ id: "toolu_ask_cancel", name: "ask_user", args: { question: "要不要顺手删掉备份？", options: ["删掉", "留着"] } }],
+			};
 		}
 		// 标题这类不带工具的小调用不问。
 		const tools = (request.tools as { name?: string }[] | undefined) ?? [];
@@ -90,11 +100,23 @@ export async function checkQuestion(options: {
 		await page(`document.querySelector('${card} [data-ask-form]').dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }))`);
 		await until(`document.querySelector('${card} [data-ask-option][data-on]')?.textContent.includes('先备份')`, "数字键选中第一项");
 		await click(`${card} [data-ask-action=submit]`);
+		// 答完卡片收走，模型接着问第二次：再看见一张提问卡，就说明第一次的回答送到了模型。
 		await until(
-			`document.querySelector('${chat}')?.textContent.includes('按你选的来。') && document.querySelector('${card}') === null`,
-			"答完卡片收走，模型接着说",
+			`document.querySelector('${card} [data-ask-form]') !== null && document.querySelector('${chat}')?.textContent.includes('要不要顺手删掉备份？')`,
+			"答完卡片收走，模型接着问第二次",
 		);
 		if (answered !== "先备份") throw new Error(`模型拿到的回答应该是「先备份」，实际是 ${JSON.stringify(answered)}`);
+
+		// 第二次问、点「取消」：模型拿到没有答案，那一次调用标「已取消」，不标「失败」。
+		await click(`${card} [data-ask-action=cancel]`);
+		await until(
+			`document.querySelector('${chat}')?.textContent.includes('那就不删了。') && document.querySelector('${card}') === null`,
+			"取消后卡片收走，模型接着说",
+		);
+		if (!declined.includes("No answer was received")) throw new Error(`取消后模型拿到的应该是没有答案，实际是 ${JSON.stringify(declined)}`);
+		// 这两次调用并在一段活里，记号画在组标题上（底下那几行收着、还没挂上），所以查整段对话。
+		const marks = (await page(`[...document.querySelectorAll('${chat} .tool-mark')].map((one) => one.textContent)`)) as string[];
+		if (!marks.includes("已取消") || marks.includes("失败")) throw new Error(`取消的那次调用应该标「已取消」、不标「失败」，实际是 ${JSON.stringify(marks)}`);
 	} finally {
 		setModel(undefined);
 	}

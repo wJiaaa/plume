@@ -697,6 +697,8 @@ export const zhCN = {
 	"session.running": "运行中",
 	"chat.noModel": "还没有可用的模型。先在「模型设置」里添加供应商，填好服务地址、API key 和模型。",
 	"toolCard.stopped": "已停止",
+	"toolCard.declined": "已取消",
+	"toolCard.expired": "没人回答",
 	"toolCard.args": "参数",
 	"toolCard.outputRunning": "输出（进行中）",
 	"toolCard.waiting": "等待输出…",

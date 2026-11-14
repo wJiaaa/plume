@@ -23,7 +23,7 @@ import { formatElapsed } from "./running-line.ts";
 import { declaredDiff, hunksOf, NO_READS, ResultImages, resultText, sameJob, writeDraft } from "./ToolCard.tsx";
 import { lineCommand, lineFields, lineFile, lineNote, runsCommand, toolKind } from "./tool-lines.ts";
 import { polledJob, pollOutput } from "./turn-blocks.ts";
-import { callStatus, callStopped, sameItems, useCallLive, useCalls, useTranscript } from "./view-state.ts";
+import { callStatus, callStopped, callUnanswered, sameItems, useCallLive, useCalls, useTranscript } from "./view-state.ts";
 
 /** 点开以后最后那一句：它在后台留下的那件事此刻怎样。 */
 const BACKGROUND_WORDS: Record<BackgroundCallState, MessageKey> = {
@@ -49,8 +49,9 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 	const running = status === "running" || status === "approval";
 	const now = useNow(running && startedAt !== undefined, 1000);
 	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
+	const unanswered = useCalls((calls) => callUnanswered(calls, latest.block.id));
 	// 输出标红只看这次调用自己：它答得好好的、是后来后台那件出错了的，输出不是错的。
-	const failed = status === "error" && !stopped && result?.isError !== false;
+	const failed = status === "error" && !stopped && unanswered === undefined && result?.isError !== false;
 	const { block } = writeDraft(call.block, status);
 	const shown = (path: string) => (cwd ? (relativeTo(cwd, path) ?? path) : path);
 

@@ -51,7 +51,8 @@ export interface ToolOutput {
 	 * 给工具卡片和插件自己用的结构化数据，存进会话，不发给模型。形状由插件定，本体不看里面，只认这几个通用声明：
 	 * 带 `checklist`（`ChecklistDetails`）是一份进度清单，带 `job`（`BackgroundJobDetails`）是在后台起了一个任务，
 	 * 带 `path`、`added`、`removed`、`hunks`（`FileDiffDetails`）是改了一个文件、通用卡片画出 diff，
-	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败，带 `spill`（`SpillDetails`）是结果截过、全文在别处。
+	 * 出错的结果带 `cancelled: true`（`CancelledDetails`）是人按了停、不是失败，带 `unanswered`（`UnansweredDetails`）是人没答、
+	 * 也不是失败，带 `spill`（`SpillDetails`）是结果截过、全文在别处。
 	 * 插件之间另认一个：让模型看了文件的哪一块（`FileViewDetails`）。改了哪些文件不在这里，见 `changes`。
 	 */
 	details?: unknown;
@@ -137,6 +138,15 @@ export interface SpillDetails {
  */
 export interface CancelledDetails {
 	cancelled: true;
+}
+
+/**
+ * 停下来等一份数据（`ToolRun.request`）的工具，没人交来答案时结果带 `unanswered`：`declined` 是人把卡取消了，`expired` 是到时没人答。
+ * 和 `CancelledDetails` 一样是「没做成，但不是失败」：转录画成「已取消」「没人回答」，不画成出错。工具自己带上，本体只认这个形状、不认工具名。
+ * 停下这一轮不用带：本体替停下的调用交结果时已经标成「已停止」。
+ */
+export interface UnansweredDetails {
+	unanswered: "declined" | "expired";
 }
 
 /**

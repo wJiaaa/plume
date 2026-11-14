@@ -15,6 +15,7 @@
  * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种点开挂在竖线上的画法是 `WorkStep`。
  */
 
+import type { UnansweredDetails } from "@plume/contract";
 import { Collapse, translate, useHeldKey, useI18n } from "@plume/ui";
 import { ChevronRight, Layers } from "@plume/ui/icons";
 import { type AnimationEvent, Fragment, memo, type ReactNode, useRef, useState } from "react";
@@ -34,7 +35,9 @@ import {
 	type CallStatus,
 	callStatus,
 	callStopped,
+	callUnanswered,
 	sameItems,
+	unansweredMark,
 	useCallLive,
 	useCalls,
 	useTranscript,
@@ -94,6 +97,7 @@ function ToolGroup({
 	// 只订阅这一组自己的几次调用：别处来了结果，标题不重画。
 	const statuses = useCalls((all) => calls.map((call) => callStatus(all, call.block.id, call.stopReason)), sameItems);
 	const stops = useCalls((all) => calls.map(({ block }) => callStopped(all, block.id)), sameItems);
+	const unanswered = useCalls((all) => calls.map(({ block }) => callUnanswered(all, block.id)), sameItems);
 	const added = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "added"), 0));
 	const removed = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "removed"), 0));
 	const answeredBy = useCalls((all) => calls.flatMap(({ block }) => all.results.get(block.id)?.answeredBy ?? []), sameItems);
@@ -131,11 +135,12 @@ function ToolGroup({
 		const draft = writeDraft(current.block, status);
 		lines = draft.lines;
 		const label = callLabel(draft.block, callLive, cwd, jobs[at], details);
-		const failed = status === "error" && !stops[at];
+		const failed = status === "error" && !stops[at] && !unanswered[at];
 		const marks = callLive ? null : (
 			<Marks
 				failed={failed || (single && failedLater)}
 				stopped={status === "error" && stops[at] === true}
+				unanswered={unanswered[at]}
 				added={single ? added : 0}
 				removed={single ? removed : 0}
 			/>
@@ -151,13 +156,13 @@ function ToolGroup({
 		swapKey = `${current.block.id}:${callLive ? "now" : "done"}:${lineNote(draft.block.name, draft.block.arguments) ? "note" : ""}`;
 		glide = callLive;
 	} else {
-		const failedIds = new Set(calls.flatMap(({ block }, index) => (statuses[index] === "error" && !stops[index] ? [block.id] : [])));
+		const failedIds = new Set(calls.flatMap(({ block }, index) => (statuses[index] === "error" && !stops[index] && !unanswered[index] ? [block.id] : [])));
 		const thought = members.filter((member) => member.kind === "thinking").length;
 		const summary = summarizeCalls(calls, failedIds, thought, members[0]?.kind === "thinking");
 		words = (
 			<>
 				{summary}
-				<Marks failed={failedLater || failedIds.size > 0} stopped={false} added={added} removed={removed} />
+				<Marks failed={failedLater || failedIds.size > 0} stopped={false} unanswered={undefined} added={added} removed={removed} />
 			</>
 		);
 		text = summary;
@@ -183,7 +188,7 @@ function ToolGroup({
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
 				{only ? (
-					<RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0]) || failedLater} />
+					<RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0] && !unanswered[0]) || failedLater} />
 				) : (
 					<span className="tool-icon">
 						<Layers size={13} strokeWidth={1.8} />
@@ -266,7 +271,8 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const live = liveStatus(status);
 	const draft = writeDraft(call.block, status);
 	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
-	const failed = status === "error" && !stopped;
+	const unanswered = useCalls((calls) => callUnanswered(calls, latest.block.id));
+	const failed = status === "error" && !stopped && unanswered === undefined;
 	const added = diffOf(result, "added");
 	const removed = diffOf(result, "removed");
 	const label: CallLabel =
@@ -288,7 +294,7 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 				<RowIcon name={call.block.name} failed={failed} />
 				<SwapText swapKey={`${live ? "now" : "done"}:${lineNote(draft.block.name, draft.block.arguments) ? "note" : ""}`} glide={live}>
 					<LabelWords label={label} />
-					{!live && <Marks failed={failed} stopped={stopped} added={added} removed={removed} />}
+					{!live && <Marks failed={failed} stopped={stopped} unanswered={unanswered} added={added} removed={removed} />}
 				</SwapText>
 				{draft.lines && <span className="shrink-0 text-caption tabular-nums">{draft.lines}</span>}
 				<Chevron shown={expandable} />
@@ -352,12 +358,25 @@ function LabelWords({ label }: { label: CallLabel }) {
 	);
 }
 
-/** 句尾的记号：失败（红字）、人按的停（中性）、改了几行。 */
-function Marks({ failed, stopped, added, removed }: { failed: boolean; stopped: boolean; added: number; removed: number }) {
+/** 句尾的记号：失败（红字）、人按的停、人没答（中性）、改了几行。 */
+function Marks({
+	failed,
+	stopped,
+	unanswered,
+	added,
+	removed,
+}: {
+	failed: boolean;
+	stopped: boolean;
+	unanswered: UnansweredDetails["unanswered"] | undefined;
+	added: number;
+	removed: number;
+}) {
 	return (
 		<>
 			{failed && <span className="tool-mark text-danger">{translate("toolRow.failed")}</span>}
 			{stopped && <span className="tool-mark text-ink-faint">{translate("toolCard.stopped")}</span>}
+			{unanswered && <span className="tool-mark text-ink-faint">{translate(unansweredMark(unanswered))}</span>}
 			{added > 0 && <span className="tool-mark tool-count text-ok">+{added}</span>}
 			{removed > 0 && <span className={`tool-count text-danger ${added > 0 ? "ml-1" : "tool-mark"}`}>−{removed}</span>}
 		</>

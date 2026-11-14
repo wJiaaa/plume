@@ -132,3 +132,13 @@ it("取消、到时没人答、停下这一轮，都是没有答案，结果叮�
 		expect(result.output).toContain("say so plainly in your reply");
 	}
 });
+
+it("取消和到时没人答是人做的收场，不是失败：结果声明 `unanswered`；停下这一轮交给本体标「已停止」", async () => {
+	const { ask } = await setup();
+	const declined = await ask({ question: "推不推", options: ["推", "不推"] }, { answered: false, reason: "declined" });
+	expect(declined.details).toEqual({ kind: "question", unanswered: "declined" });
+	const expired = await ask({ question: "推不推", options: ["推", "不推"] }, { answered: false, reason: "expired" });
+	expect(expired.details).toEqual({ kind: "question", unanswered: "expired" });
+	const stopped = await ask({ question: "推不推", options: ["推", "不推"] }, { answered: false, reason: "stopped" });
+	expect(stopped.details).toBeUndefined();
+});
