@@ -1732,30 +1732,25 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
-	 * 人在一轮中途插的话（命令声明的 `deliver: "steer"`）。有循环在跑就交给它，做完手上这一步、下一次请求之前读到；
+	 * 人在一轮中途插的话（会话忙时按回车、命令声明的 `deliver: "steer"`）。有循环在跑就排进队首、标成插话（`QueuedMessage.steered`），
+	 * 做完手上这一步、下一次请求之前读到（`consumeBoundary`）；读到之前它在排队条上，人看得见、撤得回。
 	 * 这一轮已经在收尾（收尾的压缩、`/compact`、被打断后还没停稳）、不会再有循环来取时排进队尾，跟在这件事后面发。
 	 */
 	function steer(session: Session, message: OutgoingMessage): void {
 		const prompt = userMessage(message);
-		const controller = session.controller;
-		if (controller && session.looping === controller && !controller.signal.aborted) {
-			(session.steering ??= []).push(prompt);
+		// 排队条上那一行：气泡里画的字，没有就是发给模型的正文。
+		const preview = prompt.displayText ?? prompt.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join(" ");
+		if (looping(session)) {
+			queues.push(session.summary.id, message, preview.replace(/\s+/g, " ").trim(), {}, true);
 			return;
 		}
-		// 排队条上那一行：气泡里画的字，没有就是发给模型的正文。
-		enqueue(session, message, prompt.displayText ?? prompt.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join(" "));
+		enqueue(session, message, preview);
 	}
 
-	/**
-	 * 一轮收了场，插进来的话还有没被取走的（这一轮出错、撞了上限收的场）：拿它开下一轮，剩下的在那一轮的第一个边界读到。
-	 * 不能丢：它没进转录、也不在排队条上，屏幕上就是「发了，什么也没发生」。排在排着的话前面，它是先说的。人按停的不走这里
-	 * （`stopSession` 已经清掉了）；插件的子会话也不：那一轮由建它的插件来开。
-	 */
-	function takeOrphans(session: Session, orphans: UserMessage[], controller: AbortController): void {
-		if (orphans.length === 0 || quitting || controller.signal.aborted || session.summary.owner || !sessions.has(session.summary.id)) return;
-		const [first, ...rest] = orphans;
-		begin(session, first!);
-		session.steering = rest;
+	/** 有循环在跑、还会在下一次请求前来取插话。 */
+	function looping(session: Session): boolean {
+		const controller = session.controller;
+		return controller !== undefined && session.looping === controller && !controller.signal.aborted;
 	}
 
 	/** 排进队尾；会话空着（上一轮被停下、队里还有前面的）就由这一下把队伍推起来。 */
@@ -1965,14 +1960,23 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	async function consumeBoundary(session: Session, controller: AbortController): Promise<boolean> {
 		let received = false;
-		while (!controller.signal.aborted && session.steering?.length) {
-			const prompt = session.steering.shift()!;
+		const sessionId = session.summary.id;
+		while (!controller.signal.aborted) {
+			// 插件经 `ctx.sessions.steer` 插给它子会话的在内存里，人插的在排队条上（`steer`）。
+			const queued = session.steering?.length ? undefined : queues.peekSteered(sessionId);
+			const prompt = session.steering?.shift() ?? (queued && queuedPrompt(queued, false));
+			if (!prompt) break;
 			// 被这一轮接了进去，不是开了新的一轮：发给模型时据此说清它是在模型工作时说的（plume.prompt 的插话说明）。
 			prompt.steered = true;
 			const verdict = await submitPrompt(session, prompt, controller.signal);
+			const committed =
+				!controller.signal.aborted && !verdict.block && (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted));
+			// 读到一半被停下：排队条上那一条还没取走，人按停不该把刚说的话吞掉。
 			if (controller.signal.aborted) return received;
-			if (verdict.block) emit({ type: "notice", sessionId: session.summary.id, text: verdict.reason, level: "warn" });
-			else if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted)) {
+			// 消息落进会话以后才从条上收走：反过来的话，条先空、气泡还没到，那句话有一阵子哪里都不在。
+			if (queued) queues.take(sessionId, queued.id);
+			if (verdict.block) emit({ type: "notice", sessionId, text: verdict.reason, level: "warn" });
+			else if (committed) {
 				received = true;
 				if (!prompt.synthetic) delete session.autoWakes;
 			}
@@ -2018,7 +2022,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 没写进会话就收了场的信（读到了的已经定下，不再改）：会话删掉、应用退出是 `closed`；钩子拦下的算没读到（`dropped`）；
 			// 这一轮被打断（人按停、插话、编辑重发）的留到下一轮开头读，见 `BackgroundRuns.cancelSession`。
 			const left = taken.filter((report) => report.valid());
-			const sessionId = session.summary.id;
 			for (const report of left) {
 				if (quitting || !sessions.has(sessionId)) report.letter.settle({ status: "closed" });
 				else if (!controller.signal.aborted) report.letter.settle({ status: "dropped" });
@@ -2158,7 +2161,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 拦下的这条没写进会话，这一轮什么也没做，按完成收场：不留「已暂停 · 继续」。
 			stop = controller.signal.aborted ? { reason: "aborted" } : !accepted ? { reason: "done" } : await steps();
 			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。步骤已经做完，这时读到的信是叫起了它。
-			while (!controller.signal.aborted && stop.reason === "done" && (session.steering?.length || background.hasReady(sessionId))) {
+			while (
+				!controller.signal.aborted &&
+				stop.reason === "done" &&
+				(session.steering?.length || queues.hasSteered(sessionId) || background.hasReady(sessionId))
+			) {
 				if (await consumeBoundary(session, controller)) stop = await steps();
 			}
 			if (controller.signal.aborted) stop = { reason: "aborted" };
@@ -2188,9 +2195,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			session.sent !== undefined &&
 			session.summary.kind === "top";
 		// 被一条打断的消息接替了：新的一轮紧接着开始，这里不说「停了」，免得界面闪一下「已暂停」。
-		let orphans: UserMessage[] = [];
 		if (session.controller === controller && !idle) {
-			orphans = session.steering ?? [];
 			session.controller = undefined;
 			session.turn = undefined;
 			session.steering = [];
@@ -2220,7 +2225,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		// 后面接着开的一轮（`begin` 等的是 `session.turn`）要等收尾的压缩做完；排着的、送达的由压完放开会话时（`releaseHold`）接着推。
 		if (idle) session.turn = compactIdle(session, controller).then(() => stop);
 		else {
-			takeOrphans(session, orphans, controller);
+			/*
+			 * 排队条上还有没读到的插话（被停下、出错、撞了上限收的场）：后面没有接着开的一轮来读它们，就去掉标记、留在队首，
+			 * 和排着的话一样等人；被打断换了一轮的留给那一轮读。
+			 */
+			if (!session.controller && !quitting) queues.unsteer(sessionId);
 			// 这一轮做完了就发下一条排着的；停了、出错了就留着等人，按停说的是现在别再接着做。
 			if (stop.reason === "done") drainQueue(session);
 			// 聚合计时器可能恰好在收尾的 await 期间到期，释放循环后再看一眼。
@@ -2668,6 +2677,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const entry = queues.take(session.summary.id, String(id));
 			// 打断：停下正在跑的那一轮，等它把没答的调用补完、写完会话，再拿这一条开新的一轮。
 			if (entry) begin(session, queuedPrompt(entry, session.controller !== undefined));
+		},
+		async steerQueued(sessionId, id) {
+			const session = find(sessionId);
+			if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
+			const entry = queues.list(session.summary.id).find((each) => each.id === String(id));
+			// 子会话交过来的、代管插件转来的是一件要单独开一轮、单独落定的事，不插进别的轮里。
+			if (!entry || !session.controller) return;
+			queues.promote(session.summary.id, entry.id, looping(session) && !entry.origin);
 		},
 		async removeQueued(sessionId, id) {
 			return queues.take(find(sessionId).summary.id, String(id));

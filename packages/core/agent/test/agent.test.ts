@@ -1485,6 +1485,72 @@ it("插话：一轮正在跑时插进去，做完手上这一步、下一次请�
 	expect(sentText(model?.requests[2]).match(/（插话）/g)).toHaveLength(1);
 });
 
+it("插话读到之前在排队条上标着插话，排在排着的话前面、不参与排序；读进这一轮后从队里收走", async () => {
+	await bigFile("a.txt", 1);
+	const { service, session, until, idle } = await start([
+		{ toolCalls: [{ id: "call_a", name: "read", args: { path: "a.txt" } }], stream: { chunkSize: 2, delayMs: 20 } },
+		{ text: "好" },
+		{ text: "排着的那句也答了" },
+	]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined);
+	const later = await service.queue(session.id, { content: [{ type: "text", text: "做完再说" }] }, "做完再说");
+	service.send(session.id, { content: [{ type: "text", text: "只看 src/" }], steer: true });
+	const queued = (await service.getSession(session.id)).queue;
+	expect(queued.map((entry) => [entry.preview, entry.steered])).toEqual([
+		["只看 src/", true],
+		["做完再说", undefined],
+	]);
+	await service.moveQueued(session.id, later.id, queued[0]!.id, "before");
+	expect((await service.getSession(session.id)).queue.map((entry) => entry.preview)).toEqual(["只看 src/", "做完再说"]);
+	await done;
+
+	expect(sentText(model?.requests[1])).toContain("只看 src/");
+	expect(sentText(model?.requests[1])).not.toContain("做完再说");
+	await vi.waitFor(async () => expect((await service.getSession(session.id)).queue).toEqual([]));
+	expect(sentText(model?.requests[2])).toContain("做完再说");
+});
+
+it("按停时还没读到的插话留在排队条上，去掉插话的标记，等人发；停着时「插进这一轮」不动它", async () => {
+	const { service, session, until, idle } = await start([{ text: "写到一半", hang: true }]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "写篇长文" }] });
+	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined);
+	service.send(session.id, { content: [{ type: "text", text: "换个题目" }], steer: true });
+	service.stop(session.id);
+	await done;
+
+	const view = await service.getSession(session.id);
+	expect(view.summary.stop).toEqual({ reason: "aborted" });
+	expect(view.queue.map((entry) => [entry.preview, entry.steered])).toEqual([["换个题目", undefined]]);
+	expect(view.messages.some((message) => message.role === "user" && JSON.stringify(message.content).includes("换个题目"))).toBe(false);
+	// 停着没有一轮来读，「插进这一轮」什么都不做。
+	await service.steerQueued(session.id, view.queue[0]!.id);
+	expect((await service.getSession(session.id)).queue.map((entry) => entry.steered)).toEqual([undefined]);
+});
+
+it("「插进这一轮」：排着的一条标成插话，做完手上这一步就读到", async () => {
+	await bigFile("a.txt", 1);
+	const { service, session, until, idle } = await start([
+		{ toolCalls: [{ id: "call_a", name: "read", args: { path: "a.txt" } }], stream: { chunkSize: 2, delayMs: 20 } },
+		{ text: "好，只看 src/" },
+	]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined);
+	const entry = await service.queue(session.id, { content: [{ type: "text", text: "只看 src/" }] }, "只看 src/");
+	await service.steerQueued(session.id, entry.id);
+	expect((await service.getSession(session.id)).queue).toMatchObject([{ id: entry.id, steered: true }]);
+	await done;
+
+	expect(model?.requests).toHaveLength(2);
+	expect(sentText(model?.requests[1])).toContain("（插话）");
+	const view = await service.getSession(session.id);
+	expect(view.messages.at(-2)).toMatchObject({ steered: true, content: [{ type: "text", text: "只看 src/" }] });
+	expect(view.queue).toEqual([]);
+});
+
 it("相邻的只读调用同时跑，会改动的排在它们后面；同时要问的审批一次弹一张", async () => {
 	const order: string[] = [];
 	let running = 0;

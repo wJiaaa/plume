@@ -1,5 +1,9 @@
 /**
- * 会话排着的话（`QueuedMessage`）：会话忙时人按下回车的，子会话交过来的任务，和代管插件转进来的话，排在同一条队里。
+ * 会话排着的话（`QueuedMessage`）：会话忙时人插的话、排到这一轮之后的，子会话交过来的任务，和代管插件转进来的话，排在同一条队里。
+ *
+ * 插话（`steered`）也排在这里，不只在内存里：读到之前人看得见、撤得回、能改成「现在就发」，按停、重开应用也不丢。
+ * 它们总在队首、按插进来的先后，读的时候从前往后取（`peekSteered`，消息落进会话以后才 `take`）；这一轮没人接着跑时
+ * 去掉标记（`unsteer`），成了普通的一条。
  *
  * 放在 agent 进程、落盘，不在窗口里：子会话交过来的任务是插件的逻辑入口排的，窗口关着也得排得上、轮得到；
  * 人排着的几条在重开窗口、重开应用以后也还在，不悄悄丢掉。存在会话库的 `queue` 表里，一个会话一行：变了只写这一个会话的，
@@ -28,7 +32,7 @@ export class SessionQueues {
 		private readonly failed: (error: unknown) => void,
 	) {}
 
-	/** 读回上次存下的；读不出来就当没有，不挡启动。认不出的条目丢掉。 */
+	/** 读回上次存下的；读不出来就当没有，不挡启动。认不出的条目丢掉。刚启动没有一轮在跑，插话的标记去掉。 */
 	static open(store: QueueStore, changed: (sessionId: string, queue: QueuedMessage[]) => void, failed: (error: unknown) => void): SessionQueues {
 		const queues = new Map<string, QueuedMessage[]>();
 		let saved = new Map<string, unknown>();
@@ -39,7 +43,7 @@ export class SessionQueues {
 		}
 		for (const [sessionId, list] of saved) {
 			if (!Array.isArray(list)) continue;
-			const entries = list.filter(isQueued);
+			const entries = list.filter(isQueued).map(({ steered: _steered, ...entry }) => entry);
 			if (entries.length > 0) queues.set(sessionId, entries);
 		}
 		return new SessionQueues(store, queues, changed, failed);
@@ -49,8 +53,11 @@ export class SessionQueues {
 		return structuredClone(this.queues.get(sessionId) ?? []);
 	}
 
-	/** `source` 是它的来处：不是人在输入框里排的（`origin`、`childId`、`fromPlugin`）。 */
-	push(sessionId: string, message: OutgoingMessage, preview: string, source: Source = {}): QueuedMessage {
+	/**
+	 * `source` 是它的来处：不是人在输入框里排的（`origin`、`childId`、`fromPlugin`）。`steered` 的是插进这一轮的话，
+	 * 排在已有的插话后面、没标的前面。
+	 */
+	push(sessionId: string, message: OutgoingMessage, preview: string, source: Source = {}, steered = false): QueuedMessage {
 		// 怎么送是这一次发送的事，排着的那条轮到它时是一次普通的发送。
 		const { interrupt: _interrupt, steer: _steer, ...rest } = message;
 		const entry: QueuedMessage = {
@@ -60,10 +67,42 @@ export class SessionQueues {
 			...(source.origin ? { origin: source.origin } : {}),
 			...(source.childId ? { childId: source.childId } : {}),
 			...(source.fromPlugin ? { fromPlugin: source.fromPlugin } : {}),
+			...(steered ? { steered: true as const } : {}),
 			createdAt: Date.now(),
 		};
-		this.write(sessionId, [...(this.queues.get(sessionId) ?? []), entry]);
+		const list = this.queues.get(sessionId) ?? [];
+		this.write(sessionId, steered ? list.toSpliced(steeredCount(list), 0, entry) : [...list, entry]);
 		return structuredClone(entry);
+	}
+
+	/** 最早的那句插话，不取走：读它要等钩子、落盘，读进去了才 `take`（见 `consumeBoundary`）。没有时是 undefined。 */
+	peekSteered(sessionId: string): QueuedMessage | undefined {
+		return structuredClone((this.queues.get(sessionId) ?? []).find((each) => each.steered));
+	}
+
+	hasSteered(sessionId: string): boolean {
+		return (this.queues.get(sessionId) ?? []).some((entry) => entry.steered);
+	}
+
+	/** 插话的标记都去掉：这一轮没人接着跑了，它们留在队首，等人或等下一轮收场时按顺序发。 */
+	unsteer(sessionId: string): void {
+		const list = this.queues.get(sessionId) ?? [];
+		if (!list.some((entry) => entry.steered)) return;
+		this.write(
+			sessionId,
+			list.map(({ steered: _steered, ...entry }) => entry),
+		);
+	}
+
+	/** 「插进这一轮」：`steer` 时标成插话、排在已有的插话后面，否则挪到队首。没有这一条时返回 false。 */
+	promote(sessionId: string, id: string, steer: boolean): boolean {
+		const list = this.queues.get(sessionId) ?? [];
+		const entry = list.find((each) => each.id === id);
+		if (!entry) return false;
+		if (entry.steered) return true;
+		const rest = list.filter((each) => each !== entry);
+		this.write(sessionId, steer ? rest.toSpliced(steeredCount(rest), 0, { ...entry, steered: true }) : [entry, ...rest]);
+		return true;
 	}
 
 	/** 拿出一条：不给 id 是队首。 */
@@ -82,7 +121,8 @@ export class SessionQueues {
 		const moving = list.find((entry) => entry.id === id);
 		const rest = list.filter((entry) => entry.id !== id);
 		const at = rest.findIndex((entry) => entry.id === targetId);
-		if (!moving || at < 0) return;
+		// 插话按插进来的先后读，不参与排序；没标的也挪不到它们前面。
+		if (!moving || at < 0 || moving.steered || rest[at]!.steered) return;
 		this.write(sessionId, rest.toSpliced(at + (placement === "after" ? 1 : 0), 0, moving));
 	}
 
@@ -120,8 +160,15 @@ function isQueued(value: unknown): value is QueuedMessage {
 		Array.isArray(entry.message?.content) &&
 		(entry.origin === undefined || entry.origin === "child" || entry.origin === "plugin") &&
 		(entry.childId === undefined || typeof entry.childId === "string") &&
-		(entry.fromPlugin === undefined || typeof entry.fromPlugin === "string")
+		(entry.fromPlugin === undefined || typeof entry.fromPlugin === "string") &&
+		(entry.steered === undefined || entry.steered === true)
 	);
+}
+
+/** 队首连着的几句插话有几句。 */
+function steeredCount(list: readonly QueuedMessage[]): number {
+	const at = list.findIndex((entry) => !entry.steered);
+	return at < 0 ? list.length : at;
 }
 
 /**

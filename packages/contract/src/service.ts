@@ -384,14 +384,16 @@ export interface OutgoingMessage {
 	/** 这一轮还在跑时：先停下它、等它收完尾，再拿这条开始新的一轮（排队条上的「现在就发」）。不给时正在跑就报错。 */
 	interrupt?: boolean;
 	/**
-	 * 这一轮还在跑时：插进去，模型做完手上这一步、下一次请求之前读到（命令声明的 `deliver: "steer"`）。这一轮已经在收尾、
-	 * 不会再来取话时排进队尾。空闲时就是新的一轮。
+	 * 这一轮还在跑时：插进去（会话忙时人按回车、命令声明的 `deliver: "steer"`）。读到之前它是排队条上标着插话的一条
+	 * （`QueuedMessage.steered`），模型做完手上这一步、下一次请求之前读到。这一轮已经在收尾、不会再来取话时排进队尾。
+	 * 空闲时就是新的一轮。
 	 */
 	steer?: boolean;
 }
 
 /**
- * 排在一个会话后面、等着轮到自己的一条（输入框上方那几行）。会话忙时人按下回车的，和子会话交过来的任务排的是同一条队。
+ * 排在一个会话后面、等着轮到自己的一条（输入框上方那几行）。会话忙时人插的话（`steered`）、按 ⌘回车排到这一轮之后的，
+ * 和子会话交过来的任务排的是同一条队。
  * 存在 agent 进程里、落盘：关了窗口、重开应用还在。这一轮以完成结束时发下一条；停了、出错了留着等人。
  */
 export interface QueuedMessage {
@@ -409,6 +411,11 @@ export interface QueuedMessage {
 	childId?: string;
 	/** 代管插件转进来的：是哪个插件，发出去时记进 `UserMessage.fromPlugin`。 */
 	fromPlugin?: string;
+	/**
+	 * 插进正在跑的这一轮的话，还没被读到：模型做完手上这一步、下一次请求之前读进这一轮，不等这一轮结束。排在没标的前面，
+	 * 按插进来的先后。这一轮没人接着跑了（停下、重开应用）就去掉这个标记，成了普通排着的一条。
+	 */
+	steered?: true;
 	createdAt: number;
 }
 
@@ -725,7 +732,7 @@ export interface AgentService {
 	exportSessions(file: string): Promise<void>;
 	/** 只导出这一段会话。原始库包含草稿；Markdown 只含已落盘的正文、工具摘要，附件只列名称。 */
 	exportSession(sessionId: string, file: string, format: "database" | "markdown"): Promise<void>;
-	/** 发出一条消息，开始一轮。立即返回；过程经 watch 推送。正在跑时只收带 `interrupt` 的。 */
+	/** 发出一条消息，开始一轮。立即返回；过程经 watch 推送。正在跑时只收带 `interrupt`（打断）或 `steer`（插话）的。 */
 	send(sessionId: string, message: OutgoingMessage): void;
 	/**
 	 * 排到队尾（`QueuedMessage`），返回排上的那一条。会话这会儿空着（上一轮被停下、队里还有前面的）就由这一下发出队首，
@@ -739,8 +746,13 @@ export interface AgentService {
 	 * 调用方据此知道它没拿到，不再拿旧的那份去用。
 	 */
 	removeQueued(sessionId: string, id: string): Promise<QueuedMessage | undefined>;
-	/** 拖动、↑↓ 改先后：`id` 那一条挪到 `targetId` 前面或后面。两条有一条不在队里时什么都不做。 */
+	/** 拖动、↑↓ 改先后：`id` 那一条挪到 `targetId` 前面或后面。两条有一条不在队里、或有一条是插话（`steered`）时什么都不做。 */
 	moveQueued(sessionId: string, id: string, targetId: string, placement: "before" | "after"): Promise<void>;
+	/**
+	 * 排队条上的「插进这一轮」：这一轮在跑、还会来取话时把这一条标成插话（`steered`），排在已有的插话后面；
+	 * 这一轮已经在收尾时挪到队首，它就是下一条。没有这一条、或会话没在跑时什么都不做。
+	 */
+	steerQueued(sessionId: string, id: string): Promise<void>;
 	/**
 	 * 人在子会话的卡片上点了「交给主会话」：把这件事排进 `sessionId` 这个子会话的父会话，和插件的
 	 * `ParentSession.enqueue` 同一条路（标着来自建这个子会话的插件）。只认父会话，不是子会话时报错。
