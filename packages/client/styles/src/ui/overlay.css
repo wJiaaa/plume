@@ -96,7 +96,8 @@
 	white-space: nowrap;
 	transition:
 		background-color var(--plume-t-quick),
-		color var(--plume-t-quick);
+		color var(--plume-t-quick),
+		opacity var(--plume-t-quick);
 }
 
 .plume-dialog-action-primary {
