@@ -141,7 +141,7 @@ export function useMentions({
 	const matches = useMemo(() => (listing ? rankMentions(term, items) : []), [listing, term, items]);
 	const current = Math.min(active, Math.max(0, matches.length - 1));
 	const avatars = useMemo(
-		() => assignAvatars(provided.filter((item) => item.kind === "subagent").map((item) => ({ name: item.title, avatar: item.avatar }))),
+		() => assignAvatars(provided.filter((item) => item.kind === "agent").map((item) => ({ name: item.title, avatar: item.avatar }))),
 		[provided],
 	);
 	useEffect(() => {
@@ -212,7 +212,7 @@ export function useMentions({
 	const headings = {
 		action: "mention.actions",
 		file: "mention.filesAndFolders",
-		subagent: "mention.agents",
+		agent: "mention.agents",
 		plugin: "mention.pluginsAndSkills",
 		session: "mention.sessions",
 	} as const;
@@ -250,7 +250,7 @@ export function useMentions({
 					data: { "data-mention-kind": item.kind, "data-mention-title": item.title },
 					content: (
 						<>
-							{item.kind === "subagent" ? (
+							{item.kind === "agent" ? (
 								<AgentAvatar
 									avatar={avatars.get(item.title)!}
 									size={18}

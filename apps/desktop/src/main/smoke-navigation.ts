@@ -82,9 +82,9 @@ export async function checkNavigation({
 		await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "@ 切到浅色");
 		await capture(window, join(outDir, "smoke-mentions-light.png"));
 		// Esc 收起菜单、「@」还留在输入框里时装上一个插件：菜单按新的插件名单重拉条目，收起后还画着的上一份里有子智能体的脸，不能因此崩掉。
-		await until(`document.querySelector('[data-mention-kind=subagent]') !== null`, "@ 列出子智能体");
+		await until(`document.querySelector('[data-mention-kind=agent]') !== null`, "@ 列出子智能体");
 		escape();
-		await until(`document.querySelector('[data-mention-kind=subagent]')?.closest('[data-open]')?.getAttribute('data-open') === 'false'`, "Esc 收起引用菜单");
+		await until(`document.querySelector('[data-mention-kind=agent]')?.closest('[data-open]')?.getAttribute('data-open') === 'false'`, "Esc 收起引用菜单");
 		await installPlugin("usage");
 		// 界面入口在 plugins 事件到了之后才载入，页面上看不出载完没有：给它一会儿。
 		await delay(1500);

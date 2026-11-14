@@ -4,7 +4,7 @@
  * 卡片放在输入框上方而不是工具卡片下面：人的视线本来就停在输入框这里，而且卡片按正常流占住自己的高度，
  * 对话在它上面滚，不会被它盖住。外框（收放的标题栏、倒计时、+N）是 `@plume/ui` 的 `ApprovalFrame`，插件画的提问卡也用它。
  *
- * 工具的插件登记了审批卡（`ui.approvalCard`）时那一张由插件画，这里只管它压在哪儿；插件的卡认不出这次请求或渲染出错时退回这张通用卡。
+ * 审批（放不放行）只有这一张卡，插件换不掉。
  * 同一格也摆等人给数据的卡（`run.request`，提问卡、计划卡、表单）：插件按 `kind` 登记（`ui.requestCard`），没有时退回一张只能「不答」的通用卡。
  */
 
@@ -12,7 +12,7 @@ import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest, T
 import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } from "@plume/ui";
 import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";
-import { ApprovalCardSlot, RequestCardSlot } from "../plugins.tsx";
+import { RequestCardSlot } from "../plugins.tsx";
 
 /** 卡片右上角的小标签：要做的是哪一类事（`ApprovalRequest.kind` 是 `ToolKind` 里这几种时）；别的照原样写。 */
 const KIND_LABEL: Partial<Record<string, MessageKey>> = {
@@ -30,7 +30,7 @@ function approvalReason(reason: string | undefined, detail: string): string | un
 
 /**
  * `from`：问的是插件的子会话（侧边聊天、子 Agent），卡上写明是它在请求，给它的标题。
- * `compact`：窄窗口，面板区一次只摆一格，交给插件的卡（打开面板会盖住卡片）。
+ * `compact`：窄窗口，面板区一次只摆一格，交给插件画的等人卡（打开面板会盖住卡片）。
  * `queued`：排在这张后面还在等的张数。`respond` 答审批（等人给数据的卡上「不答」也是它的 `reject`），`answer` 交回数据。
  */
 export function ApprovalOverlay({
@@ -66,15 +66,7 @@ export function ApprovalOverlay({
 					fallback={<RequestFallback request={request} queued={queued} decline={() => respond("reject")} {...source} />}
 				/>
 			) : (
-				<ApprovalCardSlot
-					request={request}
-					queued={queued}
-					sessionId={sessionId}
-					respond={respond}
-					compact={compact}
-					{...source}
-					fallback={<PermissionCard request={request} queued={queued} respond={respond} {...source} />}
-				/>
+				<PermissionCard request={request} queued={queued} respond={respond} {...source} />
 			)}
 		</div>
 	);

@@ -26,7 +26,6 @@ export default {
 | `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，详见下文 |
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片；`match: "prefix"` 按工具名前缀匹配动态工具族；`inline: true` 时调用照常并进一段活，传函数 `(args, argumentsText) => boolean` 时逐次判断 |
-| `ui.approvalCard(tool, Component, { order })` | 给自己的工具画审批卡，按 `request.tool` 认 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认 |
 | `ui.toolLine(tool, { verb, subject, file, note, command, job, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具：行上的动作和对象、对着哪个文件、归哪一类、怎么数、图标；做的是哪种活看工具定义上的 `kind`，是不是记清单看定义上的 `category: "checklist"`；画法还是通用卡片；`match: "prefix"` 按前缀登记 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板 |
@@ -41,7 +40,7 @@ export default {
 | `ui.composerAbove(id, Component, { order })` | 主输入框上方独占一行，收到 `{ session }`；返回 null 不占位，组件自己管理展开退场，不会浮到转录侧面 |
 | `ui.conversationCard(id, Component, { order, lane })` | 跟着会话的一张卡片：对话列够宽时浮在转录右上角，不够时在输入框正上方；`lane: true` 的占右边一列（够宽停靠、不够浮在转录上，从不到输入框上方，太长自己滚） |
 | `ui.environmentSection(id, Component, { label, order, attention? })` | 往会话的环境卡片（内置的 `plume.environment` 画）里加一节，收到 `{ session }`；返回 null 不占位、不画分隔线；`label` 是卡片「显示哪些内容」菜单里的名字；`attention(session)` 是 hook，有事等人决定、或有会自己叫醒这个会话的事时返回一句话，卡片收着时开关上挂圆点 |
-| `ui.mentions(provider)` | 每次打开 `@` 时传 `{ cwd?, sessionId? }`，返回 `ComposerMention[]` 或 Promise：`id/title/kind/token` 必填，kind 是 subagent 或 plugin，可带 description/origin/avatar；只插入 token，用户自行发送，停用自动撤销 |
+| `ui.mentions(provider)` | 每次打开 `@` 时传 `{ cwd?, sessionId? }`，返回 `ComposerMention[]` 或 Promise：`id/title/kind/token` 必填，可带 description/origin/avatar；`kind` 只管画法和分组：`agent` 归「智能体」、画 `avatar` 头像（输入框里的 token 也带头像），`plugin` 归「插件和技能」、画插件图标；只插入 token，用户自行发送，停用自动撤销 |
 | `ui.composerHint(session => text)` | 输入框空着时的灰字建议，按 Tab 填进去 |
 | `ui.welcomeLine(locale => ({ text, source }))` | 换掉欢迎页问候下面的那一行（默认问要在哪个项目里做什么），只问最后注册的那一个 |
 | `ui.replyText(text => text)` | 画回复正文、复制回复前过一遍，拿掉插件让模型顺带写的标记 |
@@ -54,7 +53,7 @@ export default {
 | `ui.replyAction(id, Component, { order })` | 每一轮收尾那条回复底下的操作排（时间、复制、分叉）里加一个按钮，排在复制和分叉之间，收到 `{ sessionId, from, to }`：`from` 是这一轮开口那条消息的位置，`to` 是收尾回复的位置加一，插件按自己记下的消息位置挑出归这一轮的东西。悬停才显出来、行高 24，按钮不高过 `IconButton` 默认尺寸，点开的东西用 `Popover`；返回 null 不占位（`plume.hooks` 的运行记录） |
 | `ui.terminalOpener(open)` | 为文件树等入口登记“在终端中打开”：人点击后调用 `open(directory, sessionId)`，目录和归属会话由宿主提供。一个插件保留一个处理器，最新登记的优先；停用后恢复前一个，没有处理器时宿主提示安装并启用终端插件，执行失败弹提示条 |
 | `ui.terminalRunner(run)` | 为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener` |
-| `ui.openFile(path, sessionId)` | 在指定会话的文件面板打开文件；读取仍受会话目录边界约束，只有这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的来源）在边界外也能只读打开 |
+| `ui.openFile(path, sessionId)` | 在指定会话的文件面板打开文件；读取仍受会话目录边界约束，会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也在边界里，只有这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的来源）在边界外也能只读打开；独立窗口里交给主窗口对应会话 |
 | `ui.findFile(path, sessionId)` | 纯文字里印出来的路径（终端输出）指的那个文件，返回绝对路径：绝对路径看在不在，相对路径先按会话目录拼、再按结尾找唯一的一个；不存在、不止一个、文件夹、边界外都是 `null`，答出来的 `ui.openFile` 打得开 |
 | `ui.droppedPaths(transfer)` | 拖放带着的本机绝对路径（访达的文件、文件面板的行），不带路径是 `null`；在 `drop` 里同步调，`dragover` 时只答空数组 |
 | `ui.useFileMenu(root)` | 组件内调用的 hook，返回 `{ open, onContextMenu(event, { path, onOpen }), element }`；复用打开方式、在访达中显示和复制路径菜单 |
@@ -66,8 +65,6 @@ export default {
 | `ui.quoteInPanel(panelId, sessionId, quote)` | 把划词引用追加到本插件面板的输入框；复用该会话当前可见标签，否则新开一个，保留已有草稿、不自动发送。面板须将 `PanelProps.tab` 传给 `composer.draftKey` |
 | `ui.draftInSession(sessionId \| undefined, { text, images?, send?, replace? })` | 把字和图片（base64；`from` 记着它是媒体目录里哪张图的标注副本）接在草稿后面，`replace` 时换掉整段草稿；给了 `sessionId` 先打开那个会话，不给就是眼前的输入框（当前对话或新对话）。`send` 且人刚点过（用户激活还在）、输入框原本是空的时直接发出去（如 Git 面板的「发给 Agent」），没人点时只放进草稿。弹出的面板窗口里只能交给面板来源的会话（转交主窗口），会话不在了抛错 |
 | `ui.revealToolCall(sessionId, toolCallId)` | 打开会话，转录滚到那次调用的工具卡片放在中间，外层带一下 `data-plume-flash`（插件的样式按它闪）；只在主窗口里能用 |
-| `ui.openMediaFile(name, sessionId)` | 在指定会话的文件面板打开媒体目录中的图片；传 `ctx.media.save` 返回的媒体名，不传磁盘路径；独立窗口会把打开请求交给主窗口对应会话 |
-| `ui.revealMediaFile(name)` / `ui.revealMediaLabel()` | 在系统文件管理器中定位该媒体文件；菜单文字用 `revealMediaLabel()`，随系统和语言取正确名称。宿主校验媒体名及真实路径，不开放任意磁盘路径 |
 | `ui.mediaUrl(name, thumb?)` | 会话媒体目录里一张图（`ImageContent.media`、`ctx.media.save` 交回的名字）给 `<img src>` 的地址；名字不对是空串。给 `thumb`（像素）时是长边缩到这么长的缩略图（宿主算一次存在盘上，原图不比它大时就是原图；GIF 不缩），格子、列表里用它，看图、另存、复制用不带 `thumb` 的原图 |
 | `ui.openImage(images, index, { from?, edit? })` | 用产品的看图器看几张图：从 `from` 元素飞出、关上飞回；`edit` 打开就进标注，标注完交给那张图的 `onAttach(dataUrl)` |
 | `ui.captureWindow({ x, y, width, height })` | 截取当前插件界面所在窗口的可见矩形，单位 CSS 像素、整数，返回 PNG data URL；临时隐藏浮动导航、通知与提示；只能截本窗口，不能越界或读取别的窗口 |
@@ -80,7 +77,7 @@ export default {
 | `ui.pageBadge(id, { count, label } \| null)` | 侧栏去处里本插件那一页的那一行右端挂一个数（没人看见的失败），`label` 给读屏和悬停提示；`null` 或 0 拿掉，人正在那一页上时不画，停用时一起拿掉 |
 | `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
 | `ui.openPath(path)` | 用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令 |
-| `ui.revealPath(path)` | 用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回 |
+| `ui.revealPath(path)` | 用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回（媒体图用 `ctx.media.save` 交回、记在 `details` 里的 `path`）。菜单上的字插件自带，按平台叫访达、资源管理器、文件管理器（`@plume/ui` 的 `macKeyboard()`，`navigator.platform` 以 `Win` 开头是 Windows） |
 | `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开：有插件接手点击（`takesClicks`，内置浏览器）时开在它那里，否则系统浏览器；限制同 `ui.openExternal` |
 | `ui.settingsSection(id, Component, options)` | 加一节设置：默认画进本插件详情的「设置」一节；`page: "nav"` 时单独占设置导航一行（`group` 选「Agent 能力」「数据」「代码与版本控制」组），给别的 `page` 时画进产品的那一页（「个性化」「智能体」，或「智能体」里「会话」那张卡的一行，或「插件市场」的「技能」「连接器」两类），见下文 |
 | `ui.ModelSelect` | 产品的模型下拉：`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说 |
@@ -91,8 +88,7 @@ export default {
 | `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、选文件夹 |
 | `ui.screenOverlay(Component)` | 截图浮层里画的组件 |
 | `ui.pinnedShot(Component)` | 钉在桌面上的截图窗口里画的组件 |
-| `ui.stopSession(sessionId, event)` | 人点击停止按钮时停止明确指定的会话，各窗口均可用；须在真实 React click 回调内同步调用，不能先 await、伪造事件或重复使用事件，插件须仍启用 |
-| `ui.ComposerSend` | 产品的发送／停止按钮，收到 `{ running, disabled?, tip?, onSend, onStop }`；签名与使用见下文。经 `ui` 使用，不从 `@plume/ui` 导入 |
+| `ui.ComposerSend` | 产品的发送／停止按钮，收到 `{ sessionId, running, disabled?, tip?, onSend }`；跑着时按下停下 `sessionId` 这一轮，见下文。经 `ui` 使用，不从 `@plume/ui` 导入 |
 | `ui.useSession(sessionId)` | React hook：一个会话的视图（摘要、消息、草稿、进度、审批），随它的事件更新；还没读到是 undefined |
 | `ui.useSessionActivity(sessionId)` | React hook：侧栏行首给这个会话的记号：`"waiting"`（它或子会话在等批准）、`"done"`、`"failed"`（人没看着时跑完、没跑完，人打开看过就清掉），没有记号是 undefined；只在内存里，重开应用都算看过。卡片上要「看过就不再提」时用它 |
 | `ui.listCommands({ cwd? })` | 输入框 `/` 菜单此刻有的命令（`ListedCommand[]`：`SlashCommand` 加 `plugin`），同名去重后的样子：产品自己的 `/clear`（没有 `plugin`）在前，再是各插件经 `ctx.commands` 供的；`cwd` 决定项目里的命令文件、技能列不列。只读，展开、发送仍走输入框；每次现问，要看时再调。命令设置页靠它列「内置」那一段（没有 `source` 的） |
@@ -111,20 +107,13 @@ useEffect(() => ui.onSessionsChanged((event) => {
 }), [refresh]);
 ```
 
-`ui.ComposerSend` 的 `running` 决定显示发送还是停止；`disabled` 只禁用发送，运行中始终保留停止入口，`tip` 只覆盖发送时的提示。`onStop` 收到 `React.MouseEvent<HTMLButtonElement>`，将同一个事件交给 `ui.stopSession`：
+`ui.ComposerSend` 的 `running` 决定显示发送还是停止；`disabled` 只禁用发送，运行中始终保留停止入口，`tip` 只覆盖发送时的提示。跑着时人按下它，宿主停下 `sessionId` 这一轮，和主输入框的停止键一样，出错时弹提示条：
 
 ```tsx
-<ui.ComposerSend
-	running={running}
-	disabled={!canSend}
-	onSend={send}
-	onStop={(event) => {
-		void ui.stopSession(sessionId, event).catch((error) => ui.notify(String(error), "error"));
-	}}
-/>
+<ui.ComposerSend sessionId={sessionId} running={running} disabled={!canSend} onSend={send} />
 ```
 
-停止是用户当次点击的操作，不能放进定时器、订阅回调或后台完成逻辑。`ui.stopSession` 不授予发送、修改或删除其他会话的能力。
+停止只经这枚按钮、只在人按下时发生：插件没有直接停会话的入口，不能放进定时器、订阅回调或后台完成逻辑。
 
 ## 回复正文的代码块
 
@@ -201,24 +190,7 @@ ui.toolCard("my_tool", MyCard);
 - **后注册的生效**：同一工具 `order` 小的在前；`order` 相同时后注册的在前，它撤下后前一个恢复。卡片的 `order` 默认是 0，写更小的 `order` 也能排到前面。
 - 外框用 `@plume/ui` 的 `Card`（`title`、`subtitle` 放命令或路径、`status`）；输出用 `CodeBlock`，改动用 `ui.FileDiff`。
 - 卡片只占一行时（参数还在写、事情已经交出去了）用 `@plume/ui` 的 `FlowRow`：和转录里思考、工具活、送达那几行同一个骨架（前置图标、标题、摘要、尾部、在跑时摘要扫光、`onToggle` 给了才可点），例子是 `plume.spawn-session` 的卡片写参数时那一行和开始以后那一行。
-- 审批卡压在输入框正上方，不在工具卡片里：等待确认时工具卡片收到 `status: "approval"`，卡片里不放允许、拒绝。要给自己的工具换一种审批卡，见下面「审批卡」。
-
-## 审批卡
-
-```tsx
-function ShellApproval({ request, sessionId, respond, permission, allowAuto, compact, fallback }: ApprovalCardProps) {
-	if (!request.detail) return <>{fallback}</>;
-	return <div className="my-card">…<Button onClick={() => void respond("once")}>允许</Button></div>;
-}
-ui.approvalCard("my_shell", ShellApproval);
-```
-
-- 只给自己的工具画（`request.tool`）：卡片压在输入框正上方的那一格、排队一次一张、停下这一轮时撤卡归产品；组件画整张卡（外框、正文、按钮）。认不出这次请求就返回 `fallback`（产品的通用卡），渲染出错时让给下一个注册者，都不行用通用卡。
-- 回答只有 `"once"`、`"always"`、`"reject"`，问的是放不放行。要人给答案（回答问题、批准计划、填表）用下面的「等人给数据的卡」。
-- `permission` 是现在的权限模式；`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `respond`，别的档调用不改。只在人点了卡上的按钮时调。
-- `compact`：窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`from` 是问的子会话的标题，卡上要写明。
-- 没人答时卡会过期（5 分钟），截止时刻在 `request.expiresAt`；`queued` 是排在这张后面还在等的张数。外框想和产品的审批卡一样（收放的标题栏、倒计时、+N），用 `@plume/ui` 的 `ApprovalFrame`，正文和按钮放在里面；自己画外框的，标题行放一个 `ApprovalExpiry`（`at={request.expiresAt}`），有排队时写 `+{queued}`。
-- 等审批卡时对话末尾、侧栏悬停和系统通知说的是「等待你的批准」，插件改不了；要说自己的那句状态（「等你批准计划」），那就不是审批，用 `run.request` 的 `waiting`。
+- 审批卡压在输入框正上方，不在工具卡片里：等待确认时工具卡片收到 `status: "approval"`，卡片里不放允许、拒绝。审批卡只有产品的那一张，插件换不掉；要人给答案（回答问题、批准计划、填表）的不是审批，用下面「等人给数据的卡」。
 
 ## 等人给数据的卡
 
@@ -234,7 +206,7 @@ ui.requestCard("ask_user", QuestionCard);
 - 工具经 `run.request({ kind, title, payload })` 要人给数据（见 logic.md），卡片按 `kind` 登记；`request.payload` 是工具给的数据，认不出就返回 `fallback`（产品的通用卡，只能「不答」）。渲染出错时让给下一个注册者。
 - 人答了调 `answer(value)`，`value` 原样交回 `run.request`（工具那边会再核一遍，卡上也先查一遍，拦住手误）；人不答调 `decline()`，工具得到 `reason: "declined"`。没送到时两者都抛错，卡片把错误摆出来、让人再答。一个回答连同附言（评论、修改意见）一起放进 `value`，不用经 `remote` 另交。
 - 代管这个会话的插件可能在外面先答了（`ctx.sessions.answer`、`respond`，见 logic.md「代管会话」）：卡和过期、停下时一样被产品收起，你的卡不用为它另做处理；那次调用底下由产品写「由 X 代答」。
-- 摆在哪、排队、过期（30 分钟）、停下这一轮时撤卡和审批卡一样归产品；`from`、`queued`、`compact`、`permission`、`allowAuto()` 的意思同审批卡。外框用 `ApprovalFrame`，或自己画、标题行放 `ApprovalExpiry`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
+- 卡片压在输入框正上方的那一格、和审批卡一起排队一次一张、过期（30 分钟，截止时刻在 `request.expiresAt`）、停下这一轮时撤卡都归产品。`queued` 是排在这张后面还在等的张数；`from` 是问的子会话的标题，卡上要写明；`compact` 是窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`permission` 是现在的权限模式，`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `answer`，别的档调用不改，只在人点了卡上的按钮时调。外框用 `ApprovalFrame`（收放的标题栏、倒计时、+N），或自己画、标题行放 `ApprovalExpiry`（`at={request.expiresAt}`）、有排队时写 `+{queued}`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
 - 卡片一出来把焦点给它，键盘能直接答。
 - 等这张卡时那句状态由 `run.request` 带 `waiting` 给（「等你批准计划」，按 `ctx.locale()`）；不给时宿主说「等待你的回答」。
 
@@ -459,7 +431,7 @@ function SidePanel({ tab }: PanelProps) {
 - `reask: true`：人说的最后一句底下多一颗「编辑并重新提问」，宿主截掉它和之后的、拿改过的字重跑一轮（照常经 `prompt.submit`，插件按截掉后的记录算），不问要不要退文件；一轮在跑时置灰。没有撤回、分叉。侧边聊天开它，子 Agent 的全过程不开（话是派它的会话写的）。
 - 这个子会话经 `run.parent.enqueue`、卡片的 `handToParent` 交给父会话的事走到了哪（`ChildTask`：排队中、在跑、做完、失败、随父会话停下）由宿主给，要画就给 `tasks={Component}`：组件收到 `{ sessionId, parentId, tasks, runNow, withdraw?, retry, dismiss }`，画在转录和输入框之间，留几件、摆哪些按钮由你定（侧边聊天的回执条见 `packages/builtin/side-chat/src/TaskStrip.tsx`）；不给就不画。`withdraw` 把那件从父会话的队里收回、那句话放回 `composer.draftKey` 那份草稿，没给 `draftKey` 时没有它。操作出错时宿主弹提示条。
 - 没有「继续」：子会话的一轮只有插件能发起。等人批准的那一次压在主输入框上方，转录里只标「等待确认」。
-- 画的是独立会话（`create` 不给 `parentId`，见 logic.md「独立会话」）时：等人批准的那一次（和 `run.request` 等人给数据的卡）就压在这个视图的输入框上方（插件的 `ui.approvalCard`、`ui.requestCard` 照样用），因为它不挂在哪个对话下、没有别处可压；所以只在人看得到的地方画它，页面没开着时用 `ui.useSession` 读 `approval`、经 `ui.pageBadge` 带 `attention: true` 提醒人。`model: "choose"` 的菜单没有「跟随主会话」，没选的用默认模型；没有划词引用。
+- 画的是独立会话（`create` 不给 `parentId`，见 logic.md「独立会话」）时：等人批准的那一次（和 `run.request` 等人给数据的卡）就压在这个视图的输入框上方（插件的 `ui.requestCard` 照样用），因为它不挂在哪个对话下、没有别处可压；所以只在人看得到的地方画它，页面没开着时用 `ui.useSession` 读 `approval`、经 `ui.pageBadge` 带 `attention: true` 提醒人。`model: "choose"` 的菜单没有「跟随主会话」，没选的用默认模型；没有划词引用。
 - 外面那一层给它高度（面板里 `height: 100%`），它自己撑满、底下贴着输入框。
 
 ## 设置分区

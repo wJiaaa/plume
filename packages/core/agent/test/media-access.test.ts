@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createAgent } from "../src/index.ts";
-import { managedMediaPath, mediaFilePath, readManagedMedia, readMediaBytes } from "../src/media-access.ts";
+import { managedMediaPath, readManagedMedia, readMediaBytes } from "../src/media-access.ts";
 import { saveImage } from "../src/media.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -23,7 +23,6 @@ afterEach(async () => {
 
 it("托管图片在独立于项目的目录读取，返回规范路径和只读元数据", async () => {
 	const path = join(mediaDir, name);
-	expect(await mediaFilePath(mediaDir, name)).toBe(await realpath(path));
 	expect(await managedMediaPath(mediaDir, path)).toBe(await realpath(path));
 	expect(await readManagedMedia(mediaDir, path)).toMatchObject({ text: "", binary: true, truncated: false, bytes: Buffer.from(PNG, "base64").length });
 	expect((await readMediaBytes(mediaDir, name))?.toString("base64")).toBe(PNG);
@@ -36,7 +35,6 @@ it("拒绝路径片段、伪造绝对路径、数据目录其他文件、目录�
 	const secret = join(dir, name);
 	await writeFile(secret, "outside");
 	for (const invalid of ["../" + name, secret, "name.png", name.toUpperCase(), "", "\0"]) {
-		expect(await mediaFilePath(mediaDir, invalid)).toBeNull();
 		expect(await readMediaBytes(mediaDir, invalid)).toBeNull();
 	}
 	expect(await managedMediaPath(mediaDir, name)).toBeNull();
@@ -44,15 +42,15 @@ it("拒绝路径片段、伪造绝对路径、数据目录其他文件、目录�
 	expect(await readManagedMedia(mediaDir, join(dir, "data", "settings.json"))).toBeNull();
 	const link = `${"a".repeat(40)}.png`;
 	await symlink(secret, join(mediaDir, link));
-	expect(await mediaFilePath(mediaDir, link)).toBeNull();
+	expect(await managedMediaPath(mediaDir, join(mediaDir, link))).toBeNull();
 	expect(await readMediaBytes(mediaDir, link)).toBeNull();
 	expect(await readManagedMedia(mediaDir, join(mediaDir, link))).toBeNull();
 	const inside = `${"b".repeat(40)}.png`;
 	await symlink(join(mediaDir, name), join(mediaDir, inside));
-	expect(await mediaFilePath(mediaDir, inside)).toBeNull();
+	expect(await managedMediaPath(mediaDir, join(mediaDir, inside))).toBeNull();
 	const directory = `${"c".repeat(40)}.png`;
 	await mkdir(join(mediaDir, directory));
-	expect(await mediaFilePath(mediaDir, directory)).toBeNull();
+	expect(await managedMediaPath(mediaDir, join(mediaDir, directory))).toBeNull();
 });
 
 it("普通文件面板可读托管图片，缺失会话、其他目录和写操作不因此获得权限", async () => {

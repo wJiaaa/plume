@@ -624,7 +624,7 @@ export default {
 					id,
 					title: definition.name,
 					description: definition.description,
-					kind: "subagent" as const,
+					kind: "agent" as const,
 					token: `@${definition.name}`,
 					avatar: definition.avatar,
 				}));

@@ -208,16 +208,15 @@ export async function checkGallery(options: {
 		const revealLabel = process.platform === "darwin" ? "在访达中显示" : process.platform === "win32" ? "在资源管理器中显示" : "在文件管理器中显示";
 		await clickVisible(detachedPage, "[role=menuitem]", revealLabel, 20_000);
 		await wait(async () => revealed !== undefined, "定位托管图片");
-		assert.equal(revealed, await page(`window.plume.media.path(${JSON.stringify(original)})`));
+		// 卡片按工具结果里记下的路径（`ctx.media.save` 交回的）经 `ui.revealPath` 指出来。
+		assert.equal(revealed, join(plumeHome(), "session-media", original));
 
 		const secret = join(outDir, "media-outside.png");
 		const escaped = `${"f".repeat(40)}.png`;
 		await writeFile(secret, "outside");
 		await mkdir(join(plumeHome(), "session-media"), { recursive: true });
 		await symlink(secret, join(plumeHome(), "session-media", escaped));
-		assert.equal(await page(`window.plume.media.path(${JSON.stringify(escaped)})`), null);
 		assert.equal(await page(`fetch('plume-media://m/${escaped}').then(response => response.ok)`), false, "媒体协议拒绝软链越界");
-		assert.equal(await page(`window.plume.media.path('../settings.json')`), null);
 		console.log(
 			"PLUME_GALLERY_SMOKE",
 			JSON.stringify({ ok: true, stop: true, liveRefresh: true, editResult: true, draftPreserved: true, detached: true, mediaBoundary: true }),

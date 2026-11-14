@@ -19,11 +19,6 @@ export async function managedMediaPath(dir: string, target: string): Promise<str
 	return actual === expected && info?.isFile() ? expected : null;
 }
 
-/** 界面只交媒体名；路径由宿主拼，不能传绝对路径或目录片段。 */
-export function mediaFilePath(dir: string, name: string): Promise<string | null> {
-	return typeof name === "string" && MEDIA_NAME.test(name) ? managedMediaPath(dir, join(dir, name)) : Promise.resolve(null);
-}
-
 async function openManagedMedia(dir: string, target: string): Promise<FileHandle | null> {
 	const path = await managedMediaPath(dir, target);
 	if (!path) return null;

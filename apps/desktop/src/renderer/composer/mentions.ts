@@ -7,7 +7,7 @@ export interface MentionCompletion {
 export interface MentionItem {
 	id: string;
 	title: string;
-	kind: "action" | "file" | "subagent" | "plugin" | "session";
+	kind: "action" | "file" | "agent" | "plugin" | "session";
 	description?: string;
 	origin?: string;
 	token?: string;

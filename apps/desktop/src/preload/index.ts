@@ -154,10 +154,6 @@ contextBridge.exposeInMainWorld("plume", {
 		readText: (): Promise<string> => ipcRenderer.invoke("plume:files:read-text"),
 		copyImage: (dataUrl: string) => ipcRenderer.invoke("plume:files:copy-image", dataUrl),
 	},
-	media: {
-		path: (name: string): Promise<string | null> => ipcRenderer.invoke("plume:media:path", name),
-		reveal: (name: string): Promise<boolean> => ipcRenderer.invoke("plume:media:reveal", name),
-	},
 	market: {
 		read: () => ipcRenderer.invoke("plume:market:read"),
 		install: (id: string) => ipcRenderer.invoke("plume:market:install", id),

@@ -7,8 +7,6 @@ import type { ComponentType, MouseEvent, ReactNode } from "react";
 import type { ChangeHunk } from "./changes.ts";
 import type { Locale, SlashCommand, ToolCall, ToolOutput } from "./plugin.ts";
 import type {
-	ApprovalDecision,
-	ApprovalRequest,
 	ChildTask,
 	FileContents,
 	HumanRequest,
@@ -422,36 +420,9 @@ export interface ChildTasksProps {
 }
 
 /**
- * 插件给自己的工具画的审批卡（`ui.approvalCard`）。卡片压在输入框正上方的那一格由产品摆，排队、停下这一轮时撤卡也归产品；
- * 组件画整张卡（外框、正文、按钮），人拍板时调 `respond`。要人给答案（提问、计划、表单）的不是审批，用 `run.request` 和
- * `ui.requestCard`（`RequestCardProps`）。
- */
-export interface ApprovalCardProps {
-	request: ApprovalRequest;
-	/** 在问的会话；子会话（侧边聊天、子 Agent）问时是子会话的 id。 */
-	sessionId: string;
-	/** 问的是子会话时它的标题，卡上要写明是谁在请求。 */
-	from?: string;
-	/** 排在这张后面还在等的审批张数，卡上写 +N（`@plume/ui` 的 `ApprovalFrame` 替你写）。到期时刻在 `request.expiresAt`。 */
-	queued: number;
-	/** 交出回答。没送到时抛错，卡片自己把错误摆出来、让人再答。 */
-	respond(decision: ApprovalDecision): Promise<void>;
-	/** 设置里现在的权限模式。 */
-	permission: PermissionMode;
-	/**
-	 * 把权限模式从请求批准切到帮我批准，给「接受并开启自动模式」这样的按钮：先切，再 `respond`。
-	 * 只在人点了卡上的按钮时调；不在请求批准档时什么都不改（不会把完全访问降下来）。
-	 */
-	allowAuto(): Promise<void>;
-	/** 窄窗口：面板区一次只摆一格，打开面板会盖住这张卡，要读的东西画在卡里。 */
-	compact: boolean;
-	/** 产品的通用审批卡。认不出这次请求时直接返回它。 */
-	fallback: ReactNode;
-}
-
-/**
  * 插件给 `run.request` 画的卡（`ui.requestCard`）：问题、计划、表单。摆在哪、排队、过期、停下这一轮时撤卡归产品，
  * 组件画整张卡（外框用 `@plume/ui` 的 `ApprovalFrame`），人答了调 `answer`，不答调 `decline`。
+ * 审批（放不放行）的卡只有产品的那一张，插件换不掉。
  */
 export interface RequestCardProps {
 	request: HumanRequest;
@@ -467,7 +438,10 @@ export interface RequestCardProps {
 	decline(): Promise<void>;
 	/** 设置里现在的权限模式。 */
 	permission: PermissionMode;
-	/** 同 `ApprovalCardProps.allowAuto`：「接受并开启自动模式」这样的按钮先调它，再 `answer`。 */
+	/**
+	 * 把权限模式从请求批准切到帮我批准，给「接受并开启自动模式」这样的按钮：先调它，再 `answer`。
+	 * 只在人点了卡上的按钮时调；不在请求批准档时什么都不改（不会把完全访问降下来）。
+	 */
 	allowAuto(): Promise<void>;
 	/** 窄窗口：面板区一次只摆一格，打开面板会盖住这张卡，要读的东西画在卡里。 */
 	compact: boolean;
@@ -862,14 +836,36 @@ export interface DraftQuote {
 	text: string;
 	from: "user" | "assistant";
 }
+
+/**
+ * 人在转录里划选一段字后，引用菜单里多的一项，见 `UiContext.quoteAction`。宿主只在人点了那一项时调 `run`；
+ * `quote` 是划选的那段，`sessionId` 是它所在的会话。拿去哪里由插件定（`ui.quoteInPanel` 放进自己面板的输入框）。
+ */
 export interface QuoteAction {
 	label: LocalizedText;
 	run(quote: DraftQuote, sessionId: string): void | Promise<void>;
 }
+
+/** `ui.onSessionsChanged` 收到的一次变化：只说哪个会话、哪一类变了，内容要自己重读。 */
 export interface SessionChange {
 	sessionId: string;
+	/** `messages`：消息落盘或撤回；`summary`：摘要（标题、运行状态……）变了，新会话也算；`deleted`：删掉了。 */
 	type: "messages" | "summary" | "deleted";
+	/** 落盘的是工具结果时带上那件工具的名字，别的消息不带。 */
 	tools?: string[];
+}
+
+/** `ui.ComposerSend` 收的。 */
+export interface ComposerSendProps {
+	/** 停止键停的会话。 */
+	sessionId: string;
+	/** 这个会话正在跑：画成停止键，按下停下它这一轮。 */
+	running: boolean;
+	/** 只禁用发送；跑着时停止键一直能按。 */
+	disabled?: boolean;
+	/** 发送键的悬停说明，不给是「发送」。 */
+	tip?: string;
+	onSend(): void;
 }
 
 /** 欢迎页问候下面那一行（`ui.welcomeLine`）：一句话，可以带出处。 */
@@ -885,30 +881,19 @@ export interface ComposerMention {
 	title: string;
 	description?: string;
 	origin?: string;
-	kind: "subagent" | "plugin";
+	/**
+	 * 宿主怎么画它：`agent` 是一个能点名叫来干活的智能体，归进「智能体」一组，行首和输入框里的 token 画它的头像（`avatar`）；
+	 * `plugin` 归进「插件和技能」一组，行首是插件图标。只管画法和分组，选中照样只插入 `token`。
+	 */
+	kind: "agent" | "plugin";
 	token: string;
+	/** 只给 `agent`：写明的头像，写法同 `@plume/ui` 的 `assignAvatars` 收的 `avatar`；不给按名字算一个，同一份名单里互不相同。 */
 	avatar?: string;
 }
 
 export interface UiContext {
-	quoteAction(action: QuoteAction): void;
-	/** 追加到当前可见的同插件面板，或开新标签；保留草稿，不自动发送。 */
-	quoteInPanel(panelId: string, sessionId: string, quote: DraftQuote): void;
-	/** 仅接受当前真实点击，与主输入框的停止相同。 */
-	stopSession(sessionId: string, event: MouseEvent): Promise<void>;
-	onSessionsChanged(listener: (event: SessionChange) => void): () => void;
-	openMediaFile(name: string, sessionId: string): Promise<void>;
-	revealMediaFile(name: string): Promise<void>;
-	revealMediaLabel(): string;
-	ComposerSend: ComponentType<{ running: boolean; disabled?: boolean; tip?: string; onSend(): void; onStop(event: MouseEvent<HTMLButtonElement>): void }>;
-	/** 文件树等入口打开终端；处理器只在用户操作时运行。 */
-	terminalOpener(open: (directory: string, sessionId: string) => void | Promise<void>): void;
-	/**
-	 * 回复里 shell 代码块的「在终端运行」：人点击后调用 `run(command, sessionId)`，`command` 已去掉提示符（`$ `、`> `）和注释行，
-	 * 要原样执行；`sessionId` 是代码块所在的会话。登记和没有处理器时的提示同 `terminalOpener`。
-	 */
-	terminalRunner(run: (command: string, sessionId: string) => void | Promise<void>): void;
-
+	/** 插件名，和逻辑入口的一样。 */
+	readonly name: string;
 	/** 会话标题栏的局部控件；只在有会话时显示，组件不能接管标题或布局。 */
 	sessionToolbar(id: string, component: ComponentType<{ session: SessionView }>): void;
 	/** 会话菜单中的操作，点击后调用；没有会话时不显示。 */
@@ -934,7 +919,6 @@ export interface UiContext {
 	agentDelivery(component: ComponentType<AgentDeliveryProps>): void;
 	/** 当前项目的系统打开方式；复用文件预览的默认目标和菜单。 */
 	readonly ProjectOpener: ComponentType<{ path: string }>;
-	readonly name: string;
 	/**
 	 * 人明确选择入口时在主窗口打开一个会话，和点侧栏里那一行一样；不会自动发送，不替人换屏（只在人点了插件界面上的按钮时调，
 	 * 如「打开上次会话」打开插件经 `ctx.sessions.launch` 开出来的会话）。没有的会话抛错。
@@ -969,11 +953,6 @@ export interface UiContext {
 	 * 优先于产品给内置工具的说法。工具名不固定（MCP 的 `mcp__服务__工具`）时用 `match: "prefix"` 按前缀登记，精确工具名的优先于前缀的。
 	 */
 	toolLine(tool: string, line: ToolLine, options?: { match?: "tool" | "prefix" }): void;
-	/**
-	 * 给自己的工具画审批卡，见 `ApprovalCardProps`。`tool` 是 `ApprovalRequest.tool`；order 和让位规则同 `toolCard`：
-	 * 渲染出错时让给下一个，都不行用产品的通用卡。
-	 */
-	approvalCard(tool: string, component: ComponentType<ApprovalCardProps>, options?: { order?: number }): void;
 	/**
 	 * 给 `run.request` 画卡，见 `RequestCardProps`。`kind` 是 `HumanRequest.kind`；order 和让位规则同 `toolCard`：渲染出错时让给下一个，
 	 * 都不行用产品的通用卡。
@@ -1044,12 +1023,15 @@ export interface UiContext {
 	/** React hook：各插件登记的环境卡片分区，按 order 排好，给画环境卡片的插件用；增减跟着变。只在组件里调。 */
 	useEnvironmentSections(): readonly EnvironmentSectionEntry[];
 	/**
+	 * 输入框 `@` 菜单里加几项，见 `ComposerMention`：每次打开菜单时按输入框的目录和会话问一次，可以是 Promise；
+	 * 菜单、分组、token 的样子由宿主画。一个插件一份，再登记换掉上一份，停用时撤下。
+	 */
+	mentions(provider: (context: { cwd?: string; sessionId?: string }) => ComposerMention[] | Promise<ComposerMention[]>): void;
+	/**
 	 * 输入框空着时的灰字建议（下一步想说什么），按 Tab 整段填进去，人看过再自己发。宿主画输入框时按注册先后问，
 	 * 取第一个给出字的；只问开着的会话，新对话不问。返回空串或 undefined 表示这次没有建议。
 	 * 只在渲染时同步调，别在里面做耗时的事。一个插件只能有一个，再注册换掉上一个。
 	 */
-	/** 每次打开 `@` 时列出当前目录可用的引用；停用后自动撤销，一个插件一份。 */
-	mentions(provider: (context: { cwd?: string; sessionId?: string }) => ComposerMention[] | Promise<ComposerMention[]>): void;
 	composerHint(hint: (session: SessionView) => string | undefined): void;
 	/**
 	 * 换掉欢迎页问候下面的那一行（默认是「要在某个项目里开发什么？」）：宿主每次画欢迎页时按界面语言问一次，等答复时那一行先空着，
@@ -1076,8 +1058,13 @@ export interface UiContext {
 	/** 关闭自己在该会话打开的面板，仍经过该面板的 onClose；给了 `tab` 只关那一个标签。 */
 	closePanel(id: string, sessionId?: string, tab?: string): void;
 	/**
-	 * 在指定会话的文件面板打开已有文件，读取仍受该会话的文件边界约束；唯一的例外是这个会话最近一次请求的「记忆文件」
-	 * （`PromptSection.files` 标的项目指令、项目记忆来源），在边界外也能只读打开。
+	 * 把一段引用（`QuoteAction.run` 拿到的）放进自己面板 `panelId` 里 `ui.Conversation` 的输入框：会话 `sessionId` 眼前开着的正是这个面板时
+	 * 追加到它，不然新开一个标签放进去。草稿原样留着，不发送。面板没登记时抛错。输入框的草稿和引用归宿主，所以由宿主放。
+	 */
+	quoteInPanel(panelId: string, sessionId: string, quote: DraftQuote): void;
+	/**
+	 * 在指定会话的文件面板打开已有文件，读取仍受该会话的文件边界约束；会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也算在边界里。
+	 * 唯一的例外是这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的项目指令、项目记忆来源），在边界外也能只读打开。
 	 */
 	openFile(path: string, sessionId: string): Promise<void>;
 	/**
@@ -1092,8 +1079,9 @@ export interface UiContext {
 	droppedPaths(transfer: DataTransfer): string[] | null;
 	/** 产品的文件右键菜单；root 用于复制相对路径，hook 只在组件里调用。 */
 	useFileMenu(root: string): FileMenu;
-	/** 产品的语法高亮 diff 和文件预览；插件不需要另带一套代码渲染器。 */
+	/** 产品的语法高亮 diff；插件不需要另带一套代码渲染器。 */
 	readonly FileDiff: ComponentType<FileDiffProps>;
+	/** 产品的文件预览（代码高亮、图片、文档），内容由插件经自己的 remote 读来，见 `FilePreviewProps`。 */
 	readonly FilePreview: ComponentType<FilePreviewProps>;
 	/** 按扩展名注册只读预览；同扩展名后注册的生效，撤下后恢复前一个。 */
 	documentViewer(extensions: readonly string[], component: ComponentType<DocumentPreviewProps>): void;
@@ -1122,10 +1110,23 @@ export interface UiContext {
 	 */
 	linkOpener(opener: LinkOpener): void;
 	/**
+	 * 本体文件树等处「在终端中打开」由谁接：人点了以后调 `open(directory, sessionId)`，`directory` 是要进去的目录（绝对路径），
+	 * `sessionId` 是入口所在的会话。入口是本体的，终端是插件的，所以按种类登记成接手者。每个插件一个、再登记换掉上一个，
+	 * 几个插件都登记时最后登记的接，它停用后还给前一个；没人登记时本体提示去装终端插件，`open` 抛错时把错误弹成提示条。
+	 */
+	terminalOpener(open: (directory: string, sessionId: string) => void | Promise<void>): void;
+	/**
+	 * 回复里 shell 代码块的「在终端运行」：人点击后调用 `run(command, sessionId)`，`command` 已去掉提示符（`$ `、`> `）和注释行，
+	 * 要原样执行；`sessionId` 是代码块所在的会话。登记、让位和没有处理器时的提示同 `terminalOpener`。
+	 */
+	terminalRunner(run: (command: string, sessionId: string) => void | Promise<void>): void;
+	/**
 	 * 主输入框排队条上，每条排着的消息「更多」菜单里多一项，见 `QueueAction`；排在产品自己的「编辑」后面，几个插件按注册先后。
 	 * 没有插件登记时排队条直接放「编辑」按钮，不出菜单。一个插件只能有一个，再注册换掉上一个。
 	 */
 	queueAction(action: QueueAction): void;
+	/** 转录划词后引用菜单里多一项，见 `QuoteAction`。一个插件只能有一个，再注册换掉上一个，停用时撤下。 */
+	quoteAction(action: QuoteAction): void;
 	/** 用户点击时打开目标项目／目录的空白对话，已有草稿原样保留并追加 text；仍由人按发送。 */
 	openConversationDraft(options: ConversationDraft): Promise<void>;
 	/**
@@ -1204,6 +1205,11 @@ export interface UiContext {
 	 */
 	useSessionActivity(sessionId: string): SessionActivity | undefined;
 	/**
+	 * 订阅所有会话（包括没打开的）落盘的变化，见 `SessionChange`：只说哪个会话、哪一类变了，给跨会话的页面（画廊）知道该重读了；
+	 * 流式生成中的增量不发。返回取消订阅的函数，组件的 effect 收尾时调；插件停用时也撤下。会话事件只到渲染进程的宿主，所以由宿主转。
+	 */
+	onSessionsChanged(listener: (event: SessionChange) => void): () => void;
+	/**
 	 * 输入框 `/` 菜单此刻有的命令，同名去重后的样子：产品自己的（`/clear`，没有 `plugin`）在前，再是各插件经 `ctx.commands`
 	 * 供的。`cwd` 是按哪个目录列（项目里的命令文件、技能跟着变）。只读，展开、发送仍走输入框。每次调用现问，要看时再调。
 	 */
@@ -1218,6 +1224,11 @@ export interface UiContext {
 	readonly ModelSelect: ComponentType<ModelSelectProps>;
 	/** 输入框里的模型和思考档位那两枚，见 `ModelControlsProps`。 */
 	readonly ModelControls: ComponentType<ModelControlsProps>;
+	/**
+	 * 主输入框的发送键，见 `ComposerSendProps`：发送和停止是同一枚，一轮开始、结束时在原地换。给插件自己画的输入框（画廊的改图条）用。
+	 * 跑着时按下停下 `sessionId` 这一轮，和主输入框的停止键一样：只有人按了这枚按钮才停，所以停止由按钮自己做，不开给插件直接调。
+	 */
+	readonly ComposerSend: ComponentType<ComposerSendProps>;
 	/** React hook：「跟随」会落到的模型和默认思考档位，见 `ModelDefaults`；设置改了跟着变。只在组件里调。 */
 	useModelDefaults(): ModelDefaults;
 	/** React hook：登记过的项目，按侧栏的顺序；增删改跟着变。只在组件里调。 */

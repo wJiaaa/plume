@@ -21,7 +21,7 @@ test("带空格、引号和 Windows 反斜线的文件引用可以往返", () =>
 test("引用按可见名字和描述搜索，保留分组顺序；compact 只在行首执行", () => {
 	const items = [
 		{ id: "pick-file", kind: "action" as const, title: "选择文件" },
-		{ id: "agent", kind: "subagent" as const, title: "reviewer", description: "代码审查" },
+		{ id: "agent", kind: "agent" as const, title: "reviewer", description: "代码审查" },
 	];
 	assert.equal(rankMentions("文件", items)[0]?.id, "pick-file");
 	assert.equal(rankMentions("审查", items)[0]?.id, "agent");

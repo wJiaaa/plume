@@ -530,7 +530,7 @@ export default {
 
 - 服务的接口是 `@plume/contract` 里的 `Services`。自己定义的服务用声明合并加一项：`declare module "@plume/contract" { interface Services { echo: { say(text: string): string } } }`。
 - `inject` 里的服务都有插件提供了才调 `apply`；缺的时候插件是「等待」状态（「插件市场」里它的详情页写着在等哪项服务），补上了自动加载。
-- 同一项服务只有一个生效的提供方：非内置的优先于内置的（这就是替换 Plume 自带的实现），同是非内置的先加载的那个生效，别的记一条警告。
+- 同一项服务只有一个生效的提供方：非内置的优先于内置的（这就是替换 Plume 自带的实现），同是非内置的先加载的那个生效，别的记一条警告。谁在提供、谁顶下了谁写在 `PluginStatus.provides`，「插件市场」里装着的插件的详情页写着「提供服务：…」，替换没生效时先看这里。
 - 生效的提供方换了、停了、卸了，用它的插件先停用（`effect` 照常执行），再按现在的提供方重新 `apply`；所以 `ctx.use` 拿到的在这次加载里一直可以用。
 - `ctx.use` 给的是宿主包过的一份：只有方法，冻住了，改不了提供方的对象。要改服务的行为，整个替换它，不要往上面挂东西。
 
@@ -596,7 +596,9 @@ ctx.serve(api);
 
 ## 只读运行观察和后台任务
 
-`ctx.sessions.observe(listener)` 订阅 `SessionObservation`：实际模型请求和响应、工具开始、审批、重试、通知、运行状态、一轮收场（`turnEnd`，带 `stop`：完成、出错、被停下、用满步数、原地打转，退出应用时停下的是 `interrupted`）与撤回。每个观察者拿独立副本，异常只记日志，不能拦截或改变执行；订阅在插件停用时撤下。事件不提供供应商配置、请求头或密钥。`at` 是观察时已有的消息数，持久化者在 `rewound` 时删掉 `at >= count` 的观察，在 `onDeleted` 时清理整段会话。诊断记录不是新的上下文，不应再注入模型。
+`ctx.sessions.observe(listener)` 订阅 `SessionObservation`：实际模型请求和响应、工具开始、审批、重试、通知、运行状态、一轮收场（`turnEnd`，带 `stop`：完成、出错、被停下、用满步数、原地打转，退出应用时停下的是 `interrupted`）、钩子经过（`hooks`，见下）与撤回。每个观察者拿独立副本，异常只记日志，不能拦截或改变执行；订阅在插件停用时撤下。事件不提供供应商配置、请求头或密钥。`at` 是观察时已有的消息数，持久化者在 `rewound` 时删掉 `at >= count` 的观察，在 `onDeleted` 时清理整段会话。诊断记录不是新的上下文，不应再注入模型。
+
+`hooks` 是一次钩子调用经过了哪几层（`HookTrace`）：`layers` 外层在前，每层是 `{ plugin, order, outcome, changedInput?, changedOutput? }`，`outcome` 是 `next`（往里交了）、`answered`（自己给了结果）、`failed`（这一层抛错；里层的错只记在出错的那一层）；`inner` 是最里层（本体）走到了（`ran`）、被本体按外层的设定停下（`stopped`，如外层设了 `readOnly` 的写文件调用），没有时是没走到。只记有没有改，不记参数和结果的内容。`tool.execute`、`tool.approve` 带 `toolCallId`，`model.context` 带它组出的那次请求的 `requestId`（同 `request` 的 `id`），`prompt.submit` 两样都不带；`step.end`、`context.compact` 不记，没有插件层的钩子调用也不记。自己的层没按预期生效（被外层拦下、被里层改回）时，看调用轨迹里这次调用的「经过的钩子」。
 
 只收到和你有关的会话的观察：你建的（子会话、独立会话）、你代管的和挂在它下面的子会话、你经 `launch` 开出还没兑现 `idle` 的。要看全部会话（诊断轨迹、给每个会话写摘要、一轮收场后跑用户的钩子、在任意会话里等一轮收场再做事），在默认导出上和 `inject` 并列写 `observe: "all"`；别的值加载失败。插件市场的详情页会对装着的插件写一句「能看到所有会话的运行情况」，只在真要看全部时写。
 

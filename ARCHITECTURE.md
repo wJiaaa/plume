@@ -1,6 +1,6 @@
 # Plume 架构
 
-Plume 是一个 coding agent 桌面应用（Electron）。模型调用、agent 循环、会话、审批卡和界面骨架是产品本体；基本工具（read、write、edit、ls、glob、grep、bash）、沙箱、帮我批准的风险规则、系统提示词、压缩是随应用发的内置插件（`packages/builtin/`）；循环里依赖它的能力——新工具、工具结果、发给模型的上下文——经**钩子**和**工具注册**开放给插件，对话里配套的**工具卡片**、对话旁边面板区里的**面板**也由插件画（审批卡由产品摆在输入框上方，插件可经 `ui.approvalCard` 给自己的工具换一张）。内置插件随应用发、不能停用；其余插件放在插件仓库 plume-plugins 的 `plugins/`，经插件市场安装（`apps/desktop/src/main/market-remote.ts`）。
+Plume 是一个 coding agent 桌面应用（Electron）。模型调用、agent 循环、会话、审批卡和界面骨架是产品本体；基本工具（read、write、edit、ls、glob、grep、bash）、沙箱、帮我批准的风险规则、系统提示词、压缩是随应用发的内置插件（`packages/builtin/`）；循环里依赖它的能力——新工具、工具结果、发给模型的上下文——经**钩子**和**工具注册**开放给插件，对话里配套的**工具卡片**、对话旁边面板区里的**面板**也由插件画（审批卡由产品摆在输入框上方，插件换不掉）。内置插件随应用发、不能停用；其余插件放在插件仓库 plume-plugins 的 `plugins/`，经插件市场安装（`apps/desktop/src/main/market-remote.ts`）。
 
 完整设计（可变与不可变的边界、开放哪些界面、钩子语义）见 [agent-extension.md](agent-extension.md)。本文只说代码在哪、怎么连起来。
 

@@ -18,12 +18,12 @@
 
 import type { AgentService, Locale, OutgoingMessage, PluginStatus, RegisteredToolInfo, SessionView } from "@plume/contract";
 import type {
-	ApprovalCardProps,
 	CodeBlockProps,
 	ComposerAboveProps,
 	ComposerChipProps,
 	ComposerItemProps,
 	ComposerMention,
+	ComposerSendProps,
 	AgentDeliveryProps,
 	ConversationCardProps,
 	EnvironmentAttentionProps,
@@ -97,7 +97,6 @@ import { ComposerSend } from "./composer/ComposerShell.tsx";
 import { menuCommands, productCommands } from "./composer/commands.ts";
 import { registerTerminalOpener, registerTerminalRunner } from "./files/open-terminal.ts";
 import { subscribeSessionChanges } from "./plugin-session-changes.ts";
-import { openMediaFile, revealMediaFile, revealMediaLabel } from "./media-files.ts";
 import { createPluginRegistry, type Handlers } from "./plugin-registry.ts";
 
 interface Entry<P> {
@@ -120,7 +119,6 @@ const toolCards = registry.handlers<Entry<ToolCardProps>>();
 const toolPrefixes = registry.handlers<Entry<ToolCardProps>>();
 /** `ui.toolCard(…, { inline })`：只在通用卡片上补东西的卡片，调用照常并进一段活；给的是函数时逐次调用问它。 */
 const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean)>();
-const approvalCards = registry.handlers<Entry<ApprovalCardProps>>();
 /** `ui.requestCard`：按 `HumanRequest.kind` 认的、`run.request` 的卡。 */
 const requestCards = registry.handlers<Entry<RequestCardProps>>();
 
@@ -856,7 +854,7 @@ export async function listMentions(context: { cwd?: string; sessionId?: string }
 						typeof entry.id === "string" &&
 						typeof entry.title === "string" &&
 						typeof entry.token === "string" &&
-						(entry.kind === "subagent" || entry.kind === "plugin"),
+						(entry.kind === "agent" || entry.kind === "plugin"),
 				)
 				.map((entry) => ({ ...entry, id: `${plugin}/${entry.id}` }));
 		}),
@@ -1379,7 +1377,6 @@ function pluginRemote<T extends object>(agent: Remote<AgentService>, name: strin
 }
 
 const lifetimes = new Map<string, ReturnType<typeof uiLifetime>>();
-const stopEvents = new WeakSet<Event>();
 
 function context(name: string, agent: Remote<AgentService>): UiContext {
 	const lifetime = uiLifetime((error) => console.error(`[${name}] 界面入口清理失败：`, error));
@@ -1418,7 +1415,6 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
 		}),
 		toolLine: live((tool, line, options) => registerToolLine(name, tool, line, options)),
-		approvalCard: live((tool, component, options) => register(approvalCards, "审批卡", name, tool, component, options)),
 		requestCard: live((kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind")),
 		panel: live((id, component, options) => registerPanel(name, id, component, options)),
 		page: live((id, component, options) => registerPage(name, id, component, options)),
@@ -1485,24 +1481,18 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			owned(dispose);
 			return dispose;
 		},
-		stopSession: async (sessionId, event) => {
-			const source = event?.nativeEvent;
-			if (
-				!lifetime.active ||
-				!(source instanceof Event) ||
-				source.type !== "click" ||
-				!source.isTrusted ||
-				!navigator.userActivation.isActive ||
-				stopEvents.has(source)
-			)
-				throw new Error("Stopping a session requires a user action");
-			stopEvents.add(source);
-			await agent.stop(String(sessionId));
-		},
-		ComposerSend,
-		openMediaFile,
-		revealMediaFile,
-		revealMediaLabel,
+		ComposerSend: ({ sessionId, running, disabled, tip, onSend }: ComposerSendProps) => (
+			<ComposerSend
+				running={running}
+				{...(disabled !== undefined ? { disabled } : {})}
+				{...(tip !== undefined ? { tip } : {})}
+				onSend={onSend}
+				// 停止只在人按了这枚按钮时发生：插件拿不到直接停会话的入口。插件停用后按钮也不再停。
+				onStop={() => {
+					if (lifetime.active) void agent.stop(String(sessionId)).catch((error: unknown) => notify(String(error), "error"));
+				}}
+			/>
+		),
 		// 认不出的轻重按 info：提示条照样弹，不因为插件写错一个字就吞掉。
 		notify: (message, level?: NotifyLevel) => notify(String(message), level === "warn" || level === "error" ? level : "info"),
 		openPanel: (id, sessionId, options) =>
@@ -1767,16 +1757,6 @@ async function allowAuto(): Promise<void> {
 	if (settingsView()?.permissionMode !== "ask") return;
 	await modelsAgent().setPermissionMode("auto");
 	await refreshModels();
-}
-
-/**
- * 等人决定的那一次：工具的插件登记了审批卡就由它画，渲染出错让给下一个，都不行用 `fallback`（产品的通用卡）。
- */
-export function ApprovalCardSlot(props: Omit<ApprovalCardProps, "permission" | "allowAuto">) {
-	const version = usePluginRegistrations();
-	const permission = useSyncExternalStore(subscribeModels, settingsView)?.permissionMode ?? "auto";
-	const entries = approvalCards.get(props.request.tool) ?? [];
-	return <Chain key={`${version}:${props.request.toolCallId}`} entries={entries} props={{ ...props, permission, allowAuto }} />;
 }
 
 /** `run.request` 的卡：按 `kind` 找插件登记的，渲染出错让给下一个，都不行用 `fallback`（产品的通用卡）。 */

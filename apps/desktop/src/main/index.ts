@@ -42,7 +42,6 @@ import { applicationMenuTemplate } from "./app-menu.ts";
 import { loadAppearance, registerAppearanceIpc } from "./appearance.ts";
 import { sessionFromUrl } from "./deep-link.ts";
 import { registerFilesIpc } from "./files.ts";
-import { registerMediaFilesIpc } from "./media-files.ts";
 import { registerKeepAwake } from "./keep-awake.ts";
 import { registerOpenTargetsIpc } from "./open-targets.ts";
 import { registerPanelWindowsIpc } from "./panel-windows.ts";
@@ -229,7 +228,6 @@ async function boot(): Promise<void> {
 	registerLocaleIpc();
 	registerKeepAwake();
 	registerFilesIpc();
-	registerMediaFilesIpc(join(dataDir, "session-media"));
 	registerOpenTargetsIpc();
 	registerUpdateIpc({ offline: Boolean(smoke) });
 	// 截屏的宿主能力（浮层、钉图窗口、剪贴板、全局快捷键），要在开主窗口之前登记：它得看着主窗口什么时候关。
