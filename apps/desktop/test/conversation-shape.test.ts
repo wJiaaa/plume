@@ -292,7 +292,8 @@ test("这一轮的表从人开口算起，停下等人的那段不算", () => {
 	const meter = liveTurnMeter(messages);
 	// 第一段 1000→3000 记 2 秒，第二段从 60_000 起：起点等于 60_000 - 2000。
 	assert.equal(meter?.startedAt, 58_000);
-	assert.equal(meter?.tokens, 15);
+	// 只数已经收尾的那条回复写出的：还在写的那条没有服务商报的数，由运行行按字数另估。
+	assert.equal(meter?.output, 5);
 });
 
 type MessageRun = Extract<ReturnType<typeof runs>[number], { kind: "message" }>;

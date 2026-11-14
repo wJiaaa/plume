@@ -108,6 +108,11 @@ const SETTLE_MS = 1200;
  */
 const CHARS_PER_TOKEN = 3.5;
 
+/** 按字数估的 token 数：还没收尾的回复只有字，服务商报的数要等它写完。 */
+export function estimateTokens(chars: number): number {
+	return chars / CHARS_PER_TOKEN;
+}
+
 export function trustworthy(samples: RateSample[]): boolean {
 	if (samples.length < 2) return false;
 	const span = samples[samples.length - 1]!.at - samples[0]!.at;

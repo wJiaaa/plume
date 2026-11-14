@@ -51,13 +51,6 @@ export function newClock(start = 0): Clock {
 }
 
 /**
- * 一条回复用掉的新 token：输入、写进缓存的和输出。读缓存的不算：那是上一轮已经付过的上下文，算进来一轮里每一步都把整段历史再数一遍。
- */
-function freshTokens(usage: Pick<AssistantMessage["usage"], "input" | "output" | "cacheWrite">): number {
-	return usage.input + usage.cacheWrite + usage.output;
-}
-
-/**
  * 人开口了，新的一轮从这里起。界面替人说的（「继续」、续写的催促）都是 `synthetic`，接着的是上一轮：
  * 停下又按了继续，做的还是同一件事，算成新的一轮，一段没做完的活就被切成两段。
  */
@@ -177,10 +170,10 @@ export function resumesTurn(messages: readonly Message[], index: number): boolea
 }
 
 /**
- * 还在跑的这一轮：`startedAt` 是扣掉停顿之后的起点（`now - startedAt` 就是这一轮跑了多久），`tokens` 是已经收尾的
- * 回复花掉的。和页脚读同一份时钟，这一轮结束时印在回答底下的数字接得上。
+ * 还在跑的这一轮：`startedAt` 是扣掉停顿之后的起点（`now - startedAt` 就是这一轮跑了多久），`output` 是已经收尾的
+ * 回复写出的 token（服务商报的数）。和页脚读同一份时钟，这一轮结束时印在回答底下的数字接得上。
  */
-export function liveTurnMeter(messages: readonly Message[]): { startedAt: number; tokens: number } | null {
+export function liveTurnMeter(messages: readonly Message[]): { startedAt: number; output: number } | null {
 	let start = 0;
 	for (let at = messages.length - 1; at >= 0; at--) {
 		if (opensTurn(messages[at]!) && !resumesTurn(messages, at)) {
@@ -189,11 +182,11 @@ export function liveTurnMeter(messages: readonly Message[]): { startedAt: number
 		}
 	}
 	const clock = newClock(start);
-	let tokens = 0;
+	let output = 0;
 	for (let at = start; at < messages.length; at++) {
 		const message = messages[at]!;
 		saw(clock, message);
-		if (message.role === "assistant" && message.stopReason !== "pending") tokens += freshTokens(message.usage);
+		if (message.role === "assistant" && message.stopReason !== "pending") output += message.usage.output;
 	}
-	return clock.from === null ? null : { startedAt: clock.from - clock.closedMs, tokens };
+	return clock.from === null ? null : { startedAt: clock.from - clock.closedMs, output };
 }
