@@ -2,7 +2,7 @@ import type { SessionView } from "@plume/contract";
 import type { PanelProps } from "@plume/contract/ui";
 import { acceleratorLabel, ClosableTab, IconButton, ResizeHandle, Sideways, translate, useI18n } from "@plume/ui";
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelSurface } from "../panel-surface.tsx";
 import { TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import type { TitlebarInsets } from "../titlebar.ts";
@@ -347,7 +347,8 @@ function panelCwd(app: Chrome, scope: string, view?: SessionView): string | unde
 }
 
 /** 恢复文件时只保存路径，仍由 agent 按原会话的工作目录校验并读内容。 */
-function PanelContents({ panel, tab, scope, shown }: { panel: PanelEntry; tab: PanelTab; scope: string; shown: boolean }) {
+// 面板区滑动、侧栏开合时外层每一帧都换尺寸：内容只跟这几样和自己订阅的状态走，不跟着每帧重画（终端、浏览器这些插件面板不便宜）。
+const PanelContents = memo(function PanelContents({ panel, tab, scope, shown }: { panel: PanelEntry; tab: PanelTab; scope: string; shown: boolean }) {
 	const app = useChrome();
 	const view = usePanelSession(scope);
 	const hasView = useAppPick((current) => current.view !== undefined);
@@ -377,7 +378,7 @@ function PanelContents({ panel, tab, scope, shown }: { panel: PanelEntry; tab: P
 			props={{ ...(view ? { session: view } : {}), ...(cwd ? { cwd } : {}), tab: tab.id, shown, ...handlesOf(tab.id) }}
 		/>
 	);
-}
+});
 
 /** 开始页列到这么多个以上，面板够宽时分两列；少的时候分两列会空出半行。 */
 const PANEL_START_TWO_COLUMNS = 6;

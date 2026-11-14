@@ -47,6 +47,25 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 	}, []);
 	const layout = panelLayout(app, size, share);
 	const motion = app.panelMoving ? PANEL_MOTION : "";
+	/*
+	 * 侧栏开合、拖宽度时，这里每一帧都因 `size` 重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃 `size`：
+	 * 元素留住，React 就跳过这两棵子树，只改外层的位置和尺寸。
+	 */
+	const compact = layoutMode(app.windowWidth) === "compact";
+	const maximized = app.panelMaximized[scope];
+	const panelInset = layout.single ? inset : undefined;
+	const chatCard = useMemo(
+		() => (
+			<ScreenCard header={<TitleBar inset={inset} />} fatal={fatal}>
+				<CurrentChat />
+			</ScreenCard>
+		),
+		[inset, fatal],
+	);
+	const panelArea = useMemo(
+		() => <PanelArea scope={scope} maximized={maximized} compact={compact} arrangement={layout.arrangement} inset={panelInset} />,
+		[scope, maximized, compact, layout.arrangement, panelInset],
+	);
 	useEffect(() => {
 		if (app.screen !== "chat" || !layout.shown || !layout.single) return;
 		const onKey = (event: KeyboardEvent) => {
@@ -64,9 +83,7 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 				style={layout.chat}
 				className={`absolute left-0 top-0 flex min-h-0 min-w-0 flex-col ${motion} ${layout.single && layout.shown ? "invisible" : ""}`}
 			>
-				<ScreenCard header={<TitleBar inset={inset} />} fatal={fatal}>
-					<CurrentChat />
-				</ScreenCard>
+				{chatCard}
 			</main>
 			{listPanels().length > 0 && (
 				<aside
@@ -82,13 +99,7 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 						}
 					}}
 				>
-					<PanelArea
-						scope={scope}
-						maximized={app.panelMaximized[scope]}
-						compact={layoutMode(app.windowWidth) === "compact"}
-						arrangement={layout.arrangement}
-						inset={layout.single ? inset : undefined}
-					/>
+					{panelArea}
 				</aside>
 			)}
 			<PanelLayer layout={layout} />
