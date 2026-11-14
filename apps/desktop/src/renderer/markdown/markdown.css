@@ -168,6 +168,12 @@
 		max-width: 100%;
 		box-sizing: border-box;
 		overflow: hidden;
+		/*
+		 * 上面的东西长高变矮（点开、收起一个工具组）时，下面每块代码整块挪位置。不隔开的话，浏览器每帧要给块里每个
+		 * 上色的 token 重算一遍绘制偏移：160 块代码的回复、CPU 降速 4 倍时，开合的 340ms 里每帧 PrePaint 12–14ms，
+		 * 有 5–7 帧超过 20ms。隔开后只挪这一块，同样的场景一帧也不超过 20ms。本来就 `overflow: hidden`，多出的裁切为零。
+		 */
+		contain: paint;
 	}
 
 	.markdown .markdown-code-head {
