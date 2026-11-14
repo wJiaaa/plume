@@ -12,15 +12,19 @@ const BIN_MS = 200;
 /** 一格里写了这么多字，柱子画满。 */
 const FULL_CHARS = 60;
 
+/** 在流、没在流、该警示了：和运行行行尾那句状态同一套颜色。 */
+const TONES = { flowing: "text-accent", idle: "text-ink-faint", warn: "text-warning" } as const;
+
 /**
  * 运行行上的小心电图：最近几秒每一格到了多少字，一直往左走。
  *
  * 运行行上别的会动的东西（思考球、换词、秒数）都按钟点走，模型一个字不回也照样转。只有它跟着数据：字到一格长一根，
- * 断流就是一条平线，不读数字也看得出卡没卡。颜色跟着 `currentColor`：在流是强调色，停住了褪成最淡的字色。
+ * 断流就是一条平线，不读数字也看得出卡没卡。颜色跟着 `currentColor`，和行尾那句状态同一个颜色：在流是强调色，等第一个字、跑工具、
+ * 刚停住是最淡的字色，状态变成警示色时它也是。
  *
  * 按拍画（`ticker.ts`），和思考球同一拍；滚出视口就停。不动的时候只在字变时画一次。
  */
-export function StreamTrace({ chars, flowing }: { chars: number; flowing: boolean }) {
+export function StreamTrace({ chars, tone }: { chars: number; tone: keyof typeof TONES }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const arrivals = useRef<{ at: number; chars: number }[]>([]);
 	const last = useRef(chars);
@@ -84,9 +88,7 @@ export function StreamTrace({ chars, flowing }: { chars: number; flowing: boolea
 			observer.disconnect();
 			cancelTick(tick);
 		};
-	}, [flowing]);
+	}, [tone]);
 
-	return (
-		<canvas ref={canvas} aria-hidden className={`block shrink-0 ${flowing ? "text-accent" : "text-ink-faint"}`} style={{ width: WIDTH, height: HEIGHT }} />
-	);
+	return <canvas ref={canvas} aria-hidden className={`block shrink-0 ${TONES[tone]}`} style={{ width: WIDTH, height: HEIGHT }} />;
 }

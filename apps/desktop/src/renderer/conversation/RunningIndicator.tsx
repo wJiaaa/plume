@@ -106,6 +106,7 @@ export const RunningIndicator = memo(function RunningIndicator({
 	const mood = moodFor(fresh ? doing.name : undefined, fresh ? doing.summary : undefined, retrying, writing);
 	// 重连时不说话：下面那条连接记录已经在数秒了，这里再说一句是同一件事说两遍。
 	const phrase = retrying ? null : phraseFor(mood, Math.floor(elapsed / PHRASE_MS), elapsed);
+	const status = statusFor(stage, quiet);
 	return (
 		// 8px 而不是正文里的 10px：这一行连上间距和回答底下那一行一样高，答完时两者同一帧一出一进，转录不抖。见 `RunningRow`。
 		<div
@@ -126,13 +127,17 @@ export const RunningIndicator = memo(function RunningIndicator({
 					<span className="tabular-nums text-ink-faint">{formatElapsed(elapsed)}</span>
 				</Readout>
 			)}
+			{/*
+			 * 一直在，钉在秒数后面：前面只有那句话和秒数，后面的读数进出推不动它。等第一个字、跑工具时是灰的平线，字一来柱子从右边长出来；
+			 * 颜色和行尾那句状态一致，满 `SILENT_MS` 一起变黄。
+			 */}
+			<Readout open>
+				<StreamTrace chars={output} tone={stage === "streaming" ? "flowing" : status?.warn ? "warn" : "idle"} />
+			</Readout>
 			<TurnTokens total={(meter?.output ?? 0) + estimateTokens(output)} />
 			{/* 只在字在来、或者工具在跑的时候报速度：还没开口没有速度可报，停住了它就是 0，留着最后那个数是在说还在写。 */}
 			<LiveRate rate={rate} shown={stage === "streaming" || stage === "tool"} />
-			<Readout open={stage === "streaming" || stage === "stalled"}>
-				<StreamTrace chars={output} flowing={stage === "streaming"} />
-			</Readout>
-			<StageStatus status={statusFor(stage, quiet)} />
+			<StageStatus status={status} />
 		</div>
 	);
 });
