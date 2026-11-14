@@ -11,7 +11,7 @@
 
 import type { Message, SessionView } from "@plume/contract";
 import type { ConversationCardProps, UiPlugin } from "@plume/contract/ui";
-import { ActionSpinner, Caret, IconButton, Scroller, ScrollText, Text, Tooltip, useI18n } from "@plume/ui";
+import { ActionSpinner, Caret, Collapse, IconButton, Scroller, ScrollText, Text, Tooltip, useI18n } from "@plume/ui";
 import { Check, ListTodo, Pause, Play, RotateCw } from "@plume/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fill, MESSAGES } from "./messages.ts";
@@ -172,15 +172,14 @@ function TodoCard({ session, placement, stop, carryOn }: ConversationCardProps) 
 				)}
 				<Caret open={open} size={12.5} strokeWidth={1.9} style={{ flexShrink: 0, color: "var(--plume-ink-faint)" }} />
 			</div>
-			<div className="plume-todo-reveal" data-open={open} aria-hidden={!open}>
-				<div className="plume-todo-body">
-					<Scroller className="plume-todo-scroll" contentClassName="plume-todo-rows" overscroll={placement === "inline" ? "auto" : "contain"}>
-						{todos.map((todo, index) => (
-							<Row key={`${index}-${todo.content}`} todo={todo} state={state} labels={text} {...(todo.status === "in_progress" ? { action } : {})} />
-						))}
-					</Scroller>
-				</div>
-			</div>
+			{/* 收起时留着挂载：再展开时滚动位置还在。收起的行不进 Tab 顺序（`Collapse` 带 `inert`）。 */}
+			<Collapse open={open} keepMounted bodyClassName="plume-todo-body">
+				<Scroller className="plume-todo-scroll" contentClassName="plume-todo-rows" overscroll={placement === "inline" ? "auto" : "contain"}>
+					{todos.map((todo, index) => (
+						<Row key={`${index}-${todo.content}`} todo={todo} state={state} labels={text} {...(todo.status === "in_progress" ? { action } : {})} />
+					))}
+				</Scroller>
+			</Collapse>
 			{!open && pending > 0 && <span className="plume-todo-sr">{fill(text.pending, { n: pending })}</span>}
 		</div>
 	);

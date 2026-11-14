@@ -66,22 +66,6 @@
 	flex: 1 1 0%;
 }
 
-/* 展开、收起用 grid 的行高过渡，不量高度。 */
-.plume-todo-reveal {
-	display: grid;
-	grid-template-rows: 0fr;
-	transition: grid-template-rows var(--plume-t-base);
-}
-
-.plume-todo-reveal[data-open="true"] {
-	grid-template-rows: 1fr;
-}
-
-.plume-todo-reveal > .plume-todo-body {
-	min-height: 0;
-	overflow: hidden;
-}
-
 .plume-todo-body {
 	border-top: 1px solid var(--plume-line-soft);
 }
