@@ -53,7 +53,7 @@ export function DiffView({
 										</span>
 										<span className="tool-diff-rail sticky left-[42px] z-[1] w-[3px] shrink-0" />
 										{/* 语法没加载完时底色和竖条已经说了改动，字先用中性色，不闪一下整片绿或整片红。 */}
-										<span className="shrink-0 px-2.5 whitespace-pre text-ink">
+										<span className="tool-diff-code shrink-0 px-2.5 whitespace-pre text-ink">
 											{tokens?.length
 												? tokens.map((token, index) => (
 														<span key={index} className={token.className}>

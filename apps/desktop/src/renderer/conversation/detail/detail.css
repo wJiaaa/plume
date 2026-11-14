@@ -75,4 +75,30 @@
 	.tool-diff-remove .tool-diff-rail {
 		background: color-mix(in srgb, var(--plume-danger) 70%, transparent);
 	}
+
+	/*
+	 * 外观里选了「+/-」（分不清红绿的人用），和 Git 面板的改动视图同一个做法：行和行号栏不铺底色，代码前面标 +、-，没改的行
+	 * 垫一个空格，等宽字体下三种行的代码对齐。标在代码那一格里，复制时不带上。竖条留着：它说的是哪几行改了，不靠颜色也读得出。
+	 */
+	:root[data-diff-markers="symbols"] .tool-diff-add,
+	:root[data-diff-markers="symbols"] .tool-diff-remove {
+		background: transparent;
+	}
+
+	:root[data-diff-markers="symbols"] .tool-diff-add .tool-diff-gutter,
+	:root[data-diff-markers="symbols"] .tool-diff-remove .tool-diff-gutter {
+		background: var(--plume-code-bg);
+	}
+
+	:root[data-diff-markers="symbols"] .tool-diff-code::before {
+		content: " ";
+	}
+
+	:root[data-diff-markers="symbols"] .tool-diff-add .tool-diff-code::before {
+		content: "+";
+	}
+
+	:root[data-diff-markers="symbols"] .tool-diff-remove .tool-diff-code::before {
+		content: "-";
+	}
 }
