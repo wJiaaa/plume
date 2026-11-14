@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 
 export interface FakeReply {
 	text?: string;
-	/** 将工具参数分块并延时发送，供真实界面验证流式草稿。 */
+	/** 将正文和工具参数分块并延时发送，供真实界面验证流式草稿。 */
 	stream?: { chunkSize: number; delayMs: number };
 	toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
 	/** 不回流，直接回这个 HTTP 状态码（比如 503、401）。 */
@@ -26,6 +26,14 @@ export interface FakeModel {
 	/** 收到的请求体，按顺序。 */
 	readonly requests: Array<Record<string, unknown>>;
 	close(): Promise<void>;
+}
+
+/** 按 `stream.chunkSize` 切开；没给就是一整块。 */
+function pieces(text: string, size = text.length): string[] {
+	const step = Math.max(1, size);
+	const out: string[] = [];
+	for (let at = 0; at < text.length; at += step) out.push(text.slice(at, at + step));
+	return out;
 }
 
 export async function fakeAnthropic(replies: FakeReply[] | ((request: Record<string, unknown>, index: number) => FakeReply)): Promise<FakeModel> {
@@ -70,7 +78,7 @@ export async function fakeAnthropic(replies: FakeReply[] | ((request: Record<str
 		if (reply.text) {
 			frames.push(
 				frame("content_block_start", { index, content_block: { type: "text", text: "" } }),
-				frame("content_block_delta", { index, delta: { type: "text_delta", text: reply.text } }),
+				...pieces(reply.text, reply.stream?.chunkSize).map((text) => frame("content_block_delta", { index, delta: { type: "text_delta", text } })),
 				frame("content_block_stop", { index }),
 			);
 			index++;
@@ -78,9 +86,8 @@ export async function fakeAnthropic(replies: FakeReply[] | ((request: Record<str
 		for (const call of calls) {
 			frames.push(frame("content_block_start", { index, content_block: { type: "tool_use", id: call.id, name: call.name, input: {} } }));
 			const args = JSON.stringify(call.args);
-			const size = Math.max(1, reply.stream?.chunkSize ?? args.length);
-			for (let at = 0; at < args.length; at += size)
-				frames.push(frame("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: args.slice(at, at + size) } }));
+			for (const partial_json of pieces(args, reply.stream?.chunkSize))
+				frames.push(frame("content_block_delta", { index, delta: { type: "input_json_delta", partial_json } }));
 			frames.push(frame("content_block_stop", { index }));
 			index++;
 		}
