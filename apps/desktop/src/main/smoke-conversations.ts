@@ -5,7 +5,7 @@ import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
 import { clickReal, clickRealIn, clickVisible, contextMenuVisible, lastOf } from "./smoke-kit.ts";
-import { nativeEnter } from "./smoke-message-edits.ts";
+import { nativeEnter, nativeModEnter } from "./smoke-message-edits.ts";
 
 /** 本体会话界面：项目折叠、项目草稿、置顶、停止后保留队列及手动发送。 */
 export async function checkConversations(options: {
@@ -138,16 +138,18 @@ export async function checkConversations(options: {
 		await wait(async () => (await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话开始运行");
 		await until(`document.querySelector('.cm-placeholder') !== null`, "已发送的草稿清空");
 		await page(`document.querySelector('.cm-content').focus()`);
+		// 忙时回车插进这一轮：模型手上这一步一直没做完，读到之前它在排队条上标着插话；按停后标记去掉，留着等人。
 		await window.webContents.insertText("排队的下一句");
 		nativeEnter(window);
-		await until(`document.querySelectorAll('[data-queue-row]:not([data-leaving])').length === 1`, "消息进入本体队列");
+		await until(`document.querySelectorAll('[data-queue-row][data-steered]:not([data-leaving])').length === 1`, "忙时回车的插话进入本体队列");
 		await until(`document.querySelector('.cm-placeholder') !== null`, "排队后输入框清空");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("尚未发送的草稿");
 		await clickReal(window, "[data-composer-send=stop]");
 		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话已停止");
 		if (!(await page<boolean>(`document.querySelector('[data-queue-row]:not([data-leaving])')?.textContent.includes('排队的下一句')`)))
-			throw new Error("停止后排队消息丢失");
+			throw new Error("停止后插话丢失");
+		await until(`document.querySelector('[data-queue-row][data-steered]') === null`, "停止后插话成了排着的一条");
 		await until(`document.querySelector('.cm-content')?.textContent === '尚未发送的草稿'`, "停止后草稿保留");
 		await capture("smoke-conversation-queue-held.png");
 		hang = false;
@@ -183,7 +185,7 @@ export async function checkConversations(options: {
 		await until(`document.querySelector('.cm-placeholder') !== null`, "草稿发出");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("排队自动发出的一句");
-		nativeEnter(window);
+		nativeModEnter(window);
 		await until(`document.querySelectorAll('[data-queue-row]:not([data-leaving])').length === 1`, "排在带工具的那一轮后面");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('自动发出的那句也答了。')`, "这一轮收尾后自动发出排着的一句");
 		const order = await page<{ answered: boolean } | undefined>(`window.__plumeQueueOrder`);

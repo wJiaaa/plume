@@ -52,7 +52,7 @@ export async function checkQueueActions(options: {
 		await page(`document.querySelector('${chat} .cm-content').focus()`);
 		await window.webContents.insertText(question);
 		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
-		await until(`document.querySelector('[data-queue-row]')?.textContent.includes(${JSON.stringify(question)})`, "忙时回车落进排队条");
+		await until(`document.querySelector('[data-queue-row]')?.textContent.includes(${JSON.stringify(question)})`, "忙时回车的插话落进排队条");
 		if (await page(`document.querySelector('[data-queue-row] [data-queue-edit]') !== null`))
 			throw new Error("装着侧边聊天时排队行应该是「更多」菜单，不是编辑按钮");
 		await click("[data-queue-row] [data-queue-more]");

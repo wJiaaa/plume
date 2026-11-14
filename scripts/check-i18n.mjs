@@ -54,6 +54,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-quote-side-chat.ts",
 	"apps/desktop/src/main/smoke-project-config.ts",
 	"apps/desktop/src/main/smoke-gallery.ts",
+	// 插话渲染冒烟：按中文界面找排队条和气泡，断言是写给开发者的。
+	"apps/desktop/src/main/smoke-steer.ts",
 	"apps/desktop/src/main/smoke-navigation.ts",
 	"apps/desktop/src/main/smoke-document-plugins.ts",
 	// 面板与拖拽冒烟同样按中文界面查找，断言不属于产品文案。

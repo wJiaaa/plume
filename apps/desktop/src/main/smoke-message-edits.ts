@@ -10,6 +10,13 @@ export function nativeEnter(window: BrowserWindow): void {
 	window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
 }
 
+/** ⌘回车（Windows 上 Ctrl+回车）：会话正忙时排到这一轮之后，不插进去。 */
+export function nativeModEnter(window: BrowserWindow): void {
+	const modifiers: ("meta" | "control")[] = [process.platform === "darwin" ? "meta" : "control"];
+	window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Return", modifiers });
+	window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Return", modifiers });
+}
+
 /**
  * 消息底下那排的分叉、编辑重发、撤回，经真界面走一遍：从最后那条回复分叉出一个新会话（原会话不动），在分叉里问一句，
  * 改掉它重发（转录里换成新问的和新答的），再撤回它（转录空回到分叉时的样子，那句话回到输入框）。再把它发出去、写到一半按停，

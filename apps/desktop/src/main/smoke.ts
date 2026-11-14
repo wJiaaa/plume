@@ -52,6 +52,7 @@ import { checkPreview } from "./smoke-preview.ts";
 import { checkMarkdownImages } from "./smoke-markdown-images.ts";
 import { checkOpenFile } from "./smoke-open-file.ts";
 import { checkSkinStudio } from "./smoke-skin-studio.ts";
+import { checkSteer } from "./smoke-steer.ts";
 import { checkTranscriptScroll } from "./smoke-transcript-scroll.ts";
 import { checkUsage } from "./smoke-usage.ts";
 import { checkMemoryFiles } from "./smoke-memory-files.ts";
@@ -1074,6 +1075,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await prepareQuoteSideChat(options);
 			await checkQueueActions(options);
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "queue" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "steer") {
+			await checkSteer({ window, outDir, setModel: (next) => (override = next), capture });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "steer" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();
