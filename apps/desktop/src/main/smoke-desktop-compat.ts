@@ -90,7 +90,7 @@ export async function checkDesktopCompat(options: {
 	/** 每一组从同一个样子开始：面板区收着；宽窗口里侧栏开着，窄窗口里抽屉关着。 */
 	const reset = async () => {
 		if (await page<boolean>(panelShown)) {
-			await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
+			await clickVisible(page, `button[aria-label="收起面板"]`);
 			await until(`!${panelShown}`, "收起面板区");
 		}
 		const compact = await page<boolean>(`innerWidth < 760`);
@@ -134,6 +134,13 @@ export async function checkDesktopCompat(options: {
 				const kind = header.closest('[data-panel-area]') ? 'panel' : 'chat';
 				for (const icon of header.querySelectorAll('svg')) measure(icon, center, kind + ' svg');
 				for (const button of header.querySelectorAll('button')) measure(button, center, kind + ' ' + (button.getAttribute('aria-label') || button.textContent.trim() || 'button'));
+			}
+			// 面板开关钉在工作区右上角、盖在卡片顶行右端，不在哪个 header 里：和卡片顶行同一条中线。
+			const workspace = document.querySelector('[data-panel-layout] > main > .rounded-panel');
+			for (const button of workspace ? document.querySelectorAll('[data-panel-toggle] button') : []) {
+				const center = workspace.getBoundingClientRect().top + workspace.clientTop + ${TOP_ROW_HEIGHT / 2};
+				measure(button, center, 'panel toggle');
+				measure(button.querySelector('svg'), center, 'panel toggle svg');
 			}
 			const header = document.querySelector('[data-plume-window-header]');
 			const band = header ? header.getBoundingClientRect() : null;
@@ -361,7 +368,7 @@ export async function checkDesktopCompat(options: {
 		// 标题栏右端那一组和面板区右端那一组：都贴着各自卡片的右边，侧栏边缘挪动时布局位置不变，画出来也该不变。
 		const rows = {
 			toolbar: `[...document.querySelectorAll('[data-panel-layout] > main header .ml-auto button')].filter(b => b.checkVisibility({ opacityProperty: true, visibilityProperty: true }))`,
-			pane: `[...document.querySelectorAll('[data-panel-area] header .ml-auto button')].filter(b => b.checkVisibility({ opacityProperty: true, visibilityProperty: true }))`,
+			pane: `[...document.querySelectorAll('[data-panel-area] header .ml-auto button, [data-panel-toggle] button')].filter(b => b.checkVisibility({ opacityProperty: true, visibilityProperty: true }))`,
 		};
 		const dpr = await page<number>("devicePixelRatio");
 		const placed: Record<string, { icons: { x: number; width: number }[]; clip: { x: number; y: number; width: number; height: number } }> = {};

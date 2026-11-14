@@ -213,7 +213,7 @@ export async function checkSessionWindow(options: {
 				"收尾恢复原会话",
 			);
 			if ((await page(`document.querySelector('[data-panel-area]')?.inert === false`)) !== panelOpen) {
-				await click(panelOpen ? "[data-panel-toggle] button" : '[data-panel-area] button[aria-label="收起面板"]');
+				await click(panelOpen ? "[data-panel-toggle] button" : 'button[aria-label="收起面板"]');
 				await until(`document.querySelector('[data-panel-area]')?.inert === ${!panelOpen}`, "恢复面板原来的开合状态");
 			}
 		} finally {

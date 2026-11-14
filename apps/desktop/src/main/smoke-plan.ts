@@ -179,7 +179,7 @@ export async function checkPlan(options: {
 		await mainNotAlone("右栏开着、卡片窄");
 		await capture("smoke-plan-card.png");
 		// 收起右栏看宽的那一种，再打开：后面每份新计划还要在面板里读到。
-		await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
+		await clickVisible(page, `button[aria-label="收起面板"]`);
 		await until(
 			`document.querySelector('[data-panel-area]:not([inert])') === null && document.querySelector('[data-panel-toggle] button') !== null`,
 			"收起右栏",

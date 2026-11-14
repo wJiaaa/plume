@@ -1,6 +1,6 @@
 import type { SessionSummary, SessionTarget, SessionView } from "@plume/contract";
 import type { ConversationProps, PageProps } from "@plume/contract/ui";
-import { ActionSpinner, composingKey, IconButton, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
+import { ActionSpinner, composingKey, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
 import { Folder, MoreHorizontal, Plug } from "@plume/ui/icons";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CARD_INSET, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
@@ -20,9 +20,23 @@ import { usePluginDisplayName } from "../market/store.ts";
 import { ToolbarButton } from "../window-controls.tsx";
 import { deleteSessionQuestion } from "../sidebar/delete-session.tsx";
 import { SessionMenu } from "../sidebar/SessionMenu.tsx";
-import { agent, draftScope, errorText, focusComposer, nextTurnCwd, sessionWindow, setDraft, setQuotes, state, update, useAppPick, useChrome } from "./state.ts";
+import {
+	agent,
+	type Chrome,
+	draftScope,
+	errorText,
+	focusComposer,
+	nextTurnCwd,
+	sessionWindow,
+	setDraft,
+	setQuotes,
+	state,
+	update,
+	useAppPick,
+	useChrome,
+} from "./state.ts";
 import { finishPanelLeave, scopeOf, tabsOf, togglePanel } from "./panels.ts";
-import { PANEL_MOTION, PanelArea, PanelIcon, PanelLayer, panelLayout, PanelResizer } from "./PanelArea.tsx";
+import { PANEL_MOTION, PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, PanelResizer, PanelToggle } from "./PanelArea.tsx";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { createPlugin, sidebarActions } from "./actions.ts";
 import { Composer } from "./Composer.tsx";
@@ -34,6 +48,7 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 	const { t } = useI18n();
 	usePluginUis();
 	const scope = scopeOf(app);
+	const session = useAppPick((current) => current.view?.summary);
 	const root = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({ width: 0, height: 0 });
 	useLayoutEffect(() => {
@@ -125,6 +140,11 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 					onEven={() => onShare(0.5)}
 				/>
 			)}
+			{/*
+			 * 横排、独占时开着是收起，收着是打开；上下排开着时收起按钮在下面那张卡片的顶行。放在最后：拖拽区按文档顺序合成，
+			 * 排在它后面的面板区顶行是 drag，会把它挖的洞重新盖上，鼠标点下去就成了拖窗口（见 shell-classes.ts）。
+			 */}
+			{layout.shown ? !layout.stacked && <PanelToggle open scope={scope} /> : canOpenPanel(app, session) && <PanelToggle open={false} scope={scope} />}
 		</div>
 	);
 }
@@ -154,25 +174,30 @@ export function ScreenCard({ header, fatal, topInset, children }: { header?: Rea
 	);
 }
 
+/** 面板区收着时能不能从正文顶行右端打开：开始页上有东西可开，或者这个会话已经开着面板标签（本体的文件标签不在开始页上）。 */
+function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean {
+	return (
+		app.screen === "chat" &&
+		!app.panelOpen &&
+		(listPanels(nextTurnCwd(app, session), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel))
+	);
+}
+
 /**
- * 卡片的顶行：会话标题和操作菜单，有插件注册了面板时右端是面板开关，其余界面只是一条可拖动的空行。
+ * 卡片的顶行：会话标题和操作菜单，其余界面只是一条可拖动的空行。面板开关不在这里，是工作区右上角的 PanelToggle，
+ * 它盖在这一行右端时这里让出位置。
  */
 export function TitleBar({ inset }: { inset?: number }) {
-	const { t } = useI18n();
 	const app = useChrome();
-	const { screen, panelOpen, panelMoving } = app;
+	const { screen } = app;
 	usePluginUis();
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
 	const session = useAppPick((current) => current.view?.summary);
 	const chat = screen === "chat" && session;
-	// 开始页上有东西可开，或者这个会话已经开着面板标签（本体的文件标签不在开始页上）。
-	const panelToggle =
-		screen === "chat" &&
-		!panelOpen &&
-		(listPanels(nextTurnCwd(app, session), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel));
+	const panelToggle = canOpenPanel(app, session);
 	return (
 		<header
-			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-2.5" : "gap-3 pl-6"} ${panelToggle ? "pr-3" : "pr-6"} ${CARD_DRAG}`}
+			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-2.5" : "gap-3 pl-6"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
 			style={{ height: TOP_ROW_HEIGHT, ...(inset === undefined ? {} : { paddingLeft: inset }) }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
@@ -184,14 +209,6 @@ export function TitleBar({ inset }: { inset?: number }) {
 			{screen === "market" && (
 				<div className="flex min-w-0 flex-1 items-center">
 					<MarketToolbar onCreate={createPlugin} />
-				</div>
-			)}
-			{panelToggle && (
-				<div className={`${chat ? "" : "ml-auto"} flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
-					{/* 刚收起时等面板滑走再淡入开关。 */}
-					<span data-panel-toggle="" className={panelMoving ? "plume-panel-toggle-in" : ""}>
-						<IconButton label={t("panel.show")} expanded={false} icon={<PanelIcon />} onClick={() => togglePanel(true)} />
-					</span>
 				</div>
 			)}
 		</header>

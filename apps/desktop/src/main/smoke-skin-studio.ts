@@ -226,8 +226,7 @@ export async function checkSkinStudio(options: {
 	await until(`document.querySelector('.cm-content')?.textContent.includes('skin_studio_theme')`, "设计请求进入草稿");
 	assert.ok(await page<boolean>(`document.querySelector('.cm-content').textContent.includes('我的偏好：莓果色。')`), "AI设计保留原草稿");
 	// 关闭面板后工具仍应立即换色，不依赖画廊是否挂载。
-	if (await page<boolean>(`document.querySelector('[data-panel-area] button[aria-label="收起面板"]') !== null`))
-		await clickVisible(page, `[data-panel-area] button[aria-label="收起面板"]`);
+	if (await page<boolean>(`document.querySelector('button[aria-label="收起面板"]') !== null`)) await clickVisible(page, `button[aria-label="收起面板"]`);
 	let offered = false;
 	setModel((request) => {
 		offered ||= ((request.tools ?? []) as Array<{ name: string }>).some((tool) => tool.name === "skin_studio_theme");

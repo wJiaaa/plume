@@ -131,6 +131,25 @@ export function lastOf(selector: string): string {
 	return `[...${all(selector)}].slice(-1)`;
 }
 
+/**
+ * 页面里的表达式：`selector` 那个元素的中心在不在窗口的拖拽区里（在就是 true，鼠标点下去是拖窗口，按钮收不到）。
+ * 脚本点击和 CDP 的鼠标事件都不经 macOS 的拖拽区判断，测不出这个；这里照 Electron 的合成法自己算：按文档顺序，
+ * drag 并上、no-drag 挖掉，后面的盖前面的（见 renderer/app/shell-classes.ts）。没有元素标拖拽区（有顶上带子的平台）时总是 false。
+ */
+export function inDragRegion(selector: string): string {
+	return `(() => {
+		const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+		let drag = false;
+		for (const element of document.querySelectorAll('*')) {
+			const style = getComputedStyle(element), mode = style.getPropertyValue('app-region') || style.getPropertyValue('-webkit-app-region');
+			if (mode !== 'drag' && mode !== 'no-drag') continue;
+			const b = element.getBoundingClientRect();
+			if (x >= b.left && x < b.right && y >= b.top && y < b.bottom) drag = mode === 'drag';
+		}
+		return drag;
+	})()`;
+}
+
 function describe(target: string, text: TextMatch | undefined): string {
 	return `${target}${text === undefined ? "" : `「${text}」`}`;
 }

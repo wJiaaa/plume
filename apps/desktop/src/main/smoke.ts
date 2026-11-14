@@ -73,7 +73,7 @@ import { checkSessionWindow } from "./smoke-session-window.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { recentSessions } from "./tray-menu.ts";
-import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, waitFor } from "./smoke-kit.ts";
+import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
 
 export function smokeOutput(): { file: string; dir: string; workspace: string } | undefined {
 	const file = process.env.PLUME_SMOKE_OUT;
@@ -1562,7 +1562,22 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		const tabStrip = () => page(`[...document.querySelectorAll('[data-panel-tab]')].map((tab) => tab.dataset.panelTab).join()`) as Promise<string>;
 		await click("[data-panel-toggle] button");
 		await until(`document.querySelector('[data-panel-area]')?.inert === false && document.querySelector('${shown("start")}') !== null`, "打开面板区的开始页");
-		if (await page(`document.querySelector('[data-panel-toggle]') !== null`)) throw new Error("面板打开后正文标题栏不应显示面板开关");
+		if ((await page(`document.querySelector('[data-panel-toggle] button')?.getAttribute('aria-label')`)) !== "收起面板")
+			throw new Error("面板打开后开关应留在原处、变成收起");
+		// 等面板区滑完：滑到一半时开关底下是面板区的标签（no-drag），量不出顶行的拖拽区。
+		await until(`document.querySelector('[data-panel-area]').getAnimations().length === 0`, "面板区滑完");
+		if (await page(inDragRegion("[data-panel-toggle] button"))) throw new Error("面板开着时开关落在拖拽区里，鼠标点下去是拖窗口");
+		// 对照：把开关挪回面板区前面（改坏之前的位置），同一个算法得认出它被面板区顶行的 drag 盖住，否则上面那条什么都没验。
+		if (process.platform === "darwin") {
+			const covered = await page(`(() => {
+				const toggle = document.querySelector('[data-panel-toggle]'), root = toggle.parentElement;
+				root.insertBefore(toggle, root.querySelector('[data-panel-area]'));
+				const covered = ${inDragRegion("[data-panel-toggle] button")};
+				root.append(toggle);
+				return covered;
+			})()`);
+			if (covered !== true) throw new Error("拖拽区的算法认不出被盖住的开关，上面的检查不可信");
+		}
 		const launchers = (await page(`[...document.querySelectorAll('[data-panel-launch]')].map((card) => card.dataset.panelLaunch)`)) as string[];
 		if (
 			launchers.join() !==
@@ -2183,18 +2198,29 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('.cm-content')?.textContent.includes('新增一个功能')`, "重新准备导航验收草稿");
 		window.webContents.send("plume:command", `open-session:${sessions[0].id}`);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到项目会话验证导航");
-		// 点收起和看开关在同一段脚本里（所以不经 clickVisible）：面板还在往右滑，标题栏的「显示面板」要先藏着，不然和面板自己那颗「收起面板」叠成一道虚影。
-		const toggleWhileSliding = await page(`(() => {
-			document.querySelector('[data-panel-area] button[aria-label="收起面板"]')?.click();
-			const toggle = document.querySelector("[data-panel-toggle]");
-			return toggle === null ? "none" : getComputedStyle(toggle).opacity;
-		})()`);
-		if (toggleWhileSliding !== "0" && toggleWhileSliding !== "none")
-			throw new Error(`收起面板时标题栏的面板开关没等面板滑走就露出来了（不透明度 ${String(toggleWhileSliding)}）`);
-		await until(
-			`document.querySelector('[data-panel-area]')?.inert === true && document.querySelector('[data-panel-toggle] button') !== null`,
-			"收起面板后正文标题栏恢复打开按钮",
-		);
+		// 开关只有一颗、钉在工作区右上角：点了收起，面板在它底下滑走，它还是同一个按钮、在同一个地方、看得见，只是变成「打开面板」。
+		const toggleWhileSliding = (await page(`(async () => {
+			const before = document.querySelector('[data-panel-toggle] button');
+			const from = before.getBoundingClientRect();
+			before.click();
+			await new Promise(requestAnimationFrame);
+			const after = document.querySelector('[data-panel-toggle] button');
+			const to = after.getBoundingClientRect();
+			return { same: before === after, moved: Math.abs(to.x - from.x) + Math.abs(to.y - from.y), opacity: getComputedStyle(after).opacity,
+				label: after.getAttribute('aria-label'), hit: after.contains(document.elementFromPoint(to.x + to.width / 2, to.y + to.height / 2)) };
+		})()`)) as { same: boolean; moved: number; opacity: string; label: string | null; hit: boolean };
+		if (
+			!toggleWhileSliding.same ||
+			toggleWhileSliding.moved > 0.5 ||
+			toggleWhileSliding.opacity !== "1" ||
+			toggleWhileSliding.label !== "打开面板" ||
+			!toggleWhileSliding.hit
+		)
+			throw new Error(`收起面板时开关应留在原处、看得见、点得到：${JSON.stringify(toggleWhileSliding)}`);
+		await until(`document.querySelector('[data-panel-area]')?.inert === true`, "收起面板区");
+		// 等面板区滑完：滑到一半时开关底下是面板区的标签（no-drag），量不出顶行的拖拽区。
+		await until(`document.querySelector('[data-panel-area]').getAnimations().length === 0`, "面板区滑完");
+		if (await page(inDragRegion("[data-panel-toggle] button"))) throw new Error("面板收着时开关落在拖拽区里，鼠标点下去是拖窗口");
 		await click("[data-nav=new-chat]");
 		await until(
 			`document.querySelector('[data-screen=empty] [data-welcome-line]')?.textContent.includes('workspace') && document.querySelectorAll('[data-plume-row]').length === 1`,

@@ -86,6 +86,30 @@ export function PanelIcon() {
 	);
 }
 
+/** 顶行右端给面板开关让的位置：开关右边 12px、自己 26px、和前面的按钮隔 6px。正文和面板的顶行让得一样多。 */
+export const PANEL_TOGGLE_ROOM = "pr-11";
+
+/**
+ * 面板区的开关只有一颗，钉在工作区右上角，不长在哪张卡片上：开合时两张卡片在它底下滑，它留在原处，只换说明。
+ * 分成正文顶行的「打开」、面板顶行的「收起」两颗时，开合那一下鼠标底下的按钮先没了（一颗当场卸掉，另一颗还在窗口外，
+ * 或者还没淡进来），滑完又在差几像素的地方冒出来。上下排时面板区在下面，收起按钮留在它自己的顶行，见 PanelArea。
+ * 它盖在两张卡片的顶行（拖拽区）上，得排在工作区的最后，见 Chat.tsx 的 ChatScreen。
+ */
+export function PanelToggle({ open, scope }: { open: boolean; scope: string }) {
+	const { t } = useI18n();
+	return (
+		<div data-panel-toggle="" className="absolute right-px top-px z-10 flex items-center pr-3" style={{ height: TOP_ROW_HEIGHT }}>
+			<IconButton
+				className={NO_DRAG}
+				label={t(open ? "panel.hide" : "panel.show")}
+				expanded={open}
+				icon={<PanelIcon />}
+				onClick={() => togglePanel(!open, scope)}
+			/>
+		</div>
+	);
+}
+
 /** 把手放在两张卡片的缝内，独立于面板的溢出裁切。 */
 export function PanelResizer({ width, windowWidth, max }: { width: number; windowWidth: number; max: number }) {
 	const { t } = useI18n();
@@ -192,6 +216,7 @@ export function PanelArea({
 	const current = tabs.find((tab) => tab.id === active);
 	const definition = panels.find((entry) => entry.key === current?.panel);
 	const track = useRef<HTMLDivElement>(null);
+	const stacked = arrangement === "column";
 	const addable = available.filter((entry) => entry.listed && (entry.multiple || !tabs.some((tab) => tab.panel === entry.key)));
 	useEffect(() => {
 		const strip = track.current;
@@ -250,7 +275,8 @@ export function PanelArea({
 						onClick={() => update({ panelMaximized: { ...app.panelMaximized, [scope]: !maximized } })}
 					/>
 				)}
-				<IconButton label={t("panel.hide")} icon={<PanelIcon />} onClick={() => togglePanel(false, scope)} />
+				{/* 横排、独占时收起按钮是工作区右上角那颗开关（PanelToggle），盖在这一行右端；上下排时面板区在下面，自己带一颗。 */}
+				{stacked && <IconButton label={t("panel.hide")} icon={<PanelIcon />} onClick={() => togglePanel(false, scope)} />}
 			</div>
 		</>
 	);
@@ -320,7 +346,7 @@ export function PanelArea({
 	return (
 		<PanelSurface layout={`${arrangement}:${maximized}`} contentId={`panel-content:${active}`}>
 			<header
-				className={`flex shrink-0 items-center gap-1 pl-2.5 pr-1.5 ${CARD_DRAG}`}
+				className={`flex shrink-0 items-center gap-1 pl-2.5 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
 				style={{ height: TOP_ROW_HEIGHT, ...(inset === undefined ? {} : { paddingLeft: inset }) }}
 			>
 				{heading}

@@ -314,24 +314,6 @@
 	}
 
 	/*
-	 * 收起面板后正文标题栏右端的「显示面板」（app/Chat.tsx 的 TitleBar）。面板带着自己那颗一模一样的「隐藏面板」往右滑走，
-	 * 这边当场画出来的话，滑动的那段时间里两颗图标同时在屏幕上，读起来是一道虚影。所以等滑完（同一个 --plume-t-base）
-	 * 再淡进来；减少动态效果时延迟由 base 层清掉，面板也不滑，当场出现。
-	 */
-	.plume-panel-toggle-in {
-		animation: plume-panel-toggle-in var(--plume-t-quick) var(--plume-e-out) var(--plume-t-base) both;
-	}
-
-	@keyframes plume-panel-toggle-in {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	/*
 	 * 晚一点才淡进来的加载记号（app/Chat.tsx 里会话还没读完时对话区那一圈）。读完得比这个延迟早，它就从没露面，
 	 * 不会刚闪一下转圈就被内容顶掉；减少动态效果时延迟由 base 层清掉，当场出现。
 	 */
