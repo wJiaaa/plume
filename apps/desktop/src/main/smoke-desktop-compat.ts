@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
-import { NATIVE_HEADER_HEIGHT, ROW_OFFSET, TOP_ROW_HEIGHT, TRAFFIC_LIGHTS_END } from "../shared/window-chrome.ts";
+import { hasHeaderBar, NATIVE_HEADER_HEIGHT, ROW_OFFSET, TOP_ROW_HEIGHT, TRAFFIC_LIGHTS_END } from "../shared/window-chrome.ts";
 import { clickEachVisible, clickVisible } from "./smoke-kit.ts";
 
 type Rect = { left: number; top: number; width: number; height: number };
@@ -27,7 +27,8 @@ const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置
  * 1. 顶上各行的控件都压在自己那一行的中线上，面板开关点得到，开出的标签整个露在标签条里；
  * 2. 普通大小的窗口变窄时面板区改成上下排，不丢面板、不重建面板内容、不改写存下的宽度和标签，拉宽回来原样；
  * 3. 125% 下侧栏边缘落在小数设备像素上时，标题栏和面板区的图标还画在同一列设备像素上；
- * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移。
+ * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移；
+ * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画。
  *
  * 缩放比经 DevTools 协议模拟（`Emulation.setDeviceMetricsOverride`）：冒烟只起一个 Electron，`--force-device-scale-factor`
  * 要在启动前给、一次只能一种；模拟的缩放比换的是每个 CSS 像素合几个设备像素，布局和栅格化走的是同一条路。
@@ -457,6 +458,61 @@ export async function checkDesktopCompat(options: {
 			if (phase === "收起") await shot("desktop-compat-settings-collapsed.png");
 		}
 		await clickVisible(page, BACK);
+
+		// ── 5. 侧栏开合时对话标题跟着卡片走 ────────────────────────────
+		await setViewport(1200, 760, 1);
+		await reset();
+		const title = `document.querySelector('[data-panel-layout] > main header')?.firstElementChild`;
+		await until(`Boolean(${title})`, "对话的标题栏");
+		const titleSample = `(() => { const el = ${title}, card = el.closest('.rounded-panel');
+			return { title: Math.round(el.getBoundingClientRect().x * 10) / 10, card: Math.round(card.getBoundingClientRect().x * 10) / 10,
+				toolbar: document.querySelector(${JSON.stringify(NAV_TOGGLE)}).getBoundingClientRect().right }; })()`;
+		for (const phase of ["收起", "展开"] as const) {
+			const at = await page<{ x: number; y: number }>(
+				`(() => { const r = document.querySelector(${JSON.stringify(NAV_TOGGLE)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+			);
+			await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", ...at });
+			// 按下前的位置也算一帧：按下后的第一帧可能已经是跳开之后的样子。
+			const start = await page<{ title: number; card: number; toolbar: number }>(titleSample);
+			await page(`(() => { window.__smokeHold = (async () => {
+				const out = []; let moved = false, still = 0;
+				for (let i = 0; i < 400 && still < 12; i++) {
+					await new Promise(requestAnimationFrame);
+					const sample = ${titleSample};
+					const last = out.at(-1);
+					if (last && last.card !== sample.card) { moved = true; still = 0; } else if (moved) still++;
+					out.push(sample);
+				}
+				return out;
+			})(); })()`);
+			for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
+			const held = [start, ...(await page<{ title: number; card: number; toolbar: number }[]>("window.__smokeHold"))];
+			console.log("PLUME_DESKTOP_COMPAT_SIDEBAR " + JSON.stringify({ phase, titles: held.map((sample) => sample.title) }));
+			assert.ok(new Set(held.map((sample) => sample.card)).size >= 3, `${phase}：侧栏真的滑了，中间有帧`);
+			// 让位要是按开关一下跳到终点、卡片却还在滑，标题会先被甩开一截再回来（收起），或者压到窗口按钮上（展开）。
+			for (const [index, sample] of held.entries()) {
+				const before = held[index - 1];
+				if (before)
+					assert.ok(
+						phase === "收起" ? sample.title <= before.title + 0.5 : sample.title >= before.title - 0.5,
+						`${phase}：标题只朝一个方向走：${JSON.stringify(held)}`,
+					);
+				if (!hasHeaderBar(process.platform)) assert.ok(sample.title >= sample.toolbar, `${phase}：标题不压到窗口按钮上：${JSON.stringify(sample)}`);
+			}
+			await settle();
+			// 动画只挂在点开关的那一下，滑完要撤掉，否则之后拖侧栏宽度也会慢半拍。
+			assert.ok(
+				await page<boolean>(
+					`!document.querySelector('[data-sidebar-sliding]') && getComputedStyle(${title}.parentElement).transitionProperty !== 'padding-left'`,
+				),
+				`${phase}：滑完撤掉动画`,
+			);
+			// 页面自己画顶行时靠 `--plume-top-row-inset` 让位（插件也会读它）：收起后是算好的像素，展开后是 0。
+			const pageInset = await page<string>(
+				`getComputedStyle(document.querySelector('[data-panel-layout] > main [style*="--plume-top-row-inset"]')).getPropertyValue('--plume-top-row-inset').trim()`,
+			);
+			assert.ok(phase === "收起" ? /^\d+(\.\d+)?px$/.test(pageInset) && pageInset !== "0px" : pageInset === "0px", `${phase}：页面顶行的让位是 ${pageInset}`);
+		}
 	} finally {
 		await cdp("Emulation.clearDeviceMetricsOverride");
 		window.setContentSize(...initialSize);

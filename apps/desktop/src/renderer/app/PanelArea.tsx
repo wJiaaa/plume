@@ -46,7 +46,7 @@ export function panelLayout(app: Chrome, size: { width: number; height: number }
 	};
 }
 
-export const PANEL_MOTION = "transition-[right,bottom,width,height,translate] duration-[var(--plume-t-base)] ease-out";
+export const PANEL_MOTION = "transition-[right,bottom,width,height] duration-[var(--plume-t-base)] ease-out";
 
 /** 独立窗口浮在别的应用上面：查资料、对着别的窗口干活时，这段对话或这块面板一直在手边。 */
 export function KeepOnTopButton({ keepOnTop }: { keepOnTop: (enabled?: boolean) => Promise<boolean> }) {
@@ -186,7 +186,7 @@ export function PanelArea({
 	scope = scopeOf(state),
 	maximized = false,
 	compact = false,
-	inset,
+	underToolbar = false,
 	detached = false,
 	titlebar,
 	arrangement = "row",
@@ -194,7 +194,8 @@ export function PanelArea({
 	scope?: string;
 	maximized?: boolean;
 	compact?: boolean;
-	inset?: number;
+	/** 面板区独占工作区（单栏）时占着卡片的左上角：侧栏收起后顶行要给窗口按钮让位，宽度取外壳的 `--toolbar-overlap`。 */
+	underToolbar?: boolean;
 	detached?: boolean;
 	/** 弹出的窗口顶行两端让给系统多少；Windows、Linux 上标题栏就画在窗口顶上那条带子里。 */
 	titlebar?: TitlebarInsets;
@@ -346,8 +347,9 @@ export function PanelArea({
 	return (
 		<PanelSurface layout={`${arrangement}:${maximized}`} contentId={`panel-content:${active}`}>
 			<header
-				className={`flex shrink-0 items-center gap-1 pl-2.5 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
-				style={{ height: TOP_ROW_HEIGHT, ...(inset === undefined ? {} : { paddingLeft: inset }) }}
+				data-toolbar-inset=""
+				className={`flex shrink-0 items-center gap-1 ${underToolbar ? "pl-[max(10px,var(--toolbar-overlap))]" : "pl-2.5"} ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
+				style={{ height: TOP_ROW_HEIGHT }}
 			>
 				{heading}
 			</header>

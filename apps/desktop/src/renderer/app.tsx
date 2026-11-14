@@ -62,8 +62,11 @@ function Shell() {
 	const panelInWorkspace = screen === "chat" && listPanels().length > 0;
 	// 页面自己画顶行（PageOptions.topRow）时，标题栏和它下面的占位都让给页面，见下面的 --plume-top-row-*。
 	const ownTopRow = screen.startsWith("page:") && listPages().some((entry) => `page:${entry.key}` === screen && entry.topRow);
-	// 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西；有顶上那条带子时它们在带子里，卡片不用让。
-	const topInset = pushed || HEADER_BAR ? undefined : toolbarReserved(titlebar.start) - CARD_INSET - 1;
+	/*
+	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`--toolbar-overlap`，卡片里的顶行取用）；
+	 * 有顶上那条带子时它们在带子里，卡片不用让。开合时它和侧栏宽度一起滑，见 styles.css 的 `[data-sidebar-sliding]`。
+	 */
+	const shellVars = { "--toolbar-overlap": `${pushed || HEADER_BAR ? 0 : toolbarReserved(titlebar.start) - CARD_INSET - 1}px` } as CSSProperties;
 	const available = windowWidth - (pushed ? width : 0);
 	useLayoutEffect(() => {
 		if (!panelWindow && panelWidth === 0) setPanel({ width: available * 0.4 });
@@ -223,7 +226,6 @@ function Shell() {
 				{/* 设置页只盖住工作区，常驻网页仍留在同一层、同一节点。 */}
 				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible"}`}>
 					<ChatScreen
-						inset={topInset}
 						fatal={fatal}
 						share={verticalShares[scopeOf(app)] ?? 0.4}
 						onShare={(share) => setVerticalShares((current) => ({ ...current, [scopeOf(app)]: share }))}
@@ -231,7 +233,7 @@ function Shell() {
 				</div>
 				{screen !== "chat" && (
 					<main className="absolute inset-0 flex flex-col">
-						<ScreenCard header={ownTopRow ? undefined : <TitleBar inset={topInset} />} fatal={fatal} topInset={topInset}>
+						<ScreenCard header={ownTopRow ? undefined : <TitleBar />} fatal={fatal}>
 							<Main />
 						</ScreenCard>
 					</main>
@@ -252,7 +254,7 @@ function Shell() {
 				<WindowHeader fill={managedSkin ? "bg-root" : "bg-sidebar"} insets={titlebar}>
 					<div className={`flex items-center gap-0.5 ${NO_DRAG}`}>{toolbar}</div>
 				</WindowHeader>
-				<div className="relative flex min-h-0 flex-1 overflow-hidden">
+				<div className="relative flex min-h-0 flex-1 overflow-hidden" style={shellVars}>
 					{body}
 					<ImageViewerHost />
 					<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
@@ -263,6 +265,8 @@ function Shell() {
 	return (
 		<div
 			className={`relative flex h-full overflow-hidden ${fill}`}
+			style={shellVars}
+			data-sidebar-sliding={(moving && !compact) || undefined}
 			// 停靠的侧栏透明，吸顶的标题要铺和这一层一样的底（styles.css 的 `[data-plume-head]`）。
 			data-plume-head-fill={managedSkin ? "root" : "window"}
 		>

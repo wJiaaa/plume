@@ -43,7 +43,7 @@ import { Composer } from "./Composer.tsx";
 import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
 
 /** 对话和面板共用工作区尺寸；常驻标签不随会话切换搬动 DOM。 */
-export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; fatal?: string; share: number; onShare(share: number): void }) {
+export function ChatScreen({ fatal, share, onShare }: { fatal?: string; share: number; onShare(share: number): void }) {
 	const app = useChrome();
 	const { t } = useI18n();
 	usePluginUis();
@@ -68,18 +68,17 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 	 */
 	const compact = layoutMode(app.windowWidth) === "compact";
 	const maximized = app.panelMaximized[scope];
-	const panelInset = layout.single ? inset : undefined;
 	const chatCard = useMemo(
 		() => (
-			<ScreenCard header={<TitleBar inset={inset} />} fatal={fatal}>
+			<ScreenCard header={<TitleBar />} fatal={fatal}>
 				<CurrentChat />
 			</ScreenCard>
 		),
-		[inset, fatal],
+		[fatal],
 	);
 	const panelArea = useMemo(
-		() => <PanelArea scope={scope} maximized={maximized} compact={compact} arrangement={layout.arrangement} inset={panelInset} />,
-		[scope, maximized, compact, layout.arrangement, panelInset],
+		() => <PanelArea scope={scope} maximized={maximized} compact={compact} arrangement={layout.arrangement} underToolbar={layout.single} />,
+		[scope, maximized, compact, layout.arrangement, layout.single],
 	);
 	useEffect(() => {
 		if (app.screen !== "chat" || !layout.shown || !layout.single) return;
@@ -149,8 +148,8 @@ export function ChatScreen({ inset, fatal, share, onShare }: { inset?: number; f
 	);
 }
 
-/** 标题栏只盖住对话那一栏；自己画顶行的页面不传 header。 */
-export function ScreenCard({ header, fatal, topInset, children }: { header?: ReactNode; fatal?: string; topInset?: number; children: ReactNode }) {
+/** 标题栏只盖住对话那一栏；自己画顶行的页面不传 header。卡片总在左上角，侧栏收起时顶行要给窗口按钮让位。 */
+export function ScreenCard({ header, fatal, children }: { header?: ReactNode; fatal?: string; children: ReactNode }) {
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-line-float bg-shell">
 			{header}
@@ -166,7 +165,7 @@ export function ScreenCard({ header, fatal, topInset, children }: { header?: Rea
 			 */}
 			<div
 				className="flex min-h-0 flex-1 flex-col"
-				style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px`, "--plume-top-row-inset": `${topInset ?? 0}px` } as CSSProperties}
+				style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px`, "--plume-top-row-inset": "var(--toolbar-overlap)" } as CSSProperties}
 			>
 				{children}
 			</div>
@@ -185,9 +184,9 @@ function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean
 
 /**
  * 卡片的顶行：会话标题和操作菜单，其余界面只是一条可拖动的空行。面板开关不在这里，是工作区右上角的 PanelToggle，
- * 它盖在这一行右端时这里让出位置。
+ * 它盖在这一行右端时这里让出位置。左边给窗口按钮让的宽度取外壳的 `--toolbar-overlap`（见 app.tsx），侧栏开合时和侧栏一起滑。
  */
-export function TitleBar({ inset }: { inset?: number }) {
+export function TitleBar() {
 	const app = useChrome();
 	const { screen } = app;
 	usePluginUis();
@@ -197,8 +196,9 @@ export function TitleBar({ inset }: { inset?: number }) {
 	const panelToggle = canOpenPanel(app, session);
 	return (
 		<header
-			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-2.5" : "gap-3 pl-6"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
-			style={{ height: TOP_ROW_HEIGHT, ...(inset === undefined ? {} : { paddingLeft: inset }) }}
+			data-toolbar-inset=""
+			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-[max(10px,var(--toolbar-overlap))]" : "gap-3 pl-[max(24px,var(--toolbar-overlap))]"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
+			style={{ height: TOP_ROW_HEIGHT }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
 			{chat && (

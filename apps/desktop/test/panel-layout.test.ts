@@ -29,7 +29,10 @@ test("全屏和窄窗口占满工作区，收起保留面板尺寸并还原对�
 	const hidden = panelGeometry({ ...options, shown: false });
 	assert.equal(hidden.panelWidth, 450);
 	assert.equal(hidden.chat.right, 0);
-	assert.equal(hidden.panel.translate, "calc(100% + 4px) 0");
+	assert.equal(hidden.panel.right, -454);
+	const stackedHidden = panelGeometry({ ...options, width: 590, shown: false });
+	assert.equal(stackedHidden.panel.bottom, -(stackedHidden.panelHeight + 4));
+	assert.equal(stackedHidden.panel.right, 0);
 });
 
 test("面板没有固定最大宽度，正文仍至少留420px", () => {
