@@ -278,9 +278,19 @@ export function Transcript({
 	const retrying = view.hiccups.some((hiccup) => hiccup.outcome === "waiting");
 	const resume = onCarryOn ? resumeOf(view) : null;
 
-	// 一个 Run 画成哪一行。依赖齐了它才换，`WorkStep` 的 memo 拿它的引用判断画出来的推理行会不会变。
+	/*
+	 * 一个 Run 画成哪一行。依赖齐了它才换，`ToolStep`、`ProcessBlock` 的 memo 拿它的引用判断画出来的行会不会变。
+	 *
+	 * 会话跑没跑、最后一句人话是哪句、哪句上面画时间，三样只有个别行要看，经 ref 读、不进依赖：进了的话每发一句、每收一轮
+	 * `draw` 都换引用，窗口里每一轮的过程块和工具组整片重画，发送那一下卡一拍。要看它们的行照样跟着变：`continued` 只给最后
+	 * 一轮，那一块的 `live` 随会话跑没跑一起变；时间线只画在开一轮的人话上，那些行不在过程块里、每次都重画；过程块里的人话
+	 * （插话）是不是最后一句，由 `ProcessBlock` 的 `lastUser` 告诉它。
+	 */
+	const rows = useRef({ running, lastUser, separators });
+	rows.current = { running, lastUser, separators };
 	const draw = useCallback(
 		(run: Run): ReactNode => {
+			const { running, lastUser, separators } = rows.current;
 			const key = runKey(run);
 			if (run.kind === "hiccup")
 				return (
@@ -334,7 +344,7 @@ export function Transcript({
 		},
 		// `plugins`：登记的卡片变了，画出来的也跟着变。
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
-		[onCarryOn, onOpenSettings, running, showThinking, plugins, separators, renderUserMessage, replyText, lastUser],
+		[onCarryOn, onOpenSettings, showThinking, plugins, renderUserMessage, replyText],
 	);
 
 	return (
@@ -398,7 +408,7 @@ export function Transcript({
 											const live = running && block.turn === allBlocks[allBlocks.length - 1]?.turn;
 											return (
 												<Superseded.Provider key={key} value={superseded}>
-													<ProcessBlock block={block} live={live} draw={draw} />
+													<ProcessBlock block={block} live={live} draw={draw} lastUser={holds(block, lastUser) ? lastUser : undefined} />
 												</Superseded.Provider>
 											);
 										})}
@@ -456,7 +466,17 @@ const NO_BACKGROUND: Readonly<Record<string, BackgroundCallState>> = {};
  * 有过程的一轮。按块 memo：前面那几轮的块在流式时原样沿用（见 `TurnBlocksCache`），每一拍只有在写的那一轮重新摊开。
  * `live`：这一轮还在跑。
  */
-const ProcessBlock = memo(function ProcessBlock({ block, live, draw }: { block: TurnBlock; live: boolean; draw: (run: Run) => ReactNode }) {
+const ProcessBlock = memo(function ProcessBlock({
+	block,
+	live,
+	draw,
+}: {
+	block: TurnBlock;
+	live: boolean;
+	draw: (run: Run) => ReactNode;
+	/** 最后一句人话在这一块里时是它的位置（插进这一轮的话）：换了最后一句，前后那两块跟着重画，`draw` 经 ref 读到新的。 */
+	lastUser: number | undefined;
+}) {
 	// 订阅界面语言：memo 挡住了上层的重画，换语言时这一块里经 `translate` 说的字（工具行、运行行）要跟着换。
 	useI18n();
 	const tail = block.items[block.items.length - 1];
@@ -474,6 +494,11 @@ const ProcessBlock = memo(function ProcessBlock({ block, live, draw }: { block: 
 	}));
 	return <TurnWork entries={entries} />;
 });
+
+/** 这一块里有没有第 `index` 条消息画成的那一行。 */
+function holds(block: TurnBlock, index: number): boolean {
+	return block.runs.some((run) => run.kind === "message" && run.index === index);
+}
 
 /** 最后那一行压缩此刻的样子：它换了说法（写摘要 → 等重试 → 压完），转录底部跟着变。 */
 function compactionTail(runs: SessionView["compactionRuns"]): string {
