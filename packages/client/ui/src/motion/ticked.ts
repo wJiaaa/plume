@@ -2,8 +2,11 @@ import { type RefObject, useEffect } from "react";
 import { motionReduced } from "./reduced.ts";
 import { cancelTick, requestTick, windowMinimized } from "./ticker.ts";
 
-/** 运行行上扫过摘要的那道光，和跟着字色走的同一道光，见 `ui/motion.css` 的 `.plume-glide`、`.plume-glide-status`。 */
-export const GLIDE: ReadonlySet<string> = new Set(["plume-glide", "plume-glide-status"]);
+/**
+ * 运行行上扫过摘要的那道光，和跟着字色走的同一道光，见 `ui/motion.css` 的 `.plume-glide`、`.plume-glide-status`。
+ * 认的是**动画名**不是类名：两个类共用 `plume-glide` 这个关键帧，写类名的话一次也匹配不上。
+ */
+export const GLIDE: ReadonlySet<string> = new Set(["plume-glide"]);
 
 /**
  * 没有终点的装饰动画（侧栏的呼吸点、运行行上的扫光、两种转圈记号、干活的脸、图片占位）改成按拍走：关键帧和
