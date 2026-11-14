@@ -18,7 +18,7 @@ import { InputMenu } from "./composer/InputMenu.tsx";
 import { useManagedSkin } from "./appearance-settings.ts";
 import { checkPanels, listPages, listPanels, matchesShortcut, PageSlot, usePluginUis } from "./plugins.tsx";
 import { MarketScreen } from "./market/market.tsx";
-import { NavButtons, SidebarIcon, ToolbarButton, toolbarReserved, WindowHeader } from "./window-controls.tsx";
+import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
 import { DRAG, HEADER_BAR, NO_DRAG, SLIDE_MOTION } from "./app/shell-classes.ts";
 import { finishPanelLeave, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
@@ -63,10 +63,10 @@ function Shell() {
 	// 页面自己画顶行（PageOptions.topRow）时，标题栏和它下面的占位都让给页面，见下面的 --plume-top-row-*。
 	const ownTopRow = screen.startsWith("page:") && listPages().some((entry) => `page:${entry.key}` === screen && entry.topRow);
 	/*
-	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`--toolbar-overlap`，卡片里的顶行取用）；
+	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`ToolbarOverlap`，卡片里的顶行取用）；
 	 * 有顶上那条带子时它们在带子里，卡片不用让。开合时它和侧栏宽度一起滑，见 styles.css 的 `[data-sidebar-sliding]`。
 	 */
-	const shellVars = { "--toolbar-overlap": `${pushed || HEADER_BAR ? 0 : toolbarReserved(titlebar.start) - CARD_INSET - 1}px` } as CSSProperties;
+	const overlap = pushed || HEADER_BAR ? 0 : toolbarReserved(titlebar.start) - CARD_INSET - 1;
 	const available = windowWidth - (pushed ? width : 0);
 	useLayoutEffect(() => {
 		if (!panelWindow && panelWidth === 0) setPanel({ width: available * 0.4 });
@@ -201,7 +201,7 @@ function Shell() {
 	);
 
 	const body = (
-		<>
+		<ToolbarOverlap.Provider value={overlap}>
 			<aside
 				aria-label={t("app.sidebar")}
 				inert={!navOpen}
@@ -241,7 +241,7 @@ function Shell() {
 				)}
 			</div>
 			{pushed && <SidebarResizer width={width} max={sidebarWidthFor(Number.POSITIVE_INFINITY, windowWidth)} />}
-		</>
+		</ToolbarOverlap.Provider>
 	);
 	const fill = managedSkin ? "bg-root" : window.plume.vibrancy ? "bg-window-tint" : "bg-sidebar";
 
@@ -255,7 +255,7 @@ function Shell() {
 				<WindowHeader fill={managedSkin ? "bg-root" : "bg-sidebar"} insets={titlebar}>
 					<div className={`flex items-center gap-0.5 ${NO_DRAG}`}>{toolbar}</div>
 				</WindowHeader>
-				<div className="relative flex min-h-0 flex-1 overflow-hidden" style={shellVars}>
+				<div className="relative flex min-h-0 flex-1 overflow-hidden">
 					{body}
 					<ImageViewerHost />
 					<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
@@ -266,7 +266,6 @@ function Shell() {
 	return (
 		<div
 			className={`relative flex h-full overflow-hidden ${fill}`}
-			style={shellVars}
 			data-sidebar-sliding={(moving && !compact) || undefined}
 			// 停靠的侧栏透明，吸顶的标题要铺和这一层一样的底（styles.css 的 `[data-plume-head]`）。
 			data-plume-head-fill={managedSkin ? "root" : "window"}

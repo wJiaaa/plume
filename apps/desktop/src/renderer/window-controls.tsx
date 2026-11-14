@@ -5,7 +5,7 @@
 
 import { macKeyboard, shortcutLabel } from "@plume/ui";
 import { ArrowLeft, ArrowRight } from "@plume/ui/icons";
-import { type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react";
+import { createContext, type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react";
 import { NATIVE_HEADER_HEIGHT, TOOLBAR_BUTTON } from "../shared/window-chrome.ts";
 import type { TitlebarInsets } from "./titlebar.ts";
 import { useWindowOverlay } from "./window-overlay.ts";
@@ -17,6 +17,14 @@ const TOOLBAR_GAP = 10;
 export function toolbarReserved(start: number): number {
 	return start + TOOLBAR_BUTTON * 3 + 6 + 2 + TOOLBAR_GAP;
 }
+
+/**
+ * 卡片顶行左端要给浮在卡片角上的窗口按钮让多宽（像素）：侧栏收起时是 `toolbarReserved` 减去卡片的边距，开着或有顶上那条带子时是 0。
+ *
+ * 只交给用它的那几行，由它们写在自己身上（顶行的 `padding-left`、页面的 `--plume-top-row-inset`），不挂成外层的变量：
+ * 可继承的变量一变，它底下每个元素都要重算样式。挂在外壳上时，开合侧栏那一下要重算整页六千多个元素，量到 27ms（120Hz 下丢三帧）。
+ */
+export const ToolbarOverlap = createContext(0);
 
 /** 后退、前进：在这个窗口去过的界面和会话之间来回，规则见 nav-history.ts。 */
 export function NavButtons({

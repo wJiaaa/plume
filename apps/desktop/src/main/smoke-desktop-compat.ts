@@ -510,11 +510,13 @@ export async function checkDesktopCompat(options: {
 				),
 				`${phase}：滑完撤掉动画`,
 			);
-			// 页面自己画顶行时靠 `--plume-top-row-inset` 让位（插件也会读它）：收起后是算好的像素，展开后是 0。
-			const pageInset = await page<string>(
-				`getComputedStyle(document.querySelector('[data-panel-layout] > main [style*="--plume-top-row-inset"]')).getPropertyValue('--plume-top-row-inset').trim()`,
+			// 让位只写在顶行自己身上，不挂成外层的可继承变量：一变，下面整棵树都要重算样式（见 `ToolbarOverlap`）。
+			assert.ok(
+				await page<boolean>(
+					`(() => { const style = getComputedStyle(document.querySelector('[data-panel-layout] > main [data-plume-session]')); return ['--plume-top-row-inset', '--toolbar-overlap'].every((name) => style.getPropertyValue(name) === ''); })()`,
+				),
+				`${phase}：对话卡片里没有可继承的让位变量`,
 			);
-			assert.ok(phase === "收起" ? /^\d+(\.\d+)?px$/.test(pageInset) && pageInset !== "0px" : pageInset === "0px", `${phase}：页面顶行的让位是 ${pageInset}`);
 		}
 
 		/**

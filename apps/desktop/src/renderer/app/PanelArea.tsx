@@ -2,7 +2,7 @@ import type { SessionView } from "@plume/contract";
 import type { PanelProps } from "@plume/contract/ui";
 import { acceleratorLabel, ClosableTab, IconButton, ResizeHandle, Sideways, translate, useI18n } from "@plume/ui";
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelSurface } from "../panel-surface.tsx";
 import { TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import type { TitlebarInsets } from "../titlebar.ts";
@@ -15,7 +15,7 @@ import { FilePanel } from "../files/FilePanel.tsx";
 import { fileOf, openFileIn } from "../files/open-file.ts";
 import { useLiveSession } from "../session-live.ts";
 import { flushChildDrafts } from "../conversation/child-drafts.ts";
-import { ToolbarButton, WindowHeader } from "../window-controls.tsx";
+import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.tsx";
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
 import { closeTab, handlesOf, launch, openStartTab, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
@@ -195,7 +195,7 @@ export function PanelArea({
 	scope?: string;
 	maximized?: boolean;
 	compact?: boolean;
-	/** 面板区独占工作区（单栏）时占着卡片的左上角：侧栏收起后顶行要给窗口按钮让位，宽度取外壳的 `--toolbar-overlap`。 */
+	/** 面板区独占工作区（单栏）时占着卡片的左上角：侧栏收起后顶行要给窗口按钮让位，宽度是 `ToolbarOverlap`。 */
 	underToolbar?: boolean;
 	detached?: boolean;
 	/** 弹出的窗口顶行两端让给系统多少；Windows、Linux 上标题栏就画在窗口顶上那条带子里。 */
@@ -204,6 +204,7 @@ export function PanelArea({
 }) {
 	const { t, resolvedLocale } = useI18n();
 	const app = useChrome();
+	const overlap = useContext(ToolbarOverlap);
 	const managedSkin = useManagedSkin();
 	usePluginUis();
 	const panels = detached && panelWindow ? [panelEntry(panelWindow.panel)].filter((entry): entry is PanelEntry => Boolean(entry)) : listPanels();
@@ -349,8 +350,8 @@ export function PanelArea({
 		<PanelSurface layout={`${arrangement}:${maximized}`} contentId={`panel-content:${active}`}>
 			<header
 				data-toolbar-inset=""
-				className={`flex shrink-0 items-center gap-1 ${underToolbar ? "pl-[max(10px,var(--toolbar-overlap))]" : "pl-2.5"} ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
-				style={{ height: TOP_ROW_HEIGHT }}
+				className={`flex shrink-0 items-center gap-1 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
+				style={{ height: TOP_ROW_HEIGHT, paddingLeft: underToolbar ? Math.max(10, overlap) : 10 }}
 			>
 				{heading}
 			</header>

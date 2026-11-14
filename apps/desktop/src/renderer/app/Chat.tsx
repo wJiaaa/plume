@@ -17,7 +17,7 @@ import { FileScope, type FileScopeValue, touchedPaths } from "../files/scope.ts"
 import { MarketToolbar } from "../market/market.tsx";
 import { ChildConversation, type ChildTaskActions } from "../conversation/ChildConversation.tsx";
 import { usePluginDisplayName } from "../market/store.ts";
-import { ToolbarButton } from "../window-controls.tsx";
+import { ToolbarButton, ToolbarOverlap } from "../window-controls.tsx";
 import { deleteSessionQuestion } from "../sidebar/delete-session.tsx";
 import { SessionMenu } from "../sidebar/SessionMenu.tsx";
 import {
@@ -170,6 +170,7 @@ export function ChatScreen({
 
 /** 标题栏只盖住对话那一栏；自己画顶行的页面不传 header。卡片总在左上角，侧栏收起时顶行要给窗口按钮让位。 */
 export function ScreenCard({ header, fatal, children }: { header?: ReactNode; fatal?: string; children: ReactNode }) {
+	const overlap = useContext(ToolbarOverlap);
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-line-float bg-shell">
 			{header}
@@ -182,10 +183,12 @@ export function ScreenCard({ header, fatal, children }: { header?: ReactNode; fa
 			{/*
 			 * 自己画顶行的页面从卡片顶边开始，顶行的高度、左边要让出的宽度经这两个变量给它：页面里的两栏才能
 			 * 像侧栏一样从顶边通到底，分隔线不在半空起头。不是 token，皮肤改不了。
+			 * 让出的宽度只给没有标题栏的（自己画顶行的页面）：它是可继承的变量，侧栏开合时一变，下面整棵树都要重算样式，
+			 * 对话卡片里没人用它，不该替它付这一下（见 `ToolbarOverlap`）。
 			 */}
 			<div
 				className="flex min-h-0 flex-1 flex-col"
-				style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px`, "--plume-top-row-inset": "var(--toolbar-overlap)" } as CSSProperties}
+				style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px`, ...(header ? {} : { "--plume-top-row-inset": `${overlap}px` }) } as CSSProperties}
 			>
 				{children}
 			</div>
@@ -204,10 +207,11 @@ function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean
 
 /**
  * 卡片的顶行：会话标题和操作菜单，其余界面只是一条可拖动的空行。面板开关不在这里，是工作区右上角的 PanelToggle，
- * 它盖在这一行右端时这里让出位置。左边给窗口按钮让的宽度取外壳的 `--toolbar-overlap`（见 app.tsx），侧栏开合时和侧栏一起滑。
+ * 它盖在这一行右端时这里让出位置。左边给窗口按钮让的宽度是 `ToolbarOverlap`，侧栏开合时和侧栏一起滑（styles.css 的 `[data-sidebar-sliding]`）。
  */
 export function TitleBar() {
 	const app = useChrome();
+	const overlap = useContext(ToolbarOverlap);
 	const { screen } = app;
 	usePluginUis();
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
@@ -217,8 +221,8 @@ export function TitleBar() {
 	return (
 		<header
 			data-toolbar-inset=""
-			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5 pl-[max(10px,var(--toolbar-overlap))]" : "gap-3 pl-[max(24px,var(--toolbar-overlap))]"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
-			style={{ height: TOP_ROW_HEIGHT }}
+			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
+			style={{ height: TOP_ROW_HEIGHT, paddingLeft: Math.max(chat ? 10 : 24, overlap) }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
 			{chat && (

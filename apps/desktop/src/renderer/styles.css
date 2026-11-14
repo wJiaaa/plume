@@ -385,9 +385,8 @@
 
 @layer components {
 	/*
-	 * 侧栏开合时，卡片顶行给窗口按钮让的宽度（`--toolbar-overlap`，见 app.tsx）和侧栏宽度同一时长、同一缓动地滑：
-	 * 标题的位置是卡片左边缘加内边距，两者走同一条曲线，标题就一路朝一个方向走，不先跳开、不压到按钮上。
-	 * 不去过渡外层的变量：可继承的变量每一帧都要整棵树重算样式，长对话里开合会掉帧；这里只重排这几行。
+	 * 侧栏开合时，卡片顶行给窗口按钮让的宽度（这几行的 `padding-left`，见 window-controls.tsx 的 `ToolbarOverlap`）和侧栏宽度
+	 * 同一时长、同一缓动地滑：标题的位置是卡片左边缘加内边距，两者走同一条曲线，标题就一路朝一个方向走，不先跳开、不压到按钮上。
 	 */
 	[data-sidebar-sliding] :is([data-toolbar-inset], .plume-top-row) {
 		transition: padding-left var(--plume-t-slow) var(--plume-e-out);
