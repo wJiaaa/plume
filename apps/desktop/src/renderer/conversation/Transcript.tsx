@@ -27,6 +27,8 @@ import { flash, type RevealRequest, settleReveal, useRevealRequest } from "./rev
 import { MessageRow } from "./rows.tsx";
 import { RunningRow } from "./RunningRow.tsx";
 import { PluginToolCard } from "./ToolCard.tsx";
+import { ToolCall, ToolStep } from "./ToolGroup.tsx";
+import { LEGACY_TOOL_ROWS } from "./tool-view.ts";
 import { RunsCache, TurnBlocksCache } from "./transcript-shape.ts";
 import type { TurnBlock } from "./turn-blocks.ts";
 import { latestFooterTimestamp } from "./turn-footer.ts";
@@ -240,7 +242,8 @@ export function Transcript({
 		settleReveal(reveal.nonce);
 		// 合成一段活的几次调用收在点开以后（`Collapse` 收着时不挂里面的行），先替人点开那一段。
 		const step = allBlocks[block]!.items.find(
-			(item) => item.kind === "step" && item.step.members.length > 1 && item.step.calls.some((call) => call.block.id === reveal.toolCallId),
+			(item) =>
+				item.kind === "step" && (!LEGACY_TOOL_ROWS || item.step.members.length > 1) && item.step.calls.some((call) => call.block.id === reveal.toolCallId),
 		);
 		if (step) expandInTranscript(id, step.key);
 		detach();
@@ -290,7 +293,7 @@ export function Transcript({
 				return (
 					<Fragment key={key}>
 						{run.calls.map((call) => (
-							<PluginToolCard key={call.block.id} call={call} />
+							<PluginToolCard key={call.block.id} call={call} {...(LEGACY_TOOL_ROWS ? {} : { fallback: <ToolCall call={call} /> })} />
 						))}
 					</Fragment>
 				);
@@ -448,7 +451,14 @@ const ProcessBlock = memo(function ProcessBlock({ block, live, draw }: { block: 
 	const entries: TurnEntry[] = block.items.map((item) => ({
 		key: item.key,
 		// 正在做的那一段是这一轮的最后一行：后面有了别的（下一段活、一句话），它就做完了。
-		node: item.kind === "step" ? <WorkStep step={item.step} live={live && item === tail} draw={draw} /> : draw(item.run),
+		node:
+			item.kind !== "step" ? (
+				draw(item.run)
+			) : LEGACY_TOOL_ROWS ? (
+				<WorkStep step={item.step} live={live && item === tail} draw={draw} />
+			) : (
+				<ToolStep step={item.step} live={live && item === tail} draw={draw} />
+			),
 	}));
 	return <TurnWork entries={entries} />;
 });

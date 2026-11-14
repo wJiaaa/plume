@@ -18,6 +18,8 @@ import { useMessageEdits } from "./message-edits.ts";
 import { restated, segments } from "./reply-segments.ts";
 import { ThinkingBlock } from "./ThinkingBlock.tsx";
 import { PluginToolCard, ToolCard } from "./ToolCard.tsx";
+import { ToolCall } from "./ToolGroup.tsx";
+import { LEGACY_TOOL_ROWS } from "./tool-view.ts";
 import { sameRow, type TurnStats } from "./turns.ts";
 import { UserBubble } from "./UserBubble.tsx";
 
@@ -109,7 +111,12 @@ function AssistantRow({
 					if (segment.kind === "tools") {
 						return segment.blocks.map((block) => {
 							const call = { block, stopReason: message.stopReason };
-							return ownCard(block.name) ? <PluginToolCard key={block.id} call={call} /> : <ToolCard key={block.id} call={call} />;
+							if (LEGACY_TOOL_ROWS) return ownCard(block.name) ? <PluginToolCard key={block.id} call={call} /> : <ToolCard key={block.id} call={call} />;
+							return ownCard(block.name) ? (
+								<PluginToolCard key={block.id} call={call} fallback={<ToolCall call={call} />} />
+							) : (
+								<ToolCall key={block.id} call={call} />
+							);
 						});
 					}
 					// 段在这一行里的位置；`index` 留给消息在会话里的位置（插件的 `messageId` 用它）。

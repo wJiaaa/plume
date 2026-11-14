@@ -9,7 +9,7 @@ import { activeLocale, formatList, type MessageKey, translate } from "@plume/ui"
 import { baseName } from "../files/open-file.ts";
 import { relativeTo } from "../markdown/assets.ts";
 import type { Call, ToolCallBlock } from "./grouping.ts";
-import { checklistTool, lineFile, lineJob, lineNote, lineSubject, lineVerb, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
+import { checklistTool, lineCommand, lineFile, lineJob, lineNote, lineSubject, lineVerb, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
 import { polledJob } from "./turn-blocks.ts";
 
 /** 每种活（`ToolDefinition.kind`）默认的说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
@@ -179,4 +179,104 @@ function subjectOf(block: ToolCallBlock): string | undefined {
 export function diffOf(result: ToolResultMessage | undefined, key: "added" | "removed"): number {
 	const value = (result?.details as Partial<Record<keyof FileDiffDetails, unknown>> | undefined)?.[key];
 	return typeof value === "number" ? value : 0;
+}
+
+/**
+ * 工具组（`ToolGroup`）里一次调用的那一行：动作、点名的对象、淡一档的附注（读了哪几行）。对象单独给出来，行上画得深一档。
+ *
+ * 和 `describeOne` 是同一套取法，只是动作分了时态：跑着时「正在查看」，跑完「查看」——一行字原地换一次，读的人不用再看记号
+ * 就知道它跑完了。模型写了说明（`ToolLine.note`）、插件登记了动作的照它们说，不分时态。
+ */
+export interface CallLabel {
+	verb: string;
+	subject?: string;
+	note?: string;
+}
+
+type TensedKind = Exclude<ToolKind, "watch" | "job">;
+
+const TENSED: Record<TensedKind, { now: MessageKey; done: MessageKey; nowBare: MessageKey; doneBare: MessageKey; sum: MessageKey }> = {
+	view: { now: "toolNow.view", done: "toolDone.view", nowBare: "toolNowBare.view", doneBare: "toolDoneBare.view", sum: "toolSum.view" },
+	list: { now: "toolNow.list", done: "toolDone.list", nowBare: "toolNowBare.list", doneBare: "toolDoneBare.list", sum: "toolSum.list" },
+	find: { now: "toolNow.find", done: "toolDone.find", nowBare: "toolNowBare.find", doneBare: "toolDoneBare.find", sum: "toolSum.find" },
+	search: { now: "toolNow.search", done: "toolDone.search", nowBare: "toolNowBare.search", doneBare: "toolDoneBare.search", sum: "toolSum.search" },
+	create: { now: "toolNow.create", done: "toolDone.create", nowBare: "toolNowBare.create", doneBare: "toolDoneBare.create", sum: "toolSum.create" },
+	modify: { now: "toolNow.modify", done: "toolDone.modify", nowBare: "toolNowBare.modify", doneBare: "toolDoneBare.modify", sum: "toolSum.modify" },
+	command: { now: "toolNow.command", done: "toolDone.command", nowBare: "toolNowBare.command", doneBare: "toolDoneBare.command", sum: "toolSum.command" },
+};
+
+/** 分时态说的那几种；长跑的命令（`watch`）和一次跑完的说法一样。查后台任务（`job`）另有说法。 */
+function tensedKind(tool: string): TensedKind | undefined {
+	const kind = toolKind(tool);
+	if (kind === "watch") return "command";
+	return kind === undefined || kind === "job" ? undefined : kind;
+}
+
+export function labelText(label: CallLabel): string {
+	return [label.verb, label.subject, label.note].filter(Boolean).join(" ");
+}
+
+/** `live`：这次调用还没跑完（参数在写、排着、等批准、在跑）。`root` 是工作区，`job` 是查看的那个后台任务的说明。 */
+export function callLabel(block: ToolCallBlock, live: boolean, root?: string, job?: string): CallLabel {
+	if (polledJob(block)) return { verb: describePolls(job, 1) };
+	if (toolKind(block.name) === "job") return { verb: translate("tools.stopJob") };
+	const said = lineNote(block.name, block.arguments);
+	if (said) return { verb: said };
+	const spoken = spokenLine(block.name);
+	if (spoken) {
+		const subject = lineSubject(spoken, block.arguments);
+		return { verb: lineVerb(spoken, activeLocale()) || block.name, ...(subject ? { subject } : {}) };
+	}
+	const kind = tensedKind(block.name);
+	// 不认得的工具（没登记说法的插件工具）照原名说。
+	if (!kind) return { verb: block.name };
+	const words = TENSED[kind];
+	const file = lineFile(block.name, block.arguments);
+	let subject: string | undefined;
+	let note: string | undefined;
+	if (kind === "list") subject = locationOf(block, root);
+	else if (kind === "command") subject = lineCommand(block.name, block.arguments)?.split("\n")[0]?.trim() || undefined;
+	else if (file) {
+		subject = file.path !== "" ? baseName(file.path) : undefined;
+		if (kind === "view" && file.lines) note = `(${file.lines.from}–${file.lines.to ?? ""})`;
+	} else subject = subjectFor(block);
+	if (!subject) return { verb: translate(live ? words.nowBare : words.doneBare) };
+	return { verb: translate(live ? words.now : words.done), subject, ...(note ? { note } : {}) };
+}
+
+/**
+ * 一组调用跑完以后标题上那一句：按种类数，「运行 3 个命令（1 个失败），查看 2 个文件」。读、写、改按文件数（同一个文件改三次
+ * 是「修改 1 个文件」），其余按次数。插件登记了动作的、不认得的工具照 `describeCalls` 的说法接在后面；推理有几次也说。
+ * 哪些调用不数（清单、查输出）和 `describeCalls` 一样，见 `counted`。
+ */
+export function summarizeCalls(calls: Call[], failed: ReadonlySet<string>, thought = 0, thoughtFirst = false): string {
+	const kinds = new Map<TensedKind, { seen: Set<string>; failed: number }>();
+	const others: Call[] = [];
+	for (const call of counted(calls)) {
+		const { block } = call;
+		const kind = spokenLine(block.name) ? undefined : tensedKind(block.name);
+		if (!kind) {
+			others.push(call);
+			continue;
+		}
+		const entry = kinds.get(kind) ?? { seen: new Set<string>(), failed: 0 };
+		const path = kind === "view" || kind === "create" || kind === "modify" ? lineFile(block.name, block.arguments)?.path : undefined;
+		entry.seen.add(path || block.id);
+		if (failed.has(block.id)) entry.failed += 1;
+		kinds.set(kind, entry);
+	}
+	const parts: string[] = [];
+	for (const [kind, entry] of kinds) {
+		const count = translate(TENSED[kind].sum, { n: entry.seen.size });
+		parts.push(entry.failed > 0 ? count + translate("toolSum.failed", { n: entry.failed }) : count);
+	}
+	if (others.length > 0)
+		parts.push(
+			describeRun(
+				others.map(({ block }) => ({ toolName: block.name, subject: checklistTool(block.name) ? undefined : subjectFor(block) })),
+				true,
+			),
+		);
+	if (thought > 0) parts[thoughtFirst ? "unshift" : "push"](translate("step.thinking", { n: thought }));
+	return parts.join(translate("toolSum.separator"));
 }

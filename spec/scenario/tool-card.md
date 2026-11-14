@@ -9,7 +9,7 @@
 - 一次调用 = 工具卡片；等待确认时卡片只标「等待确认」，审批卡压在输入框正上方（`ApprovalOverlay`），摆放和排队归产品；审批卡只有产品的那一张，插件换不掉。插件换了工具卡片，审批照样能用。
 - 通用卡片是一行流水行（`conversation/ToolCard.tsx`，骨架是 `FlowRow`）：图标、一句做了什么（`call-words.ts` 的 `describeOne`：按工具经 `ui.toolLine` 登记的说——模型写的说明（`note`）、动作和对象、读文件和列目录的路径（`file`），没给动作的按工具定义上声明的种类（`ToolDefinition.kind`）说；什么都没登记就说工具名。基本工具也由 plume.tools 登记，本体不认工具名）、行尾记号（写了几行、失败、已停止、`+N -M`）、展开箭头；点开是命令、参数、输出，或者 diff。diff 和 `+N -M` 只按结果 `details` 里的通用声明 `FileDiffDetails`（`@plume/contract`）画，不认是哪个工具交的。
 - 运行中只有一种说法：字上扫光。失败是红色的 ×，人按的停是中性的「已停止」记号，不是失败。参数还在写、没开跑的调用不能展开。
-- 转录按回合分块（`grouping.ts` → `turn-blocks.ts`）：读、跑命令、改文件连着做的几次调用合成一段活（`WorkStep`），跑着时说正在跑的那一次，停了说总的「读取文件 3 个、修改文件 1 个」，点开是挂在竖线上的每一次；推理默认不画（设置 › 常规 › 显示思考过程）。跑完的一轮照原样摊着，不收起（`TurnWork`）。
+- 转录按回合分块（`grouping.ts` → `turn-blocks.ts`）：读、跑命令、改文件连着做的几次调用合成一段活，画成工具组（`ToolGroup`）：跑着时标题说正在跑的那一次（分时态：「正在查看 a.ts」→「查看 a.ts」，`call-words.ts` 的 `callLabel`），停了说总的「运行 3 个命令（1 个失败），查看 2 个文件 +N −M」（`summarizeCalls`），点开是带框的卡片、一次调用一行（`ToolRow`），每行点开是详情（`ToolBody`）；只有一次调用时标题就是它、点开直接是详情。换字原地交叉淡入淡出、宽度缓过去（`SwapText`）。推理默认不画（设置 › 常规 › 显示思考过程）。跑完的一轮照原样摊着，不收起（`TurnWork`）。旧的流水行（`WorkStep`、`ToolCard`）留着，`tool-view.ts` 的 `LEGACY_TOOL_ROWS` 换回去。
 - 工具按定义上声明的种类（`ToolDefinition.kind`，界面经 `AgentService.listTools()` 和 `tools` 事件拿到工具表）和经 `ui.toolLine` 登记的 `group` 归类（`conversation/tool-lines.ts`，归类在 `tool-category.ts`），默认的说法、图标、运行行跟着种类；种类只在工具定义上写一处，`ui.toolLine` 不再写；本体只有按种类的表，没有按工具名的表。
 - 插件登记了卡片的工具不合并：每次调用单独一行，整张卡照插件画的样子摆（`PluginToolCard`）；`fallback` 是上面那一行。登记时 `inline`（`true` 或逐次判断的函数）说了并进的那几次照常按归类合成一段活（`ownsToolRow`）。
 - 转录底下的运行行（`RunningRow`）：一句在做什么、跑了多久、本轮 token、此刻速度；有调用在等确认时换成「等待你的批准」。
@@ -43,12 +43,12 @@
 
 ## 检查点
 
-- 冒烟依赖的属性不变：外层的 `data-tool`、`data-status`，合成一段活的 `data-plume-step`、`data-plume-run`，审批卡的 `data-approval-card`（提问卡里的 `data-ask-form`、`data-ask-option`、`data-ask-action`），权限签的 `data-permission-chip`、`data-permission-source`（菜单里项目要求的说明 `data-permission-project`），todo 卡片的 `data-todo-list`、`.plume-todo-row`。冒烟先点开那一段活，再查里面的卡片。
+- 冒烟依赖的属性不变：外层的 `data-tool`、`data-status`（工具组里每一行、只有一次调用的组本身），合成一段活的 `data-plume-step`、`data-plume-run`（标题按钮是它的直接子元素），审批卡的 `data-approval-card`（提问卡里的 `data-ask-form`、`data-ask-option`、`data-ask-action`），权限签的 `data-permission-chip`、`data-permission-source`（菜单里项目要求的说明 `data-permission-project`），todo 卡片的 `data-todo-list`、`.plume-todo-row`。冒烟先点开那一段活，再查里面的卡片。
 - 新卡片在浅色和深色下各看一眼：`pnpm smoke` 的截图包含 todo 卡片、edit 的审批卡（正文是 diff）和提问卡（`smoke-question.png`、`smoke-question-dark.png`）。
 
 ## 事实来源
 
-- `apps/desktop/src/renderer/conversation/`：`Transcript.tsx`、`ToolCard.tsx`、`WorkStep.tsx`、`TurnWork.tsx`、`rows.tsx`、`ThinkingBlock.tsx`、`RunningRow.tsx`，分组规则在 `grouping.ts`、`turn-blocks.ts`（测试在 `apps/desktop/test/conversation-shape.test.ts`）
+- `apps/desktop/src/renderer/conversation/`：`Transcript.tsx`、`ToolGroup.tsx`、`ToolBody.tsx`、`SwapText.tsx`、`ToolCard.tsx`、`WorkStep.tsx`、`TurnWork.tsx`、`rows.tsx`、`ThinkingBlock.tsx`、`RunningRow.tsx`，分组规则在 `grouping.ts`、`turn-blocks.ts`（测试在 `apps/desktop/test/conversation-shape.test.ts`）
 - `apps/desktop/src/renderer/plugins.tsx`
 - `apps/desktop/src/renderer/conversation/ApprovalOverlay.tsx`、`apps/desktop/src/renderer/composer/PermissionPicker.tsx`、`packages/builtin/todo/src/ui.tsx`
 - `packages/contract/src/ui.ts`（`ToolCardProps`）、`packages/contract/src/service.ts`（`ApprovalRequest`、`ApprovalDecision`、`PermissionMode`）

@@ -17,6 +17,7 @@
 @import "./markdown/images.css";
 @import "./conversation/conversation.css";
 @import "./conversation/detail/detail.css";
+@import "./conversation/tool-group.css";
 @import "./files/files.css";
 
 @source "./";

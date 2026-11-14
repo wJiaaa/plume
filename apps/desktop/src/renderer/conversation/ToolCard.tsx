@@ -40,7 +40,7 @@ import {
 const POP = "animate-[plume-settle_var(--plume-t-base)_var(--plume-e-out)_both]";
 
 /** 冒烟和插件看的状态：还没开跑的也算执行中。 */
-const SLOT_STATUS: Record<CallStatus, ToolCardProps["status"]> = {
+export const SLOT_STATUS: Record<CallStatus, ToolCardProps["status"]> = {
 	pending: "running",
 	approval: "approval",
 	running: "running",
@@ -74,7 +74,7 @@ export function StepCall({ call, thinking, polls }: { call: Call; thinking?: Rea
 }
 
 /** 插件的卡片单独一行；发送始终绑定当前会话、调用和真实用户操作。 */
-export function PluginToolCard({ call, thinking }: { call: Call; thinking?: ReactNode }) {
+export function PluginToolCard({ call, thinking, fallback }: { call: Call; thinking?: ReactNode; fallback?: ReactNode }) {
 	const state = useTranscript();
 	const { block } = call;
 	const status = useCalls((calls) => callStatus(calls, block.id, call.stopReason));
@@ -147,7 +147,7 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 		status: SLOT_STATUS[status],
 		...(progress === undefined ? {} : { progress }),
 		...(slotResult ? { result: slotResult } : {}),
-		fallback: <ToolCard call={call} {...(thinking ? { thinking } : {})} />,
+		fallback: fallback ?? <ToolCard call={call} {...(thinking ? { thinking } : {})} />,
 	};
 	return (
 		<div ref={root} data-tool={block.name} data-tool-call={block.id} data-status={props.status}>
@@ -158,11 +158,11 @@ export function PluginToolCard({ call, thinking }: { call: Call; thinking?: Reac
 }
 
 /** 后台任务的说明和命令按内容比：每来一条消息这张表都重建一遍，里面的对象也是新的。 */
-function sameJob(a: BackgroundJobInfo | undefined, b: BackgroundJobInfo | undefined): boolean {
+export function sameJob(a: BackgroundJobInfo | undefined, b: BackgroundJobInfo | undefined): boolean {
 	return a === b || (a?.description === b?.description && a?.command === b?.command);
 }
 
-const NO_READS: readonly (ToolResultMessage | undefined)[] = [];
+export const NO_READS: readonly (ToolResultMessage | undefined)[] = [];
 
 export function ToolCard({
 	call,
@@ -283,11 +283,11 @@ export function ToolCard({
 }
 
 /** 工具结果的 `details` 声明的文件改动（`FileDiffDetails`），逐个字段核过再用：形状由插件填，本体不认是哪个工具交的。 */
-function declaredDiff(result: ToolResultMessage | undefined): Partial<Record<keyof FileDiffDetails, unknown>> | undefined {
+export function declaredDiff(result: ToolResultMessage | undefined): Partial<Record<keyof FileDiffDetails, unknown>> | undefined {
 	return result?.details as Partial<Record<keyof FileDiffDetails, unknown>> | undefined;
 }
 
-function hunksOf(result: ToolResultMessage | undefined): FileDiffDetails["hunks"] | undefined {
+export function hunksOf(result: ToolResultMessage | undefined): FileDiffDetails["hunks"] | undefined {
 	const hunks = declaredDiff(result)?.hunks;
 	return Array.isArray(hunks) && hunks.length > 0 ? (hunks as FileDiffDetails["hunks"]) : undefined;
 }
@@ -387,7 +387,7 @@ function resultImages(result: ToolResultMessage): { src: string; mimeType: strin
  * 工具回了图就画图：读一张 PNG、插件的截图，模型看到的是像素，卡片上从前只写着它的名字——那正是点开卡片想看的东西。
  * 点一下在看图器里打开原图。
  */
-function ResultImages({ result, summary, spaced }: { result: ToolResultMessage; summary: string; spaced: boolean }) {
+export function ResultImages({ result, summary, spaced }: { result: ToolResultMessage; summary: string; spaced: boolean }) {
 	const sources = resultImages(result).map((image) => image.src);
 	if (sources.length === 0) return null;
 	const gallery = sources.map((src, index) => ({ src, alt: translate("toolCard.image", { summary, n: index + 1 }) }));
@@ -418,7 +418,7 @@ type ModelImage = NonNullable<ToolOutput["images"]>[number];
 /** `ToolOutput.images` 收的四种。 */
 const MODEL_IMAGE = /^image\/(png|jpeg|webp|gif)$/;
 
-function resultText(content: readonly { type: string; text?: string }[]): string {
+export function resultText(content: readonly { type: string; text?: string }[]): string {
 	return content
 		.flatMap((block) => (block.type === "text" && block.text ? [block.text] : []))
 		.join("\n")

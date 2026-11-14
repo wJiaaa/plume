@@ -1,0 +1,169 @@
+/*
+ * 工具组（`ToolGroup.tsx`）：一行标题，点开是一张带框的卡片，一次调用一行。换字的交叉淡入淡出见 `SwapText.tsx`。取值只用 token。
+ */
+
+@layer components {
+	/* 标题按字宽，装不下时封顶在一整列，字在 `SwapText` 里化成省略号；箭头紧跟在字后面。 */
+	.tool-group-head {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: fit-content;
+		max-width: 100%;
+		min-height: 26px;
+		color: var(--plume-ink-muted);
+		text-align: left;
+		transition: color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.tool-group-head[aria-expanded]:hover,
+	.tool-group-head[data-open] {
+		color: var(--plume-ink);
+	}
+
+	.tool-group-head:not([aria-expanded]) {
+		cursor: default;
+	}
+
+	.tool-group-card {
+		overflow: hidden;
+		border: 1px solid var(--plume-line);
+		border-radius: var(--plume-radius-panel);
+	}
+
+	.tool-group-card > * + * {
+		border-top: 1px solid var(--plume-line-soft);
+	}
+
+	/* 卡片里的一行：整行能点，悬停铺一层薄纱；点开的那一行字深一档。 */
+	.tool-row-head {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		min-height: 32px;
+		padding: 5px 10px;
+		color: var(--plume-ink-muted);
+		text-align: left;
+		transition:
+			color var(--plume-t-quick) var(--plume-e-soft),
+			background-color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.tool-row-head[aria-expanded]:hover {
+		background: var(--plume-card-hover);
+		color: var(--plume-ink);
+	}
+
+	.tool-row-head[data-open] {
+		color: var(--plume-ink);
+	}
+
+	.tool-row-head:not([aria-expanded]) {
+		cursor: default;
+	}
+
+	/* 卡片里的推理、回来的后台命令结果：和调用行一样的边距。 */
+	[data-tool-extra] {
+		padding: 4px 10px;
+	}
+
+	/* 插件补在通用那一行下面的东西（MCP 的文档预览）：和行里的详情一样的边距。 */
+	.tool-row-plugin > [data-tool] > :not([data-tool-row]) {
+		padding: 0 8px 8px;
+	}
+
+	/*
+	 * 箭头：能点开时才出现，打开时转 90°。和字按盒子居中，再往下挪 0.25px：汉字的墨迹中线比行框中线低一点，量过默认字体低 0.2px，
+	 * 宋体、冬青黑这些换过的字体在 ±1px 里，平均也是低 0.2px 上下。按字体逐个量要在脚本里测字形，为不到 1px 不值得。
+	 */
+	.tool-chevron {
+		flex: none;
+		opacity: 0;
+		translate: 0 0.25px;
+		transition:
+			transform var(--plume-t-base) var(--plume-e-out),
+			opacity var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.tool-chevron[data-shown] {
+		opacity: 0.8;
+	}
+
+	[data-open] > .tool-chevron {
+		transform: rotate(90deg);
+	}
+
+	/* 点名的对象深一档，附注淡一档。跑着时字上扫光，它们跟着一起扫，不各自是实色。 */
+	.tool-label-subject {
+		color: var(--plume-ink);
+	}
+
+	.tool-label-note {
+		color: var(--plume-ink-faint);
+	}
+
+	.plume-glide .tool-label-subject,
+	.plume-glide .tool-label-note {
+		color: transparent;
+	}
+
+	.tool-mark {
+		margin-left: 6px;
+	}
+
+	.tool-count {
+		font-variant-numeric: tabular-nums;
+	}
+
+	/*
+	 * 换字的那一格：新旧两句叠在一起，各自装不下时化成省略号。宽度在换句时由组件钉住再放开，这里只给过渡；
+	 * `overflow: hidden` 让变窄时还在淡出的长句从右边被裁掉，不压到箭头上。
+	 */
+	.tool-swap {
+		display: inline-grid;
+		flex: 0 1 auto;
+		grid-template-columns: minmax(0, auto);
+		justify-items: start;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		white-space: nowrap;
+		transition: width var(--plume-t-base) var(--plume-e-out);
+	}
+
+	.tool-swap > span {
+		grid-area: 1 / 1;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.tool-swap-in {
+		animation: tool-fade-in var(--plume-t-base) var(--plume-e-soft) both;
+	}
+
+	.tool-swap-out {
+		pointer-events: none;
+		animation: tool-fade-out var(--plume-t-quick) var(--plume-e-soft) both;
+	}
+
+	/* 一组跑着时新出现的组、新来的行。 */
+	.tool-fade-in {
+		animation: tool-fade-in var(--plume-t-slow) var(--plume-e-out) both;
+	}
+
+	@keyframes tool-fade-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes tool-fade-out {
+		to {
+			opacity: 0;
+		}
+	}
+}
