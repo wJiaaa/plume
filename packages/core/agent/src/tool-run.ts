@@ -16,6 +16,7 @@ import type {
 	CancelledDetails,
 	FileChanges,
 	HumanAnswer,
+	HookTrace,
 	HumanRequest,
 	HumanRequestInput,
 	LetterInput,
@@ -85,6 +86,8 @@ export interface ToolScope {
 	answeredBy?(toolCallId: string): string | undefined;
 	/** 调用开始执行了（审批也算在执行里）：界面从这一刻给它计时。 */
 	started(toolCallId: string): void;
+	/** 这次调用的 tool.execute、tool.approve 经过了哪几层、每层做了什么（有层时才调）：记进运行观察。 */
+	traced(toolCallId: string, trace: HookTrace): void;
 	/** 执行中的输出：记下最新的一份，按节奏推给界面；`undefined` 表示这个调用跑完了。 */
 	progress(toolCallId: string, output: string | undefined, push: boolean): void;
 	/** `plugin` 的工具在 `toolCallId` 那次调用把后台结果送回这个会话的渠道（`ToolRun.background`）；子会话没有。 */
@@ -418,6 +421,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				const shown = approval.request;
 				return await askWith(shown, shown.subject !== undefined && shown.escalation === undefined ? grant : undefined);
 			},
+			{ trace: (trace) => scope.traced(call.id, trace) },
 		);
 		// i18n-exempt：抛出去会作为工具结果交给模型。
 		if (decision !== "once" && decision !== "always" && decision !== "reject") throw new Error(`tool.approve 给的结论不认得：${String(decision)}`);
@@ -550,7 +554,11 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	const startedAt = Date.now();
 	try {
 		scope.started(call.id);
-		let result = await scope.host.run("tool.execute", execution, execute, canonicalHandoff(tool.definition.aliases), readOnlyStop);
+		let result = await scope.host.run("tool.execute", execution, execute, {
+			settle: canonicalHandoff(tool.definition.aliases),
+			stop: readOnlyStop,
+			trace: (trace) => scope.traced(call.id, trace),
+		});
 		if (typeof result?.output !== "string") throw new Error("tool.execute 返回的结果没有 output");
 		result = withChanges(result);
 		if (result.images !== undefined && !(Array.isArray(result.images) && result.images.every(validImage)))

@@ -305,6 +305,18 @@
 	gap: 12px;
 	padding: 3px 0;
 }
+.plume-diagnostics-hook {
+	padding-top: 6px;
+}
+.plume-diagnostics-hook-layers {
+	margin: 2px 0 0;
+	padding-left: 10px;
+	border-left: 1px solid var(--plume-line-soft);
+	list-style: none;
+}
+.plume-diagnostics-hook-layers > li {
+	padding: 2px 0;
+}
 .plume-diagnostics-image {
 	overflow: hidden;
 	border-radius: var(--plume-radius-item);

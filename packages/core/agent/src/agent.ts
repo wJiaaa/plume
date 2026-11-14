@@ -32,6 +32,7 @@ import type {
 	CommandContext,
 	CompactionOutcome,
 	Hiccup,
+	HookTrace,
 	LetterFate,
 	LetterInput,
 	LetterReceipt,
@@ -1111,17 +1112,19 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			tools: host.toolSpecs(),
 		};
 		await restoreImages(mediaDir, input.messages);
-		const context = await host.run(
-			"model.context",
-			input,
-			async (context) => context,
-			(context: ModelContext) => settleShell(settlePrompt(context)),
-		);
+		let trace: HookTrace | undefined;
+		const context = await host.run("model.context", input, async (context) => context, {
+			settle: (context: ModelContext) => settleShell(settlePrompt(context)),
+			trace: (value) => (trace = value),
+		});
 		if (typeof context?.systemPrompt !== "string" || !validSections(context.sections) || !Array.isArray(context.messages) || !Array.isArray(context.tools)) {
 			throw new Error(text("session.contextIncomplete"));
 		}
+		if (trace) contextTraces.set(context, trace);
 		return context;
 	}
+	/** 组出这份上下文时 model.context 经过的层：发请求时随它记进运行观察（压缩拿去用、没发出去的不记）。 */
+	const contextTraces = new WeakMap<ModelContext, HookTrace>();
 
 	/**
 	 * 插件的一次性调用（`ctx.model.complete`）：不带工具、不思考，只要最后那段字。替会话做的用那个会话的模型、花销记在它名下，
@@ -1256,6 +1259,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		session.sent = sent;
 		const requestId = randomUUID();
 		const input = { systemPrompt: context.systemPrompt, messages: stripForeignHandles(context.messages, provider, model), tools: context.tools };
+		const traced = contextTraces.get(context);
+		if (traced) observe(sessionId, { type: "hooks", requestId, ...traced }, sent.at);
 		observe(sessionId, { type: "request", id: requestId, provider: provider.name, model: model.id, ...input }, sent.at);
 		const reply = await streamTurn({
 			provider,
@@ -1386,6 +1391,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					signal,
 				},
 				async () => ({ block: false }),
+				{ trace: (trace) => observe(session.summary.id, { type: "hooks", ...trace }) },
 			);
 		} finally {
 			release();
@@ -2168,6 +2174,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 						session.startedAt.set(toolCallId, at);
 						emit({ type: "toolStart", sessionId, toolCallId, startedAt: at });
 					},
+					traced: (toolCallId, trace) => observe(sessionId, { type: "hooks", toolCallId, ...trace }),
 					// 后台结果只回顶层会话：插件的子会话、独立会话没人等它们的后台结果，见 `ToolRun.background`。
 					...(session.summary.kind !== "top"
 						? {}

@@ -23,7 +23,9 @@ import type {
 	SlashCommand,
 	HookLayer,
 	HookName,
+	HookPass,
 	Hooks,
+	HookTrace,
 	InstalledPlugin,
 	Log,
 	Logger,
@@ -153,6 +155,25 @@ function compareTools(a: RegisteredTool, b: RegisteredTool): number {
 
 function compareText(a: string, b: string): number {
 	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * 钩子的一层交接时比较交下去的和收到的是不是同一个值（`HookPass.changedInput`、`changedOutput`）。同一个引用直接算一样，
+ * 普通对象和数组逐项比：层照原样展开再交下去不算改；别的对象（`AbortSignal`、函数、`Uint8Array`……）只认同一个引用。
+ * 钩子之间交的数据没有环。
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+	if (Object.is(a, b)) return true;
+	if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+	if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((item, index) => sameValue(item, b[index]));
+	if (Array.isArray(b) || !plainObject(a) || !plainObject(b)) return false;
+	const keys = Object.keys(a);
+	return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && sameValue(a[key], b[key]));
+}
+
+function plainObject(value: object): value is Record<string, unknown> {
+	const proto = Object.getPrototypeOf(value);
+	return proto === Object.prototype || proto === null;
 }
 
 /** 钩子某一层出错。message 里带上插件名，交给模型和界面都能看出是谁。 */
@@ -586,32 +607,62 @@ export class PluginHost {
 	 * 按洋葱顺序调用钩子，inner 是最里层。
 	 * `settle` 在每一层交接时调：这一层交给里层的、里层交回来又被这一层改过的，都先经它整理（见 `prompt/sections.ts`）。
 	 * `stop` 在交给每一层（含最里层）之前调：它给出结果时不再往里交，交过来的那一层拿到的就是它（见 `tool-run.ts` 的只读）。
+	 * `trace` 在这次调用收场（含出错）时拿到经过了哪几层、每层做了什么（`HookTrace`），有层时才调：给运行观察用。
 	 */
 	run<N extends HookName>(
 		name: N,
 		input: Hooks[N][0],
 		inner: (input: Hooks[N][0]) => Promise<Hooks[N][1]>,
-		settle?: (value: never) => unknown,
-		stop?: (input: Hooks[N][0]) => Hooks[N][1] | undefined,
+		options: {
+			settle?: (value: never) => unknown;
+			stop?: (input: Hooks[N][0]) => Hooks[N][1] | undefined;
+			trace?: (trace: HookTrace) => void;
+		} = {},
 	): Promise<Hooks[N][1]> {
+		const { settle, stop, trace } = options;
 		// 取快照：调用过程中有插件停用或新注册，不影响这一次。
 		const layers = [...(this.layers.get(name) ?? [])];
 		const align = (value: unknown) => (settle ? settle(value as never) : value);
+		const passes: HookPass[] = [];
+		let reached: HookTrace["inner"];
 		const dispatch = async (index: number, value: unknown): Promise<unknown> => {
 			const stopped = stop?.(value as Hooks[N][0]);
-			if (stopped !== undefined) return stopped;
+			if (stopped !== undefined) {
+				reached = "stopped";
+				return stopped;
+			}
 			const layer = layers[index];
-			if (!layer) return inner(value as Hooks[N][0]);
+			if (!layer) {
+				reached = "ran";
+				return inner(value as Hooks[N][0]);
+			}
+			// 进来就记上，外层在前；没往里交就是自己交了结果。
+			const pass: HookPass = { plugin: layer.plugin, order: layer.order, outcome: "answered" };
+			passes.push(pass);
 			try {
+				let called = false;
 				let returned: unknown;
-				const output = await layer.run(value, async (next) => (returned = await dispatch(index + 1, align(next))));
-				return returned === undefined ? output : align(output);
+				const output = await layer.run(value, async (next) => {
+					called = true;
+					pass.outcome = "next";
+					const handed = align(next);
+					if (!sameValue(handed, value)) pass.changedInput = true;
+					return (returned = await dispatch(index + 1, handed));
+				});
+				const result = returned === undefined ? output : align(output);
+				if (called && !sameValue(result, returned)) pass.changedOutput = true;
+				return result;
 			} catch (error) {
 				// 里层的错误原样往外传，只在最先出错的那一层归因。
-				throw error instanceof HookError ? error : new HookError(layer.plugin, name, error);
+				if (error instanceof HookError) throw error;
+				pass.outcome = "failed";
+				throw new HookError(layer.plugin, name, error);
 			}
 		};
-		return dispatch(0, input) as Promise<Hooks[N][1]>;
+		const done = () => {
+			if (trace && passes.length > 0) trace({ hook: name, layers: passes, ...(reached ? { inner: reached } : {}) });
+		};
+		return (dispatch(0, input) as Promise<Hooks[N][1]>).finally(done);
 	}
 
 	/**

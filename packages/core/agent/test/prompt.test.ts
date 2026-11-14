@@ -73,7 +73,7 @@ describe("systemPrompt 跟着 sections 重拼", () => {
 				seen = input;
 				return input;
 			},
-			settlePrompt,
+			{ settle: settlePrompt },
 		);
 		expect(seen?.sections.map((section) => section.id)).toEqual(["workspace", "outer"]);
 		expect(seen?.systemPrompt).toBe("W\n\nOUTER");

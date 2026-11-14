@@ -109,6 +109,14 @@ export async function checkBackgroundJob(options: {
 		} finally {
 			nativeTheme.themeSource = previousTheme;
 		}
+		// 这次调用经过的钩子层（运行观察的 `hooks`）：内置插件挂着 tool.execute，最后一行是本体执行了。
+		await until(
+			`(() => { const node = document.querySelector('[data-trace-inspector] [data-hook-layers]'); return node?.textContent.includes('tool.execute') && node.textContent.includes('本体执行'); })() === true`,
+			"轨迹详情画出经过的钩子",
+		);
+		await page(`document.querySelector('[data-trace-inspector] [data-hook-layers]').scrollIntoView({ block: 'center' })`);
+		await settled();
+		await writeFile(join(outDir, "smoke-trajectory-hooks.png"), (await window.webContents.capturePage()).toPNG());
 		await clickVisible(page, `[data-trace-inspector] button[aria-label="返回"]`);
 		await page(
 			`(() => { const input = document.querySelector('[data-trajectory] input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'NO_SUCH_DIAGNOSTIC'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,

@@ -93,6 +93,18 @@ const zhCN = {
 	openBuiltin: "打开",
 	openSystem: "在系统浏览器打开",
 	copyUrl: "复制服务地址",
+	hooks: "经过的钩子",
+	hookNext: "往里交",
+	hookAnswered: "自己给了结果，没往里交",
+	hookFailed: "出错",
+	hookChangedInput: "改了参数",
+	hookChangedOutput: "改了结果",
+	hookRan: "本体执行",
+	hookStopped: "本体按外层的设定停下，没有执行",
+	hookUnreached: "没走到本体",
+	hookAsked: "弹卡问人",
+	hookNotAsked: "没问人",
+	hookDid: (parts: string[]) => parts.join("，"),
 };
 export const MESSAGES: Record<Locale, typeof zhCN> = {
 	"zh-CN": zhCN,
@@ -190,6 +202,18 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		openBuiltin: "Open",
 		openSystem: "Open in system browser",
 		copyUrl: "Copy service address",
+		hooks: "Hook layers",
+		hookNext: "passed on",
+		hookAnswered: "answered without passing on",
+		hookFailed: "failed",
+		hookChangedInput: "changed the input",
+		hookChangedOutput: "changed the result",
+		hookRan: "Core ran it",
+		hookStopped: "Core stopped as an outer layer set, without running it",
+		hookUnreached: "Never reached core",
+		hookAsked: "Asked the person on a card",
+		hookNotAsked: "Did not ask the person",
+		hookDid: (parts: string[]) => parts.join(", "),
 	},
 };
 export const SOURCE_LABELS: Record<Locale, Record<Source, string>> = {
@@ -207,6 +231,7 @@ export const SOURCE_LABELS: Record<Locale, Record<Source, string>> = {
 		lifecycle: "执行状态",
 		notice: "诊断与重试",
 		approval: "审批",
+		hook: "钩子",
 	},
 	en: {
 		system: "System prompt",
@@ -222,6 +247,7 @@ export const SOURCE_LABELS: Record<Locale, Record<Source, string>> = {
 		lifecycle: "Lifecycle",
 		notice: "Diagnostics & retries",
 		approval: "Approval",
+		hook: "Hook",
 	},
 };
 export const STATUS_LABELS: Record<Locale, Record<Status, string>> = {

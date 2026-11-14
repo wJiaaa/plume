@@ -54,6 +54,7 @@ export interface TurnScope {
 	requestHuman: ToolScope["requestHuman"];
 	answeredBy?: ToolScope["answeredBy"];
 	started: ToolScope["started"];
+	traced: ToolScope["traced"];
 	progress: ToolScope["progress"];
 	background?: ToolScope["background"];
 	track: ToolScope["track"];

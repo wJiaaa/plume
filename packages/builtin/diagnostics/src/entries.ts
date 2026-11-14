@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, SessionView, ToolResultMessage } from "@plume/contract";
+import type { AssistantMessage, HookTrace, Message, SessionView, ToolResultMessage } from "@plume/contract";
 import type { TraceObservation } from "./api.ts";
 
 export type Source =
@@ -14,7 +14,8 @@ export type Source =
 	| "request"
 	| "lifecycle"
 	| "notice"
-	| "approval";
+	| "approval"
+	| "hook";
 export const SOURCES: Source[] = [
 	"system",
 	"context",
@@ -29,6 +30,7 @@ export const SOURCES: Source[] = [
 	"lifecycle",
 	"notice",
 	"approval",
+	"hook",
 ];
 export type Status = "running" | "done" | "error" | "cancelled" | "interrupted";
 export interface Entry {
@@ -54,6 +56,8 @@ export interface Entry {
 	usage?: AssistantMessage["usage"];
 	metadata?: unknown;
 	images?: Array<{ data: string; mimeType: string; media?: string }>;
+	/** 这条（工具调用、模型请求、写进会话前的那条消息）经过的钩子层，外层在前；工具调用先 `tool.execute` 再 `tool.approve`。 */
+	hooks?: HookTrace[];
 }
 
 function textOf(message: Message): string {
@@ -91,14 +95,25 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 	const add = (entry: Omit<Entry, "seq">) => {
 		entries.push({ ...entry, seq: entries.length + 1 });
 	};
+	/** 按调用、请求归好的钩子经过：`tool.execute` 排在 `tool.approve` 前面（审批是在执行里问的，观察却先到）。 */
+	const callHooks = new Map<string, HookTrace[]>();
+	const requestHooks = new Map<string, HookTrace[]>();
+	const keep = (map: Map<string, HookTrace[]>, key: string, { hook, layers, inner }: HookTrace) => {
+		const list = map.get(key) ?? [];
+		list.push({ hook, layers, ...(inner ? { inner } : {}) });
+		map.set(key, list);
+	};
 	for (const observation of observations) {
 		const { event, timestamp } = observation;
+		if (event.type === "hooks" && event.toolCallId) keep(callHooks, event.toolCallId, event);
+		if (event.type === "hooks" && event.requestId) keep(requestHooks, event.requestId, event);
 		if (event.type === "toolStart") starts.set(event.toolCallId, event.startedAt);
 		if (event.type === "response") {
 			responses.set(event.id, { reply: event.reply, timestamp });
 			requested.add(event.reply.timestamp);
 		}
 	}
+	for (const list of callHooks.values()) list.sort((a, b) => Number(a.hook === "tool.approve") - Number(b.hook === "tool.approve"));
 	for (const [index, message] of [...view.messages, ...(view.draft ? [view.draft] : [])].entries()) {
 		const common = { turn: atTurn(index), ts: message.timestamp };
 		if (message.role === "user") {
@@ -155,6 +170,7 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 						finishedAt: result?.timestamp,
 						durationMs: result?.durationMs ?? (startedAt !== undefined && result ? Math.max(0, result.timestamp - startedAt) : undefined),
 						images: result?.content.filter((item) => item.type === "image"),
+						hooks: callHooks.get(part.id),
 					});
 				} else if (part.type === "thinking")
 					add({ ...common, id, source: "thinking", summary: headline(part.thinking), detail: part.thinking, durationMs: part.durationMs });
@@ -204,6 +220,7 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 					failure: reply.failure,
 					firstTokenMs: reply.durationMs !== undefined && reply.sseDurationMs !== undefined ? reply.durationMs - reply.sseDurationMs : undefined,
 				},
+				hooks: requestHooks.get(event.id),
 			});
 			const prompt = prompts[event.systemPrompt];
 			if (prompt) add({ ...common, id: `system:${event.id}`, source: "system", summary: headline(prompt), detail: prompt });
@@ -240,6 +257,17 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 									? "cancelled"
 									: "error",
 				});
+		} else if (event.type === "hooks" && !event.toolCallId && !event.requestId) {
+			// 写进会话前的那条消息经过的层（`prompt.submit`）：拦下的那条不进会话，只在这里看得到。
+			const { hook, layers, inner } = event;
+			add({
+				...common,
+				id: `hook:${index}`,
+				source: "hook",
+				summary: `${hook} · ${layers.map((layer) => layer.plugin).join(" → ")}`,
+				status: layers.some((layer) => layer.outcome === "failed") ? "error" : "done",
+				hooks: [{ hook, layers, ...(inner ? { inner } : {}) }],
+			});
 		} else if (event.type === "notice")
 			add({
 				...common,

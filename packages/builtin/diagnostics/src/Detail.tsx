@@ -1,6 +1,7 @@
 import { CodeBlock, IconButton, Segmented, Text, useI18n } from "@plume/ui";
 import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Copy, FileText, History } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
+import type { HookTrace } from "@plume/contract";
 import type { Entry } from "./entries.ts";
 import { outputPath } from "./entries.ts";
 import { MESSAGES, SOURCE_LABELS, STATUS_LABELS } from "./messages.ts";
@@ -35,6 +36,64 @@ function DetailText({ title, text, runtime }: { title: string; text?: string; ru
 				/>
 			</div>
 			<CodeBlock>{text}</CodeBlock>
+		</section>
+	);
+}
+
+/**
+ * 这条经过的钩子：每次钩子调用一节，层从外到内一行一层（插件、order、做了什么），最后一行是本体走没走到。
+ * 只说有没有改，不画改成了什么：观察里本来就不记。
+ */
+function HookLayers({ traces }: { traces?: HookTrace[] }) {
+	const words = MESSAGES[useI18n().resolvedLocale];
+	if (!traces?.length) return null;
+	const outcome = { next: words.hookNext, answered: words.hookAnswered, failed: words.hookFailed };
+	return (
+		<section className="plume-diagnostics-text" data-hook-layers="">
+			<Text size="caption" tone="faint">
+				{words.hooks}
+			</Text>
+			{traces.map((trace, index) => (
+				<div key={index} className="plume-diagnostics-hook">
+					<Text size="caption" tone="muted">
+						{trace.hook}
+					</Text>
+					<ol className="plume-diagnostics-hook-layers">
+						{trace.layers.map((layer, at) => (
+							<li key={at}>
+								<Text size="caption" className="plume-diagnostics-break">
+									{layer.plugin}
+								</Text>
+								<Text size="caption" tone="faint" numeric>
+									{" "}
+									· {layer.order} ·{" "}
+								</Text>
+								<Text size="caption" tone={layer.outcome === "failed" ? "danger" : "muted"}>
+									{words.hookDid([
+										outcome[layer.outcome],
+										...(layer.changedInput ? [words.hookChangedInput] : []),
+										...(layer.changedOutput ? [words.hookChangedOutput] : []),
+									])}
+								</Text>
+							</li>
+						))}
+						<li>
+							<Text size="caption" tone="faint">
+								{/* tool.approve 的本体就是弹卡问人：照它说，不说「本体执行」。 */}
+								{trace.hook === "tool.approve"
+									? trace.inner === "ran"
+										? words.hookAsked
+										: words.hookNotAsked
+									: trace.inner === "ran"
+										? words.hookRan
+										: trace.inner === "stopped"
+											? words.hookStopped
+											: words.hookUnreached}
+							</Text>
+						</li>
+					</ol>
+				</div>
+			))}
 		</section>
 	);
 }
@@ -191,6 +250,7 @@ export function TraceDetail({
 							</>
 						)}
 						<DetailText title={words.details} text={entry.detail} runtime={runtime} />
+						<HookLayers traces={entry.hooks} />
 						{entry.images?.map((image, index) => {
 							const src = image.media ? runtime.ui.mediaUrl(image.media) : image.data ? `data:${image.mimeType};base64,${image.data}` : undefined;
 							return src ? (

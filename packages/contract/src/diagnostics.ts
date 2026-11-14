@@ -1,5 +1,35 @@
 import type { AssistantMessage, Message, ToolSpec } from "@plume/llm/types";
+import type { HookName } from "./plugin.ts";
 import type { AgentEvent, TurnStop } from "./service.ts";
+
+/**
+ * 钩子的一层在一次钩子调用里做了什么。只记有没有改，不记改成了什么：观察里不因此多出参数、结果的内容。
+ * 「改了」按值比较（同一个对象、或逐个字段一样都算没改），所以照原样展开再交下去不算改。
+ */
+export interface HookPass {
+	plugin: string;
+	order: number;
+	/**
+	 * `next`：往里交了；`answered`：没往里交，自己给了结果；`failed`：这一层抛了错。里层的错原样往外传时只记在出错的那一层，
+	 * 外面的层照样是 `next`（和 `HookError` 的归因一样）。
+	 */
+	outcome: "next" | "answered" | "failed";
+	/** 交给里层的和自己收到的不一样：改了参数，或在输入上设了别的（`approved`、`readOnly`……）。 */
+	changedInput?: true;
+	/** 交回外层的和里层交给它的不一样：改了结果。 */
+	changedOutput?: true;
+}
+
+/** 一次钩子调用穿过的层，外层在前；一层交了几次（重试）就记几次。 */
+export interface HookTrace {
+	hook: HookName;
+	layers: HookPass[];
+	/**
+	 * 最里层（本体）：`ran` 走到了；`stopped` 本体按外层设下的东西在某一层之前就停下、不再往里交（如外层设了 `readOnly`，写、改文件的工具不跑）。
+	 * 没有时是某一层自己交了结果或出错，没走到最里层。
+	 */
+	inner?: "ran" | "stopped";
+}
 
 /** 会话的只读运行观察，不包含供应商配置、请求头和密钥。观察者失败不影响运行。 */
 export interface SessionObservation {
@@ -11,6 +41,12 @@ export interface SessionObservation {
 		| Extract<AgentEvent, { type: "toolStart" | "approval" | "hiccups" | "notice" | "rewound" }>
 		| { type: "request"; id: string; provider: string; model: string; systemPrompt: string; messages: Message[]; tools: ToolSpec[] }
 		| { type: "response"; id: string; reply: AssistantMessage }
+		/**
+		 * 一次钩子调用经过了哪几层、每层做了什么，有插件挂了这个钩子时才有。`tool.execute`、`tool.approve` 带它所在的那次工具调用
+		 * （`tool.approve` 一次调用里问几次就有几条），`model.context` 带组出来的那次请求（同 `request` 的 `id`；组了没发出去的不记），
+		 * `prompt.submit` 两样都不带（每条要写进会话的消息一条，拦下的也记）。`step.end`、`context.compact` 不记。
+		 */
+		| ({ type: "hooks"; toolCallId?: string; requestId?: string } & HookTrace)
 		| { type: "running"; running: boolean }
 		/** 一轮收场了、为什么收场：完成、出错、被停下、用满步数、原地打转，退出应用时停下的是 `interrupted`。 */
 		| { type: "turnEnd"; stop: TurnStop };

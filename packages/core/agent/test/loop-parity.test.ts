@@ -115,6 +115,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 		},
 		files: (call) => host.workspace.call(call),
 		started: () => {},
+		traced: () => {},
 		progress: () => {},
 	};
 	return { scope, messages, executed, notices, requests: () => requests };

@@ -110,6 +110,33 @@ it("请求与响应按 id 关联，用量不再和原消息重复计数", () => 
 	expect(entries.find((entry) => entry.source === "system")).toMatchObject({ summary: "system", detail: "system" });
 });
 
+it("钩子经过按调用、请求挂到对应的条目上，tool.execute 排在 tool.approve 前面；prompt.submit 单独一条", () => {
+	const at = (timestamp: number, event: TraceObservation["event"]): TraceObservation => ({ sessionId: "a", at: 1, timestamp, event });
+	const observations: TraceObservation[] = [
+		at(105, { type: "hooks", hook: "prompt.submit", layers: [{ plugin: "x.guard", order: 0, outcome: "failed" }] }),
+		at(110, {
+			type: "hooks",
+			requestId: "r",
+			hook: "model.context",
+			layers: [{ plugin: "x.ctx", order: 0, outcome: "next", changedOutput: true }],
+			inner: "ran",
+		}),
+		at(110, { type: "request", id: "r", provider: "test", model: "fake", systemPrompt: "p1", messages: 1 }),
+		at(140, { type: "response", id: "r", reply }),
+		at(160, { type: "hooks", toolCallId: "call-a", hook: "tool.approve", layers: [{ plugin: "x.approver", order: 0, outcome: "answered" }] }),
+		at(170, { type: "hooks", toolCallId: "call-a", hook: "tool.execute", layers: [{ plugin: "x.redact", order: -100, outcome: "next" }], inner: "ran" }),
+	];
+	const entries = entriesOf(view(), observations);
+	expect(entries.find((entry) => entry.source === "tool-call")?.hooks?.map((trace) => trace.hook)).toEqual(["tool.execute", "tool.approve"]);
+	expect(entries.find((entry) => entry.source === "request")?.hooks).toEqual([
+		{ hook: "model.context", layers: [{ plugin: "x.ctx", order: 0, outcome: "next", changedOutput: true }], inner: "ran" },
+	]);
+	const submit = entries.filter((entry) => entry.source === "hook");
+	expect(submit).toHaveLength(1);
+	expect(submit[0]).toMatchObject({ status: "error", hooks: [{ hook: "prompt.submit" }] });
+	expect(submit[0]?.summary).toContain("x.guard");
+});
+
 it("只接受成功工具结果中有效的最新计划", () => {
 	const session = view();
 	session.messages.push({

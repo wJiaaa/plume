@@ -266,6 +266,7 @@ disabled：配置里关掉，两个入口都不加载（内置插件不能关）
 - 某一层抛错时，整个钩子失败，不会跳过这一层继续执行。原因是审批、脱敏这类层一旦被跳过，就等于放行或泄露，所以出错时按最严的方式处理。循环会把这次失败转成交给模型的错误结果，这一轮照常继续。
 - `step.end` 失败或交回认不得的结论（漏了 `return`、`say` 不是一句话、`reason` 不认得）时循环按自然结论走（有工具结果就接着做，否则本体决定续写、催一句还是结束），界面提示出错的插件：它只能让循环多做，退回默认不会放过什么。
 - `context.compact` 失败时转录里那一行写「压缩失败」，这一步照常发全文。
+- 组合后实际怎么走的记进运行观察（`SessionObservation` 的 `hooks`，`HookTrace`）：宿主在 `PluginHost.run` 里逐层记下插件、`order`、结果（`next` 往里交、`answered` 自己给了结果、`failed` 出错，里层的错只记在出错的那一层）、有没有改输入（`changedInput`）和结果（`changedOutput`），以及最里层走到了（`ran`）还是被本体按外层的设定停下（`stopped`）。只记有没有改、不记改成了什么，观察里不因此多出参数和结果的内容；「改了」按值比，照原样展开再交下去不算。记的是 `tool.execute`、`tool.approve`（带调用 id）、`model.context`（带它组出的那次请求的 id，组了没发出去的不记）和 `prompt.submit`（单独一条，拦下的也记）；`step.end`、`context.compact` 不记。没有插件层的钩子调用不记。内置插件 plume.diagnostics 在调用轨迹的详情里画出来。
 - 每个钩子的输入和工具的 `ToolRun` 都带着 `session`（`SessionScope`：`id`、`kind`、`parentId?`、`owner?`、`spawnedFrom?`、`project?`、`steward?`），本体照会话摘要填。`kind` 是 `top`（侧栏里的会话）、`child`（插件的子会话）、`standalone`（插件的独立会话），由本体按 `parentId`、`owner` 算出；本体和插件判断「是不是人的那段对话」都只看它，插件不用为找自己那条去 `ctx.sessions.list()`（钩子之外用 `ctx.sessions.get`）。
 
 ### 每个钩子
