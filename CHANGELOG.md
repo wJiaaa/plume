@@ -2,6 +2,20 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.4.0] - 2026-11-14
+
+<!-- plume:notes en -->
+### Changes
+
+- **Tool calls now sit together in an expandable card.** Consecutive calls share a heading that shows the current action while running and a summary when done; expand it to see each call, its output or file diff, with failures marked even when the group is collapsed.
+- **File links only become file chips when the file exists on this machine.** Paths from a remote server or files that haven't been created stay as text, and remembered lookups keep existing files from repeatedly switching from text to chips when you reopen a conversation.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **连着做的工具调用放进同一张卡片。** 标题在执行时说正在做什么，结束后汇总做过的事，点开后一次调用一行，再点开看输出或文件差异，组内有失败时收起也看得见。
+- **文件在本机找到了，回复里才画成文件签。** 远程服务器上的路径、还没创建的文件保持原来的文字，查找结果会记住，重新打开会话时不再反复从文字跳成文件签。
+
 ## [0.3.0] - 2026-11-14
 
 <!-- plume:notes en -->
