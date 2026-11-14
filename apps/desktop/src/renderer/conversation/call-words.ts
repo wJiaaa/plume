@@ -108,14 +108,19 @@ export function describePolls(what: string | undefined, times: number): string {
  * 只说文件名时，`apps/web/src/main.tsx` 和 `apps/cli/src/main.ts` 读起来是同一个 main。只读了一段的带上行号，同一个文件
  * 读两段才分得开；目录带 `/`，和文件一眼分开，没给目录的是工作目录。工作区外的路径照原样，家目录缩成 `~`。
  * 改文件、写文件的那一行照旧只说名字：展开是带着完整路径的 diff。
+ *
+ * 回复还在写（`writing`）时没给目录不算工作目录：参数写完之前 `arguments` 是空的，按工作目录说就是先「正在浏览 ./」、
+ * 参数一到又改成真的目录，一次发出几个调用时每一行都这样错一下。这时只说「正在浏览」，开跑后还是没给的才是工作目录。
  */
-function locationOf(block: ToolCallBlock, root?: string): string | undefined {
+function locationOf(block: ToolCallBlock, root?: string, writing = false): string | undefined {
 	const kind = toolKind(block.name);
 	if (kind !== "view" && kind !== "list") return undefined;
 	const file = lineFile(block.name, block.arguments);
 	const shown = (value: string) => tildeHome(root ? (relativeTo(root, value) ?? value) : value);
 	if (kind === "list") {
-		const dir = shown(file && file.path !== "" ? file.path : ".");
+		const given = file && file.path !== "";
+		if (!given && writing) return undefined;
+		const dir = shown(given ? file.path : ".");
 		return /[\\/]$/.test(dir) ? dir : `${dir}/`;
 	}
 	if (!file || file.path === "") return undefined;
@@ -222,9 +227,9 @@ export function labelText(label: CallLabel): string {
 
 /**
  * `live`：这次调用还没跑完（参数在写、排着、等批准、在跑，起的后台事还在跑）。`root` 是工作区，`job` 是查看的那个后台任务的说明，
- * `details` 是这次结果的（插件按这一次说动作、对象时要看，见 `ToolLine.verbFor`）。
+ * `details` 是这次结果的（插件按这一次说动作、对象时要看，见 `ToolLine.verbFor`）。`writing`：回复还在写，参数可能还没到（见 `locationOf`）。
  */
-export function callLabel(block: ToolCallBlock, live: boolean, root?: string, job?: string, details?: unknown): CallLabel {
+export function callLabel(block: ToolCallBlock, live: boolean, root?: string, job?: string, details?: unknown, writing = false): CallLabel {
 	if (polledJob(block)) return { verb: describePolls(job, 1) };
 	if (toolKind(block.name) === "job") return { verb: translate("tools.stopJob") };
 	const said = lineNote(block.name, block.arguments);
@@ -241,7 +246,7 @@ export function callLabel(block: ToolCallBlock, live: boolean, root?: string, jo
 	const file = lineFile(block.name, block.arguments);
 	let subject: string | undefined;
 	let note: string | undefined;
-	if (kind === "list") subject = locationOf(block, root);
+	if (kind === "list") subject = locationOf(block, root, writing);
 	else if (kind === "command") subject = lineCommand(block.name, block.arguments)?.split("\n")[0]?.trim() || undefined;
 	else if (file) {
 		subject = file.path !== "" ? baseName(file.path) : undefined;
@@ -256,7 +261,13 @@ export function callLabel(block: ToolCallBlock, live: boolean, root?: string, jo
  * 是「修改 1 个文件」），其余按次数。插件登记了动作的、不认得的工具照 `describeCalls` 的说法接在后面；推理有几次也说。
  * 哪些调用不数（清单、查输出）和 `describeCalls` 一样，见 `counted`。
  */
-export function summarizeCalls(calls: Call[], failed: ReadonlySet<string>, thought = 0, thoughtFirst = false): string {
+export function summarizeCalls(
+	calls: Call[],
+	failed: ReadonlySet<string>,
+	thought = 0,
+	thoughtFirst = false,
+	writing: ReadonlySet<string> = new Set(),
+): string {
 	const kinds = new Map<TensedKind, { seen: Set<string>; failed: number }>();
 	const others: Call[] = [];
 	for (const call of counted(calls)) {
@@ -266,8 +277,14 @@ export function summarizeCalls(calls: Call[], failed: ReadonlySet<string>, thoug
 			others.push(call);
 			continue;
 		}
+		const file = kind === "view" || kind === "create" || kind === "modify";
+		const path = file ? lineFile(block.name, block.arguments)?.path : undefined;
+		/*
+		 * 文件按路径数，参数还在写（`writing`）、路径还没到的先不数：按 id 先数上，路径一到和读过的同一个文件并成一个，数就
+		 * 往回跳一下（4 → 3）。跑着的一组标题上的数只往上长。这一类还一个都没数上时照数：不然标题会空一下。
+		 */
+		if (file && !path && writing.has(block.id) && kinds.has(kind)) continue;
 		const entry = kinds.get(kind) ?? { seen: new Set<string>(), failed: 0 };
-		const path = kind === "view" || kind === "create" || kind === "modify" ? lineFile(block.name, block.arguments)?.path : undefined;
 		entry.seen.add(path || block.id);
 		if (failed.has(block.id)) entry.failed += 1;
 		kinds.set(kind, entry);

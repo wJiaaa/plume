@@ -2,23 +2,24 @@
  * 一段连着做的活画成一组（怎么分段见 `turn-blocks.ts` 的 `Step`）：一行标题，点开是一张带框的卡片，卡片里一次调用一行，
  * 每一行再点开是它的详情（`ToolBody`）。
  *
- * - **标题**：这一段还在做时说正在做的那一次（「正在查看 client.ts」，字上扫光），每一句至少挂 650ms（`useHeldKey`）；
- *   做完了说总的（「运行 3 个命令（1 个失败），查看 2 个文件 +12 −3」）。只有一次调用时标题就是那一次，点开直接是详情。
+ * - **标题**：只有一次调用时说那一次（跑着「正在查看 client.ts」、字上扫光，跑完「查看 client.ts」），点开直接是详情。
+ *   几次调用合成的一组从头到尾说总的（「运行 3 个命令（1 个失败），查看 2 个文件 +12 −3」），跑着时数跟着长、字上扫光。
+ *   不说正在做的那一次：一次发出几个调用时，一批里标题要换好几句（流进来的最后一个 → 开跑的第一个 → 跑完的最后一个），
+ *   每句淡入淡出一次、箭头被推来推去；每一次在做什么，点开看卡片里的行。从一次长成几次时换一句，每一句至少挂 650ms（`useHeldKey`）。
  * - **换字**：原地交叉淡入淡出，宽度缓过去（`SwapText`），后面的箭头不跳。
  * - **一行**：跑着「正在修改 retry.ts」，跑完「修改 retry.ts +2 −1」；模型写了说明的命令说它的说明，失败的在后面标红「失败」。
- *   一组跑着时新来的行淡入。
+ *   一组跑着时新来的行长出来（高度从 0 缓过去，同时淡入，见 `useGrowIn`）。
  * - **末尾的推理还在写**：标题后面接一句「正在思考 · 5s」，句子本身不动。推理和回来的后台命令结果在卡片里各占一行。
  *
- * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题不画图标，
- *   跑着说正在做的那一次时也不画，免得图标跟着每一句跳。
+ * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题不画图标。
  *
  * 默认收着；点开过的按会话记住（`useTranscriptDisclosure`）。旧的那种点开挂在竖线上的画法是 `WorkStep`。
  */
 
 import type { UnansweredDetails } from "@plume/contract";
-import { Collapse, translate, useHeldKey, useI18n } from "@plume/ui";
+import { Collapse, motionReduced, translate, useHeldKey, useI18n } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
-import { type AnimationEvent, Fragment, memo, type ReactNode, useRef, useState } from "react";
+import { type AnimationEvent, memo, type ReactNode, type TransitionEvent, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
 import { type CallLabel, callLabel, describePolls, diffOf, labelText, summarizeCalls } from "./call-words.ts";
@@ -109,11 +110,10 @@ function ToolGroup({
 	const arrival = useArrival(live || liveStatus(statuses[0]));
 
 	/*
-	 * 跑着时说的那一次：第一个还在跑的调用，不是最后发出的那个——一次发出几个调用时它们各跑各的。一个都没在跑（两批之间）
-	 * 就说最后那个。只有一次调用时说的总是它。
+	 * 只有一次调用时说它；跑着的这一段前面挂着推理（显示推理时）也还是说它。几次调用说总的，跑着也一样，见文件头。
 	 */
-	const runningAt = statuses.findIndex((status) => status === "running" || status === "approval");
-	const want = single || live ? calls[runningAt >= 0 ? runningAt : calls.length - 1]!.block.id : SUMMARY;
+	const one = calls.length === 1 ? calls[0]! : undefined;
+	const want = one && (single || live) ? one.block.id : SUMMARY;
 	const held = useHeldKey(want);
 	const current = held === SUMMARY ? undefined : (calls.find(({ block }) => block.id === held) ?? calls[calls.length - 1]);
 	const at = current ? calls.indexOf(current) : -1;
@@ -134,7 +134,7 @@ function ToolGroup({
 		const callLive = liveStatus(status);
 		const draft = writeDraft(current.block, status);
 		lines = draft.lines;
-		const label = callLabel(draft.block, callLive, cwd, jobs[at], details);
+		const label = callLabel(draft.block, callLive, cwd, jobs[at], details, status === "pending");
 		const failed = status === "error" && !stops[at] && !unanswered[at];
 		const marks = callLive ? null : (
 			<Marks
@@ -158,15 +158,25 @@ function ToolGroup({
 	} else {
 		const failedIds = new Set(calls.flatMap(({ block }, index) => (statuses[index] === "error" && !stops[index] && !unanswered[index] ? [block.id] : [])));
 		const thought = members.filter((member) => member.kind === "thinking").length;
-		const summary = summarizeCalls(calls, failedIds, thought, members[0]?.kind === "thinking");
+		const writing = new Set(calls.flatMap(({ block }, index) => (statuses[index] === "pending" ? [block.id] : [])));
+		const summary = summarizeCalls(calls, failedIds, thought, members[0]?.kind === "thinking", writing);
 		words = (
 			<>
 				{summary}
-				<Marks failed={failedLater || failedIds.size > 0} stopped={false} unanswered={undefined} added={added} removed={removed} />
+				{/* 有一次没人答（提问卡被取消、到时没人答）也说出来：总的那句不点名是哪一次，记号不能跟着丢。 */}
+				<Marks
+					failed={failedLater || failedIds.size > 0}
+					stopped={false}
+					unanswered={unanswered.find((reason) => reason !== undefined)}
+					added={added}
+					removed={removed}
+				/>
 			</>
 		);
 		text = summary;
 		swapKey = SUMMARY;
+		// 跑着时总的那句也扫光：数在长，字不换。
+		glide = live;
 	}
 
 	const tail = members[members.length - 1];
@@ -217,7 +227,7 @@ function ToolGroup({
 	);
 }
 
-/** 卡片里的那几行。挂上以后才来的（一组还在跑时新做的那一次）淡入，点开时已经在的原样出现。 */
+/** 卡片里的那几行。挂上以后才来的（一组还在跑时新做的那一次）长出来（`useGrowIn`），点开时已经在的原样出现。 */
 function CardRows({ members, draw }: { members: StepMember[]; draw: ((run: Run) => ReactNode) | undefined }) {
 	usePluginRegistrations();
 	const seen = useRef<Set<string> | null>(null);
@@ -233,14 +243,14 @@ function CardRows({ members, draw }: { members: StepMember[]; draw: ((run: Run) 
 				if (line.kind === "call" || line.kind === "polls") {
 					const call = line.kind === "call" ? line.call : line.calls[0]!;
 					const polls = line.kind === "polls" ? line.calls : undefined;
-					const row = <ToolRow call={call} polls={polls} enter={enter} />;
+					// 插件画的那一行在外面这层长出来：插件画它自己的卡片时不经过 `ToolRow`。
 					if (!polls && hasToolCard(call.block.name))
 						return (
-							<div key={key} className="tool-row-plugin">
-								<PluginToolCard call={call} fallback={row} />
-							</div>
+							<PluginRow key={key} enter={enter}>
+								<PluginToolCard call={call} fallback={<ToolRow call={call} enter={false} />} />
+							</PluginRow>
 						);
-					return <Fragment key={key}>{row}</Fragment>;
+					return <ToolRow key={key} call={call} polls={polls} enter={enter} />;
 				}
 				return (
 					<ExtraRow key={key} enter={enter}>
@@ -270,14 +280,16 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const added = diffOf(result, "added");
 	const removed = diffOf(result, "removed");
 	const label: CallLabel =
-		job && polls ? { verb: describePolls(started?.description, polls.length) } : callLabel(draft.block, live, cwd, started?.description, result?.details);
+		job && polls
+			? { verb: describePolls(started?.description, polls.length) }
+			: callLabel(draft.block, live, cwd, started?.description, result?.details, status === "pending");
 	const text = labelText(label);
 	// 答完了、起的任务还在后台跑的（照跑着画）有结果可看。
 	const expandable = startedAt !== undefined || result !== undefined || !live;
-	const arrival = useArrival(enter);
+	const grow = useGrowIn(enter);
 
 	return (
-		<div data-tool-row="" data-tool={call.block.name} data-tool-call={call.block.id} data-status={SLOT_STATUS[status]} {...arrival}>
+		<div data-tool-row="" data-tool={call.block.name} data-tool-call={call.block.id} data-status={SLOT_STATUS[status]} {...grow}>
 			<button
 				type="button"
 				className="tool-row-head text-label"
@@ -305,16 +317,48 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 
 /** 卡片里的推理、回来的后台命令结果。 */
 function ExtraRow({ enter, children }: { enter: boolean; children: ReactNode }) {
-	const arrival = useArrival(enter);
+	const grow = useGrowIn(enter);
 	return (
-		<div data-tool-extra="" {...arrival}>
+		<div data-tool-extra="" {...grow}>
+			{children}
+		</div>
+	);
+}
+
+/** 卡片里插件登记了卡片的那一次调用。 */
+function PluginRow({ enter, children }: { enter: boolean; children: ReactNode }) {
+	const grow = useGrowIn(enter);
+	return (
+		<div {...grow} className={`tool-row-plugin ${grow.className ?? ""}`.trim()}>
 			{children}
 		</div>
 	);
 }
 
 /**
- * 新出现的东西淡入一次（`.tool-fade-in`）；淡完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
+ * 卡片里新来的一行长出来（`.tool-row-enter`）：高度从 0 缓到它自己的高，同时淡入。
+ *
+ * 一下子撑开的话，卡片点开着、贴着底部时，每来一行上面整块就被顶上去一行高；一次发出六个调用，一秒里跳六下。
+ * 用高度过渡，贴底跟随每一帧按长出来的那一截跟着挪（`useFollowBottom` 的 `growing`），上面的字平平地往上走，底下的不动。
+ *
+ * 长完摘掉类名：长着时裁着（`overflow: clip`），之后不该再裁；`@starting-style` 也只该用一次，藏起来的页面（`Activity`）
+ * 再显出来时不重演。被打断（`transitioncancel`，比如长到一半藏了起来）也算长完。减少动态效果时直接出现。
+ */
+function useGrowIn(initial: boolean): {
+	className?: string;
+	onTransitionEnd?: (event: TransitionEvent<HTMLElement>) => void;
+	onTransitionCancel?: (event: TransitionEvent<HTMLElement>) => void;
+} {
+	const [fresh, setFresh] = useState(() => initial && !motionReduced());
+	if (!fresh) return {};
+	const done = (event: TransitionEvent<HTMLElement>) => {
+		if (event.target === event.currentTarget && event.propertyName === "height") setFresh(false);
+	};
+	return { className: "tool-row-enter", onTransitionEnd: done, onTransitionCancel: done };
+}
+
+/**
+ * 新出现的一组淡入一次（`.tool-fade-in`）；淡完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
  */
 function useArrival(initial: boolean): { className?: string; onAnimationEnd?: (event: AnimationEvent<HTMLElement>) => void } {
 	const [fresh, setFresh] = useState(initial);
