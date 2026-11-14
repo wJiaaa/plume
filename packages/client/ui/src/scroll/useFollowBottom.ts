@@ -95,6 +95,13 @@ export interface FollowBottom {
 	 * 不在文档里、因此再也不会和任何东西相交的节点：标记已读一次都不会触发，「有新内容」永远亮着。
 	 */
 	tailRef: (node: HTMLDivElement | null) => void;
+	/**
+	 * 放在滚动内容里、哨兵后面的一块空白垫，平时零高度。
+	 *
+	 * 贴着底部收起一段时，下面没有东西往上补，浏览器只能把位置夹回来，整页跟着往下掉。垫子在那一帧加高、
+	 * 把位置留在原处，收起的那截变成视口底下的一块空；往上滚、新内容进来时它跟着缩，滚回来就没了。见 `settle`、`trim`。
+	 */
+	slackRef: (node: HTMLDivElement | null) => void;
 	/** 要不要给出回去的路。 */
 	away: boolean;
 	/** 读者离开期间来了多少条消息。除非真的来了东西，否则是零。 */
@@ -168,6 +175,11 @@ export function useFollowBottom({
 	 */
 	const [tailEl, setTailEl] = useState<HTMLDivElement | null>(null);
 	const tailRef = useCallback((node: HTMLDivElement | null) => setTailEl(node), []);
+	/** 空白垫和它现在的高度，见 `FollowBottom.slackRef`。换了元素就从零算。 */
+	const slack = useRef<Slack>({ el: null, height: 0 });
+	const slackRef = useCallback((node: HTMLDivElement | null) => {
+		slack.current = { el: node, height: 0 };
+	}, []);
 
 	/*
 	 * 状态是一个 ref，不是 React 状态。
@@ -300,11 +312,25 @@ export function useFollowBottom({
 			 * 来——只测大的那个会得出「原生的就够了」这个错结论。
 			 */
 			const drift = held.el.getBoundingClientRect().top - held.top;
-			if (Math.abs(drift) >= 1) write(el, el.scrollTop + drift);
+			if (Math.abs(drift) < 1) return true;
+			/*
+			 * 要放回去的位置超过了末尾：按住的东西下面收短了、又没有东西往上补，浏览器已经把位置夹了回来。不跟着掉，
+			 * 垫高末尾那块空白、留在原处——同一帧、画之前，见 `FollowBottom.slackRef`。
+			 */
+			const want = el.scrollTop + drift;
+			const past = want - (el.scrollHeight - el.clientHeight);
+			if (past > 0.5) setSlack(slack.current, slack.current.height + Math.ceil(past));
+			write(el, want);
 			return true;
 		},
 		[write],
 	);
+
+	/** 按下的那个锚还管着位置：没过期、还在文档里。只读，不放掉——放掉归 `settle`。 */
+	const holding = useCallback(() => {
+		const held = anchor.current;
+		return held !== null && performance.now() <= held.until && held.el.isConnected;
+	}, []);
 
 	/**
 	 * 记下读者眼前那一行；跟着底部的不用记。
@@ -547,6 +573,7 @@ export function useFollowBottom({
 	const onScroll = useCallback(
 		(el: HTMLDivElement) => {
 			if (!ready || restoredSurface.current !== surfaceId) return;
+			trim(slack.current, el);
 			const reading = read(el);
 			lastTop.current = reading.scrollTop;
 
@@ -594,6 +621,7 @@ export function useFollowBottom({
 		(el: HTMLDivElement) => {
 			// 手里按着东西的时候，跟随底部让路——细节见 `settle`。排在下面的门前面：会话还在读盘时点开
 			// 一段折叠区，也要把按到的那一块放回原处。
+			trim(slack.current, el);
 			const held = settle(el);
 			if (!ready || selectedSurface.current !== surfaceId) return;
 			const reading = read(el);
@@ -617,9 +645,25 @@ export function useFollowBottom({
 	 *
 	 * 不挑按钮也不挑元素：不改变高度的点击根本不会走到 `onResize`，锚点在超时后自己过期，什么
 	 * 也不会发生。挑，反而要在这里重写一遍「哪些东西点了会变高」，而那份名单一定会漏。
+	 *
+	 * 同一时刻只能有一方管位置。按住的这段时间里，跟随底部的三个入口都让路：`onResize` 先问 `settle`，
+	 * 追赶的那一帧见到锚就停，内容变了的布局 effect 也先看 `holding`。少了最后这一处时，回复写着时点开一个
+	 * 工具组，布局 effect 每一拍把位置送到底、`settle` 下一帧又放回去，量到位置在 0 和 136、146、153 之间
+	 * 来回翻了 150ms，就是人看到的闪。
+	 *
+	 * 跟着底部时按的是展开收起的开关（`aria-expanded`，转录里的折叠区都标着它）：读者要看手里这一块了，
+	 * 不再跟着底部，由锚把它留在原处，新写出来的字照样在下面长，「回到最新」会亮。只是让路的话，锚一过期
+	 * 跟随底部就把攒下的一截一口气追回去，点开的那一块又被带走。停在末尾收起的，收完浏览器把位置夹回
+	 * 末尾，`onScroll` 读到 `arrived` 又跟上。
 	 */
 	const hold = useCallback((target: EventTarget | null) => {
 		if (!(target instanceof HTMLElement)) return;
+		if (state.current !== "detached" && target.closest("[aria-expanded]")) {
+			cancelAnimationFrame(glide.current);
+			cancelAnimationFrame(chase.current);
+			chase.current = 0;
+			state.current = "detached";
+		}
 		anchor.current = { el: target, top: target.getBoundingClientRect().top, until: performance.now() + HOLD_MS };
 	}, []);
 
@@ -742,6 +786,8 @@ export function useFollowBottom({
 		restoredSurface.current = undefined;
 		selectedSurface.current = surfaceId;
 		place.current = null;
+		// 垫子在会话那一栏外面，换会话不重建，留下的空白不能带进别的会话。
+		setSlack(slack.current, 0);
 		current.current = makeMarker(count, tail);
 		restore.current = surfaceId ? readFollow(namespace, surfaceId) : undefined;
 		// 进来的面自己记住的意图，绝不是离开的那个的。把上一个会话的带过来，你往上翻过的转录就会把它的
@@ -794,16 +840,19 @@ export function useFollowBottom({
 		const reading = read(el);
 		if (isDegenerate(reading)) return;
 		restoreOnce(el);
+		// 新内容先填进空白垫，填满了才往下推，见 `trim`。
+		trim(slack.current, el);
 
 		if (state.current === "following") {
-			pin(el);
+			// 手里按着东西时由 `settle` 管位置，这里送到底只会和它轮流写，见 `hold`。
+			if (!holding()) pin(el);
 			seen.current = current.current;
 			setUnread(0);
 		} else {
 			setUnread(unreadSince(seen.current, current.current));
 		}
 		publish(read(el));
-	}, [count, tail, publish, ready, restoreOnce, pin]);
+	}, [count, tail, publish, ready, restoreOnce, pin, holding]);
 
 	const detach = useCallback(() => {
 		cancelAnimationFrame(glide.current);
@@ -819,7 +868,28 @@ export function useFollowBottom({
 		},
 		[detach, publish, write],
 	);
-	return { scrollRef, tailRef, away, unread, returnToBottom, onScroll, onResize, onUserScroll: intend, detach, scrollTo, hold, keep };
+	return { scrollRef, tailRef, slackRef, away, unread, returnToBottom, onScroll, onResize, onUserScroll: intend, detach, scrollTo, hold, keep };
+}
+
+interface Slack {
+	el: HTMLDivElement | null;
+	height: number;
+}
+
+function setSlack(pad: Slack, height: number) {
+	if (!pad.el || pad.height === height) return;
+	pad.height = height;
+	pad.el.style.height = height ? `${height}px` : "";
+}
+
+/**
+ * 垫子只留视口里还用得着的那一截：当前位置要它撑着的部分。往上滚、内容长高都让它缩，缩到零就和平常一样。
+ * 只缩不长，长只在 `settle` 里。
+ */
+function trim(pad: Slack, el: HTMLDivElement) {
+	if (pad.height === 0) return;
+	const needed = Math.max(0, Math.ceil(el.scrollTop + el.clientHeight - (el.scrollHeight - pad.height)));
+	if (needed < pad.height - 1) setSlack(pad, needed);
 }
 
 /**

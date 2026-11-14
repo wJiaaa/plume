@@ -427,6 +427,8 @@ export function Transcript({
 										</>
 									)}
 								</div>
+								{/* 贴底收起后留在底下的那块空，见 `FollowBottom.slackRef`。在会话那一栏外面：它不是转录的内容。 */}
+								<div ref={follow.slackRef} aria-hidden className="w-full shrink-0" />
 							</Scroller>
 							<BackToLatest
 								show={follow.away || range.end < allBlocks.length}
