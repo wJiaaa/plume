@@ -409,7 +409,9 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 							attachments.reconcile(next);
 						}}
 						onSubmit={() => void send()}
-						placeholder={hint ?? t("composer.plumePlaceholder")}
+						onSubmitLater={() => void send(true)}
+						// ↩ 后面的 U+FE0E 要它按文字画：不带时 macOS 把它画成彩色 emoji。
+						placeholder={hint ?? (running ? t("composer.runningPlaceholder", { later: shortcutLabel("⌘↩\uFE0E") }) : t("composer.plumePlaceholder"))}
 						// 两张菜单不会同时开：`@` 开着就说它，否则说 `/` 那张。
 						combobox={mentions.combobox.open ? mentions.combobox : commands.combobox}
 						top={
@@ -454,10 +456,14 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 							<>
 								<ComposerItems side="end" {...item} />
 								<ContextMeter view={view} contextWindow={model?.contextWindow} />
-								<ComposerModels view={view} disabled={sending !== undefined} />
+								{/*
+								 * 不拿 `sending` 禁这两处：它从按下到 `agent.send` 返回只存在一两帧，只够让这一排闪一下暗再回来；
+								 * 防连按在 `send()` 开头（`state.sending`），而换模型本来就下一轮生效。
+								 */}
+								<ComposerModels view={view} />
 								<ComposerSend
 									running={running}
-									disabled={!canSend || sending !== undefined || !settings?.defaultModel}
+									disabled={!canSend || !settings?.defaultModel}
 									onSend={() => void send()}
 									onStop={() => {
 										if (view) void agent.stop(view.summary.id);

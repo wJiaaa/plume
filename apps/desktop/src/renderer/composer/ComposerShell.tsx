@@ -236,14 +236,19 @@ export function ComposerSend({
 			aria-label={label}
 			disabled={!running && disabled}
 			onClick={running ? onStop : onSend}
-			className={`plume-composer-control plume-composer-icon relative flex shrink-0 items-center justify-center rounded-lg transition-colors ${running ? "bg-elevated text-ink hover:bg-card-hover" : "bg-ink text-shell enabled:hover:bg-ink/80 disabled:opacity-50"}`}
+			className={`plume-composer-control plume-composer-icon relative flex shrink-0 items-center justify-center rounded-lg ${running ? "bg-elevated hover:bg-card-hover" : "bg-ink enabled:hover:bg-ink/80 disabled:opacity-50"}`}
 		>
-			<span className="plume-send-icon" data-active={mode === "stop"}>
+			{/*
+			 * 两枚图标各带自己的颜色，不靠 `currentColor` 从按钮上继承：按钮底色和字色一起换时，缓存着看的话（`transition-colors`）
+			 * 底色会先渐变过去、字色却晚到，中间几帧深底压着深图标，方块看着像消失了再弹出来（录屏逐帧量到过）。
+			 * 所以这里整组一次换完：底色、图标、颜色都不带过渡，hover 也是。
+			 */}
+			<span className="plume-send-icon text-ink" data-active={mode === "stop"}>
 				<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden>
 					<rect width="11" height="11" rx="1.5" fill="currentColor" />
 				</svg>
 			</span>
-			<span className="plume-send-icon" data-active={mode === "send"}>
+			<span className="plume-send-icon text-shell" data-active={mode === "send"}>
 				<svg
 					width="15"
 					height="15"
