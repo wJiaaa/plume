@@ -358,19 +358,24 @@
 }
 
 /*
- * 同一道光，底色跟着字自己的颜色走（运行行行尾的那几段状态）：等第一个字时字是灰的，光在灰上走；变成警示色时说黄色的话，
- * 光也在黄色上走。底色用 `currentColor`，亮处是当前色和正文色各一半——换成整档走正文色的话，黄字会被洗成灰白，警示就没了。
+ * 同一道光，走在运行行行尾的那几段状态上：灰字走灰光，警示色的字走黄光。
  *
- * 和 `.plume-glide` 一样，这一行每一刻都读得清：动的是强调，不是存在。
+ * 底色只能写成变量，不能写 `currentColor`：字色要让出来（`color: transparent`）才看得见渐变，而 `currentColor` 此刻正是
+ * 那个透明色，整段会消失。所以底色和亮处各一个变量，警示那一档只换这两个变量。
+ *
+ * 亮处是底色和正文色之间的一截——整档走到正文色的话，黄字会被洗成灰白，警示就没了。和 `.plume-glide` 一样，
+ * 这一行每一刻都读得清：动的是强调，不是存在。
  */
 .plume-glide-status {
+	--plume-glide-base: var(--plume-ink-faint);
+	--plume-glide-lit: var(--plume-ink-muted);
 	background-image: linear-gradient(
 		100deg,
-		currentColor 0%,
-		currentColor 42%,
-		color-mix(in srgb, currentColor 50%, var(--plume-ink)) 50%,
-		currentColor 58%,
-		currentColor 100%
+		var(--plume-glide-base) 0%,
+		var(--plume-glide-base) 42%,
+		var(--plume-glide-lit) 50%,
+		var(--plume-glide-base) 58%,
+		var(--plume-glide-base) 100%
 	);
 	background-size: 300% 100%;
 	-webkit-background-clip: text;
@@ -379,11 +384,16 @@
 	animation: plume-glide 2.6s linear infinite;
 }
 
+.plume-glide-status.plume-glide-warn {
+	--plume-glide-base: var(--plume-warning);
+	--plume-glide-lit: color-mix(in srgb, var(--plume-warning) 55%, var(--plume-ink));
+}
+
 /* 没有动效时，它就是这一行平常的颜色。 */
 @media (prefers-reduced-motion: reduce) {
 	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-glide-status {
 		background: none;
-		color: currentColor;
+		color: var(--plume-glide-base);
 		-webkit-background-clip: border-box;
 		background-clip: border-box;
 	}
@@ -391,6 +401,7 @@
 
 :root[data-reduce-motion="on"] .plume-glide-status {
 	background: none;
+	color: var(--plume-glide-base);
 	-webkit-background-clip: border-box;
 	background-clip: border-box;
 }

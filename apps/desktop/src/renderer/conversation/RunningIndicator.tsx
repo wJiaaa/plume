@@ -163,14 +163,15 @@ function statusFor(stage: Stage, quiet: number): Status | null {
 /**
  * 状态那段字上的扫光：等第一个字、没有新输出，那道光照样一直走——行上别的东西（思考球）也在动，字不动的话像没在等。
  *
- * 底色跟着字自己的颜色（`.plume-glide-status`）：灰字走灰光，警示色的字走黄光。不用现成的 `.plume-glide`：那道光的亮处
- * 固定走到正文色，灰字会被提亮一档、黄字会被洗成灰白。扫光按拍推，不交给浏览器每帧重绘（和思考球、工具标题同一拍）。
+ * 颜色分两档（`.plume-glide-status`；`warn` 是同一个类加 `.plume-glide-warn`，只换底色和亮处）：灰字走灰光，警示色的字走黄光。
+ * 不用现成的 `.plume-glide`：那道光的亮处固定走到正文色，灰字会被提亮一档、黄字会被洗成灰白。扫光按拍推，不交给浏览器
+ * 每帧重绘（和思考球、工具标题同一拍）。
  */
-function GlideText({ children }: { children: ReactNode }) {
+function GlideText({ warn, children }: { warn: boolean; children: ReactNode }) {
 	const box = useRef<HTMLSpanElement>(null);
 	useTickedAnimations(box, GLIDE);
 	return (
-		<span className="inline-block plume-glide-status" ref={box}>
+		<span className={`inline-block plume-glide-status ${warn ? "plume-glide-warn" : ""}`} ref={box}>
 			{children}
 		</span>
 	);
@@ -184,15 +185,7 @@ function StageStatus({ status }: { status: Status | null }) {
 	const last = useRef(status);
 	if (status) last.current = status;
 	const shown = status ?? last.current;
-	return (
-		<Readout open={status !== null}>
-			{shown && (
-				<span className={`transition-colors duration-[var(--plume-t-slow)] ${shown.warn ? "text-warning" : "text-ink-faint"}`}>
-					<GlideText>{shown.text}</GlideText>
-				</span>
-			)}
-		</Readout>
-	);
+	return <Readout open={status !== null}>{shown && <GlideText warn={shown.warn}>{shown.text}</GlideText>}</Readout>;
 }
 
 /**
