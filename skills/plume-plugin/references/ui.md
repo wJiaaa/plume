@@ -27,7 +27,7 @@ export default {
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，见「回复正文的代码块」 |
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片，见「工具卡片」 |
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认，见「等人给数据的卡」 |
-| `ui.toolLine(tool, { verb, subject, file, note, command, job, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
+| `ui.toolLine(tool, { verb, verbFor, subject, file, note, command, job, fields, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
 | `ui.page(id, Component, options)` | 往侧栏加一个页面，见「页面」 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤，见「皮肤」 |
@@ -157,14 +157,17 @@ ui.toolLine("symbol", {
 ```
 
 - 一次调用说成「动作 对象」（「查找符号 runAgent」），一段活里几次合在一起数个数（「查找符号 3 个」）。`verb` 写成事后描述的动词短语，和内置的「读取文件」「搜索内容」一个口吻。
-- `subject` 收到的参数是模型给的、没校验过：取不出就返回 undefined，只说动作；抛错也按没有对象处理。
+- `subject(args, details?)` 收到的参数是模型给的、没校验过：取不出就返回 undefined，只说动作；抛错也按没有对象处理。有结果时第二个参数是结果的 `details`（要点名的东西只有结果里有时用：`cron_delete` 说取消的那一项要做的事，不只是 id）。
+- `verbFor({ args, details, live }, locale)`：一个动词说不清时按这一次调用说动作，代替 `verb`；`verb` 照旧要给，几次合在一起数个数时用它。`live` 是这次调用还没跑完（起的后台事还在跑也算），`details` 是结果的（还没结果时 undefined）。用在：跑着、做完用不同的词（`monitor` 的「监视中」「已开始监视」）；看参数说（`cron_create` 按 `recurring` 说「已开始轮询」或「已安排定时任务」）；看结果才知道（`cron_list` 的「已列出 3 个定时任务」）。出错、停下由行尾的记号说，不用另说；返回空的照 `verb` 说。给了它就不要再给 `note`：`note` 整行替掉动作，读的人分不出是在做哪种事。
 - 工具定义上的 `kind`（`ToolDefinition.kind`，宿主把工具表带给界面）：`view` 读文件、`list` 列目录、`find` 按名字找文件、`search` 按内容搜、`create` 写出一个文件、`modify` 改已有的文件、`command` 跑一条命令、`watch` 起一条长跑的命令边跑边送输出、`job` 查看或停掉一个后台任务。前四种归「探索」、`create`、`modify` 归「改文件」、`command`、`watch`、`job` 归「跑命令」，连着做时并进同一段活；宿主按它给默认的说法（没给 `verb` 时「读取文件」「执行命令」……）、图标和运行行。一段活里有跑命令的（`command`、`watch`）时，查后台任务输出的那几次不另数。没有 `kind` 就自成一类。
 - 下面几个从参数里取值，参数同样没校验过，取不出就返回 undefined：
   - `file(args)`：这次调用对着的本机文件 `{ path, lines? }`（`path` 照模型写的样子，绝对路径或相对工作目录；`lines: { from, to? }` 是只读了其中几行；列目录的是目录，空串是工作目录）。没给 `verb` 时，`view`、`list` 的那一行说相对工作区的路径（`src/a.ts:10-29`、`src/`），别的说文件名；不是列目录、调用成功了的，回复里写到这个文件时直接画成文件签。
   - `note(args)`：模型在参数里写给人看的一句说明（`description`），有就整行说它。命令、正则一眼读不出在干什么的工具给它。
   - `command(args)`：`kind` 是 `command`、`watch` 的工具跑的命令原文。只是在读的命令（`rg`、`sed -n`、`git log`）归「探索」；参数还在生成、命令还没写出来时这次调用先不画。
   - `job(args)`：`kind: "job"` 的工具这次查看或停掉的后台任务 `{ id?, stop? }`，`id` 对得上起它那次结果的 `details.job.id`（`BackgroundJobDetails`）。查看的那一行说是哪条命令的输出，连着查同一个任务的几次合成一行；`stop` 的那一行说停止命令。认不出是哪个任务时返回 undefined，这次调用仍按查看后台任务说，只是说不出是哪个任务。
+- `fields(args, details, locale)`：点开这次调用以后列成几行「名称 值」（`{ label, value, mono? }`，`mono` 的值用等宽字），代替参数和输出。结果是写给模型读的，人要的是几样事实时给它：`plume.tools` 的 `schedule_wakeup`、`cron_create` 列回来时间或多久一次、在等什么、有效期、ID 和回来要做的事，`cron_list` 一项一行。`details` 是这次结果的 `details`（还没结果时是 undefined），和参数一样没校验过；取不出就不给那一行，交回空的、或者调用出错了，照通用的画。
 - `create` 的参数要生成好一阵（整个文件的正文）：还在生成时那一行先带上 `file` 取到的路径，行尾说写了几行。
+- 调用答完以后它在后台留下的事（经 `run.track` 登记的任务、经 `run.schedule` 约的唤醒），那一行由宿主跟着画：任务还在跑时照跑着画，被停掉、唤醒被取消时标「已停止」，任务出错结束标失败。插件不用自己画这些，登记任务、约唤醒时本体就记下了是哪次调用。
 - `group` 是插件自己起名的一类活（浏览器的五个工具都写 `"browser"`）：同一类的连着做合成一段，和读、跑命令、改文件那几类也接成一段——边改边在页面上验是一件事。给了就不按工具定义上的 `kind` 归类，`kind` 照旧管说法、运行行和图标；不碰本机文件和命令、没有 `kind` 的工具（`plume.compaction` 的 `recall` 搜会话转录）也可以只给 `group` 和 `icon`。只该给「一段活里的一步」，要人单独看见的事（问人、派活）别给。
 - `apart: true`（要和 `group` 一起给）：这一类自成一段，只和同一类的接，不和读、跑命令、改文件接。例子是 `plume.mcp`：不管哪台服务的工具都是一类，和本地的活分开。
 - 记进度清单的工具不在这里写，在工具定义上写 `category: "checklist"`（见 logic.md「按类别找工具」），结果的 `details` 带 `checklist`（`@plume/contract` 的 `ChecklistDetails`）。宿主从工具表里认出它，当一段活的记账：跟旁边那段活接成一段、不单独占一行，有别的活时总的那句不数它，回答之后被替人追问、只更新了清单的那一步不画，运行行说在排步骤。例子是 `plume.todo` 的 `todo_write`。
@@ -349,9 +352,9 @@ ui.conversationCard("todo", TodoCard);
 
 - 组件收到 `{ session }`；没东西时返回 null，不占位、不画分隔线。`label` 是卡片「显示哪些内容」菜单里的名字。
 - 卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。
-- order 排进卡片自己的几节（打开方式 0、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、引用 90）和别的插件的节之间；内置插件已经用了的：后台任务 10、定时唤醒 50、压缩记录 85（`plume.diagnostics`），计划 30（`plume.plan`），建议的新会话 40（`plume.spawn-session`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。
+- order 排进卡片自己的几节（打开方式 0、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、引用 90）和别的插件的节之间；内置插件已经用了的：后台任务 10（含检查、定时任务和轮询）、压缩记录 85（`plume.diagnostics`），计划 30（`plume.plan`），建议的新会话 40（`plume.spawn-session`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。
 - `attention(session)` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关的说明后面。
-- 要提醒的是两种事：等人回来决定的，和会自己叫醒这个会话的（人不回来，会话也会自己开一轮）；普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。例子：`plume.spawn-session` 还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」；`plume.diagnostics` 的后台任务一节说「N 个监视在跑」（监视有输出就开一轮，普通后台命令不算），定时唤醒一节说「N 个定时唤醒待触发」。
+- 要提醒的是两种事：等人回来决定的，和会自己叫醒这个会话的（人不回来，会话也会自己开一轮）；普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。例子：`plume.spawn-session` 还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」；`plume.diagnostics` 的后台任务一节说「1 个监视在跑，2 个检查待触发」（监视有输出就开一轮，检查、定时任务到点开一轮，普通后台命令不算）。
 
 `ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`、`label`、`order`、已包好错误边界的 `component`），按 order 排好。
 

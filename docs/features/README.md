@@ -11,7 +11,7 @@
 | [composer.md](composer.md) | 输入框：编辑区、工具栏、模型与思考档位、上下文用量、附件、`@` 引用、`/` 命令、排队与插话 |
 | [approvals-and-permissions.md](approvals-and-permissions.md) | 权限模式、审批卡、帮我批准的风险规则、命令沙箱与提权、计划模式、向人提问 |
 | [agent-core.md](agent-core.md) | 一轮的流程、收尾续写、重复调用检测、系统提示词、上下文压缩、智能标题 |
-| [agent-tools.md](agent-tools.md) | 文件工具、资源地址、bash 与后台任务、定时唤醒、网页搜索、语言服务、符号索引 |
+| [agent-tools.md](agent-tools.md) | 文件工具、资源地址、bash 与后台任务、检查和定时任务、网页搜索、语言服务、符号索引 |
 | [agent-extensions.md](agent-extensions.md) | 自定义命令、技能、MCP 连接器、钩子、记忆 |
 | [multi-session.md](multi-session.md) | 子智能体、侧边聊天、会话互通、建议新会话、代码审阅、定时任务 |
 | [files.md](files.md) | 文件树、文件预览与文档预览、文件交付卡 |

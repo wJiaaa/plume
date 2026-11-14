@@ -65,6 +65,9 @@ export async function checkBackgroundJob(options: {
 		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-card] button')].some((button) => button.textContent.includes('允许一次'))`))
 			await clickVisible(page, `[data-approval-card] button`, /允许一次/);
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(STARTED)}) === true`, "放到后台后这一轮先收尾");
+		// 调用早答完了，命令还在后台跑：起它的那一行照跑着画，命令结束后才落成跑完。
+		const call = `[data-screen=chat] [data-tool-call="toolu_smoke_job"]`;
+		await until(`document.querySelector(${JSON.stringify(call)})?.dataset.status === 'running'`, "后台命令跑着时起它的那一行照跑着画");
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-job]') !== null`, "环境卡显示后台任务");
@@ -76,6 +79,7 @@ export async function checkBackgroundJob(options: {
 		await until(`document.querySelector('[data-environment-job]') === null`, "收起环境卡");
 		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes('后台命令完成') === true`, "命令结束后对话里出现送达那一行");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(FINISHED)}) === true`, "送达叫醒会话开了一轮");
+		await until(`document.querySelector(${JSON.stringify(call)})?.dataset.status === 'done'`, "后台命令结束后起它的那一行落成跑完");
 		if (!(await page<string>(`document.querySelector(${JSON.stringify(row)}).textContent`)).includes("冒烟用的后台命令"))
 			throw new Error("送达那一行没写是哪条命令");
 		if (await page<boolean>(`[...document.querySelectorAll('[data-screen=chat] [data-plume-quote=user]')].some(e => e.textContent.includes('运行时送达'))`))

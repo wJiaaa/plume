@@ -146,7 +146,7 @@ it.skipIf(process.platform === "win32")(
 // 监视的命令是 POSIX shell 的写法。
 it.skipIf(process.platform === "win32")("约着定时唤醒和 cron、起着监视时照样算闲：它们是挂着的，照旧列着、到点和有输出时叫醒会话", async () => {
 	const wakeup = { id: "call_wakeup", name: "schedule_wakeup", args: { delay_seconds: 600, prompt: "再看看 CI", reason: "等 CI" } };
-	const cron = { id: "call_cron", name: "cron_create", args: { cron: "0 9 * * *", prompt: "看看夜里的构建", recurring: false } };
+	const cron = { id: "call_cron", name: "cron_create", args: { cron: "0 9 * * *", prompt: "看看夜里的构建", reason: "看夜里的构建", recurring: false } };
 	const monitor = { id: "call_monitor", name: "monitor", args: { command: "sleep 30", description: "盯着日志" } };
 	const peek = { id: "call_peek", name: "peek", args: {} };
 	const { ctx, snapshot } = await start([{ toolCalls: [wakeup, cron, monitor] }, { text: "约好了" }, { toolCalls: [peek] }, { text: "看过了" }]);

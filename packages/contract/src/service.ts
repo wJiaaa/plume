@@ -7,6 +7,7 @@ import type { RetryPolicy } from "@plume/llm/retry-policy";
 import type { ApiFormat, AssistantMessage, Message, MessageAttachment, ModelPricing, ThinkingLevel, ThinkingOption, UserContent } from "@plume/llm/types";
 import type { CallContext } from "@plume/rpc";
 import type { RevertPlan } from "./changes.ts";
+import type { BackgroundCallState } from "./diagnostics.ts";
 import type { CommandContext, CommandResult, Locale, RegisteredToolInfo, SlashCommand } from "./plugin.ts";
 import type { ClearRange, ClearResult, StorageUse, UsageRequestBucket } from "./usage.ts";
 
@@ -480,6 +481,8 @@ export interface SessionView {
 	queue: QueuedMessage[];
 	/** 这个子会话交给父会话的那几件事，先交的在前，见 `ChildTask`。没交过时没有。 */
 	tasks?: ChildTask[];
+	/** 答完以后还在后台留着事的调用，按调用 id，见 `BackgroundCallState`。没有时没有。 */
+	backgroundCalls?: Record<string, BackgroundCallState>;
 	/** 转录里那几行压缩：自动的（定下要压以后）和人敲的 `/compact`，连同进行中的那一次，旧的在前。 */
 	compactionRuns: CompactionRun[];
 }
@@ -596,6 +599,8 @@ export type AgentEvent =
 	| { type: "queue"; sessionId: string; queue: QueuedMessage[] }
 	/** 一个子会话交给父会话的那几件事有了变化（排上、开始、收场、拿掉）：全部的最新快照。 */
 	| { type: "tasks"; sessionId: string; tasks: ChildTask[] }
+	/** 某次调用在后台留下的任务、唤醒变了（结束、被停、取消）：这个会话全部的最新快照，见 `BackgroundCallState`。 */
+	| { type: "backgroundCalls"; sessionId: string; calls: Record<string, BackgroundCallState> }
 	/** 这一轮出了模型调用以外的问题（如没配置模型、钩子出错）。 */
 	/** 有 `level` 的进提示条（插件经 `ctx.notice` 说的、循环在压缩或重发）；没有的是这一轮出了错，写在输入框上面。 */
 	| { type: "notice"; sessionId: string; text: string; level?: NoticeLevel }

@@ -345,9 +345,6 @@
 	margin-top: 3px;
 	color: var(--plume-ink-muted);
 }
-.plume-diagnostics-note {
-	padding: 2px 8px 4px;
-}
 .plume-diagnostics-section-label {
 	display: flex;
 	align-items: center;

@@ -5,7 +5,6 @@ import type { DiagnosticsApi } from "./api.ts";
 import { createEndpointFinder } from "./endpoints.ts";
 import { DiagnosticStore } from "./store.ts";
 import { MESSAGES } from "./messages.ts";
-import { stopAll } from "./stop-all.ts";
 
 /** 结果里记着的全文在哪：`spill.path`（截过的结果）或 `outputPath`（命令的完整输出）。 */
 function detailsPath(details: unknown): string | undefined {
@@ -93,10 +92,6 @@ export default {
 			async cancelWakeup(id, wakeupId) {
 				await session(id);
 				return typeof wakeupId === "string" && ctx.sessions.cancelWakeup(id, wakeupId);
-			},
-			async stopAll(id) {
-				await session(id);
-				return stopAll(ctx.sessions, id);
 			},
 		};
 		ctx.serve(api);

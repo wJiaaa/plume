@@ -64,9 +64,13 @@ export class SessionWakeups {
 	private readonly sessions = new Map<string, Map<string, Entry>>();
 	/** 每个会话的编号接着往下数，取消了也不回头：模型手里的旧 id 不会指到新的那一个。 */
 	private readonly counters = new Map<string, number>();
+	/** 每个会话里约的唤醒被取消了的那几次调用：转录里那一行画成停下的（`cancelled`）。删会话、退出应用时清掉。 */
+	private readonly dropped = new Map<string, Set<string>>();
 	private timer: unknown = null;
 
+	/** `changed`：某个会话里有唤醒被取消了，`cancelled` 变了。 */
 	constructor(
+		private readonly changed: (sessionId: string) => void,
 		private readonly log: (message: string) => void,
 		private readonly clock: WakeupClock = realClock,
 	) {}
@@ -106,17 +110,28 @@ export class SessionWakeups {
 		return [...(this.sessions.get(sessionId)?.values() ?? [])].map((entry) => ({ ...entry.wakeup })).sort((a, b) => a.nextAt - b.nextAt);
 	}
 
+	/** 约过唤醒、唤醒又被取消了的那几次调用（`BackgroundCallState` 的 `stopped`）。到点、过期的不算。 */
+	cancelled(sessionId: string): string[] {
+		return [...(this.dropped.get(sessionId) ?? [])];
+	}
+
+	/** 人在环境卡片里取消、模型 `cron_delete`。 */
 	cancel(sessionId: string, id: string): boolean {
-		if (!this.sessions.get(sessionId)?.delete(String(id))) return false;
+		const entry = this.sessions.get(sessionId)?.get(String(id));
+		if (!entry) return false;
+		this.sessions.get(sessionId)!.delete(entry.wakeup.id);
+		this.drop(sessionId, [entry]);
 		this.settle(sessionId);
 		return true;
 	}
 
-	/** 人按了停：这个会话的全部取消，交回取消了几个，好跟人说一声。 */
+	/** 人按了停、归档：这个会话的全部取消，交回取消了几个，好跟人说一声。 */
 	cancelSession(sessionId: string): number {
-		const count = this.sessions.get(sessionId)?.size ?? 0;
-		if (count === 0) return 0;
+		const entries = this.sessions.get(sessionId);
+		if (!entries || entries.size === 0) return 0;
+		const count = entries.size;
 		this.sessions.delete(sessionId);
+		this.drop(sessionId, entries.values());
 		this.settle(sessionId);
 		return count;
 	}
@@ -132,19 +147,20 @@ export class SessionWakeups {
 				entries.delete(id);
 				changed = true;
 			}
+		// 截掉的调用不在转录里了，不用再记它停没停。
+		const dropped = this.dropped.get(sessionId);
+		for (const id of cut) dropped?.delete(id);
 		if (changed) this.settle(sessionId);
 	}
 
 	/** 约它们的插件停用了：到点要它给的话，它已经不在了。 */
 	cancelOwner(plugin: string): void {
 		for (const [sessionId, entries] of this.sessions) {
-			let changed = false;
-			for (const [id, entry] of entries)
-				if (entry.plugin === plugin) {
-					entries.delete(id);
-					changed = true;
-				}
-			if (changed) this.settle(sessionId);
+			const gone = [...entries.values()].filter((entry) => entry.plugin === plugin);
+			if (gone.length === 0) continue;
+			for (const entry of gone) entries.delete(entry.wakeup.id);
+			this.drop(sessionId, gone);
+			this.settle(sessionId);
 		}
 	}
 
@@ -152,18 +168,28 @@ export class SessionWakeups {
 	forget(sessionId: string): void {
 		this.sessions.delete(sessionId);
 		this.counters.delete(sessionId);
+		this.dropped.delete(sessionId);
 		this.arm();
 	}
 
 	/** 退出应用：全部取消。 */
 	clear(): void {
 		this.sessions.clear();
+		this.dropped.clear();
 		this.arm();
 	}
 
 	/** 会话的一轮收场了：送进去的那次触发开的那一轮就是它，之后再到点照常送。 */
 	turnEnded(sessionId: string): void {
 		for (const entry of this.sessions.get(sessionId)?.values() ?? []) if (entry.phase === "running") entry.phase = null;
+	}
+
+	/** 记下这几条是取消掉的，告诉本体。 */
+	private drop(sessionId: string, entries: Iterable<Entry>): void {
+		let dropped = this.dropped.get(sessionId);
+		if (!dropped) this.dropped.set(sessionId, (dropped = new Set()));
+		for (const entry of entries) dropped.add(entry.toolCallId);
+		this.changed(sessionId);
 	}
 
 	private nextId(sessionId: string, prefix: string): string {

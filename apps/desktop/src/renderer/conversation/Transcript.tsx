@@ -3,7 +3,7 @@
  * 跟着底部走，离开了有「回到最新」。
  */
 
-import type { Message, SessionView, ToolResultMessage } from "@plume/contract";
+import type { BackgroundCallState, Message, SessionView, ToolResultMessage } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
 import { BackToLatest, Button, motionReduced, Scroller, tailSignature, translate, useFollowBottom, useI18n } from "@plume/ui";
 import { ChevronDown, ChevronUp } from "@plume/ui/icons";
@@ -128,7 +128,11 @@ export function Transcript({
 		[id, view.summary.cwd, view.summary.parentId, onSend],
 	);
 	const approval = view.approval?.toolCallId;
-	const calls = useMemo<CallState>(() => ({ running, results, jobs, ...(approval ? { approval } : {}) }), [running, results, jobs, approval]);
+	const background = view.backgroundCalls ?? NO_BACKGROUND;
+	const calls = useMemo<CallState>(
+		() => ({ running, results, jobs, background, ...(approval ? { approval } : {}) }),
+		[running, results, jobs, background, approval],
+	);
 	/*
 	 * 调用的结果和执行中的输出各一个仓：只有那几次调用的卡重画，见 `CallState`、`CallLive`。没跟着重画的卡在布局阶段收到通知，
 	 * 在这一帧画出来之前就跟上；调用的结果在画子行之前先换上，见 `CallStateStore`。
@@ -441,6 +445,9 @@ export function Transcript({
 		</TranscriptContext.Provider>
 	);
 }
+
+/** 没有调用在后台留着事时的那一份：身份不变，调用仓不因此换一份。 */
+const NO_BACKGROUND: Readonly<Record<string, BackgroundCallState>> = {};
 
 /**
  * 有过程的一轮。按块 memo：前面那几轮的块在流式时原样沿用（见 `TurnBlocksCache`），每一拍只有在写的那一轮重新摊开。

@@ -82,13 +82,18 @@ const read = (text: string) => JSON.parse(text) as { id: string; fired: number; 
 
 function harness() {
 	const clock = fakeClock();
-	const wakeups = new SessionWakeups(() => undefined, clock);
+	const changed: string[] = [];
+	const wakeups = new SessionWakeups(
+		(sessionId) => changed.push(sessionId),
+		() => undefined,
+		clock,
+	);
 	const channel = fakeChannel();
 	const at = (ms: number, reason = "r", call = "call") =>
 		wakeups.schedule("s", "test.plugin", call, channel.channel, { at: START + ms, prompt: "p", reason, message });
 	const cron = (expression: string, recurring = true, expiresAt: number | undefined = START + 3 * DAY, call = "call") =>
 		wakeups.schedule("s", "test.plugin", call, channel.channel, { cron: expression, recurring, expiresAt, prompt: "p", message });
-	return { clock, wakeups, at, cron, ...channel };
+	return { clock, wakeups, at, cron, changed, ...channel };
 }
 
 it("cron：步长、范围、列表、星期名字，写错时说清哪一处", () => {
@@ -123,6 +128,8 @@ it("一次性唤醒：到点送一次，用约它的一方给的话和那一行�
 	expect(read(h.sent[0]!.text)).toEqual({ id: "wake-1", fired: 1, next: null, skipped: 0 });
 	expect(h.sent[0]!.delivery).toEqual({ id: "wake-1", title: "等 CI", status: "done" });
 	expect(h.wakeups.list("s")).toEqual([]);
+	// 到点送掉的不算取消：约它的那一行照常画。
+	expect(h.wakeups.cancelled("s")).toEqual([]);
 	expect(h.clock.pending()).toBe(0);
 });
 
@@ -172,20 +179,28 @@ it("人按停取消这个会话的全部、数得出几个；撤回只取消截�
 	h.cron("*/5 * * * *", true, START + 3 * DAY, "call-2");
 	h.wakeups.cancelCalls("s", ["call-2"]);
 	expect(h.wakeups.list("s").map((one) => one.id)).toEqual(["wake-1"]);
+	// 撤回截掉的调用不在转录里了，不算「取消了」。
+	expect(h.wakeups.cancelled("s")).toEqual([]);
 	expect(h.wakeups.cancel("s", "wake-1")).toBe(true);
 	expect(h.wakeups.cancel("s", "wake-1")).toBe(false);
-	h.at(10 * MINUTE);
-	h.at(20 * MINUTE);
+	expect(h.wakeups.cancelled("s")).toEqual(["call-1"]);
+	h.at(10 * MINUTE, "b", "call-3");
+	h.at(20 * MINUTE, "c", "call-4");
 	expect(h.wakeups.cancelSession("s")).toBe(2);
 	expect(h.wakeups.cancelSession("s")).toBe(0);
+	expect(h.wakeups.cancelled("s")).toEqual(["call-1", "call-3", "call-4"]);
 	expect(h.clock.pending()).toBe(0);
 	// 编号接着数：模型手里的旧 id 不会指到新的。
-	expect(h.at(10 * MINUTE)?.id).toBe("wake-5");
+	expect(h.at(10 * MINUTE, "d", "call-5")?.id).toBe("wake-5");
 	h.wakeups.cancelOwner("other.plugin");
 	expect(h.wakeups.list("s")).toHaveLength(1);
 	h.wakeups.cancelOwner("test.plugin");
 	expect(h.wakeups.list("s")).toEqual([]);
+	expect(h.wakeups.cancelled("s")).toContain("call-5");
+	// 每次取消都告诉本体一声（取消、按停、插件停用各一次），撤回不算。
+	expect(h.changed).toEqual(["s", "s", "s"]);
 	h.wakeups.forget("s");
+	expect(h.wakeups.cancelled("s")).toEqual([]);
 	expect(h.at(10 * MINUTE)?.id).toBe("wake-1");
 });
 

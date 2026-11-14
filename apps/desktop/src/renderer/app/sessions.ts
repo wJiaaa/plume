@@ -119,6 +119,7 @@ function apply(event: AgentEvent): void {
 		case "hiccups":
 		case "queue":
 		case "tasks":
+		case "backgroundCalls":
 		case "compaction": {
 			const change = viewChange(event);
 			if (change) updateView(event.sessionId, change);

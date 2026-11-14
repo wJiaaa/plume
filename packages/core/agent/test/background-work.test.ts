@@ -135,6 +135,9 @@ it("后台任务在时不算闲；结束了才闲", async () => {
 	await launched.idle;
 	expect(await h.background(id)).toBe(false);
 	expect(h.ctx().sessions.jobs(id)).toMatchObject([{ status: "exited", exitCode: 0 }]);
+	// 正常跑完的是 exited：那次调用照它自己的结果画，点开说一句在后台跑完了。
+	expect((await h.service.getSession(id)).backgroundCalls).toEqual({ call_job: "exited" });
+	expect(h.events).toContainEqual({ type: "backgroundCalls", sessionId: id, calls: { call_job: "running" } });
 	expect(h.events.some((event) => event.type === "idle" && event.sessionId === id)).toBe(true);
 });
 
@@ -178,11 +181,16 @@ it("人按停：任务不再算在等（本体不替工具停它），会话恢�
 	const [jobId, job] = [...h.jobs.entries()][0]!;
 	expect(job.stops).toEqual([]);
 	expect(h.ctx().sessions.jobs(id)).toMatchObject([{ status: "running" }]);
+	// 起它的那次调用在界面上还在跑：人按停不替工具停它。
+	expect((await h.service.getSession(id)).backgroundCalls).toEqual({ call_job: "running" });
 	expect(h.ctx().sessions.stopJob("别的会话", jobId, false)).toBe(false);
 	expect(h.ctx().sessions.stopJob(id, jobId, false)).toBe(true);
 	expect(job.stops).toEqual([false]);
 	expect(h.ctx().sessions.stopJob(id, jobId, true)).toBe(false);
 	await expect(h.ctx().sessions.jobOutput("别的会话", jobId)).rejects.toThrow();
+	// 叫停的任务退出了：那次调用画成停下的，不算失败；界面经事件收到。
+	expect((await h.service.getSession(id)).backgroundCalls).toEqual({ call_job: "stopped" });
+	await vi.waitFor(() => expect(h.events).toContainEqual({ type: "backgroundCalls", sessionId: id, calls: { call_job: "stopped" } }));
 });
 
 it("撤回截掉起它的那次调用：任务不再算在等，会话恢复为闲；删会话时本体停掉它", async () => {
@@ -232,7 +240,7 @@ it("唤醒是挂着的，在时会话照样闲；到点送进去的是约它的�
 	expect(h.ctx().sessions.wakeups(id)).toEqual([]);
 });
 
-it("人按停：唤醒全部取消，说一声取消了几个", async () => {
+it("人按停：唤醒全部取消，说一声取消了几件", async () => {
 	const wake = (n: number) => ({ id: `call_wake_${n}`, name: "wake_soon", args: { ms: 600_000 } });
 	const h = await start([{ toolCalls: [wake(1), wake(2)] }, { text: "约好了" }]);
 	const { launched, id } = await h.launch("过一会儿再看");
@@ -243,9 +251,23 @@ it("人按停：唤醒全部取消，说一声取消了几个", async () => {
 	expect(await h.background(id)).toBe(false);
 	await vi.waitFor(() =>
 		expect(h.events).toContainEqual(
-			expect.objectContaining({ type: "notice", sessionId: id, text: expect.stringMatching(/2 个定时唤醒一并取消|2 scheduled wakeups/) }),
+			expect.objectContaining({ type: "notice", sessionId: id, text: expect.stringMatching(/2 个待触发的检查和定时任务一并取消|2 pending check-ins/) }),
 		),
 	);
 	// 已经取消了的再取消：false。
 	expect(h.ctx().sessions.cancelWakeup(id, "wake-1")).toBe(false);
+	// 约它们的两次调用在界面上画成停下的。
+	expect((await h.service.getSession(id)).backgroundCalls).toEqual({ call_wake_1: "stopped", call_wake_2: "stopped" });
+});
+
+it("归档：唤醒取消、还在跑的后台任务停掉，记录留着；那几次调用画成停下的", async () => {
+	const h = await start([{ toolCalls: [startJob.toolCalls[0]!, { id: "call_wake", name: "wake_soon", args: { ms: 600_000 } }] }, { text: "都安排好了" }]);
+	const { id } = await h.launch("起个服务，过一会儿再看");
+	await vi.waitFor(() => expect(h.jobs.size).toBe(1));
+	expect(h.ctx().sessions.wakeups(id)).toHaveLength(1);
+	await h.service.setSessionArchived(id, true);
+	expect(h.ctx().sessions.wakeups(id)).toEqual([]);
+	expect([...h.jobs.values()][0]!.stops).toEqual([true]);
+	expect(h.ctx().sessions.jobs(id)).toMatchObject([{ status: "exited" }]);
+	expect((await h.service.getSession(id)).backgroundCalls).toEqual({ call_job: "stopped", call_wake: "stopped" });
 });

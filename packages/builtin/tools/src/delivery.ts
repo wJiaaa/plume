@@ -1,6 +1,6 @@
 /**
  * 本插件交回的结果在对话里那一行带的 `details`（`DeliveredReport.details`）：宿主不读，原样留给界面入口画那一行（`ui.tsx`）。
- * 后台命令结束、监视送来一批输出是 `job`，定时唤醒到点是 `wakeup`。
+ * 后台命令结束、监视送来一批输出是 `job`，检查、定时任务、轮询到点是 `wakeup`。
  */
 export type DeliveryDetails =
 	| {
@@ -14,6 +14,8 @@ export type DeliveryDetails =
 	  }
 	| {
 			kind: "wakeup";
-			/** cron 表达式，一次性唤醒没有。 */
+			/** cron 表达式，`schedule_wakeup` 约的没有。 */
 			cron?: string;
+			/** 反复的 cron（轮询）：有 cron 没有它的是只来一次的定时任务。那一行据此说是检查、定时任务还是轮询。 */
+			recurring?: true;
 	  };

@@ -24,6 +24,7 @@ import type {
 	AlwaysAllow,
 	ApprovalDecision,
 	ApprovalRequest,
+	BackgroundCallState,
 	HumanAnswer,
 	HumanRequest,
 	PendingRequest,
@@ -359,20 +360,44 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	let quitting = false;
 	// 删除会话不等循环收尾；退出和卸载仍须等这些已从列表移走的运行。
 	const active = new Set<Session>();
-	/** 某个会话在等的后台的事变了（派发回来、任务结束、唤醒取消……）：重新看它闲没闲。 */
+	/** 某个会话在等的后台的事变了（派发回来、任务结束、唤醒取消……）：重新看它闲没闲，起了任务的那几次调用也跟着看一遍。 */
 	const backgroundChanged = (sessionId: string) => {
 		const session = sessions.get(sessionId);
 		if (!session) return;
 		if (syncBackground(session)) emit({ type: "sessions", sessions: summaries() });
 		checkIdle(session);
+		emitBackgroundCalls(sessionId);
 	};
+	/** 答完以后还在后台留着事的调用，见 `BackgroundCallState`：任务的和唤醒取消了的合在一起，在跑的任务盖过取消。 */
+	const backgroundCallsOf = (sessionId: string): Record<string, BackgroundCallState> => {
+		const calls: Record<string, BackgroundCallState> = {};
+		for (const toolCallId of wakeups.cancelled(sessionId)) calls[toolCallId] = "stopped";
+		return Object.assign(calls, jobs.calls(sessionId));
+	};
+	/** 上次推给界面的那一份，按会话：没变就不推（`backgroundChanged` 也为派发、送达叫一声）。删会话时清掉。 */
+	const shownBackgroundCalls = new Map<string, string>();
+	function backgroundCallsField(sessionId: string): { backgroundCalls?: Record<string, BackgroundCallState> } {
+		const calls = backgroundCallsOf(sessionId);
+		return Object.keys(calls).length > 0 ? { backgroundCalls: calls } : {};
+	}
+	function emitBackgroundCalls(sessionId: string): void {
+		if (!sessions.has(sessionId)) {
+			shownBackgroundCalls.delete(sessionId);
+			return;
+		}
+		const calls = backgroundCallsOf(sessionId);
+		const key = JSON.stringify(Object.entries(calls).sort(([a], [b]) => a.localeCompare(b)));
+		if ((shownBackgroundCalls.get(sessionId) ?? "[]") === key) return;
+		shownBackgroundCalls.set(sessionId, key);
+		emit({ type: "backgroundCalls", sessionId, calls });
+	}
 	const background = new BackgroundRuns((parentId) => {
 		const parent = sessions.get(parentId);
 		if (parent) wakeReports(parent);
 	}, backgroundChanged);
 	/** 工具登记的后台任务（`ToolRun.track`，在等结果的算进 `waiting`）和约好的唤醒（`ToolRun.schedule`，挂着的，不算）。 */
 	const jobs = new BackgroundJobs(backgroundChanged, (message) => log("agent", "warn", message));
-	const wakeups = new SessionWakeups((message) => log("agent", "warn", message));
+	const wakeups = new SessionWakeups(emitBackgroundCalls, (message) => log("agent", "warn", message));
 	/** 等着某个会话真闲下来的（`launch` 的 `idle`），见 `checkIdle`。 */
 	const idleWaiters = new Map<string, Array<() => void>>();
 	/**
@@ -709,6 +734,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			session.steering = [];
 			session.controller?.abort();
 			sessions.delete(id);
+			shownBackgroundCalls.delete(id);
 			void host.sessionEnded(id, "deleted");
 			// 插件按会话记的东西（读过的文件之类）跟着清掉。
 			host.sessionDeleted(id);
@@ -734,14 +760,23 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		emit({ type: "sessions", sessions: summaries() });
 	}
 
-	/** 归档、取消归档：人点的和插件经 `ctx.sessions.setArchived` 的都走这里，状态变了才告诉插件。 */
+	/**
+	 * 归档、取消归档：人点的和插件经 `ctx.sessions.setArchived` 的都走这里，状态变了才告诉插件。
+	 * 归档就是这个会话收工了：它和子会话约的唤醒取消、还在跑的后台任务停掉（记录留着），不在人看不见的地方接着跑、接着叫醒它。
+	 * 环境卡片因此不另放「全部停止」：要一次清掉，归档、删会话或退出应用。取消归档不恢复，要用再让 agent 起。
+	 */
 	function archive(session: Session, archived: boolean): void {
 		const changed = (session.summary.archived === true) !== archived;
 		if (archived) session.summary.archived = true;
 		else delete session.summary.archived;
 		saveSummary(session);
 		if (changed) host.sessionArchived(session.summary.id, archived);
-		if (changed && archived) for (const id of withChildren(session.summary.id)) void host.sessionEnded(id, "archived");
+		if (changed && archived)
+			for (const id of withChildren(session.summary.id)) {
+				wakeups.cancelSession(id);
+				jobs.stopRunning(id);
+				void host.sessionEnded(id, "archived");
+			}
 	}
 
 	/** 明确停止同时撤掉派发和待送达；正常结束和打断换轮不走这里。 */
@@ -2167,7 +2202,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					commands: commandAccess,
 					// 只有顶层会话的任务算在等：结果经那次调用的送达渠道送回来，渠道作废（人按停、撤回）就不再算。子会话没有渠道。
 					track: (plugin, toolCallId, job) =>
-						jobs.track(sessionId, plugin, job, session.summary.kind === "top" ? background.channel(sessionId, toolCallId, plugin).signal : undefined),
+						jobs.track(
+							sessionId,
+							plugin,
+							toolCallId,
+							job,
+							session.summary.kind === "top" ? background.channel(sessionId, toolCallId, plugin).signal : undefined,
+						),
 					files: (call) => host.workspace.call(call),
 					started: (toolCallId) => {
 						const at = Date.now();
@@ -2548,6 +2589,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				queue: queues.list(session.summary.id),
 				compactionRuns: runsOf(session.record),
 				...(session.summary.parentId ? { tasks: handedOf(session.summary.id) } : {}),
+				...backgroundCallsField(session.summary.id),
 			};
 		},
 		async deleteSession(sessionId) {

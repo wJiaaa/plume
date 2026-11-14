@@ -94,8 +94,7 @@ export default {
 		});
 		ui.panel("output", Output, { title: (locale) => MESSAGES[locale].output, listed: false });
 		const sections = environmentSections(runtime);
-		ui.environmentSection("jobs", sections.Jobs, { label: (locale) => MESSAGES[locale].jobs, order: 10, attention: sections.useMonitors });
-		ui.environmentSection("wakeups", sections.Wakeups, { label: (locale) => MESSAGES[locale].wakeups, order: 50, attention: sections.usePendingWakeups });
+		ui.environmentSection("jobs", sections.Background, { label: (locale) => MESSAGES[locale].jobs, order: 10, attention: sections.useAttention });
 		ui.environmentSection("compactions", sections.Compactions, { label: (locale) => MESSAGES[locale].compactions, order: 85 });
 		ui.sessionMenuItem("trajectory", {
 			label: (locale) => MESSAGES[locale].viewTrajectory,

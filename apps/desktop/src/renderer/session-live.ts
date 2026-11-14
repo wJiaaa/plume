@@ -59,6 +59,8 @@ export function viewChange(event: SessionEvent): ((view: SessionView) => Partial
 			return () => ({ queue: event.queue });
 		case "tasks":
 			return () => ({ tasks: event.tasks });
+		case "backgroundCalls":
+			return () => ({ backgroundCalls: event.calls });
 		default:
 			return undefined;
 	}

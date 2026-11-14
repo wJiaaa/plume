@@ -188,7 +188,7 @@ function registerToolLine(plugin: string, tool: unknown, line: unknown, options:
 	if (match !== undefined && match !== "tool" && match !== "prefix") throw new Error(`工具说法 ${tool} 的 match 只能是 tool 或 prefix`);
 	if (candidate.verb !== undefined && !validTitle(candidate.verb)) throw new Error(`工具说法 ${tool} 的 verb 必须是文字或按语言取文字的函数`);
 	if (candidate.subject !== undefined && typeof candidate.subject !== "function") throw new Error(`工具说法 ${tool} 的 subject 必须是函数`);
-	for (const key of ["file", "note", "command", "job"] as const) {
+	for (const key of ["verbFor", "file", "note", "command", "job", "fields"] as const) {
 		if (candidate[key] !== undefined && typeof candidate[key] !== "function") throw new Error(`工具说法 ${tool} 的 ${key} 必须是函数`);
 	}
 	if (candidate.group !== undefined && (typeof candidate.group !== "string" || candidate.group === ""))

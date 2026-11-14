@@ -103,3 +103,14 @@ export interface SessionWakeup {
 	/** 已经触发过几次。 */
 	fired: number;
 }
+
+/**
+ * 一次工具调用答完以后，它在后台留下的那件事此刻怎样：它起的后台任务（`ToolRun.track`）、它约的唤醒（`ToolRun.schedule`）。
+ * `SessionView.backgroundCalls` 按那次调用的 id 列出，转录里那次调用的行跟着它画：
+ * - `running`：起的任务还在跑（含正在停的），那一行照跑着画；
+ * - `stopped`：任务被人或本体叫停（环境卡片、任务面板、删会话），或者唤醒被取消（人按停止、环境卡片、模型自己删掉、约它的插件停用），照人按的停画；
+ * - `failed`：任务出错结束、退出码不是 0；
+ * - `exited`：任务自己好好跑完了，点开那一行说一句在后台跑完了。
+ * 还没到点和已经到点的唤醒不列。只在 agent 进程的内存里，退出应用就没了。
+ */
+export type BackgroundCallState = "running" | "stopped" | "failed" | "exited";

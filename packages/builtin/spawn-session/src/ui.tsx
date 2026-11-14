@@ -398,7 +398,7 @@ export default {
 		});
 		// 和侧栏上归档用的是同一枚，这一行和它作用的地方对得上。
 		context.toolLine(ARCHIVE_SESSION, { verb: (locale) => MESSAGES[locale].archived, icon: Archive });
-		// 40：环境卡片里排在计划之后、定时唤醒之前。
+		// 40：环境卡片里排在计划之后。
 		context.environmentSection("suggestions", SuggestionsSection, { label: (locale) => MESSAGES[locale].suggested, order: 40, attention: useAttention });
 	},
 } satisfies UiPlugin;

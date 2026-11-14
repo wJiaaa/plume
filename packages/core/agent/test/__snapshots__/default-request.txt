@@ -206,7 +206,7 @@ Record the task list for work of three or more steps. Send the complete list eve
 
 Like schedule_wakeup, but on a schedule ("check the deploy every 5 minutes until it is done", "at 14:30 today"). 5-field cron in local time: "*/5 * * * *", "30 14 * * *", "0 9 * * 1-5". Recurring jobs expire after 3 days. Each firing costs a turn: pick the longest interval that works, and delete the job with cron_delete once it is settled. Not the app's Scheduled page (定时任务): for something that should keep running on its own ("every morning"), tell the person to create it there.
 
-{"type":"object","properties":{"cron":{"type":"string","description":"5-field cron expression in local time."},"prompt":{"type":"string","description":"What to do each time it fires, written to yourself, including when to stop."},"recurring":{"type":"boolean","description":"Default true; false fires once at the next match."}},"required":["cron","prompt"],"additionalProperties":false}
+{"type":"object","properties":{"cron":{"type":"string","description":"5-field cron expression in local time."},"prompt":{"type":"string","description":"What to do each time it fires, written to yourself, including when to stop."},"reason":{"type":"string","description":"A few words shown to the person (\"watching the deploy\")."},"recurring":{"type":"boolean","description":"Default true; false fires once at the next match."}},"required":["cron","prompt","reason"],"additionalProperties":false}
 
 ## cron_delete
 

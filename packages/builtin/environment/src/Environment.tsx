@@ -14,7 +14,7 @@ export interface Runtime {
 
 /**
  * 卡片自己的几节和它们在卡片里的位置：只是和会话本身有关、不用别的插件的数据的这几样。别的节都经 `ui.environmentSection` 登记、
- * 按 order 排进这几节之间（现在有后台任务 10、计划 30、建议的新会话 40、定时唤醒 50、拉取请求 60、会话摘要 80、压缩记录 85），
+ * 按 order 排进这几节之间（现在有后台任务 10、计划 30、建议的新会话 40、拉取请求 60、会话摘要 80、压缩记录 85），
  * 所以这里的 order 留着空档。卡片不认是哪个插件登记的，那个插件没装或停用了，只是少一节。
  * `children` 是插件建的子会话，按建它的插件（`owner`）分成几节，一个插件一节，在菜单里作为一项一起开关。
  */
@@ -65,7 +65,7 @@ function usePrefs() {
  * 标题栏上开关环境卡片的那颗，开着就亮。
  *
  * 卡片收着时，各节经 `attention` 报的事在按钮上挂一个圆点，那句话按节的 order 接在说明后面：等人决定的（建议的新会话还没人点开始），
- * 或会自己叫醒会话的（在跑的监视、待触发的定时唤醒）。人把那一节关掉了就不再提醒。
+ * 或会自己叫醒会话的（监视、待触发的检查和定时任务）。人把那一节关掉了就不再提醒。
  */
 export function EnvironmentToggle({ session, runtime }: { session: SessionView; runtime: Runtime }) {
 	const words = MESSAGES[useI18n().resolvedLocale];

@@ -1,6 +1,9 @@
 import type { Locale } from "@plume/contract";
 import type { Source, Status } from "./entries.ts";
 
+/** 约好的那一项是哪种，见 `Sections.tsx` 的 `planOf`。 */
+export type Plan = "checkIn" | "prompt" | "loop";
+
 const zhCN = {
 	tasks: "任务",
 	taskDescription: "后台任务、计划和运行记录",
@@ -74,19 +77,21 @@ const zhCN = {
 	viewTrajectory: "查看调用轨迹",
 	exported: "导出的轨迹",
 	compactions: "压缩记录",
-	wakeups: "定时唤醒",
-	wakeupOnce: "一次",
-	wakeupRecurring: "循环",
-	wakeupExpires: (time: string) => `${time} 过期`,
-	wakeupCancel: "取消这个定时唤醒",
-	wakeupMemoryOnly: "只在这次运行里有效：退出应用、按停止或撤回都会取消。",
-	stopAll: "全部停止",
-	stopAllConfirm: "停下这个会话的全部后台事？",
-	stopAllDetail: (jobs: number, wakeups: number) =>
-		[...(jobs > 0 ? [`停掉 ${jobs} 个后台任务（开着的服务、监视会结束）`] : []), ...(wakeups > 0 ? [`取消 ${wakeups} 个定时唤醒`] : [])].join("，") +
-		"。它们不会再叫醒这个会话，要再用得让 agent 重新起。",
-	pendingWakeups: (n: number) => `${n} 个定时唤醒待触发`,
-	runningMonitors: (n: number) => `${n} 个监视在跑`,
+	/** 约好的那几行小字里的种类，和转录里那一行同一套叫法：检查（`schedule_wakeup`）、定时任务（只来一次的 cron）、轮询（反复的 cron）。 */
+	plans: { checkIn: "检查", prompt: "定时任务", loop: "轮询" } as Record<Plan, string>,
+	nextAt: (time: string) => `下次 ${time}`,
+	wakeupExpires: (time: string) => `${time} 到期`,
+	wakeupCancel: "取消",
+	/** 卡片收着时开关旁那句：会自己叫醒会话的有几个；一个都没有是 undefined。 */
+	attention: (monitors: number, plans: Record<Plan, number>): string | undefined => {
+		const pending = [
+			...(plans.checkIn > 0 ? [`${plans.checkIn} 个检查`] : []),
+			...(plans.prompt > 0 ? [`${plans.prompt} 个定时任务`] : []),
+			...(plans.loop > 0 ? [`${plans.loop} 个轮询`] : []),
+		];
+		const parts = [...(monitors > 0 ? [`${monitors} 个监视在跑`] : []), ...(pending.length > 0 ? [`${pending.join("、")}待触发`] : [])];
+		return parts.length > 0 ? parts.join("，") : undefined;
+	},
 	monitorTip: "有新输出就会叫醒 agent，每送一批就是一轮",
 	portFailed: (reason: string) => `端口查询失败：${reason}`,
 	invalidListeners: "系统返回了无效的端口信息",
@@ -181,21 +186,20 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		viewTrajectory: "View trajectory",
 		exported: "Exported trajectory",
 		compactions: "Compactions",
-		wakeups: "Scheduled wakeups",
-		wakeupOnce: "Once",
-		wakeupRecurring: "Recurring",
+		plans: { checkIn: "Check-in", prompt: "Scheduled prompt", loop: "Loop" },
+		nextAt: (time: string) => `next ${time}`,
 		wakeupExpires: (time: string) => `expires ${time}`,
-		wakeupCancel: "Cancel this wakeup",
-		wakeupMemoryOnly: "Only for this run: quitting the app, pressing Stop or undoing cancels them.",
-		stopAll: "Stop all",
-		stopAllConfirm: "Stop everything this conversation runs in the background?",
-		stopAllDetail: (jobs: number, wakeups: number) =>
-			[
-				...(jobs > 0 ? [`Stops ${jobs} background job${jobs === 1 ? "" : "s"} (running servers and monitors exit)`] : []),
-				...(wakeups > 0 ? [`${jobs > 0 ? "cancels" : "Cancels"} ${wakeups} scheduled wakeup${wakeups === 1 ? "" : "s"}`] : []),
-			].join(" and ") + ". They won't wake this conversation again; the agent has to start them anew.",
-		pendingWakeups: (n: number) => `${n} scheduled wakeup${n === 1 ? "" : "s"} pending`,
-		runningMonitors: (n: number) => `${n} monitor${n === 1 ? "" : "s"} running`,
+		wakeupCancel: "Cancel",
+		attention: (monitors: number, plans: Record<Plan, number>) => {
+			const count = (n: number, one: string, many: string) => (n > 0 ? [`${n} ${n === 1 ? one : many}`] : []);
+			const pending = [
+				...count(plans.checkIn, "check-in", "check-ins"),
+				...count(plans.prompt, "scheduled prompt", "scheduled prompts"),
+				...count(plans.loop, "loop", "loops"),
+			];
+			const parts = [...count(monitors, "monitor running", "monitors running"), ...(pending.length > 0 ? [`${pending.join(", ")} pending`] : [])];
+			return parts.length > 0 ? parts.join("; ") : undefined;
+		},
 		monitorTip: "New output wakes the agent; every batch is a turn",
 		portFailed: (reason: string) => `Port lookup failed: ${reason}`,
 		invalidListeners: "The system returned invalid port information",

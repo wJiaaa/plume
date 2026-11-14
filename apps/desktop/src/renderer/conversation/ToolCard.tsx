@@ -28,8 +28,8 @@ import {
 	type BackgroundJobInfo,
 	type CallStatus,
 	callStatus,
+	callStopped,
 	sameItems,
-	stoppedByUser,
 	useCallLive,
 	useCalls,
 	useTranscript,
@@ -206,14 +206,14 @@ export function ToolCard({
 	const now = useNow(running && startedAt !== undefined, 250);
 	const elapsed = startedAt === undefined ? 0 : now - startedAt;
 	// 停下不是失败：中性的说法，不用红色。
-	const stopped = status === "error" && stoppedByUser(result);
+	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
 	const failed = status === "error" && !stopped;
-	const summary = job ? describePolls(started?.description, polls?.length ?? 1) : describeOne(block, state.cwd, started?.description);
+	const summary = job ? describePolls(started?.description, polls?.length ?? 1) : describeOne(block, state.cwd, started?.description, result?.details);
 	/*
 	 * 还没开跑的调用没有可看的：不能展开。参数还在写的、写完了排在前面的调用后面等着的，都没有开始时刻；从前点开是
 	 * 「等待输出…」，一条排了十二秒、只跑了几十毫秒的命令看上去是跑卡住了。
 	 */
-	const expandable = startedAt !== undefined || !live;
+	const expandable = startedAt !== undefined || result !== undefined || !live;
 	// 「刚跑完」才弹一下：挂上时就已经结束的（历史、第一次展开的一段）不弹，否则每次展开 +N -M 都跳一下。
 	const pop = useRef(live).current ? `${POP} ` : "";
 

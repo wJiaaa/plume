@@ -62,6 +62,14 @@ export interface ToolCardProps {
 	fallback: ReactNode;
 }
 
+/** `ToolLine.fields`：点开以后的一行。 */
+export interface ToolField {
+	label: string;
+	value: string;
+	/** 值用等宽字：id、表达式这类照原样读的。 */
+	mono?: boolean;
+}
+
 /** `ToolLine.file`：一次调用对着的本机文件，列目录（`ToolDefinition.kind` 是 `list`）的是目录。 */
 export interface ToolFile {
 	/** 模型给的样子：绝对路径，或相对会话的工作目录。列目录的空串是工作目录本身。 */
@@ -87,8 +95,15 @@ export interface ToolLine {
 	 * （「查找符号 3 个」）。不给就照种类的说法说（「读取文件」）；也没有种类时一次说工具名，合在一起说「使用工具」，只用这里的归类和图标。
 	 */
 	verb?: LocalizedText;
-	/** 这一次要点名的对象，从参数里取；取不出就只说动作。 */
-	subject?(args: Record<string, unknown>): string | undefined;
+	/**
+	 * 按这一次调用说动作，代替 `verb`；`verb` 仍是几次合在一起数个数时的说法，给这个也要给 `verb`。用在一个动词说不清的工具上：
+	 * 跑着和做完用不同的词（「监视中」「已开始监视」），说法要看参数（「已开始轮询」还是「已安排定时任务」）或看结果（「已列出 3 个定时任务」）。
+	 * `details` 是这次调用结果的 `details`，还没有结果时是 undefined；`live` 是这次调用还没跑完，起的后台事还在跑的也算
+	 * （见 `@plume/contract` 的 `BackgroundCallState`）。出错、停下由行尾的记号说，动作不用另说。返回空的照 `verb` 说。
+	 */
+	verbFor?(call: { args: Record<string, unknown>; details: unknown; live: boolean }, locale: Locale): string | undefined;
+	/** 这一次要点名的对象，从参数里取，有结果时也给结果的 `details`（取消的是哪一个只有结果里有）；取不出就只说动作。 */
+	subject?(args: Record<string, unknown>, details?: unknown): string | undefined;
 	/**
 	 * 这次调用对着的本机文件（列目录的是目录）。没给 `verb` 时，读文件、列目录的那一行说它相对工作区的路径（读了几行的带上行号，
 	 * 目录带 `/`），别的说文件名，几次合在一起时说名字；不是列目录、调用成功了的，回复里写到这个文件时直接画成文件签，不用再去磁盘上找。
@@ -108,6 +123,12 @@ export interface ToolLine {
 	 * 停掉的那一行说停止命令。一段活里有命令时不另数，只有查看时一个任务记一次。不给或取不出时仍是这类调用，只是不知道是哪个任务。
 	 */
 	job?(args: Record<string, unknown>): { id?: string; stop?: boolean } | undefined;
+	/**
+	 * 点开以后列成几行「名称 值」，代替参数和输出：结果写给模型读（「Scheduled wake-1 for …, finish this turn normally」），
+	 * 人要的是几样事实（下次在什么时候、活多久、到点做什么）。`details` 是这次调用结果的 `details`，还没有结果时是 undefined；
+	 * 参数和 `details` 都没校验过，取不出就不给那一行。交回空的、或者这次调用出错了，照通用的画（参数和输出）。
+	 */
+	fields?(args: Record<string, unknown>, details: unknown, locale: Locale): ToolField[] | undefined;
 	/**
 	 * 归哪一类活，名字插件自己起（`"browser"`）：同一类的几个工具连着做时合成一段，和读、跑命令、改文件那几类也接成一段——
 	 * 边改边在页面上验是一件事（`apart` 时不接）。给了就不按种类归类，种类照旧管说法、运行行和图标。
@@ -1010,9 +1031,9 @@ export interface UiContext {
 	 * 按 order 从小到大排进卡片自己的几节之间（默认 0）。id 在插件内唯一，停用时撤下。
 	 *
 	 * `attention` 是一个 React hook：这一节此刻有没有要提醒人的事，有就返回一句给人看的话（按界面语言，「2 条建议的新会话等你决定」
-	 * 「1 个定时唤醒待触发」），没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话按节的
+	 * 「1 个监视在跑，2 个检查待触发」），没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话按节的
 	 * order 接在它的说明后面；只在这时调，所以它要读的数据可以只在被调时拉。要提醒的是两种事：等人决定的（建议的新会话还没人点开始），
-	 * 和会自己叫醒这个会话的（待触发的定时唤醒、在跑的监视：人不回来，会话也会自己开一轮）。普通的「有东西在跑」不算（开着一个
+	 * 和会自己叫醒这个会话的（监视、待触发的检查和定时任务：人不回来，会话也会自己开一轮）。普通的「有东西在跑」不算（开着一个
 	 * 开发服务器是常态），算进去圆点就一直亮着。规则同 React 的 hook。
 	 */
 	environmentSection(

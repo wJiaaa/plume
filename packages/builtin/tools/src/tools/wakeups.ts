@@ -76,7 +76,7 @@ export function wakeupMessage(wakeup: SessionWakeup, info: { next: number | null
 			id: wakeup.id,
 			title: wakeupLabel(wakeup),
 			status: "done",
-			details: { kind: "wakeup", ...(wakeup.cron ? { cron: wakeup.cron } : {}) } satisfies DeliveryDetails,
+			details: { kind: "wakeup", ...(wakeup.cron ? { cron: wakeup.cron } : {}), ...(wakeup.recurring ? { recurring: true } : {}) } satisfies DeliveryDetails,
 		},
 	};
 }
@@ -175,7 +175,7 @@ export const scheduleWakeupTool: Tool<{ delay_seconds?: unknown; prompt?: unknow
 		}),
 };
 
-const cronCreateTool: Tool<{ cron?: unknown; prompt?: unknown; recurring?: unknown }> = {
+const cronCreateTool: Tool<{ cron?: unknown; prompt?: unknown; reason?: unknown; recurring?: unknown }> = {
 	name: "cron_create",
 	// i18n-exempt：给模型看的工具说明，点名产品里那一页的中文名。
 	description:
@@ -188,9 +188,10 @@ const cronCreateTool: Tool<{ cron?: unknown; prompt?: unknown; recurring?: unkno
 		properties: {
 			cron: { type: "string", description: "5-field cron expression in local time." },
 			prompt: { type: "string", description: "What to do each time it fires, written to yourself, including when to stop." },
+			reason: { type: "string", description: 'A few words shown to the person ("watching the deploy").' },
 			recurring: { type: "boolean", description: "Default true; false fires once at the next match." },
 		},
-		required: ["cron", "prompt"],
+		required: ["cron", "prompt", "reason"],
 		additionalProperties: false,
 	},
 	execute: async (args, ctx) =>
@@ -200,10 +201,20 @@ const cronCreateTool: Tool<{ cron?: unknown; prompt?: unknown; recurring?: unkno
 			if (typeof args.cron !== "string" || !args.cron.trim()) return errorResult("cron is required: a 5-field cron expression.");
 			const prompt = text(args.prompt, "prompt", PROMPT_MAX);
 			if (typeof prompt !== "string") return errorResult(prompt.error);
+			// 给人看的那句：转录、环境卡片、到点那一行都说它。prompt 是写给模型自己的指令，人读着生硬。
+			const reason = text(args.reason, "reason", REASON_MAX);
+			if (typeof reason !== "string") return errorResult(reason.error);
 			if (args.recurring !== undefined && typeof args.recurring !== "boolean") return errorResult("recurring must be true or false.");
 			roomForOneMore(ctx);
 			// 第一次要落在过期之前（本体只在一分钟以后找）：永远等不到的任务不收。一次性的也只在这 3 天里找。
-			const made = schedule({ cron: args.cron, recurring: args.recurring !== false, expiresAt: Date.now() + CRON_MAX_AGE_MS, prompt, message: wakeupMessage });
+			const made = schedule({
+				cron: args.cron,
+				recurring: args.recurring !== false,
+				expiresAt: Date.now() + CRON_MAX_AGE_MS,
+				prompt,
+				reason,
+				message: wakeupMessage,
+			});
 			if (!made) {
 				const source = args.cron.trim().split(/\s+/).join(" ");
 				// i18n-exempt：给模型看的报错，点名产品里那一页的中文名，模型据此转告人。
@@ -232,7 +243,11 @@ export const cronListTool: Tool = {
 	parameters: { type: "object", properties: {}, additionalProperties: false },
 	execute: async (_args, ctx) => {
 		const all = ctx.wakeups?.list() ?? [];
-		return { content: [{ type: "text", text: all.length === 0 ? "No pending wakeups or cron jobs in this conversation." : all.map(describe).join("\n") }] };
+		return {
+			content: [{ type: "text", text: all.length === 0 ? "No pending wakeups or cron jobs in this conversation." : all.map(describe).join("\n") }],
+			// 转录里那一行数各有几项、点开一项一行（`tool-lines.ts`）。
+			details: { kind: "wakeups", wakeups: all },
+		};
 	},
 };
 
@@ -248,9 +263,11 @@ const cronDeleteTool: Tool<{ id?: unknown }> = {
 	execute: async (args, ctx) => {
 		if (typeof args.id !== "string" || !args.id.trim()) return errorResult("id is required.");
 		const id = args.id.trim();
+		// 先记下是哪一个：转录里那一行说取消的是哪种、要做的是什么事，不只是一个 id。
+		const target = ctx.wakeups?.list().find((wakeup) => wakeup.id === id);
 		if (!ctx.wakeups?.cancel(id))
 			return errorResult(`No pending wakeup or cron job "${id}" in this conversation; it may have fired already. cron_list shows what is pending.`);
-		return { content: [{ type: "text", text: `Cancelled ${id}.` }] };
+		return { content: [{ type: "text", text: `Cancelled ${id}.` }], ...(target ? { details: { kind: "wakeup", wakeup: target, cancelled: true } } : {}) };
 	},
 };
 

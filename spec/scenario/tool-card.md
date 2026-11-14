@@ -9,6 +9,9 @@
 - 一次调用 = 工具卡片；等待确认时卡片只标「等待确认」，审批卡压在输入框正上方（`ApprovalOverlay`），摆放和排队归产品；审批卡只有产品的那一张，插件换不掉。插件换了工具卡片，审批照样能用。
 - 通用卡片是一行流水行（`conversation/ToolCard.tsx`，骨架是 `FlowRow`）：图标、一句做了什么（`call-words.ts` 的 `describeOne`：按工具经 `ui.toolLine` 登记的说——模型写的说明（`note`）、动作和对象、读文件和列目录的路径（`file`），没给动作的按工具定义上声明的种类（`ToolDefinition.kind`）说；什么都没登记就说工具名。基本工具也由 plume.tools 登记，本体不认工具名）、行尾记号（写了几行、失败、已停止、`+N -M`）、展开箭头；点开是命令、参数、输出，或者 diff。diff 和 `+N -M` 只按结果 `details` 里的通用声明 `FileDiffDetails`（`@plume/contract`）画，不认是哪个工具交的。
 - 运行中只有一种说法：字上扫光。失败是红色的 ×，人按的停是中性的「已停止」记号，不是失败。参数还在写、没开跑的调用不能展开。
+- 调用答完以后它在后台留下的事也算进这一行（`CallState.background`，本体按调用 id 推的 `BackgroundCallState`）：起的任务还在跑照跑着画，任务被叫停（含归档）、唤醒被取消照人按的停画，任务出错结束照失败画，好好跑完的照跑完画、点开说一句在后台跑完了；`callStatus`、`callStopped` 是唯一的算法，各种行都经它们取，不各自认 `details`。
+- 点开的详情按插件经 `ui.toolLine` 给的 `fields` 列成几行「名称 值」时，不再摆参数和输出；调用出错或 `fields` 交回空的照通用的画。
+- 插件经 `verbFor` 按这一次说动作时（跑着和做完不同、看参数或结果才说得出），动作和对象照样分开画，几次合在一起数个数时仍用 `verb`；只有通用的 `describeOne`（旧流水行、运行行）不分时态，按做完说。
 - 转录按回合分块（`grouping.ts` → `turn-blocks.ts`）：读、跑命令、改文件连着做的几次调用合成一段活，画成工具组（`ToolGroup`）：跑着时标题说正在跑的那一次（分时态：「正在查看 a.ts」→「查看 a.ts」，`call-words.ts` 的 `callLabel`），停了说总的「运行 3 个命令（1 个失败），查看 2 个文件 +N −M」（`summarizeCalls`），点开是带框的卡片、一次调用一行（`ToolRow`），每行点开是详情（`ToolBody`）；只有一次调用时标题就是它、点开直接是详情。换字原地交叉淡入淡出、宽度缓过去（`SwapText`）。推理默认不画（设置 › 常规 › 显示思考过程）。跑完的一轮照原样摊着，不收起（`TurnWork`）。旧的流水行（`WorkStep`、`ToolCard`）留着，`tool-view.ts` 的 `LEGACY_TOOL_ROWS` 换回去。
 - 工具按定义上声明的种类（`ToolDefinition.kind`，界面经 `AgentService.listTools()` 和 `tools` 事件拿到工具表）和经 `ui.toolLine` 登记的 `group` 归类（`conversation/tool-lines.ts`，归类在 `tool-category.ts`），默认的说法、图标、运行行跟着种类；种类只在工具定义上写一处，`ui.toolLine` 不再写；本体只有按种类的表，没有按工具名的表。
 - 插件登记了卡片的工具不合并：每次调用单独一行，整张卡照插件画的样子摆（`PluginToolCard`）；`fallback` 是上面那一行。登记时 `inline`（`true` 或逐次判断的函数）说了并进的那几次照常按归类合成一段活（`ownsToolRow`）。

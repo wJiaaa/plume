@@ -11,19 +11,23 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { BackgroundJobInfo, BackgroundJobInput, BackgroundJobOutput, TrackedJob } from "@plume/contract";
+import type { BackgroundCallState, BackgroundJobInfo, BackgroundJobInput, BackgroundJobOutput, TrackedJob } from "@plume/contract";
 import { text } from "./i18n.ts";
 
 interface Job {
 	sessionId: string;
 	/** 登记它的插件：插件停用时跟着停。 */
 	plugin: string;
+	/** 起它的那次调用：转录里那一行跟着它画，见 `calls`。 */
+	toolCallId: string;
 	info: BackgroundJobInfo;
 	input: BackgroundJobInput;
 	/** 起它的那次调用的送达渠道作废时触发；没有就是不会把结果送回会话（子会话）。 */
 	signal?: AbortSignal;
 	/** 挂着的：不挡会话闲下来，见文件头。 */
 	standing: boolean;
+	/** 叫它停过（人在环境卡片、任务面板里停，删会话、子会话那次运行结束时本体停）：之后怎么退出都算停下的，不算失败。 */
+	stopped?: true;
 }
 
 export class BackgroundJobs {
@@ -35,13 +39,14 @@ export class BackgroundJobs {
 		private readonly log: (message: string) => void,
 	) {}
 
-	track(sessionId: string, plugin: string, input: BackgroundJobInput, signal: AbortSignal | undefined): TrackedJob {
+	track(sessionId: string, plugin: string, toolCallId: string, input: BackgroundJobInput, signal: AbortSignal | undefined): TrackedJob {
 		const { command, description, pid, wakes, output, stop } = input ?? ({} as Partial<BackgroundJobInput>);
 		if (typeof command !== "string" || typeof output !== "function" || typeof stop !== "function") throw new Error(text("session.badJob"));
 		const id = randomUUID();
 		const job: Job = {
 			sessionId,
 			plugin,
+			toolCallId,
 			info: {
 				id,
 				command,
@@ -83,6 +88,23 @@ export class BackgroundJobs {
 		return [...this.jobs.values()].filter((job) => job.sessionId === sessionId).map((job) => ({ ...job.info }));
 	}
 
+	/**
+	 * 起了任务的那几次调用此刻怎样，按调用 id（见 `BackgroundCallState`）：没结束的在跑，叫停过的是停下，出错结束的失败，
+	 * 正常结束的是跑完。同一次调用起了几个时取最要紧的那个：在跑的盖过停下的、停下的盖过失败的、失败的盖过跑完的。
+	 */
+	calls(sessionId: string): Record<string, BackgroundCallState> {
+		const rank: Record<BackgroundCallState, number> = { running: 4, stopped: 3, failed: 2, exited: 1 };
+		const states: Record<string, BackgroundCallState> = {};
+		for (const job of this.jobs.values()) {
+			if (job.sessionId !== sessionId) continue;
+			const state: BackgroundCallState =
+				job.info.finishedAt === undefined ? "running" : job.stopped ? "stopped" : job.info.status === "failed" ? "failed" : "exited";
+			const held = states[job.toolCallId];
+			if (!held || rank[state] > rank[held]) states[job.toolCallId] = state;
+		}
+		return states;
+	}
+
 	/** 还有没结束、结果还会送回会话、不是挂着的：会话不算闲。 */
 	pending(sessionId: string): boolean {
 		for (const job of this.jobs.values())
@@ -101,6 +123,7 @@ export class BackgroundJobs {
 		const job = this.find(sessionId, jobId);
 		if (!job || job.info.finishedAt !== undefined) return false;
 		job.info.status = "stopping";
+		job.stopped = true;
 		try {
 			job.input.stop(force === true);
 		} catch (error) {
@@ -145,6 +168,7 @@ export class BackgroundJobs {
 			sessions.add(job.sessionId);
 			if (job.info.finishedAt !== undefined) continue;
 			job.info.status = "stopping";
+			job.stopped = true;
 			try {
 				job.input.stop(true);
 			} catch (error) {

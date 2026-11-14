@@ -8,7 +8,7 @@
  */
 
 import type { Locale, RegisteredToolInfo, ToolKind } from "@plume/contract";
-import type { ToolFile, ToolLine } from "@plume/contract/ui";
+import type { ToolField, ToolFile, ToolLine } from "@plume/contract/ui";
 
 const KINDS: ReadonlySet<string> = new Set<ToolKind>(["view", "list", "find", "search", "create", "modify", "command", "watch", "job"]);
 
@@ -100,11 +100,27 @@ export function lineVerb(line: ToolLine, locale: Locale): string {
 	}
 }
 
-/** 插件取的对象：插件的函数出错或不给字，就当没有对象，只说动作。 */
-export function lineSubject(line: ToolLine, args: unknown): string | undefined {
+/**
+ * 这一次调用的动作：插件按这一次说的（`ToolLine.verbFor`，看参数、结果和跑没跑完），没给、出错或不给字时照 `verb`。
+ * `call` 不给的（几种只说一句、不分时态的地方）当作跑完了、还没有结果。
+ */
+export function callVerb(line: ToolLine, args: unknown, locale: Locale, call?: { details?: unknown; live?: boolean }): string {
+	if (line.verbFor) {
+		try {
+			const verb = line.verbFor({ args: (args ?? {}) as Record<string, unknown>, details: call?.details, live: call?.live === true }, locale);
+			if (typeof verb === "string" && verb.trim() !== "") return verb.trim();
+		} catch (error) {
+			console.error("插件给的工具说法取不出来：", error);
+		}
+	}
+	return lineVerb(line, locale);
+}
+
+/** 插件取的对象：插件的函数出错或不给字，就当没有对象，只说动作。`details` 是这次结果的，还没有结果时不给。 */
+export function lineSubject(line: ToolLine, args: unknown, details?: unknown): string | undefined {
 	if (!line.subject) return undefined;
 	try {
-		const subject = line.subject((args ?? {}) as Record<string, unknown>);
+		const subject = line.subject((args ?? {}) as Record<string, unknown>, details);
 		return typeof subject === "string" && subject.trim() !== "" ? subject.trim() : undefined;
 	} catch (error) {
 		console.error("插件给的工具对象取不出来：", error);
@@ -133,6 +149,21 @@ export function lineFile(tool: string, args: unknown): ToolFile | undefined {
 export function lineNote(tool: string, args: unknown): string | undefined {
 	const note = fromArgs(toolLine(tool)?.note, args);
 	return typeof note === "string" && note.trim() !== "" ? note.trim() : undefined;
+}
+
+/** 点开以后列的那几行（`ToolLine.fields`）：插件的函数出错、给的形状不对的那几行都不要，一行都不剩当作没给。 */
+export function lineFields(tool: string, args: unknown, details: unknown, locale: Locale): ToolField[] {
+	const take = toolLine(tool)?.fields;
+	if (!take) return [];
+	try {
+		const fields = take((args ?? {}) as Record<string, unknown>, details, locale);
+		return Array.isArray(fields)
+			? fields.filter((field): field is ToolField => typeof field?.label === "string" && typeof field.value === "string" && field.value.trim() !== "")
+			: [];
+	} catch (error) {
+		console.error("插件给的工具详情取不出来：", error);
+		return [];
+	}
 }
 
 /** 这次跑的命令原文（`ToolLine.command`）。 */

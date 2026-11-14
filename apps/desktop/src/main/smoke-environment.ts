@@ -4,26 +4,26 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
+import { clickVisible, clickVisibleIn, contextMenuVisible } from "./smoke-kit.ts";
 
 const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
-const STARTED = "服务起来了，监视和唤醒都安排好了。";
+const STARTED = "服务起来了，盯着输出、约好回来都安排好了。";
 const REPLIES = ["端口在环境卡片里。", "好的，到点我会自己接着做。"];
 const WOKE = "唤醒到点了，接着看服务。";
-const SUMMARY = "冒烟会话：起了一个本地服务和一个监视，安排了定时唤醒，下一步是到点后接着看服务。";
-const FIRE = "冒烟里到点的唤醒";
-const CANCEL = "冒烟里取消的唤醒";
-const AGAIN = "冒烟里全部停止取消的唤醒";
+const SUMMARY = "冒烟会话：起了一个本地服务，监视一条命令的输出，安排了检查回来看服务。";
+const FIRE = "冒烟里到点的检查";
+const CANCEL = "冒烟里取消的检查";
+const AGAIN = "冒烟里被叫醒后再安排的检查";
 /** 在本机随便一个端口上开 HTTP 服务，把地址打出来：端口发现既能从系统表找到它，也能拿输出里的地址补全 URL。 */
 const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')).listen(0, '127.0.0.1', function () { console.log('http://127.0.0.1:' + this.address().port + '/') })"`;
 
 /**
- * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟）。
- * 卡片收着时开关上有圆点、说明里数着唤醒和监视；打开后后台任务那一行有端口签、监视签，服务被认成挂着的（`TrackedJob.stand`）、
- * 会话不再算有后台的事没完，唤醒一节两项，取消掉十分钟那项；
- * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那项到点——对话里出现「定时唤醒」那一行、会话被叫醒开一轮，
- * 那一轮再约一次唤醒——最后点「全部停止」、确认，服务、监视、唤醒一起清空，之后没有「后台命令完成」那一行、不再请求模型。
- * 这段要一分多钟，大头是等唤醒的一分钟。
+ * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟后的检查）。
+ * 卡片收着时开关上有圆点、说明里数着监视和待触发的检查；打开后「后台任务」一节里服务那一行有端口签、监视那一行有「监视」签，
+ * 服务被认成挂着的（`TrackedJob.stand`）、会话不再算有后台的事没完，同一节里两个检查，取消掉十分钟那个；
+ * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那个到点——对话里出现「检查 · …」那一行、会话被叫醒开一轮，
+ * 那一轮再安排一次；换成英文界面，转录里的工具行（在 memo 后面）、送达那一行和卡片不重挂就当场换过来，再换回中文；在卡片里取消它，安排它的那一行标「已停止」。最后归档这个会话：服务、监视跟着停掉（端口不再应答），
+ * 之后没有「后台命令完成」那一行、不再请求模型。卡片里没有「全部停止」。这段要一分多钟，大头是等到点的一分钟。
  *
  * 会话摘要单独一段（`part: "summary"`，段名 environment-summary）：装上市场插件 plume.summary，说三句人话，这一轮结束静下来一分钟后
  * 卡片里出现摘要，设置 › 智能体里有选摘要模型的那一行。原来接在唤醒后面，两个一分钟串着等，整段两分多钟；分开后两段并行。
@@ -81,7 +81,7 @@ export async function checkEnvironment(options: {
 		// 只认最后一条就认不出唤醒、又回一遍起服务的工具调用。
 		const last = JSON.stringify(messages.slice(messages.findLastIndex((message) => message.role === "assistant") + 1));
 		if (last.includes("toolu_env_again")) return { text: WOKE };
-		// 被叫醒的那一轮再约一次：最后的「全部停止」要连唤醒一起取消。
+		// 被叫醒的那一轮再约一次：之后在卡片里取消它，看约它的那一行标「已停止」。
 		if (last.includes("<wakeup"))
 			return { toolCalls: [{ id: "toolu_env_again", name: "schedule_wakeup", args: { delay_seconds: 60, prompt: "再看一次服务", reason: AGAIN } }] };
 		if (last.includes(PROMPTS[1]!)) return { text: REPLIES[0]! };
@@ -106,21 +106,26 @@ export async function checkEnvironment(options: {
 		await until(chatHas(STARTED), "这一轮安排好服务、监视和唤醒后收尾");
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 
-		// 卡片收着：开关上的圆点和说明数着待触发的唤醒和在跑的监视。
+		// 卡片收着：开关上的圆点和说明数着监视和待触发的检查。
 		if (await page<boolean>(`document.querySelector('[data-environment]') !== null`)) await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "收着的开关上有圆点");
-		await wait(async () => /2 个定时唤醒待触发/.test(await toggleLabel()) && /1 个监视在跑/.test(await toggleLabel()), "开关说明数着唤醒和监视");
+		await wait(async () => /1 个监视在跑，2 个检查待触发/.test(await toggleLabel()), "开关说明数着监视和待触发的检查");
 		await capture("smoke-environment-toggle.png");
 
-		// 打开卡片：后台任务那一行有端口签和监视签，唤醒一节两项。
+		// 打开卡片：「后台任务」一节里服务那一行有端口签、监视那一行有「监视」签，两个检查也列在同一节里；没有「全部停止」。
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-port]')?.textContent.startsWith(':') === true`, "服务那一行有端口签", 30_000);
 		await until(`document.querySelector('[data-environment-monitor]') !== null`, "监视那一行有监视签");
 		// 服务打印了本机地址，plume.tools 经 `TrackedJob.stand` 标成挂着的；监视登记时就是挂着的。两样都还在跑，会话却不算还有后台的事没完
-		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后「全部停止」。
+		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后归档。
 		await wait(async () => (await agent.sessions()).find((item) => !previous.has(item.id))?.background !== true, "服务被认成挂着的，会话不再等它结束");
 		if ((await page<number>(`document.querySelectorAll('[data-environment-job]').length`)) !== 2) throw new Error("服务和监视应该都还在跑");
-		await until(`document.querySelectorAll('[data-environment-wakeup]').length === 2`, "唤醒一节两项");
+		await until(`document.querySelectorAll('[data-environment-section$="/jobs"] [data-environment-wakeup]').length === 2`, "检查和后台命令列在同一节里，两个");
+		if (await page<boolean>(`document.querySelector('[data-environment-section$="/wakeups"], [data-environment-stop-all]') !== null`))
+			throw new Error("环境卡片里还有单独的定时唤醒一节或「全部停止」");
+		if (!(await page<boolean>(`/检查 · \\d+:\\d\\d$/.test(document.querySelector('[data-environment-wakeup][data-plan=checkIn]').textContent)`)))
+			throw new Error("检查那一行没在小字里写「检查 · 几点」");
+		if (!(await page<boolean>(`document.querySelector('[data-environment-monitor]').textContent === '监视'`))) throw new Error("监视那一行没有「监视」签");
 		if (await page<boolean>(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`))
 			throw new Error("卡片开着时开关上还挂着圆点");
 		await capture("smoke-environment-card.png");
@@ -176,10 +181,11 @@ export async function checkEnvironment(options: {
 		await send(PROMPTS[2]!);
 		await until(chatHas(REPLIES[1]!), "第三句的回复");
 
-		// 一分钟那项到点：送达那一行和被叫醒的一轮。
+		// 一分钟那个到点：送达那一行（「检查 · 那句话」）和被叫醒的一轮。
 		const row = "[data-screen=chat] [data-delivery-row][data-delivery-kind=wakeup]";
-		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes(${JSON.stringify(FIRE)}) === true`, "对话里出现定时唤醒那一行", 120_000);
-		if (!(await page<string>(`document.querySelector(${JSON.stringify(row)}).textContent`)).includes("定时唤醒")) throw new Error("送达那一行没写是定时唤醒");
+		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes(${JSON.stringify(FIRE)}) === true`, "对话里出现检查到点那一行", 120_000);
+		if (!(await page<string>(`document.querySelector(${JSON.stringify(row)}).textContent`)).includes(`检查 · ${FIRE}`))
+			throw new Error("送达那一行没写「检查 · 那句话」");
 		await until(chatHas(WOKE), "唤醒叫醒会话开了一轮");
 		await until(
 			`document.querySelectorAll('[data-environment-wakeup]').length === 1 && document.querySelector('[data-environment-wakeup]').textContent.includes(${JSON.stringify(AGAIN)})`,
@@ -187,46 +193,80 @@ export async function checkEnvironment(options: {
 		);
 		await page(`document.querySelector(${JSON.stringify(row)}).scrollIntoView({ block: 'center' })`);
 		await capture("smoke-environment-wakeup.png");
+		// 再安排那次调用：行上说动作和理由，没到点时照跑完画。
+		const again = `[data-screen=chat] [data-tool-call="toolu_env_again"]`;
+		await until(
+			`document.querySelector(${JSON.stringify(again)})?.dataset.status === 'done' && document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`已安排检查 ${AGAIN}`)})`,
+			"安排检查的那一行说动作和那句话",
+		);
+		// 点开它：列成几行「名称 值」（检查时间、原因、有效期、ID、提示词），不摆写给模型的结果。
+		await clickVisible(page, `${again} > button`);
+		await until(
+			`document.querySelector(${JSON.stringify(`${again} [data-tool-fields]`)})?.textContent.includes('检查时间') === true && document.querySelector(${JSON.stringify(`${again} [data-tool-fields]`)}).textContent.includes('再看一次服务')`,
+			"点开安排检查的那一行列出几样事实",
+		);
+		await page(`document.querySelector(${JSON.stringify(again)}).scrollIntoView({ block: 'center' })`);
+		await capture("smoke-environment-wakeup-fields.png");
+		await clickVisible(page, `${again} > button`);
+		await until(`document.querySelector(${JSON.stringify(`${again} > button`)})?.getAttribute('aria-expanded') === 'false'`, "收起安排检查的那一行");
 
-		// 全部停止：服务、监视、新约的唤醒一起清空，先问一句；之后它们都不再叫醒会话。
-		await until(`document.querySelectorAll('[data-environment-job]').length === 2`, "服务和监视还在跑");
-		// 「全部停止」在显示着的、排在前面的那一节：后台任务一节在时在它上面；把它藏起来，落到定时唤醒一节上；再显示回来，回到后台任务一节。
-		const stopAllIn = (section: string) =>
-			`document.querySelectorAll('[data-environment-stop-all]').length === 1 && document.querySelector('[data-environment-section$="/${section}"] [data-environment-stop-all]') !== null`;
-		const toggleJobsSection = async () => {
-			await clickVisible(page, `[data-environment] button[aria-label="显示哪些内容"]`);
-			await clickVisible(page, `[role=menuitemcheckbox]`, /^后台任务$/);
-			await page(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-			await until(`document.querySelector('[role=menuitemcheckbox]') === null`, "收起显示哪些内容的菜单");
+		// 换界面语言：转录里的工具行、送达那一行和卡片当场换成英文。工具行在 memo 后面，没订阅语言时会停在中文。
+		// 先在那一行的节点上做个记号，回来时还在才说明对话没被重挂——重挂了谁都会换，验不出什么。
+		const setLanguage = async (sections: string, title: string, option: string, backLabel: string) => {
+			window.webContents.send("plume:command", "settings");
+			await until(`document.querySelector('[data-screen=settings]') !== null`, `换成 ${option}：打开设置`);
+			await clickVisible(page, `[aria-label="${sections}"] button`, sections === "设置章节" ? "常规" : "General");
+			await clickVisible(page, `[aria-haspopup=menu][aria-label="${title}"]`);
+			// 选项前面还有语言的小标记（EN、中），按结尾认。
+			await clickVisible(page, `[role=menuitem]`, new RegExp(`${option}$`));
+			await clickVisible(page, "button", backLabel);
+			await until(`document.querySelector('[data-screen=chat]') !== null`, `换成 ${option}：回到对话`);
 		};
-		await until(stopAllIn("jobs"), "「全部停止」在后台任务一节");
-		await toggleJobsSection();
+		await page(`document.querySelector(${JSON.stringify(again)}).plumeSmokeMark = true`);
+		await setLanguage("设置章节", "界面语言", "English", "Back to workspace");
+		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(again)})?.plumeSmokeMark === true`)))
+			throw new Error("换语言后对话被重新挂载了，验不出工具行跟没跟着换");
 		await until(
-			`document.querySelector('[data-environment-section$="/jobs"]') === null && ${stopAllIn("wakeups")}`,
-			"藏起后台任务一节后「全部停止」落到定时唤醒一节",
+			`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`Scheduled check-in ${AGAIN}`)}) && document.querySelector(${JSON.stringify(row)}).textContent.includes(${JSON.stringify(`Check-in · ${FIRE}`)}) && /^Check-in · /.test(document.querySelector('[data-environment-wakeup] [data-plume-tip] > :last-child')?.textContent ?? '')`,
+			"换成英文后工具行、送达那一行和卡片当场跟着换",
 		);
-		await capture("smoke-environment-stop-all-hidden.png");
-		await toggleJobsSection();
-		await until(stopAllIn("jobs"), "后台任务一节显示回来，「全部停止」回到它上面");
-		await clickVisible(page, `[data-environment-stop-all]`);
-		await until(`document.querySelector('[role=dialog]')?.textContent.includes('停掉 2 个后台任务') === true`, "确认框数清两个后台任务");
-		if (!(await page<boolean>(`document.querySelector('[role=dialog]').textContent.includes('取消 1 个定时唤醒')`))) throw new Error("确认框没数唤醒");
-		await capture("smoke-environment-stop-all.png");
+		if (
+			await page<boolean>(
+				`(() => { const screen = document.querySelector('[data-screen=chat]').cloneNode(true); screen.querySelector('.plume-composer-dock')?.remove(); return /已安排检查|运行 \\d 个命令/.test(screen.textContent); })()`,
+			)
+		)
+			throw new Error("换成英文后转录里还有中文的工具说法");
+		await capture("smoke-environment-english.png");
+		await setLanguage("Settings sections", "Interface language", "简体中文", "返回工作区");
+		await until(`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`已安排检查 ${AGAIN}`)})`, "换回中文");
+
+		// 在卡片里取消再安排的那个：转录里安排它的那一行跟着标「已停止」。
+		await clickVisibleIn(page, `[...document.querySelectorAll('[data-environment-wakeup] [data-wakeup-cancel]')]`, "再安排那个的取消");
+		await until(`document.querySelectorAll('[data-environment-wakeup]').length === 0`, "取消后卡片里没有检查了");
+		await until(
+			`document.querySelector(${JSON.stringify(again)})?.dataset.status === 'failed' && document.querySelector(${JSON.stringify(again)}).textContent.includes('已停止')`,
+			"取消的那个在安排它的那一行标「已停止」",
+		);
+
+		// 归档：服务、监视跟着停掉，不在人看不见的地方接着跑；停掉的退出时不送回会话，也不再请求模型。
+		await until(`document.querySelectorAll('[data-environment-job]').length === 2`, "归档前服务和监视还在跑");
+		const answers = () =>
+			fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) }).then(
+				() => true,
+				() => false,
+			);
+		if (!(await answers())) throw new Error("归档前服务就不应答了");
+		const id = (await agent.sessions()).find((item) => !previous.has(item.id))!.id;
 		const before = requests;
-		await clickVisible(page, `[role=dialog] button`, /^全部停止$/);
-		await until(
-			`document.querySelectorAll('[data-environment-job]').length === 0 && document.querySelectorAll('[data-environment-wakeup]').length === 0`,
-			"全部停止后后台任务、唤醒都清空",
-		);
-		if (await page<boolean>(`document.querySelector('[data-environment-stop-all]') !== null`)) throw new Error("清空后还有「全部停止」");
-		// 停掉的服务、监视退出时不送回会话，取消的唤醒不再到点：等几秒，对话里没有「后台命令完成」那一行，也没再请求模型。
+		await contextMenuVisible(page, `[data-plume-row="${id}"]`);
+		await clickVisible(page, `[role=menu][aria-label="会话选项"] [role=menuitem]`, "归档");
+		await wait(async () => (await agent.sessions()).find((item) => item.id === id)?.archived === true, "会话已归档");
+		await wait(async () => !(await answers()), "归档后服务停掉、端口不再应答");
 		await page(`new Promise(resolve => setTimeout(resolve, 3000))`);
-		if (await page<boolean>(`document.querySelector('[data-screen=chat] [data-delivery-row][data-delivery-kind=job]') !== null`))
-			throw new Error("停掉的后台任务结束时又叫醒了会话");
-		if (requests !== before) throw new Error(`全部停止后又请求了 ${requests - before} 次模型`);
-		const session = (await agent.sessions()).find((item) => !previous.has(item.id));
-		if (session?.running) throw new Error("全部停止后会话又开了一轮");
-		await capture("smoke-environment-stopped.png");
+		if (requests !== before) throw new Error(`归档后又请求了 ${requests - before} 次模型`);
+		const session = (await agent.sessions()).find((item) => item.id === id);
+		if (session?.running) throw new Error("归档后会话又开了一轮");
+		await capture("smoke-environment-archived.png");
 	} finally {
 		setModel(undefined);
 	}

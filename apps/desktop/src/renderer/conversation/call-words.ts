@@ -9,7 +9,7 @@ import { activeLocale, formatList, type MessageKey, translate } from "@plume/ui"
 import { baseName } from "../files/open-file.ts";
 import { relativeTo } from "../markdown/assets.ts";
 import type { Call, ToolCallBlock } from "./grouping.ts";
-import { checklistTool, lineCommand, lineFile, lineJob, lineNote, lineSubject, lineVerb, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
+import { callVerb, checklistTool, lineCommand, lineFile, lineJob, lineNote, lineSubject, lineVerb, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
 import { polledJob } from "./turn-blocks.ts";
 
 /** 每种活（`ToolDefinition.kind`）默认的说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
@@ -132,13 +132,17 @@ function lineRange(lines: { from: number; to?: number } | undefined): string {
  * 一次调用在行上怎么说：模型写了一句给人看的说明（`ToolLine.note`）就用它；读文件、列目录说路径（`root` 是工作区）；其余说动作和对象。
  * 查后台任务输出的那一次说是哪个任务（种类是 `job`：启动它的那条命令的说明），停掉它的那一次说停止命令。
  */
-export function describeOne(block: ToolCallBlock, root?: string, job?: string): string {
+export function describeOne(block: ToolCallBlock, root?: string, job?: string, details?: unknown): string {
 	if (polledJob(block)) return describePolls(job, 1);
 	if (toolKind(block.name) === "job") return translate("tools.stopJob");
 	const said = lineNote(block.name, block.arguments);
 	if (said) return said;
 	const spoken = spokenLine(block.name);
-	if (spoken) return describeRun([{ toolName: block.name, subject: lineSubject(spoken, block.arguments) }]);
+	if (spoken?.verbFor) {
+		const subject = lineSubject(spoken, block.arguments, details);
+		return [callVerb(spoken, block.arguments, activeLocale(), { details }) || block.name, subject].filter(Boolean).join(" ");
+	}
+	if (spoken) return describeRun([{ toolName: block.name, subject: lineSubject(spoken, block.arguments, details) }]);
 	const location = locationOf(block, root);
 	if (location) return describeRun([{ toolName: block.name, subject: location }]);
 	if (defaultVerb(block.name)) return describeRun([{ toolName: block.name, subject: subjectFor(block) }]);
@@ -216,16 +220,19 @@ export function labelText(label: CallLabel): string {
 	return [label.verb, label.subject, label.note].filter(Boolean).join(" ");
 }
 
-/** `live`：这次调用还没跑完（参数在写、排着、等批准、在跑）。`root` 是工作区，`job` 是查看的那个后台任务的说明。 */
-export function callLabel(block: ToolCallBlock, live: boolean, root?: string, job?: string): CallLabel {
+/**
+ * `live`：这次调用还没跑完（参数在写、排着、等批准、在跑，起的后台事还在跑）。`root` 是工作区，`job` 是查看的那个后台任务的说明，
+ * `details` 是这次结果的（插件按这一次说动作、对象时要看，见 `ToolLine.verbFor`）。
+ */
+export function callLabel(block: ToolCallBlock, live: boolean, root?: string, job?: string, details?: unknown): CallLabel {
 	if (polledJob(block)) return { verb: describePolls(job, 1) };
 	if (toolKind(block.name) === "job") return { verb: translate("tools.stopJob") };
 	const said = lineNote(block.name, block.arguments);
 	if (said) return { verb: said };
 	const spoken = spokenLine(block.name);
 	if (spoken) {
-		const subject = lineSubject(spoken, block.arguments);
-		return { verb: lineVerb(spoken, activeLocale()) || block.name, ...(subject ? { subject } : {}) };
+		const subject = lineSubject(spoken, block.arguments, details);
+		return { verb: callVerb(spoken, block.arguments, activeLocale(), { details, live }) || block.name, ...(subject ? { subject } : {}) };
 	}
 	const kind = tensedKind(block.name);
 	// 不认得的工具（没登记说法的插件工具）照原名说。

@@ -29,8 +29,8 @@ import {
 	type CallState,
 	type CallStatus,
 	callStatus,
+	callStopped,
 	sameItems,
-	stoppedByUser,
 	useCallLive,
 	useCalls,
 	useTranscript,
@@ -89,7 +89,7 @@ function ToolGroup({
 	const [open, setOpen] = useTranscriptDisclosure(id);
 	// 只订阅这一组自己的几次调用：别处来了结果，标题不重画。
 	const statuses = useCalls((all) => calls.map((call) => callStatus(all, call.block.id, call.stopReason)), sameItems);
-	const stops = useCalls((all) => calls.map(({ block }) => stoppedByUser(all.results.get(block.id))), sameItems);
+	const stops = useCalls((all) => calls.map(({ block }) => callStopped(all, block.id)), sameItems);
 	const added = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "added"), 0));
 	const removed = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "removed"), 0));
 	const answeredBy = useCalls((all) => calls.flatMap(({ block }) => all.results.get(block.id)?.answeredBy ?? []), sameItems);
@@ -110,6 +110,7 @@ function ToolGroup({
 	const current = held === SUMMARY ? undefined : (calls.find(({ block }) => block.id === held) ?? calls[calls.length - 1]);
 	const at = current ? calls.indexOf(current) : -1;
 	const status = statuses[at];
+	const details = useCalls((all) => (current ? all.results.get(current.block.id)?.details : undefined));
 
 	// 后台命令回来时失败了也算：起它的那次 bash 早就以「已放到后台」跑完了。
 	const failedLater = members.some(
@@ -125,7 +126,7 @@ function ToolGroup({
 		const callLive = liveStatus(status);
 		const draft = writeDraft(current.block, status);
 		lines = draft.lines;
-		const label = callLabel(draft.block, callLive, cwd, jobs[at]);
+		const label = callLabel(draft.block, callLive, cwd, jobs[at], details);
 		const failed = status === "error" && !stops[at];
 		const marks = callLive ? null : (
 			<Marks
@@ -161,8 +162,9 @@ function ToolGroup({
 
 	const tail = members[members.length - 1];
 	const writing = live && tail?.kind === "thinking" && thinkingLive(tail.run) ? tail.run : null;
-	// 只有一次调用、还没开跑（参数在写、排在后面）的没有可看的：不能点开。
-	const expandable = !single || startedAt !== undefined || !liveStatus(statuses[0]);
+	// 只有一次调用、还没开跑（参数在写、排在后面）的没有可看的：不能点开。答完了、起的任务还在后台跑的有结果可看。
+	const answered = useCalls((all) => (only ? all.results.has(only.block.id) : false));
+	const expandable = !single || startedAt !== undefined || answered || !liveStatus(statuses[0]);
 	const attrs = only
 		? { "data-tool": only.block.name, "data-tool-call": only.block.id, "data-status": SLOT_STATUS[statuses[0] ?? "pending"] }
 		: { "data-plume-run": live ? "running" : "done" };
@@ -252,13 +254,15 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const { startedAt } = useCallLive(latest.block.id);
 	const live = liveStatus(status);
 	const draft = writeDraft(call.block, status);
-	const stopped = status === "error" && stoppedByUser(result);
+	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
 	const failed = status === "error" && !stopped;
 	const added = diffOf(result, "added");
 	const removed = diffOf(result, "removed");
-	const label: CallLabel = job && polls ? { verb: describePolls(started?.description, polls.length) } : callLabel(draft.block, live, cwd, started?.description);
+	const label: CallLabel =
+		job && polls ? { verb: describePolls(started?.description, polls.length) } : callLabel(draft.block, live, cwd, started?.description, result?.details);
 	const text = labelText(label);
-	const expandable = startedAt !== undefined || !live;
+	// 答完了、起的任务还在后台跑的（照跑着画）有结果可看。
+	const expandable = startedAt !== undefined || result !== undefined || !live;
 	const arrival = useArrival(enter);
 
 	return (

@@ -8,7 +8,7 @@
  * 展示状态按会话记、不跟着 DOM 和消息走：挂载了哪一段历史、哪些思考和工具组被点开过。最多记 12 个会话。
  */
 
-import type { CancelledDetails, ToolResultMessage } from "@plume/contract";
+import type { BackgroundCallState, CancelledDetails, ToolResultMessage } from "@plume/contract";
 import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 
 export interface TranscriptState {
@@ -29,6 +29,8 @@ export interface CallState {
 	results: ReadonlyMap<string, ToolResultMessage>;
 	/** 这个会话里放到后台的命令，按任务 id：启动它的那次调用写的说明和命令。查输出那一行说的是它（`describePolls`）。 */
 	jobs: ReadonlyMap<string, BackgroundJobInfo>;
+	/** 答完以后在后台留下了事的调用，按调用 id（`SessionView.backgroundCalls`）：起的任务在跑、被停、出错、跑完，约的唤醒被取消。 */
+	background: Readonly<Record<string, BackgroundCallState>>;
 	/** 正在等人确认的那次调用。 */
 	approval?: string;
 }
@@ -163,13 +165,29 @@ export type CallStatus = "pending" | "approval" | "running" | "done" | "error";
 export function callStatus(calls: CallState, id: string, stopReason: string): CallStatus {
 	if (calls.approval === id) return "approval";
 	const result = calls.results.get(id);
-	if (result) return result.isError ? "error" : "done";
+	if (result) {
+		if (result.isError) return "error";
+		/*
+		 * 调用早答完了，它起的后台任务还在跑：这一行照跑着画，直到任务结束——「已放到后台」的那条命令、在盯输出的监视，
+		 * 读的人一眼看得出哪件还在跑。被停下、出错结束的照停下、失败画，见 `callStopped`。
+		 */
+		const later = calls.background[id];
+		return later === "running" ? "running" : later === undefined || later === "exited" ? "done" : "error";
+	}
 	if (stopReason === "pending") return "pending";
 	return stopReason === "toolUse" && calls.running ? "running" : "error";
 }
 
+/**
+ * 这次调用是被停下的，不是失败：人按了停（结果 `details` 里的通用声明 `CancelledDetails`），或者它在后台留下的任务被叫停、
+ * 约的唤醒被取消（`CallState.background`）。
+ */
+export function callStopped(calls: CallState, id: string): boolean {
+	return stoppedByUser(calls.results.get(id)) || calls.background[id] === "stopped";
+}
+
 /** 结果出错是因为人按了停，不是失败：按结果 `details` 里的通用声明 `CancelledDetails` 认。 */
-export function stoppedByUser(result: ToolResultMessage | undefined): boolean {
+function stoppedByUser(result: ToolResultMessage | undefined): boolean {
 	return result?.isError === true && (result.details as Partial<Record<keyof CancelledDetails, unknown>> | undefined)?.cancelled === true;
 }
 

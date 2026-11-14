@@ -1,5 +1,5 @@
 /**
- * 界面入口：本插件交回的结果在对话里的那一行（`ui.agentDelivery`）。后台命令结束、`monitor` 送来新输出、定时唤醒到点时，
+ * 界面入口：本插件交回的结果在对话里的那一行（`ui.agentDelivery`）。后台命令结束、`monitor` 送来新输出、检查、定时任务、轮询到点时，
  * 结果作为一条运行时送达交给模型；那条消息是写给模型的，原样画出来，读的人会看见一大段自己没说过的话落在自己那一侧，
  * 什么都不画，模型又像是自己突然动了起来。所以画成一行：和工具行同一个骨架，标题先说结果，摘要说是哪件事，
  * 完整命令只在悬停时出现——那串 shell 不是写给人读的。另外登记本插件各工具在转录里的说法（`ui.toolLine`，见 `tool-lines.ts`）。
@@ -12,7 +12,7 @@ import { AlarmClock, CircleAlert, Terminal } from "@plume/ui/icons";
 import type { ComponentType } from "react";
 import type { DeliveryDetails } from "./delivery.ts";
 import { MESSAGES } from "./messages.ts";
-import { TOOL_LINES } from "./tool-lines.ts";
+import { TOOL_LINES, WAKEUP_LINES } from "./tool-lines.ts";
 import css from "./tools.css";
 
 type Job = Extract<DeliveryDetails, { kind: "job" }>;
@@ -35,10 +35,12 @@ function deliveries(ui: UiContext): ComponentType<AgentDeliveryProps> {
 				{reports.map((report) => {
 					const details = detailsOf(report);
 					if (details?.kind !== "wakeup") return null;
-					// 一行题注，不能点：要做的事模型这一轮自己会说，还在等的那些在环境卡片里。cron 表达式只在悬停时出现。
+					// 一行题注，不能点：先说是哪种（检查、定时任务、轮询），再接模型写给人看的那句；要做的事模型这一轮自己会说，
+					// 还在等的那些在环境卡片里。cron 表达式只在悬停时出现。
+					const lead = text.plans[details.cron === undefined ? "checkIn" : details.recurring ? "loop" : "prompt"];
 					return (
 						<div key={report.id} data-delivery-row="" data-delivery-kind="wakeup" data-plume-tip={details.cron}>
-							<FlowRow icon={<AlarmClock size={13} strokeWidth={1.8} className="plume-tools-icon" />} summary={`${text.wakeupFired} · ${report.title}`} />
+							<FlowRow icon={<AlarmClock size={13} strokeWidth={1.8} className="plume-tools-icon" />} summary={`${lead} · ${report.title}`} />
 						</div>
 					);
 				})}
@@ -106,6 +108,6 @@ export default {
 		document.head.append(style);
 		ui.effect(() => style.remove());
 		ui.agentDelivery(deliveries(ui));
-		for (const [tool, line] of Object.entries(TOOL_LINES)) ui.toolLine(tool, line);
+		for (const [tool, line] of Object.entries(TOOL_LINES)) ui.toolLine(tool, WAKEUP_LINES.includes(tool) ? { ...line, icon: AlarmClock } : line);
 	},
 } satisfies UiPlugin;

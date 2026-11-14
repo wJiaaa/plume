@@ -74,9 +74,12 @@ it("每个会话最多 10 个；子会话（没有 schedule）里拒绝", async 
 	const core = fakeCore();
 	for (let i = 0; i < MAX_WAKEUPS; i++)
 		expect((await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: `p${i}`, reason: "r" }, core.ctx)).isError).toBeFalsy();
-	const full = await cronCreateTool.execute({ cron: "*/5 * * * *", prompt: "x" }, core.ctx);
+	const full = await cronCreateTool.execute({ cron: "*/5 * * * *", prompt: "x", reason: "r" }, core.ctx);
 	expect(textOf(full)).toMatch(/already has 10.*cron_delete/);
-	expect(textOf(await cronDeleteTool.execute({ id: "wake-3" }, core.ctx))).toBe("Cancelled wake-3.");
+	const cancelled = await cronDeleteTool.execute({ id: "wake-3" }, core.ctx);
+	expect(textOf(cancelled)).toBe("Cancelled wake-3.");
+	// 转录里那一行要说取消的是哪种、要做的是什么：结果带上取消前的那一个。
+	expect(cancelled.details).toMatchObject({ kind: "wakeup", cancelled: true, wakeup: { id: "wake-3", prompt: "p2" } });
 	expect((await cronDeleteTool.execute({ id: "wake-3" }, core.ctx)).isError).toBe(true);
 	const child = await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: "x", reason: "y" }, withFiles({ cwd: "/", state: new Map() }));
 	expect(textOf(child)).toMatch(/Only the conversation itself can schedule wakeups/);
@@ -85,21 +88,25 @@ it("每个会话最多 10 个；子会话（没有 schedule）里拒绝", async 
 it("cron_create：默认循环、3 天后过期；3 天里对不上的拒绝、点名定时任务页", async () => {
 	const core = fakeCore();
 	const before = Date.now();
-	const made = await cronCreateTool.execute({ cron: "*/5 * * * *", prompt: "看部署" }, core.ctx);
+	const made = await cronCreateTool.execute({ cron: "*/5 * * * *", prompt: "看部署", reason: "盯着部署" }, core.ctx);
 	expect(textOf(made)).toMatch(/^Created cron-1\. Next firing: .* It repeats until .*, when it expires;/);
-	expect(core.made[0]).toMatchObject({ cron: "*/5 * * * *", recurring: true, prompt: "看部署" });
+	expect(core.made[0]).toMatchObject({ cron: "*/5 * * * *", recurring: true, prompt: "看部署", reason: "盯着部署" });
+	// 给人看的那句是必填的。
+	expect(textOf(await cronCreateTool.execute({ cron: "*/5 * * * *", prompt: "看部署" }, core.ctx))).toMatch(/reason is required/);
 	expect(core.made[0]!.expiresAt! - before).toBeGreaterThanOrEqual(3 * 24 * 60 * MINUTE);
-	const once = await cronCreateTool.execute({ cron: "30 14 * * *", prompt: "x", recurring: false }, core.ctx);
+	const once = await cronCreateTool.execute({ cron: "30 14 * * *", prompt: "x", reason: "r", recurring: false }, core.ctx);
 	expect(textOf(once)).toContain("It fires once, then is deleted.");
 	const never = fakeCore({ never: true });
-	const refused = await cronCreateTool.execute({ cron: " 0  0 30 2 * ", prompt: "x" }, never.ctx);
+	const refused = await cronCreateTool.execute({ cron: " 0  0 30 2 * ", prompt: "x", reason: "r" }, never.ctx);
 	expect(textOf(refused)).toMatch(/^"0 0 30 2 \*" does not match any time between one minute and 3 days from now\..*Scheduled page/);
 });
 
 it("cron_list 列出待触发的", async () => {
 	const core = fakeCore();
 	await scheduleWakeupTool.execute({ delay_seconds: 600, prompt: "看 CI", reason: "等 CI" }, core.ctx);
-	expect(textOf(await cronListTool.execute({}, core.ctx))).toMatch(/wake-1: one-time wakeup, next .* — 等 CI/);
+	const listed = await cronListTool.execute({}, core.ctx);
+	expect(textOf(listed)).toMatch(/wake-1: one-time wakeup, next .* — 等 CI/);
+	expect(listed.details).toMatchObject({ kind: "wakeups", wakeups: [{ id: "wake-1", reason: "等 CI" }] });
 	expect(textOf(await cronListTool.execute({}, withFiles({ cwd: "/", state: new Map() })))).toBe("No pending wakeups or cron jobs in this conversation.");
 });
 
@@ -133,7 +140,9 @@ it("到点送进去的话：循环 cron 写明第几次、下一次和过期，�
 		fired: 2,
 	};
 	const { text, delivery } = wakeupMessage(cron, { next: new Date(2026, 9, 23, 14, 10).getTime(), skipped: 1 });
-	expect(delivery.details).toEqual({ kind: "wakeup", cron: "*/5 * * * *" });
+	// 反复的带上 recurring：那一行据此说是「轮询」，不是只来一次的「定时任务」。
+	expect(delivery.details).toEqual({ kind: "wakeup", cron: "*/5 * * * *", recurring: true });
+	expect(wakeupMessage({ ...cron, recurring: false }, { next: null, skipped: 0 }).delivery.details).toEqual({ kind: "wakeup", cron: "*/5 * * * *" });
 	expect(text).toMatch(/cron_create.*id="cron-1".*第 2 次触发/);
 	expect(text).toMatch(/又到点了 1 次，那几次跳过了/);
 	expect(text).toMatch(/下一次在 2026-10-23 14:10 \(UTC\+08:00\)；它在 2026-10-26 14:00 \(UTC\+08:00\) 过期/);
