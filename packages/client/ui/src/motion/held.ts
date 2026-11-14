@@ -4,7 +4,7 @@ import { useLayoutEffect, useState } from "react";
  * 一句话至少挂多久才换下一句。
  *
  * 一段探索里 read、grep 常常一两百毫秒就来一次，来一次换一句的话，字还没读完就滚走了，整行一直在抖。
- * 650ms 是 OpenClaude Desktop（照官方 Claude 桌面端）的取值。它必须比滚进来的那段动画（`DURATION.slow`）
+ * 650ms：滚进来的那段动画（`DURATION.slow`，340ms）落定之后，还要留出三百来毫秒读完一句短话。它必须比那段动画
  * 长，否则上一句还没落定下一句就开始滚。
  */
 export const HOLD_MS = 650;
