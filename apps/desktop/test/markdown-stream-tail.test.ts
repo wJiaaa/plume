@@ -135,3 +135,19 @@ test("图的地址还在写：先藏起来，并说明藏的是图，好先放�
 	assert.equal(completeTailHeld("[文档](/Users/me/a.m").heldImage, false, "普通链接不是图");
 	assert.equal(completeTailHeld("```md\n![图](/a/b").heldImage, false, "代码块里的不算");
 });
+
+test("写完的链接、行内代码还在等结论时，连同后面的字先藏着；有了结论照常放出来", () => {
+	const waiting = new Set(["src/a.ts", "b.ts"]);
+	const asked: string[] = [];
+	const wait = (kind: "link" | "code", value: string) => (asked.push(`${kind}:${value}`), waiting.has(value));
+	assert.equal(completeTailHeld("看 [a](src/a.ts) 和后面", wait).text, "看 ");
+	assert.equal(completeTailHeld("看 `b.ts` 和后面", wait).text, "看 ");
+	assert.equal(completeTailHeld('看 [a](src/a.ts "标题") 和后面', wait).text, "看 ", "给的是去掉标题的地址");
+	assert.equal(completeTailHeld("**重点 [a](src/a.ts)", wait).text, "**重点** ", "藏在强调里时照常补上收口");
+	assert.deepEqual(asked.slice(0, 2), ["link:src/a.ts", "code:b.ts"]);
+
+	waiting.clear();
+	assert.equal(completeTailHeld("看 [a](src/a.ts) 和 `b.ts`", wait).text, "看 [a](src/a.ts) 和 `b.ts`");
+	assert.equal(completeTailHeld("![图](src/a.ts) 后面", () => true).text, "![图](src/a.ts) 后面", "图不等");
+	assert.equal(completeTailHeld("[a](src/a.ts)\n\n下一段", () => true).text, "[a](src/a.ts)\n\n下一段", "只看最后一段");
+});

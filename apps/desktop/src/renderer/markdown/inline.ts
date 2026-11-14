@@ -165,7 +165,7 @@ const SPAN = 1000;
 const URL_SPAN = 2048;
 
 /** 代码跨度，用开头那串反引号的个数定界。 */
-function matchCode(source: string, start: number): { text: string; next: number } | null {
+export function matchCode(source: string, start: number): { text: string; next: number } | null {
 	let fence = 0;
 	while (source[start + fence] === "`") fence++;
 	// 手写这个循环而不是 `indexOf`：`indexOf` 找不到时照样会把剩下的全扫一遍，上限就落不下来。
@@ -230,7 +230,7 @@ function matchMath(source: string, start: number): { tex: string; display: boole
 }
 
 /** `[label](href)`：标签里允许嵌套，地址里允许成对的括号。 */
-function matchLink(source: string, start: number): { label: string; href: string; next: number } | null {
+export function matchLink(source: string, start: number): { label: string; href: string; next: number } | null {
 	let depth = 0;
 	let i = start;
 	// 标签的上限是 CommonMark 自己的 999 字符；扫过这条线还没收口的，不是链接。

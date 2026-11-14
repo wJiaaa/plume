@@ -214,9 +214,17 @@ async function readHead(path: string, limit: number): Promise<Buffer | null> {
  * 工作目录。按工作目录直接拼，点开的是一个不存在的文件。这里先按原样找，找不到再在目录的文件里按结尾
  * 匹配，由调用方决定只有一个匹配时才认。文件夹带着结尾的 `/` 交回去，界面凭它画文件夹图标。
  * `dataDir` 是 Plume 的数据目录：问 git 用的隔离视图建在它下面，见 `git`。
+ *
+ * 绝对路径不找，只看这台机器上有没有它：回复里常有别的机器上的路径（模型经 ssh 看过的服务器），
+ * 本机没有就不该画成能点的文件签。只回答在不在，和主进程的 `files:exists` 一样不读内容。
  */
 export async function locateSessionFiles(cwd: string, written: string, dataDir: string): Promise<string[]> {
 	if (typeof written !== "string") return [];
+	if (isAbsolute(written)) {
+		const info = await stat(written).catch(() => null);
+		if (info?.isFile()) return [written];
+		return info?.isDirectory() ? [`${written.replace(/[/\\]+$/, "")}${sep}`] : [];
+	}
 	const clean = written.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
 	// 通配符、走出目录的 `..`，都不是「回复里提到的一个文件」。
 	if (!clean || isAbsolute(clean) || /[*?[\]]/.test(clean) || clean.split("/").includes("..")) return [];

@@ -781,9 +781,9 @@ export interface AgentService {
 	listDirectory(sessionId: string, path: string): Promise<FileEntry[]>;
 	/**
 	 * 在会话工作目录里找一个写得不全的路径：裸文件名（`approvals.ts`）或相对于某个子目录的路径。
-	 * 返回找到的绝对路径，按路径排好；跳过依赖和构建产物目录。
+	 * 返回找到的绝对路径，按路径排好；跳过依赖和构建产物目录。绝对路径不找，本机有它就原样返回。
 	 */
-	locateFiles(sessionId: string, relative: string): Promise<string[]>;
+	locateFiles(sessionId: string, written: string): Promise<string[]>;
 	stop(sessionId: string): void;
 	/** 答弹着的那张卡。对 `HumanRequest` 只认 `"reject"`（人不答），别的不理。 */
 	respond(sessionId: string, toolCallId: string, decision: ApprovalDecision): void;

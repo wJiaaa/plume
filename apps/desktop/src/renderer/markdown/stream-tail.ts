@@ -20,6 +20,7 @@
  */
 
 import { openFence } from "./blocks.ts";
+import { matchCode, matchLink } from "./inline.ts";
 
 const TABLE_SEPARATOR = /^\s*\|?[\s:|-]+\|[\s:|-]*$/;
 /** 只写出了块标记、还没有内容的一行：`#`、`-`、`1.`、`>`。 */
@@ -36,6 +37,13 @@ const URL_SPAN = 2048;
 /** 一行内容自成一个行内单元的开头：列表项和标题。 */
 const UNIT_START = /^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s)/;
 
+/**
+ * 写完了的链接（`link`，给地址）或行内代码（`code`，给里面的字）还要不要先藏着。
+ *
+ * 文件签就要这个：指着本机的链接要等找完才知道画成签还是字，先放出来的话，结论一到它就跳一下。
+ */
+export type TailWait = (kind: "link" | "code", value: string) => boolean;
+
 export function completeTail(source: string): string {
 	return completeTailHeld(source).text;
 }
@@ -45,8 +53,11 @@ export function completeTail(source: string): string {
  *
  * 图的地址写完之前不画（同链接），而本地路径动辄上百字：这段时间里屏幕上什么都不长，像是卡住了，
  * `)` 一到又整张跳出来。知道藏的是图，调用方就能先在那里放一块占位。
+ *
+ * `wait` 让写完了的链接和行内代码也藏着，连同它后面的字，见 `TailWait`。只看最后一个行内单元：
+ * 屏幕已经放到下一段、下一个列表项时，前面那条就不再藏了。
  */
-export function completeTailHeld(source: string): { text: string; heldImage: boolean } {
+export function completeTailHeld(source: string, wait?: TailWait): { text: string; heldImage: boolean } {
 	const lines = source.split("\n");
 	const last = lines.length - 1;
 
@@ -118,7 +129,7 @@ export function completeTailHeld(source: string): { text: string; heldImage: boo
 			break;
 		}
 	}
-	const { text: closed, heldImage } = closeInline(tail.slice(unit).join("\n"));
+	const { text: closed, heldImage } = closeInline(tail.slice(unit).join("\n"), wait);
 
 	return { text: [...lines.slice(0, start), ...tail.slice(0, unit), closed].join("\n"), heldImage };
 }
@@ -148,7 +159,7 @@ function holdTableHeader(tail: string[]): void {
  * 强调补上收口；代码跨度和链接藏到写完（理由见文件开头）；只写出了开头标记、后面还一个字都没有
  * 的，先不画。
  */
-function closeInline(text: string): { text: string; heldImage: boolean } {
+function closeInline(text: string, wait: TailWait | undefined): { text: string; heldImage: boolean } {
 	const open: { fence: string; at: number }[] = [];
 	let end = text.length;
 	let suffix = "";
@@ -167,6 +178,11 @@ function closeInline(text: string): { text: string; heldImage: boolean } {
 			const width = runOf(text, i, "`");
 			const close = findRun(text, i + width, "`", width);
 			if (close >= 0) {
+				const code = wait && matchCode(text, i);
+				if (code && wait("code", code.text)) {
+					end = i;
+					break;
+				}
 				i = close + width;
 				continue;
 			}
@@ -189,6 +205,12 @@ function closeInline(text: string): { text: string; heldImage: boolean } {
 			const from = char === "!" ? i + 1 : i;
 			const link = scanLink(text, from);
 			if (link.state === "closed") {
+				// 写完的链接还在等找文件的结论：和地址没写完一样整个先不画，见 `TailWait`。
+				const href = char === "[" && wait ? matchLink(text, from)?.href : undefined;
+				if (href !== undefined && wait?.("link", href)) {
+					end = i;
+					break;
+				}
 				i = link.next;
 				continue;
 			}

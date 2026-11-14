@@ -10,7 +10,7 @@
  */
 
 import { Disclosure, OverlayScrollbar, translate } from "@plume/ui";
-import { Fragment, memo, type ReactNode, useMemo, useRef, useSyncExternalStore } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import type { Block, ListItem } from "./blocks.ts";
 import { parseMarkdown, parseMarkdownChunks } from "./blocks.ts";
@@ -20,12 +20,14 @@ import { filePathInCode } from "./file-link.ts";
 import { MarkdownCode } from "./MarkdownCode.tsx";
 import { ImageDocument, MarkdownImage } from "./MarkdownImage.tsx";
 import { ReplyCode, ReplyCodeScope } from "./ReplyCode.tsx";
-import { Link } from "./MarkdownLink.tsx";
+import { awaitingLink, Link } from "./MarkdownLink.tsx";
 import { MarkdownTable } from "./MarkdownTable.tsx";
 import { mathReady, onMathReady, renderMath } from "./math.ts";
 import { isMermaid, MermaidBlock } from "./MermaidBlock.tsx";
 import { groupTokens, HUGE_BLOCK } from "./slice.ts";
-import { completeTailHeld } from "./stream-tail.ts";
+import { useFileScope } from "../files/scope.ts";
+import { useLocatedVersion } from "./located-path.ts";
+import { completeTailHeld, type TailWait } from "./stream-tail.ts";
 import { stripEmoji } from "./strip-emoji.ts";
 import { useSmoothText } from "./useSmoothText.ts";
 
@@ -82,15 +84,36 @@ function MarkdownView({
 }) {
 	// 写完之后还要演完：没放出来的字放完、最后一个字淡完，`active` 才落下。见 `useSmoothText`。
 	const { text: shown, active, recent } = useSmoothText(text, streaming);
+	/*
+	 * 指着本机的链接、像路径的行内代码，找完了才放出来：先放成字、找到了再换成文件签，字会跳一下。见
+	 * `awaitingLink`。只在对话里（有 `FileScope`）、正在输出时这样；`located` 变了就再看一遍停在哪。
+	 */
+	const fileScope = useFileScope();
+	const located = useLocatedVersion(active && !!fileScope);
+	const wait = useMemo<TailWait | undefined>(() => {
+		if (!fileScope) return undefined;
+		return (kind, value) => {
+			const href = kind === "link" ? value : filePathInCode(value);
+			return !!href && awaitingLink(fileScope, href);
+		};
+	}, [fileScope]);
+	/*
+	 * 模型写到哪就从哪开始找，不等屏幕放到那里：屏幕落后模型几十到几百毫秒，多数链接放到时已经有结论，
+	 * 一下都不用停。这一遍只为开始找，`false` 让它扫完最后一段里的每一条。
+	 */
+	useEffect(() => {
+		if (streaming && wait) completeTailHeld(text, (kind, value) => (wait(kind, value), false));
+	}, [text, streaming, wait]);
 	// 围栏里的原文是插件的数据，不能清理字符；系统表情只在下面画普通文字时拿掉。
 	/*
 	 * 换行统一成 `\n`：分块时也是这么换的（`parseMarkdownChunks`），下面按块的原文在这里找它的位置，带着 `\r` 就找不到，
 	 * 之后每一块的位置都差几个字，新放出来的字认错，有的旧字重新淡一遍。
 	 */
 	const { text: clean, heldImage } = useMemo(() => {
-		const held = active ? completeTailHeld(shown) : { text: shown, heldImage: false };
+		const held = active ? completeTailHeld(shown, wait) : { text: shown, heldImage: false };
 		return held.text.includes("\r\n") ? { ...held, text: held.text.replace(/\r\n/g, "\n") } : held;
-	}, [shown, active]);
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- `located` 变了是停着的链接有了结论，要重算停在哪
+	}, [shown, active, wait, located]);
 	const doc = useMemo(
 		() => ({ baseDir, sessionId, localImages, remoteImages, streaming: streaming || active }),
 		[baseDir, sessionId, localImages, remoteImages, streaming, active],
@@ -336,13 +359,7 @@ function renderToken(token: Inline, fade: boolean): ReactNode {
 			const code = fade ? <FadeIn as="code">{token.text}</FadeIn> : <code>{token.text}</code>;
 			// 模型常把路径写成 `path/to/file.ts:42`；解析不到本机路径、或找遍了也没有这个文件时，`Link` 原样还给这枚代码。
 			const path = filePathInCode(token.text);
-			return path ? (
-				<Link href={path} guessed>
-					{code}
-				</Link>
-			) : (
-				code
-			);
+			return path ? <Link href={path}>{code}</Link> : code;
 		}
 		case "break":
 			return <br />;

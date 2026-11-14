@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { operateSessionFile } from "../src/file-operations.ts";
@@ -113,10 +113,15 @@ it.skipIf(process.platform === "win32")("找文件时不执行仓库配置里的
 	expect(await readFile(trace, "utf8").catch(() => null)).toBeNull();
 });
 
-it("找文件：通配符、走出目录的 `..`、绝对路径都不找", async () => {
+it("找文件：通配符、走出目录的 `..` 都不找", async () => {
 	expect(await locateSessionFiles(cwd, "*.ts", join(dir, "data"))).toEqual([]);
 	expect(await locateSessionFiles(cwd, "../secret.txt", join(dir, "data"))).toEqual([]);
-	expect(await locateSessionFiles(cwd, join(dir, "secret.txt"), join(dir, "data"))).toEqual([]);
+});
+
+it("找文件：绝对路径只看本机有没有，不在工作目录里也算", async () => {
+	expect(await locateSessionFiles(cwd, join(dir, "secret.txt"), join(dir, "data"))).toEqual([join(dir, "secret.txt")]);
+	expect(await locateSessionFiles(cwd, join(cwd, "src"), join(dir, "data"))).toEqual([`${join(cwd, "src")}${sep}`]);
+	expect(await locateSessionFiles(cwd, join(dir, "gone.ts"), join(dir, "data"))).toEqual([]);
 });
 
 it("服务按会话的工作目录读和找；没有这个会话时什么都不给", async () => {

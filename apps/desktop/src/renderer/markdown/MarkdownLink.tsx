@@ -12,7 +12,7 @@ import { type FileScopeValue, useFileScope } from "../files/scope.ts";
 import { isAbsolutePath, resolveAsset } from "./assets.ts";
 import { FileChoices } from "./FileChoices.tsx";
 import { fileLinkCaption, filePathInUrl, splitLineSuffix } from "./file-link.ts";
-import { useLocatedPaths } from "./located-path.ts";
+import { awaitingPaths, useLocatedPaths } from "./located-path.ts";
 import { revealKey } from "../files/open-targets.ts";
 import { fileExits, usePathMenu } from "./PathMenu.tsx";
 import { touchedFile } from "./touched-file.ts";
@@ -219,16 +219,15 @@ function FileLinkAction({ label, icon, tipSide, onClick }: { label: string; icon
 }
 
 /**
- * 回复里的一条链接。
- *
- * `guessed`：这枚链接不是模型写的，是从行内代码的样子猜出来的（`Markdown.tsx` 里的 `filePathInCode`）。
- * 猜的那种找到了才画成文件签，找遍了也没有就一直是行内代码：画成文件签只会让人点开一句「读不到」。
- * 模型自己写的链接不这么退，它可能是这一轮稍后才写出来的文件。
+ * 回复里的一条链接，或是一枚看着像路径的行内代码（`Markdown.tsx` 里的 `filePathInCode`）。
  *
  * 网址在系统浏览器里打开。指着本机的地址只在对话里画成文件签（要知道是哪个会话、相对哪个目录，见
- * `files/scope.ts`）；别处画的 Markdown 里照旧是普通的字。
+ * `files/scope.ts`），而且找到了才画：模型写的链接常指着别的机器（经 ssh 看过的服务器）或根本没有的
+ * 文件，画成签只会让人点开一句「读不到」。没找到时、还在找时都是原来的字，找到了才换成签——不先画成
+ * 签再撤回，那样找不到的那几枚每次挂上都闪一下。换的那一下怎么尽量不出现见 `located-path.ts`、
+ * `awaitingLink`。别处画的 Markdown 里照旧是普通的字。
  */
-export function Link({ href, guessed = false, children }: { href: string; guessed?: boolean; children: ReactNode }) {
+export function Link({ href, children }: { href: string; children: ReactNode }) {
 	const scope = useFileScope();
 	if (/^https?:\/\//i.test(href)) {
 		return (
@@ -239,34 +238,51 @@ export function Link({ href, guessed = false, children }: { href: string; guesse
 	}
 	if (!scope) return <>{children}</>;
 	return (
-		<LocalLink href={href} guessed={guessed} scope={scope}>
+		<LocalLink href={href} scope={scope}>
 			{children}
 		</LocalLink>
 	);
 }
 
-function LocalLink({ href, guessed, scope, children }: { href: string; guessed: boolean; scope: FileScopeValue; children: ReactNode }) {
+/**
+ * 一条链接指着本机的什么、要不要去找。不是本机路径（网址、锚点）时是 null。
+ *
+ * `query` 是拿去找的那条：`approvals.ts:125` 拼在工作目录上多半什么都不指，模型写的是裸名字，或相对某个
+ * 子包的路径，所以相对路径照写的样子去目录里找；绝对路径照解析出的样子（解过码、规整过）只问在不在。
+ * `touched` 是这场对话 read、edit、write 过的那个文件：路径是现成的，当场就画，不用等磁盘。
+ */
+function linkTarget(scope: FileScopeValue, href: string): { guess: string; query: string; touched: string | null; lines: LineRange | null } | null {
 	const { path: written, lines } = splitLineSuffix(href);
 	const target = filePathInUrl(written) ?? written;
 	const guess = resolveAsset(scope.cwd, target);
-	/*
-	 * `approvals.ts:125` 拼在工作目录上多半什么都不指：模型写的是裸名字，或相对某个子包的路径。只能是那一个
-	 * 文件的就认它；同名的有几个就让人挑，见 `located-path.ts`。绝对路径不找。
-	 */
-	const searched = !!guess && !isAbsolutePath(target);
-	// 这场对话 read、edit、write 过的，路径是现成的：当场就画，不用等磁盘。
-	const touched = useMemo(() => (searched ? touchedFile(scope.touched, scope.cwd, [scope.cwd], target) : null), [searched, scope.touched, scope.cwd, target]);
-	const located = useLocatedPaths(searched && !touched ? scope.sessionId : null, target);
-	const found = touched ? [touched] : located;
-	/*
-	 * 猜出来的那种，找到之前不画。找的途中先按工作目录拼着画成文件签、找完没有再撤回成代码，回复里那几枚
-	 * 就闪一下；没找到的不记在同步缓存里，每次挂载都闪。
-	 */
-	if (guessed && searched && !found?.length) return <>{children}</>;
-	const path = found?.length === 1 ? found[0]! : guess;
-	if (!path) return <>{children}</>;
+	if (!guess) return null;
+	if (isAbsolutePath(target)) return { guess, query: guess, touched: null, lines };
+	return { guess, query: target, touched: touchedFile(scope.touched, scope.cwd, [scope.cwd], target), lines };
+}
+
+/**
+ * 正在输出的回复要不要先停在这条链接前面：它指着本机、这场对话没碰过、还没找出结论。停着等结论，放出来
+ * 时就是它最终的样子，不会先是字、随后跳成签。停多久、怎么等见 `awaitingPaths`。
+ */
+export function awaitingLink(scope: FileScopeValue, href: string): boolean {
+	const target = linkTarget(scope, href);
+	return !!target && !target.touched && awaitingPaths(scope.sessionId, target.query);
+}
+
+function LocalLink({ href, scope, children }: { href: string; scope: FileScopeValue; children: ReactNode }) {
+	const target = useMemo(() => linkTarget(scope, href), [scope, href]);
+	const located = useLocatedPaths(target && !target.touched ? scope.sessionId : null, target?.query ?? null);
+	const found = target?.touched ? [target.touched] : located;
+	// 同名的有几个就让人挑，见 `located-path.ts`。
+	if (!target || !found?.length) return <>{children}</>;
 	return (
-		<FileLink href={href} path={path} lines={lines} root={scope.cwd} choices={found && found.length > 1 ? found : undefined}>
+		<FileLink
+			href={href}
+			path={found.length === 1 ? found[0]! : target.guess}
+			lines={target.lines}
+			root={scope.cwd}
+			choices={found.length > 1 ? found : undefined}
+		>
 			{children}
 		</FileLink>
 	);

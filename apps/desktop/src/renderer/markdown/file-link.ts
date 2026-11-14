@@ -94,8 +94,9 @@ const BARE_FILE_EXTENSIONS = new Set(
  * 模型常把路径写成 `path/to/file.ts:42`，这类行内代码要画成文件签。带空格、括号、引号、协议的都不是。
  *
  * 只看样子分不出 `src/utils` 和 `origin/main`。带目录的相对路径因此不要求扩展名：`Link` 会先在磁盘上
- * 找，找到了才画，`origin/main` 找不到就留作代码。绝对路径不去找，画不画全凭这里，所以仍要最后一段
- * 有以字母开头的扩展名；裸名字只认 `BARE_FILE_EXTENSIONS`，不然 `console.log` 也成了文件。
+ * 找，找到了才画，`origin/main` 找不到就留作代码。绝对路径仍要最后一段有以字母开头的扩展名：`/api`、
+ * `/login` 这类路由和本机的 `/tmp`、`/usr` 形状一样，不拿去问；裸名字只认 `BARE_FILE_EXTENSIONS`，
+ * 不然 `console.log` 也成了文件。
  */
 export function filePathInCode(text: string): string | null {
 	const raw = text.trim();

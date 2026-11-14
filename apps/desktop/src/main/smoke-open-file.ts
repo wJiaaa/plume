@@ -140,10 +140,30 @@ export async function checkOpenFile(options: {
 				"- [doc.pdf](open-file/media/doc.pdf)",
 				"- [sound.wav](open-file/media/sound.wav)",
 				"- [clip.webm](open-file/media/clip.webm)",
+				// 本机没有的：别的机器上的绝对路径、没写出来的相对路径、像路径的行内代码，一直是字。
+				"- [request.ts:138](/plume-smoke-missing/server/request.ts:138)",
+				"- [gone.ts](open-file/src/gone.ts)",
+				"- `open-file/src/gone-code.ts`",
 			].join("\n"),
 		}));
+		// 从回复开始写起盯着：没有的那几枚哪怕先画成签、一帧后撤回，也算错。
+		const missing = ["request.ts", "gone.ts", "gone-code.ts"];
+		await page(`(() => {
+			const missing = ${JSON.stringify(missing)};
+			window.__plumeFlashed = [];
+			new MutationObserver(() => {
+				for (const name of document.querySelectorAll('[data-screen=chat] [data-file-link] [data-file-name]'))
+					if (missing.includes(name.textContent) && !window.__plumeFlashed.includes(name.textContent)) window.__plumeFlashed.push(name.textContent);
+			}).observe(document.body, { subtree: true, childList: true, characterData: true });
+		})()`);
 		await send("给我看看这些文件");
 		await until(`Boolean(${chip("clip.webm")})`, "回复里画出文件签");
+		await until(
+			`(() => { const text = document.querySelector('[data-screen=chat]')?.textContent ?? ''; return ${JSON.stringify(missing)}.every((name) => text.includes(name)); })()`,
+			"本机没有的文件照样写在回复里",
+		);
+		const flashed = await page<string[]>(`window.__plumeFlashed`);
+		if (flashed.length) throw new Error(`本机没有的文件画成过文件签：${flashed.join("、")}`);
 		await until(`${chip("app.ts")}?.querySelector('[data-file-line]')?.textContent === ':30'`, "文件签带着行号");
 
 		// 点带行号的签：文件面板打开它，停在第 30 行并亮一下。

@@ -2852,11 +2852,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				readListedFile(session.contextEstimate?.memoryFiles.map((file) => file.path) ?? [], path)
 			);
 		},
-		async locateFiles(sessionId, relative) {
+		async locateFiles(sessionId, written) {
 			const session = sessions.get(sessionId);
 			if (!session) return [];
 			const roots = [...new Set([session.summary.cwd, ...projectRootsFor(projects, session.summary.cwd, session.summary.project)])];
-			return [...new Set((await Promise.all(roots.map((root) => locateSessionFiles(root, relative, dataDir)))).flat())].sort();
+			return [...new Set((await Promise.all(roots.map((root) => locateSessionFiles(root, written, dataDir)))).flat())].sort();
 		},
 		stop(sessionId) {
 			stopSession(find(sessionId));

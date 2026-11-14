@@ -149,9 +149,12 @@ export async function isFolder(sessionId: string, path: string): Promise<boolean
 	}
 }
 
-/** 在会话工作目录里找一个写得不全的路径，见 `AgentService.locateFiles`。 */
-export function locateFiles(sessionId: string, relative: string): Promise<string[]> {
-	return agent ? agent.locateFiles(sessionId, relative).catch(() => []) : Promise.resolve([]);
+/**
+ * 在会话工作目录里找一个写得不全的路径，绝对路径只看在不在，见 `AgentService.locateFiles`。
+ * 问不到（agent 进程不在、调用失败）时是 null，和「找过了、没有」分开。
+ */
+export function locateFiles(sessionId: string, written: string): Promise<string[] | null> {
+	return agent ? agent.locateFiles(sessionId, written).catch(() => null) : Promise.resolve(null);
 }
 
 /**
@@ -168,7 +171,7 @@ export async function findFile(sessionId: string, written: string): Promise<stri
 		const name = baseName(written);
 		return entries.some((entry) => !entry.isDirectory && entry.name === name) ? written : null;
 	}
-	const files = (await locateFiles(sessionId, written)).filter((path) => !/[/\\]$/.test(path));
+	const files = ((await locateFiles(sessionId, written)) ?? []).filter((path) => !/[/\\]$/.test(path));
 	return files.length === 1 ? files[0]! : null;
 }
 
