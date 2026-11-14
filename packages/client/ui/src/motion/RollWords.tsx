@@ -42,16 +42,21 @@ export function RollWords({
 	useLayoutEffect(() => {
 		const element = box.current;
 		if (!element) return;
-		const from = width.current;
-		if (from === null) {
+		const last = width.current;
+		if (last === null) {
 			// 头一次只记下宽度，不写样式：转录里每一行挂上时都走这里，写一次就让下一行的读重新排版。
 			width.current = element.offsetWidth;
 			return;
 		}
+		/*
+		 * 上一次还没缓完就又变了（流式输出时一秒三十次）：从此刻画着的宽度接着走。从上一个终点起步的话，
+		 * 每一拍先跳到那个终点再缓，过渡只走得完开头一小截，读起来是一顿一顿地跳。
+		 */
+		const from = element.style.width !== "" ? element.getBoundingClientRect().width : last;
 		element.style.width = "";
 		const to = element.offsetWidth;
 		width.current = to;
-		if (from === to) return;
+		if (Math.abs(from - to) < 0.5) return;
 		element.style.width = `${from}px`;
 		void element.offsetWidth;
 		element.style.width = `${to}px`;
