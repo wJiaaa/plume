@@ -17,7 +17,7 @@ import { openReferencedSession } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
 import { SessionReferences } from "../composer/SessionReferences.tsx";
 import { MessageSquarePlus, Pencil } from "@plume/ui/icons";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type ReactNode, useContext, useMemo, useRef, useState } from "react";
 import { attachmentActions } from "../composer/attachments/actions.ts";
 import { AttachmentMenu } from "../composer/attachments/AttachmentMenu.tsx";
 import { AttachmentStrip } from "../composer/attachments/AttachmentStrip.tsx";
@@ -26,6 +26,7 @@ import { MarkGlyph } from "../composer/attachments/FileKindIcon.tsx";
 import { useFileScope } from "../files/scope.ts";
 import { usePluginDisplayName } from "../market/store.ts";
 import { openFromEvent, openViewer } from "../image/index.ts";
+import { Arrival } from "../markdown/useSmoothText.ts";
 import { BubbleText } from "./BubbleText.tsx";
 import { useFilesBack } from "./files-back.tsx";
 import { ForkAction } from "./ForkAction.tsx";
@@ -35,6 +36,12 @@ import { MessageEditor } from "./MessageEditor.tsx";
 import { RevertAction } from "./RevertAction.tsx";
 import { type SentFile, sentAttachments, spokenText } from "./sent-attachments.ts";
 import { useCalls } from "./view-state.ts";
+
+/**
+ * 时间戳离现在这么近的才算刚发出去。时间戳是 agent 进程开这一轮时打的，到转录里只隔一次推送；
+ * 「显示更早的 N 轮」翻出来的、没有 `Arrival` 的地方（预览、插件画的转录）挂上的都是旧消息，靠这条挡住。
+ */
+const SENT_JUST_NOW = 3000;
 
 /** `index` 是它在会话里的位置，`last` 说它是不是最后一条人说的话：撤回、编辑、分叉按它们认是哪一条。 */
 export function UserBubble({ message, index, last = false }: { message: UserMessage; index?: number; last?: boolean }) {
@@ -52,6 +59,13 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(text);
 	const filesBack = useFilesBack();
+	/*
+	 * 刚发出去的这一条从右下角长出来（`.plume-user-arrive`）。打开、切回会话时已有的气泡不演（`Arrival.fresh`）；
+	 * 新对话的第一句是随整页一起挂上的，同样算刚露面，那一下演的是输入框升起。
+	 * 演完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
+	 */
+	const arrival = useContext(Arrival);
+	const [arriving, setArriving] = useState(() => !arrival.fresh && Date.now() - message.timestamp < SENT_JUST_NOW);
 
 	/** 看图器里的这几张：已经发出去，不能改写；标注完的副本放回这个会话的输入框（没有输入框的转录照旧复制）。 */
 	const viewerImages = () =>
@@ -143,7 +157,14 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 	}
 
 	return (
-		<div ref={root} data-plume-quote="user" className="group/msg flex w-full flex-col items-end">
+		<div
+			ref={root}
+			data-plume-quote="user"
+			className={`group/msg flex w-full flex-col items-end${arriving ? " plume-user-arrive" : ""}`}
+			onAnimationEnd={(event) => {
+				if (event.target === event.currentTarget) setArriving(false);
+			}}
+		>
 			{message.sessionRefs && (
 				<SessionReferences
 					references={message.sessionRefs}

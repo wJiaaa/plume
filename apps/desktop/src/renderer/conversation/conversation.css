@@ -1,5 +1,5 @@
 /*
- * 转录里工具类写不清的那几样：用户气泡里的 Markdown、折起来的长消息、问题导航的悬停预览。取值只用 token。
+ * 转录里工具类写不清的那几样：用户气泡里的 Markdown、刚发出去的气泡入场、折起来的长消息、问题导航的悬停预览。取值只用 token。
  */
 
 @layer components {
@@ -8,6 +8,22 @@
 		font-size: inherit;
 		line-height: inherit;
 		letter-spacing: 0;
+	}
+
+	/*
+	 * 刚发出去的一条从右下角长出来：气泡贴着右边落下，从它落下的那个角长开，读起来是输入框里那句被放了上去。
+	 * 只动 transform 和透明度，版面一开始就是最终的样子，跟随底部不受影响。只在发出的那一下演，见 `UserBubble`。
+	 */
+	.plume-user-arrive {
+		transform-origin: 100% 100%;
+		animation: plume-user-arrive var(--plume-t-slow) var(--plume-e-out) both;
+	}
+
+	@keyframes plume-user-arrive {
+		from {
+			opacity: 0;
+			transform: translateY(5px) scale(0.9);
+		}
 	}
 
 	/* 折起来的长消息：露出几行由 `BubbleText` 给，最后三行化开，告诉人底下还有。遮罩只看透明度，颜色写 black。 */
