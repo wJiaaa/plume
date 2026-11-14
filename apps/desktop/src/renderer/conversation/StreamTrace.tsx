@@ -12,19 +12,16 @@ const BIN_MS = 200;
 /** 一格里写了这么多字，柱子画满。 */
 const FULL_CHARS = 60;
 
-/** 在流、没在流、该警示了：和运行行行尾那句状态同一套颜色。 */
-const TONES = { flowing: "text-accent", idle: "text-ink-faint", warn: "text-warning" } as const;
-
 /**
  * 运行行上的小心电图：最近几秒每一格到了多少字，一直往左走。
  *
  * 运行行上别的会动的东西（思考球、换词、秒数）都按钟点走，模型一个字不回也照样转。只有它跟着数据：字到一格长一根，
- * 断流就是一条平线，不读数字也看得出卡没卡。颜色跟着 `currentColor`，和行尾那句状态同一个颜色：在流是强调色，等第一个字、跑工具、
- * 刚停住是最淡的字色，状态变成警示色时它也是。
+ * 没有底线：只在字在来的时候挂出来（见 `RunningIndicator`），没东西可画时整个收起，不留一条像占位符的空线。
+ * 宽 36、每秒走 9 像素，窗口正好四秒：断流后最后一根柱子走出画面，和行尾「没有新输出」出现是同一刻。
  *
  * 按拍画（`ticker.ts`），和思考球同一拍；滚出视口就停。不动的时候只在字变时画一次。
  */
-export function StreamTrace({ chars, tone }: { chars: number; tone: keyof typeof TONES }) {
+export function StreamTrace({ chars }: { chars: number }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const arrivals = useRef<{ at: number; chars: number }[]>([]);
 	const last = useRef(chars);
@@ -47,14 +44,12 @@ export function StreamTrace({ chars, tone }: { chars: number; tone: keyof typeof
 		const ratio = Math.min(2, window.devicePixelRatio || 1);
 		element.width = Math.round(WIDTH * ratio);
 		element.height = Math.round(HEIGHT * ratio);
-		// 颜色只在换色时读一次：每拍读计算样式，页面别处一脏就要整页重算。
+		// 颜色挂上时读一次（`currentColor`，强调色）：每拍读计算样式，页面别处一脏就要整页重算。
 		const color = getComputedStyle(element).color;
 		const draw = (now: number) => {
 			context.setTransform(ratio, 0, 0, ratio, 0, 0);
 			context.clearRect(0, 0, WIDTH, HEIGHT);
 			context.fillStyle = color;
-			context.globalAlpha = 0.35;
-			context.fillRect(0, HEIGHT - 1.5, WIDTH, 1);
 			const bins = new Map<number, number>();
 			for (const arrival of arrivals.current) {
 				if (now - arrival.at > SPAN_MS + BIN_MS) continue;
@@ -88,7 +83,7 @@ export function StreamTrace({ chars, tone }: { chars: number; tone: keyof typeof
 			observer.disconnect();
 			cancelTick(tick);
 		};
-	}, [tone]);
+	}, []);
 
-	return <canvas ref={canvas} aria-hidden className={`block shrink-0 ${TONES[tone]}`} style={{ width: WIDTH, height: HEIGHT }} />;
+	return <canvas ref={canvas} aria-hidden className="block shrink-0 text-accent" style={{ width: WIDTH, height: HEIGHT }} />;
 }

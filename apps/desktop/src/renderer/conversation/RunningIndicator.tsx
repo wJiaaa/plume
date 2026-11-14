@@ -107,6 +107,8 @@ export const RunningIndicator = memo(function RunningIndicator({
 	// 重连时不说话：下面那条连接记录已经在数秒了，这里再说一句是同一件事说两遍。
 	const phrase = retrying ? null : phraseFor(mood, Math.floor(elapsed / PHRASE_MS), elapsed);
 	const status = statusFor(stage, quiet);
+	// 这一轮模型写出的 token：收尾的按服务商报的数，在写的那条按字数估。
+	const written = (meter?.output ?? 0) + estimateTokens(output);
 	return (
 		// 8px 而不是正文里的 10px：这一行连上间距和回答底下那一行一样高，答完时两者同一帧一出一进，转录不抖。见 `RunningRow`。
 		<div
@@ -127,16 +129,16 @@ export const RunningIndicator = memo(function RunningIndicator({
 					<span className="tabular-nums text-ink-faint">{formatElapsed(elapsed)}</span>
 				</Readout>
 			)}
-			{/*
-			 * 一直在，钉在秒数后面：前面只有那句话和秒数，后面的读数进出推不动它。等第一个字、跑工具时是灰的平线，字一来柱子从右边长出来；
-			 * 颜色和行尾那句状态一致，满 `SILENT_MS` 一起变黄。
-			 */}
-			<Readout open>
-				<StreamTrace chars={output} tone={stage === "streaming" ? "flowing" : status?.warn ? "warn" : "idle"} />
-			</Readout>
-			<TurnTokens total={(meter?.output ?? 0) + estimateTokens(output)} />
+			<TurnTokens total={written} />
 			{/* 只在字在来、或者工具在跑的时候报速度：还没开口没有速度可报，停住了它就是 0，留着最后那个数是在说还在写。 */}
 			<LiveRate rate={rate} shown={stage === "streaming" || stage === "tool"} />
+			{/*
+			 * 只在字在来的时候挂出来，排在 tok/s 后面：两个一起出、一起收，进出推不动前面的读数。没字可画时不留一条空线，
+			 * 那件事行尾那句状态已经说了；断流四秒最后一根柱子正好走出画面，同一刻那句「没有新输出」接上。
+			 */}
+			<Readout open={stage === "streaming"}>
+				<StreamTrace chars={output} />
+			</Readout>
 			<StageStatus status={status} />
 		</div>
 	);
