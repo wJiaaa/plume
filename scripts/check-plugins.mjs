@@ -186,10 +186,84 @@ function docBefore(text, start) {
 	return before.endsWith("*/") && at > 0 ? before.slice(at) : "";
 }
 
+/**
+ * 注释只留第一段：第一段写怎么用，后面的段落写为什么这样做，给维护组件的人看（约定见 spec/tech/components.md）。
+ * 只剩一行的写回一行的 `/** … *\/`。
+ */
+function firstParagraphs(code) {
+	return code.replace(/^([ \t]*)\/\*\*\n([\s\S]*?)\n[ \t]*\*\/$/gm, (_, indent, body) => {
+		const lines = body.split("\n");
+		const end = lines.findIndex((line) => /^\s*\*\s*$/.test(line));
+		const kept = end < 0 ? lines : lines.slice(0, end);
+		if (kept.length === 1) return `${indent}/** ${kept[0].replace(/^\s*\*\s?/, "")} */`;
+		return [`${indent}/**`, ...kept, `${indent} */`].join("\n");
+	});
+}
+
+/** 按顶层的逗号切开（括号和字符串里的不算）。 */
+function splitTopLevel(text) {
+	const parts = [];
+	let depth = 0;
+	let quote = "";
+	let start = 0;
+	for (let i = 0; i < text.length; i++) {
+		const char = text[i];
+		if (quote) {
+			if (char === "\\") i++;
+			else if (char === quote) quote = "";
+		} else if (`"'\``.includes(char)) quote = char;
+		else if ("([{".includes(char)) depth++;
+		else if (")]}".includes(char)) depth--;
+		else if (char === "," && depth === 0) {
+			parts.push(text.slice(start, i));
+			start = i + 1;
+		}
+	}
+	parts.push(text.slice(start));
+	return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+/** 多行解构的参数只留有默认值的和 `...rest` 写成一行：其余的名字后面的类型里都有，再列一遍是重复。 */
+function compactParams(signature) {
+	const open = signature.match(/^export\s+(?:async\s+)?function\s+[\w$]+(?:<[^\n(]*>)?\(\{\n/);
+	if (!open) return signature;
+	const from = open[0].length - 2;
+	let depth = 0;
+	let end = from;
+	for (; end < signature.length; end++) {
+		if ("({[".includes(signature[end])) depth++;
+		else if (")}]".includes(signature[end]) && --depth === 0) break;
+	}
+	const kept = splitTopLevel(signature.slice(from + 1, end))
+		.filter((entry) => entry.startsWith("...") || /^[\w$]+(?:\s*:\s*[\w$]+)?\s*=/.test(entry))
+		// `surface: kind = "menu"` 里的 `kind` 是组件内部的名字，调用方只认 `surface`。
+		.map((entry) => entry.replace(/^([\w$]+)\s*:\s*[\w$]+\s*=/, "$1 ="));
+	const params = kept.length > 0 ? `{ ${kept.join(", ")} }` : "props";
+	return `${signature.slice(0, from)}${params}${signature.slice(end + 1)}`;
+}
+
+/** 签名里只用到 `keyof typeof X` 的常量：类型只取它的键，值（类名串）换成 `…`，键上的注释留着。 */
+function keysOnly(declaration) {
+	const lines = declaration.split("\n");
+	if (lines.length < 3) return declaration;
+	const body = lines
+		.slice(1, -1)
+		.filter((line) => /^\t(?:\/\*\*|\*\/| \*|[\w$"']+\s*:)/.test(line))
+		.map((line) => line.replace(/^(\t[\w$"']+\s*:).*$/, "$1 …,"));
+	return [lines[0], ...body, lines.at(-1)].join("\n");
+}
+
+/** 只有字符串的数组写成一行。 */
+function inlineStrings(declaration) {
+	return declaration.replace(/\[\n((?:\t"[^"\n]*",\n)+)\]/, (_, items) => `[${items.trim().split(/,\s*/).filter(Boolean).join(", ")}]`);
+}
+
 const uiFiles = walk(UI_SRC, [".ts", ".tsx"]).map((file) => ({ file, text: readFileSync(file, "utf8") }));
 const uiExports = exportsOf(join(UI_SRC, "index.tsx"));
+/** 已经摘过的同文件常量和类型（`文件:名字`）：几个函数共用一个类型时只在第一处列出。 */
+const described = new Set();
 
-/** 一个公开名字的说明：注释、签名，以及签名里用到的同文件常量（`keyof typeof X`）和类型。 */
+/** 一个公开名字的说明：注释、签名，以及签名里（层层）用到的同文件常量（`keyof typeof X`）、类型和借参数的组件。 */
 function describe(name) {
 	if (!uiExports.has(name)) report(UI_API, `${name}：@plume/ui 没有导出它`);
 	const pattern = new RegExp(`^export\\s+(?:async\\s+)?(function|const|class)\\s+${name}\\b`, "m");
@@ -202,32 +276,62 @@ function describe(name) {
 	const match = text.match(pattern);
 	const signature = declarationText(text, match.index, match[1]);
 	const related = [];
-	for (const [, ref] of signature.matchAll(/keyof typeof ([\w$]+)/g)) {
-		const found = text.match(new RegExp(`^(?:export\\s+)?const\\s+${ref}\\b`, "m"));
-		if (found) related.push(declarationText(text, found.index, "const"));
-	}
-	for (const ref of new Set([...signature.matchAll(/\b([A-Z][\w$]*)\b/g)].map((hit) => hit[1]))) {
-		const found = text.match(new RegExp(`^(?:export\\s+)?(type|interface)\\s+${ref}\\b`, "m"));
-		if (found) related.push(declarationText(text, found.index, found[1]));
+	const earlier = [];
+	const seen = new Set([name]);
+	/** 摘过的声明里再用到的同文件类型也摘上（`PopoverProps` 里的 `Anchor`）。 */
+	const pending = [signature];
+	const relate = (ref, found, kind, shape = (declaration) => declaration) => {
+		if (!found || seen.has(ref)) return;
+		seen.add(ref);
+		if (described.has(`${file}:${ref}`)) earlier.push(`\`${ref}\``);
+		else {
+			described.add(`${file}:${ref}`);
+			const declaration = declarationText(text, found.index, kind);
+			related.push(shape(declaration));
+			pending.push(declaration);
+		}
+	};
+	while (pending.length > 0) {
+		const code = stripComments(pending.shift());
+		for (const [, ref] of code.matchAll(/keyof typeof ([\w$]+)/g))
+			relate(ref, text.match(new RegExp(`^(?:export\\s+)?const\\s+${ref}\\b`, "m")), "const", keysOnly);
+		for (const ref of new Set([...code.matchAll(/\b([A-Z][\w$]*)\b/g)].map((hit) => hit[1]))) {
+			const found = text.match(new RegExp(`^(?:export\\s+)?(type|interface)\\s+${ref}\\b`, "m"));
+			relate(ref, found, found?.[1]);
+		}
+		// `Parameters<typeof DialogFrame>` 这类借同文件组件的参数：把那个组件的签名也列上，不然看不到有哪些参数。
+		for (const [, ref] of code.matchAll(/\btypeof ([A-Z][\w$]*)/g))
+			relate(ref, text.match(new RegExp(`^(?:export\\s+)?function\\s+${ref}\\b`, "m")), "function", compactParams);
 	}
 	const doc = docBefore(text, match.index);
-	const code = [doc ? `${doc}\n${signature}` : signature, ...related].join("\n\n");
-	return `### \`${name}\`\n\n源码：\`${relative(root, file)}\`\n\n\`\`\`tsx\n${code}\n\`\`\`\n`;
+	const own = match[1] === "function" ? compactParams(signature) : inlineStrings(signature);
+	const code = firstParagraphs([doc ? `${doc}\n${own}` : own, ...related].join("\n\n"));
+	return [`### \`${name}\``, "", "```tsx", code, "```", ...(earlier.length > 0 ? ["", `${earlier.join("、")} 见上文。`] : []), ""].join("\n");
 }
+
+/** 这几个类名组合是组件的外观，插件用组件，这一页不列。 */
+const COMPONENT_LOOKS = { button: "Button", iconButton: "IconButton", code: "CodeBlock" };
 
 function componentsDoc() {
 	const groups = JSON.parse(readFileSync(UI_API, "utf8"));
 	const styles = readFileSync(STYLES_SRC, "utf8");
-	const combos = [...styles.matchAll(/^export\s+const\s+([\w$]+)/gm)].map((match) => {
-		const code = [docBefore(styles, match.index), declarationText(styles, match.index, "const")].filter(Boolean).join("\n");
-		return `### \`${match[1]}\`\n\n\`\`\`ts\n${code}\n\`\`\`\n`;
-	});
+	const exported = [...styles.matchAll(/^export\s+const\s+([\w$]+)/gm)];
+	for (const look of Object.keys(COMPONENT_LOOKS))
+		if (!exported.some((match) => match[1] === look))
+			report(STYLES_SRC, `${look}：@plume/styles 没有导出它（scripts/check-plugins.mjs 的 COMPONENT_LOOKS 跟着改）`);
+	const combos = exported
+		.filter((match) => !(match[1] in COMPONENT_LOOKS))
+		.map((match) => {
+			const code = firstParagraphs([docBefore(styles, match.index), declarationText(styles, match.index, "const")].filter(Boolean).join("\n"));
+			return `### \`${match[1]}\`\n\n\`\`\`ts\n${code}\n\`\`\`\n`;
+		});
+	const looks = Object.entries(COMPONENT_LOOKS);
 	return [
 		"# 组件和类名组合",
 		"",
 		"<!-- 由 `node scripts/check-plugins.mjs --fix` 从源码生成，不要手改。名单在 packages/client/ui/plugin-api.json。 -->",
 		"",
-		"界面入口能用的 `@plume/ui` 组件和 `@plume/styles` 类名组合，就是这一页列出的这些；`@plume/ui` 的其他导出是产品内部用的，`pnpm check:plugins` 会拦。签名和注释原样摘自源码。",
+		"界面入口能用的 `@plume/ui` 组件和 `@plume/styles` 类名组合，就是这一页列出的这些；`@plume/ui` 的其他导出是产品内部用的，`pnpm check:plugins` 会拦。签名和注释摘自源码：解构的参数只留有默认值的（其余的看后面的类型），`keyof typeof` 的常量只列键，注释只取第一段。",
 		"",
 		"怎么选：文字一律用 `Text`（字号档位自带行高、字距和字重，不在 CSS 里写字号）；按钮、输入框、开关、菜单、对话框用对应组件；工具卡片的外框用 `Card`。组件不够时用下面的类名组合，再不够才写自己的样式（见 [style-i18n.md](style-i18n.md)）。",
 		"",
@@ -235,6 +339,7 @@ function componentsDoc() {
 		"## `@plume/styles` 的类名组合",
 		"",
 		'`import { text, card } from "@plume/styles"`，拼进 `className`。产品的 Tailwind 扫描这个包，这些类一定会生成。',
+		`${looks.map(([look]) => `\`${look}\``).join("、")} 是 ${looks.map(([, component]) => `\`${component}\``).join("、")} 的外观，用组件，这里不列。`,
 		"",
 		...combos,
 	].join("\n");

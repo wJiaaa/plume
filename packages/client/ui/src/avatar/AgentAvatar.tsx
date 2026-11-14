@@ -28,12 +28,9 @@ export interface AgentAvatarProps {
 	/** 像素边长。 */
 	size?: number;
 	mood?: AvatarMood;
-	/**
-	 * 悬停时眼睛跟着指针、身子弹一下。默认开。
-	 *
-	 * `host` 是往上找的那个容器：一整行的任何地方悬停都算，而不是非得对准这 20 像素。
-	 */
+	/** 悬停时眼睛跟着指针、身子弹一下。默认开。 */
 	interactive?: boolean;
+	/** 往上找的那个容器的选择器（`closest`）：在它里面任何地方悬停都算，而不是非得对准这 20 像素。 */
 	host?: string;
 	/** 名字，决定眨眼的节奏——七张脸不该踩着同一个拍子。 */
 	seed?: string;

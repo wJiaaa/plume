@@ -181,12 +181,11 @@ export function MenuLabel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 列出超过一屏的菜单顶上的筛选框。
+ * 列出超过一屏的菜单顶上的筛选框，放进 `Popover` 的 `header` 槽位，列表滚动时它不动。Escape 先清空再关闭。
  *
  * 每个菜单各写一份的话，同样的高度、同样的放大镜、同样的占位文案，每多一份就多一次走样的机会。
- * 给 `Popover` 的 `header` 槽位用，列表滚动时它不动；它下面那条线属于那个槽位，不在这里画。
- *
- * Escape 先清空再关闭，和 `SearchField` 一样：第一次按撤销输入，只有没东西可撤销时按才关掉菜单。
+ * 它下面那条线属于 `header` 槽位，不在这里画。Escape 和 `SearchField` 一样：第一次按撤销输入，
+ * 只有没东西可撤销时按才关掉菜单。
  */
 export function MenuSearch({
 	value,

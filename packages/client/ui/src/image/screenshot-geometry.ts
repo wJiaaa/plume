@@ -65,9 +65,9 @@ export function handlePoint(rect: Rect, handle: Handle): Point {
 }
 
 /**
- * 指针在哪个手柄上，没有就是 null。
+ * 指针在哪个手柄上，没有就是 null。`tolerance` 是屏幕像素的半径，而不是手柄画出来的大小。
  *
- * `tolerance` 是屏幕像素的半径，而不是手柄画出来的大小：目标得比记号大，理由和滚动条一样——八个像素见方
+ * 目标得比记号大，理由和滚动条一样——八个像素见方
  * 的一块，手落不准。
  */
 export function hitHandle(rect: Rect, at: Point, tolerance: number): Handle | null {

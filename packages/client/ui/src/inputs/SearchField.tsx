@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { composingKey } from "../keyboard.ts";
 
 /**
- * 搜索框。
+ * 搜索框。独占一行的给 `size="comfortable"`，塞进面板标题行的用默认的 `compact`。
  *
  * 侧栏的会话搜索、审阅面板的文件筛选、文件树的筛选共用这一个。各写各的话，每个都有自己的高度、
  * 自己的描边、自己对放大镜在框里还是框旁的看法——一个只有一个答案的问题，得到三个答案。

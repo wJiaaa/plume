@@ -80,9 +80,9 @@ export function Text({
 	/** 等宽字体，给正文里引用的标识符和路径。 */
 	mono?: boolean;
 	/**
-	 * 等宽数字。
+	 * 等宽数字，给原地变化的数——token 数、计时、diff 统计。
 	 *
-	 * 给原地变化的数——token 数、计时、diff 统计。比例数字每跳一下字就左右挪，读起来是闪烁。
+	 * 比例数字每跳一下字就左右挪，读起来是闪烁。
 	 */
 	numeric?: boolean;
 	className?: string;

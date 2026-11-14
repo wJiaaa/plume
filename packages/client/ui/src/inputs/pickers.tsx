@@ -13,7 +13,7 @@ import { Input } from "./NativeField.tsx";
 import { InlineSelect } from "./Select.tsx";
 
 /**
- * 带自己画的步进按钮的数字框。
+ * 带自己画的步进按钮的数字框。`onChange` 只收到 `min`–`max` 以内的数，敲到一半的草稿留在框里。
  *
  * 用 `type="text"` 加数字键盘提示，不用 `type="number"`：后者的上下箭头每个浏览器画得都不一样，而且它认为不合法的
  * 输入一律报成空字符串，`1e5`、`--3` 看着像收下了，到手却是「什么也没敲」。

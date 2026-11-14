@@ -11,9 +11,9 @@ import { Overlay, type Dismiss } from "./Overlay.tsx";
 import { Scroller } from "../scroll/Scroller.tsx";
 
 /**
- * 对话框底下的那一颗按钮。上面写着它会做的那件事。
+ * 对话框底下的那一颗按钮。上面写着它会做的那件事：写字，不画图标。
  *
- * **写字，不画图标。** 这些按钮曾经有好几处只放一个 ✕ 和一个 ✓，名字挂在 tooltip 上。工具栏
+ * 这些按钮曾经有好几处只放一个 ✕ 和一个 ✓，名字挂在 tooltip 上。工具栏
  * 里的图标按钮可以这么省——周围一排东西替它说明它属于哪一类；对话框底下这两颗没有这个周围，
  * 它们是这次操作的结论本身，一个要说清按下去会发生什么，另一个要说清不按会怎样。一个勾在
  * 「删除会话」「卸载插件」「导入 33 个模型」上长得一模一样，而读出区别的唯一办法是把鼠标停
@@ -129,11 +129,10 @@ export function DialogFrame({
 }
 
 /**
- * 里面放着 `DialogFrame` 的 `Overlay`。
+ * 里面放着 `DialogFrame` 的 `Overlay`。`actions` 和 `children` 可以是 `dismiss` 的函数，关对话框的按钮
+ * 应该用它：`dismiss()` 播完退场再运行 `onClose`，`dismiss(after)` 改为运行 `after`。
  *
- * `actions` 和 `children` 可以是 `dismiss` 的函数，关对话框的按钮应该用它：`dismiss()` 播完退场再运行
- * `onClose`，`dismiss(after)` 改为运行 `after`。按钮直接调用 `onClose` 会在那一帧卸掉对话框——那样
- * 只有 Escape 和点遮罩是怎么来的就怎么走。
+ * 按钮直接调用 `onClose` 会在那一帧卸掉对话框——那样只有 Escape 和点遮罩是怎么来的就怎么走。
  */
 export function Dialog({
 	onClose,
