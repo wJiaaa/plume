@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useTickedAnimations } from "@plume/ui";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { localImageUrl } from "../files/open-file.ts";
 import { useFileScope } from "../files/scope.ts";
 import { resolveAsset } from "./assets.ts";
@@ -11,8 +12,13 @@ export const ImageDocument = createContext<{
 	streaming: boolean;
 }>({ localImages: false, remoteImages: false, streaming: false });
 
+/** 占位上的两层点阵动的是 `mask-position`，只能逐帧重绘：按拍走，和正文共用一拍（见 `@plume/ui` 的 `motion/ticked.ts`）。 */
+const PENDING: ReadonlySet<string> = new Set(["md-image-sweep", "md-image-drift"]);
+
 function Pending() {
-	return <span className="md-image-pending" aria-hidden="true" />;
+	const box = useRef<HTMLSpanElement>(null);
+	useTickedAnimations(box, PENDING);
+	return <span ref={box} className="md-image-pending" aria-hidden="true" />;
 }
 
 /** 图片是正文的一部分；读取仍受会话目录和文档远程加载策略约束。 */

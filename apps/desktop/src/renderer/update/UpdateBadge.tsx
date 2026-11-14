@@ -8,9 +8,9 @@
  * 没有什么能把它藏起来：有新版本就在，装上为止。
  */
 
-import { useI18n } from "@plume/ui";
+import { useI18n, useTickedAnimations } from "@plume/ui";
 import { ArrowDownToLine, Pause, RefreshCw, TriangleAlert } from "@plume/ui/icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { UpdatePhase } from "../../shared/update.ts";
 import { check, useUpdate } from "./store.ts";
 import { UpdateDialog } from "./UpdateDialog.tsx";
@@ -70,6 +70,8 @@ function PhaseGlyph({ phase, size }: { phase: UpdatePhase; size: number }) {
 	return <ArrowDownToLine size={size + 1} strokeWidth={2.4} className="shrink-0" />;
 }
 
+const SPIN: ReadonlySet<string> = new Set(["plume-spin"]);
+
 /**
  * 随下载合拢的环，从十二点钟开始。刚开始的几秒四舍五入是 0%，留一点看得见的最小值，不然和没开始分不清。
  * 准备中没有百分比可画，是四分之一段弧绕着转（`data-spinning`，见 styles.css）。
@@ -77,8 +79,19 @@ function PhaseGlyph({ phase, size }: { phase: UpdatePhase; size: number }) {
 function ProgressRing({ fraction, spinning, inset }: { fraction: number; spinning: boolean; inset: number }) {
 	const radius = 10;
 	const circumference = 2 * Math.PI * radius;
+	// 转圈按拍走，不按帧：SVG 的转动每帧都要重排，见 `@plume/ui` 的 `motion/ticked.ts`。
+	const ring = useRef<SVGSVGElement>(null);
+	useTickedAnimations(ring, SPIN, spinning);
 	return (
-		<svg aria-hidden data-ring="" data-spinning={spinning ? "" : undefined} viewBox="0 0 24 24" style={{ inset: -inset }} className="absolute -rotate-90">
+		<svg
+			ref={ring}
+			aria-hidden
+			data-ring=""
+			data-spinning={spinning ? "" : undefined}
+			viewBox="0 0 24 24"
+			style={{ inset: -inset }}
+			className="absolute -rotate-90"
+		>
 			{/* 轨道：8% 的弧看得出是一圈里的一小段，而不是孤零零一个点。 */}
 			<circle cx="12" cy="12" r={radius} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.32" />
 			<circle
