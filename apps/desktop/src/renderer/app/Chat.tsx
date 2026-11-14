@@ -2,7 +2,7 @@ import type { SessionSummary, SessionTarget, SessionView } from "@plume/contract
 import type { ConversationProps, PageProps } from "@plume/contract/ui";
 import { ActionSpinner, composingKey, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
 import { Folder, MoreHorizontal, Plug } from "@plume/ui/icons";
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, type CSSProperties, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CARD_INSET, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { layoutMode, panelWidthFor } from "../layout.ts";
@@ -43,7 +43,18 @@ import { Composer } from "./Composer.tsx";
 import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
 
 /** 对话和面板共用工作区尺寸；常驻标签不随会话切换搬动 DOM。 */
-export function ChatScreen({ fatal, share, onShare }: { fatal?: string; share: number; onShare(share: number): void }) {
+export function ChatScreen({
+	fatal,
+	slideWidth,
+	share,
+	onShare,
+}: {
+	fatal?: string;
+	/** 侧栏正开合时，工作区滑完有多宽；不在滑时是 undefined。 */
+	slideWidth?: number;
+	share: number;
+	onShare(share: number): void;
+}) {
 	const app = useChrome();
 	const { t } = useI18n();
 	usePluginUis();
@@ -62,6 +73,10 @@ export function ChatScreen({ fatal, share, onShare }: { fatal?: string; share: n
 	}, []);
 	const layout = panelLayout(app, size, share);
 	const motion = app.panelMoving ? PANEL_MOTION : "";
+	// 侧栏、面板区开合时对话那一栏滑完有多宽，见 ChatSlide。侧栏滑完时面板区可能换了宽度、换了排法，按滑完的工作区重算一遍。
+	const landed = slideWidth === undefined ? layout : panelLayout(app, { width: slideWidth, height: size.height }, share);
+	const slideTarget =
+		slideWidth !== undefined || (app.panelMoving && layout.arrangement === "row") ? (slideWidth ?? size.width) - Number(landed.chat.right) : undefined;
 	/*
 	 * 侧栏开合、拖宽度时，这里每一帧都因 `size` 重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃 `size`：
 	 * 元素留住，React 就跳过这两棵子树，只改外层的位置和尺寸。
@@ -91,13 +106,18 @@ export function ChatScreen({ fatal, share, onShare }: { fatal?: string; share: n
 		return () => window.removeEventListener("keydown", onKey);
 	}, [app.screen, layout.shown, layout.single, app.panelMaximized, scope]);
 	return (
-		<div ref={root} data-panel-layout={layout.arrangement} className="relative min-h-0 flex-1 overflow-hidden rounded-panel">
+		<div
+			ref={root}
+			data-panel-layout={layout.arrangement}
+			data-panel-sliding={app.panelMoving || undefined}
+			className="relative min-h-0 flex-1 overflow-hidden rounded-panel"
+		>
 			<main
 				inert={layout.single && layout.shown}
 				style={layout.chat}
 				className={`absolute left-0 top-0 flex min-h-0 min-w-0 flex-col ${motion} ${layout.single && layout.shown ? "invisible" : ""}`}
 			>
-				{chatCard}
+				<ChatSlide.Provider value={slideTarget}>{chatCard}</ChatSlide.Provider>
 			</main>
 			{listPanels().length > 0 && (
 				<aside
@@ -276,12 +296,24 @@ const CARD_FLOAT_WIDTH = 320 + 32 + 420;
 const LANE_WIDTH = 300 + 24;
 const LANE_DOCK_WIDTH = LANE_WIDTH + 520;
 
+/** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）；不在滑时是 undefined。 */
+const ChatSlide = createContext<number | undefined>(undefined);
+
 function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean } {
+	const slideTarget = useContext(ChatSlide);
 	const [room, setRoom] = useState({ float: false, dock: false });
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!column) return;
+		/*
+		 * 侧栏、面板区开合时这一列每一帧一个宽度，跟着量的话卡片会在半路跨过停靠线、浮动线，换个地方，滑着滑着闪一下。
+		 * 滑着时按滑之前和滑完的宽度里窄的那个定：变窄点下去当场就按滑完的放好，变宽滑完再换。
+		 * 滑之前的宽度在这里量：开合那一下的布局 effect 里过渡刚开始，量到的还是起点。
+		 */
+		const main = column.closest("main");
+		const start = column.clientWidth;
+		const end = slideTarget === undefined || !main ? undefined : slideTarget - (main.getBoundingClientRect().width - start);
 		const measure = () => {
-			const width = column.clientWidth;
+			const width = end === undefined ? column.clientWidth : Math.min(start, end);
 			const float = width >= CARD_FLOAT_WIDTH;
 			const dock = width >= LANE_DOCK_WIDTH;
 			setRoom((before) => (before.float === float && before.dock === dock ? before : { float, dock }));
@@ -290,7 +322,7 @@ function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolea
 		const observer = new ResizeObserver(measure);
 		observer.observe(column);
 		return () => observer.disconnect();
-	}, [column]);
+	}, [column, slideTarget]);
 	return room;
 }
 
@@ -349,15 +381,16 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 		);
 	}
 	/*
-	 * 右边那一列：停靠时挂在整块上（从顶到底，正文和输入框让出它的宽度），浮着时挂在转录那一块里（不压输入框）。
-	 * 换地方会重挂卡片，只在宽度跨过停靠线时发生。卡片自己不挡点击，空处点下去还是转录；卡片太长自己滚。
+	 * 右边那一列：停靠时占整块的两行（从顶到底，正文和输入框让出它的宽度），浮着时只占转录那一行（不压输入框）。
+	 * 这一块是两行的网格，卡片绝对定位在哪几行里就以哪几行为界：停靠、浮着之间只换它占的行，一直是同一个节点，
+	 * 卡片不重挂、不闪。卡片自己不挡点击，空处点下去还是转录；卡片太长自己滚。
 	 * 这一列有卡片、别的卡片也浮得下时，别的卡片排到它下面，不各占一个角互相压着。
 	 */
 	const laneCards = !loading && (
 		<div
 			ref={setLane}
 			data-conversation-lane={docked ? "docked" : "floating"}
-			className={`pointer-events-none absolute top-3 right-3 z-20 flex w-[300px] flex-col gap-3 empty:hidden [&>*]:pointer-events-auto bottom-3`}
+			className={`pointer-events-none absolute top-3 right-3 bottom-3 z-20 col-start-1 row-start-1 ${docked ? "row-end-3" : "row-end-2"} flex w-[300px] flex-col gap-3 empty:hidden [&>*]:pointer-events-auto`}
 		>
 			<ConversationCards lane session={view} placement="floating" {...cardActions(view.summary.id)} />
 			{laneOpen && roomToFloat && (
@@ -369,12 +402,11 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 	);
 	return (
 		// relative isolate：背景图那一层是 z-index: -1，隔离之后压在这一区的底色之上、内容之下。
-		<section ref={setColumn} data-screen="chat" className="relative isolate flex min-h-0 flex-1 flex-col">
+		<section ref={setColumn} data-screen="chat" className="relative isolate grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto]">
 			<ChatBackdrop empty={!loading && view.messages.length === 0 && !view.draft} headerHeight={headerHeight} />
-			{docked && laneCards}
-			<div className={`relative flex min-h-0 flex-1 flex-col${docked ? " mr-[324px]" : ""}`}>
+			{laneCards}
+			<div className={`relative col-start-1 row-start-1 flex min-h-0 flex-col${docked ? " mr-[324px]" : ""}`}>
 				{loading ? <ChatLoading /> : <Conversation view={view} />}
-				{!docked && laneCards}
 				{/* 浮着的卡片自己不挡点击：卡片之间、卡片旁边的空处点下去还是转录。 */}
 				{roomToFloat && !laneOpen && !loading && (
 					<div
@@ -385,7 +417,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 					</div>
 				)}
 			</div>
-			<div className={`flex shrink-0 flex-col${docked ? " mr-[324px]" : ""}`}>
+			<div className={`col-start-1 row-start-2 flex flex-col${docked ? " mr-[324px]" : ""}`}>
 				<Composer key={view.summary.id} view={view} cards={!roomToFloat && !loading} />
 			</div>
 		</section>

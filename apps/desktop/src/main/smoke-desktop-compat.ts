@@ -28,7 +28,10 @@ const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置
  * 2. 普通大小的窗口变窄时面板区改成上下排，不丢面板、不重建面板内容、不改写存下的宽度和标签，拉宽回来原样；
  * 3. 125% 下侧栏边缘落在小数设备像素上时，标题栏和面板区的图标还画在同一列设备像素上；
  * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移；
- * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画。
+ * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画；
+ * 6. 面板区开合时两张卡片隔着 4px 一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
+ *    开着的环境卡片不重挂，停靠、浮着只换一次，打开时点下去当场换好、收起时滑完再换，不在半路上闪；滑完撤掉动画；
+ * 7. 侧栏开合时环境卡片同样不重挂，对话那一栏变窄时点下去当场换好、变宽时滑完再换。
  *
  * 缩放比经 DevTools 协议模拟（`Emulation.setDeviceMetricsOverride`）：冒烟只起一个 Electron，`--force-device-scale-factor`
  * 要在启动前给、一次只能一种；模拟的缩放比换的是每个 CSS 像素合几个设备像素，布局和栅格化走的是同一条路。
@@ -512,6 +515,113 @@ export async function checkDesktopCompat(options: {
 				`getComputedStyle(document.querySelector('[data-panel-layout] > main [style*="--plume-top-row-inset"]')).getPropertyValue('--plume-top-row-inset').trim()`,
 			);
 			assert.ok(phase === "收起" ? /^\d+(\.\d+)?px$/.test(pageInset) && pageInset !== "0px" : pageInset === "0px", `${phase}：页面顶行的让位是 ${pageInset}`);
+		}
+
+		/**
+		 * 开合时环境卡片一直是同一个节点，只换一次地方：对话那一栏变窄时点下去当场按滑完的宽度换好，变宽时滑完才换，
+		 * 半路上不换。`held` 的第一帧是点之前的样子，`moving` 标着正在滑的帧。
+		 */
+		const laneSteady = (label: string, held: { width: number; moving: boolean; lane: string | null; same: boolean }[], narrowing: boolean) => {
+			assert.ok(
+				held.every((sample) => sample.same),
+				`${label}：环境卡片没被重挂：${JSON.stringify(held)}`,
+			);
+			const switched = held.findIndex((sample, index) => index > 0 && sample.lane !== held[index - 1]!.lane);
+			if (switched < 0) return;
+			assert.ok(
+				held.slice(switched).every((sample) => sample.lane === held[switched]!.lane),
+				`${label}：环境卡片只换一次地方：${JSON.stringify(held)}`,
+			);
+			const firstMoved = held.findIndex((sample) => sample.width !== held[0]!.width);
+			if (narrowing) assert.ok(switched <= firstMoved, `${label}：环境卡片在滑之前就换好：${JSON.stringify(held)}`);
+			else assert.ok(!held[switched]!.moving, `${label}：环境卡片滑完才换：${JSON.stringify(held)}`);
+		};
+		const laneOf = `(document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null)`;
+
+		// ── 6. 面板区开合时两张卡片一起滑，环境卡片不闪 ──────────────────
+		// 环境卡片开着：宽的时候停靠在右边那一列，面板区打开后那一栏变窄，它浮到转录上。
+		if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`))) await clickVisible(page, `[data-environment-toggle]`);
+		await until(`document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane === 'docked'`, "环境卡片停靠");
+		await settle();
+		// 标在卡片自己的根上：换停靠、浮着时它要是被卸下重挂，这个标记就没了。
+		await page(`document.querySelector('[data-environment]').setAttribute('data-smoke-same-card', '')`);
+		const PANEL_LAYER = '[data-panel-layer]:not(.invisible) [data-panel="plume/files"]';
+		const panelSample = `(() => { const box = (s) => document.querySelector(s)?.getBoundingClientRect(), area = document.querySelector('[data-panel-area]');
+			const content = box(${JSON.stringify(PANEL_LAYER)}), card = document.querySelector('[data-environment]'), chat = box('[data-panel-layout] > main');
+			return { chat: Math.round(chat.right * 10) / 10, width: Math.round(chat.width * 10) / 10, icon: Math.round((chat.right - box('[data-panel-layout] > main [data-environment-toggle]').right) * 10) / 10, area: Math.round(area.getBoundingClientRect().left * 10) / 10,
+				content: content ? Math.round(content.left * 10) / 10 : null, moving: getComputedStyle(area).transitionProperty.includes('right'),
+				lane: card?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null, same: Boolean(card?.hasAttribute('data-smoke-same-card')) }; })()`;
+		type PanelFrame = { chat: number; width: number; icon: number; area: number; content: number | null; moving: boolean; lane: string | null; same: boolean };
+		for (const phase of ["打开", "收起"] as const) {
+			const start = await page<PanelFrame>(panelSample);
+			await page(`(() => { window.__smokeHold = (async () => {
+				const out = []; let moved = false, still = 0;
+				for (let i = 0; i < 400 && still < 12; i++) {
+					await new Promise(requestAnimationFrame);
+					const sample = ${panelSample};
+					const last = out.at(-1);
+					if (last && last.chat !== sample.chat) { moved = true; still = 0; } else if (moved) still++;
+					out.push(sample);
+				}
+				return out;
+			})(); })()`);
+			await press(PANEL_TOGGLE);
+			const held = [start, ...(await page<PanelFrame[]>("window.__smokeHold"))];
+			console.log(
+				"PLUME_DESKTOP_COMPAT_PANEL " +
+					JSON.stringify({ phase, chat: held.map((sample) => sample.chat), icon: held.map((sample) => sample.icon), lane: held.map((sample) => sample.lane) }),
+			);
+			// 顶行右端的按钮（环境开关）离卡片右边的距离一帧一帧地变，不在点下去那一下横着跳一截。
+			for (const [index, sample] of held.entries()) {
+				const before = held[index - 1];
+				if (before) assert.ok(Math.abs(sample.icon - before.icon) < 6, `${phase}：环境开关不横着跳：${JSON.stringify(held.map((each) => each.icon))}`);
+			}
+			const sliding = held.filter((sample) => sample.moving);
+			assert.ok(new Set(sliding.map((sample) => sample.chat)).size >= 3, `${phase}：对话的边缘真的滑了，中间有帧：${JSON.stringify(held)}`);
+			// 面板整张跟着滑，两张卡片一直隔 4px，面板的内容跟着自己的卡片走、不被裁。
+			for (const sample of sliding) assert.ok(Math.abs(sample.area - sample.chat - 4) < 1, `${phase}：两张卡片隔 4px：${JSON.stringify(sample)}`);
+			const offsets = new Set(sliding.flatMap((sample) => (sample.content === null ? [] : [Math.round(sample.content - sample.area)])));
+			assert.ok(offsets.size === 1, `${phase}：面板内容跟着卡片走：${JSON.stringify(held)}`);
+			laneSteady(phase, held, phase === "打开");
+			await settle();
+			assert.equal(await page<string | null>(laneOf), phase === "打开" ? "floating" : "docked", `${phase}：落定后环境卡片的放法`);
+			assert.ok(await page<boolean>(`getComputedStyle(document.querySelector('[data-panel-area]')).transitionProperty === 'all'`), `${phase}：滑完撤掉动画`);
+		}
+		// ── 7. 侧栏开合时环境卡片也不闪 ──────────────────────────────
+		// 面板区开着、窗口 1300 宽：侧栏收起后对话那一栏够停靠，展开后不够，开合一次各跨一次停靠线。
+		await setViewport(1300, 760, 1);
+		await press(PANEL_TOGGLE);
+		await until(`${panelShown} && ${laneOf} === 'floating'`, "侧栏开着、面板区开着时环境卡片浮着");
+		await settle();
+		const sidebarSample = `(() => { const card = document.querySelector('[data-environment]'), chat = document.querySelector('[data-panel-layout] > main').getBoundingClientRect();
+			return { width: Math.round(chat.width * 10) / 10, moving: Boolean(document.querySelector('[data-sidebar-sliding]')),
+				lane: card?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null, same: Boolean(card?.hasAttribute('data-smoke-same-card')) }; })()`;
+		type SidebarFrame = { width: number; moving: boolean; lane: string | null; same: boolean };
+		for (const phase of ["收起", "展开"] as const) {
+			const start = await page<SidebarFrame>(sidebarSample);
+			await page(`(() => { window.__smokeHold = (async () => {
+				const out = []; let moved = false, still = 0;
+				for (let i = 0; i < 400 && still < 12; i++) {
+					await new Promise(requestAnimationFrame);
+					const sample = ${sidebarSample};
+					const last = out.at(-1);
+					if (last && last.width !== sample.width) { moved = true; still = 0; } else if (moved) still++;
+					out.push(sample);
+				}
+				return out;
+			})(); })()`);
+			await press(NAV_TOGGLE);
+			const held = [start, ...(await page<SidebarFrame[]>("window.__smokeHold"))];
+			console.log(
+				"PLUME_DESKTOP_COMPAT_SIDEBAR_LANE " + JSON.stringify({ phase, width: held.map((sample) => sample.width), lane: held.map((sample) => sample.lane) }),
+			);
+			assert.ok(
+				new Set(held.filter((sample) => sample.moving).map((sample) => sample.width)).size >= 3,
+				`侧栏${phase}：对话那一栏真的滑了：${JSON.stringify(held)}`,
+			);
+			laneSteady(`侧栏${phase}`, held, phase === "展开");
+			await settle();
+			assert.equal(await page<string | null>(laneOf), phase === "收起" ? "docked" : "floating", `侧栏${phase}：落定后环境卡片的放法`);
 		}
 	} finally {
 		await cdp("Emulation.clearDeviceMetricsOverride");

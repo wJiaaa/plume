@@ -392,6 +392,16 @@
 	[data-sidebar-sliding] :is([data-toolbar-inset], .plume-top-row) {
 		transition: padding-left var(--plume-t-slow) var(--plume-e-out);
 	}
+	/*
+	 * 面板区开合时，对话顶行右端给面板开关让的位置（`PANEL_TOGGLE_ROOM`，见 PanelArea.tsx）在点下去那一下就换了：
+	 * 当场换的话顶行右端那几颗按钮（环境开关）先横着跳 20px 再跟着卡片滑。这里让它和卡片同一时长、同一缓动地变。
+	 * 左边也列上：侧栏和面板区同时在滑时，上面那条不被这条盖掉。
+	 */
+	[data-panel-sliding] [data-toolbar-inset] {
+		transition:
+			padding-left var(--plume-t-slow) var(--plume-e-out),
+			padding-right var(--plume-t-slow) var(--plume-e-out);
+	}
 	[data-plume-head] {
 		background: var(--plume-sidebar);
 	}

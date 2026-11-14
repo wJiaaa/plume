@@ -46,7 +46,8 @@ export function panelLayout(app: Chrome, size: { width: number; height: number }
 	};
 }
 
-export const PANEL_MOTION = "transition-[right,bottom,width,height] duration-[var(--plume-t-base)] ease-out";
+/** 面板区开合时对话和面板一起滑，和侧栏（SLIDE_MOTION）同一时长、同一曲线。 */
+export const PANEL_MOTION = "transition-[right,bottom,width,height] duration-[var(--plume-t-slow)] ease-out";
 
 /** 独立窗口浮在别的应用上面：查资料、对着别的窗口干活时，这段对话或这块面板一直在手边。 */
 export function KeepOnTopButton({ keepOnTop }: { keepOnTop: (enabled?: boolean) => Promise<boolean> }) {

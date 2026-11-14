@@ -74,7 +74,7 @@ function Shell() {
 	useEffect(() => {
 		if (!app.panelLeaving) return;
 		// 减少动态效果、切页或窗口缩放可能取消 transitionend，资源仍必须收掉。
-		const token = getComputedStyle(document.documentElement).getPropertyValue("--plume-t-base").trim();
+		const token = getComputedStyle(document.documentElement).getPropertyValue("--plume-t-slow").trim();
 		const duration = parseFloat(token) * (token.endsWith("ms") ? 1 : 1000);
 		const timer = setTimeout(finishPanelLeave, Number.isFinite(duration) ? duration + 50 : 0);
 		return () => clearTimeout(timer);
@@ -227,6 +227,7 @@ function Shell() {
 				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible"}`}>
 					<ChatScreen
 						fatal={fatal}
+						slideWidth={moving && !compact ? available - 2 * CARD_INSET : undefined}
 						share={verticalShares[scopeOf(app)] ?? 0.4}
 						onShare={(share) => setVerticalShares((current) => ({ ...current, [scopeOf(app)]: share }))}
 					/>
