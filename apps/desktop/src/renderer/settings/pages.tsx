@@ -354,7 +354,7 @@ export function AppearanceSettings() {
 							aria-pressed={theme === value}
 							disabled={managedSkin !== undefined}
 							onClick={() => updateAppearance({ theme: value })}
-							className={`rounded-lg border p-1.5 text-center transition-all duration-[var(--plume-t-base)] ${
+							className={`rounded-lg border p-1.5 text-center transition-[border-color,box-shadow] duration-[var(--plume-t-base)] ${
 								theme === value ? "border-ink ring-1 ring-ink" : "border-line hover:border-ink-faint"
 							}`}
 						>
