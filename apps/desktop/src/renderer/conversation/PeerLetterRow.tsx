@@ -41,7 +41,7 @@ function Letter({ letter, stateKey }: { letter: PeerLetter; stateKey: string }) 
 				<FlowRow
 					icon={<MessagesSquare size={13} strokeWidth={1.8} />}
 					/* 别的过程行标题是「思考」这种两三个字的词，加粗读作标签；这里装的是会话名，整段加粗就成了一行粗字。 */
-					title={<span className="font-normal">{t(letter.answer ? "peers.answerFrom" : "peers.from", { name: peerName(letter.from) })}</span>}
+					title={<span className="font-normal">{t("peers.from", { name: peerName(letter.from) })}</span>}
 					summary={letter.text.split("\n").find((line) => line.trim()) ?? ""}
 					open={open}
 					onToggle={() => setOpen((value) => !value)}

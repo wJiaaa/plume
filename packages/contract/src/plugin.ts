@@ -149,7 +149,7 @@ export interface SessionScope {
 	kind: SessionKind;
 	parentId?: string;
 	owner?: string;
-	spawnedFrom?: { sessionId: string; toolCallId?: string };
+	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
 	project?: string;
 	/** 代管这个会话的插件，见 `SessionSummary.steward`。插件据此只对自己代管的会话收紧工具、改提示词。 */
 	steward?: string;
@@ -281,9 +281,8 @@ export interface ToolRun {
 	schedule?(wake: WakeupInput): SessionWakeup | undefined;
 	/**
 	 * 给另一个顶层会话寄一封信（`to` 是它的 id），见 `LetterReceipt`。只有顶层会话有，也只寄得到别的顶层会话：
-	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。请求的答复由本体配对、没答时由本体代答，往来链也由本体数，
-	 * 见 `LetterReceipt`。对方不在、是子会话、是自己时抛错；往来链太长、太绕时抛错，message 是给模型的话（让它停下、回去告诉人）。
-	 * 只在这次调用里用：调用答完以后再调就抛错（回执的 `answer` 不受影响）。
+	 * 子会话不是谁的通信对象。发件方的 id、工作目录由本体照实填上。信是单向的：没有请求和答复之分，对方要回话就再寄一封。
+	 * 对方不在、是子会话、是自己时抛错。只在这次调用里用：调用答完以后再调就抛错（回执的 `read` 不受影响）。
 	 */
 	letter?(to: string, letter: LetterInput): LetterReceipt;
 	/**
@@ -453,62 +452,42 @@ export interface WakeupInput {
 }
 
 /**
- * 一份后台结果在对话里画成的那一行，`BackgroundChannel.report`、`ReportOptions.delivery`、`LaunchedSession.reportBack` 给的都是它。
+ * 一份后台结果在对话里画成的那一行，`BackgroundChannel.report`、`ReportOptions.delivery`、`SessionAccess.reportBack` 给的都是它。
  * 宿主只留这几个字段、拷一份（`details` 要能存成 JSON），记下是哪个插件交的（`DeliveredReport.plugin`），那一行交给这个插件经
  * `ui.agentDelivery` 登记的组件画，没登记就画成宿主默认的一行（`title` 和收场）。`sessionId`（点了去哪个会话）插件写不了，
- * 只有新会话交回时宿主填上。
+ * 只有开出来的会话交回时宿主填上。
  */
 export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "incomplete" | "inline" | "details">;
 
 /**
- * 一封信写什么（`ToolRun.letter`）。字段的意思见 `PeerLetter`：`from` 是发件方的地址，收件方回信时原样当作收件人；
- * 是请求、答复还是通知由寄信的插件定，往来链由本体数（见 `LetterReceipt`）。
- * - 答复（`answer`，插件写的一般是 `replied`）对着哪几封请求由本体认：收件方读到了、还没答的、这封信的收件方问它的请求，一封答复
- *   全部答掉；`re` 不给时本体按这几封请求的开头填。一封也对不上（问的都答过了、根本没问过）时按通知送，`answer`、`re` 都不带。
- * - `recipient` 只对请求有用：收件方的地址，写法和 `from` 一样由寄信的插件定。本体替收件方代答（见 `LetterReceipt`）时拿它当
- *   答复的 `from`；不给就用收件方此刻的标题。
- * - `guide` 是给收件方模型的处理说明（「标着 reply="expected" 的用某件工具回」），一次送达里一样的只写一遍。各个标记本身是什么意思
- *   （请求没答会被代答、`answer` 的几种值）本体自己会说，插件只说怎么用它的工具。
+ * 一封信写什么（`ToolRun.letter`）。字段的意思见 `PeerLetter`：`from` 是发件方的地址，收件方回信时原样当作收件人。
+ * `guide` 是给收件方模型的处理说明（「回话用某件工具，`to` 写 from 的地址」），一次送达里一样的只写一遍。
  */
-export type LetterInput = Pick<PeerLetter, "from" | "text" | "request" | "answer" | "re"> & { recipient?: string; guide?: string };
+export type LetterInput = Pick<PeerLetter, "from" | "text"> & { guide?: string };
 
 /**
- * 信的下落。`read`：写进了收件方的对话。
- * `dropped`：没读到——请求还没读到收件方的人就按了停（通知和答复不丢，留到它下一轮开头读，这期间没有着落），或钩子 prompt.submit
- * 拦下了这次送达。`closed`：收件方删掉了，或应用退出了。
+ * 信的下落。`read`：写进了收件方的对话（收件方为它开了一轮，或在两步之间读到）。
+ * `dropped`：钩子 prompt.submit 拦下了这次送达，收件方没读到。`closed`：收件方删掉了，或应用退出了。
+ * 收件方的人按了停时信不丢：留到它下一轮开头读，这期间没有着落。
  */
 export type LetterFate = { status: "read" } | { status: "dropped" } | { status: "closed" };
 
 /**
- * 寄出的一封信。信和后台结果走同一条路：收件方忙着时在下一个步骤边界读到，闲着时为它开一轮（停下过的也开：一封信是
- * 一件新的事），送达经钩子 prompt.submit（`synthetic`）。前面带一句本体的话：这不是用户说的，不构成用户的授权。
+ * 寄出的一封信。信是单向的：本体不配对请求和答复，也不替没回话的一方代答；收件方要回话就再寄一封，发件方从它寄来的信认出回音。
+ * 信和后台结果走同一条路：收件方忙着时在下一个步骤边界读到，闲着时为它开一轮（停下过的也开：一封信是一件新的事），
+ * 送达经钩子 prompt.submit（`synthetic`）。前面带一句本体的话：这不是用户说的，不构成用户的授权。
  *
- * 请求（`request: true`）总会有一封答复，由本体配对，不靠哪个插件记账：
- * - 收件方答了：它寄回一封答复（见 `LetterInput`），或者寄信的插件经 `answer` 替它答了。
- * - 读到它的那一轮收场了还没答（完成、人按停、出错、跑到步数上限、原地打转都算）：本体拿那一轮读到它以后最后一段回复代答，
- *   `answer` 是 `unreplied`（太长的截掉，没以完成收场的前面注一句是怎么收场的，什么也没说的也说一句）。
- * - 没读到：收件方的人先按了停、或钩子 prompt.submit 拦下了这次送达，本体代答 `dropped`；收件方删掉了（读没读到都算）代答 `closed`。
- * - 发件方删掉了、应用退出了：不再答。
- * 代答从收件方寄回发件方，`from` 是请求的 `recipient`，和收件方自己回的一样走信的路。答过的请求再答一次（收件方答了以后又回、
- * 插件在本体代答以后再代答）什么也不寄：`answer` 返回 `undefined`，寄来的答复按通知送或不寄（见 `answer`）。
- *
- * 往来链防几个会话原地来回，也由本体数，不靠哪个插件记账：一封信叫起收件方的一轮（不是插进一轮已经在跑的），这一轮里经
- * `ToolRun.letter` 寄出的信就接着它的链再加一跳；人在这一轮里开口以后从头算。代答、经回执 `answer` 替收件方答的接着它答的
- * 那封信的链，同样往下数，所以收件方总不正面回答时也照样数到上限。一条链超过 28 跳、或同一个会话经手超过 10 次时
- * `ToolRun.letter` 抛错不寄；代答和回执的 `answer` 一封答一封，不拦。
+ * 防几个会话原地来回由本体管，不靠哪个插件记账：一个会话接连被别的会话的信、开出来的会话的交回（`SessionAccess.reportBack`）
+ * 叫起超过 10 轮、这期间人一句话也没说时，之后这两种都不再叫醒它，留到人下次开口时接在那句后面读，对话里提示一句；人开口后从头数。
+ * 后台命令、约好的唤醒叫起的几轮不算。
  */
 export interface LetterReceipt {
 	/** 这封信的 id，记在收件方对话里那条消息的 `peer` 上。 */
 	id: string;
+	/** 寄出那一刻收件方正忙（在跑一轮）：它要等手上这一步做完才读到。闲着的收件方当场为它开一轮。 */
+	queued: boolean;
 	/** 信有了着落时兑现，见 `LetterFate`。 */
 	read: Promise<LetterFate>;
-	/** 这封信作为答复答掉了几封请求（见 `LetterInput`）；不是答复、或一封也没对上时是 0。 */
-	answered: number;
-	/**
-	 * 替收件方答这一封请求：从收件方寄回给发件方，只答这一封，`answer` 不给就是 `replied`。请求已经有了答复（收件方答了、本体代答了、
-	 * 这里答过了）、两边有一方不在了、应用在退出时返回 `undefined`，什么也不寄。通知的回执也能用一次，寄回去的是一封通知。
-	 */
-	answer(letter: LetterInput): LetterReceipt | undefined;
 }
 
 /** 父会话此刻在做什么，见 `ParentSession.status`。 */
@@ -1245,9 +1224,15 @@ export interface SessionLaunch {
 	thinking?: ThinkingLevel;
 	/**
 	 * 从哪个会话开出来的，记进新会话摘要的 `spawnedFrom`；那个会话要在、不能是子会话。不给就不记。
-	 * 要经 `reportBack` 交回时，`toolCallId` 得是本插件注册的工具在那个会话里的一次调用（提出开新会话的那次）。
+	 * 要经 `SessionAccess.reportBack` 交回、要 `fork` 时，`toolCallId` 得是本插件注册的工具在那个会话里的一次调用（提出开新会话的那次）。
+	 * `name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字）：一组互相开出来的会话靠它称呼彼此，不给就不记。
 	 */
-	spawnedFrom?: { sessionId: string; toolCallId?: string };
+	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
+	/**
+	 * 带着来处的对话开：新会话先复制 `spawnedFrom` 那个会话里 `toolCallId` 那次调用之前的全部记录，再发 `message`。
+	 * 要给 `spawnedFrom.toolCallId`，那次调用要在那个会话的记录里，否则抛错。
+	 */
+	fork?: boolean;
 	/** 标题；不给就取第一句话的开头。 */
 	title?: string;
 	/**
@@ -1267,15 +1252,21 @@ export interface LaunchedSession {
 	 * 挂着的监视、认出来的开发服务器、约着还没触发的唤醒不挡它（见 `ParentStatus`），之后它们叫醒会话做的几轮不算进这一次。
 	 */
 	idle: Promise<LaunchedIdle>;
+}
+
+/** `SessionAccess.reportBack` 的选项。 */
+export interface ReportBackOptions {
+	/** 对话里那一行，见 `DeliveryInput`。宿主给它填上交回的会话的 id（`DeliveredReport.sessionId`），点了到那个会话。 */
+	delivery: DeliveryInput;
+	/** 同一次送达里本插件交的几份合成一段，见 `ReportFrame`。 */
+	frame?: ReportFrame;
 	/**
-	 * 把它做出来的结果交回开出它的那个会话（`spawnedFrom`），只能交一次：`text` 是写给模型的话，作为一条运行时送达写进那个会话
-	 * （前面带着「不是用户说的话」的抬头）；`delivery` 是对话里那一行（见 `DeliveryInput`），宿主给它填上这个会话的 id
-	 * （`DeliveredReport.sessionId`），默认画成「来自新会话 · 标题」，点了到这个会话。
-	 * 那个会话闲着（人按停过也算，这是一件新的事）就为它开一轮，忙着在两步之间读到。
-	 * 没有 `spawnedFrom`、那个会话删了或归档了、已经交过、正在退出时不送，返回 false。
-	 * `spawnedFrom.toolCallId` 不是本插件的工具在那个会话里的一次调用（或撤回时被截掉了）、插件已经停用时抛错。
+	 * 要不要叫醒开出它的会话。不给或 false 时不叫醒：那个会话正在跑就在两步之间读到，闲着就留到它下一轮开头读（人开口时接在后面）。
+	 * true 时宿主也只在这几种时候叫醒：那个会话闲着、上一轮以完成收场、没被人按停；从它开出来的会话（`spawnedFrom` 指回它的）没有一个在跑——
+	 * 还有在跑的，等最后一个停下再一起叫醒，几份合成一次送达；它被信和交回接连叫起的轮数没到上限（见 `LetterReceipt`）。
+	 * 不满足的留到它下一轮开头读。
 	 */
-	reportBack(text: string, delivery: DeliveryInput): boolean;
+	wake?: boolean;
 }
 
 /** `LaunchedSession.idle` 兑现时的样子。 */
@@ -1295,7 +1286,7 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
  * - 新开的会话：`launch` 开一个新的顶层会话、发出第一句话，之后它就是人的会话，插件不能再往里发；
  * - 代管的会话：`launch({ steward: true })` 开出来的那些，人没停止代管时，开它的插件能经 `post` 往里转话、经 `respond`、`answer`
  *   替人答它和挂在它下面的子会话弹的卡；别的会话（人已有的、别的插件代管的）不行，也不能事后认领；
- * - 开出它的那个会话：`LaunchedSession.reportBack` 交回一次，来处要是本插件的工具在那里的一次调用；
+ * - 开出它的那个会话：`reportBack` 把开出来的会话一轮的结果交回去，来处要是本插件的工具在那里的一次调用；
  * - 调用所在的会话：`ToolRun.background` 送后台结果、`ToolRun.archiveAfterTurn` 收尾后归档；
  * - 子会话的父会话：插件自己建的子会话里，它注册的工具的那次调用拿得到 `ToolRun.parent`（排活、停下、接着做），
  *   人在子会话的卡片上点的 `ToolCardProps.handToParent` 同样只到父会话；
@@ -1382,15 +1373,21 @@ export interface SessionAccess {
 	 * 开一个新会话并发出第一句话（定时任务到点了、人在插件界面上点了「在新会话里执行」）。新会话和人在侧栏新建的一样：
 	 * 进侧栏、不记在插件名下（没有 `owner`），人能接着聊，插件之后不能再往里发、也停不了删不了它（`steward` 开出来的除外：
 	 * 本插件能往里转话、替人答卡，见 `SessionLaunch.steward`）。第一句话照常经
-	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的；对已有会话只有 `reportBack` 往开出它的那个会话交回一次。
+	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的；对已有会话只有 `reportBack` 往开出它的那个会话交回。
 	 * 建好就返回：`session` 是新会话的摘要，`done` 在这第一轮结束时给出它为什么结束（之后人接着聊的几轮不算）。
 	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的一次性后台任务
-	 * 都结束了（被人停掉、撤回而作废的不算在等；挂着的监视、开发服务器、约好的唤醒和 cron 不等，见 `ParentStatus`），它经 `ToolRun.letter`
-	 * 问出去的请求（`request: true`）也都有了答复、答复唤起的几轮也做完了。请求总会有答复（见 `LetterReceipt`）：对方答了，
-	 * 或者本体在对方没答时代答。
+	 * 都结束了（被人停掉、撤回而作废的不算在等；挂着的监视、开发服务器、约好的唤醒和 cron 不等，见 `ParentStatus`）。
 	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
 	 */
 	launch(options: SessionLaunch): Promise<LaunchedSession>;
+	/**
+	 * 把开出来的会话 `sessionId` 一轮的结果交回开出它的那个会话（它的 `spawnedFrom`）：`text` 是写给模型的话，作为一条运行时送达写进那个会话
+	 * （前面带着「不是用户说的话」的抬头），对话里那一行见 `ReportBackOptions.delivery`；叫不叫醒那个会话见 `ReportBackOptions.wake`。
+	 * 每一轮都可以交，宿主不记交过几次。重启以后也能交：认的是 `spawnedFrom`，不是 `launch` 的句柄。
+	 * `sessionId` 没有 `spawnedFrom`、开出它的会话删了或归档了、正在退出时不送，返回 false。
+	 * `spawnedFrom.toolCallId` 不是本插件的工具在那个会话里的一次调用（或撤回时被截掉了）、插件已经停用时抛错。
+	 */
+	reportBack(sessionId: string, text: string, options: ReportBackOptions): boolean;
 	/**
 	 * 往本插件代管的会话里转一句话（外面的人经插件发来的消息）：排进这个会话的队（和人在输入框里排的同一条，落盘），
 	 * 会话闲着就当场开一轮，正在跑就排着，不插进这一轮。气泡标着来自本插件（`UserMessage.origin` 是 `plugin`，`fromPlugin` 是本插件），

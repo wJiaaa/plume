@@ -1094,7 +1094,7 @@ const counts = (map: Record<string, number>) =>
 		.map(([k, v]) => `${k} ${v}`)
 		.join("，") || "没有";
 console.log(`  有往来的会话 ${peers.involvedSessions} 个；工具调用：${counts(peers.calls)}`);
-console.log(`  寄信的结果（ask、reply、notify）：${counts(peers.outcomes)}`);
-console.log(`  收到的信：${counts(peers.letters)}；插进正在跑的那一轮 ${peers.arrivals.steered} 条，为它开一轮 ${peers.arrivals.opened} 条`);
-console.log(`  有往来的会话平均每个发通知 ${peers.noticesPerInvolvedSession} 条`);
-console.log("  ⚠ 问成没成看 answer:replied 占 request 的比例；answer:unreplied 多说明对方常忘了 reply_session，refused 多说明地址或限速挡得多。");
+console.log(`  send_message 的结果：${counts(peers.outcomes)}`);
+console.log(`  收到的信 ${peers.letters} 封；插进正在跑的那一轮 ${peers.arrivals.steered} 条，为它开一轮 ${peers.arrivals.opened} 条`);
+console.log(`  有往来的会话平均每个发消息 ${peers.messagesPerInvolvedSession} 条`);
+console.log("  ⚠ refused 多说明地址或限速挡得多；平均条数高说明会话之间在拿消息汇报进度，汇报该走每轮自动交回。");

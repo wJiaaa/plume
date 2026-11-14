@@ -13,7 +13,7 @@
 | [agent-core.md](agent-core.md) | 一轮的流程、收尾续写、重复调用检测、系统提示词、上下文压缩、智能标题 |
 | [agent-tools.md](agent-tools.md) | 文件工具、资源地址、bash 与后台任务、检查和定时任务、网页搜索、语言服务、符号索引 |
 | [agent-extensions.md](agent-extensions.md) | 自定义命令、技能、MCP 连接器、钩子、记忆 |
-| [multi-session.md](multi-session.md) | 子智能体、侧边聊天、会话互通、建议新会话、代码审阅、定时任务 |
+| [multi-session.md](multi-session.md) | 子智能体、侧边聊天、会话互通、开新会话、代码审阅、定时任务 |
 | [files.md](files.md) | 文件树、文件预览与文档预览、文件交付卡 |
 | [diagnostics.md](diagnostics.md) | 任务面板、调用轨迹（运行诊断）、环境卡片（会话环境）、会话摘要 |
 | [browser-and-preview.md](browser-and-preview.md) | 内置浏览器、回复内交互网页 |

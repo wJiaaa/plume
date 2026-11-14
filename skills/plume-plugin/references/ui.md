@@ -340,11 +340,11 @@ ui.conversationCard("todo", TodoCard);
 
 ## 送达的那一行
 
-`ui.agentDelivery(Component)` 画本插件交回的结果在对话里的那一行（`ctx.sessions.report`、`channel.report`、`reportBack` 带了 `delivery` 的，见 logic.md「后台与会话间递话」）：
+`ui.agentDelivery(Component)` 画本插件交回的结果在对话里的那一行（`ctx.sessions.report`、`channel.report`、`ctx.sessions.reportBack` 带了 `delivery` 的，见 logic.md「后台与会话间递话」）：
 
 - 收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给（连着几次只带 `inline` 的送达并成一次），画成一行（子 Agent 的「消息来自 @explore」、plume.tools 的「后台命令完成」，用 `FlowRow`）。每份的 `details` 是你交的时候给的自己的数据，宿主不读，原样带回来。
 - 宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下。
-- 没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（新会话交回）画成「来自新会话」、点了过去；组件出错时只丢这一行。
+- 没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（开出来的会话交回）画成「来自关联会话」、点了过去；组件出错时只丢这一行。
 
 ## 环境卡片
 

@@ -44,14 +44,10 @@ interface Run {
 /** 别的会话寄来、还没有着落的一封信，见 `ToolRun.letter`。 */
 export interface Letter {
 	peer: PeerLetter;
-	/** 它所在的往来链，按经手的会话 id 排、含发件方；叫起收件方一轮时那一轮接着它（见 `chainRefusal`）。 */
-	chain: string[];
 	guide?: string;
 	/** 定下它的下落；只认第一次。 */
 	settle(fate: LetterFate): void;
 }
-
-type LetterReport = { letter: Letter; valid(): boolean };
 
 /** 插件交回子会话结果时带的 `ReportFrame`，记着是哪个插件的：只有同一个插件的几份合成一段。 */
 type Frame = ReportFrame & { owner: string };
@@ -59,8 +55,19 @@ type Frame = ReportFrame & { owner: string };
 /** 取出来的一份：后台结果的话，或者一封信。 */
 export type Report = ({ text: string; delivery?: DeliveredReport; frame?: Frame } | { letter: Letter }) & { valid(): boolean };
 
-/** 攒着还没取的一份：工具给的可以是函数，取的那一刻才定送不送。 */
-type Pending = ({ text: string | (() => string | undefined); delivery?: DeliveredReport; frame?: Frame } | { letter: Letter }) & { valid(): boolean };
+/**
+ * 攒着还没取的一份：工具给的可以是函数，取的那一刻才定送不送。`spawned`：开出来的会话交回的、要叫醒来处的一份
+ * （`SessionAccess.reportBack` 的 `wake`），叫不叫醒另有规矩，见 `readyKind`。
+ */
+type Pending = ({ text: string | (() => string | undefined); delivery?: DeliveredReport; frame?: Frame; spawned?: true } | { letter: Letter }) & {
+	valid(): boolean;
+};
+
+/**
+ * 一批攒好的送达是什么，决定叫不叫醒会话（见 agent 的 `wakeReports`）：`other` 里有后台命令、子会话这些会话自己派出去的事的结果，
+ * `letter` 里有别的会话的信（没有前一种），`spawned` 全是开出来的会话交回的。
+ */
+export type ReadyKind = "other" | "letter" | "spawned";
 
 interface Batch {
 	reports: Pending[];
@@ -78,10 +85,11 @@ export class BackgroundRuns {
 	 */
 	private readonly channels = new Map<string, { generation: AbortController; calls: Map<string, AbortController> }>();
 	/**
-	 * 留到会话下一轮开头读的信：人按停时攒着的通知和答复——没人等它们的回音，丢了就
-	 * 谁也不知道——和一轮被打断（插话、编辑重发）时取出来还没写进会话的。不叫醒会话，也不算它在等后台（`pending`）。
+	 * 留到会话下一轮开头读的：人按停时攒着的信和开出来的会话交回的结果——丢了就谁也不知道——，一轮被打断（插话、编辑重发）时
+	 * 取出来还没写进会话的信，不叫醒会话的交回（`reportBack` 不带 `wake`），和到了上限、不再叫醒会话的那几份（`holdReady`）。
+	 * 不叫醒会话，也不算它在等后台（`pending`）；会话正在跑时在下一个步骤边界读到。
 	 */
-	private readonly held = new Map<string, LetterReport[]>();
+	private readonly held = new Map<string, Pending[]>();
 
 	/** `changed`：某个父会话的后台运行有了着落（结束、撤掉），`pending` 可能变了。 */
 	constructor(
@@ -135,11 +143,28 @@ export class BackgroundRuns {
 	}
 
 	/**
-	 * `plugin` 开出的新会话 `launchedId` 把结果交回开出它的会话（`LaunchedSession.reportBack`）：走同一条送达，那一行带着
-	 * 新会话的 id（`sessionId`，点了过去）——只有这里写得出它。作废跟着来处会话这一代渠道。
+	 * `plugin` 开出的会话 `launchedId` 把一轮的结果交回开出它的会话（`SessionAccess.reportBack`）：走同一条送达，那一行带着
+	 * 那个会话的 id（`sessionId`，点了过去）——只有这里写得出它。不跟着来处的渠道作废：来处的人按了停，交回留到它下一轮开头读，
+	 * 删掉时才丢。`wake` 的攒进这一批、按 `readyKind` 的规矩叫醒，不叫醒的直接留到下一轮。
 	 */
-	reportBack(sessionId: string, launchedId: string, words: string, delivery: DeliveryInput, plugin: string): boolean {
-		return this.send(sessionId, this.signal(sessionId, `launch:${launchedId}`), words, { ...deliveryOf(delivery, plugin), sessionId: launchedId });
+	reportBack(
+		sessionId: string,
+		launchedId: string,
+		words: string,
+		options: { delivery: DeliveryInput; frame?: ReportFrame; wake: boolean },
+		plugin: string,
+	): void {
+		if (typeof words !== "string" || !words.trim()) throw new Error(text("session.emptyMessage"));
+		const frame = options.frame;
+		const report: Pending = {
+			text: words,
+			delivery: { ...deliveryOf(options.delivery, plugin), sessionId: launchedId },
+			...(frame ? { frame: { owner: plugin, head: String(frame.head ?? ""), ...(typeof frame.tail === "function" ? { tail: frame.tail } : {}) } } : {}),
+			...(options.wake ? { spawned: true as const } : {}),
+			valid: () => true,
+		};
+		if (options.wake) this.enqueue(sessionId, report);
+		else this.held.set(sessionId, [...(this.held.get(sessionId) ?? []), report]);
 	}
 
 	private signal(sessionId: string, toolCallId: string): AbortSignal {
@@ -157,13 +182,12 @@ export class BackgroundRuns {
 		return true;
 	}
 
-	/** 给 `sessionId` 攒一封信，信有了着落时兑现。删掉、退出时是 `closed`，人按停时请求是 `dropped`（见 `cancelSession`）。 */
-	letter(sessionId: string, peer: PeerLetter, chain: string[], guide?: string): Promise<LetterFate> {
+	/** 给 `sessionId` 攒一封信，信有了着落时兑现。删掉、退出时是 `closed`；人按停时留到下一轮开头读（见 `cancelSession`）。 */
+	letter(sessionId: string, peer: PeerLetter, guide?: string): Promise<LetterFate> {
 		const fate = Promise.withResolvers<LetterFate>();
 		let settled = false;
 		const letter: Letter = {
 			peer,
-			chain,
 			...(guide ? { guide } : {}),
 			settle: (value) => {
 				if (settled) return;
@@ -211,14 +235,32 @@ export class BackgroundRuns {
 		return this.batches.get(parentId)?.ready === true;
 	}
 
-	/** 有留到下一轮开头读的信，见 `held`。 */
+	/** 攒好的这一批是什么，见 `ReadyKind`；没有攒好的时是 undefined。 */
+	readyKind(parentId: string): ReadyKind | undefined {
+		const batch = this.batches.get(parentId);
+		if (!batch?.ready) return undefined;
+		const live = batch.reports.filter((report) => report.valid());
+		if (live.some((report) => !("letter" in report) && !report.spawned)) return "other";
+		return live.some((report) => "letter" in report) ? "letter" : "spawned";
+	}
+
+	/** 攒好的这一批不叫醒会话了，整批留到它下一轮开头读（见 `held`）。 */
+	holdReady(parentId: string): void {
+		const batch = this.batches.get(parentId);
+		if (!batch?.ready) return;
+		this.batches.delete(parentId);
+		this.hold(parentId, batch.reports);
+		this.changed(parentId);
+	}
+
+	/** 有留到下一轮开头读的，见 `held`。 */
 	hasHeld(sessionId: string): boolean {
 		return (this.held.get(sessionId)?.length ?? 0) > 0;
 	}
 
-	/** 没写进会话就收了场的信放回去，留到下一轮开头读。 */
-	hold(sessionId: string, letters: readonly LetterReport[]): void {
-		const kept = letters.filter((report) => report.valid());
+	/** 没写进会话就收了场的信、交回放回去，留到下一轮开头读。 */
+	hold(sessionId: string, reports: readonly Pending[]): void {
+		const kept = reports.filter((report) => report.valid());
 		if (kept.length > 0) this.held.set(sessionId, [...(this.held.get(sessionId) ?? []), ...kept]);
 	}
 
@@ -242,19 +284,18 @@ export class BackgroundRuns {
 	}
 
 	/**
-	 * 人按停（`dropped`）、删掉（`closed`）：渠道作废，派发停掉。攒着的信：删掉时都是 `closed`；按停时请求丢掉（发件方在等，
-	 * 告诉它没读到），通知和答复留到下一轮开头读（`held`）。
+	 * 人按停（`stopped`）、删掉（`closed`）：渠道作废，派发停掉。攒着的信和开出来的会话交回的：删掉时信是 `closed`、交回丢掉；
+	 * 按停时都留到下一轮开头读（`held`）——它们不是这个会话自己派出去的事，人停的不是它们。
 	 */
-	cancelSession(sessionId: string, fate: "dropped" | "closed" = "dropped"): void {
+	cancelSession(sessionId: string, fate: "stopped" | "closed" = "stopped"): void {
 		const batch = this.batches.get(sessionId);
-		const letters = [...(this.held.get(sessionId) ?? []), ...((batch?.reports.filter((report) => "letter" in report) ?? []) as LetterReport[])];
+		const kept = (report: Pending) => "letter" in report || report.delivery?.sessionId !== undefined;
+		const others = [...(this.held.get(sessionId) ?? []), ...(batch?.reports.filter(kept) ?? [])];
 		this.held.delete(sessionId);
-		if (batch) batch.reports = batch.reports.filter((report) => !("letter" in report));
-		if (fate === "closed") for (const { letter } of letters) letter.settle({ status: "closed" });
-		else {
-			for (const { letter } of letters) if (letter.peer.request) letter.settle({ status: "dropped" });
-			this.hold(sessionId, letters);
-		}
+		if (batch) batch.reports = batch.reports.filter((report) => !kept(report));
+		if (fate === "closed") {
+			for (const report of others) if ("letter" in report) report.letter.settle({ status: "closed" });
+		} else this.hold(sessionId, others);
 		this.channels.get(sessionId)?.generation.abort();
 		this.channels.delete(sessionId);
 		this.cancelRuns(sessionId);

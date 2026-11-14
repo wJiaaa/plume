@@ -79,7 +79,7 @@
 	color: var(--plume-danger);
 }
 
-/* 开始以后那一行，第一轮还在跑时后面挂着「交回这里」。 */
+/* 开始以后那一行。 */
 .plume-spawn-started {
 	display: flex;
 	min-width: 0;
@@ -171,4 +171,23 @@
 
 .plume-spawn-dot[data-status="failed"] {
 	background: var(--plume-danger);
+}
+
+/* offer 的卡：模型起的那件事，下面三颗按钮靠右，主按钮在最后。 */
+.plume-spawn-offer {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 0 16px 12px;
+}
+
+.plume-spawn-offer > p {
+	margin: 0;
+}
+
+.plume-spawn-offer-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
 }

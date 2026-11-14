@@ -264,7 +264,7 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
 
 调用答完以后还在后台接着做的事、过一会儿再叫醒会话、给另一个顶层会话寄信，都由本体送进会话：会话闲着时开一轮，忙着时在下一个步骤边界读入。
 
-**送达在对话里的那一行**：`channel.report`、`ctx.sessions.report`、`reportBack` 都可以带 `delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON），写进送达消息，宿主只留认得的字段、记下是哪个插件交的；界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），没登记就按 `title` 画默认的一行，标 `inline: true` 的插在一段活中间时并进那段活；不给 `delivery` 就只有模型看得到。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。
+**送达在对话里的那一行**：`channel.report`、`ctx.sessions.report`、`ctx.sessions.reportBack` 都可以带 `delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON），写进送达消息，宿主只留认得的字段、记下是哪个插件交的；界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），没登记就按 `title` 画默认的一行，标 `inline: true` 的插在一段活中间时并进那段活；不给 `delivery` 就只有模型看得到。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。
 
 - **后台结果**：调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型。
   - `channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）。
@@ -278,12 +278,12 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
   - cron 写错抛错，在 `expiresAt` 之前一次也对不上（第一次至少在一分钟以后）时不登记、返回 `undefined`。
   - 到点时本体调 `message(wakeup, { next, skipped })` 要送进去的话和那一行（`{ text, delivery? }`），经这次调用的渠道送，那一行记在你名下；上一次开的那一轮还没收场时跳过、下一次告诉你跳过了几次。
   - 唤醒是挂着的：没触发的唤醒不挡会话闲下来，到点照样叫醒它。上限、下限、措辞归你管（plume.tools 的 `schedule_wakeup`、`cron_create` 做了一份）。
-- **寄信**：给另一个顶层会话寄一封信，`run.letter(to, { from, text, request?, answer?, re?, recipient?, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址、收件方回信时原样当收件人）。一封多长、发得多快、重复的发不发归你管（plume.sessions 做了一份）。
-  - 信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… reply="expected"|answer=… re=…>`，对话里一行「来自 X」「X 的答复」（`UserMessage.peer`）。这些标记是什么意思（请求没答会被代答、`answer` 的几种值）本体自己会跟模型说；`guide` 只写和你的工具有关的处理说明（用哪件工具回），一次送达里一样的只写一遍。
-  - 请求（`request: true`）总会有一封答复，配对和代答都在本体，你不用记账：收件方读到以后寄回一封 `answer: "replied"` 的信，本体把它对上收件方读到了、还没答的、你问它的全部请求（`re` 不给就按那几封的开头填；一封也对不上——都答过了、根本没问过——就按通知送，`answer`、`re` 都去掉，回执的 `answered` 是 0）；读到它的那一轮收场了还没答（完成、人按停、出错、步数上限、原地打转都算），本体拿那一轮读到它以后最后一段回复代答 `unreplied`（最多 4000 字，没以完成收场的前面注一句怎么收场的）；没读到（对方的人先按了停、`prompt.submit` 拦下了）代答 `dropped`；对方删掉了（读没读到都算）代答 `closed`；你这边的会话删掉了、应用退出了就不答。代答署的名是请求的 `recipient`（收件方的地址，写法和 `from` 一样由你定；不给用它的标题）。所以收件方没有专门回信的工具也行：它在那一轮最后的回复里写清楚，就原样交回来。
-  - 回执 `{ id, read, answered, answer }`：`read` 兑现成 `{ status: "read" }`、`{ status: "dropped" }`（请求没读到对方的人就按了停——通知和答复不丢，留到它下一轮开头读；或 `prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）；`answered` 是这封作为答复答掉了几封请求；`answer(letter)` 替收件方答这一封请求（只答这一封、只能一次，`answer` 不给就是 `replied`），请求已经有了答复（对方答了、本体代答了）、一方不在了时返回 `undefined`、什么也不寄，所以重复代答是无害的。请求有了答复之前，发件方不算真闲（`launch` 的 `idle` 等它）。
-  - 往来链防几个会话原地来回，由本体数，你不用记账：一封信叫起对方一轮（不是插进一轮已经在跑的）时，那一轮里经 `run.letter` 寄出的信接着它的链再加一跳，人在那一轮里开口以后从头算；本体的代答、回执的 `answer` 也接着它答的那封信的链往下数，所以对方总不正面回答时照样数到上限。一条链超过 28 跳、或同一个会话经手超过 10 次时 `run.letter` 抛错不寄，message 是给模型的话（别再转、回去告诉人），原样交给模型就行。
-  - 对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `answer` 不受影响），要以后寄就在那次调用里寄出去、留着回执。
+- **寄信**：给另一个顶层会话寄一封单向的信，`run.letter(to, { from, text, guide? })`（`to` 是对方的会话 id，`from` 是你给发件方起的地址，对方回话时原样当收件人）。一封多长、发得多快、重复的发不发归你管（plume.sessions 做了一份）。
+  - 信和后台结果走同一条路：对方闲着为它开一轮（人按停过的也开），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… cwd=…>`，对话里一行「来自 X」（`UserMessage.peer`）。`guide` 只写和你的工具有关的处理说明（要回话用哪件工具），一次送达里一样的只写一遍。
+  - 没有请求和答复之分，本体不配对也不代答：要回话就由对方再寄一封，你从寄回来的信（`peer` 里 `sessionId` 是对方）认出回音。要对方答的，给对方一件回话的工具（plume.review 的 `answer_review`），或者靠一件通用的发消息工具。
+  - 回执 `{ id, queued, read }`：`queued` 是寄出那一刻对方正忙（要等手上这一步做完才读到）；`read` 兑现成 `{ status: "read" }`（写进了对方的对话）、`{ status: "dropped" }`（`prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）。对方的人按了停时信不丢，留到它下一轮开头读，这期间没有着落。
+  - 防几个会话原地来回由本体数，你不用记账：一个会话接连被别的会话的信和开出来的会话的交回（`ctx.sessions.reportBack`）叫起超过 10 轮、这期间人一句话也没说，之后这两种都不再叫醒它，留到人开口时接在那句后面读，对话里提示一句。
+  - 对方不在、是子会话、是自己时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `read` 不受影响），要以后寄就在那次调用里寄出去、留着回执。
 
 ## 钩子
 
@@ -631,13 +631,15 @@ const stop = await ctx.sessions.send(assistant.id, text);
 ```ts
 const { session, done, idle } = await ctx.sessions.launch({ project: task.project, message: task.prompt });
 const stop = await done; // 第一轮为什么结束：done、error、stalled、max_turns、aborted（人按了停止）……
-await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的后台命令都回来了，问出去的请求都有了答复，结果唤起的几轮也做完了（挂着的开发服务器、监视、约好的唤醒不等）
+await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的后台命令都回来了，结果唤起的几轮也做完了（挂着的开发服务器、监视、约好的唤醒不等）
 ```
 
-- 返回 `{ session, done, idle, reportBack }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）；`reportBack(text, delivery)` 把结果作为一条运行时送达交回 `spawnedFrom` 那个会话一次（`delivery` 和 `report` 的同一个形状，宿主填上新会话的 id，默认画成「来自新会话」一行、点了过去），来处删了、归档了返回 false。
+- 返回 `{ session, done, idle }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）。
+- **交回来处**：`ctx.sessions.reportBack(sessionId, text, { delivery, frame?, wake? })` 把开出来的会话一轮的结果作为一条运行时送达交回它的 `spawnedFrom` 那个会话（`delivery` 和 `report` 的同一个形状，宿主填上它的 id，默认画成「来自关联会话」一行、点了过去；`frame` 同 `report`，同一次送达里你交的几份合成一段）。每一轮都可以交，重启以后也能交：认的是 `spawnedFrom`，不是句柄；要知道它哪一轮收场了，声明 `observe: "all"` 看 `turnEnd`。`wake: true` 请宿主叫醒来处：只在来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑（还有在跑的就等最后一个停下再一起送）、接连被叫起没到上限时叫醒，否则留到来处下一轮开头读；不给就不叫醒。来处删了、归档了、正在退出时返回 false；`spawnedFrom.toolCallId` 不是你的工具在来处的一次调用、或你的插件停用了时抛错。
+- `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`。
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
-- `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
+- `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, name? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
 - 什么时候开由插件定，但开出来的每个会话都是实打实的一轮模型调用：只在到点了、人点了按钮时开，不在渲染、循环里开。界面上要把人带过去，用 `ui.openSession(session.id)`（人点了按钮时）。
 
 ## 代管会话

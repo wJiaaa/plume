@@ -18,7 +18,7 @@ afterEach(async () => {
 	if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-async function open(replies: FakeReply[], configure: (ctx: PluginContext) => void = () => undefined) {
+async function open(replies: FakeReply[] | ((request: Record<string, unknown>) => FakeReply), configure: (ctx: PluginContext) => void = () => undefined) {
 	dir = await mkdtemp(join(tmpdir(), "plume-launch-"));
 	model = await fakeAnthropic(replies);
 	let sessions!: SessionAccess;
@@ -138,57 +138,140 @@ it("插件停用以后，留着的 ctx 开不了会话", async () => {
 	expect(service.listSessions()).toHaveLength(0);
 });
 
-/** 来处会话里先有一次本插件工具（`suggest`）的调用 `call_1`：交回只认这样的来处。 */
-async function withSuggestion(replies: FakeReply[]) {
-	const opened = await open([{ toolCalls: [{ id: "call_1", name: "suggest", args: {} }] }, { text: "建议好了" }, ...replies], (ctx) =>
-		ctx.tools.register({ name: "suggest", description: "提建议", parameters: { type: "object", properties: {} }, execute: async () => ({ output: "好" }) }),
-	);
+/**
+ * 来处会话里先有一次本插件工具（`suggest`）的调用 `call_1`：交回、带记录开只认这样的来处。之后的请求按 `replies` 答，
+ * 给函数时按请求里最后一条消息的字答（几个会话同时在跑，先后不定）。
+ */
+async function withSuggestion(replies: FakeReply[] | ((last: string) => FakeReply), configure: (ctx: PluginContext) => void = () => undefined) {
+	let served = 0;
+	const answer = (request: Record<string, unknown>): FakeReply => {
+		served++;
+		if (served === 1) return { toolCalls: [{ id: "call_1", name: "suggest", args: {} }] };
+		if (served === 2) return { text: "建议好了" };
+		return typeof replies === "function" ? replies(lastText(request)) : (replies[served - 3] ?? { text: "多出来的一问" });
+	};
+	const opened = await open(answer, (ctx) => {
+		ctx.tools.register({ name: "suggest", description: "提建议", parameters: { type: "object", properties: {} }, execute: async () => ({ output: "好" }) });
+		configure(ctx);
+	});
 	const source = await opened.service.createSession({ cwd: dir });
 	opened.service.send(source.id, { content: [{ type: "text", text: "看看" }] });
 	await vi.waitFor(async () => expect((await opened.service.getSession(source.id)).summary.stop).toEqual({ reason: "done" }), { timeout: 5_000, interval: 10 });
 	return { ...opened, source };
 }
 
-it("reportBack 把结果交回开出它的会话：送达那一行带着新会话的 id（插件给的不算），叫起那个会话一轮，只交一次", async () => {
-	const { service, sessions, source } = await withSuggestion([{ text: "新会话做完了" }, { text: "收到交回的结果" }]);
-	const launched = await sessions().launch({ cwd: dir, message: "去做", title: "清理死代码", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
-	expect(await launched.idle).toEqual({ stop: { reason: "done" }, reply: "新会话做完了" });
-	// 人按停过的会话也为交回开一轮：这是一件新的事。
-	service.stop(source.id);
-	const line = { id: "suggestion-1", title: "清理死代码", status: "failed" as const };
-	expect(launched.reportBack("它说：做完了", { ...line, sessionId: "somewhere-else" } as typeof line)).toBe(true);
-	expect(launched.reportBack("再交一次", { ...line, status: "done" })).toBe(false);
-	await vi.waitFor(
+/** 请求体里最后一条消息的字（工具结果也算）。 */
+function lastText(request: Record<string, unknown>): string {
+	const messages = (request.messages ?? []) as Array<{ content: unknown }>;
+	return JSON.stringify(messages.at(-1)?.content ?? "");
+}
+
+const roles = async (service: Awaited<ReturnType<typeof open>>["service"], id: string) =>
+	(await service.getSession(id)).messages.map((message) => (message.role === "user" && message.delivery ? "delivery" : message.role));
+
+const settled = async (service: Awaited<ReturnType<typeof open>>["service"], id: string, expected: string[]) =>
+	vi.waitFor(
 		async () => {
-			const view = await service.getSession(source.id);
-			expect(view.messages.map((message) => message.role)).toEqual(["user", "assistant", "toolResult", "assistant", "user", "assistant"]);
-			expect(view.summary.running).toBe(false);
+			expect(await roles(service, id)).toEqual(expected);
+			expect((await service.getSession(id)).summary.running).toBe(false);
 		},
 		{ timeout: 5_000, interval: 10 },
 	);
+
+const line = { id: "r", title: "清理死代码", status: "done" as const };
+
+it("reportBack 把一轮的结果交回开出它的会话：那一行带着新会话的 id（插件给的不算），来处闲着就叫起一轮；每一轮都能交", async () => {
+	const { service, sessions, source } = await withSuggestion([{ text: "新会话做完了" }, { text: "收到交回的结果" }, { text: "又收到一份" }]);
+	const launched = await sessions().launch({ cwd: dir, message: "去做", title: "清理死代码", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
+	expect(await launched.idle).toEqual({ stop: { reason: "done" }, reply: "新会话做完了" });
+	const forged = { ...line, sessionId: "somewhere-else" } as typeof line;
+	expect(sessions().reportBack(launched.session.id, "它说：做完了", { delivery: forged, wake: true })).toBe(true);
+	await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant"]);
 	const delivered = (await service.getSession(source.id)).messages[4];
-	expect(delivered).toMatchObject({
-		role: "user",
-		synthetic: true,
-		delivery: [{ ...line, plugin: "test.launcher", sessionId: launched.session.id }],
-	});
+	expect(delivered).toMatchObject({ role: "user", synthetic: true, delivery: [{ ...line, plugin: "test.launcher", sessionId: launched.session.id }] });
 	const words = JSON.stringify(delivered?.content);
 	expect(words).toContain("不是用户说的话");
 	expect(words).toContain("它说：做完了");
+	expect(sessions().reportBack(launched.session.id, "第二轮也做完了", { delivery: { ...line, id: "r2" }, wake: true })).toBe(true);
+	await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant", "delivery", "assistant"]);
 });
 
-const done = { id: "r", title: "结果", status: "done" as const };
+it("不叫醒的、来处被人按停或上一轮没做完时交回的：都留到来处下一轮开头，接在人那句后面读到", async () => {
+	const { service, sessions, source } = await withSuggestion([{ text: "新会话做完了" }, { text: "人问的我答了" }]);
+	const launched = await sessions().launch({ cwd: dir, message: "去做", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
+	await launched.idle;
+	expect(sessions().reportBack(launched.session.id, "不叫醒的一份", { delivery: line })).toBe(true);
+	service.stop(source.id);
+	expect(sessions().reportBack(launched.session.id, "停下以后的一份", { delivery: { ...line, id: "r2" }, wake: true })).toBe(true);
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+	expect((await service.getSession(source.id)).summary.background ?? false).toBe(false);
+	service.send(source.id, { content: [{ type: "text", text: "人开口" }] });
+	await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "user", "delivery", "assistant"]);
+	const words = JSON.stringify((await service.getSession(source.id)).messages[5]?.content);
+	expect(words).toContain("不叫醒的一份");
+	expect(words).toContain("停下以后的一份");
+});
+
+it("从来处开出来的会话还有在跑的：先不叫醒，最后一个停下后几份合成一次送达", async () => {
+	let gate!: () => void;
+	const opened = new Promise<void>((resolve) => (gate = resolve));
+	const { service, sessions, source } = await withSuggestion(
+		(last) => {
+			if (last.includes("做甲")) return { text: "甲做完了" };
+			if (last.includes("做乙")) return { toolCalls: [{ id: "call_wait", name: "wait", args: {} }] };
+			if (last.includes("等好了")) return { text: "乙做完了" };
+			return { text: "两份都收到了" };
+		},
+		(ctx) =>
+			ctx.tools.register({
+				name: "wait",
+				description: "等",
+				parameters: { type: "object", properties: {} },
+				execute: async () => {
+					await opened;
+					return { output: "等好了" };
+				},
+			}),
+	);
+	const first = await sessions().launch({ cwd: dir, message: "做甲", spawnedFrom: { sessionId: source.id, toolCallId: "call_1", name: "jia" } });
+	const second = await sessions().launch({ cwd: dir, message: "做乙", spawnedFrom: { sessionId: source.id, toolCallId: "call_1", name: "yi" } });
+	await first.done;
+	sessions().reportBack(first.session.id, "甲的汇报", { delivery: { ...line, id: "a" }, wake: true });
+	await new Promise((resolve) => setTimeout(resolve, 1_200));
+	expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+	gate();
+	await second.done;
+	sessions().reportBack(second.session.id, "乙的汇报", { delivery: { ...line, id: "b" }, wake: true });
+	await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant"]);
+	expect((await service.getSession(source.id)).messages[4]).toMatchObject({ delivery: [{ id: "a" }, { id: "b" }] });
+	expect((await service.getSession(first.session.id)).summary.spawnedFrom).toEqual({ sessionId: source.id, toolCallId: "call_1", name: "jia" });
+});
+
+it("fork 带着来处在那次调用之前的记录开；没有调用、短名不对时抛错", async () => {
+	const { service, sessions, source } = await withSuggestion([{ text: "接着做了" }]);
+	const forked = await sessions().launch({ cwd: dir, message: "接着做剩下的", fork: true, spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
+	await forked.done;
+	const messages = (await service.getSession(forked.session.id)).messages;
+	expect(messages.map((message) => message.role)).toEqual(["user", "user", "assistant"]);
+	expect(JSON.stringify(messages[0]?.content)).toContain("看看");
+	expect(JSON.stringify(messages[1]?.content)).toContain("接着做剩下的");
+	await expect(sessions().launch({ cwd: dir, message: "做", fork: true, spawnedFrom: { sessionId: source.id } })).rejects.toThrow();
+	await expect(sessions().launch({ cwd: dir, message: "做", fork: true, spawnedFrom: { sessionId: source.id, toolCallId: "nope" } })).rejects.toThrow();
+	await expect(sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: source.id, name: "Bad Name" } })).rejects.toThrow();
+});
 
 it("reportBack 只认本插件工具的调用当来处：填别的会话、别的调用 id 抛错，停用以后也抛错", async () => {
 	const { service, sessions, source } = await withSuggestion([{ text: "a" }, { text: "b" }]);
 	const other = await service.createSession({ cwd: dir });
 	const forged = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: other.id, toolCallId: "call_1" } });
 	await forged.idle;
-	expect(() => forged.reportBack("结果", done)).toThrow("不是本插件的工具");
+	expect(() => sessions().reportBack(forged.session.id, "结果", { delivery: line })).toThrow("不是本插件的工具");
 	const legit = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });
 	await legit.idle;
+	const stale = sessions();
 	await service.setPluginEnabled("test.launcher", false);
-	expect(() => legit.reportBack("结果", done)).toThrow("已停用");
+	expect(() => stale.reportBack(legit.session.id, "结果", { delivery: line })).toThrow("已停用");
 	expect((await service.getSession(other.id)).messages).toEqual([]);
 });
 
@@ -196,21 +279,21 @@ it("reportBack 不送：没有来处、来处归档了或删了，空话和没�
 	const { service, sessions } = await open([{ text: "a" }, { text: "b" }, { text: "c" }]);
 	const plain = await sessions().launch({ cwd: dir, message: "做" });
 	await plain.done;
-	expect(plain.reportBack("结果", done)).toBe(false);
+	expect(sessions().reportBack(plain.session.id, "结果", { delivery: line })).toBe(false);
 
 	const archived = await service.createSession({ cwd: dir });
 	const fromArchived = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: archived.id } });
 	await fromArchived.done;
 	await sessions().setArchived(archived.id, true);
-	expect(() => fromArchived.reportBack("  ", done)).toThrow("消息不能为空");
-	expect(() => fromArchived.reportBack("结果", "done" as never)).toThrow("要是一个对象");
-	expect(fromArchived.reportBack("结果", done)).toBe(false);
+	expect(() => sessions().reportBack(fromArchived.session.id, "  ", { delivery: line })).toThrow("消息不能为空");
+	expect(() => sessions().reportBack(fromArchived.session.id, "结果", { delivery: "done" } as never)).toThrow("要是一个对象");
+	expect(sessions().reportBack(fromArchived.session.id, "结果", { delivery: line })).toBe(false);
 
 	const deleted = await service.createSession({ cwd: dir });
 	const fromDeleted = await sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: deleted.id } });
 	await fromDeleted.done;
 	await service.deleteSession(deleted.id);
-	expect(fromDeleted.reportBack("结果", done)).toBe(false);
+	expect(sessions().reportBack(fromDeleted.session.id, "结果", { delivery: line })).toBe(false);
 	expect((await service.getSession(archived.id)).messages).toEqual([]);
 });
 

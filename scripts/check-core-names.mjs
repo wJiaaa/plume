@@ -44,7 +44,7 @@ const BUILTIN_TOOLS = {
 	plan: ["submit_plan"],
 	"side-chat": ["read_main_chat", "dispatch_task", "control_main"],
 	skills: ["skill"],
-	"spawn-session": ["spawn_session", "archive_session"],
+	"spawn-session": ["spawn_session", "hand_off_to_session", "dismiss_task", "archive_session"],
 	subagents: ["task", "stop_subagent", "yield"],
 	todo: ["todo_write"],
 	tools: ["read", "write", "edit", "ls", "glob", "grep", "bash", "bash_output", "monitor", "schedule_wakeup", "cron_create", "cron_list", "cron_delete"],
@@ -55,7 +55,7 @@ const BUILTIN_TOOLS = {
 const BUILTIN_MARKS = {
 	mcp: ["mcpDeferred"],
 	prompt: ["userInstructions", "projectInstructions"],
-	"spawn-session": ["session_result"],
+	"spawn-session": ["session-report", "spawnedSession"],
 	subagents: ["subagent_result"],
 	tools: ["background_job", "monitor_events"],
 };
@@ -95,11 +95,10 @@ const MARKET_TOOLS = [
 	"read_pull_request",
 	"review_session",
 	"ask_implementer",
+	"answer_review",
 	"list_sessions",
 	"read_session",
-	"ask_session",
-	"reply_session",
-	"notify_session",
+	"send_message",
 	"skin_studio_theme",
 	"ssh_run",
 	"ssh_sessions",
@@ -119,11 +118,6 @@ const ALLOWED = [
 		file: "apps/desktop/src/renderer/market/detail.tsx",
 		name: "skill",
 		reason: "同上：插件市场按插件包的种类分页",
-	},
-	{
-		file: "packages/core/agent/src/agent.ts",
-		name: "read",
-		reason: "会话互发的信的下落（LetterFate.status：对方读到了），和读文件的工具同字",
 	},
 	{
 		file: "apps/desktop/src/main/security-policy.ts",

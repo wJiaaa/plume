@@ -933,7 +933,7 @@ export interface UiContext {
 	 */
 	useService<K extends keyof UiServices>(name: K): UiServices[K] | undefined;
 	/**
-	 * 本插件交回的结果（`ctx.sessions.report`、`BackgroundChannel.report`、`LaunchedSession.reportBack` 带了 `delivery` 的）在对话里
+	 * 本插件交回的结果（`ctx.sessions.report`、`BackgroundChannel.report`、`ctx.sessions.reportBack` 带了 `delivery` 的）在对话里
 	 * 画成哪一行：一次送达里本插件交的几份一起交给它。只画自己交的那几份，别的插件交的由它们自己登记的组件画；同一插件再登记换掉前一个，
 	 * 停用时撤下。没登记（或停用了）时宿主按 `DeliveredReport` 的通用字段画默认的一行。
 	 */

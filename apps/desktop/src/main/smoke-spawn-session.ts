@@ -11,16 +11,23 @@ import { clickVisible } from "./smoke-kit.ts";
 const ASK = "冒烟：顺手看到一处死代码";
 const TITLE = "清理 utils.ts 里的死代码";
 const PROMPT = "冒烟新会话：删掉 utils.ts 里没人用的三个函数";
+const BACKGROUND =
+	"改登录流程时顺手看到 utils.ts 里有三个函数已经没有任何调用方。这次改动只管登录，不顺手删；这一块单独做，删完跑一遍测试确认没人引用，别的文件不动，也不改公共接口；要是发现其实还有人在用，就停下说明是谁在用，不要硬删。";
 const SUGGESTED = "建议好了，我接着做手上的事。";
 const CLEANED = "清理完了：删了三个函数。";
 const RECEIVED = "收到新会话交回的结果。";
 const ARCHIVE_ASK = "冒烟：做完就把这个对话归档";
+const OFFER_ASK = "冒烟：另外帮我把 README 翻成英文";
+const OFFER_TITLE = "把 README 翻成英文";
+const OFFER_DONE = "好，就在这里翻。";
 const ARCHIVING = "好，这就归档。";
 
 /**
- * 建议新会话（内置插件 plume.spawn-session）：假模型在对话里调 `spawn_session`（要求交回），对话里画出建议卡片，收着的环境开关上
- * 挂圆点、说明里有「等你决定」；点「开始」，新会话开在同一处、记着来处，跑完第一轮后它的回复交回原对话：那边多一行「来自新会话」，
- * 被叫起一轮；卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方钉着那个会话跑完了，点过去看过就收走。在那个会话里说「做完就归档」，假模型调 `archive_session`：
+ * 开新会话（内置插件 plume.spawn-session）：假模型在对话里调 `spawn_session`（`own_initiative`），对话里画出建议卡片，收着的环境开关上
+ * 挂圆点、说明里有「等你决定」；点「开始」，新会话开在同一处、记着来处，第一句是「背景 + 任务」，跑完第一轮后它的汇报交回原对话：那边多一行
+ * 「来自关联会话」，被叫起一轮；卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方钉着那个会话跑完了，点过去看过就收走。
+ * 回到原对话说一件无关的新事，假模型调 `spawn_session`（`offer`）：输入框上方弹出「要另开一个会话吗？」，调用等着；点「就在这里做」，
+ * 调用的位置留一行「问过要不要另开会话 · 就在这里做」，模型接着在这里做。在新会话里说「做完就归档」，假模型调 `archive_session`：
  * 这一轮停在这一下（之后不再问模型），收场后会话归档，界面离开它。
  *
  * 卡片上还有工作树开关（内置插件 plume.git 经服务 `session.worktree` 提供）：打开再开始，新会话第一轮就换进自己的工作树。
@@ -55,6 +62,7 @@ export async function checkSpawnSession(options: {
 
 	// 按整段对话认是哪一方、走到哪一步，越往后的状态越先认。
 	let afterArchive = 0;
+	let briefed = false;
 	setModel((request) => {
 		const all = JSON.stringify(request.messages ?? []);
 		if (all.includes("toolu_archive")) {
@@ -62,15 +70,28 @@ export async function checkSpawnSession(options: {
 			return { text: "归档以后不该再问到这里。" };
 		}
 		if (all.includes(ARCHIVE_ASK)) return { text: ARCHIVING, toolCalls: [{ id: "toolu_archive", name: "archive_session", args: { reason: "清理完了" } }] };
-		if (all.includes("session_result")) return { text: RECEIVED };
+		if (all.includes(OFFER_ASK)) {
+			if (all.includes("toolu_offer")) return { text: OFFER_DONE };
+			return { toolCalls: [{ id: "toolu_offer", name: "spawn_session", args: { initiation: "offer", title: OFFER_TITLE } }] };
+		}
+		if (all.includes("session-report")) return { text: RECEIVED };
 		if (all.includes("toolu_spawn")) return { text: SUGGESTED };
-		if (all.includes(PROMPT)) return { text: CLEANED };
+		if (all.includes(PROMPT)) {
+			briefed ||= all.includes("Background (from the session that started this one)");
+			return { text: CLEANED };
+		}
 		return {
 			toolCalls: [
 				{
 					id: "toolu_spawn",
 					name: "spawn_session",
-					args: { title: TITLE, summary: "改登录时看到的，和这次改动无关，单独做更干净。", prompt: PROMPT, report_back: true },
+					args: {
+						initiation: "own_initiative",
+						title: TITLE,
+						summary: "改登录时看到的，和这次改动无关，单独做更干净。",
+						prompt: PROMPT,
+						background: BACKGROUND,
+					},
 				},
 			],
 		};
@@ -102,8 +123,6 @@ export async function checkSpawnSession(options: {
 
 		const card = "[data-screen=chat] [data-spawn-suggestion=suggested]";
 		await until(`document.querySelector(${JSON.stringify(card)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "对话里画出建议卡片");
-		if ((await page<string>(`document.querySelector('${card} [data-spawn-report]')?.dataset.spawnReport ?? ''`)) !== "on")
-			throw new Error("模型要求交回，卡片上的「交回这里」没开着");
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "环境开关上挂着圆点");
 		if (!(await page<string>(`document.querySelector('[data-environment-toggle]').getAttribute('aria-label')`)).includes("等你决定"))
 			throw new Error("环境开关的说明里没有待决定的建议");
@@ -166,10 +185,10 @@ export async function checkSpawnSession(options: {
 		const delivery = "[data-screen=chat] [data-delivery-row][data-delivery-session]";
 		await until(
 			`document.querySelector(${JSON.stringify(delivery)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`,
-			"原对话里有「来自新会话」那一行",
+			"原对话里有「来自关联会话」那一行",
 		);
 		await until(chatHas(RECEIVED), "交回叫起原对话一轮");
-		if (await page<boolean>(`[...document.querySelectorAll('[data-screen=chat] [data-plume-quote=user]')].some(e => e.textContent.includes('session_result'))`))
+		if (await page<boolean>(`[...document.querySelectorAll('[data-screen=chat] [data-plume-quote=user]')].some(e => e.textContent.includes('session-report'))`))
 			throw new Error("交回的结果画成了人的气泡");
 		// 输入框上方钉着交出去的那个会话：人没看着时它跑完了，这一行说「已完成 · 未查看」，点了过去。
 		const handedOff = `[data-screen=chat] [data-handed-off-row="${startedId}"]`;
@@ -181,7 +200,20 @@ export async function checkSpawnSession(options: {
 		await clickVisible(page, handedOff);
 		await until(chatHas(CLEANED), "输入框上方那一条点了到新会话");
 		await clickVisible(page, `[data-plume-row="${parentId}"] > button`);
+		if (!briefed) throw new Error("新会话的第一句不是「背景 + 任务」");
 		await until(`${chatHas(RECEIVED)} && document.querySelector(${JSON.stringify(handedOff)}) === null`, "回到原对话，看过的那一行收走");
+
+		// 说一件无关的新事：模型先问要不要另开，调用等人选；选「就在这里做」，留一行记录，模型接着在这里做。
+		await page(`document.querySelector('.cm-content').focus()`);
+		await window.webContents.insertText(OFFER_ASK);
+		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "原对话里可以发送");
+		await clickVisible(page, `[data-composer-send=send]`);
+		await until(`document.querySelector('[data-spawn-offer]')?.textContent.includes(${JSON.stringify(OFFER_TITLE)}) === true`, "输入框上方弹出要不要另开的卡");
+		await capture("smoke-spawn-session-offer.png");
+		await clickVisible(page, `[data-spawn-offer-choice=here]`);
+		await until(chatHas(OFFER_DONE), "选了就在这里做，模型接着做");
+		await until(`document.querySelector('[data-screen=chat] [data-spawn-suggestion=offer-here]') !== null`, "调用的位置留一行「就在这里做」");
+		if ((await agent.sessions()).some((item) => item.spawnedFrom?.toolCallId === "toolu_offer")) throw new Error("选了就在这里做，却开出了新会话");
 		await clickVisible(page, `[data-screen=chat] [data-spawn-action=open]`);
 		await until(chatHas(CLEANED), "那一行点了到新会话");
 		await capture("smoke-spawn-session-opened.png");

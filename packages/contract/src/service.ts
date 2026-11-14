@@ -188,8 +188,11 @@ export interface SessionSummary {
 	 * 只有 `top` 进侧栏、搜索、`@` 引用，收后台结果和会话间的信。判断「是不是人的那段对话」看它，不要自己拼 `parentId`、`owner`。
 	 */
 	kind: SessionKind;
-	/** 插件经 `ctx.sessions.launch` 从哪个会话开出来的（计划交出去执行的那个会话、那次调用）。会话本身独立保存，侧栏同组时嵌套在来源下面。 */
-	spawnedFrom?: { sessionId: string; toolCallId?: string };
+	/**
+	 * 插件经 `ctx.sessions.launch` 从哪个会话开出来的（计划交出去执行的那个会话、那次调用）。会话本身独立保存，侧栏同组时嵌套在来源下面。
+	 * `name` 是开出它的一方叫它的短名（见 `SessionLaunch.spawnedFrom`）。
+	 */
+	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
 	/** 从哪条会话的消息分叉；来源存在于同一分组时嵌套显示。 */
 	forkedFrom?: { sessionId: string };
 	/**

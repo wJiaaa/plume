@@ -312,7 +312,7 @@ export interface UserMessage {
 	 * 另一个会话的模型发来的消息——不是看着这个面板的人说的话。
 	 *
 	 * `content` 是给模型读的那份（外面套着 `<session-message>`）；这一项给界面画成「来自 X」，
-	 * 本体代答时据它的 `id` 找回读到请求的那条消息（插件经 `ToolRun.letter` 寄，配对和代答见 `@plume/contract` 的 `LetterReceipt`）。
+	 * 发件方的卡片据它的 `id` 认出信已经送到（插件经 `ToolRun.letter` 寄，见 `@plume/contract` 的 `LetterReceipt`）。
 	 */
 	peer?: PeerLetter[];
 	/**
@@ -360,7 +360,7 @@ export interface DeliveredReport {
 	status: "done" | "failed" | "aborted";
 	/** 没做完就停下了（检查点、原地打转、上游出错）——报告是阶段性的。 */
 	incomplete?: boolean;
-	/** 点了去哪个会话。只有宿主写得出：新会话交回开出它的会话时（`LaunchedSession.reportBack`）填它的 id。 */
+	/** 点了去哪个会话。只有宿主写得出：新会话交回开出它的会话时（`SessionAccess.reportBack`）填它的 id。 */
 	sessionId?: string;
 	/**
 	 * 插在一轮中间、并进正在做的那段活里，挨着的几份并成一行：后台命令的结果——放到后台的那次调用当场就跑完了，
@@ -374,22 +374,11 @@ export interface DeliveredReport {
 /**
  * 另一个会话发来的一条消息。
  *
- * 请求、通知、答复走同一条路：对方在跑就在两步之间读到，闲着就开一轮。问是发出即返回，请求的答复
- * 由收件方交回，作为一封 `answer` 信送到发件方，收件方没答时由本体代答；通知没有答复。
+ * 信是单向的：对方在跑就在两步之间读到，闲着就开一轮。没有请求和答复之分，要回话就再寄一封。
  */
 export interface PeerLetter {
-	/** 这一封的 id：本体据此认出读到它的那条消息，代答时从那里往后找回复。 */
+	/** 这一封的 id：发件方据此认出它已经写进了收件方的对话。 */
 	id?: string;
-	/** 请求：发件方要一个答复。没有就是通知（或答复）。 */
-	request?: true;
-	/**
-	 * 这是对我问过的请求的答复：`replied` 是对方交回的；`unreplied` 是对方读到请求的那一轮
-	 * 收场了却没回，正文是那一轮最后说的话；`dropped` 是请求没被读到就被对方的人停下了；`closed` 是对方会话关了。
-	 * 后三种由本体代写，见 `@plume/contract` 的 `LetterReceipt`。
-	 */
-	answer?: "replied" | "unreplied" | "dropped" | "closed";
-	/** 答复对着我发过的哪几封：每封开头一截，按发出的顺序。 */
-	re?: string[];
 	/** 对方会话的 id，界面据此跳过去。 */
 	sessionId: string;
 	/** 寄出那一刻对方的地址，`名字 [ref]`；要再找它时原样当作 `to`。 */
