@@ -41,7 +41,7 @@ export function looksLikeAnswer(messages: readonly Message[]): boolean {
 
 /**
  * 末尾在流的是这一轮第一次调工具之前的话：不管它是结论还是开场白，运行行都让开。不让的话第一个字一来它就被推下去一行。
- * 只管第一次调工具之前：之后每批调用之间的话都让的话，它就围着每一批调用出没。
+ * 只管第一次调工具之前：之后每批调用之间的话都让的话，它就围着每一批调用出没。插话（`steered`）不开新的一轮，越过它往回找。
  */
 export function leadsTheTurn(messages: readonly Message[]): boolean {
 	const last = messages[messages.length - 1];
@@ -50,7 +50,7 @@ export function leadsTheTurn(messages: readonly Message[]): boolean {
 	if (block?.type !== "text" || !block.text.trim()) return false;
 	for (let at = messages.length - 1; at >= 0; at--) {
 		const message = messages[at]!;
-		if (message.role === "user" && !message.synthetic) return true;
+		if (message.role === "user" && !message.synthetic && !message.steered) return true;
 		if (message.role === "assistant" && message.content.some((part) => part.type === "toolCall")) return false;
 	}
 	return true;

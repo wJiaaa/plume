@@ -1,7 +1,7 @@
 import type { Message } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
-import { GLIDE, StatusSpinner, translate, useCountUp, useI18n, useNow, useTickedAnimations } from "@plume/ui";
-import { memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { GLIDE, RollWords, StatusSpinner, translate, useCountUp, useI18n, useNow, useTickedAnimations } from "@plume/ui";
+import { memo, type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { estimateTokens, pushSample, type RateSample, rateFrom, trustworthy } from "./live-rate.ts";
 import { formatElapsed, formatTokens } from "./running-line.ts";
 import { StreamTrace } from "./StreamTrace.tsx";
@@ -73,7 +73,7 @@ export const RunningIndicator = memo(function RunningIndicator({
 	const rate = useLiveRate(producedChars(messages), now, startedAt);
 	const output = draftOutput(messages);
 	// 有进展就重新计：多了一条消息（上一步收尾、工具出了结果）或者草稿长了。
-	const quiet = useQuietFor(`${messages.length}:${output}`, now);
+	const { quiet, seen } = useQuietFor(`${messages.length}:${output}`, now);
 
 	if (waiting) {
 		return (
@@ -111,16 +111,17 @@ export const RunningIndicator = memo(function RunningIndicator({
 	const written = (meter?.output ?? 0) + estimateTokens(output);
 	return (
 		// 8px 而不是正文里的 10px：这一行连上间距和回答底下那一行一样高，答完时两者同一帧一出一进，转录不抖。见 `RunningRow`。
+		// 不换行：读数一段段开合，换行的话窄栏（侧边聊天）里这一行在一行、两行之间跳，转录跟着抖。放不下时只让开头那句闲话截短，读数都是事实，不截。
 		<div
 			data-plume-running=""
 			data-plume-mood={mood}
-			className="mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-y-1 text-detail whitespace-nowrap text-ink-muted"
+			className="mt-2 flex min-w-0 max-w-full items-center overflow-hidden text-detail whitespace-nowrap text-ink-muted"
 		>
 			{/* 装饰，旁边那句话已经说了这是什么。用 20 而不是缩小的 64：两种尺寸是各自的设计，这一颗是画来放进一行字里的。 */}
 			<ThinkingOrb state={mood} size={20} className="shrink-0" />
 			{/* 按字记 key：一句淡入、一句走开，不原地换字。 */}
 			{phrase && (
-				<span key={phrase} className="plume-fade-in ml-2">
+				<span key={phrase} className="plume-fade-in ml-2 min-w-0 truncate">
 					{phrase}…
 				</span>
 			)}
@@ -129,14 +130,15 @@ export const RunningIndicator = memo(function RunningIndicator({
 					<span className="tabular-nums text-ink-faint">{formatElapsed(elapsed)}</span>
 				</Readout>
 			)}
-			<TurnTokens total={written} />
+			<TurnTokens total={written} turn={startedAt} />
 			{/* 只在字在来、或者工具在跑的时候报速度：还没开口没有速度可报，停住了它就是 0，留着最后那个数是在说还在写。 */}
 			<LiveRate rate={rate} shown={stage === "streaming" || stage === "tool"} />
 			{/*
 			 * 只在字在来的时候挂出来，排在 tok/s 后面：两个一起出、一起收，进出推不动前面的读数。没字可画时不留一条空线，
 			 * 那件事行尾那句状态已经说了；断流四秒最后一根柱子正好走出画面，同一刻那句「没有新输出」接上。
 			 */}
-			<Readout open={stage === "streaming"}>
+			{/* 挂上以后见过字来才出：切回一个在跑的会话时，挂上前到的字它没记，开着也是一截空线。 */}
+			<Readout open={stage === "streaming" && seen}>
 				<StreamTrace chars={output} />
 			</Readout>
 			<StageStatus status={status} />
@@ -171,7 +173,7 @@ function GlideText({ warn, children }: { warn: boolean; children: ReactNode }) {
 	const box = useRef<HTMLSpanElement>(null);
 	useTickedAnimations(box, GLIDE);
 	return (
-		<span className={`inline-block plume-glide-status ${warn ? "plume-glide-warn" : ""}`} ref={box}>
+		<span className={`inline-block tabular-nums plume-glide-status ${warn ? "plume-glide-warn" : ""}`} ref={box}>
 			{children}
 		</span>
 	);
@@ -179,34 +181,54 @@ function GlideText({ warn, children }: { warn: boolean; children: ReactNode }) {
 
 /**
  * 行尾的那句状态。开头那句话是程序的自言自语、按钟点换，事实另起一段放在最后：秒数每秒在变，放在行尾，它变宽变窄不推动别的读数。
- * `key` 换了才滚，停住时秒数在走只缓宽度；收起的那一阵留着最后一句，有东西可演。
+ * `key` 换了才滚，停住时秒数在走只缓宽度；收起的那一阵留着最后一句，有东西可演，收完再卸掉。
  */
 function StageStatus({ status }: { status: Status | null }) {
 	const last = useRef(status);
+	const [, forget] = useReducer((n: number) => n + 1, 0);
 	if (status) last.current = status;
 	const shown = status ?? last.current;
-	return <Readout open={status !== null}>{shown && <GlideText warn={shown.warn}>{shown.text}</GlideText>}</Readout>;
+	return (
+		<Readout
+			open={status !== null}
+			// 收完就卸掉：看不见的那段扫光不该每拍还被拨一次。
+			onClosed={() => {
+				last.current = null;
+				forget();
+			}}
+		>
+			{shown && (
+				<RollWords rollKey={shown.key} text={shown.text}>
+					<GlideText warn={shown.warn}>{shown.text}</GlideText>
+				</RollWords>
+			)}
+		</Readout>
+	);
 }
 
 /**
- * 离上一次进展（`progress` 变了）过了多久。在渲染时现读：每拍 `now` 都会重画这一行，不另开计时器。
+ * 离上一次进展（`progress` 变了）过了多久，和挂上以后见没见过进展（`seen`）。在渲染时现读：每拍 `now` 都会重画这一行，不另开计时器。
  * 换会话回来重新挂载时从头计，只少算一段，不会多报。
  */
-function useQuietFor(progress: string, now: number): number {
-	const mark = useRef({ progress, at: Date.now() });
-	if (mark.current.progress !== progress) mark.current = { progress, at: Date.now() };
-	return Math.max(0, now - mark.current.at);
+function useQuietFor(progress: string, now: number): { quiet: number; seen: boolean } {
+	const mark = useRef({ progress, at: Date.now(), seen: false });
+	if (mark.current.progress !== progress) mark.current = { progress, at: Date.now(), seen: true };
+	return { quiet: Math.max(0, now - mark.current.at), seen: mark.current.seen };
 }
 
 /**
  * 一段读数进出：宽度和透明度一起走，后面的读数被推过去而不是跳过去。关着时子树照样留着，收起的那一阵有东西可演；
  * 间距和分隔点画在它里面，关着时一起收成 0，不在行里留一道空。
  */
-function Readout({ open, separated = true, children }: { open: boolean; separated?: boolean; children: ReactNode }) {
+function Readout({ open, separated = true, onClosed, children }: { open: boolean; separated?: boolean; onClosed?: () => void; children: ReactNode }) {
 	return (
 		<span
 			aria-hidden={!open || undefined}
-			className={`inline-grid transition-[grid-template-columns,opacity] duration-[var(--plume-t-slow)] ease-out ${open ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0"}`}
+			onTransitionEnd={(event) => {
+				// 里面缓宽度的过渡也会冒上来，只认自己这层的透明度走完。
+				if (!open && event.target === event.currentTarget && event.propertyName === "opacity") onClosed?.();
+			}}
+			className={`inline-grid shrink-0 transition-[grid-template-columns,opacity] duration-[var(--plume-t-slow)] ease-out ${open ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0"}`}
 		>
 			{/* 内边距放在里面那层：放在被压成 0 宽的这层上，宽压得掉、内边距压不掉，收着的读数各留下 8px 的空。 */}
 			<span className="min-w-0 overflow-hidden">
@@ -222,8 +244,15 @@ function Readout({ open, separated = true, children }: { open: boolean; separate
 /**
  * 这一轮写出了多少 token：收尾了的按服务商报的数，还在写的那条按字数估。走过去，不跳过去：草稿 50ms 长一截，收尾时估数换成真数。
  */
-function TurnTokens({ total }: { total: number }) {
-	const counted = Math.round(useCountUp(total));
+function TurnTokens({ total, turn }: { total: number; turn: number | null }) {
+	/*
+	 * 一轮之内只往上走：一步收尾时按字数估的数换成服务商报的真数，英文常常小一成；不报用量的服务商真数是 0，
+	 * 照搬的话读数会往回跳、甚至整段收起再展开。换了一轮（`turn` 是这一轮的开始时刻）才从头数。
+	 */
+	const peak = useRef({ turn, value: 0 });
+	if (peak.current.turn !== turn) peak.current = { turn, value: 0 };
+	peak.current.value = Math.max(peak.current.value, total);
+	const counted = Math.round(useCountUp(peak.current.value));
 	return (
 		<Readout open={counted > 0}>
 			{/* 走着的时候 `tabular-nums` 更要紧：字宽每帧在变，整行会跟着左右挪。 */}
@@ -312,7 +341,8 @@ function latestCall(
 	let done: { block: ToolCallContent; at: number } | undefined;
 	for (let at = messages.length - 1; at >= 0; at--) {
 		const message = messages[at]!;
-		if (message.role === "user" && !message.synthetic) break;
+		// 插话不开新的一轮：越过它，插话前刚跑完的那个照样算（`TOOL_HOLD_MS`）。
+		if (message.role === "user" && !message.synthetic && !message.steered) break;
 		if (message.role === "toolResult") finished.set(message.toolCallId, message.timestamp);
 		if (message.role !== "assistant") continue;
 		for (const block of message.content) {

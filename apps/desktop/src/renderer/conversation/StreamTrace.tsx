@@ -11,6 +11,8 @@ const SPAN_MS = (WIDTH / PX_PER_SECOND) * 1000;
 const BIN_MS = 200;
 /** 一格里写了这么多字，柱子画满。 */
 const FULL_CHARS = 60;
+/** 颜色多久重读一次，见 `fit`。 */
+const COLOR_MS = 1000;
 
 /**
  * 运行行上的小心电图：最近几秒每一格到了多少字，一直往左走。
@@ -41,12 +43,27 @@ export function StreamTrace({ chars }: { chars: number }) {
 		const element = canvas.current;
 		const context = element?.getContext("2d");
 		if (!element || !context) return;
-		const ratio = Math.min(2, window.devicePixelRatio || 1);
-		element.width = Math.round(WIDTH * ratio);
-		element.height = Math.round(HEIGHT * ratio);
-		// 颜色挂上时读一次（`currentColor`，强调色）：每拍读计算样式，页面别处一脏就要整页重算。
-		const color = getComputedStyle(element).color;
+		let ratio = 0;
+		let color = "";
+		let checked = -Infinity;
+		/*
+		 * 像素比每拍现问（只是读个数，不排版）：窗口拖到另一块屏上，画布跟着换分辨率，不发糊。颜色（`currentColor`，强调色）一秒问一次：
+		 * 跑着的时候换明暗、换皮肤也跟得上；每拍读计算样式的话，页面别处一脏就要整页重算。
+		 */
+		const fit = (now: number) => {
+			const next = Math.min(2, window.devicePixelRatio || 1);
+			if (next !== ratio) {
+				ratio = next;
+				element.width = Math.round(WIDTH * ratio);
+				element.height = Math.round(HEIGHT * ratio);
+			}
+			if (now - checked >= COLOR_MS) {
+				checked = now;
+				color = getComputedStyle(element).color;
+			}
+		};
 		const draw = (now: number) => {
+			fit(now);
 			context.setTransform(ratio, 0, 0, ratio, 0, 0);
 			context.clearRect(0, 0, WIDTH, HEIGHT);
 			context.fillStyle = color;
