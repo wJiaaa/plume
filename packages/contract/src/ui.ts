@@ -35,8 +35,11 @@ export interface CodeBlockProps {
 	/** 原始围栏已闭合且消息成功完成；中断、截断不算完成。 */
 	complete: boolean;
 	fallback: ReactNode;
-	/** 只在真实点击或表单提交事件中同步调用；发送到此块所属会话。只读视图和未完成块没有此入口。 */
-	send?: (text: string, event: import("react").SyntheticEvent) => Promise<void>;
+	/**
+	 * 只在真实点击或表单提交事件中同步调用；发送到此块所属会话。只读视图和未完成块没有此入口。displayText 可提供气泡中显示的
+	 * 简短说明（如按钮上的那句话），text 仍是完整模型输入（如连同表单值）。
+	 */
+	send?: (text: string, event: import("react").SyntheticEvent, displayText?: string) => Promise<void>;
 }
 
 export interface ToolCardProps {

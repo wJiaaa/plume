@@ -80,9 +80,9 @@ shell 代码块（bash、sh、zsh、shell、console、terminal）标题栏上有
 - 组件：布局（Card、Stack、Row、Grid、Tabs/Tab、Each、Divider）、文字与读数（Text、Heading、Stat、Badge、Callout、Progress）、表格、图表（柱、折线、面积、环形饼图）、输入（Input、Select、Choice、Toggle、Slider）、按钮。
 - 只允许白名单表达式，不执行任意 HTML、样式或脚本。模型通过 `ui_help` 工具获取完整语法。
 - 流式阶段显示点阵占位和扫光，完整后自上而下揭开；整段完成后才能操作。
-- 按钮 `send` 把一句话连同全部字段值（`<interface-values>…</interface-values>`）发到所属会话，按钮下方逐字显示将发送的内容；发送期间锁定，成功后显示回执。
+- 按钮 `send` 把一句话连同全部字段值（`<interface-values>…</interface-values>`）发到所属会话，气泡里只显示那句话；发送期间锁定，成功后按钮原地换成「已发送」，改了值才能再发。
 - 声明有错时整块退回源码，并在下一条用户消息的请求副本里附上诊断（最多 8 条）。
-- 每个块的表单值、页签、最后一次发送回执按会话保存在本机，最多最近 200 个块。复制回复时输出可读文字，表格和图表转为 Markdown 表格。
+- 每个块的表单值、页签、最后一次发送按会话保存在本机，最多最近 200 个块。复制回复时输出可读文字，表格和图表转为 Markdown 表格。
 - 上限：Each 200 项、整块 4000 节点、表格 500 行 30 列、图表 500 点 6 系列，超限退回源码，不截断。
 - 未安装或停用时显示源码。
 

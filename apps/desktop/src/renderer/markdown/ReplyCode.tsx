@@ -37,7 +37,7 @@ export function ReplyCode({
 		};
 	}, []);
 	if (!reply || !transcript) return <>{unregistered}</>;
-	const send: NonNullable<CodeBlockProps["send"]> = async (text, event) => {
+	const send: NonNullable<CodeBlockProps["send"]> = async (text, event, displayText) => {
 		const source = event.nativeEvent;
 		// 模型只能描述控件；真正的用户事件才可发消息，不能在渲染、计时器或卸载后的闭包里调用。
 		if (
@@ -54,8 +54,10 @@ export function ReplyCode({
 		)
 			throw new Error("Code block submission requires a user action");
 		if (typeof text !== "string" || !text.trim() || text.length > 32_000) throw new Error("Invalid code block message");
+		if (displayText !== undefined && (typeof displayText !== "string" || !displayText.trim() || displayText.length > 32_000))
+			throw new Error("Invalid code block display text");
 		usedEvents.add(source);
-		await current.current.send(text);
+		await current.current.send(text, displayText);
 	};
 	return (
 		<CodeBlockSlot

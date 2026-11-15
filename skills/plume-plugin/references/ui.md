@@ -147,7 +147,7 @@ useEffect(() => ui.onSessionsChanged((event) => {
 
 组件收到 `CodeBlockProps`：`language`、`code`（围栏内原文）、`sessionId`、`messageId`（会话内展示标识，不是数据库 id）、`blockId`、`streaming`、`complete`、`fallback` 和可选的 `send`。同消息中多个块的标识不同。解析、校验、控件、状态及模型说明都由插件实现，宿主不识别其中的语法。可选 `copyText({ code, sessionId })` 在复制成功完成的助手回复时同步读取当前状态并返回可读文字；返回 `undefined`、抛错或插件停用时保留围栏源码。它只影响复制，不改显示、存储，也不能发消息。解析失败返回 `fallback`；渲染抛错或停用自动回到原始代码。
 
-`complete` 只在原始围栏闭合、消息成功结束且平滑出字完成后为真，中断和截断不算完成。未完成块和只读视图没有 `send`；插件仍应禁用不完整表单。`send(text, event)` 必须在真实 click / submit 回调内同步调用，传入 React 事件；不可先 await，再调用。宿主拒绝程序生成的事件、重复使用的事件、卸载后及插件停用后的调用，内容须非空且不超过 32,000 字符。主会话复用输入框排队，子会话复用该视图的 composer.send，不把发送目标交给插件指定。
+`complete` 只在原始围栏闭合、消息成功结束且平滑出字完成后为真，中断和截断不算完成。未完成块和只读视图没有 `send`；插件仍应禁用不完整表单。`send(text, event, displayText?)` 必须在真实 click / submit 回调内同步调用，传入 React 事件；不可先 await，再调用。宿主拒绝程序生成的事件、重复使用的事件、卸载后及插件停用后的调用，内容须非空且不超过 32,000 字符。`text` 是模型收到的全文（比如一句话连同表单值）；可传第三参 `displayText` 作为气泡里给人看的那句话（同样非空、最多 32,000 字符），不传时气泡显示全文。主会话复用输入框排队，子会话复用该视图的 composer.send，不把发送目标交给插件指定。
 
 ```tsx
 ui.codeBlock("my-language", ({ code, complete, send, fallback }) => {

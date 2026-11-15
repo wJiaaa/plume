@@ -1811,9 +1811,9 @@ export function CodeBlockSlot({ unregistered, ...props }: CodeBlockProps & { unr
 	const Render = entry.component;
 	// 传入的闭包即使被插件保存，撤销注册后也不能再发消息。
 	const send: CodeBlockProps["send"] = props.send
-		? async (text, event) => {
+		? async (text, event, displayText) => {
 				if (codeBlocks.get(props.language.toLowerCase())?.[0] !== entry) throw new Error("Code block renderer is inactive");
-				await props.send!(text, event);
+				await props.send!(text, event, displayText);
 			}
 		: undefined;
 	return (
