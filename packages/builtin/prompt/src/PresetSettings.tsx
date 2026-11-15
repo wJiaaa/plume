@@ -1,25 +1,40 @@
 /**
- * 设置 › 个性化里「身份与准则」那一节：列出内置的两套和自己写的，选一套给之后新开的会话用；内置的只能看、复制，自己写的能改、删。
+ * 设置 › 个性化里「身份与准则」那一节：列出内置的两套和自己写的，选一套给之后新开的会话用；都能改、复制，内置的改过能恢复默认，自己写的能删。
  *
- * 编辑器开在列表下面，保存后收起。固定加上的几条只读地列在编辑器里，让人知道换准则换不掉它们。
+ * 改在弹窗里：身份、准则是几屏长的英文，铺在设置页里会把列表挤下去。
  * 选的、写的都在逻辑入口那边（插件数据目录），经 `ui.remote()` 读写；校验也在那边，存不进去的原因按界面语言交回来。
  */
 
 import type { Remote } from "@plume/contract/ui";
-import { Button, ChoiceMark, Input, SettingsCard, SettingsNotice, SettingsSectionTitle, Text, TextArea, useConfirmer, useI18n } from "@plume/ui";
-import { CircleAlert, Copy, Eye, Pencil, Trash2 } from "@plume/ui/icons";
+import {
+	ChoiceMark,
+	Dialog,
+	DialogAction,
+	IconButton,
+	Input,
+	SettingsCard,
+	SettingsNotice,
+	SettingsSectionTitle,
+	Text,
+	TextArea,
+	useConfirmer,
+	useI18n,
+} from "@plume/ui";
+import { CircleAlert, Copy, Pencil, RotateCcw, Trash2 } from "@plume/ui/icons";
 import { field } from "@plume/styles";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type BuiltinId, type PresetDraft, type PresetsView, type PresetView, type PromptApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 
 type Messages = (typeof MESSAGES)["zh-CN"];
 type Notify = (message: string, level?: "info" | "warn" | "error") => void;
 
-/** 正在看或改的那一套：`create` 是复制出来、还没存的；`view` 是内置的，只能看。 */
+/** 正在改的那一套：`create` 是复制出来、还没存的。`key` 认没存的草稿：Esc 关掉后再打开同一套还在。内置的不改名字。 */
 interface Editing {
-	mode: "create" | "change" | "view";
+	mode: "create" | "change";
+	key: string;
 	id?: string;
+	builtin: boolean;
 	draft: PresetDraft;
 	original: PresetDraft;
 }
@@ -28,14 +43,15 @@ const reasonOf = (error: unknown) => (error instanceof Error ? error.message : S
 const nameOf = (preset: PresetView, text: Messages) => (preset.builtin ? text[preset.id as BuiltinId] : (preset.name ?? preset.id));
 const detailOf = (preset: PresetView, text: Messages) => (preset.builtin ? text[`${preset.id as BuiltinId}Detail`] : preset.identity.split("\n")[0]);
 const draftOf = (preset: PresetView, text: Messages): PresetDraft => ({ name: nameOf(preset, text), identity: preset.identity, guidelines: preset.guidelines });
+const isDirty = (editing: Editing) => JSON.stringify(editing.draft) !== JSON.stringify(editing.original);
 
 export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify: Notify }) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const [view, setView] = useState<PresetsView | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<Editing | null>(null);
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	// Esc、点遮罩关掉时没存的字留在这里，下次打开同一套还在；只有「取消」先问一句再扔。
+	const drafts = useRef(new Map<string, PresetDraft>());
 	const confirmer = useConfirmer();
 
 	useEffect(() => {
@@ -57,56 +73,37 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 		[notify, text],
 	);
 
-	const open = (next: Editing) => {
-		setError(null);
-		setEditing(next);
-	};
-
-	const dirty = editing !== null && editing.mode !== "view" && JSON.stringify(editing.draft) !== JSON.stringify(editing.original);
-
-	/** 关掉编辑器；有没存的改动先问一句。 */
-	const close = (then?: () => void) => {
-		const done = () => {
-			setEditing(null);
-			setError(null);
-			then?.();
-		};
-		if (!dirty) return done();
-		confirmer.ask({ title: text.discardTitle, confirmLabel: text.discard, cancelLabel: text.keepEditing, onConfirm: done });
-	};
+	const open = (next: Omit<Editing, "draft">) => setEditing({ ...next, draft: drafts.current.get(next.key) ?? next.original });
 
 	const copy = (preset: PresetView) => {
-		const draft = { ...draftOf(preset, text), name: text.copyName(nameOf(preset, text)) };
-		close(() => open({ mode: "create", draft, original: draft }));
+		const original = { ...draftOf(preset, text), name: text.copyName(nameOf(preset, text)) };
+		open({ mode: "create", key: `copy:${preset.id}`, builtin: false, original });
 	};
 
 	const remove = (preset: PresetView) => {
-		const name = nameOf(preset, text);
 		confirmer.ask({
-			title: text.removeTitle(name),
+			title: text.removeTitle(nameOf(preset, text)),
 			detail: text.removeDetail,
 			confirmLabel: text.remove,
 			cancelLabel: text.cancel,
 			onConfirm: () => {
-				if (editing?.id === preset.id) setEditing(null);
+				drafts.current.delete(preset.id);
 				void act(api.remove(preset.id));
 			},
 		});
 	};
 
-	const save = async () => {
-		if (!editing || saving) return;
-		setSaving(true);
-		setError(null);
-		try {
-			setView(await api.save(editing.mode === "change" ? editing.id : undefined, editing.draft));
-			setEditing(null);
-			notify(text.saved);
-		} catch (cause) {
-			setError(reasonOf(cause));
-		} finally {
-			setSaving(false);
-		}
+	const reset = (preset: PresetView) => {
+		confirmer.ask({
+			title: text.resetTitle(nameOf(preset, text)),
+			detail: text.resetDetail,
+			confirmLabel: text.reset,
+			cancelLabel: text.cancel,
+			onConfirm: () => {
+				drafts.current.delete(preset.id);
+				void act(api.reset(preset.id));
+			},
+		});
 	};
 
 	if (loadError) {
@@ -117,11 +114,6 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 		);
 	}
 	if (!view) return null;
-
-	const editDraft = (change: Partial<PresetDraft>) => setEditing((current) => current && { ...current, draft: { ...current.draft, ...change } });
-	const readOnly = editing?.mode === "view";
-	const titleOf = (current: Editing) =>
-		current.mode === "create" ? text.newTitle : current.mode === "change" ? text.editTitle(current.original.name) : text.viewTitle(current.original.name);
 
 	return (
 		<div>
@@ -137,7 +129,6 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 			<SettingsCard role="radiogroup" aria-label={text.title} data-prompt-presets="">
 				{view.presets.map((preset) => {
 					const selected = preset.id === view.selected;
-					const name = nameOf(preset, text);
 					return (
 						<div key={preset.id} className="prompt-row" data-prompt-preset={preset.id}>
 							<button type="button" role="radio" aria-checked={selected} className="prompt-choice" onClick={() => selected || void act(api.select(preset.id))}>
@@ -145,10 +136,11 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 								<span className="prompt-choice-body">
 									<span className="prompt-choice-head">
 										<Text size="label" weight="medium">
-											{name}
+											{nameOf(preset, text)}
 										</Text>
 										<Text size="caption" tone="faint">
 											{preset.builtin ? text.builtinBadge : text.custom}
+											{preset.modified ? ` · ${text.modified}` : ""}
 											{selected ? ` · ${text.inUse}` : ""}
 										</Text>
 									</span>
@@ -157,26 +149,16 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 									</Text>
 								</span>
 							</button>
+							{/* 悬停或聚焦到这一行时才出现，和子智能体、命令那几行一样。 */}
 							<span className="prompt-actions">
-								{preset.builtin ? (
-									<Button
-										size="sm"
-										label={text.view}
-										icon={<Eye size={14} strokeWidth={1.8} aria-hidden />}
-										onClick={() => close(() => open({ mode: "view", id: preset.id, draft: draftOf(preset, text), original: draftOf(preset, text) }))}
-									/>
-								) : (
-									<Button
-										size="sm"
-										label={text.edit}
-										icon={<Pencil size={14} strokeWidth={1.8} aria-hidden />}
-										onClick={() => close(() => open({ mode: "change", id: preset.id, draft: draftOf(preset, text), original: draftOf(preset, text) }))}
-									/>
-								)}
-								<Button size="sm" label={text.copy} icon={<Copy size={14} strokeWidth={1.8} aria-hidden />} onClick={() => copy(preset)} />
-								{!preset.builtin && (
-									<Button size="sm" label={text.remove} icon={<Trash2 size={14} strokeWidth={1.8} aria-hidden />} onClick={() => remove(preset)} />
-								)}
+								<IconButton
+									label={text.edit}
+									icon={<Pencil size={14} aria-hidden />}
+									onClick={() => open({ mode: "change", key: preset.id, id: preset.id, builtin: preset.builtin, original: draftOf(preset, text) })}
+								/>
+								<IconButton label={text.copy} icon={<Copy size={14} aria-hidden />} onClick={() => copy(preset)} />
+								{preset.modified && <IconButton label={text.reset} icon={<RotateCcw size={14} aria-hidden />} onClick={() => reset(preset)} />}
+								{!preset.builtin && <IconButton label={text.remove} icon={<Trash2 size={14} aria-hidden />} onClick={() => remove(preset)} />}
 							</span>
 						</div>
 					);
@@ -184,108 +166,160 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 			</SettingsCard>
 
 			{editing && (
-				<SettingsCard className="prompt-editor" data-prompt-editor={editing.mode}>
-					<Text as="h3" size="label" weight="semibold">
-						{titleOf(editing)}
-					</Text>
-					{!readOnly && (
-						<label className="prompt-field">
-							<Text size="label" weight="medium">
-								{text.nameLabel}
-							</Text>
-							<Input name="presetName" className={field} value={editing.draft.name} onChange={(event) => editDraft({ name: event.target.value })} />
-						</label>
-					)}
-					<div className="prompt-field">
-						<Text size="label" weight="medium">
-							{text.identityLabel}
-						</Text>
-						<TextArea
-							name="presetIdentity"
-							aria-label={text.identityLabel}
-							value={editing.draft.identity}
-							onChange={(identity) => editDraft({ identity })}
-							readOnly={readOnly}
-							rows={3}
-							className="plume-textarea-mono"
-						/>
-						<Text size="caption" tone="faint">
-							{text.identityHint}
-						</Text>
-					</div>
-					<div className="prompt-field">
-						<Text size="label" weight="medium">
-							{text.guidelinesLabel}
-						</Text>
-						<TextArea
-							name="presetGuidelines"
-							aria-label={text.guidelinesLabel}
-							value={editing.draft.guidelines}
-							onChange={(guidelines) => editDraft({ guidelines })}
-							readOnly={readOnly}
-							rows={12}
-							resizable
-							className="plume-textarea-mono"
-						/>
-						<Text size="caption" tone="faint">
-							{text.guidelinesHint}
-						</Text>
-					</div>
-					<details className="prompt-fixed">
-						<summary>
-							<Text size="label" weight="medium">
-								{text.fixedTitle}
-							</Text>
-						</summary>
-						<Text as="p" size="caption" tone="faint">
-							{text.fixedDetail}
-						</Text>
-						<ul>
-							{view.fixed.map((line) => (
-								<li key={line}>
-									<Text size="detail" tone="muted">
-										{line}
-									</Text>
-								</li>
-							))}
-						</ul>
-					</details>
-					{error && (
-						<SettingsNotice tone="danger" icon={CircleAlert} data-prompt-save-error="">
-							{error}
-						</SettingsNotice>
-					)}
-					<div className="prompt-buttons">
-						{readOnly ? (
-							<>
-								<Button
-									variant="primary"
-									onClick={() => {
-										const preset = view.presets.find((each) => each.id === editing.id);
-										if (preset) copy(preset);
-									}}
-								>
-									{text.copy}
-								</Button>
-								<Button onClick={() => close()}>{text.close}</Button>
-							</>
-						) : (
-							<>
-								<Button
-									variant="primary"
-									loading={saving}
-									disabled={editing.draft.name.trim() === "" || editing.draft.identity.trim() === ""}
-									onClick={() => void save()}
-								>
-									{text.save}
-								</Button>
-								<Button onClick={() => close()}>{text.cancel}</Button>
-							</>
-						)}
-					</div>
-				</SettingsCard>
+				<PresetDialog
+					// 内置那套里按「复制」会换成新的一份草稿：换 key 让弹窗里的状态（出错、问放弃）从头来。
+					key={`${editing.mode}:${editing.key}`}
+					editing={editing}
+					text={text}
+					onChange={(draft) => {
+						const next = { ...editing, draft };
+						setEditing(next);
+						if (isDirty(next)) drafts.current.set(editing.key, draft);
+						else drafts.current.delete(editing.key);
+					}}
+					onSave={async (draft) => {
+						setView(await api.save(editing.mode === "change" ? editing.id : undefined, draft));
+						drafts.current.delete(editing.key);
+						notify(text.saved);
+					}}
+					onDiscard={() => drafts.current.delete(editing.key)}
+					onClose={() => setEditing(null)}
+				/>
 			)}
 			{confirmer.element}
 		</div>
+	);
+}
+
+function PresetDialog({
+	editing,
+	text,
+	onChange,
+	onSave,
+	onDiscard,
+	onClose,
+}: {
+	editing: Editing;
+	text: Messages;
+	onChange: (draft: PresetDraft) => void;
+	onSave: (draft: PresetDraft) => Promise<void>;
+	onDiscard: () => void;
+	onClose: () => void;
+}) {
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [leaving, setLeaving] = useState(false);
+	const { draft } = editing;
+	const edit = (change: Partial<PresetDraft>) => onChange({ ...draft, ...change });
+	const title = editing.mode === "create" ? text.newTitle : text.editTitle(editing.original.name);
+
+	const save = async (dismiss: () => void) => {
+		if (saving) return;
+		setSaving(true);
+		setError(null);
+		try {
+			await onSave(draft);
+			dismiss();
+		} catch (cause) {
+			setError(reasonOf(cause));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<Dialog
+			onClose={onClose}
+			width={640}
+			label={title}
+			title={title}
+			detail={editing.builtin ? text.builtinNote : undefined}
+			bodyClassName="prompt-dialog-body"
+			data-prompt-editor={editing.mode}
+			status={
+				error ? (
+					<Text as="p" size="detail" tone="danger" role="alert" className="prompt-dialog-error" data-prompt-save-error="">
+						{error}
+					</Text>
+				) : undefined
+			}
+			actions={(dismiss) => {
+				// 「放弃没保存的改动？」就问在按下取消的那一排：底栏原地换成这句话和两个去处。
+				if (leaving)
+					return (
+						<>
+							<Text size="detail" role="alert" className="prompt-leaving">
+								{text.discardTitle}
+							</Text>
+							<DialogAction autoFocus onClick={() => setLeaving(false)}>
+								{text.keepEditing}
+							</DialogAction>
+							<DialogAction
+								tone="danger"
+								onClick={() => {
+									onDiscard();
+									dismiss();
+								}}
+							>
+								{text.discard}
+							</DialogAction>
+						</>
+					);
+				return (
+					<>
+						<DialogAction disabled={saving} onClick={() => (isDirty(editing) ? setLeaving(true) : dismiss())}>
+							{text.cancel}
+						</DialogAction>
+						<DialogAction tone="primary" disabled={saving || draft.name.trim() === "" || draft.identity.trim() === ""} onClick={() => void save(dismiss)}>
+							{text.save}
+						</DialogAction>
+					</>
+				);
+			}}
+		>
+			<div className="prompt-form">
+				{!editing.builtin && (
+					<label className="prompt-field">
+						<Text size="label" weight="medium">
+							{text.nameLabel}
+						</Text>
+						<Input name="presetName" className={field} value={draft.name} onChange={(event) => edit({ name: event.target.value })} autoFocus />
+					</label>
+				)}
+				<div className="prompt-field">
+					<Text size="label" weight="medium">
+						{text.identityLabel}
+					</Text>
+					<TextArea
+						name="presetIdentity"
+						aria-label={text.identityLabel}
+						value={draft.identity}
+						onChange={(identity) => edit({ identity })}
+						rows={3}
+						className="plume-textarea-mono"
+					/>
+					<Text size="caption" tone="faint">
+						{text.identityHint}
+					</Text>
+				</div>
+				<div className="prompt-field">
+					<Text size="label" weight="medium">
+						{text.guidelinesLabel}
+					</Text>
+					<TextArea
+						name="presetGuidelines"
+						aria-label={text.guidelinesLabel}
+						value={draft.guidelines}
+						onChange={(guidelines) => edit({ guidelines })}
+						rows={10}
+						resizable
+						className="plume-textarea-mono"
+					/>
+					<Text size="caption" tone="faint">
+						{text.guidelinesHint}
+					</Text>
+				</div>
+			</div>
+		</Dialog>
 	);
 }

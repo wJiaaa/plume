@@ -28,6 +28,7 @@ export default {
 			view: () => presets.view(),
 			save: (id, draft) => presets.save(id, draft),
 			remove: (id) => presets.remove(id),
+			reset: (id) => presets.reset(id),
 			select: (id) => presets.select(id),
 		} satisfies PromptApi);
 		ctx.hook(

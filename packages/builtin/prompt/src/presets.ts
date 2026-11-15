@@ -1,7 +1,8 @@
 /**
- * 人能换的那一块：身份和准则。内置两套（`BUILTIN_PERSONAS`），人可以复制一份改成自己的；选中的那套给之后新开的会话用。
+ * 人能换的那一块：身份和准则。内置两套（`BUILTIN_PERSONAS`），人可以直接改、也可以复制一份改成自己的；选中的那套给之后新开的会话用。
  *
- * 只认本机：内置的，加上插件数据目录 `presets/<id>.json` 里人在设置页建的。不读仓库里的任何文件——仓库内容不能替换系统提示词，
+ * 只认本机：内置的，加上插件数据目录 `presets/<id>.json` 里人在设置页建的。内置的那套被改过时，改过的全文存在 `overrides/<id>.json`，
+ * 原文不动：恢复默认就是删掉这份，之后又跟着应用更新。不读仓库里的任何文件——仓库内容不能替换系统提示词，
  * 项目自己的要求写进 AGENTS.md。选中的是哪套记在 `selected.json`。
  *
  * 会话里固定：一个会话第一次带着消息请求时，把那时用的那套连同全文记进 `personas/<会话 id>.json`，之后一直交出这份全文。
@@ -16,7 +17,7 @@ import { join } from "node:path";
 import type { Locale, ModelContext, PluginContext } from "@plume/contract";
 import { BUILTIN_IDS, type BuiltinId, LIMITS, type PresetDraft, type PresetProblem, type PresetsView, type PresetView } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
-import { BUILTIN_PERSONAS, fixedGuidelines, type Persona } from "./system.ts";
+import { BUILTIN_PERSONAS, type Persona } from "./system.ts";
 
 /** id 当文件名用：只认这几种字符，别的不落盘、不读。 */
 const SAFE_ID = /^[\w-]+$/;
@@ -31,18 +32,21 @@ interface SessionPersona extends Persona {
 	presetId: string;
 }
 
-/** 存下的一套像不像样：字段都在、没超限、身份不空。读出来不合格的按坏了处理。 */
-function wellFormed(value: unknown): value is StoredPreset {
-	const preset = value as Partial<StoredPreset> | null;
+/** 存下的身份和准则像不像样：字段都在、没超限、身份不空。读出来不合格的按坏了处理。 */
+function wellFormedPersona(value: unknown): value is Persona {
+	const persona = value as Partial<Persona> | null;
 	return (
-		typeof preset?.name === "string" &&
-		typeof preset.identity === "string" &&
-		typeof preset.guidelines === "string" &&
-		preset.name.trim() !== "" &&
-		preset.identity.trim() !== "" &&
-		bytes(preset.identity) <= LIMITS.identity &&
-		bytes(preset.guidelines) <= LIMITS.guidelines
+		typeof persona?.identity === "string" &&
+		typeof persona.guidelines === "string" &&
+		persona.identity.trim() !== "" &&
+		bytes(persona.identity) <= LIMITS.identity &&
+		bytes(persona.guidelines) <= LIMITS.guidelines
 	);
+}
+
+/** 自己写的一套还要有名字。 */
+function wellFormed(value: unknown): value is StoredPreset {
+	return wellFormedPersona(value) && typeof (value as Partial<StoredPreset>).name === "string" && (value as StoredPreset).name.trim() !== "";
 }
 
 async function readJson(file: string): Promise<{ found: false } | { found: true; value: unknown }> {
@@ -67,14 +71,28 @@ async function writeJson(file: string, value: unknown): Promise<void> {
 
 export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "locale" | "trash" | "sessions">) {
 	const presetsDir = join(ctx.dataDir, "presets");
+	const overridesDir = join(ctx.dataDir, "overrides");
 	const personasDir = join(ctx.dataDir, "personas");
 	const selectedFile = join(ctx.dataDir, "selected.json");
 	const presetFile = (id: string) => join(presetsDir, `${id}.json`);
+	const overrideFile = (id: BuiltinId) => join(overridesDir, `${id}.json`);
 	const personaFile = (sessionId: string) => join(personasDir, `${sessionId}.json`);
 	const text = () => MESSAGES[ctx.locale() as Locale];
 	const held = new Map<string, SessionPersona>();
 	/** 上一次记过日志的那个问题：每次请求都会读到同一个坏文件，不每次都记一条。 */
 	let warned: string | undefined;
+
+	/** 内置的那套现在是什么：改过就是改过的那份。覆盖读不出来时用原文，记一条日志。 */
+	async function builtin(id: BuiltinId): Promise<{ persona: Persona; modified: boolean }> {
+		const read = await readJson(overrideFile(id));
+		if (read.found && wellFormedPersona(read.value)) return { persona: { identity: read.value.identity, guidelines: read.value.guidelines }, modified: true };
+		if (read.found && warned !== `override:${id}`) {
+			warned = `override:${id}`;
+			// i18n-exempt：写给调试的人看的日志。
+			ctx.log.warn(`内置的身份与准则「${id}」改过的那份读不出或不合格，先用原文`);
+		}
+		return { persona: BUILTIN_PERSONAS[id], modified: false };
+	}
 
 	async function custom(): Promise<Array<PresetView & { name: string }>> {
 		const names = await readdir(presetsDir).catch(() => [] as string[]);
@@ -84,7 +102,7 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 			const id = name.slice(0, -".json".length);
 			if (!SAFE_ID.test(id) || isBuiltin(id)) continue;
 			const read = await readJson(presetFile(id));
-			if (read.found && wellFormed(read.value)) presets.push({ id, builtin: false, ...read.value });
+			if (read.found && wellFormed(read.value)) presets.push({ id, builtin: false, modified: false, ...read.value });
 		}
 		return presets;
 	}
@@ -98,7 +116,7 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 	/** 选中的那套，用不了时退回「通用」并说出原因。 */
 	async function resolve(): Promise<{ id: string; persona: Persona; problem: PresetProblem | null }> {
 		const id = await selectedId();
-		if (isBuiltin(id)) return { id, persona: BUILTIN_PERSONAS[id], problem: null };
+		if (isBuiltin(id)) return { id, persona: (await builtin(id)).persona, problem: null };
 		const read = await readJson(presetFile(id));
 		if (read.found && wellFormed(read.value)) return { id, persona: { identity: read.value.identity, guidelines: read.value.guidelines }, problem: null };
 		const problem: PresetProblem = { id, reason: read.found ? "invalid" : "missing" };
@@ -113,23 +131,33 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 
 	async function view(): Promise<PresetsView> {
 		const { id, problem } = await resolve();
-		const builtins: PresetView[] = BUILTIN_IDS.map((builtinId) => ({ id: builtinId, builtin: true, ...BUILTIN_PERSONAS[builtinId] }));
-		// 固定的几条里有两条跟着权限模式、工作区说，这里按最常见的那种（请求批准、在 git 仓库里）列。
-		const fixed = fixedGuidelines({ permissionMode: "auto", isGitRepo: true });
-		return { presets: [...builtins, ...(await custom())], selected: id, problem, fixed };
+		const builtins: PresetView[] = await Promise.all(
+			BUILTIN_IDS.map(async (builtinId) => {
+				const { persona, modified } = await builtin(builtinId);
+				return { id: builtinId, builtin: true, modified, ...persona };
+			}),
+		);
+		return { presets: [...builtins, ...(await custom())], selected: id, problem };
 	}
 
-	/** 交上来的一套合不合格：不合格的抛出按界面语言写的原因。`except` 是正在改的那一套自己，不和自己比重名。 */
-	async function check(draft: PresetDraft, except: string | undefined): Promise<StoredPreset> {
+	/** 交上来的身份和准则合不合格：不合格的抛出按界面语言写的原因。 */
+	function checkPersona(draft: PresetDraft): Persona {
 		const t = text();
-		const name = typeof draft?.name === "string" ? draft.name.trim() : "";
 		const identity = typeof draft?.identity === "string" ? draft.identity.trim() : "";
 		const guidelines = typeof draft?.guidelines === "string" ? draft.guidelines.trim() : "";
-		if (name === "") throw new Error(t.nameEmpty);
-		if ([...name].length > LIMITS.name) throw new Error(t.nameTooLong(LIMITS.name));
 		if (identity === "") throw new Error(t.identityEmpty);
 		if (bytes(identity) > LIMITS.identity) throw new Error(t.tooLarge(t.identityLabel, LIMITS.identity / 1024));
 		if (bytes(guidelines) > LIMITS.guidelines) throw new Error(t.tooLarge(t.guidelinesLabel, LIMITS.guidelines / 1024));
+		return { identity, guidelines };
+	}
+
+	/** 自己写的一套还要查名字。`except` 是正在改的那一套自己，不和自己比重名。 */
+	async function check(draft: PresetDraft, except: string | undefined): Promise<StoredPreset> {
+		const t = text();
+		const name = typeof draft?.name === "string" ? draft.name.trim() : "";
+		if (name === "") throw new Error(t.nameEmpty);
+		if ([...name].length > LIMITS.name) throw new Error(t.nameTooLong(LIMITS.name));
+		const { identity, guidelines } = checkPersona(draft);
 		// 内置的名字两种语言都算：换了界面语言，同一份列表里不该出现两个「编程」。
 		const builtinNames = Object.values(MESSAGES).flatMap((messages) => [messages.general, messages.coding]);
 		const taken = [...builtinNames, ...(await custom()).filter((preset) => preset.id !== except).map((preset) => preset.name)];
@@ -142,10 +170,19 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 
 		async save(id: string | undefined, draft: PresetDraft): Promise<PresetsView> {
 			const t = text();
-			if (id !== undefined) {
-				if (isBuiltin(id)) throw new Error(t.builtinReadOnly);
-				if (!SAFE_ID.test(id) || !(await readJson(presetFile(id))).found) throw new Error(t.notFound);
+			if (id !== undefined && isBuiltin(id)) {
+				const persona = checkPersona(draft);
+				const original = BUILTIN_PERSONAS[id];
+				// 改回和原文一样就是没改：删掉覆盖，之后照样跟着应用更新。
+				if (persona.identity === original.identity.trim() && persona.guidelines === original.guidelines.trim()) await rm(overrideFile(id), { force: true });
+				else {
+					await mkdir(overridesDir, { recursive: true });
+					await writeJson(overrideFile(id), persona);
+				}
+				warned = undefined;
+				return view();
 			}
+			if (id !== undefined && (!SAFE_ID.test(id) || !(await readJson(presetFile(id))).found)) throw new Error(t.notFound);
 			const preset = await check(draft, id);
 			await mkdir(presetsDir, { recursive: true });
 			await writeJson(presetFile(id ?? `custom-${randomUUID().slice(0, 8)}`), preset);
@@ -154,11 +191,18 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 
 		async remove(id: string): Promise<PresetsView> {
 			const t = text();
-			if (isBuiltin(id)) throw new Error(t.builtinReadOnly);
+			if (isBuiltin(id)) throw new Error(t.builtinNotRemovable);
 			if (!SAFE_ID.test(id) || !(await readJson(presetFile(id))).found) throw new Error(t.notFound);
 			// 先换掉选中的再删：删到一半出错时，新会话不会指向一个已经没了的文件。
 			if ((await selectedId()) === id) await writeJson(selectedFile, { id: "general" });
 			await ctx.trash(presetFile(id));
+			return view();
+		},
+
+		async reset(id: string): Promise<PresetsView> {
+			if (!isBuiltin(id)) throw new Error(text().notFound);
+			await rm(overrideFile(id), { force: true });
+			warned = undefined;
 			return view();
 		},
 

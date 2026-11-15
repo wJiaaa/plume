@@ -120,8 +120,8 @@ export const BUILTIN_PERSONAS: Record<"general" | "coding", Persona> = {
 	coding: { identity: CODING_IDENTITY, guidelines: bullets(CODING_GUIDELINES) },
 };
 
-/** 固定的那几条，设置页只读地列出来，让人知道换准则换不掉它们。按权限模式、工作区变的两条在这里按最常见的情况说。 */
-export function fixedGuidelines(input: Pick<SystemPromptInput, "permissionMode" | "readOnly" | "isGitRepo" | "isolatedWorktree">): string[] {
+/** 不管选哪一套都接在准则后面的几条：界面靠第一条把文件画成能点的链接，后几条关乎并行调用、诚实和权限。 */
+function fixedGuidelines(input: Pick<SystemPromptInput, "permissionMode" | "readOnly" | "isGitRepo" | "isolatedWorktree">): string[] {
 	return [...FIXED_GUIDELINES, outsideGuideline(input), isolationGuideline(input)];
 }
 

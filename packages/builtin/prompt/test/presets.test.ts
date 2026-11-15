@@ -46,15 +46,14 @@ const request = (id: string, extra: Partial<SessionScope> = {}, messages: Messag
 const draft = (name: string, identity = `You are ${name}.`, guidelines = "- Be careful.") => ({ name, identity, guidelines });
 
 describe("选哪一套", () => {
-	it("没选过时是「通用」；内置两套都列出来，带上固定的几条", async () => {
+	it("没选过时是「通用」；内置两套都列出来，没改过", async () => {
 		const view = await open().view();
 		expect(view.selected).toBe("general");
 		expect(view.problem).toBeNull();
-		expect(view.presets.map((preset) => [preset.id, preset.builtin])).toEqual([
-			["general", true],
-			["coding", true],
+		expect(view.presets.map((preset) => [preset.id, preset.builtin, preset.modified])).toEqual([
+			["general", true, false],
+			["coding", true, false],
 		]);
-		expect(view.fixed.some((line) => line.startsWith("Write local file references"))).toBe(true);
 	});
 
 	it("改了选中的那套，已经开过头的会话还是原来那套，新开的会话用新的", async () => {
@@ -115,6 +114,45 @@ describe("选哪一套", () => {
 	});
 });
 
+describe("改内置的那套", () => {
+	it("存成一份覆盖：名字不看，列表里标已修改，新会话用改过的，已开始的会话不变", async () => {
+		const presets = open();
+		await presets.select("coding");
+		const before = await presets.forRequest(request("s1"));
+		const view = await presets.save("coding", draft("随便什么名字", "You are a careful coder.", "- Read first."));
+		expect(view.presets.find((preset) => preset.id === "coding")).toMatchObject({
+			modified: true,
+			identity: "You are a careful coder.",
+			guidelines: "- Read first.",
+		});
+		expect(view.presets.map((preset) => preset.id)).toEqual(["general", "coding"]);
+		expect(await presets.forRequest(request("s1"))).toEqual(before);
+		expect(await presets.forRequest(request("s2"))).toMatchObject({ identity: "You are a careful coder.", guidelines: "- Read first." });
+	});
+
+	it("恢复默认删掉覆盖；改得和原文一样也算恢复", async () => {
+		const presets = open();
+		await presets.save("general", draft("x", "You are someone else."));
+		const reset = await presets.reset("general");
+		expect(reset.presets[0]).toMatchObject({ modified: false, ...BUILTIN_PERSONAS.general });
+
+		await presets.save("general", draft("x", "You are someone else."));
+		const same = await presets.save("general", draft("x", BUILTIN_PERSONAS.general.identity, BUILTIN_PERSONAS.general.guidelines));
+		expect(same.presets[0]?.modified).toBe(false);
+		await expect(readFile(join(dir, "data", "overrides", "general.json"), "utf8")).rejects.toThrow();
+	});
+
+	it("身份为空、超限照样拦下；覆盖读不出来时用原文", async () => {
+		const presets = open();
+		await expect(presets.save("coding", draft("x", " "))).rejects.toThrow("身份不能为空");
+		await mkdir(join(dir, "data", "overrides"), { recursive: true });
+		await writeFile(join(dir, "data", "overrides", "coding.json"), "{ 不是 JSON");
+		await presets.select("coding");
+		expect(await presets.forRequest(request("s1"))).toMatchObject(BUILTIN_PERSONAS.coding);
+		expect((await presets.view()).presets[1]?.modified).toBe(false);
+	});
+});
+
 describe("存不进去的", () => {
 	it("名字为空、太长、和别的重名（内置的两种语言的名字都算），身份为空、超限，都按界面语言说原因", async () => {
 		const presets = open();
@@ -128,10 +166,10 @@ describe("存不进去的", () => {
 		await expect(open("en").save(undefined, draft("Fresh", "x", "y".repeat(32 * 1024 + 1)))).rejects.toThrow("Guidelines can be at most 32 KiB");
 	});
 
-	it("内置的不能改、不能删；找不到的选不了、改不了", async () => {
+	it("内置的不能删；找不到的选不了、改不了、恢复不了", async () => {
 		const presets = open();
-		await expect(presets.save("coding", draft("编程 2"))).rejects.toThrow("内置的不能改");
-		await expect(presets.remove("general")).rejects.toThrow("内置的不能改");
+		await expect(presets.remove("general")).rejects.toThrow("内置的不能删");
+		await expect(presets.reset("custom-gone")).rejects.toThrow("找不到这一套");
 		await expect(presets.select("custom-gone")).rejects.toThrow("找不到这一套");
 		await expect(presets.save("custom-gone", draft("新的"))).rejects.toThrow("找不到这一套");
 		await expect(presets.select("../x")).rejects.toThrow("找不到这一套");

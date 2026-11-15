@@ -8,12 +8,18 @@
 	margin-bottom: 12px;
 }
 
-/* 一套一行：左边是选它的那块（圈、名字、一句说明），右边是这一套能做的事。 */
+/* 一套一行：整行是选它的那块（圈、名字、一句说明），悬停时整行变底色；右边是这一套能做的事。 */
 .prompt-row {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	padding: 10px 12px 10px 4px;
+	padding: 12px 16px;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.prompt-row:hover {
+	background: var(--plume-card-hover);
 }
 
 .prompt-row + .prompt-row {
@@ -26,18 +32,19 @@
 	flex: 1;
 	align-items: center;
 	gap: 12px;
-	padding: 4px 12px;
+	padding: 0;
 	border: 0;
-	border-radius: var(--plume-radius-field);
 	background: transparent;
 	color: inherit;
 	text-align: left;
 	cursor: pointer;
-	transition: background-color var(--plume-t-quick);
 }
 
-.prompt-choice:hover {
-	background: var(--plume-card-hover);
+/* 点这一行哪里都算选它；右边的按钮叠在上面，各点各的。 */
+.prompt-choice::after {
+	position: absolute;
+	inset: 0;
+	content: "";
 }
 
 .prompt-choice-body {
@@ -62,18 +69,50 @@
 }
 
 .prompt-actions {
+	position: relative;
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
 	gap: 4px;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
 }
 
-.prompt-editor {
+/* 有指针的地方平常藏着，指过来或键盘走到这一行才出现；触屏上一直在。 */
+@media (hover: hover) and (pointer: fine) {
+	.prompt-actions {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.prompt-row:hover .prompt-actions,
+	.prompt-row:focus-within .prompt-actions {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* 弹窗：正文是表单，比问题型对话框默认的高度放得下更多字段。 */
+.prompt-dialog-body {
+	max-height: min(620px, 66dvh);
+}
+
+.prompt-form {
 	display: flex;
-	margin-top: 16px;
 	flex-direction: column;
 	gap: 16px;
-	padding: 16px;
+}
+
+.prompt-dialog-error {
+	margin-bottom: 4px;
+}
+
+/* 底栏原地换成「放弃没保存的改动？」时，这句话占掉按钮左边的地方。 */
+.prompt-leaving {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .prompt-field {
@@ -84,22 +123,4 @@
 
 .prompt-field input {
 	width: 100%;
-}
-
-.prompt-fixed summary {
-	cursor: pointer;
-}
-
-.prompt-fixed ul {
-	display: flex;
-	margin: 8px 0 0;
-	flex-direction: column;
-	gap: 6px;
-	padding-left: 18px;
-	color: var(--plume-ink-muted);
-}
-
-.prompt-buttons {
-	display: flex;
-	gap: 8px;
 }
