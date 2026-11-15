@@ -2,6 +2,38 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.1] - 2026-11-15
+
+<!-- plume:notes en -->
+### Changes
+
+- **The terminal comes with the app.** "Open in the terminal" in the file tree and "Run it in the terminal" on code blocks used to ask you to install the terminal plugin first. The terminal is now built in, so both work out of the box. If you installed it from the marketplace, the built-in one takes its place.
+- **Auto approve is stricter in a few places.** With your home folder (`~`) open as a project, writing `~/.zshrc` or a file under `~/.ssh` now asks you first, the same as doing it with a shell command. A plugin tool named something like `command` or `create` is no longer waved through as if it were a harmless command or a new file. And a plugin can no longer change what a permission card says, or turn your "No" into a yes, when the agent asks to leave the sandbox.
+- **Long chats keep what the model just read.** When a conversation outgrew the model's context, large tool results, often the file it had just opened, were cut down to one line before anything older was summarised. Now the history is compacted first, and results are only cut if that still isn't enough. Compaction also stops dropping a test or build run as a "duplicate" when its output had changed, so the error that prompted a fix stays in the summary.
+- **Fixes.** A new side chat uses the default model you saved for it again. After restarting the app, the context usage popover is broken down by part again instead of showing a single "Last request" line. The last words of a reply no longer flicker away and back as the turn ends, and the page no longer jolts while tool rows stream in at the bottom.
+
+### For plugin authors
+
+Rebuild with SDK 0.5.1:
+
+- `ui.remote()` methods must have a fixed number of parameters. A method with optional or rest parameters is now a type error on the remote proxy, because the caller's `CallContext` would land in the missing argument. Write values that may be absent as `x: T | undefined` and pass `undefined`.
+- New: `ctx.sessions.configure(id, { model?, thinking?, project?, cwd? })` changes the model, thinking level and working folder of a session your plugin created. `ResizeHandle` from `@plume/ui` lets a plugin page have draggable column edges.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **终端随应用一起装好。** 文件树里的「在终端中打开」、代码块上的「在终端运行」，以前要先去市场装终端插件。现在终端是内置的，装好就能用；从市场装过的那份由内置的顶替。
+- **帮我批准在几处收紧了。** 把主目录（`~`）当项目打开时，写 `~/.zshrc` 或 `~/.ssh` 下的文件会先问你，和用命令写一样。叫 `command`、`create` 这类名字的插件工具，不会再被当成普通命令或新建文件直接放行。agent 申请离开沙箱时，插件不能再改审批卡上写的内容，也不能把你点的「拒绝」翻成放行。
+- **长对话不再剪掉模型刚读到的东西。** 以前对话超出模型的上下文时，会先把大的工具结果剪成一行（往往是刚打开的那个文件），再去总结更早的历史。现在先压缩历史，还放不下才剪。压缩时也不再把输出变了的测试、构建当成「重复」清掉，引出这次修改的那段报错会留在摘要里。
+- **修好的几处。** 新开的侧边聊天重新用上你给它存的默认模型。重开应用后，上下文用量照样按各部分分开列，不再只剩「上一次请求」一行。一轮收尾时回复最后几个字不再闪一下；贴着底部看工具行一行行进来时，页面不再一顶一停。
+
+### 给插件作者
+
+请用 SDK 0.5.1 重新构建：
+
+- `ui.remote()` 调的方法参数个数要写死。带可选参数或剩余参数的方法，在远端代理上调用会报类型错误：调用方少传一个参数时，`CallContext` 会落进那个参数里。可能不传的值写成 `x: T | undefined`，调用时传 `undefined`。
+- 新增：`ctx.sessions.configure(id, { model?, thinking?, project?, cwd? })`，改插件自己建的会话的模型、思考档位和工作目录；`@plume/ui` 的 `ResizeHandle`，插件页面的栏能拖动改宽度。
+
 ## [0.5.0] - 2026-11-15
 
 <!-- plume:notes en -->
