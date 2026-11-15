@@ -2,6 +2,36 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.3] - 2026-11-15
+
+<!-- plume:notes en -->
+### Changes
+
+- **A new activity bar on the far left.** Plugin pages, the Plugin Market and Settings no longer share one sidebar with your chats; they open from a narrow bar at the left edge of the window.
+- **You can edit the built-in identity and guidelines.** Open them in a dialog, change them, and restore the defaults any time. In Settings you can also pick which identity and guidelines new chats start with.
+- **Calmer dialogs and page headers.** Dialog buttons now sit on the right instead of crowding the left, and the header of a plugin page no longer drags the window around when you press on it.
+- **Smoother chat switching.** The area under the title bar no longer flashes bright and then dims when you switch chats, and the "waiting" hints while a reply is on its way read more clearly.
+
+### For plugin authors
+
+- Removed: the `topRow` option of `ui.page` and the `start` prop of `PageTopRow`.
+- New: `ui.usePageToolbar(items)` puts your own icon buttons at the top-left of the window, right after Back and Forward.
+- New: a logic entry can look up the projects the user has registered, and receives the assistant's reply as a draft while it is being generated.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **窗口最左边多了一列活动栏。** 插件的页面、插件市场、设置不再和会话挤在同一根侧栏里，从窗口左边这条窄栏打开。
+- **内置的身份与准则能直接改了。** 在弹窗里查看和编辑，随时可以恢复默认；设置里还能选新会话用哪一套身份和准则。
+- **对话框和页面栏头更顺手。** 对话框底下的按钮靠右排，不再挤在左边；插件页面的栏头按住也不会再拖着窗口走。
+- **切换会话更稳。** 标题栏底下的内容不再先亮一下再暗下去，等回复时的提示也说得更清楚。
+
+### 给插件作者
+
+- 删掉了 `ui.page` 的 `topRow` 和 `PageTopRow` 的 `start`。
+- 新增 `ui.usePageToolbar(items)`：在窗口左上角、后退和前进后面放自己的图标按钮。
+- 新增：逻辑入口能查到用户登记过的项目，也能在助理回复生成的过程中收到草稿。
+
 ## [0.5.2] - 2026-11-15
 
 <!-- plume:notes en -->
