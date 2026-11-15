@@ -1715,18 +1715,18 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-scheduled-task] [data-scheduled-run]')?.disabled === false`, "回到定时任务页");
 		await clickVisible(page, `[data-scheduled-task] [data-scheduled-run]`);
 		window.webContents.send("plume:command", `open-session:${firstRun.lastSessionId}`);
-		// 活动栏只挂圆点，数量和含义留在无障碍名和悬停提示里。
+		// 活动栏那一格右上角的数；它是什么意思接在这一格的名字后面（无障碍名和悬停提示）。
 		const failureNav = `document.querySelector('[data-nav="page:plume.scheduled/scheduled"][aria-label$="1 个任务运行失败"]')`;
 		await until(
-			`document.querySelector('[data-screen=chat] [data-scheduled-alert]')?.textContent.includes('失败') && ${failureNav}?.querySelector('[data-plume-nav-dot]') !== null && ${failureNav}?.textContent === ''`,
-			"失败了：输入框上方说一句，活动栏的定时任务入口只挂圆点、不显示数字",
+			`document.querySelector('[data-screen=chat] [data-scheduled-alert]')?.textContent.includes('失败') && ${failureNav}?.textContent === '1'`,
+			"失败了：输入框上方说一句，活动栏的定时任务那一格挂着 1",
 		);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-scheduled-alert.png"));
 		await click("[data-scheduled-alert-look]");
 		await until(
-			`document.querySelector('[data-scheduled-task] [data-scheduled-error]')?.textContent.startsWith('失败：') && ${failureNav} === null && document.querySelector('[data-nav="page:plume.scheduled/scheduled"] [data-plume-nav-dot]') === null`,
-			"「查看」回到定时任务页，卡片上写着原因，活动栏的圆点清掉",
+			`document.querySelector('[data-scheduled-task] [data-scheduled-error]')?.textContent.startsWith('失败：') && ${failureNav} === null`,
+			"「查看」回到定时任务页，卡片上写着原因，活动栏的数目清掉",
 		);
 		const secondRun = (await storedTasks())[0];
 		if (!secondRun?.lastError || !secondRun.lastSessionId || secondRun.lastSessionId === firstRun.lastSessionId)

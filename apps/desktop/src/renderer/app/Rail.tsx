@@ -57,8 +57,8 @@ export function Rail() {
 							label={localized(page.title, resolvedLocale)}
 							icon={<Icon size={17} strokeWidth={1.8} />}
 							onClick={() => go(key)}
-							// 窄活动栏只标有事待看，详情留在提示里；人就在这一页上时不再挂着。
-							{...(badge && screen !== key ? { badge: true, badgeLabel: localized(badge.label, resolvedLocale) } : {})}
+							// 人就在这一页上时数目说的就是眼前的东西，不再挂着。
+							{...(badge && screen !== key ? { badge: badge.count, badgeLabel: localized(badge.label, resolvedLocale) } : {})}
 						/>
 					);
 				})}
