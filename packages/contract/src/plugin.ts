@@ -916,7 +916,8 @@ export type CompactSummary =
  * 最里层照着传进来的 `request` 把审批卡弹给人、等人答。
  *
  * 权限模式的含义在本体，到不了这里：完全访问、tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行。
- * 提权（`request.escalation`）只能由人答：它在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算。
+ * 提权（`request.escalation`）只能由人答：它在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算；
+ * 最里层照本体原本问的那一条弹卡（层交下去的 `request` 不算），层拿到人的回答后改成放行也不算。
  * 弹出来的卡可以由人点，也可以由代管这个会话的插件经 `ctx.sessions.respond` 转达，那条路不经这里。
  * 工具要人给答案（`ToolRun.request`）不是审批，不到这里。
  * 内置插件 plume.approval 在里层（order 1000）按帮我批准（`auto`）的风险规则放行，命中规则的把理由写进卡片再交给里层；

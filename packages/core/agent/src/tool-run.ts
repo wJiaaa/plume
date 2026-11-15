@@ -383,7 +383,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	const permission = () => (read ??= scope.permission());
 	/**
 	 * 要不要放行。权限模式的含义由本体定，换掉哪个插件都不变：
-	 * - 提权（`escalation`，放宽沙箱）只能由人答：完全访问不替人点头，层答放行不算数、照样弹卡，层的拒绝照算；
+	 * - 提权（`escalation`，放宽沙箱）只能由人答：完全访问不替人点头，层答放行不算数、照样弹卡，层的拒绝照算；卡照本体问的原样弹，
+	 *   层往里交以后改卡面、改人的回答都不算；
 	 * - 完全访问直接放行；
 	 * - tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的直接放行；层自己问的（`byLayer`）没有 `subject`，不归这两条；
 	 * - 其余经钩子 tool.approve（插件替人答、帮我批准的风险规则在那里），最里层把审批卡弹给人。
@@ -399,7 +400,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 			byLayer || humanOnly || request.subject === undefined ? undefined : { subject: request.subject, ...(asker === "plugin" ? { plugin: tool.plugin } : {}) };
 		if (!humanOnly && mode === "full") return "once";
 		if (!humanOnly && !byLayer && (from.approved || (grant && alwaysAllow.some((granted) => sameGrant(granted, grant))))) return "once";
-		let asked = false;
+		// 提权时人在卡上的回答：层往里交了以后改不了它，见下面收尾。
+		let answered: ApprovalDecision | undefined;
 		const decision = await scope.host.run(
 			"tool.approve",
 			{
@@ -415,7 +417,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				signal: from.signal,
 			},
 			async (approval) => {
-				asked = true;
+				// 提权照本体原本问的那一条弹卡：层拿掉 `escalation`、换掉命令，人会以为批的是一次普通调用。
+				if (humanOnly) return (answered = await askWith(request, undefined));
 				// 记下的是本体按工具原本问的那一条归好的名下和 subject，层改不了它；层把卡改成答不了「以后不再问」的（拿掉 subject、
 				// 加上提权），人看到的卡上没有这个按钮，也就不记。
 				const shown = approval.request;
@@ -425,7 +428,8 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		);
 		// i18n-exempt：抛出去会作为工具结果交给模型。
 		if (decision !== "once" && decision !== "always" && decision !== "reject") throw new Error(`tool.approve 给的结论不认得：${String(decision)}`);
-		if (humanOnly && !asked && decision !== "reject") return await askWith(request, undefined);
+		// 提权：层的拒绝照算；放行只认人答的。层没往里交就照样弹卡，往里交了就用人的回答，层拿到人的拒绝再交回放行也不算。
+		if (humanOnly) return decision === "reject" ? "reject" : (answered ?? (await askWith(request, undefined)));
 		return decision;
 	};
 	const execution: ToolExecution = {
