@@ -318,7 +318,7 @@ function fullLogHint(buffer: OutputBuffer, path: string | undefined): string {
 /**
  * 一条命令能不能跑：它读什么，以及——除非能证明什么都不写——人怎么说。`undefined` 是能跑，别的是代替运行返回的结果。
  *
- * `monitor` 也跑 shell 命令，共用这一道，不能成为绕过它的路：两者问的 `kind` 都是 `bash`，审批层按它判命令的风险。
+ * `monitor` 也跑 shell 命令，共用这一道，不能成为绕过它的路：两者问的 `kind` 都是 `command`，审批层按它判命令的风险。
  * `ask` 只对提权的为 false：那次已经带着更宽的模式问过了。
  */
 export async function authorizeCommand(command: string, title: string | undefined, ctx: ToolContext, ask = true): Promise<ToolResult | undefined> {
