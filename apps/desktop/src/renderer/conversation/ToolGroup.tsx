@@ -8,7 +8,7 @@
  *   每句淡入淡出一次、箭头被推来推去；每一次在做什么，点开看卡片里的行。从一次长成几次时换一句，每一句至少挂 650ms（`useHeldKey`）。
  * - **换字**：原地交叉淡入淡出，宽度缓过去（`SwapText`），后面的箭头不跳。
  * - **一行**：跑着「正在修改 retry.ts」，跑完「修改 retry.ts +2 −1」；模型写了说明的命令说它的说明，失败的在后面标红「失败」。
- *   一组跑着时新来的行长出来（高度从 0 缓过去，同时淡入，见 `useGrowIn`）。
+ *   一组跑着时新来的行从卡片下沿露出来、同时淡入（`useRevealRows`、`useArrival`）。
  * - **末尾的推理还在写**：标题后面接一句「正在思考 · 5s」，句子本身不动。推理和回来的后台命令结果在卡片里各占一行。
  *
  * - **图标**：每一行行首是那次调用的图标（`ToolIcon`），只有一次调用时标题就是那一次、也用它；几次调用合成的标题不画图标。
@@ -17,9 +17,9 @@
  */
 
 import type { UnansweredDetails } from "@plume/contract";
-import { Collapse, DURATION, motionReduced, translate, useHeldKey, useI18n } from "@plume/ui";
+import { Collapse, translate, useHeldKey, useI18n, useRevealRows } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
-import { type AnimationEvent, memo, type ReactNode, type TransitionEvent, useEffect, useRef, useState } from "react";
+import { type AnimationEvent, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
 import { type CallLabel, callLabel, describePolls, diffOf, labelText, summarizeCalls } from "./call-words.ts";
@@ -227,37 +227,44 @@ function ToolGroup({
 	);
 }
 
-/** 卡片里的那几行。挂上以后才来的（一组还在跑时新做的那一次）长出来（`useGrowIn`），点开时已经在的原样出现。 */
+/**
+ * 卡片里的那几行。挂上以后才来的（一组还在跑时新做的那一次）从卡片下沿露出来（`useRevealRows`：整张卡片一条弹簧，
+ * 行接着行连成一条平稳的长高），同时淡入（`useArrival`）；点开时已经在的原样出现。
+ */
 function CardRows({ members, draw }: { members: StepMember[]; draw: ((run: Run) => ReactNode) | undefined }) {
 	usePluginRegistrations();
 	const seen = useRef<Set<string> | null>(null);
 	const lines = foldPolls(members);
 	const keyOf = (line: (typeof lines)[number]) =>
 		line.kind === "call" ? line.call.block.id : line.kind === "polls" ? line.calls[0]!.block.id : runKey(line.run);
-	const initial = (seen.current ??= new Set(lines.map(keyOf)));
+	const keys = lines.map(keyOf);
+	const initial = (seen.current ??= new Set(keys));
+	const rows = useRevealRows<HTMLDivElement>(keys);
 	return (
 		<div className="tool-group-card">
-			{lines.map((line) => {
-				const key = keyOf(line);
-				const enter = !initial.has(key);
-				if (line.kind === "call" || line.kind === "polls") {
-					const call = line.kind === "call" ? line.call : line.calls[0]!;
-					const polls = line.kind === "polls" ? line.calls : undefined;
-					// 插件画的那一行在外面这层长出来：插件画它自己的卡片时不经过 `ToolRow`。
-					if (!polls && hasToolCard(call.block.name))
-						return (
-							<PluginRow key={key} enter={enter}>
-								<PluginToolCard call={call} fallback={<ToolRow call={call} enter={false} />} />
-							</PluginRow>
-						);
-					return <ToolRow key={key} call={call} polls={polls} enter={enter} />;
-				}
-				return (
-					<ExtraRow key={key} enter={enter}>
-						{draw?.(line.run)}
-					</ExtraRow>
-				);
-			})}
+			<div ref={rows} className="tool-group-rows">
+				{lines.map((line) => {
+					const key = keyOf(line);
+					const enter = !initial.has(key);
+					if (line.kind === "call" || line.kind === "polls") {
+						const call = line.kind === "call" ? line.call : line.calls[0]!;
+						const polls = line.kind === "polls" ? line.calls : undefined;
+						// 插件画的那一行在外面这层淡入：插件画它自己的卡片时不经过 `ToolRow`。
+						if (!polls && hasToolCard(call.block.name))
+							return (
+								<PluginRow key={key} enter={enter}>
+									<PluginToolCard call={call} fallback={<ToolRow call={call} enter={false} />} />
+								</PluginRow>
+							);
+						return <ToolRow key={key} call={call} polls={polls} enter={enter} />;
+					}
+					return (
+						<ExtraRow key={key} enter={enter}>
+							{draw?.(line.run)}
+						</ExtraRow>
+					);
+				})}
+			</div>
 		</div>
 	);
 }
@@ -286,7 +293,7 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const text = labelText(label);
 	// 答完了、起的任务还在后台跑的（照跑着画）有结果可看。
 	const expandable = startedAt !== undefined || result !== undefined || !live;
-	const grow = useGrowIn(enter);
+	const grow = useArrival(enter);
 
 	return (
 		<div data-tool-row="" data-tool={call.block.name} data-tool-call={call.block.id} data-status={SLOT_STATUS[status]} {...grow}>
@@ -317,7 +324,7 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 
 /** 卡片里的推理、回来的后台命令结果。 */
 function ExtraRow({ enter, children }: { enter: boolean; children: ReactNode }) {
-	const grow = useGrowIn(enter);
+	const grow = useArrival(enter);
 	return (
 		<div data-tool-extra="" {...grow}>
 			{children}
@@ -327,7 +334,7 @@ function ExtraRow({ enter, children }: { enter: boolean; children: ReactNode }) 
 
 /** 卡片里插件登记了卡片的那一次调用。 */
 function PluginRow({ enter, children }: { enter: boolean; children: ReactNode }) {
-	const grow = useGrowIn(enter);
+	const grow = useArrival(enter);
 	return (
 		<div {...grow} className={`tool-row-plugin ${grow.className ?? ""}`.trim()}>
 			{children}
@@ -336,35 +343,9 @@ function PluginRow({ enter, children }: { enter: boolean; children: ReactNode })
 }
 
 /**
- * 卡片里新来的一行长出来（`.tool-row-enter`）：高度从 0 缓到它自己的高，同时淡入。
+ * 新出现的一组、卡片里新来的一行淡入一次（`.tool-fade-in`）；淡完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
  *
- * 一下子撑开的话，卡片点开着、贴着底部时，每来一行上面整块就被顶上去一行高；一次发出六个调用，一秒里跳六下。
- * 用高度过渡，贴底跟随每一帧按长出来的那一截跟着挪（`useFollowBottom` 的 `growing`），上面的字平平地往上走，底下的不动。
- *
- * 长完摘掉类名：长着时裁着（`overflow: clip`），之后不该再裁；`@starting-style` 也只该用一次，藏起来的页面（`Activity`）
- * 再显出来时不重演。被打断（`transitioncancel`，比如长到一半藏了起来）也算长完。减少动态效果时直接出现。
- * 挂上时就藏着（`Activity` 里的面板、侧边聊天）过渡根本不跑，两个事件都不来：过了动画的时长照样摘掉，不然一直裁着，显出来时整批再长一遍。
- */
-function useGrowIn(initial: boolean): {
-	className?: string;
-	onTransitionEnd?: (event: TransitionEvent<HTMLElement>) => void;
-	onTransitionCancel?: (event: TransitionEvent<HTMLElement>) => void;
-} {
-	const [fresh, setFresh] = useState(() => initial && !motionReduced());
-	useEffect(() => {
-		if (!fresh) return;
-		const timer = setTimeout(() => setFresh(false), DURATION.slow * 2);
-		return () => clearTimeout(timer);
-	}, [fresh]);
-	if (!fresh) return {};
-	const done = (event: TransitionEvent<HTMLElement>) => {
-		if (event.target === event.currentTarget && event.propertyName === "height") setFresh(false);
-	};
-	return { className: "tool-row-enter", onTransitionEnd: done, onTransitionCancel: done };
-}
-
-/**
- * 新出现的一组淡入一次（`.tool-fade-in`）；淡完摘掉类名：藏起来的页面（`Activity`）再显出来时动画会重演，摘掉了就不会。
+ * 卡片里新来的一行只管淡入；它怎么长高归整张卡片（`useRevealRows`），不各自做高度过渡，理由见那里。
  */
 function useArrival(initial: boolean): { className?: string; onAnimationEnd?: (event: AnimationEvent<HTMLElement>) => void } {
 	const [fresh, setFresh] = useState(initial);

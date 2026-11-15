@@ -31,7 +31,8 @@
 		border-radius: var(--plume-radius-panel);
 	}
 
-	.tool-group-card > * + * {
+	/* 行包在 `.tool-group-rows` 里：新来的行从卡片下沿露出来，露出量是它的负下外边距（`useRevealRows`），卡片裁着溢出。 */
+	.tool-group-rows > * + * {
 		border-top: 1px solid var(--plume-line-soft);
 	}
 
@@ -167,29 +168,9 @@
 		animation: tool-fade-out var(--plume-t-quick) var(--plume-e-soft) both;
 	}
 
-	/* 一组跑着时新出现的组。 */
+	/* 一组跑着时新出现的组，卡片里新来的一行。 */
 	.tool-fade-in {
 		animation: tool-fade-in var(--plume-t-slow) var(--plume-e-out) both;
-	}
-
-	/*
-	 * 卡片里新来的一行（`useGrowIn`）：高度从 0 缓到它自己的高，同时淡入。是过渡不是动画：贴底跟随认高度过渡
-	 * （`useFollowBottom` 的 `growing`），每一帧按长出来的那一截跟着挪。长着时裁住，还没长到的下半截不压到下一行上。
-	 * 自带上下内边距的那几行（推理、送回来的结果）内边距也从 0 起，不先一下子空出一截。
-	 */
-	.tool-row-enter {
-		overflow: clip;
-		interpolate-size: allow-keywords;
-		transition:
-			height var(--plume-t-slow) var(--plume-e-out),
-			padding-block var(--plume-t-slow) var(--plume-e-out),
-			opacity var(--plume-t-slow) var(--plume-e-out);
-
-		@starting-style {
-			height: 0;
-			padding-block: 0;
-			opacity: 0;
-		}
 	}
 
 	@keyframes tool-fade-in {

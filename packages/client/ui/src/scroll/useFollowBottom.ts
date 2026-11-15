@@ -25,6 +25,8 @@ import {
 	type Reading,
 } from "./follow.ts";
 import { readFollow, writeFollow, type FollowSnapshot } from "./memory.ts";
+import { REVEAL_EVENT } from "./reveal.ts";
+import { advance, type Spring } from "./spring.ts";
 import { motionReduced } from "../motion/reduced.ts";
 import { windowMinimized } from "../motion/ticker.ts";
 
@@ -211,13 +213,29 @@ export function useFollowBottom({
 	const size = useRef({ content: 0, view: 0 });
 	const flow = useRef<Flow>({ amount: 0, at: 0, since: 0 });
 	/**
+	 * 追赶的两级弹簧（见 `CHASE_LAG`）。放在 ref 里而不是追赶那一帧的闭包里：`pin` 在追的途中还会替它挪位置
+	 * （平滑长高跟着挪、`LAG_MAX` 那一刀），挪的时候要连弹簧一起挪。只挪 `scrollTop` 的话，下一帧弹簧照着自己
+	 * 记的旧位置写回去，把刚挪的那一截又拽回来：量到过整段输出里一帧往回 0.5px、下一帧再往前，落后越攒越多。
+	 */
+	const springs = useRef({ view: { at: 0, speed: 0 } as Spring, ramp: { at: 0, speed: 0 } as Spring });
+	/**
 	 * 滚动区里正在做高度过渡的元素。
 	 *
-	 * 界面块边写边长、折叠区开合，这种长高本身已经是一帧一小截、平滑的，
+	 * 界面块边写边长、折叠区开合，这种一次性的长高本身已经是一帧一小截、平滑的，
 	 * 再交给弹簧抹一遍只会落后：量到过界面块的下沿被压到视口外 116px。所以它在 `pin` 里当帧跟着挪。
 	 * 过渡事件会冒泡，在滚动区上听就够。
+	 *
+	 * 只给一次性的长高用。一个接一个来的东西（工具卡片里新来的行）不能各自做高度过渡：跟着挪时上面整页的速度
+	 * 就是每一个自己的缓动曲线，一个一个起步停下，连起来是一顶一停。它们走 `useRevealRows`，见 `revealed`。
 	 */
 	const growing = useRef(new Set<EventTarget>());
+	/**
+	 * `useRevealRows` 报上来、还没在 `pin` 里跟着挪的露出高度。
+	 *
+	 * 和 `growing` 一样是当帧跟着挪，但只挪它报的这么多：露出是一阵一阵、跨好几秒的，这期间正文照样在写，按「有东西在长」
+	 * 把整帧的长高都照搬，写出来的那一行就跳着进来。多出来的那截照样交给弹簧追。
+	 */
+	const revealed = useRef(0);
 	const restoredSurface = useRef<string | null | undefined>(undefined);
 	const selectedSurface = useRef<string | null | undefined>(undefined);
 	const restore = useRef<FollowSnapshot | undefined>(undefined);
@@ -386,9 +404,17 @@ export function useFollowBottom({
 			const grew = reading.scrollHeight - size.current.content;
 			const sameView = reading.clientHeight === size.current.view;
 			size.current = { content: reading.scrollHeight, view: reading.clientHeight };
+			/*
+			 * 这一截长高里当帧跟着挪的部分：高度过渡里的全部，露出报上来的那么多（见 `growing`、`revealed`）。它不用追，不算进
+			 * 输出速度。露出按它报的小数照搬，不拿 `scrollHeight` 的差去截：那是取过整的，露出一帧 0.5px 时它可能报 0、也可能
+			 * 报 1，截了就每帧差半个像素，运行行跟着闪。只防它比实际长高多出取整以外的部分（同一帧里别处缩了）。
+			 */
+			const smooth = grew < 0 ? 0 : transitioning(growing.current) ? grew : Math.min(grew + 1, revealed.current);
+			revealed.current = 0;
 			const now = performance.now();
 			const kept = flow.current.amount * Math.exp(-(now - flow.current.at) / FLOW_TAU);
-			const added = grew > 0 && grew <= CHASE_MAX ? grew : 0;
+			const rest = grew - smooth;
+			const added = rest >= 1 && rest <= CHASE_MAX ? rest : 0;
 			flow.current = { amount: kept + added, at: now, since: added > 0 && kept < 1 ? now : flow.current.since };
 			const target = targetScrollTop("following", reading);
 			if (target === null) return;
@@ -404,26 +430,39 @@ export function useFollowBottom({
 				grew >= 0 &&
 				grew <= reading.clientHeight &&
 				target > reading.scrollTop &&
-				(moving || grew > 0) &&
+				(moving || grew > 0 || smooth > 0) &&
 				!motionReduced() &&
 				!windowMinimized();
 			if (!slide) {
 				cancelAnimationFrame(chase.current);
 				chase.current = 0;
+				revealed.current = 0;
 				write(el, target);
 				return;
 			}
-			// 这里跑在布局之后、绘制之前（布局 effect 或 `ResizeObserver` 回调），下面两次写都当帧生效。
-			// 高度过渡里长出来的这一截跟着挪，见 `growing`。
-			if (grew > 0 && transitioning(growing.current)) write(el, reading.scrollTop + grew);
-			if (target - el.scrollTop > LAG_MAX) write(el, target - LAG_MAX);
+			// 位置自己记一份小数：浏览器会把 `scrollTop` 取整到物理像素，每帧挪不到半个像素的那几帧
+			// 读回来原地不动，拿读回来的值接着算就永远差那一点。`view` 是视口，`ramp` 是前一级：抹平了的目标。
+			const { view, ramp } = springs.current;
+			if (!moving) {
+				view.at = ramp.at = reading.scrollTop;
+				view.speed = ramp.speed = 0;
+			}
+			// 这里跑在布局之后、绘制之前（布局 effect 或 `ResizeObserver` 回调），下面这次写当帧生效。
+			// 平滑长出来的这一截跟着挪（见 `smooth`），落后超出 `LAG_MAX` 的那截当帧写掉；两样都连弹簧一起挪，见 `springs`。
+			let shifted = false;
+			if (smooth > 0) {
+				view.at += smooth;
+				ramp.at += smooth;
+				shifted = true;
+			}
+			if (target - view.at > LAG_MAX) {
+				view.at = target - LAG_MAX;
+				shifted = true;
+			}
+			if (ramp.at < view.at) ramp.at = view.at;
+			if (shifted) write(el, view.at);
 			if (moving) return;
 
-			// 位置自己记一份小数：浏览器会把 `scrollTop` 取整到物理像素，每帧挪不到半个像素的那几帧
-			// 读回来原地不动，拿读回来的值接着算就永远差那一点。
-			const view: Spring = { at: el.scrollTop, speed: 0 };
-			// 前一级：抹平了的目标。
-			const ramp: Spring = { at: el.scrollTop, speed: 0 };
 			let last = 0;
 			const step = (now: number) => {
 				chase.current = 0;
@@ -431,7 +470,7 @@ export function useFollowBottom({
 				if (state.current !== "following" || anchor.current || !el.isConnected) return;
 				const here = read(el);
 				if (isDegenerate(here)) return;
-				// 别人挪过（浏览器夹住、原生锚定、`LAG_MAX` 那一刀），以实际位置为准；前一级不能落在视口
+				// 别人挪过（浏览器夹住、原生锚定），以实际位置为准；前一级不能落在视口
 				// 后面，否则会把视口往回拽。
 				if (Math.abs(here.scrollTop - view.at) > 1) view.at = here.scrollTop;
 				if (ramp.at < view.at) ramp.at = view.at;
@@ -549,7 +588,7 @@ export function useFollowBottom({
 		};
 	}, [intend]);
 
-	// 哪些元素正在做高度过渡，见 `growing`。
+	// 哪些元素正在做高度过渡，见 `growing`；露出了多少，见 `revealed`。
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (!el) return;
@@ -559,13 +598,21 @@ export function useFollowBottom({
 		const onEnd = (event: TransitionEvent) => {
 			if (event.target && SIZES.has(event.propertyName)) growing.current.delete(event.target);
 		};
+		// 露出只在跟着底部时记：停在上面时露出在视口外，攒下的不能在回到底部以后拿去照搬别的长高。嵌在里面的滚动面自己管。
+		const onReveal = (event: Event) => {
+			if (state.current !== "following" || !(event instanceof CustomEvent) || typeof event.detail !== "number") return;
+			if (event.target instanceof Element && event.target.closest(".plume-scroll-view") !== el) return;
+			revealed.current += Math.max(0, event.detail);
+		};
 		el.addEventListener("transitionrun", onRun);
 		el.addEventListener("transitionend", onEnd);
 		el.addEventListener("transitioncancel", onEnd);
+		el.addEventListener(REVEAL_EVENT, onReveal);
 		return () => {
 			el.removeEventListener("transitionrun", onRun);
 			el.removeEventListener("transitionend", onEnd);
 			el.removeEventListener("transitioncancel", onEnd);
+			el.removeEventListener(REVEAL_EVENT, onReveal);
 		};
 	}, []);
 
@@ -798,6 +845,7 @@ export function useFollowBottom({
 			});
 		});
 		written.current = null;
+		revealed.current = 0;
 		touchY.current = 0;
 		restoredSurface.current = undefined;
 		selectedSurface.current = surfaceId;
@@ -923,20 +971,6 @@ function firstInView(parent: Element, edge: number): Element | null {
 		if (inner) return inner;
 	}
 	return null;
-}
-
-interface Spring {
-	at: number;
-	speed: number;
-}
-
-/** 临界阻尼弹簧朝 `target` 走 `dt` 毫秒的精确解，步长再大也不会冲过头或者发散。 */
-function advance(spring: Spring, target: number, omega: number, dt: number): void {
-	const offset = spring.at - target;
-	const decay = Math.exp(-omega * dt);
-	const pull = spring.speed + omega * offset;
-	spring.at = target + (offset + pull * dt) * decay;
-	spring.speed = (spring.speed - omega * pull * dt) * decay;
 }
 
 /**

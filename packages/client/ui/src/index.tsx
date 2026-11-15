@@ -102,6 +102,8 @@ export * from "./scroll/fade.ts";
 export * from "./scroll/follow.ts";
 export * from "./scroll/measure-batch.ts";
 export * from "./scroll/memory.ts";
+// 只导出 hook：露出时发的事件只在 `@plume/ui` 里面、它和贴底跟随之间用。
+export { useRevealRows } from "./scroll/reveal.ts";
 export * from "./scroll/signature.ts";
 export * from "./scroll/useFollowBottom.ts";
 export * from "./scroll/useSideways.ts";
