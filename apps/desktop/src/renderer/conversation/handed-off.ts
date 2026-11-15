@@ -8,6 +8,7 @@
 import type { AgentEvent, AssistantMessage, SessionSummary } from "@plume/contract";
 import type { SessionActivity } from "@plume/contract/ui";
 import { useSyncExternalStore } from "react";
+import { busy } from "../sidebar/activity.ts";
 
 type HandedOffState = "running" | SessionActivity;
 
@@ -31,7 +32,7 @@ export function handedOffFrom(
 		if (session.spawnedFrom?.sessionId !== parentId || session.archived) continue;
 		const own = activityOf(session.id);
 		// 和侧栏行首同一个次序：等人批准排最前，那是一个会一直等下去的会话。
-		const state = own === "waiting" ? own : session.running ? "running" : own;
+		const state = own === "waiting" ? own : busy(session) ? "running" : own;
 		if (state) out.push({ session, state });
 	}
 	return out;

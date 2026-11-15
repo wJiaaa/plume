@@ -12,11 +12,12 @@ function session(id: string, extra: Partial<SessionSummary> = {}): SessionSummar
 	return { id, title: id, cwd: "/work", createdAt: 0, updatedAt: 0, running: false, ...extra };
 }
 
-test("只列从这个会话交出去、此刻有话可说的：在跑、在等、跑完还没看；归档的、别处开的、看过的不列", () => {
+test("只列从这个会话交出去、此刻有话可说的：在跑（含等后台回来）、在等、跑完还没看；归档的、别处开的、看过的不列", () => {
 	const from = { sessionId: "main" };
 	const sessions = [
 		session("plan", { spawnedFrom: from, running: true }),
 		session("seen", { spawnedFrom: from }),
+		session("background", { spawnedFrom: from, background: true }),
 		session("other", { spawnedFrom: { sessionId: "elsewhere" }, running: true }),
 		session("plain", { running: true }),
 		session("review", { spawnedFrom: from }),
@@ -28,6 +29,7 @@ test("只列从这个会话交出去、此刻有话可说的：在跑、在等�
 		handedOffFrom(sessions, (id) => marks[id], "main").map((row) => [row.session.id, row.state]),
 		[
 			["plan", "running"],
+			["background", "running"],
 			["review", "done"],
 			["asking", "waiting"],
 		],

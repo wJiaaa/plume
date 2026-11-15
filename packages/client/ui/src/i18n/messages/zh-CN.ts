@@ -212,6 +212,7 @@ export const zhCN = {
 	"common.collapse": "收起",
 	"groupActivity.running": "{n} 个会话正在执行",
 	"sessionStatus.running": "正在执行",
+	"sessionStatus.background": "等待后台任务",
 	"sessionStatus.unread": "未读",
 	"sessionStatus.done": "已完成 · 未查看",
 	"sessionStatus.failed": "执行失败 · 未查看",

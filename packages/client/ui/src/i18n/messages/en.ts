@@ -230,6 +230,7 @@ export const en = {
 	"common.collapse": "Collapse",
 	"groupActivity.running": { one: "{n} conversation is running", other: "{n} conversations are running" },
 	"sessionStatus.running": "Working",
+	"sessionStatus.background": "Waiting on background work",
 	"sessionStatus.unread": "Unread",
 	"sessionStatus.done": "Finished · unread",
 	"sessionStatus.failed": "Failed · unread",

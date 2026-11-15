@@ -14,7 +14,7 @@ import { useSidebarReorderContext, useReorderState } from "./reorder-context.ts"
 import { memo } from "react";
 import { SessionMarks } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
-import { type SessionActivity, useSessionActivity, waitingWords, waitOf } from "./activity.ts";
+import { busy, type SessionActivity, useSessionActivity, waitingWords, waitOf } from "./activity.ts";
 import { SessionMenu, type SessionMenuActions } from "./SessionMenu.tsx";
 
 export const SessionRow = memo(function SessionRow({
@@ -105,7 +105,7 @@ export const SessionRow = memo(function SessionRow({
 					</span>
 				)}
 				<span className={followUps ? "flex shrink-0 transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0" : "flex shrink-0"}>
-					<SessionStatus session={session} running={session.running || childRunning} />
+					<SessionStatus session={session} running={busy(session) || childRunning} />
 				</span>
 				<ScrollText text={title} className="plume-fade-tail min-w-0 flex-1" />
 				{/* 不管列表按什么排，这里都是最后活动的时间：扫一眼要回答的是「这条多久没动了」。悬停按钮出来时它让位，两者不同时出现。 */}
@@ -164,7 +164,7 @@ export const SessionRow = memo(function SessionRow({
 const ACTIVITY_LABEL = { waiting: "sessionStatus.waiting", done: "sessionStatus.done", failed: "sessionStatus.failed" } as const;
 
 /**
- * 行首 14px 的状态槽。在跑的是一个比槽小一圈的呼吸点，不用转圈：一列里可能好几行同时在跑，
+ * 行首 14px 的状态槽。在跑的是一个比槽小一圈的呼吸点（一轮停了、还在等子 Agent 或一次性后台命令回来的也是，见 `busy`，悬停说在等后台），不用转圈：一列里可能好几行同时在跑，
  * 并排几个各自在转，读标题时旁边总有东西在动。等人批准、人没看着时跑完或出错，各是一个同样大小的实心点：
  * 换状态只换颜色，行不跳。空闲是一个空心圈，描边用 `line-float`，深色侧栏上也看得见。
  * 等批准排最前：那是一个会一直等下去、却没人知道它在等的会话，子会话在等也标在这一行上。手动标的未读只占空闲那一档，
@@ -177,7 +177,7 @@ export function SessionStatus({ session, running }: { session: SessionSummary; r
 	const shown = activity === "waiting" ? activity : running ? "running" : activity;
 	const label =
 		shown === "running"
-			? t("sessionStatus.running")
+			? t(!session.running && session.background ? "sessionStatus.background" : "sessionStatus.running")
 			: shown === "waiting"
 				? waitingWords(waitOf(session.id), t)
 				: shown

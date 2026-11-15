@@ -30,6 +30,13 @@ test("新一轮开始清掉上一轮的结果，跑着时等批准的记号留�
 	assert.equal(settle(base, { ...base, title: "改名" }, "failed", false), "failed");
 });
 
+test("一轮停了还在等后台回来不算完成，后台回来、真闲下来时才记最后一轮的结果", () => {
+	const waitingOnBackground = { ...base, background: true, stop: { reason: "done" } } as const;
+	assert.equal(settle(running, waitingOnBackground, undefined, false), undefined);
+	assert.equal(settle(waitingOnBackground, { ...base, stop: { reason: "done" } }, undefined, false), "done");
+	assert.equal(settle(base, waitingOnBackground, "done", false), undefined);
+});
+
 test("子会话在等批准时父会话也是等批准；子会话答完了父会话回到自己的记号", () => {
 	const parent = { ...base, id: "p" };
 	const child = { ...base, id: "c", parentId: "p", running: true };

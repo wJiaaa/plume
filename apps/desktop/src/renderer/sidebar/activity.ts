@@ -2,7 +2,7 @@
  * 侧栏行首要说的、会话摘要里没有的那几件事：停下来等人批准了，或者在人没看着的时候跑完、出错了。
  *
  * 只从事件里推，不存盘：事件已经说清了一切，再存一份就多一个会说错的地方；重开应用后都算看过了。
- * 在跑不在这里，摘要的 `running` 就是它。在看着的那个会话跑完不留记号：结果就在眼前。
+ * 在跑不在这里，摘要里就有（`busy`）。在看着的那个会话跑完不留记号：结果就在眼前。
  */
 
 import type { PendingRequest, SessionSummary, StopReason } from "@plume/contract";
@@ -37,6 +37,15 @@ function set(sessionId: string, next: SessionActivity | undefined): void {
 	changed();
 }
 
+/**
+ * 这件事还没做完：一轮在跑，或者一轮停了、还在等会自己回来的后台事（子 Agent、一次性后台命令，摘要的 `background`）。
+ * 后者回来时会话自己接着跑，这中间不算完成，和完成通知、交付卡片等的是同一件事。监视、开发服务器这类挂着的不在 `background` 里：
+ * 它们一直挂着，算进来侧栏就一直在动。
+ */
+export function busy(session: SessionSummary): boolean {
+	return session.running || session.background === true;
+}
+
 /** 一轮怎么收的尾：人自己按停的、应用退出打断的不用提醒，人知道它是怎么结束的。 */
 export function outcome(reason: StopReason | undefined): SessionActivity | undefined {
 	if (reason === "done") return "done";
@@ -46,7 +55,7 @@ export function outcome(reason: StopReason | undefined): SessionActivity | undef
 
 /**
  * 摘要变了以后这个会话的记号。新一轮开始时清掉上一轮的结果；跑着时等批准的记号留着，等审批事件撤；
- * 一轮刚停下：等批准的撤掉，人没看着的话记下结果。
+ * 刚闲下来（`busy` 落下，一轮停了且后台没有在等的）：等批准的撤掉，人没看着的话记下最后一轮的结果。
  */
 export function settle(
 	previous: SessionSummary | undefined,
@@ -54,8 +63,8 @@ export function settle(
 	current: SessionActivity | undefined,
 	watching: boolean,
 ): SessionActivity | undefined {
-	if (next.running) return current === "waiting" ? current : undefined;
-	if (previous?.running) return watching ? undefined : outcome(next.stop?.reason);
+	if (busy(next)) return current === "waiting" ? current : undefined;
+	if (previous && busy(previous)) return watching ? undefined : outcome(next.stop?.reason);
 	return current === "waiting" ? undefined : current;
 }
 
