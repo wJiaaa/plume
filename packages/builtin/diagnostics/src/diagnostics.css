@@ -21,9 +21,6 @@
 	gap: 6px;
 	min-width: 0;
 }
-.plume-diagnostics-section-head {
-	padding: 12px 6px 4px;
-}
 .plume-diagnostics-controls {
 	display: flex;
 	align-items: center;
@@ -31,10 +28,6 @@
 	gap: 4px;
 	padding: 6px 8px 4px;
 	min-width: 0;
-}
-.plume-diagnostics-task-content > .plume-diagnostics-controls {
-	padding-inline: 0;
-	margin-bottom: 8px;
 }
 .plume-diagnostics-row {
 	display: flex;
@@ -82,12 +75,107 @@
 .plume-diagnostics-dot[data-status="error"] {
 	background: var(--plume-danger);
 }
+.plume-diagnostics-job-group + .plume-diagnostics-job-group {
+	margin-top: 12px;
+}
+.plume-diagnostics-group-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 4px 4px 6px;
+	color: var(--plume-ink-faint);
+	text-align: left;
+	transition: color var(--plume-t-quick);
+}
+button.plume-diagnostics-group-head:hover {
+	color: var(--plume-ink-muted);
+}
+/* 卡片里的文字从箭头后面起：卡片左内边距 4 + 按钮左内边距 8 + 箭头 12 + 间距 8。 */
 .plume-diagnostics-job {
-	padding: 4px 6px;
-	border-radius: var(--plume-radius-field);
+	--plume-diagnostics-job-indent: 32px;
+	margin-bottom: 6px;
+	border-radius: var(--plume-radius-panel);
+	background: var(--plume-card);
+}
+.plume-diagnostics-job-head {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	padding: 4px 12px 4px 4px;
+}
+.plume-diagnostics-job-toggle {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	min-height: 32px;
+	padding: 4px 8px;
+	color: var(--plume-ink-faint);
+	text-align: left;
+	transition: color var(--plume-t-quick);
+}
+.plume-diagnostics-job-toggle:hover {
+	color: var(--plume-ink-muted);
+}
+.plume-diagnostics-job-toggle > svg {
+	flex-shrink: 0;
+}
+/* 子 Agent 那一行整行是打开它的按钮：说明后面跟一枚朝右的箭头，说明点了会去别处。 */
+.plume-diagnostics-task-open {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	min-height: 32px;
+	padding: 4px 8px;
+	color: var(--plume-ink-faint);
+	text-align: left;
+	transition: color var(--plume-t-quick);
+}
+.plume-diagnostics-task-open:hover {
+	color: var(--plume-ink-muted);
+}
+.plume-diagnostics-task-open > svg {
+	flex-shrink: 0;
+}
+.plume-diagnostics-shrink {
+	min-width: 0;
+}
+.plume-diagnostics-stop {
+	margin-left: 4px;
+	background: var(--plume-elevated);
+	color: var(--plume-ink);
 }
 .plume-diagnostics-endpoint {
-	padding-left: 12px;
+	padding: 0 8px 4px var(--plume-diagnostics-job-indent);
+}
+.plume-diagnostics-job-error {
+	padding: 0 12px 8px var(--plume-diagnostics-job-indent);
+	overflow-wrap: anywhere;
+}
+.plume-diagnostics-job-body {
+	padding: 0 12px 12px var(--plume-diagnostics-job-indent);
+}
+.plume-diagnostics-job-command {
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--plume-line-soft);
+}
+.plume-diagnostics-job-tail {
+	padding-bottom: 6px;
+}
+.plume-diagnostics-link {
+	margin-left: 4px;
+	color: var(--plume-ink-muted);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	transition: color var(--plume-t-quick);
+}
+.plume-diagnostics-link:hover {
+	color: var(--plume-ink);
 }
 .plume-diagnostics-alert {
 	display: flex;
@@ -95,58 +183,13 @@
 	color: var(--plume-ink-faint);
 }
 .plume-diagnostics-job-output {
-	margin: 4px 0 8px 12px;
-	max-height: 220px;
+	max-height: 240px;
 	overflow: auto;
+	padding-top: 8px;
 }
-.plume-diagnostics-job-output pre {
+.plume-diagnostics-job-text {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-}
-.plume-diagnostics-todo {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 5px 6px;
-	color: var(--plume-ink-faint);
-}
-.plume-diagnostics-completed {
-	text-decoration: line-through;
-	flex: 1;
-	min-width: 0;
-}
-.plume-diagnostics-records {
-	position: relative;
-}
-.plume-diagnostics-record {
-	position: absolute;
-	left: 0;
-	right: 0;
-	display: flow-root;
-	padding-bottom: 4px;
-}
-.plume-diagnostics-record[data-open="true"] {
-	z-index: 2;
-}
-.plume-diagnostics-record[data-open="true"] .plume-diagnostics-record-head {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	background: var(--plume-shell);
-}
-.plume-diagnostics-record[data-open="true"] .plume-diagnostics-row {
-	border: 1px solid var(--plume-line-soft);
-	border-bottom: 0;
-	border-bottom-left-radius: 0;
-	border-bottom-right-radius: 0;
-	background: var(--plume-card);
-}
-.plume-diagnostics-record-body {
-	border: 1px solid var(--plume-line-soft);
-	border-top: 0;
-	border-bottom-left-radius: var(--plume-radius-field);
-	border-bottom-right-radius: var(--plume-radius-field);
-	background: var(--plume-card);
 }
 .plume-diagnostics-run-detail {
 	padding: 8px 12px 12px;

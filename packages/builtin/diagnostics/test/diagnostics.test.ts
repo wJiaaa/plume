@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { AssistantMessage, Message, SessionObservation, SessionView } from "@plume/contract";
 import type { TraceObservation } from "../src/api.ts";
 import { DiagnosticStore } from "../src/store.ts";
-import { entriesOf, filterEntries, jobCall, latestTodos } from "../src/entries.ts";
+import { entriesOf, filterEntries, jobCall } from "../src/entries.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -135,25 +135,6 @@ it("钩子经过按调用、请求挂到对应的条目上，tool.execute 排在
 	expect(submit).toHaveLength(1);
 	expect(submit[0]).toMatchObject({ status: "error", hooks: [{ hook: "prompt.submit" }] });
 	expect(submit[0]?.summary).toContain("x.guard");
-});
-
-it("只接受成功工具结果中有效的最新计划", () => {
-	const session = view();
-	session.messages.push({
-		role: "toolResult",
-		toolCallId: "todo",
-		toolName: "todo_write",
-		content: [],
-		isError: false,
-		timestamp: 200,
-		details: {
-			checklist: [
-				{ content: "test", status: "in_progress" },
-				{ content: 3, status: "other" },
-			],
-		},
-	});
-	expect(latestTodos(session.messages)).toEqual([{ content: "test", status: "in_progress" }]);
 });
 
 it("起后台任务的那次调用按结果里声明的 `job` 认，不认是哪个工具、不认它自己的字段", () => {

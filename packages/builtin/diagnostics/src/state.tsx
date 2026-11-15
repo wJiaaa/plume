@@ -10,7 +10,7 @@ export interface Snapshot extends DiagnosticSnapshot {
 	error?: string;
 	loading: boolean;
 }
-const EMPTY: Snapshot = { version: "", observations: [], prompts: {}, jobs: [], children: [], wakeups: [], loading: true };
+const EMPTY: Snapshot = { version: "", observations: [], prompts: {}, jobs: [], wakeups: [], loading: true };
 export type Selection = { job?: string; call?: string; file?: Awaited<ReturnType<DiagnosticsApi["fullOutput"]>> };
 const NONE: Selection = {};
 

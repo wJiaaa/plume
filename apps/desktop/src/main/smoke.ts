@@ -1789,6 +1789,19 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"只读子任务已单独送达主会话",
 		);
 		await until(`document.querySelector('[data-screen=chat] [data-composer-send=send]') !== null`, "子任务等审批时主会话已经正常收尾");
+		// 后台任务面板把子 Agent 和后台命令列在一起：点写说明的那个，打开子 Agent 面板、选中它。
+		const tasksPanel = shown("plume.diagnostics/tasks");
+		const modifier = process.platform === "darwin" ? "meta" : "control";
+		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "J", modifiers: [modifier] });
+		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "J", modifiers: [modifier] });
+		await until(`document.querySelectorAll('${tasksPanel} [data-subagent-task]').length === 2`, "后台任务面板列出两个子 Agent");
+		await delay(300);
+		await capture(window, join(outDir, "smoke-tasks-subagents.png"));
+		await click(`${tasksPanel} [data-subagent-task] button`, containing(TASK_TITLE));
+		await until(
+			`document.querySelector('${agentsPanel} [data-sub-header]')?.textContent.includes(${JSON.stringify(TASK_TITLE)})`,
+			"点子 Agent 打开它在子 Agent 面板里的那一页",
+		);
 		await click(`${agentsPanel} [data-sub-switch]`);
 		await until(`document.querySelectorAll('.subagents-menu [role=menuitem]').length === 2`, "双任务切换菜单已展开");
 		const checkMenuRows = async () => {

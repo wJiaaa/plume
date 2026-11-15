@@ -92,13 +92,16 @@ export async function checkBackgroundJob(options: {
 		await settled();
 		await writeFile(join(outDir, "smoke-background-job.png"), (await window.webContents.capturePage()).toPNG());
 		await clickVisibleIn(page, `[document.querySelector(${JSON.stringify(row)})?.querySelector('button')]`, `${row} 的按钮`);
-		await until(`document.querySelector('[data-session-services]')?.textContent.includes('SMOKE_JOB_DONE') === true`, "送达行定位后台输出");
-		await until(`document.querySelector('[data-task-record]') !== null`, "任务运行记录");
+		await until(`document.querySelector('[data-session-services] [data-job-output]')?.textContent.includes('SMOKE_JOB_DONE') === true`, "送达行定位后台输出");
 		await settled();
 		await writeFile(join(outDir, "smoke-tasks.png"), (await window.webContents.capturePage()).toPNG());
-		await clickVisible(page, `[data-task-record] button`);
-		await until(`document.querySelector('button[aria-label="在轨迹中查看"]') !== null`, "运行详情跳转入口");
-		await clickVisible(page, `button[aria-label="在轨迹中查看"]`);
+		// 后台任务面板不列运行记录：按快捷键打开调用轨迹，点起这条后台命令的那次工具调用。
+		const modifier = process.platform === "darwin" ? "meta" : "control";
+		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "L", modifiers: [modifier] });
+		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "L", modifiers: [modifier] });
+		const callEntries = `[...document.querySelectorAll('[data-trajectory] [data-trace-entry]')].filter(row => row.textContent.includes('工具调用') && row.textContent.includes('冒烟用的后台命令'))`;
+		await until(`${callEntries}.length > 0`, "调用轨迹列出起后台命令的那次调用");
+		await clickVisibleIn(page, callEntries, "起后台命令的那次调用");
 		await until(`document.querySelector('[data-trajectory] [data-trace-inspector]')?.textContent.includes('SMOKE_JOB_DONE') === true`, "轨迹定位相同调用");
 		await settled();
 		await writeFile(join(outDir, "smoke-trajectory.png"), (await window.webContents.capturePage()).toPNG());

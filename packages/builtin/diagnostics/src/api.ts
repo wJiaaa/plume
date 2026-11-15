@@ -1,4 +1,4 @@
-import type { BackgroundJobInfo, BackgroundJobOutput, FileContents, SessionObservation, SessionSummary, SessionWakeup } from "@plume/contract";
+import type { BackgroundJobInfo, BackgroundJobOutput, FileContents, SessionObservation, SessionWakeup } from "@plume/contract";
 
 /** 后台任务进程树里在监听的一个端口；`url` 是能点开的本机地址（它自己打印过的，或问过确实是 HTTP 的）。 */
 export interface ServiceEndpoint {
@@ -8,7 +8,7 @@ export interface ServiceEndpoint {
 	url?: string;
 }
 
-type DiagnosticJob = BackgroundJobInfo & { endpoints: ServiceEndpoint[] };
+export type DiagnosticJob = BackgroundJobInfo & { endpoints: ServiceEndpoint[] };
 
 type Request = Extract<SessionObservation["event"], { type: "request" }>;
 /** 一次请求实际发出去的系统提示词、消息和工具表。 */
@@ -31,7 +31,6 @@ export interface DiagnosticSnapshot {
 	jobs: DiagnosticJob[];
 	/** 问系统哪些端口在监听时失败了（端口只剩任务输出里打印过的）。 */
 	discoveryError?: string;
-	children: SessionSummary[];
 	wakeups: SessionWakeup[];
 }
 

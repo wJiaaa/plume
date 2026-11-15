@@ -276,7 +276,7 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
 - **后台任务**：调用答完以后还在跑的任务（后台命令、监视）经 `run.track({ command, description?, pid?, wakes?, output, stop })` 登记进本体，拿回 `{ id, done(exitCode, error?), stand() }`。
   - 任务结束时调 `done`（有结果要送就先 `report` 再 `done`，中间才没有一刻算闲）。
   - 顶层会话里起它的那次调用的渠道还有效、任务又没 `done` 时，会话不算闲（`launch` 的 `idle`、`ParentStatus`、摘要的 `background`、`idle` 事件都等它）——只算会自己结束、结束后要叫醒会话的；挂着的不算：登记时带 `wakes: true` 的监视（有输出就叫醒会话，没有「做完」），和跑起来以后你认出是长跑服务、调了 `stand()` 的（plume.tools 看到后台命令打印出本机带端口的地址就标上）；人按停、撤回截掉那次调用后不再算（本体不替你停它）。
-  - 本体在删会话、退出应用、你的插件停用时调 `stop(true)`，在子会话经 `sessions.start` 派出去的那次运行结束时调 `stop(true)` 停掉子会话里起的；人在任务面板里停它也走 `stop`。`output()` 给任务面板读输出。子会话里也能登记（列得出、停得掉），只是不算谁在等。
+  - 本体在删会话、退出应用、你的插件停用时调 `stop(true)`，在子会话经 `sessions.start` 派出去的那次运行结束时调 `stop(true)` 停掉子会话里起的；人在后台任务面板里停它也走 `stop`。`output()` 给后台任务面板读输出。子会话里也能登记（列得出、停得掉），只是不算谁在等。
 - **定时唤醒**：让会话过一会儿接着做，`run.schedule?.({ at?, cron?, recurring?, expiresAt?, prompt, reason?, message })` 登记一次唤醒（`at` 是毫秒时间戳，和 `cron` 二选一），交回 `SessionWakeup`。
   - cron 写错抛错，在 `expiresAt` 之前一次也对不上（第一次至少在一分钟以后）时不登记、返回 `undefined`。
   - 到点时本体调 `message(wakeup, { next, skipped })` 要送进去的话和那一行（`{ text, delivery? }`），经这次调用的渠道送，那一行记在你名下；上一次开的那一轮还没收场时跳过、下一次告诉你跳过了几次。

@@ -37,7 +37,7 @@ export default {
 		};
 		const api: DiagnosticsApi = {
 			async read(id, version, ports) {
-				const all = await session(id);
+				await session(id);
 				const current = store.version(id);
 				const list = ctx.sessions.jobs(id);
 				const found = ports ? await findEndpoints(id, list) : { jobs: list.map((job) => ({ ...job, endpoints: [] })) };
@@ -45,7 +45,6 @@ export default {
 					...(typeof version !== "string" ? {} : current === version ? { version: current } : { version: current, ...store.read(id) }),
 					jobs: found.jobs,
 					...(found.error ? { discoveryError: found.error } : {}),
-					children: all.filter((entry) => entry.parentId === id),
 					wakeups: ctx.sessions.wakeups(id),
 				};
 			},

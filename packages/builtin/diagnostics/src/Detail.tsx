@@ -120,7 +120,7 @@ function useRequestInput(entry: Entry, runtime: Runtime, sessionId: string): str
 	return requestId && loaded?.id === requestId ? loaded.text : undefined;
 }
 
-export function RunDetail({ entry, runtime, sessionId }: { entry: Entry; runtime: Runtime; sessionId: string }) {
+function RunDetail({ entry, runtime, sessionId }: { entry: Entry; runtime: Runtime; sessionId: string }) {
 	const { resolvedLocale: locale } = useI18n();
 	const words = MESSAGES[locale];
 	return (
