@@ -9,6 +9,9 @@
  *   pnpm release 0.2.0                 指定版本
  *   pnpm release patch --no-push       改完、提交、打好 tag，不推：本地看一眼、改好发版文案再推
  *
+ * 这一节里还没有手写的中英两段文案（`check-release-notes.mjs`）时，不带 `--no-push` 也停在推送前；
+ * 手推 `v*` tag 时 pre-push 钩子照样查。
+ *
  * 推 `v*` tag 会触发 CI 打安装包（`.github/workflows/package.yml`）。
  */
 
@@ -18,6 +21,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { releaseNotesProblems } from "./check-release-notes.mjs";
 import { MANIFESTS, ROOT, SOURCE, readVersion, writeVersion } from "./versions.mjs";
 
 const run = promisify(execFile);
@@ -138,10 +142,13 @@ async function main() {
 	const message = await must("node", ["scripts/changelog-section.mjs", tag]);
 	await must("git", ["tag", "-a", tag, "-m", message]);
 
-	if (!push) {
+	// 刚生成的这一节只有提交列表，文案还没手写时不推：推出去的分支和 tag 就是发给人的版本。
+	const missing = releaseNotesProblems(await readFile(changelogPath, "utf8"), version);
+	if (!push || missing.length > 0) {
 		console.log(
 			[
 				"",
+				...(push ? [`发版文案还没写，停在推送前：\n${missing.map((problem) => `  ${problem}`).join("\n")}`, ""] : []),
 				"没有推送。CHANGELOG 里生成的是提交列表，发版文案要手写（见 AGENTS.md 的 pnpm release 一行）；改完重新提交、重打 tag：",
 				`  git commit --amend --no-edit -- ${CHANGELOG} && git tag -f -a ${tag} -m "$(node scripts/changelog-section.mjs ${tag})"`,
 				"推送：",

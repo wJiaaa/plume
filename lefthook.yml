@@ -61,3 +61,8 @@ pre-push:
 
     - name: knip
       run: pnpm knip
+
+    - name: release-notes
+      # 推 v* tag 时，CHANGELOG 里那一版要有手写的中英两段文案；推别的 ref 时什么也不查。
+      run: node scripts/check-release-notes.mjs
+      use_stdin: true
