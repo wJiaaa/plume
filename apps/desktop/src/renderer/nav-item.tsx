@@ -56,7 +56,7 @@ export function NavItem({
 
 /**
  * 活动栏里的一格：只有图标，名字在右边的悬停提示里。在哪一页底色深一档、字是满色，别的淡着。
- * 右上角的数目和侧栏那一行的一样，是有东西在等你；人就在这一页时调用方不传。
+ * 右上角的圆点或数目表示有东西在等你；人就在这一页时调用方不传。
  */
 export function RailItem({
 	icon,
@@ -73,7 +73,8 @@ export function RailItem({
 	label: string;
 	onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 	active?: boolean;
-	badge?: number;
+	/** true 显示圆点，数值显示数量；false 和 0 不画。 */
+	badge?: number | boolean;
 	badgeLabel?: string;
 	/** 点了弹出一层（通知、搜索）时，那一层开没开。 */
 	expanded?: boolean;
@@ -99,9 +100,13 @@ export function RailItem({
 		>
 			{icon}
 			{badge ? (
-				<span className="pointer-events-none absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 text-badge font-medium text-on-accent tabular-nums">
-					{badge > 99 ? "99+" : badge}
-				</span>
+				typeof badge === "number" ? (
+					<span className="pointer-events-none absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 text-badge font-medium text-on-accent tabular-nums">
+						{badge > 99 ? "99+" : badge}
+					</span>
+				) : (
+					<span aria-hidden data-plume-nav-dot className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-accent" />
+				)
 			) : null}
 			{children}
 		</button>
