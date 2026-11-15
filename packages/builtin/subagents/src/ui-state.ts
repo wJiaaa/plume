@@ -49,20 +49,25 @@ function watch(parent: string, state: Roster): void {
 	})();
 }
 
+function subscribeRoster(parent: string, listener: () => void): () => void {
+	const state = roster(parent);
+	state.listeners.add(listener);
+	if (!state.cancel) watch(parent, state);
+	return () => {
+		state.listeners.delete(listener);
+		if (!state.listeners.size) state.cancel?.();
+	};
+}
+
+/** 组件外订阅一个父会话的名单：先给一次当前的，之后每变一次给一次。 */
+export function watchRoster(parent: string, listener: (tasks: TaskRecord[]) => void): () => void {
+	const stop = subscribeRoster(parent, () => listener(roster(parent).snapshot.tasks));
+	listener(roster(parent).snapshot.tasks);
+	return stop;
+}
+
 export function useRoster(parent: string | undefined): Snapshot {
-	const subscribe = useCallback(
-		(listener: () => void) => {
-			if (!parent) return () => {};
-			const state = roster(parent);
-			state.listeners.add(listener);
-			if (!state.cancel) watch(parent, state);
-			return () => {
-				state.listeners.delete(listener);
-				if (!state.listeners.size) state.cancel?.();
-			};
-		},
-		[parent],
-	);
+	const subscribe = useCallback((listener: () => void) => (parent ? subscribeRoster(parent, listener) : () => {}), [parent]);
 	const snapshot = useCallback(() => (parent ? roster(parent).snapshot : EMPTY), [parent]);
 	return useSyncExternalStore(subscribe, snapshot);
 }

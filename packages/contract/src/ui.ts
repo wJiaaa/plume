@@ -1281,6 +1281,25 @@ export interface UiContext {
 export interface UiServices {
 	/** 打开一个后台任务（`ctx.sessions.jobs` 列出的那些）给人看：人点了对话里那个后台任务那一行时调，不改变送达或命令状态。 */
 	"background.jobs.view": { open(sessionId: string, jobId: string): void };
+	/**
+	 * 一个会话派出去的子 Agent，给后台任务面板和后台命令列在一起。`watch` 先给一次当前的，之后每变一次给一次，返回的函数退订；
+	 * `open` 打开那个子 Agent 自己的视图，`stop` 叫它停下。
+	 */
+	"subagents.tasks": {
+		watch(sessionId: string, listener: (tasks: SubagentTaskSummary[]) => void): () => void;
+		open(sessionId: string, taskId: string): void;
+		stop(taskId: string): Promise<void>;
+	};
+}
+
+/** `subagents.tasks` 列出的一个子 Agent。 */
+export interface SubagentTaskSummary {
+	id: string;
+	/** 派它时写的说明。 */
+	title: string;
+	state: "queued" | "running" | "done" | "failed" | "stopped";
+	startedAt?: number;
+	endedAt?: number;
 }
 
 /** `ui.draftInSession` 放进输入框的东西。 */

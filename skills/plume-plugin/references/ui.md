@@ -724,7 +724,8 @@ Plume 自带的界面侧服务：
 
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
-| `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（逻辑入口里 `ctx.sessions.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
+| `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开后台任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（逻辑入口里 `ctx.sessions.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
+| `subagents.tasks` | 内置插件 plume.subagents | `watch(sessionId, listener)`：先给一次这个会话派出去的子 Agent（`SubagentTaskSummary`：`id`、说明、状态、起止时间），之后每变一次给一次，返回退订函数；`open(sessionId, taskId)` 打开子 Agent 面板、选中那一个；`stop(taskId)` 叫它停下。plume.diagnostics 的后台任务面板用它把子 Agent 和后台命令列在一起，没人提供时只列后台命令 |
 
 ## 共享模块
 

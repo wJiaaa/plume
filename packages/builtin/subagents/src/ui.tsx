@@ -38,7 +38,7 @@ import { callCount, elapsed, ordered } from "./format.ts";
 import { fill, MESSAGES } from "./messages.ts";
 import { AgentsSection, connectSettings } from "./settings.tsx";
 import { connectStructured, hasContent, StructuredOutput } from "./structured.tsx";
-import { avatarOf, type Avatars, connect, choose, retryRoster, useAvatars, useChosen, useRoster } from "./ui-state.ts";
+import { avatarOf, type Avatars, connect, choose, retryRoster, useAvatars, useChosen, useRoster, watchRoster } from "./ui-state.ts";
 import { descriptionOf, dispatchFromProgress, isActive, isDispatch, reportProse, wayBack, type TaskRecord } from "./types.ts";
 import css from "./subagents.css";
 
@@ -646,6 +646,17 @@ export default {
 		context.toolLine("yield", { verb: "Submitting result", callOnly: true });
 		context.composerAbove("agents", AgentsBar);
 		context.turnFooter("report", AgentTurnFooter);
+		// 后台任务面板经它把子 Agent 和后台命令列在一起，点了打开这里的面板、选中那个子 Agent。
+		context.provide("subagents.tasks", {
+			watch: (parent, listener) =>
+				watchRoster(parent, (tasks) =>
+					listener(tasks.map((task) => ({ id: task.session, title: task.description, state: task.state, startedAt: task.startedAt, endedAt: task.endedAt }))),
+				),
+			open: (parent, session) => reveal({ parent, session }),
+			stop: async (session) => {
+				await api.stop(session);
+			},
+		});
 		context.panel(PANEL, AgentsPanel, {
 			title: (locale) => MESSAGES[locale].panelTitle,
 			description: (locale) => MESSAGES[locale].panelDescription,
