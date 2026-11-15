@@ -192,18 +192,16 @@ export interface PageProps {
 }
 
 export interface PageOptions {
-	/** 页面的名字：侧栏里那一行的字。 */
+	/** 页面的名字：活动栏里那一格的悬停提示。 */
 	title: LocalizedText;
-	/** 侧栏那一行的图标，颜色跟着文字走（currentColor）；不给用产品的默认图标。 */
+	/** 活动栏那一格的图标，颜色跟着文字走（currentColor）；不给用产品的默认图标。 */
 	icon?: ComponentType<{ size?: number; className?: string }>;
 	order?: number;
 	/**
-	 * 页面自己画窗口顶行，默认 false。
+	 * 页面每一栏顶上自己画一行 `@plume/ui` 的 `PageTopRow`（左边列表、右边详情的两栏页面），默认 false。
 	 *
-	 * 平时宿主在页面上方留一行和标题栏一样高的空白（窗口的拖动区域）。两栏的页面（左边列表、右边详情）这样排，
-	 * 分隔线从这一行下面才开始，悬在半空；盖满整页的一层也只能从它下面开始。设成 true 以后宿主不留这一行，页面从
-	 * 正文卡片的顶边开始，每一栏最上面放一个 `@plume/ui` 的 `PageTopRow`（高度、拖动、给红绿灯让位都在里面）。
-	 * 宿主在页面外层给 `--plume-top-row-height`（顶行高）和 `--plume-top-row-inset`（侧栏收起时左边要让出的宽度）。
+	 * 宿主的标题栏（写页面名、拖窗口）在正文卡片外面、窗口顶上那一条里，页面总是从卡片的顶边开始，给不给这一项都一样排；
+	 * 只是说明页面自己带了栏头。宿主在页面外层给 `--plume-top-row-height`（`PageTopRow` 的高度）。
 	 */
 	topRow?: boolean;
 }
@@ -978,8 +976,9 @@ export interface UiContext {
 	 */
 	panel(id: string, component: ComponentType<PanelProps>, options: PanelOptions): void;
 	/**
-	 * 往侧栏的去处里加一个页面：侧栏一行，点了正文区整块换成这个页面。按 order 从小到大排（默认 0，相同时按注册先后），
-	 * 都排在产品自己的「插件」前面。id 在插件内唯一；标题给函数的，产品每次按当前界面语言调用它。
+	 * 往窗口最左边的活动栏里加一个页面：活动栏一格图标，点了整个界面换成这个页面。页面没有侧栏，活动栏右边整块都给它；
+	 * 要列表的页面在自己里面画（左边列表、右边详情，每栏顶上一行 `PageTopRow`）。按 order 从小到大排（默认 0，相同时按注册先后），
+	 * 排在产品自己的「对话」后面。id 在插件内唯一；标题给函数的，产品每次按当前界面语言调用它。
 	 */
 	page(id: string, component: ComponentType<PageProps>, options: PageOptions): void;
 	/** 换皮肤：可重复调用更新，null 撤下自己的皮肤；最后注册的生效，撤下后前一个恢复。 */
@@ -1173,10 +1172,10 @@ export interface UiContext {
 	captureWindow(rect: { x: number; y: number; width: number; height: number }): Promise<string>;
 	/** 打开本插件注册的、单独占导航一行（`page: "nav"`）的设置分区，不接受其他插件或产品设置的地址。 */
 	openSettings(id: string): void;
-	/** 打开本插件注册的页面，和点侧栏去处里那一行一样；不接受别的插件的页面。只在人点了按钮时调（输入框上方提示条的「查看」）。 */
+	/** 打开本插件注册的页面，和点活动栏里那一格一样；不接受别的插件的页面。只在人点了按钮时调（输入框上方提示条的「查看」）。 */
 	openPage(id: string): void;
 	/**
-	 * 侧栏去处里本插件那一页的那一行右端挂一个数（有东西在等人看：没人看见的失败）。`null` 或 0 拿掉；人正在那一页上时不画。
+	 * 活动栏里本插件那一页的那一格右上角挂一个数（有东西在等人看：没人看见的失败）。`null` 或 0 拿掉；人正在那一页上时不画。
 	 * `label` 说这个数是什么意思，给读屏和悬停提示。`attention` 为 true 时也列进通知菜单。只能挂本插件注册的页面；插件停用时一起拿掉。
 	 */
 	pageBadge(id: string, badge: { count: number; label: LocalizedText; attention?: boolean } | null): void;

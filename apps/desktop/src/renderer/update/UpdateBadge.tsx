@@ -1,10 +1,10 @@
 /**
- * 窗口里说「有新版本、下到哪了」的那一处：侧栏底行末尾的一个圆点，悬停展开写它是什么。
+ * 窗口里说「有新版本、下到哪了」的那一处：活动栏里设置上面的一个圆，和旁边的格子一样居中。
  *
- * 带颜色，看得出是通知而不是控件；句号那么大，不占窗口的地方；字在悬停时才出来。下载时一圈环跟着字节合拢，
- * 关掉对话框也还在，因为下载还在（状态在主进程，这里订阅）。
+ * 带颜色，看得出是通知而不是控件。不展开成一段字：往右展开会盖到旁边的侧栏上，版本和进度写在右边的悬停提示里。
+ * 下载时一圈环跟着字节合拢，关掉对话框也还在，因为下载还在（状态在主进程，这里订阅）。
  *
- * 点它在每个阶段都是打开对话框，下载中也是：在 20px 的圆上直接暂停，太容易在去点别处的路上误触。
+ * 点它在每个阶段都是打开对话框，下载中也是：在圆上直接暂停，太容易在去点别处的路上误触。
  * 没有什么能把它藏起来：有新版本就在，装上为止。
  */
 
@@ -16,7 +16,7 @@ import { check, useUpdate } from "./store.ts";
 import { UpdateDialog } from "./UpdateDialog.tsx";
 import { fractionOf, labelFor, shouldShow } from "./view.ts";
 
-export function UpdateBadge({ compact = false }: { compact?: boolean }) {
+export function UpdateBadge() {
 	const { t } = useI18n();
 	const { info, phase } = useUpdate();
 	const [open, setOpen] = useState(false);
@@ -24,9 +24,9 @@ export function UpdateBadge({ compact = false }: { compact?: boolean }) {
 	if (!info || !shouldShow(info)) return null;
 
 	const fraction = fractionOf(phase);
-	// 按旁边 16px 的线条图标定大小，不按这一行的高度。
-	const size = compact ? 22 : 20;
-	const glyph = compact ? 12 : 11;
+	// 比活动栏的格子（32px）小一圈，实心的淡底不比旁边的线条图标抢眼。
+	const size = 28;
+	const glyph = 13;
 	const label = labelFor(phase, info.latest, t);
 
 	return (
@@ -39,22 +39,16 @@ export function UpdateBadge({ compact = false }: { compact?: boolean }) {
 					if (phase.at === "idle") void check(true);
 				}}
 				aria-label={label}
+				data-plume-tip={label}
+				data-plume-tip-side="right"
 				data-phase={phase.at}
 				data-plume-update-dot=""
-				// 左右内边距是圆和图标之差的一半，收起时宽等于高。
-				style={{ height: size, paddingInline: (size - glyph) / 2 }}
-				className="update-dot flex shrink-0 items-center rounded-full text-caption font-medium whitespace-nowrap"
+				style={{ width: size, height: size }}
+				className="update-dot flex shrink-0 items-center justify-center rounded-full"
 			>
 				<span className="relative flex shrink-0 items-center justify-center">
-					{/* 环套在图标上，不套在按钮上：按钮悬停时变成胶囊，图标一直是圆的。 */}
 					{fraction !== null ? <ProgressRing fraction={fraction} spinning={phase.at === "preparing"} inset={(size - 2 - glyph) / 2} /> : null}
 					<PhaseGlyph phase={phase} size={glyph} />
-				</span>
-				{/* 外层把宽度从 0fr 展到 1fr，里层裁掉还放不下的部分。 */}
-				<span className="update-dot-label">
-					<span>
-						<span className="pl-1.5 tabular-nums">{label}</span>
-					</span>
 				</span>
 			</button>
 			{open ? <UpdateDialog info={info} phase={phase} onClose={() => setOpen(false)} /> : null}

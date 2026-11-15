@@ -64,6 +64,8 @@ export const en = {
 	"app.hideSettingsNavigation": "Hide settings navigation {shortcut}",
 	"app.showSettingsNavigation": "Show settings navigation {shortcut}",
 	"app.sidebar": "Sidebar",
+	"app.rail": "Navigation",
+	"app.chats": "Chats",
 	"language.title": "Interface language",
 	"language.detail": "Change Plume's menus, settings, and action hints. Conversations, code, and terminal output stay in their original language.",
 	"language.system": "Use system language",

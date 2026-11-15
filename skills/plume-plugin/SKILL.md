@@ -66,7 +66,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 工具在对话里的卡片，或只登记它在转录里的说法 | `ui.toolCard`、`ui.toolLine` |
 | 给 `run.request` 画等人卡（审批卡只有产品那张） | `ui.requestCard` |
 | 接管助手正文里某种语言的围栏代码块 | `ui.codeBlock` |
-| 工作区加面板、侧栏加页面、设置页加一节 | `ui.panel`、`ui.page`、`ui.settingsSection` |
+| 工作区加面板、活动栏加页面、设置页加一节 | `ui.panel`、`ui.page`、`ui.settingsSection` |
 | 输入框周围：底下那排一格、上方项目签那一行一格、上方独占一行、灰字建议 | `ui.composerItem`、`ui.composerChip`、`ui.composerAbove`、`ui.composerHint` |
 | 跟着会话的卡片、最新回复下面的卡片、回复操作排的按钮、环境卡片的一节 | `ui.conversationCard`、`ui.turnFooter`、`ui.replyAction`、`ui.environmentSection` |
 | 画自己的子会话、独立会话 | `ui.Conversation`、`ui.useSession` |

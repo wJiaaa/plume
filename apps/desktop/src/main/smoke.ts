@@ -525,7 +525,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click(`${sessionMenu} [role=menuitem]`, "归档");
 			await until(`document.querySelector('[data-plume-row]') === null`, "归档后会话离开侧栏");
 			await until(`document.querySelector('[data-screen=empty]') !== null`, "归档当前会话后右侧换成新对话");
-			await click("button", "设置");
+			await click("[data-nav=settings]");
 			await click("[aria-label=设置章节] button", "已归档的聊天");
 			await until(`document.querySelector('[data-plume-archive-group]') !== null`, "已归档里列出这个会话");
 			await click("[data-plume-archive-group] > button");
@@ -1343,7 +1343,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await waitFor(async () => (await agent.plugins()).find((item) => item.key === "scheduled")?.state === "active", "装上定时任务");
 
 		// 欢迎页先验浅色，后面的外观步骤再验深色，避免只覆盖本机的系统主题。
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		await click("[aria-label=设置章节] button", "外观");
 		await click("button[aria-pressed]", "浅色");
 		await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "切到浅色");
@@ -1715,17 +1715,18 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-scheduled-task] [data-scheduled-run]')?.disabled === false`, "回到定时任务页");
 		await clickVisible(page, `[data-scheduled-task] [data-scheduled-run]`);
 		window.webContents.send("plume:command", `open-session:${firstRun.lastSessionId}`);
-		const failureNav = `document.querySelector('[data-nav="page:plume.scheduled/scheduled"] [aria-label="1 个任务运行失败"]')`;
+		// 活动栏那一格右上角的数；它是什么意思接在这一格的名字后面（无障碍名和悬停提示）。
+		const failureNav = `document.querySelector('[data-nav="page:plume.scheduled/scheduled"][aria-label$="1 个任务运行失败"]')`;
 		await until(
 			`document.querySelector('[data-screen=chat] [data-scheduled-alert]')?.textContent.includes('失败') && ${failureNav}?.textContent === '1'`,
-			"失败了：输入框上方说一句，侧栏的定时任务那一行挂着 1",
+			"失败了：输入框上方说一句，活动栏的定时任务那一格挂着 1",
 		);
 		await delay(300);
 		await capture(window, join(outDir, "smoke-scheduled-alert.png"));
 		await click("[data-scheduled-alert-look]");
 		await until(
 			`document.querySelector('[data-scheduled-task] [data-scheduled-error]')?.textContent.startsWith('失败：') && ${failureNav} === null`,
-			"「查看」回到定时任务页，卡片上写着原因，侧栏的数目清掉",
+			"「查看」回到定时任务页，卡片上写着原因，活动栏的数目清掉",
 		);
 		const secondRun = (await storedTasks())[0];
 		if (!secondRun?.lastError || !secondRun.lastSessionId || secondRun.lastSessionId === firstRun.lastSessionId)
@@ -1741,13 +1742,15 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await delay(300);
 		await capture(window, join(outDir, "smoke-scheduled.png"));
 		// 定时任务开出来的两个会话是人的会话，和别的一样归档、删除；删掉它们，后面的步骤只数原来那一个。
+		// 插件的页面没有侧栏：先从活动栏回到对话，会话列表才在。
+		await click("[data-nav=chat]");
 		await click(`[data-plume-row="${firstRun.lastSessionId}"] > button`);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到定时任务开出的会话");
 		for (const id of [firstRun.lastSessionId, secondRun.lastSessionId]) {
 			await click(`[data-plume-row="${id}"] button[aria-label^="归档会话"]`);
 			await until(`document.querySelector('[data-plume-row="${id}"]') === null`, "定时任务开出的会话归档");
 		}
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		await click("[aria-label=设置章节] button", "已归档的聊天");
 		await click("[data-plume-delete-all-archived]");
 		await click("[role=dialog] button", /^删除 \d+ 个$/);
@@ -1941,7 +1944,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 6. 使用统计、存储：上面那一轮的调用记进了花销。使用统计是市场里的插件，装上后在设置 › 数据里「存储」上面多一页。
 		await plugin.install("usage");
 		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "usage" && status.state === "active"), "装上 usage 插件");
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		// agent 进程报已装上时，界面入口还在加载：等它登记的那一页出现在导航里再点。
 		await until(
 			`[...document.querySelectorAll('[aria-label=设置章节] button')].some((button) => button.textContent.trim() === '使用统计')`,
@@ -2001,7 +2004,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click("button", "返回工作区");
 
 		// 7. 外观：主题和会话背景
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		await click("[aria-label=设置章节] button", "外观");
 		await until(`document.querySelector('[data-screen=settings][data-section=appearance]') !== null`, "打开外观设置");
 		const checkCodeLayout = async (uiSize: number) => {
@@ -2173,7 +2176,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-screen=chat] > .chat-backdrop') === null`, "对话里撤下背景");
 
 		// 7.5 设置 › 智能体：子智能体插件画名单和编辑器，侧边聊天插件在「会话」那张卡里登记一行选模型。
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		await click("[aria-label=设置章节] button", "智能体");
 		await until(
 			`document.querySelector('[data-subagents-settings] [data-agent-profile=general]') !== null && document.querySelector('[data-session-model="plume.side-chat/model"]') !== null`,

@@ -60,6 +60,8 @@ export const zhCN = {
 	"common.show": "显示",
 	"app.backWorkspace": "返回工作区",
 	"app.sidebar": "侧边栏",
+	"app.rail": "导航栏",
+	"app.chats": "对话",
 	"app.hideSettingsNavigation": "隐藏设置导航 {shortcut}",
 	"app.showSettingsNavigation": "显示设置导航 {shortcut}",
 	"language.title": "界面语言",

@@ -383,7 +383,7 @@ export function Scroller({
 							// 手按在滑块上，还没动就已经是在认领这块面——如果正在滑回底部，这一下就是喊停。
 							onUserScroll?.("unknown");
 						}}
-						className={`plume-thumb absolute top-0 right-[2px] w-[6px] rounded-full bg-ink-faint ${active ? "plume-thumb-active" : ""}`}
+						className={`plume-thumb absolute top-0 right-[2px] w-[4px] rounded-full bg-ink-faint ${active ? "plume-thumb-active" : ""}`}
 					/>
 				</div>
 			)}

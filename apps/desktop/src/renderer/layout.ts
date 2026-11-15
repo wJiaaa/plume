@@ -4,11 +4,17 @@
  *   regular  ≥760  侧栏推开正文，可以收起、可以拖宽度
  *   compact  <760  侧栏变成盖在正文上的抽屉，默认关着，选完东西自己收起
  *
+ * 最左边一直是活动栏（`RAIL_WIDTH`），两种形状都在；侧栏、抽屉排在它右边。侧栏放什么跟着当前界面换，
+ * 对话、设置有侧栏，插件市场和插件的页面没有。
+ *
  * 面板在空间够时与正文并排；横向不够、纵向够时上下排列；compact 一次只显示正文或面板。
  * 全屏和单面板模式只隐藏正文，不卸载会话；按 Esc 恢复或收起面板。
  *
  * 侧栏、面板的宽度和收没收起是偏好，记在 localStorage 里，下次打开照旧；抽屉开没开不记。
  */
+
+/** 活动栏：对话、插件的页面、插件市场、设置的入口，一列图标，不收起、不拖宽度。 */
+export const RAIL_WIDTH = 48;
 
 export const SIDEBAR_MIN = 240;
 const SIDEBAR_MAX = 420;
@@ -33,7 +39,7 @@ export function layoutMode(windowWidth: number): LayoutMode {
  * 窗口拉宽回来侧栏就回到原来的宽度。
  */
 export function sidebarWidthFor(preferred: number, windowWidth: number): number {
-	return clamp(preferred, SIDEBAR_MIN, Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, windowWidth - CONTENT_MIN)));
+	return clamp(preferred, SIDEBAR_MIN, Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, windowWidth - RAIL_WIDTH - CONTENT_MIN)));
 }
 
 /** 面板能不能并排推开正文：sidebar 是侧栏实际推开的宽度（收起或抽屉时为 0），除掉它还摆得下正文和最窄的面板。 */

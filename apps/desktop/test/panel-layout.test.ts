@@ -9,7 +9,7 @@ test("面板宽度按工作区夹住，空间不足时上下排列，不改宽�
 	const wide = panelGeometry(options);
 	assert.equal(wide.arrangement, "row");
 	assert.equal(wide.panelWidth, 450);
-	assert.equal(wide.chat.right, 454);
+	assert.equal(wide.chat.right, 450);
 	const clamped = panelGeometry({ ...options, width: 850, preferred: 900 });
 	assert.equal(850 - Number(clamped.chat.right), 420);
 	const narrow = panelGeometry({ ...options, width: 590 });
@@ -29,7 +29,7 @@ test("全屏和窄窗口占满工作区，收起保留面板尺寸并还原对�
 	const hidden = panelGeometry({ ...options, shown: false });
 	assert.equal(hidden.panelWidth, 450);
 	assert.equal(hidden.chat.right, 0);
-	assert.equal(hidden.panel.right, -454);
+	assert.equal(hidden.panel.right, -450);
 	const stackedHidden = panelGeometry({ ...options, width: 590, shown: false });
 	assert.equal(stackedHidden.panel.bottom, -(stackedHidden.panelHeight + 4));
 	assert.equal(stackedHidden.panel.right, 0);

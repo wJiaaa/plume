@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { basename, join } from "node:path";
 import { BrowserWindow } from "electron";
+import { TOP_ROW_HEIGHT, trafficLights } from "../shared/window-chrome.ts";
 import { clickEachVisible, clickVisibleIn, contextMenuVisible } from "./smoke-kit.ts";
 
 /**
@@ -97,11 +98,11 @@ export async function checkSessionWindow(options: {
 		if (process.platform === "darwin") {
 			assert.deepEqual(
 				{ top: shell.top, height: shell.height, mainLeft: shell.mainLeft, border: shell.border, radius: shell.radius },
-				{ top: 0, height: 44, mainLeft: 0, border: "0px", radius: "0px" },
+				{ top: 0, height: TOP_ROW_HEIGHT, mainLeft: 0, border: "0px", radius: "0px" },
 				"会话窗口的标题栏贴窗口顶，正文没有卡片",
 			);
 			assert.equal(shell.paddingLeft, "96px", "标题从红绿灯后面的第一格再让 10px 起");
-			assert.deepEqual(detached.getWindowButtonPosition(), { x: 16, y: 15 }, "红绿灯在贴顶的 44px 标题栏里居中");
+			assert.deepEqual(detached.getWindowButtonPosition(), trafficLights(TOP_ROW_HEIGHT), "红绿灯在贴顶的标题栏里居中");
 		}
 		await capture(detached, join(outDir, "smoke-session-window.png"));
 		await clickVisibleIn(inDetached, `[document.querySelector('[data-keep-on-top]')?.closest('button')]`, "置顶按钮");
@@ -170,7 +171,7 @@ export async function checkSessionWindow(options: {
 		const closed = Date.now() + 5_000;
 		while (!detached.isDestroyed() && Date.now() < closed) await new Promise((resolve) => setTimeout(resolve, 50));
 		assert.ok(detached.isDestroyed(), "会话归档以后会话窗口应该关掉");
-		await click("button", "设置");
+		await click("[data-nav=settings]");
 		await click("[aria-label=设置章节] button", "已归档的聊天");
 		const archivedRow = `[data-plume-archive-row="${other}"]`;
 		await until(`document.querySelector('[data-plume-archive-group]') !== null`, "已归档里列出会话");

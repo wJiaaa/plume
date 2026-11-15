@@ -5,7 +5,7 @@
  * 抽屉里的行靠手指点，不是靠肌肉记忆，所以 compact 下行更高。
  */
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 export function NavItem({
 	icon,
@@ -50,6 +50,60 @@ export function NavItem({
 					{badge}
 				</span>
 			) : null}
+		</button>
+	);
+}
+
+/**
+ * 活动栏里的一格：只有图标，名字在右边的悬停提示里。在哪一页底色深一档、字是满色，别的淡着。
+ * 右上角的数目和侧栏那一行的一样，是有东西在等你；人就在这一页时调用方不传。
+ */
+export function RailItem({
+	icon,
+	label,
+	onClick,
+	active,
+	badge,
+	badgeLabel,
+	expanded,
+	nav,
+	children,
+}: {
+	icon: ReactNode;
+	label: string;
+	onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+	active?: boolean;
+	badge?: number;
+	badgeLabel?: string;
+	/** 点了弹出一层（通知、搜索）时，那一层开没开。 */
+	expanded?: boolean;
+	/** 冒烟测试按 data-nav 找这一格。 */
+	nav?: string;
+	/** 角上别的标记（通知的圆点）。 */
+	children?: ReactNode;
+}) {
+	const tip = badge && badgeLabel ? `${label} · ${badgeLabel}` : label;
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			aria-current={active ? "page" : undefined}
+			aria-expanded={expanded}
+			aria-label={tip}
+			data-nav={nav}
+			data-plume-tip={tip}
+			data-plume-tip-side="right"
+			className={`relative flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+				active || expanded ? "bg-card-hover text-ink" : "text-ink-muted hover:bg-card-hover hover:text-ink"
+			}`}
+		>
+			{icon}
+			{badge ? (
+				<span className="pointer-events-none absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 text-badge font-medium text-on-accent tabular-nums">
+					{badge > 99 ? "99+" : badge}
+				</span>
+			) : null}
+			{children}
 		</button>
 	);
 }

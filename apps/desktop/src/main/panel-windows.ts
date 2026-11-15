@@ -6,7 +6,7 @@ import type { Appearance } from "../shared/appearance.ts";
 import type { PanelWindowTarget, PanelWindowReveal, PanelWindowsBridge } from "../shared/panel-window.ts";
 import { guardWebviews } from "./web-pages.ts";
 import { panelQuoteFrom } from "./panel-quote.ts";
-import { bareWindowChrome } from "./session-windows.ts";
+import { TOP_ROW_HEIGHT, windowChrome } from "../shared/window-chrome.ts";
 
 /** 还要连 agent、加载插件界面，不能只等 HTML 下载完。 */
 const READY_TIMEOUT_MS = 30_000;
@@ -197,7 +197,7 @@ export function registerPanelWindowsIpc(
 				icon: iconPath,
 				show: false,
 				backgroundColor: opaque(appearance),
-				...bareWindowChrome(opaque(appearance)),
+				...windowChrome(process.platform, opaque(appearance), TOP_ROW_HEIGHT),
 				webPreferences: {
 					preload: join(import.meta.dirname, "../preload/index.cjs"),
 					sandbox: true,

@@ -3,7 +3,7 @@ import type { ConversationProps, PageProps } from "@plume/contract/ui";
 import { ActionSpinner, composingKey, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
 import { Folder, MoreHorizontal, Plug } from "@plume/ui/icons";
 import { createContext, type CSSProperties, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CARD_INSET, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
+import { MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { layoutMode, panelWidthFor } from "../layout.ts";
 import { ChatBackdrop } from "../chat-backdrop.tsx";
@@ -12,7 +12,7 @@ import { Transcript } from "../conversation/Transcript.tsx";
 import type { MessageEdits } from "../conversation/message-edits.ts";
 import type { DraftQuote } from "../conversation/quote.ts";
 import { Welcome } from "../composer/Welcome.tsx";
-import { ConversationCards, listPanels, SessionToolbar, usePluginUis } from "../plugins.tsx";
+import { ConversationCards, listPages, listPanels, localized, SessionToolbar, usePluginUis } from "../plugins.tsx";
 import { FileScope, type FileScopeValue, touchedPaths } from "../files/scope.ts";
 import { MarketToolbar } from "../market/market.tsx";
 import { ChildConversation, type ChildTaskActions } from "../conversation/ChildConversation.tsx";
@@ -110,6 +110,8 @@ export function ChatScreen({
 			ref={root}
 			data-panel-layout={layout.arrangement}
 			data-panel-sliding={app.panelMoving || undefined}
+			// 横排时对话和面板区并成一块；收起滑走的那一路也算，滑完对话右边才圆回来，不在半路豁开一个角。
+			data-frame-right={(layout.arrangement === "row" && (layout.shown || app.panelMoving)) || undefined}
 			className="relative min-h-0 flex-1 overflow-hidden rounded-panel"
 		>
 			<main
@@ -138,7 +140,7 @@ export function ChatScreen({
 			)}
 			<PanelLayer layout={layout} />
 			{layout.shown && !layout.single && !layout.stacked && (
-				<PanelResizer width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width - CARD_INSET, 0)} />
+				<PanelResizer width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width, 0)} />
 			)}
 			{layout.shown && layout.stacked && (
 				<Splitter
@@ -168,29 +170,28 @@ export function ChatScreen({
 	);
 }
 
-/** 标题栏只盖住对话那一栏；自己画顶行的页面不传 header。卡片总在左上角，侧栏收起时顶行要给窗口按钮让位。 */
-export function ScreenCard({ header, fatal, children }: { header?: ReactNode; fatal?: string; children: ReactNode }) {
-	const overlap = useContext(ToolbarOverlap);
+/**
+ * 正文这一列：标题栏在身子上面、压在窗口底色上，和侧栏顶行、面板区的标签行连成窗口顶上的一条；身子从它下面开始。
+ * 身子透明、描边透明：外沿和底色是 app.tsx 里底下那一块（`data-frame`）画的，描边只占着 1px，内容不压到外沿上。
+ * 圆角和裁切留着，跟着停靠的侧栏、横排的面板区换（styles.css 的 `data-frame-body`），自己铺底色的内容不从外沿的圆角里探出去。
+ * 标题栏只盖住这一列，跟着这一列的左右边走：侧栏、面板区开合时一起滑。侧栏收起时它的左端要给浮在窗口左上角的按钮让位（`ToolbarOverlap`）。
+ */
+export function ScreenCard({ header, fatal, children }: { header: ReactNode; fatal?: string; children: ReactNode }) {
 	return (
-		<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-line-float bg-shell">
-			{header}
-			{header && <div aria-hidden className="shrink-0" style={{ height: TOP_ROW_HEIGHT }} />}
-			{fatal && (
-				<p className="bg-danger px-6 py-2 text-detail text-shell" role="alert">
-					{fatal}
-				</p>
-			)}
-			{/*
-			 * 自己画顶行的页面从卡片顶边开始，顶行的高度、左边要让出的宽度经这两个变量给它：页面里的两栏才能
-			 * 像侧栏一样从顶边通到底，分隔线不在半空起头。不是 token，皮肤改不了。
-			 * 让出的宽度只给没有标题栏的（自己画顶行的页面）：它是可继承的变量，侧栏开合时一变，下面整棵树都要重算样式，
-			 * 对话卡片里没人用它，不该替它付这一下（见 `ToolbarOverlap`）。
-			 */}
-			<div
-				className="flex min-h-0 flex-1 flex-col"
-				style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px`, ...(header ? {} : { "--plume-top-row-inset": `${overlap}px` }) } as CSSProperties}
-			>
-				{children}
+		<div className="relative flex min-h-0 flex-1 flex-col">
+			<div className="relative shrink-0" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
+				{header}
+			</div>
+			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-transparent">
+				{fatal && (
+					<p className="bg-danger px-6 py-2 text-detail text-shell" role="alert">
+						{fatal}
+					</p>
+				)}
+				{/* 页面里的 `PageTopRow` 按这个高度画；标题栏已经在卡片外面，左边不用再给窗口按钮让位。不是 token，皮肤改不了。 */}
+				<div className="flex min-h-0 flex-1 flex-col" style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px` } as CSSProperties}>
+					{children}
+				</div>
 			</div>
 		</div>
 	);
@@ -206,14 +207,18 @@ function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean
 }
 
 /**
- * 卡片的顶行：会话标题和操作菜单，其余界面只是一条可拖动的空行。面板开关不在这里，是工作区右上角的 PanelToggle，
- * 它盖在这一行右端时这里让出位置。左边给窗口按钮让的宽度是 `ToolbarOverlap`，侧栏开合时和侧栏一起滑（styles.css 的 `[data-sidebar-sliding]`）。
+ * 卡片上面的标题栏：对话是会话标题和操作菜单，插件市场是它的工具栏，设置和插件的页面写名字；这一行同时拖窗口。
+ * 面板开关不在这里，是工作区右上角的 PanelToggle，它盖在这一行右端时这里让出位置。
+ * 左边给窗口按钮让的宽度是 `ToolbarOverlap`，侧栏开合时和侧栏一起滑（styles.css 的 `[data-sidebar-sliding]`）。
  */
 export function TitleBar() {
 	const app = useChrome();
 	const overlap = useContext(ToolbarOverlap);
 	const { screen } = app;
+	const { t, resolvedLocale } = useI18n();
 	usePluginUis();
+	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
+	const name = screen === "settings" ? t("sidebar.settings") : page ? localized(page.title, resolvedLocale) : undefined;
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
 	const session = useAppPick((current) => current.view?.summary);
 	const chat = screen === "chat" && session;
@@ -222,13 +227,18 @@ export function TitleBar() {
 		<header
 			data-toolbar-inset=""
 			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
-			style={{ height: TOP_ROW_HEIGHT, paddingLeft: Math.max(chat ? 10 : 24, overlap) }}
+			style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: Math.max(chat ? 10 : name ? 14 : 24, overlap) }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
 			{chat && (
 				<div className={`ml-auto flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
 					<CurrentSessionToolbar />
 				</div>
+			)}
+			{name && (
+				<span data-plume-screen-title className="min-w-0 truncate text-label font-medium text-ink select-none">
+					{name}
+				</span>
 			)}
 			{screen === "market" && (
 				<div className="flex min-w-0 flex-1 items-center">
@@ -363,8 +373,8 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 	const [lane, setLane] = useState<HTMLElement | null>(null);
 	const laneOpen = useLaneOpen(lane);
 	const docked = laneOpen && room.dock;
-	// Windows、Linux 的会话窗口里，标题在窗口顶上那条带子里，卡片顶上没有标题栏。
-	const headerHeight = sessionWindow && HEADER_BAR ? 0 : TOP_ROW_HEIGHT;
+	// 背景图、磨砂往上铺满透明的标题栏：只有 macOS 的会话窗口标题栏压在对话上；主窗口的标题栏在卡片外面，Windows、Linux 的在顶上那条带子里。
+	const headerHeight = sessionWindow && !HEADER_BAR ? TOP_ROW_HEIGHT : 0;
 	if (!view || (!loading && view.messages.length === 0 && !view.draft)) {
 		if (!view && loading) return <ChatLoading />;
 		const scope = draftScope(view);

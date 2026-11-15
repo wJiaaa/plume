@@ -157,10 +157,10 @@ export async function checkSkinStudio(options: {
 	assert.equal((await token("accent-dim")).toUpperCase(), "#3D1530");
 	assert.ok(
 		await page<boolean>(`(() => {
-		const sidebar = document.querySelector('aside[aria-label="侧边栏"]');
-		return sidebar && getComputedStyle(sidebar).backgroundColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(sidebar).backgroundImage === 'none';
+		const card = document.querySelector('aside[aria-label="侧边栏"] .sidebar-surface');
+		return card !== null && getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(card).backgroundImage === 'none';
 	})()`),
-		"停靠侧栏透明，和窗口外圈共用底层，不产生色差接缝",
+		"停靠侧栏是一张实底卡片，不铺外圈的底纹",
 	);
 	await capture("smoke-skin-dark.png");
 	await button("保存当前皮肤");

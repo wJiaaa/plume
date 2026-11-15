@@ -364,28 +364,14 @@
 }
 
 /*
- * 侧栏里吸顶的标题（项目名、「聊天」，见 sidebar/ProjectList.tsx）铺上侧栏底下那层的底色，滑到下面的行被盖住：
- * 名字一直在，会话一直看得见，下一个名字把上一个顶走。不让行滑到标题底下之前自己淡没：行只能整行一起没，
- * 不是标题底下空一截，就是名字单独挂着。
- *
- * 停靠的侧栏透明，底色跟外圈：不透明的窗口是侧栏色，皮肤管着时是根底色（`data-plume-head-fill`，见 app.tsx）；
- * 抽屉（`data-plume-drawer`）自己铺侧栏色。
- *
- * 毛玻璃底下没有哪种实色对得上透出来的材质，铺了就是玻璃上一块别的颜色；`backdrop-filter` 也模糊不到同一个
- * 滚动面里的行。所以标题不铺底，改成把列表滑到标题底下的那一截遮掉：标题后面那一块（这一组的 `Collapse`）
- * 挂一条按标题高度内缩的视图时间线，`exit-crossing` 换算成「这一块有多少已经在标题下沿上面」，遮罩切在那里。
- * 一组一条时间线，不是一行一条：行在列表里换位置（按更新时间重排）时逐行的时间线要重建，几个会话并行跑久了
- * 合成线程每帧都要算一遍被取消的那些。
+ * 侧栏是侧栏、对话、面板区连成的那一块的左边一截（窄窗口里是抽屉），底色和窗口外圈、对话都差一档：
+ * 对话的 `shell` 兑四成 `sidebar`。皮肤改的是这两档，侧栏跟着变。
+ * 吸顶的标题（项目名、「聊天」，见 sidebar/ProjectList.tsx）铺同一个底色，滑到下面的行被盖住：名字一直在，会话一直看得见，
+ * 下一个名字把上一个顶走。侧栏是实色的，毛玻璃只透在那一块外面，标题不用再遮罩下面的行。
  */
-@property --sidebar-under {
-	syntax: "<length-percentage>";
-	inherits: false;
-	initial-value: 0%;
-}
-
 @layer components {
 	/*
-	 * 侧栏开合时，卡片顶行给窗口按钮让的宽度（这几行的 `padding-left`，见 window-controls.tsx 的 `ToolbarOverlap`）和侧栏宽度
+	 * 侧栏开合时，标题栏给窗口按钮让的宽度（这几行的 `padding-left`，见 window-controls.tsx 的 `ToolbarOverlap`）和侧栏宽度
 	 * 同一时长、同一缓动地滑：标题的位置是卡片左边缘加内边距，两者走同一条曲线，标题就一路朝一个方向走，不先跳开、不压到按钮上。
 	 */
 	[data-sidebar-sliding] :is([data-toolbar-inset], .plume-top-row) {
@@ -401,11 +387,10 @@
 			padding-left var(--plume-t-slow) var(--plume-e-out),
 			padding-right var(--plume-t-slow) var(--plume-e-out);
 	}
+	/* 侧栏一栏：对话底色兑四成侧栏色，在 oklab 里混，深浅按人眼的明度走。 */
+	.sidebar-surface,
 	[data-plume-head] {
-		background: var(--plume-sidebar);
-	}
-	[data-plume-head-fill="root"] aside:not([data-plume-drawer]) [data-plume-head] {
-		background: var(--plume-root);
+		background: color-mix(in oklab, var(--plume-shell) 60%, var(--plume-sidebar));
 	}
 	/*
 	 * 磨砂（外观偏好 `grain`，开着时根上有 `data-grain`）：64px 一块的分形噪声平铺，偏亮处叠黑点、偏暗处叠白点，
@@ -420,51 +405,56 @@
 	}
 
 	/*
-	 * 外圈（停靠侧栏透明，跟着它）铺磨砂；皮肤接管配色时再垫上皮肤的底纹（`--plume-root-image`，缺省 none）。
-	 * 固定在视口上：外圈、吸顶标题和 Windows 的顶带各画一份，取的是同一片，标题盖住滑上来的行时看不出接缝。
-	 * 用分写：底纹可能是好几层，简写的 `fixed` 只落在最后一层。毛玻璃下吸顶标题本来就透明，透出外圈那一层，不再画。
+	 * 外圈（活动栏、顶上那一条、卡片之间的缝）铺磨砂；皮肤接管配色时再垫上皮肤的底纹（`--plume-root-image`，缺省 none）。
+	 * 固定在视口上：外圈和 Windows 的顶带各画一份，取的是同一片，看不出接缝。用分写：底纹可能是好几层，简写的 `fixed` 只落在最后一层。
 	 */
 	[data-plume-head-fill="window"],
-	[data-plume-head-fill="window"] [data-plume-window-header],
-	:root:not([data-vibrancy="on"]) [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head] {
+	[data-plume-head-fill="window"] [data-plume-window-header] {
 		background-image: var(--grain-layer);
 		background-attachment: fixed;
 	}
 	[data-plume-head-fill="root"],
-	[data-plume-head-fill="root"] [data-plume-window-header],
-	[data-plume-head-fill="root"] aside:not([data-plume-drawer]) [data-plume-head] {
+	[data-plume-head-fill="root"] [data-plume-window-header] {
 		background-image: var(--grain-layer), var(--plume-root-image);
 		background-attachment: fixed;
 	}
+}
 
-	@keyframes sidebar-under-head {
-		from {
-			--sidebar-under: 0%;
-		}
-		to {
-			--sidebar-under: 100%;
-		}
+/* 要压过 `rounded-panel`、`border` 这些工具类，得和它们同在 utilities 层、靠选择器更具体取胜。 */
+@layer utilities {
+	/*
+	 * 停靠的侧栏、对话、横排的面板区连成一整块：外沿一圈圆角描边由底下那一块（app.tsx 的 `data-frame`）画，栏和栏之间只有一道线，
+	 * 没有缝。各栏的身子（`data-frame-body`）透明，描边也透明、只占着位置，圆角用来裁内容；挨着别人的那一边在这里去掉圆角和描边，
+	 * 内容贴着分隔线——侧栏右边那道描边、面板身子左边那道描边就是分隔线。
+	 * 用属性在外层切，不往各栏传状态：对话、面板区的内容在开合、拖宽度时不跟着重画（见 Chat.tsx 的 ChatScreen）。
+	 */
+	[data-frame-left] :is([data-frame-body], [data-frame-clip], [data-panel-layout]) {
+		border-left-width: 0;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
 	}
-	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head] {
-		background: transparent;
+	[data-frame-right] > main [data-frame-body] {
+		border-right-width: 0;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
 	}
-	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head] + * {
-		/* 渐隐只占标题下沿、字下面那一截：放宽到中线时，滑上去那一行的下半截字会半透明地叠在标题的字上。 */
-		--sidebar-under-fade: 8px;
-		animation: sidebar-under-head linear both;
-		/* 项目名那一行 32px。 */
-		animation-timeline: view(block 32px 0);
-		/* 用 `exit-crossing` 不用 `exit`：比侧栏还高的一块，顶边还没到标题时 `exit` 就开始了。 */
-		animation-range: exit-crossing 0% exit-crossing 100%;
-		mask-image: linear-gradient(to bottom, transparent calc(var(--sidebar-under) - var(--sidebar-under-fade)), black var(--sidebar-under));
-		/* 遮罩裁到这一块的边框盒，会切掉行的焦点环（外移 2px）：盒子往外撑 4px、外边距收回来，排版不动。 */
-		padding: 4px;
-		margin: -4px;
+	/* 常驻面板的内容裁在 `data-frame-clip` 里，圆角跟着面板的身子换；它自己没有描边。 */
+	[data-frame-right] :is([data-panel-area], [data-panel-layer]) :is([data-frame-body], [data-frame-clip]) {
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
 	}
-	/* 「聊天」的标题是分区标题那一行，28px，比项目名矮 4px；照 32px 淡，紧挨着的那一行还没滑进标题就先淡掉一截。 */
-	:root[data-vibrancy="on"] [data-plume-head-fill="window"] aside:not([data-plume-drawer]) [data-plume-head]:has(> [data-plume-section]) + * {
-		--sidebar-under-fade: 6px;
-		animation-timeline: view(block 28px 0);
+	[data-frame-right] [data-panel-area] [data-frame-body] {
+		border-left-width: 1px;
+		border-left-color: var(--plume-line-float);
+	}
+	/* 上下排时面板区的标签行夹在两栏中间，同铺在底下那一块上：在两栏之间那 4px 的正中横一道线隔开。不画在面板区身上，免得把它往下顶 1px、和常驻面板的内容错开。 */
+	[data-panel-layout="column"] > [data-panel-area]::before {
+		content: "";
+		position: absolute;
+		inset-inline: 0;
+		top: -2px;
+		height: 1px;
+		background: var(--plume-line-float);
 	}
 }
 
@@ -476,12 +466,10 @@
 }
 
 /*
- * 侧栏底行的更新圆点（见 update/UpdateBadge.tsx）。
+ * 活动栏底部的更新圆点（见 update/UpdateBadge.tsx）。
  *
- * 颜色说阶段：有东西可下是强调色，暂停是灰的，下好等重启是绿的，失败是红的；20px 放不下字，扫一眼就知道状态。
- * 用一层淡底配同色图标，不用实心圆配白图标：它和 16px 的细线设置图标同一行，实心的在任何尺寸下都是侧栏里最吵的东西。
- * 悬停时字从 0fr 展到 1fr 的栅格列里出来，按字的真实宽度动；设置那一行的字同时淡下去让位，不被挤成两层。
- * 不在下载时一直展开：那会把设置那一行的字一直挤着，进度交给环。
+ * 颜色说阶段：有东西可下是强调色，暂停是灰的，下好等重启是绿的，失败是红的；圆里放不下字，扫一眼就知道状态。
+ * 用一层淡底配同色图标，不用实心圆配白图标：它和细线的设置图标挨着，实心的在任何尺寸下都是活动栏里最吵的东西。
  */
 @layer components {
 	.update-dot {
@@ -517,24 +505,6 @@
 	}
 	.update-dot[data-phase="failed"]:hover {
 		background: color-mix(in srgb, var(--plume-danger) 28%, transparent);
-	}
-	.update-dot-label {
-		display: grid;
-		grid-template-columns: 0fr;
-		transition: grid-template-columns var(--plume-t-base) var(--plume-e-out);
-	}
-	.update-dot-label > span {
-		overflow: hidden;
-	}
-	/* 键盘也能展开：只靠悬停的提示键盘读不到。 */
-	.update-dot:is(:hover, :focus-visible) .update-dot-label {
-		grid-template-columns: 1fr;
-	}
-	.sidebar-foot-label {
-		transition: opacity var(--plume-t-base) var(--plume-e-out);
-	}
-	[data-plume-sidebar-foot]:has(.update-dot:is(:hover, :focus-visible)) .sidebar-foot-label {
-		opacity: 0.25;
 	}
 	/* 准备中没有百分比可画：四分之一段弧绕着图标转。 */
 	.update-dot [data-ring][data-spinning] {

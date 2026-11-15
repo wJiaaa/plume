@@ -20,11 +20,12 @@ import {
 
 const hasToken = (token: string) => ["bg", "fg", "root", "accent-dim"].includes(token);
 
-test("停靠侧栏透明共用外圈底层，只有 compact 浮出侧栏单独铺底", () => {
+test("侧栏停靠和抽屉都铺自己的底色（.sidebar-surface），不和窗口外圈连成一片，也不按皮肤分支", () => {
 	const source = readFileSync(new URL("../src/renderer/app.tsx", import.meta.url), "utf8");
 	const aside = source.slice(source.indexOf("<aside"), source.indexOf("</aside>"));
-	assert.match(aside, /compact\s*\? `absolute[^`]*bg-sidebar/);
+	assert.match(aside, /compact\s*\?\s*`sidebar-surface [^`]*absolute/);
 	assert.match(aside, /: "relative shrink-0 overflow-hidden"/);
+	assert.match(aside, /"sidebar-surface overflow-hidden rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"/);
 	assert.doesNotMatch(aside, /managedSkin/);
 });
 

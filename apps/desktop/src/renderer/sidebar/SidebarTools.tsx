@@ -1,12 +1,13 @@
-/** 侧栏的两个入口共用会话和插件的现成清单，不另存搜索目录或通知记录。 */
+/** 活动栏底部的搜索和通知：共用会话和插件的现成清单，不另存搜索目录或通知记录。 */
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
-import { IconButton, useI18n, usePopover } from "@plume/ui";
+import { useI18n, usePopover } from "@plume/ui";
 import { Archive, AtSign, Bell, FolderOpen, FolderPlus, PanelLeft, Pin, PinOff, Search, Settings, SquarePen } from "@plume/ui/icons";
 import { createElement, useState } from "react";
 import { updateAppearance, useAppearance, useManagedSkin } from "../appearance-settings.ts";
 import { listPages, listPanels, listSettingsSections, localized, pageBadge, usePluginUis } from "../plugins.tsx";
 import { SETTINGS_GROUPS, type SettingsSection } from "../settings/pages.tsx";
 import { notify } from "../toast/index.ts";
+import { RailItem } from "../nav-item.tsx";
 import type { SidebarActions } from "./actions.ts";
 import { CommandPalette, type PaletteCommand, type PaletteGroup } from "./CommandPalette.tsx";
 import { useActivityVersion, activityOf, sortNotices } from "./activity.ts";
@@ -178,17 +179,10 @@ export function SidebarTools({
 	const top = notices[0]?.state;
 	return (
 		<>
-			<IconButton
-				size="composer"
-				label={t("sidebar.search")}
-				expanded={searching}
-				onClick={() => setSearching(true)}
-				icon={<Search size={15} strokeWidth={1.9} />}
-			/>
-			<span className="relative">
-				<IconButton size="composer" label={t("sidebar.notifications")} expanded={bell.open} onClick={bell.toggle} icon={<Bell size={15} strokeWidth={1.9} />} />
+			<RailItem label={t("sidebar.search")} expanded={searching} onClick={() => setSearching(true)} icon={<Search size={17} strokeWidth={1.8} />} />
+			<RailItem label={t("sidebar.notifications")} expanded={bell.open} onClick={bell.toggle} icon={<Bell size={17} strokeWidth={1.8} />}>
 				<NoticeDot top={top} />
-			</span>
+			</RailItem>
 			{bell.open && <NotificationsMenu anchor={bell.anchor} notices={notices} onClose={bell.close} />}
 			{searching && (
 				<CommandPalette

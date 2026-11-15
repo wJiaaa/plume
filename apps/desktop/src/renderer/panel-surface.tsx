@@ -44,7 +44,7 @@ export class PanelSurface extends Component<Props, Record<string, never>, DOMRec
 
 	override render() {
 		return (
-			<div ref={this.root} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-line-float bg-shell">
+			<div ref={this.root} className="flex min-h-0 flex-1 flex-col">
 				{this.props.children}
 			</div>
 		);

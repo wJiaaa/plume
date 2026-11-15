@@ -37,7 +37,7 @@ import {
 	SETTINGS_FILE_ENV,
 } from "../shared/protocol.ts";
 import type { Appearance } from "../shared/appearance.ts";
-import { hasVibrancy, windowChrome } from "../shared/window-chrome.ts";
+import { hasVibrancy, MAIN_TOOLBAR_HEIGHT, windowChrome } from "../shared/window-chrome.ts";
 import { applicationMenuTemplate } from "./app-menu.ts";
 import { loadAppearance, registerAppearanceIpc } from "./appearance.ts";
 import { sessionFromUrl } from "./deep-link.ts";
@@ -474,7 +474,7 @@ function createWindow(hidden: boolean, appearance: Appearance): BrowserWindow {
 		...(vibrant ? { vibrancy: "under-window" as const } : {}),
 		...(hasVibrancy(process.platform) ? { visualEffectState: "active" as const } : {}),
 		// 标题栏由界面自己画（顶行可拖动）：macOS 只留红绿灯，Windows、Linux 由系统把三颗按钮画在页面右上角。
-		...windowChrome(process.platform, windowColor(appearance)),
+		...windowChrome(process.platform, windowColor(appearance), MAIN_TOOLBAR_HEIGHT),
 		webPreferences: {
 			preload: join(import.meta.dirname, "../preload/index.cjs"),
 			sandbox: true,

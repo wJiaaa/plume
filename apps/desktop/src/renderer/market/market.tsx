@@ -75,7 +75,7 @@ import {
 } from "@plume/ui/icons";
 import { ActionSpinner } from "@plume/ui";
 import { type ComponentType, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { NavItem } from "../nav-item.tsx";
+import { RailItem } from "../nav-item.tsx";
 import type { ProjectInfo } from "@plume/contract/ui";
 import { listPageSettingsSections, localized, usePluginUis } from "../plugins.tsx";
 import type { SettingsSection } from "../settings/pages.tsx";
@@ -859,16 +859,15 @@ function NoticeLine({ notice, onDismiss }: { notice: MarketNotice; onDismiss: ()
  * 侧栏里去市场的那一行，以及你在不在那里。自动更新关着时，有新版的数目挂在行尾——人不打开市场也知道；
  * 开着的话它们一会儿就自己换上了，挂一个转眼就消失的数字只是晃一下眼。
  */
-export function MarketNavItem({ active, compact, onClick }: { active: boolean; compact: boolean; onClick: () => void }) {
+export function MarketNavItem({ active, onClick }: { active: boolean; onClick: () => void }) {
 	const { t } = useI18n();
 	const { updates } = useMarketStore();
 	const waiting = updates && !updates.auto ? updates.outdated.length : 0;
 	return (
-		<NavItem
+		<RailItem
 			active={active}
-			compact={compact}
 			nav="market"
-			icon={<Store size={16} />}
+			icon={<Store size={17} strokeWidth={1.8} />}
 			label={t("market.title")}
 			onClick={onClick}
 			badge={waiting}

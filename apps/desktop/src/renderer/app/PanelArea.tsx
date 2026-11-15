@@ -4,7 +4,7 @@ import { acceleratorLabel, ClosableTab, IconButton, ResizeHandle, Sideways, tran
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
 import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelSurface } from "../panel-surface.tsx";
-import { TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
+import { MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import type { TitlebarInsets } from "../titlebar.ts";
 import { clamp, layoutMode, PANEL_MIN } from "../layout.ts";
 import { notify } from "../toast/index.ts";
@@ -99,7 +99,7 @@ export const PANEL_TOGGLE_ROOM = "pr-11";
 export function PanelToggle({ open, scope }: { open: boolean; scope: string }) {
 	const { t } = useI18n();
 	return (
-		<div data-panel-toggle="" className="absolute right-px top-px z-10 flex items-center pr-3" style={{ height: TOP_ROW_HEIGHT }}>
+		<div data-panel-toggle="" className="absolute top-0 right-px z-10 flex items-center pr-3" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
 			<IconButton
 				className={NO_DRAG}
 				label={t(open ? "panel.hide" : "panel.show")}
@@ -111,12 +111,12 @@ export function PanelToggle({ open, scope }: { open: boolean; scope: string }) {
 	);
 }
 
-/** 把手放在两张卡片的缝内，独立于面板的溢出裁切。 */
+/** 把手骑在对话和面板区之间那 1px 分隔线上，独立于面板的溢出裁切。 */
 export function PanelResizer({ width, windowWidth, max }: { width: number; windowWidth: number; max: number }) {
 	const { t } = useI18n();
 	const resize = (next: number) => setPanel({ width: clamp(Math.round(next), PANEL_MIN, max) });
 	return (
-		<div className="absolute inset-y-0 w-0" style={{ left: windowWidth - width - 1 }}>
+		<div className="absolute inset-y-0 w-0" style={{ left: windowWidth - width }}>
 			<ResizeHandle edge="start" width={width} min={PANEL_MIN} max={max} onResize={resize} onReset={() => resize(windowWidth / 2)} label={t("panel.resize")} />
 		</div>
 	);
@@ -163,13 +163,14 @@ function PanelLayerTab({ tab, scope, panel, layout }: { tab: PanelTab; scope: st
 			className={`pointer-events-none absolute inset-0 overflow-hidden ${!shown && !(app.panelMoving && current && panelGroup(app, scope).active === tab.id) ? "invisible" : ""}`}
 		>
 			<div className={`plume-panel plume-freeze absolute ${motion}`} style={last.current.panel}>
-				<div className="absolute inset-0 overflow-hidden rounded-panel">
+				{/* 和 PanelArea 里面板的身子对齐：标签行在身子上面，身子从它下面开始、带 1px 描边。 */}
+				<div data-frame-clip="" className="absolute inset-x-0 bottom-0 overflow-hidden rounded-panel" style={{ top: MAIN_TOOLBAR_HEIGHT }}>
 					<div
 						id={`panel-content:${tab.id}`}
 						data-panel={panel.key}
 						inert={!shown}
 						className="plume-dock-pane pointer-events-auto absolute overflow-auto origin-top-left"
-						style={{ top: TOP_ROW_HEIGHT + 1, left: 1, right: 1, bottom: 1 }}
+						style={{ top: 1, left: 1, right: 1, bottom: 1 }}
 					>
 						<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
 					</div>
@@ -180,7 +181,7 @@ function PanelLayerTab({ tab, scope, panel, layout }: { tab: PanelTab; scope: st
 }
 
 /**
- * 面板区：一张和正文一样的浮起卡片，顶上一排标签，每个开着的面板一个，后面的「+」开一个开始页标签。
+ * 面板区：一张和正文一样的浮起卡片，卡片上面一排标签，每个开着的面板一个，后面的「+」开一个开始页标签。
  * 这个会话的标签都挂着，只有当前那个看得见：后台的终端、计划切回来不重来。右端收起面板区。
  */
 export function PanelArea({
@@ -350,12 +351,17 @@ export function PanelArea({
 		<PanelSurface layout={`${arrangement}:${maximized}`} contentId={`panel-content:${active}`}>
 			<header
 				data-toolbar-inset=""
-				className={`flex shrink-0 items-center gap-1 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
-				style={{ height: TOP_ROW_HEIGHT, paddingLeft: underToolbar ? Math.max(10, overlap) : 10 }}
+				className={`relative flex shrink-0 items-center gap-1 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
+				style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: underToolbar ? Math.max(10, overlap) : 10 }}
 			>
+				{/* 横排时左端竖一小截线，和下面对话、面板区之间那道分隔线在同一列，把顶上这一条分成对话、面板两段（侧栏那一道见 SidebarTopRow）。 */}
+				{arrangement === "row" && <span aria-hidden data-panel-divider="" className="absolute top-1/2 left-0 h-5 w-px -translate-y-1/2 bg-line-float" />}
 				{heading}
 			</header>
-			{content}
+			{/* 标签行在身子上面，和对话的标题栏连成窗口顶上的一条。身子透明，外沿是底下那一块画的；横排时身子和对话贴着，左边那道描边就是分隔线（styles.css 的 `data-frame-body`）。 */}
+			<div data-frame-body="" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-transparent">
+				{content}
+			</div>
 		</PanelSurface>
 	);
 }

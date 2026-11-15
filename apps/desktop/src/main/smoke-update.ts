@@ -5,7 +5,7 @@ import { clickVisible, containing } from "./smoke-kit.ts";
 
 /**
  * 应用更新的界面：菜单栏图标的「检查更新…」到设置 › 关于并查一次（冒烟不联网，答「查不了」），自动检查的间隔记得住；
- * 再经 `__plumeUpdatePreview` 放进一个新版本，看侧栏底行的圆点、悬停展开的字、下载中的进度环和对话框的进度、失败和下好之后的按钮。
+ * 再经 `__plumeUpdatePreview` 放进一个新版本，看活动栏里的圆、悬停提示里的字、下载中的进度环和对话框的进度、失败和下好之后的按钮。
  */
 export async function checkUpdate(options: { window: BrowserWindow; outDir: string }): Promise<void> {
 	const { window, outDir } = options;
@@ -66,15 +66,16 @@ export async function checkUpdate(options: { window: BrowserWindow; outDir: stri
 	await until(`document.body.textContent.includes('更新圆点和对话框') && !document.body.textContent.includes('English only')`, "更新内容只出中文那段");
 	await shot("smoke-update-about-available.png");
 
-	// 设置页的侧栏是章节列表，圆点在别的页的侧栏底行。
+	// 圆点在活动栏底部、设置那一格上面，哪一页都在；回到对话再看。
 	window.webContents.send("plume:command", "new-session");
-	await until(`document.querySelector('[data-plume-update-dot][data-phase=idle]') !== null`, "侧栏底行出现更新圆点");
+	await until(`document.querySelector('[data-plume-update-dot][data-phase=idle]') !== null`, "活动栏出现更新圆点");
 	await preview({ phase: { at: "downloading", received: 63_000_000, total: 140_000_000 } });
 	await until(`document.querySelector('[data-plume-update-dot][data-phase=downloading] [data-ring]') !== null`, "下载中圆点套上进度环");
-	await page(`document.querySelector('[data-plume-update-dot]').focus()`);
+	// 和活动栏的格子居中对齐、不展开：进度写在悬停提示里，读屏照样读得到。
 	await until(
-		`document.querySelector('[data-plume-update-dot] .update-dot-label').getBoundingClientRect().width > 40 && document.querySelector('[data-plume-update-dot]').textContent.includes('下载中 45%')`,
-		"键盘聚焦时圆点展开写出进度",
+		`(() => { const dot = document.querySelector('[data-plume-update-dot]'), r = dot.getBoundingClientRect(), item = document.querySelector('[data-nav=settings]').getBoundingClientRect();
+			return r.width === 28 && r.height === 28 && Math.abs(r.left + r.width / 2 - (item.left + item.width / 2)) < 0.5 && dot.getAttribute('data-plume-tip').includes('下载中 45%') && dot.getAttribute('aria-label').includes('下载中 45%'); })()`,
+		"更新的圆和设置那一格居中对齐，进度写在提示里",
 	);
 	await shot("smoke-update-badge.png");
 

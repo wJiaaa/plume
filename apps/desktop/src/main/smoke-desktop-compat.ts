@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
-import { hasHeaderBar, NATIVE_HEADER_HEIGHT, ROW_OFFSET, TOP_ROW_HEIGHT, TRAFFIC_LIGHTS_END } from "../shared/window-chrome.ts";
+import { hasHeaderBar, MAIN_TOOLBAR_HEIGHT, NATIVE_HEADER_HEIGHT, TRAFFIC_LIGHTS_END } from "../shared/window-chrome.ts";
 import { clickEachVisible, clickVisible } from "./smoke-kit.ts";
 
 type Rect = { left: number; top: number; width: number; height: number };
@@ -29,7 +29,7 @@ const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置
  * 3. 125% 下侧栏边缘落在小数设备像素上时，标题栏和面板区的图标还画在同一列设备像素上；
  * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移；
  * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画；
- * 6. 面板区开合时两张卡片隔着 4px 一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
+ * 6. 面板区开合时对话和面板区贴着一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
  *    开着的环境卡片不重挂，停靠、浮着只换一次，打开时点下去当场换好、收起时滑完再换，不在半路上闪；滑完撤掉动画；
  * 7. 侧栏开合时环境卡片同样不重挂，对话那一栏变窄时点下去当场换好、变宽时滑完再换。
  *
@@ -108,10 +108,11 @@ export async function checkDesktopCompat(options: {
 	};
 
 	/*
-	 * 每个控件的中心和它那一行的中线差不过半个 CSS 像素（小数缩放比下卡片 1px 的描边会被量化）。
-	 * 卡片里的标题栏（对话、面板区）从卡片描边里面算起，各 `TOP_ROW_HEIGHT` 高；窗口自己的那一行在 Windows、Linux 上是
-	 * 顶上那条 `NATIVE_HEADER_HEIGHT` 的带子，量它画出来的位置，不拿常量比：拿常量比只说明两边哪个碰巧对上了；
-	 * macOS 上没有带子，后退、前进、侧栏开关浮在卡片角上，和红绿灯同在下移 `ROW_OFFSET` 的那一行。
+	 * 每个控件的中心和它那一行的中线差不过半个 CSS 像素（小数缩放比下 1px 的描边会被量化）。
+	 * 对话的标题栏、面板区的标签行在各自身子上面，各 `MAIN_TOOLBAR_HEIGHT` 高、底边就是身子的顶边，按身子画出来的位置往上量；
+	 * 窗口自己的那一行在 Windows、Linux 上是顶上那条 `NATIVE_HEADER_HEIGHT` 的带子，量它画出来的位置，不拿常量比：
+	 * 拿常量比只说明两边哪个碰巧对上了；macOS 上没有带子，后退、前进、侧栏开关和红绿灯同在窗口顶上那一行，
+	 * 和标题栏同一条中线。
 	 */
 	const headerAlignment = async (label: string) => {
 		const geometry = await page<{
@@ -132,23 +133,30 @@ export async function checkDesktopCompat(options: {
 				errors.push(error);
 				if (error > 0.5) drift.push(name + ': ' + (r.y + r.height / 2).toFixed(2) + ' vs ' + center.toFixed(2));
 			};
-			for (const header of document.querySelectorAll('.rounded-panel.border > header')) {
-				const card = header.parentElement;
-				const center = card.getBoundingClientRect().top + card.clientTop + ${TOP_ROW_HEIGHT / 2};
-				const kind = header.closest('[data-panel-area]') ? 'panel' : 'chat';
+			const rows = [...document.querySelectorAll('[data-panel-layout] [data-frame-body]')].filter(body => body.checkVisibility({ visibilityProperty: true }));
+			for (const body of rows) {
+				const center = body.getBoundingClientRect().top - ${MAIN_TOOLBAR_HEIGHT / 2};
+				const header = body.previousElementSibling?.matches('header') ? body.previousElementSibling : body.previousElementSibling?.querySelector('header');
+				const kind = body.closest('[data-panel-area]') ? 'panel' : 'chat';
+				if (!header) { errors.push(99); drift.push(kind + ': 身子上面没有标题行'); continue; }
 				for (const icon of header.querySelectorAll('svg')) measure(icon, center, kind + ' svg');
 				for (const button of header.querySelectorAll('button')) measure(button, center, kind + ' ' + (button.getAttribute('aria-label') || button.textContent.trim() || 'button'));
 			}
-			// 面板开关钉在工作区右上角、盖在卡片顶行右端，不在哪个 header 里：和卡片顶行同一条中线。
-			const workspace = document.querySelector('[data-panel-layout] > main > .rounded-panel');
-			for (const button of workspace ? document.querySelectorAll('[data-panel-toggle] button') : []) {
-				const center = workspace.getBoundingClientRect().top + workspace.clientTop + ${TOP_ROW_HEIGHT / 2};
+			// 面板开关钉在工作区右上角、盖在标题行右端，不在哪个 header 里：和标题行同一条中线。
+			const chatBody = document.querySelector('[data-panel-layout] > main [data-frame-body]');
+			for (const button of chatBody ? document.querySelectorAll('[data-panel-toggle] button') : []) {
+				const center = chatBody.getBoundingClientRect().top - ${MAIN_TOOLBAR_HEIGHT / 2};
 				measure(button, center, 'panel toggle');
 				measure(button.querySelector('svg'), center, 'panel toggle svg');
 			}
 			const header = document.querySelector('[data-plume-window-header]');
 			const band = header ? header.getBoundingClientRect() : null;
-			const headerCenter = band ? band.top + band.height / 2 : ${ROW_OFFSET + TOP_ROW_HEIGHT / 2};
+			const headerCenter = band ? band.top + band.height / 2 : ${MAIN_TOOLBAR_HEIGHT / 2};
+			// 侧栏、对话、横排的面板区的身子顶边在同一条线上，连成一块。上下排的面板区在对话下面，收着的挪在窗口外，不算。
+			const joined = [document.querySelector('[data-panel-layout] > main [data-frame-body]'), document.querySelector('aside[aria-label="侧边栏"]:not([data-plume-drawer]) .sidebar-surface'),
+				document.querySelector('[data-panel-layout=row][data-frame-right] [data-panel-area] [data-frame-body]')];
+			const tops = joined.filter(Boolean).map(el => el.getBoundingClientRect()).filter(r => r.width > 1).map(r => r.top);
+			if (Math.max(...tops) - Math.min(...tops) > 0.5) { errors.push(99); drift.push('身子顶边不齐: ' + tops.join(', ')); }
 			const toggle = document.querySelector(${JSON.stringify(NAV_TOGGLE)});
 			for (const button of toggle ? toggle.parentElement.closest('div').querySelectorAll('button') : []) {
 				const name = button.getAttribute('aria-label');
@@ -580,8 +588,8 @@ export async function checkDesktopCompat(options: {
 			}
 			const sliding = held.filter((sample) => sample.moving);
 			assert.ok(new Set(sliding.map((sample) => sample.chat)).size >= 3, `${phase}：对话的边缘真的滑了，中间有帧：${JSON.stringify(held)}`);
-			// 面板整张跟着滑，两张卡片一直隔 4px，面板的内容跟着自己的卡片走、不被裁。
-			for (const sample of sliding) assert.ok(Math.abs(sample.area - sample.chat - 4) < 1, `${phase}：两张卡片隔 4px：${JSON.stringify(sample)}`);
+			// 面板整张跟着滑，一直贴着对话、中间不裂缝，面板的内容跟着自己的身子走、不被裁。
+			for (const sample of sliding) assert.ok(Math.abs(sample.area - sample.chat) < 1, `${phase}：面板区贴着对话：${JSON.stringify(sample)}`);
 			const offsets = new Set(sliding.flatMap((sample) => (sample.content === null ? [] : [Math.round(sample.content - sample.area)])));
 			assert.ok(offsets.size === 1, `${phase}：面板内容跟着卡片走：${JSON.stringify(held)}`);
 			laneSteady(phase, held, phase === "打开");

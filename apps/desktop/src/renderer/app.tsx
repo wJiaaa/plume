@@ -9,9 +9,9 @@ import type { SessionSummary } from "@plume/contract";
 import { composingKey, macKeyboard, shortcutLetter, useI18n } from "@plume/ui";
 import { AppWindow } from "@plume/ui/icons";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CARD_INSET, ROW_OFFSET, TOP_ROW_HEIGHT } from "../shared/window-chrome.ts";
+import { CARD_INSET, MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../shared/window-chrome.ts";
 import { useTitlebar } from "./titlebar.ts";
-import { layoutMode, sidebarWidthFor } from "./layout.ts";
+import { layoutMode, RAIL_WIDTH, sidebarWidthFor } from "./layout.ts";
 import { ImageViewerHost } from "./image/index.ts";
 import { Toaster } from "./toast/index.ts";
 import { InputMenu } from "./composer/InputMenu.tsx";
@@ -25,7 +25,8 @@ import { finishPanelLeave, scopeOf, setPanel, setSidebar, showPanel, tabsOf, tog
 import { canStep, go, openNoticeSession } from "./app/sessions.ts";
 import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
 import { investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
-import { SidebarContent, SidebarResizer } from "./app/Sidebar.tsx";
+import { SidebarContent, SidebarResizer, SidebarTopRow } from "./app/Sidebar.tsx";
+import { hasSidebar, Rail } from "./app/Rail.tsx";
 import { ChatScreen, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
 import { SettingsScreen } from "./app/SettingsScreen.tsx";
 
@@ -52,22 +53,23 @@ function Shell() {
 		window.addEventListener("focus", recheck);
 		return () => window.removeEventListener("focus", recheck);
 	}, []);
-	const navOpen = compact ? drawerOpen : sidebarOpen;
-	const pushed = !compact && sidebarOpen;
+	// 插件市场和插件的页面没有侧栏：侧栏开没开的偏好留着，回到对话、设置时照旧。切过去不滑，整个界面一下换掉。
+	const sided = hasSidebar(screen);
+	const navOpen = (compact ? drawerOpen : sidebarOpen) && sided;
+	const pushed = !compact && sidebarOpen && sided;
+	const drawerWidth = Math.min(sidebarWidth, windowWidth - RAIL_WIDTH - 48);
 	const width = sidebarWidthFor(sidebarWidth, windowWidth);
 	const titlebar = useTitlebar(window.plume.platform, fullScreen);
 	// 面板只跟着工作区，设置页不画。工作区里收起时也挂着，只是藏起来：面板里的状态留着，开合才有东西可滑。
 	// 插件运行中装卸时面板跟着出现、消失。
 	usePluginUis();
 	const panelInWorkspace = screen === "chat" && listPanels().length > 0;
-	// 页面自己画顶行（PageOptions.topRow）时，标题栏和它下面的占位都让给页面，见下面的 --plume-top-row-*。
-	const ownTopRow = screen.startsWith("page:") && listPages().some((entry) => `page:${entry.key}` === screen && entry.topRow);
 	/*
 	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`ToolbarOverlap`，卡片里的顶行取用）；
 	 * 有顶上那条带子时它们在带子里，卡片不用让。开合时它和侧栏宽度一起滑，见 styles.css 的 `[data-sidebar-sliding]`。
 	 */
-	const overlap = pushed || HEADER_BAR ? 0 : toolbarReserved(titlebar.start) - CARD_INSET - 1;
-	const available = windowWidth - (pushed ? width : 0);
+	const overlap = pushed || HEADER_BAR ? 0 : Math.max(0, toolbarReserved(titlebar.start, sided) - RAIL_WIDTH - 1);
+	const available = windowWidth - RAIL_WIDTH - (pushed ? width : 0);
 	useLayoutEffect(() => {
 		if (!panelWindow && panelWidth === 0) setPanel({ width: available * 0.4 });
 	}, [available, panelWidth]);
@@ -83,17 +85,18 @@ function Shell() {
 	const [moving, setMoving] = useState(false);
 
 	const toggle = () => {
+		if (!sided) return;
 		setMoving(true);
 		if (compact) update({ drawerOpen: !drawerOpen });
 		else setSidebar({ open: !sidebarOpen });
 	};
 
-	// ⌘B 开合侧栏，设置页里开合的是章节列表。
+	// ⌘B 开合侧栏，设置页里开合的是章节列表；没有侧栏的界面不接，留给页面自己。
 	useEffect(() => {
 		if (panelWindow) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.repeat || composingKey(event)) return;
-			if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && shortcutLetter(event) === "b") {
+			if (sided && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && shortcutLetter(event) === "b") {
 				event.preventDefault();
 				toggle();
 			}
@@ -138,13 +141,13 @@ function Shell() {
 	}, []);
 
 	useEffect(() => {
-		if (!compact || !drawerOpen) return;
+		if (!compact || !navOpen) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key === "Escape") update({ drawerOpen: false });
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [compact, drawerOpen]);
+	}, [compact, navOpen]);
 
 	/*
 	 * 面板的快捷键：没开或在看别的就切到它，正在看它就收起面板区。在捕获阶段接：焦点在终端里时，xterm 会
@@ -186,55 +189,96 @@ function Shell() {
 				onBack={() => void go(-1)}
 				onForward={() => void go(1)}
 			/>
-			<ToolbarButton
-				label={
-					screen === "settings"
-						? t(navOpen ? "app.hideSettingsNavigation" : "app.showSettingsNavigation", { shortcut: "⌘B" })
-						: t(navOpen ? "shell.hideSidebar" : "shell.showSidebar")
-				}
-				onClick={toggle}
-				active={compact && navOpen}
-			>
-				<SidebarIcon open={navOpen} />
-			</ToolbarButton>
+			{sided && (
+				<ToolbarButton
+					label={
+						screen === "settings"
+							? t(navOpen ? "app.hideSettingsNavigation" : "app.showSettingsNavigation", { shortcut: "⌘B" })
+							: t(navOpen ? "shell.hideSidebar" : "shell.showSidebar")
+					}
+					onClick={toggle}
+					active={compact && navOpen}
+				>
+					<SidebarIcon open={navOpen} />
+				</ToolbarButton>
+			)}
 		</>
 	);
 
 	const body = (
 		<ToolbarOverlap.Provider value={overlap}>
-			<aside
-				aria-label={t("app.sidebar")}
-				inert={!navOpen}
-				// 抽屉自己铺侧栏色，吸顶的标题跟着它，不跟外圈（styles.css 的 `[data-plume-head]`）。
-				data-plume-drawer={compact || undefined}
-				// 只认侧栏自己的：里面的行悬停也有 transition，结束事件会冒泡上来。
-				onTransitionEnd={(event) => event.target === event.currentTarget && setMoving(false)}
-				className={`${moving ? `${SLIDE_MOTION} duration-[var(--plume-t-slow)]` : ""} ${
-					compact
-						? `absolute inset-y-0 left-0 z-20 border-r border-line bg-sidebar ${drawerOpen ? "" : "-translate-x-full"}`
-						: "relative shrink-0 overflow-hidden"
-				}`}
-				style={{ width: compact ? Math.min(sidebarWidth, windowWidth - 48) : pushed ? width : 0 }}
+			{/*
+			 * 侧栏、对话、面板区底下那一整块：外沿的圆角描边和对话的底色只由它画，各栏的身子透明（侧栏只在里面铺自己的底色）。
+			 * 外沿交给不随开合变的一层：侧栏收起时最后露出来的是对话的身子，它滑着时为了和侧栏拼平是直角，滑完才圆回来；
+			 * 身子自己画外沿的话，左上角会在滑完那一下从直角跳成圆角。
+			 */}
+			<div
+				aria-hidden
+				data-frame=""
+				className="pointer-events-none absolute rounded-panel border border-line-float bg-shell"
+				style={{ left: RAIL_WIDTH, top: MAIN_TOOLBAR_HEIGHT, right: CARD_INSET, bottom: CARD_INSET }}
+			/>
+			<Rail />
+			{/*
+			 * 抽屉从活动栏右边抽出来：外面这层裁掉收着的那一截，抽屉不从活动栏底下滑过；收着时整层不接指针，点得到下面的卡片。
+			 * 宽窗口里这层是 `contents`，不占盒子：两种形状同一棵树，窗口跨过分档时侧栏不重挂。
+			 */}
+			<div
+				className={compact ? "pointer-events-none absolute inset-y-0 z-20 overflow-hidden" : "contents"}
+				style={compact ? { left: RAIL_WIDTH, width: drawerWidth } : undefined}
 			>
-				{/* 里面定宽：收起时只是被裁掉，文字不跟着宽度一起挤。 */}
-				<div className="flex h-full flex-col" style={{ width: compact ? Math.min(sidebarWidth, windowWidth - 48) : width }}>
-					<SidebarContent />
-				</div>
-			</aside>
-			{compact && drawerOpen && <div className="absolute inset-0 z-10 bg-ink/20" aria-hidden onClick={() => update({ drawerOpen: false })} />}
-			<div className="relative isolate min-h-0 min-w-0 flex-1 overflow-hidden" style={{ margin: CARD_INSET }}>
+				<aside
+					aria-label={t("app.sidebar")}
+					inert={!navOpen}
+					// 抽屉自己铺侧栏色，吸顶的标题跟着它，不跟外圈（styles.css 的 `[data-plume-head]`）。
+					data-plume-drawer={compact || undefined}
+					// 只认侧栏自己的：里面的行悬停也有 transition，结束事件会冒泡上来。
+					onTransitionEnd={(event) => event.target === event.currentTarget && setMoving(false)}
+					className={`${moving ? `${SLIDE_MOTION} duration-[var(--plume-t-slow)]` : ""} ${
+						compact
+							? `sidebar-surface pointer-events-auto absolute inset-y-0 left-0 border-r border-line ${navOpen ? "" : "-translate-x-full"}`
+							: "relative shrink-0 overflow-hidden"
+					}`}
+					style={{ width: compact ? drawerWidth : pushed ? width : 0 }}
+				>
+					{/*
+					 * 里面定宽：收起时只是被裁掉，文字不跟着宽度一起挤。停靠时侧栏是底下那一块（`data-frame`）的左边一截：
+					 * 上、左、下的描边透明、底色不铺到描边下面，透出那一块的外沿；右边那道描边就是两栏之间的分隔线。
+					 * 底色比窗口外圈亮一档（`.sidebar-surface`），会话列表不和窗口底色糊成一片。抽屉整条铺同一个底色。
+					 */}
+					<div className="flex h-full flex-col" style={{ width: compact ? drawerWidth : width }}>
+						<SidebarTopRow divider={!compact && !moving} />
+						<div
+							className={`flex min-h-0 flex-1 flex-col ${compact ? "" : "sidebar-surface overflow-hidden rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"}`}
+							style={compact ? undefined : { marginBottom: CARD_INSET }}
+						>
+							<SidebarContent />
+						</div>
+					</div>
+				</aside>
+			</div>
+			{compact && navOpen && <div className="absolute inset-0 z-10 bg-ink/20" aria-hidden onClick={() => update({ drawerOpen: false })} />}
+			{/*
+			 * 工作区贴着活动栏、侧栏和窗口顶，只离窗口右边、底边 4px。侧栏停靠着（收起滑走的那一路也算）时身子的左边不圆、不描边，
+			 * 和侧栏连成一块；滑完收起才圆回来，不在半路豁开一个角。
+			 */}
+			<div
+				data-frame-left={pushed || (moving && !compact) || undefined}
+				className="relative isolate min-h-0 min-w-0 flex-1 overflow-hidden"
+				style={{ marginRight: CARD_INSET, marginBottom: CARD_INSET }}
+			>
 				{/* 设置页只盖住工作区，常驻网页仍留在同一层、同一节点。 */}
 				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible"}`}>
 					<ChatScreen
 						fatal={fatal}
-						slideWidth={moving && !compact ? available - 2 * CARD_INSET : undefined}
+						slideWidth={moving && !compact ? available - CARD_INSET : undefined}
 						share={verticalShares[scopeOf(app)] ?? 0.4}
 						onShare={(share) => setVerticalShares((current) => ({ ...current, [scopeOf(app)]: share }))}
 					/>
 				</div>
 				{screen !== "chat" && (
 					<main className="absolute inset-0 flex flex-col">
-						<ScreenCard header={ownTopRow ? undefined : <TitleBar />} fatal={fatal}>
+						<ScreenCard header={<TitleBar />} fatal={fatal}>
 							<Main />
 						</ScreenCard>
 					</main>
@@ -243,7 +287,11 @@ function Shell() {
 			{pushed && <SidebarResizer width={width} max={sidebarWidthFor(Number.POSITIVE_INFINITY, windowWidth)} />}
 		</ToolbarOverlap.Provider>
 	);
-	const fill = managedSkin ? "bg-root" : window.plume.vibrancy ? "bg-window-tint" : "bg-sidebar";
+	/*
+	 * 窗口外圈（活动栏、顶上那一条）不开毛玻璃时和对话同一个底色，底下那一块靠描边和外圈分开；侧栏一栏比两边都亮一档。
+	 * 外圈铺侧栏色时它比侧栏还亮，会话列表夹在外圈和对话中间、不上不下，看着发灰。
+	 */
+	const fill = managedSkin ? "bg-root" : window.plume.vibrancy ? "bg-window-tint" : "bg-shell";
 
 	/*
 	 * Windows、Linux：顶上一条横贯的带子，后退、前进、侧栏开关在左端，系统按钮在右端，侧栏和卡片都在它下面。
@@ -272,8 +320,8 @@ function Shell() {
 		>
 			{body}
 			{/* 设置页顶上整条都能拖窗口，连同卡片上方和侧栏、卡片之间的缝。放在侧栏开关前面：拖拽区按文档顺序合成，开关的洞要后挖。 */}
-			{screen === "settings" && <div aria-hidden className={`absolute inset-x-0 top-0 z-30 ${DRAG}`} style={{ height: TOP_ROW_HEIGHT }} />}
-			<div className={`absolute z-30 flex items-center gap-0.5 ${NO_DRAG}`} style={{ left: titlebar.start, top: ROW_OFFSET, height: TOP_ROW_HEIGHT }}>
+			{screen === "settings" && <div aria-hidden className={`absolute inset-x-0 top-0 z-30 ${DRAG}`} style={{ height: MAIN_TOOLBAR_HEIGHT }} />}
+			<div className={`absolute z-30 flex items-center gap-0.5 ${NO_DRAG}`} style={{ left: titlebar.start, top: 0, height: MAIN_TOOLBAR_HEIGHT }}>
 				{toolbar}
 			</div>
 			<ImageViewerHost />

@@ -13,13 +13,16 @@ import { useWindowOverlay } from "./window-overlay.ts";
 /** 侧栏开关后面到标题之间的空当。 */
 const TOOLBAR_GAP = 10;
 
-/** 侧栏收起时，窗口左上角有多宽归顶行按钮：后退、前进之间 `gap-1.5`，开关前 `gap-0.5`，再留一段空当。 */
-export function toolbarReserved(start: number): number {
-	return start + TOOLBAR_BUTTON * 3 + 6 + 2 + TOOLBAR_GAP;
+/**
+ * 侧栏收起时，窗口左上角有多宽归顶行按钮：后退、前进之间 `gap-1.5`，开关前 `gap-0.5`，再留一段空当。
+ * 没有侧栏的界面（插件市场、插件的页面）不放侧栏开关，少一颗。
+ */
+export function toolbarReserved(start: number, toggle: boolean): number {
+	return start + TOOLBAR_BUTTON * (toggle ? 3 : 2) + 6 + (toggle ? 2 : 0) + TOOLBAR_GAP;
 }
 
 /**
- * 卡片顶行左端要给浮在卡片角上的窗口按钮让多宽（像素）：侧栏收起时是 `toolbarReserved` 减去卡片的边距，开着或有顶上那条带子时是 0。
+ * 卡片顶行左端要给浮在卡片角上的窗口按钮让多宽（像素）：侧栏收起时是 `toolbarReserved` 减去活动栏和卡片的边距，开着或有顶上那条带子时是 0。
  *
  * 只交给用它的那几行，由它们写在自己身上（顶行的 `padding-left`、页面的 `--plume-top-row-inset`），不挂成外层的变量：
  * 可继承的变量一变，它底下每个元素都要重算样式。挂在外壳上时，开合侧栏那一下要重算整页六千多个元素，量到 27ms（120Hz 下丢三帧）。

@@ -19,7 +19,7 @@ const TILE = {
 export function NotificationsMenu({ anchor, notices, onClose }: { anchor: Anchor; notices: Notice[]; onClose: () => void }) {
 	const { t } = useI18n();
 	return (
-		<Popover anchor={anchor} onClose={onClose} placement="bottom" align="end" width="panel" role="menu" label={t("sidebar.notifications")}>
+		<Popover anchor={anchor} onClose={onClose} placement="right" width="panel" role="menu" label={t("sidebar.notifications")}>
 			<MenuBody>
 				<div className="flex items-baseline gap-1.5 px-2.5 pb-2 pt-1.5">
 					<span className="text-label font-semibold text-ink">{t("sidebar.notifications")}</span>

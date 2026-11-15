@@ -82,7 +82,7 @@ export async function checkGallery(options: {
 		});
 	};
 	const gallery = async () => {
-		await click("button", "画廊");
+		await click('[data-nav^="page:plume.image/"]');
 		await until("document.querySelector('[data-image-gallery]') !== null", "画廊打开");
 	};
 	try {

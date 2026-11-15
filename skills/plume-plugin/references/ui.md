@@ -29,7 +29,7 @@ export default {
 | `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认，见「等人给数据的卡」 |
 | `ui.toolLine(tool, { verb, verbFor, subject, file, note, command, job, fields, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
-| `ui.page(id, Component, options)` | 往侧栏加一个页面，见「页面」 |
+| `ui.page(id, Component, options)` | 往活动栏加一个页面，见「页面」 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤，见「皮肤」 |
 | `ui.useTheme()` / `ui.setTheme(theme)` | 读、改应用的主题偏好（设置 › 外观的跟随系统、浅色、深色），见「皮肤」 |
 | `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`，见「皮肤」 |
@@ -78,7 +78,7 @@ export default {
 | `ui.queueAction({ label, icon?, run })` | 主输入框排队条上，每条排着的消息「更多」菜单里多一项（在侧边聊天中打开），见「排队消息拿到别处去发」 |
 | `ui.openSettings(id)` | 打开本插件注册的、单独占导航一行（`page: "nav"`）的设置分区；不能跳到别的插件或未登记分区 |
 | `ui.openPage(id)` | 人点了按钮时打开本插件注册的页面（输入框上方提示里的「查看」）；不能开别的插件的页面 |
-| `ui.pageBadge(id, { count, label, attention? } \| null)` | 侧栏去处里本插件那一页的那一行右端挂一个数，见「页面」 |
+| `ui.pageBadge(id, { count, label, attention? } \| null)` | 活动栏里本插件那一页的那一格右上角挂一个数，见「页面」 |
 | `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
 | `ui.openPath(path)` | 用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开，见「文件、终端和系统打开」 |
 | `ui.revealPath(path)` | 用户点击后在系统的文件管理器里选中它（「在访达中显示」），同上 |
@@ -277,19 +277,19 @@ ui.panel("plan", PlanPanel, {
 ui.page("scheduled", ScheduledPage, { title: (locale) => MESSAGES[locale].title, icon: Clock, order: 0 });
 ```
 
-侧栏多一行，点了正文区整块换成这个页面。组件收到 `session`（打开着的会话）和 `workspace`（当前工作区：打开着的会话的 `project`、`cwd`，没打开会话时是空白页选着的项目或目录，都没选时为空；项目的目录按 `project` 在 `ui.useProjects()` 里查）。要在「人现在所在的项目」里建东西（定时任务的新任务）用 `workspace`，不用 `session`：人停在某个项目的空白页时没有会话。插件停用时侧栏那一行撤掉。
+窗口最左边的活动栏多一格图标（`title` 是悬停提示和页面上方标题栏里的名字），点了整个界面换成这个页面。页面没有侧栏：活动栏右边整块都是它的，要列表就在页面里自己画一栏（见下面的 `PageTopRow`），不用再和本体的侧栏挤成三栏。组件收到 `session`（打开着的会话）和 `workspace`（当前工作区：打开着的会话的 `project`、`cwd`，没打开会话时是空白页选着的项目或目录，都没选时为空；项目的目录按 `project` 在 `ui.useProjects()` 里查）。要在「人现在所在的项目」里建东西（定时任务的新任务）用 `workspace`，不用 `session`：人停在某个项目的空白页时没有会话。插件停用时活动栏那一格撤掉。
 
-那一行右端可以挂一个数，告诉人这一页上有东西在等他看（定时任务没人看见的失败）：`ui.pageBadge("scheduled", { count, label })`，数变了再调一次，`null` 或 0 拿掉；`label` 给读屏和悬停提示。人正在那一页上时不画，停用时一起拿掉。带 `attention: true` 时同时在通知菜单中显示该页面的待处理事项，`label` 是通知标题，点击打开该页面。数要跟着逻辑入口走、不等人打开页面，所以在 `apply` 里一直连着逻辑入口的 `watch`，每次推来时调它。别处的按钮（输入框上方那一行的「查看」）经 `ui.openPage(id)` 把人带到这一页。
+那一格右上角可以挂一个数，告诉人这一页上有东西在等他看（定时任务没人看见的失败）：`ui.pageBadge("scheduled", { count, label })`，数变了再调一次，`null` 或 0 拿掉；`label` 给读屏和悬停提示。人正在那一页上时不画，停用时一起拿掉。带 `attention: true` 时同时在通知菜单中显示该页面的待处理事项，`label` 是通知标题，点击打开该页面。数要跟着逻辑入口走、不等人打开页面，所以在 `apply` 里一直连着逻辑入口的 `watch`，每次推来时调它。别处的按钮（输入框上方那一行的「查看」）经 `ui.openPage(id)` 把人带到这一页。
 
-平时宿主在页面上方留一行和标题栏一样高的空白，它是拖动窗口的地方，页面从它下面开始。怎么选：
+宿主在正文卡片上面画标题栏（写页面名、拖窗口），和侧栏、面板区的顶行连成窗口顶上的一条；页面从卡片的顶边开始。怎么排：
 
-- 单栏、标题写在内容里的页面（定时任务、画廊的相册）：用默认，顶上那一行空着拖窗口。
-- 左边列表、右边详情这种两栏页面，或者有盖满整页的一层（画廊的大图详情）：给 `topRow: true`，宿主不再留那一行，页面从卡片顶边开始，每一栏最上面放一个 `PageTopRow`（`@plume/ui`）。分隔线才能和侧栏一样从顶边通到底，盖满整页的那一层也不会先空一截。
+- 单栏、标题写在内容里的页面（定时任务、画廊的相册）：内容直接从卡片顶边开始。
+- 左边列表、右边详情这种两栏页面：每一栏最上面放一个 `PageTopRow`（`@plume/ui`）当栏头，分隔线从卡片顶边通到底；给 `topRow: true` 说明页面自带栏头（不影响排法）。
 
 ```tsx
 ui.page("pull-requests", PullRequestsPage, { title, icon: GitPullRequest, topRow: true });
 
-// 贴着页面左边的那一栏给 `start`：侧栏收起时红绿灯和前进、后退浮在那里，它让出那段宽度。
+// 贴着页面左边的那一栏给 `start`。
 <PageTopRow start>
 	<Text size="label" weight="medium">{text.title}</Text>
 	<span className="my-spacer" />
@@ -298,7 +298,7 @@ ui.page("pull-requests", PullRequestsPage, { title, icon: GitPullRequest, topRow
 <PageTopRow>…右栏的标题和按钮…</PageTopRow>
 ```
 
-`PageTopRow` 管高度、左右内边距、整行拖窗口、行里的按钮和输入框挖成不拖动的，不用自己写 `app-region`；间距、两端对齐经 `className` 补。每一栏都要有这一行，空着的也放一个，不然那一段拖不动窗口。Windows、Linux 上窗口顶上另有一条拖窗口的带子，宿主让这一行不拖动，插件不用分平台处理。两栏页面贴左边那一栏的宽度要加上让出的那段：`width: calc(300px + var(--plume-top-row-inset))`；这两个变量（`--plume-top-row-height`、`--plume-top-row-inset`）是宿主在页面外层给的，不是 token，皮肤改不了。
+`PageTopRow` 管高度、左右内边距、整行拖窗口、行里的按钮和输入框挖成不拖动的，不用自己写 `app-region`；间距、两端对齐经 `className` 补。每一栏都要有这一行，空着的也放一个，不然那一段拖不动窗口。Windows、Linux 上窗口顶上另有一条拖窗口的带子，宿主让这一行不拖动，插件不用分平台处理。行高取宿主在页面外层给的 `--plume-top-row-height`（不是 token，皮肤改不了）；主窗口的窗口按钮在页面外面的顶行里，页面左上角不用给它们让位，两栏页面各栏按自己的宽度写。
 
 ## 输入框里的一格
 
@@ -617,11 +617,11 @@ function ModelSetting() {
 
 要让人在插件里切「跟随系统 / 浅色 / 深色」，就是改外观页那三张主题卡片，不是做一套皮肤：`ui.setTheme("dark")` 等同人在外观页点「深色」，存盘、各窗口同步；组件里用 `ui.useTheme()` 读当前选的是哪张。有皮肤接管深浅模式时外观页的主题只读，`setTheme` 同样不改，所以先 `ui.skin(null)` 撤下自己的皮肤再调。只在人点了插件界面上的按钮时调，不在工具或定时逻辑里替人改。
 
-背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、效果、浓淡，以及整个窗口的磨砂质感（外圈、停靠侧栏和对话区一起，不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
+背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、效果、浓淡，以及整个窗口的磨砂质感（窗口外圈和对话区一起，不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
 
-`root` 是窗口最外层与透明停靠侧栏共用的底色，默认跟随 `shell`；`sidebar` 只给 compact 浮出侧栏铺底，不给停靠侧栏另铺一层；`accent-dim` 是强调弱底，默认是强调色的 10% 透明底。数据皮肤可直接给出完整的面、线、字 token；若一份配色只适用于一个模式，给 `light`、`dark` 同一组 token，并用 `mode` 指定深浅模式。
+`root` 是窗口最外层（活动栏、顶上那一条）的底色，默认跟随 `shell`；`sidebar` 是侧栏的那一档：侧栏一栏和窄窗口的抽屉取 `shell` 和它六四开混出来的颜色，和外圈、对话都差一档，Windows、Linux 顶上那条带子也铺它；`accent-dim` 是强调弱底，默认是强调色的 10% 透明底。数据皮肤可直接给出完整的面、线、字 token；若一份配色只适用于一个模式，给 `light`、`dark` 同一组 token，并用 `mode` 指定深浅模式。
 
-`root-image` 是盖在 `root` 上的底纹，值是 CSS 图像，可以逗号分隔叠几层（例如 `linear-gradient(160deg, #…, #…)`，先写的在上面），默认 `none`。颗粒、噪点这类质感不写进皮肤：磨砂是用户在背景设置里开关的，宿主叠在底纹上面，哪套皮肤都一样。只在管理配色的数据皮肤下铺在窗口外圈和透明的停靠侧栏上，正文卡片仍是 `shell` 的实底。宿主把它固定在视口上（`background-attachment: fixed`），外圈、侧栏吸顶标题和 Windows 顶带画的是同一片；平铺的小图按自身尺寸重复，渐变铺满整个窗口。侧栏的字直接压在它上面，渐变两端的颜色都要和 `root` 一样满足文字对比度。
+`root-image` 是盖在 `root` 上的底纹，值是 CSS 图像，可以逗号分隔叠几层（例如 `linear-gradient(160deg, #…, #…)`，先写的在上面），默认 `none`。颗粒、噪点这类质感不写进皮肤：磨砂是用户在背景设置里开关的，宿主叠在底纹上面，哪套皮肤都一样。只在管理配色的数据皮肤下铺在窗口外圈上，侧栏和正文卡片仍是实底。宿主把它固定在视口上（`background-attachment: fixed`），外圈和 Windows 顶带画的是同一片；平铺的小图按自身尺寸重复，渐变铺满整个窗口。活动栏的图标和顶上那一条的字直接压在它上面，渐变两端的颜色都要和 `root` 一样满足文字对比度。
 
 ## remote：调自己的逻辑入口
 

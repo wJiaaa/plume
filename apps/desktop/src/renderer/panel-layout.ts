@@ -15,10 +15,14 @@ export function panelGeometry(options: {
 	const single = compact || maximized;
 	const stacked = !single && width < 420 + 300 + 4 && height >= 260 + 150 + 4;
 	const arrangement = single ? "single" : stacked ? "column" : "row";
-	const panelWidth = single || stacked ? width : panelWidthFor(preferred, width - 4, 0);
+	const panelWidth = single || stacked ? width : panelWidthFor(preferred, width, 0);
 	const panelHeight = stacked ? panelHeightFor(share, height) : height;
+	/*
+	 * 横排时对话和面板区贴着，中间只有面板身子左边那 1px 描边，和侧栏连成一整块（styles.css 的 `[data-frame-right]`）。
+	 * 上下排时面板区的标签行夹在两张身子中间，连不起来，仍隔 4px。
+	 */
 	const chat: CSSProperties = {
-		right: shown && !single && !stacked ? panelWidth + 4 : 0,
+		right: shown && !single && !stacked ? panelWidth : 0,
 		bottom: shown && stacked ? panelHeight + 4 : 0,
 	};
 	/*
@@ -30,7 +34,7 @@ export function panelGeometry(options: {
 	const panel: CSSProperties = {
 		width: single || stacked ? "100%" : panelWidth,
 		height: stacked ? panelHeight : "100%",
-		right: hidden && !stacked ? -(panelWidth + 4) : 0,
+		right: hidden && !stacked ? -panelWidth : 0,
 		bottom: hidden && stacked ? -(panelHeight + 4) : 0,
 	};
 	return { single, stacked, arrangement, panelWidth, panelHeight, chat, panel };

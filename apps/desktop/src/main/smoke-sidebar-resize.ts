@@ -32,7 +32,7 @@ async function checkResize(window: BrowserWindow, screenshot: string, pane: "sid
 			min: Number(handle.getAttribute('aria-valuemin')), max: Number(handle.getAttribute('aria-valuemax')),
 			grip: box ? { width: box.width, height: box.height, y: box.top + box.height / 2,
 				active: grip.classList.contains('bg-accent'), color: getComputedStyle(grip).backgroundColor,
-				inGap: ${panel ? "box.left >= document.querySelector('main > div').getBoundingClientRect().right && box.right <= document.querySelector('[data-panel-area]').getBoundingClientRect().left" : "true"},
+				onLine: ${panel ? "Math.abs(box.left + box.width / 2 - document.querySelector('[data-panel-area]').getBoundingClientRect().left) <= 2" : "true"},
 				visible: document.elementFromPoint(box.left + 1, box.top + 1) === grip } : null,
 		};
 	})()`) as Promise<{
@@ -40,7 +40,7 @@ async function checkResize(window: BrowserWindow, screenshot: string, pane: "sid
 			width: number;
 			min: number;
 			max: number;
-			grip: null | { width: number; height: number; y: number; active: boolean; color: string; inGap: boolean; visible: boolean };
+			grip: null | { width: number; height: number; y: number; active: boolean; color: string; onLine: boolean; visible: boolean };
 		}>;
 	const move = async (x: number, y: number) => {
 		web.sendInputEvent({ type: "mouseMove", x: Math.round(x), y });
@@ -57,7 +57,7 @@ async function checkResize(window: BrowserWindow, screenshot: string, pane: "sid
 	assert.equal(hover.grip.height, 30);
 	assert.equal(hover.grip.y, 200);
 	assert.equal(hover.grip.active, false);
-	assert.ok(hover.grip.inGap, "面板指示器应落在两张卡片的间隙内");
+	assert.ok(hover.grip.onLine, "面板指示器骑在对话和面板区之间那道线上");
 
 	web.sendInputEvent({ type: "mouseDown", x: Math.round(initial.x), y: 200, button: "left", clickCount: 1 });
 	await settle();
@@ -67,7 +67,7 @@ async function checkResize(window: BrowserWindow, screenshot: string, pane: "sid
 	assert.equal(dragging.width, Math.min(initial.max, initial.width + 50));
 	assert.ok(dragging.grip?.visible && dragging.grip.active, "拖动时显示强调色把手");
 	assert.equal(dragging.grip.y, 260);
-	assert.ok(dragging.grip.inGap, "拖动时面板边缘必须跟上指示器");
+	assert.ok(dragging.grip.onLine, "拖动时面板边缘必须跟上指示器");
 	assert.notEqual(dragging.grip.color, hover.grip.color);
 	await writeFile(screenshot, (await web.capturePage()).toPNG());
 

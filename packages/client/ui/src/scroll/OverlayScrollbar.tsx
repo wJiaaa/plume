@@ -214,8 +214,8 @@ export function OverlayScrollbar({
 				style={vertical ? { top: metrics.offset, height: metrics.size } : { left: metrics.offset, width: metrics.size }}
 				className={`absolute rounded-full bg-ink-faint ${
 					vertical
-						? `plume-thumb right-[2px] w-[6px] ${active ? "plume-thumb-active" : ""}`
-						: `plume-hthumb bottom-[2px] h-[6px] ${active ? "plume-hthumb-active" : ""}`
+						? `plume-thumb right-[2px] w-[4px] ${active ? "plume-thumb-active" : ""}`
+						: `plume-hthumb bottom-[2px] h-[4px] ${active ? "plume-hthumb-active" : ""}`
 				}`}
 			/>
 		</div>

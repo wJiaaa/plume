@@ -14,10 +14,10 @@
 
 | 组 | token（Tailwind 类名） | 用途 |
 |---|---|---|
-| 面 | `root` | 窗口最外层与停靠侧栏共用的底层，默认 `var(--plume-shell)`，数据皮肤可与正文区分开 |
+| 面 | `root` | 窗口最外层（活动栏、顶上那一条、卡片之间的缝）的底层，默认 `var(--plume-shell)`，数据皮肤可与正文区分开 |
 | | `root-image`（无 Tailwind 类） | 盖在 root 上的底纹，CSS 图像（可多层，如渐变），默认 `none`；只在数据皮肤接管配色时铺在外圈，固定在视口上，外圈、侧栏吸顶标题和 Windows 顶带取同一片。磨砂颗粒不是 token，是用户开关（外观偏好 `grain`），叠在它上面 |
 | | `shell` | 正文区 |
-| | `sidebar` | compact 浮出侧栏；停靠侧栏透明，共用窗口 root，不另铺一层 |
+| | `sidebar` | 侧栏一栏和窄窗口的抽屉取 `shell` 与它六四开（`.sidebar-surface`，styles.css，oklab 里混）；Windows、Linux 顶上那条带子的底色。不透明窗口的外圈是 `shell` |
 | | `card` | 卡片：工具卡片、用户消息；输入框（field）的底 |
 | | `card-hover` | 悬停、选中（侧栏的会话、设置导航、列表里选中的行）、输入框聚焦：前景色的薄纱，压在什么面上都看得出来 |
 | | `elevated` | 按下，比 card-hover 再深一档 |

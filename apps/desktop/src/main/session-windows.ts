@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, screen, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from "electron";
 import iconPath from "../assets/icon.png?asset";
 import type { Appearance } from "../shared/appearance.ts";
-import { ROW_OFFSET, windowChrome } from "../shared/window-chrome.ts";
+import { TOP_ROW_HEIGHT, windowChrome } from "../shared/window-chrome.ts";
 import { guardWebviews } from "./web-pages.ts";
 
 /** 是一段对话，不是第二个工作区：比主窗口小，放得下一列转录和输入框。 */
@@ -17,16 +17,6 @@ const CASCADE = 52;
 
 function alive(window: BrowserWindow): boolean {
 	return !window.isDestroyed() && !window.webContents.isDestroyed();
-}
-
-/**
- * 独立窗口（会话窗口、面板窗口）没有浮起的卡片，整面是内容的底色，标题栏贴着窗口顶：红绿灯不跟着卡片往下挪那 5px。
- * 也不铺毛玻璃——整面不透明，材质透不出来，只会在快速拉边时露出一条。
- */
-export function bareWindowChrome(color: string): ReturnType<typeof windowChrome> {
-	const base = windowChrome(process.platform, color);
-	const lights = base.trafficLightPosition;
-	return lights ? { ...base, trafficLightPosition: { x: lights.x, y: lights.y - ROW_OFFSET } } : base;
 }
 
 function sessionIdFrom(value: unknown): string | undefined {
@@ -94,7 +84,7 @@ export function registerSessionWindowsIpc(
 			icon: iconPath,
 			show: false,
 			backgroundColor: opaque(appearance),
-			...bareWindowChrome(opaque(appearance)),
+			...windowChrome(process.platform, opaque(appearance), TOP_ROW_HEIGHT),
 			webPreferences: {
 				preload: join(import.meta.dirname, "../preload/index.cjs"),
 				sandbox: true,

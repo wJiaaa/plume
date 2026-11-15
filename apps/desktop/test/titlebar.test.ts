@@ -7,7 +7,15 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hasHeaderBar, NATIVE_HEADER_HEIGHT, TOOLBAR_EDGE, TOP_ROW_HEIGHT, TRAFFIC_LIGHTS_END, windowChrome } from "../src/shared/window-chrome.ts";
+import {
+	hasHeaderBar,
+	MAIN_TOOLBAR_HEIGHT,
+	NATIVE_HEADER_HEIGHT,
+	TOOLBAR_EDGE,
+	TOP_ROW_HEIGHT,
+	TRAFFIC_LIGHTS_END,
+	windowChrome,
+} from "../src/shared/window-chrome.ts";
 import { OVERLAY_FALLBACK, overlayReserved, titlebarInsets } from "../src/renderer/titlebar.ts";
 
 /** 两端都没有系统按钮。 */
@@ -73,15 +81,17 @@ test("只有 macOS 没有顶上那条带子", () => {
 });
 
 test("macOS 的窗口外壳一点没变：只留红绿灯，没有 overlay", () => {
-	const chrome = windowChrome("darwin", "#f8f8f8");
+	const chrome = windowChrome("darwin", "#f8f8f8", MAIN_TOOLBAR_HEIGHT);
 	assert.equal(chrome.titleBarStyle, "hiddenInset");
-	assert.ok(chrome.trafficLightPosition);
 	assert.equal(chrome.titleBarOverlay, undefined);
+	// 灯高 14，在各自的顶行里居中：主窗口那一条 40，会话窗口、面板窗口的标题栏 44。
+	assert.deepEqual(chrome.trafficLightPosition, { x: 16, y: 13 });
+	assert.deepEqual(windowChrome("darwin", "#f8f8f8", TOP_ROW_HEIGHT).trafficLightPosition, { x: 16, y: 15 });
 });
 
 test("Windows、Linux 隐藏系统标题栏，系统按钮的高度和带子是同一个数，不是红绿灯的 44", () => {
 	for (const platform of ["win32", "linux"]) {
-		const chrome = windowChrome(platform, "#171717");
+		const chrome = windowChrome(platform, "#171717", MAIN_TOOLBAR_HEIGHT);
 		assert.equal(chrome.titleBarStyle, "hidden");
 		assert.equal(chrome.trafficLightPosition, undefined);
 		assert.deepEqual(chrome.titleBarOverlay, { color: "#171717", height: NATIVE_HEADER_HEIGHT });
