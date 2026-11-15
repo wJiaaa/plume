@@ -11,8 +11,7 @@
  * 不记下的话，下一次从会话重建出的是原文：前缀从那里断开、缓存白写，拒收的那份还会原样再被拒一次。
  */
 
-import type { CompactionRun, CompactionVia } from "@plume/contract";
-import type { Message, ToolResultMessage } from "@plume/llm/types";
+import type { CompactionRun, CompactionVia, Message, ToolResultMessage } from "@plume/contract";
 import type { ContextEstimate } from "./context-breakdown.ts";
 
 /** 一次压缩。 */

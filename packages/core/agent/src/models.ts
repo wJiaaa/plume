@@ -6,11 +6,11 @@
  * magpie 块由 Magpie 写，读入时合成一个供应商排在最后，写盘时再拿掉（见 magpie.ts）。
  */
 
-import type { AlwaysAllow, ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
+import type { AlwaysAllow, Message, ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
 import { isImageModel } from "@plume/llm/image-models";
 import { normalizeRetryPolicy, type RetryPolicy } from "@plume/llm/retry-policy";
 import { resolveModelThinkingOptions, resolveThinkingOption, THINKING_LEVELS } from "@plume/llm/thinking-options";
-import type { Message, ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
+import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
 import { text } from "./i18n.ts";
 import { isMagpie, magpieProvider } from "./magpie.ts";
 

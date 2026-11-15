@@ -10,8 +10,8 @@
  * 不认的字段（请求头、生图）读的时候丢掉。
  */
 
-import type { ModelEntry, ProviderImportEntry, ProviderImportPreview } from "@plume/contract";
-import type { ApiFormat, ModelPricing, ModelPricingTier } from "@plume/llm/types";
+import type { ApiFormat, ModelEntry, ProviderImportEntry, ProviderImportPreview } from "@plume/contract";
+import type { ModelPricing, ModelPricingTier } from "@plume/llm/types";
 import { isMagpie } from "./magpie.ts";
 import { checkProvider, type StoredProvider } from "./models.ts";
 

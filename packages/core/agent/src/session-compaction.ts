@@ -19,9 +19,10 @@ import type {
 	ModelContext,
 	SessionSummary,
 	ToolResultView,
+	ToolSpec,
 } from "@plume/contract";
 import type { PrefixSegment } from "@plume/llm/prefix-fingerprint";
-import type { ModelConfig, ProviderConfig, ThinkingLevel, ToolSpec } from "@plume/llm/types";
+import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
 import { cacheHotMs } from "@plume/llm/vendors";
 import { type ContextRecord, historyFor, latest, oversized } from "./compaction.ts";
 import { errorText, type PluginHost } from "./host.ts";

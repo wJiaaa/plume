@@ -8,9 +8,9 @@
  * 给结束换个原因，拦不下本来要跑的那一步，出错和用户停止也轮不到它说话。
  */
 
-import type { Log, ModelContext, NoticeLevel, StepEnd, StepVerdict, TurnStop } from "@plume/contract";
+import type { AssistantMessage, Log, Message, ModelContext, NoticeLevel, StepEnd, StepVerdict, ToolResultMessage, TurnStop } from "@plume/contract";
 import { isContextOverflow } from "@plume/llm/failure";
-import type { AssistantMessage, Message, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
+import type { ToolCallContent } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { text } from "./i18n.ts";
 import { Recovery } from "./recovery.ts";

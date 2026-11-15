@@ -17,7 +17,7 @@ import { activeModelCatalog } from "@plume/llm/model-catalog";
 import { comparePrefix, payloadSegments } from "@plume/llm/prefix-fingerprint";
 import { normalizeRetryPolicy } from "@plume/llm/retry-policy";
 import { resolveModelThinkingOptions, THINKING_LEVELS } from "@plume/llm/thinking-options";
-import type { MessageAttachment, ModelConfig, ProviderConfig, RequestOptions, UserContent, UserMessage } from "@plume/llm/types";
+import type { ModelConfig, ProviderConfig, RequestOptions } from "@plume/llm/types";
 import type {
 	AgentEvent,
 	AgentService,
@@ -27,6 +27,7 @@ import type {
 	BackgroundCallState,
 	HumanAnswer,
 	HumanRequest,
+	MessageAttachment,
 	PendingRequest,
 	PermissionMode,
 	AssistantMessage,
@@ -61,6 +62,8 @@ import type {
 	RevertPlan,
 	ToolDefinition,
 	TurnStop,
+	UserContent,
+	UserMessage,
 } from "@plume/contract";
 import { renameWithRetry, writeFileAtomic } from "./atomic-write.ts";
 import { type ContextRecord, emptyRecord, historyFor, keptRecord } from "./compaction.ts";

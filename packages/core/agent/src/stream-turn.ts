@@ -5,7 +5,8 @@
  */
 
 import { streamAssistant } from "@plume/llm";
-import type { AssistantMessage, LlmContext, ModelConfig, ProviderConfig, RequestOptions } from "@plume/llm/types";
+import type { AssistantMessage } from "@plume/contract";
+import type { LlmContext, ModelConfig, ProviderConfig, RequestOptions } from "@plume/llm/types";
 import type { RetryInfo, RetrySettled } from "./hiccups.ts";
 
 /** 草稿快照最快多久推一次：每个 token 都推的话，长回复会把整条消息来回复制几千遍。 */

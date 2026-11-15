@@ -8,7 +8,8 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { activeModelCatalog, resetModelCatalog } from "@plume/llm/model-catalog";
-import type { AssistantMessage, Message, ModelConfig, ProviderConfig } from "@plume/llm/types";
+import type { AssistantMessage, Message } from "@plume/contract";
+import type { ModelConfig, ProviderConfig } from "@plume/llm/types";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
 import { syncModelCatalog } from "../src/model-catalog-sync.ts";

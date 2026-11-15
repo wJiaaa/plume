@@ -11,6 +11,7 @@ import type {
 	ApprovalContent,
 	ApprovalDecision,
 	ApprovalRequest,
+	AssistantMessage,
 	BackgroundChannel,
 	BackgroundJobInput,
 	CancelledDetails,
@@ -29,11 +30,12 @@ import type {
 	ToolDefinition,
 	ToolExecution,
 	ToolOutput,
+	ToolResultMessage,
 	ToolRun,
 	TrackedJob,
 	WakeupInput,
 } from "@plume/contract";
-import type { AssistantMessage, ToolCallContent, ToolResultMessage } from "@plume/llm/types";
+import type { ToolCallContent } from "@plume/llm/types";
 import { errorText, type PluginHost } from "./host.ts";
 import { REJECTED } from "./declined.ts";
 import { sameGrant } from "./models.ts";

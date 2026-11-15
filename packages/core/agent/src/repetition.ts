@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { Message, ToolResultMessage } from "@plume/llm/types";
+import type { Message, ToolResultMessage } from "@plume/contract";
 
 const REPEAT_WARN = 3;
 const REPEAT_STOP = 10;

@@ -12,8 +12,8 @@ import { failureOf } from "@plume/llm/failure";
 import { imageDimensions } from "@plume/llm/image-dimensions";
 import { isImageModel } from "@plume/llm/image-models";
 import { generateImages } from "@plume/llm/images";
-import type { AssistantMessage, ModelConfig, ProviderConfig, StreamEvent } from "@plume/llm/types";
-import type { FetchModelsResult, ProviderTestResult } from "@plume/contract";
+import type { ModelConfig, ProviderConfig, StreamEvent } from "@plume/llm/types";
+import type { AssistantMessage, FetchModelsResult, ProviderTestResult } from "@plume/contract";
 import { text } from "./i18n.ts";
 import { providerConfig, type StoredProvider, thinkingFor } from "./models.ts";
 
