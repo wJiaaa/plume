@@ -869,7 +869,6 @@ export const en = {
 	"messageActions.forkFailed": "Could not fork",
 	"transcript.damagedRecord": "This record could not be read — skipped",
 	"running.outputTokens": { one: "↓ {n} token", other: "↓ {n} tokens" },
-	"running.awaitingModel": "Waiting for the model",
 	"running.modelSilent": "No response from the model yet",
 	"running.noNewOutput": "No new output for {n}s",
 	"sessionStatus.waiting": "Waiting on you",

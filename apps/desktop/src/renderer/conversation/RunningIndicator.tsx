@@ -24,7 +24,7 @@ const TOOL_HOLD_MS = 2000;
  */
 const STALL_MS = 4000;
 
-/** 等第一个字、或者断流，到这么久换成警示色：多半不是在想，是请求出了状况。 */
+/** 等第一个字到这么久才说「静候回音」、断流到这么久换成警示色：多半不是在想，是请求出了状况。 */
 const SILENT_MS = 15_000;
 
 /**
@@ -152,12 +152,12 @@ interface Status {
 	warn: boolean;
 }
 
-/** 模型那一侧没在出字时，直说是哪一种没出：还没开口，还是写着写着停了。在写、在跑工具、在重连时没有。 */
+/**
+ * 模型那一侧没在出字时，直说是哪一种没出：还没开口，还是写着写着停了。在写、在跑工具、在重连时没有。
+ * 还没开口的等到 `SILENT_MS` 才说，一出来就是警示色：等第一个字本来就要些时候，思考球和秒数已经在走，之前再说一句只是把正常的等待报成一件事。
+ */
 function statusFor(stage: Stage, quiet: number): Status | null {
-	if (stage === "awaiting") {
-		const silent = quiet >= SILENT_MS;
-		return { key: silent ? "silent" : "awaiting", text: translate(silent ? "running.modelSilent" : "running.awaitingModel"), warn: silent };
-	}
+	if (stage === "awaiting") return quiet >= SILENT_MS ? { key: "silent", text: translate("running.modelSilent"), warn: true } : null;
 	if (stage === "stalled") return { key: "stalled", text: translate("running.noNewOutput", { n: Math.floor(quiet / 1000) }), warn: quiet >= SILENT_MS };
 	return null;
 }

@@ -835,7 +835,6 @@ export const zhCN = {
 	"messageActions.forkFailed": "分叉失败",
 	"transcript.damagedRecord": "这条记录读不出来，已跳过",
 	"running.outputTokens": "↓ {n} tokens",
-	"running.awaitingModel": "静候回音",
 	"running.modelSilent": "静候回音",
 	"running.noNewOutput": "静候下文 {n} 秒",
 	"sessionStatus.waiting": "等待你的批准",
