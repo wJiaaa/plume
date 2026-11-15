@@ -44,7 +44,7 @@ export interface Appearance {
 	chatBackgroundEffect?: ChatBackgroundEffect;
 	chatBackgroundOpacity?: number;
 	chatBackgroundFit?: ChatBackgroundFit;
-	/** 磨砂：整个窗口（外圈、停靠侧栏、对话区）叠一层细噪点，和皮肤、背景图都无关；有图时叠在图上。 */
+	/** 磨砂：整个窗口（外圈、对话区）叠一层细噪点，和皮肤、背景图都无关；有图时叠在图上。 */
 	grain?: boolean;
 }
 

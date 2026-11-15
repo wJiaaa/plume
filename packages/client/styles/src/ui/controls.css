@@ -390,11 +390,3 @@ div.plume-field {
 		pointer-events: auto;
 	}
 }
-
-/* ---------------------------------------------------------------------------
- * 页面自己画的顶行（`PageTopRow`）：整行拖窗口，行里能点的东西挖成不拖动的。
- * ------------------------------------------------------------------------- */
-
-.plume-top-row :is(button, a[href], input, select, textarea, [role="button"], [contenteditable="true"]) {
-	app-region: no-drag;
-}

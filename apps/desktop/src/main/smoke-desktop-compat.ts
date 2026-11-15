@@ -521,7 +521,7 @@ export async function checkDesktopCompat(options: {
 			// 让位只写在顶行自己身上，不挂成外层的可继承变量：一变，下面整棵树都要重算样式（见 `ToolbarOverlap`）。
 			assert.ok(
 				await page<boolean>(
-					`(() => { const style = getComputedStyle(document.querySelector('[data-panel-layout] > main [data-plume-session]')); return ['--plume-top-row-inset', '--toolbar-overlap'].every((name) => style.getPropertyValue(name) === ''); })()`,
+					`(() => { const style = getComputedStyle(document.querySelector('[data-panel-layout] > main [data-plume-session]')); return style.getPropertyValue('--toolbar-overlap') === ''; })()`,
 				),
 				`${phase}：对话卡片里没有可继承的让位变量`,
 			);

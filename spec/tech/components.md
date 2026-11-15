@@ -29,7 +29,7 @@
 | `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |
 | `useAnnotator`、`AnnotateCanvas`、`AnnotateToolbar` | 图片标注：标记清单和撤销（hook）、画标记的画布、深色工具条；看图器和截图插件共用 | `ui.css` 的 `.plume-image-*`、`.plume-annotate-*`（压在图上，颜色不跟主题） |
 | `useMovableBar`、`useToolbarPlacement`、`HANDLES` 等选区几何 | 标注工具条的落点和拖动：看图器里贴窗口底边、截图浮层里跟着选区；选区的手柄、移动、缩放 | 无 |
-| `PageTopRow` | 自己画顶行的页面（`ui.page` 的 `topRow`）每一栏最上面那一行：顶行高、整行拖窗口、行里的控件不拖动、贴左边那一栏给红绿灯让位 | Tailwind 类，`ui/controls.css` 的 `.plume-top-row` |
+| `PageTopRow` | 页面每一栏最上面那一行（两栏页面的栏头）：顶行高、左右内边距，不拖窗口（拖窗口归宿主的标题栏） | Tailwind 类 |
 
 只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
 

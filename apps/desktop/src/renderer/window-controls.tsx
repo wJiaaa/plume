@@ -24,7 +24,7 @@ export function toolbarReserved(start: number, toggle: boolean): number {
 /**
  * 卡片顶行左端要给浮在卡片角上的窗口按钮让多宽（像素）：侧栏收起时是 `toolbarReserved` 减去活动栏和卡片的边距，开着或有顶上那条带子时是 0。
  *
- * 只交给用它的那几行，由它们写在自己身上（顶行的 `padding-left`、页面的 `--plume-top-row-inset`），不挂成外层的变量：
+ * 只交给用它的那几行，由它们写在自己身上（顶行的 `padding-left`），不挂成外层的变量：
  * 可继承的变量一变，它底下每个元素都要重算样式。挂在外壳上时，开合侧栏那一下要重算整页六千多个元素，量到 27ms（120Hz 下丢三帧）。
  */
 export const ToolbarOverlap = createContext(0);
@@ -107,16 +107,14 @@ export function WindowHeader({ fill, insets, children }: { fill: "bg-sidebar" | 
 	const symbol = useRef<HTMLSpanElement>(null);
 	useWindowOverlay(band, symbol);
 	/*
-	 * 带子归窗口：浮层（弹层、悬停卡）停在它下面，不铺到系统按钮和拖窗口的那一条上（@plume/ui 的 `chromeTop`）；
-	 * 页面自己画的顶行（`PageTopRow`）不再拖窗口。弹层在 portal 里，量不到布局，所以写在根元素上。
+	 * 带子归窗口：浮层（弹层、悬停卡）停在它下面，不铺到系统按钮和拖窗口的那一条上（@plume/ui 的 `chromeTop`）。
+	 * 弹层在 portal 里，量不到布局，所以写在根元素上。
 	 */
 	useLayoutEffect(() => {
 		const root = document.documentElement;
 		root.style.setProperty("--plume-chrome-top", `${NATIVE_HEADER_HEIGHT}px`);
-		root.dataset.plumeWindowHeader = "";
 		return () => {
 			root.style.removeProperty("--plume-chrome-top");
-			delete root.dataset.plumeWindowHeader;
 		};
 	}, []);
 	return (

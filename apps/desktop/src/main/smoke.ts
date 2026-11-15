@@ -1688,7 +1688,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await delay(300);
 		await capture(window, join(outDir, "smoke-git.png"));
 
-		// 定时任务：插件加的页面排在侧栏的去处里；新建的任务记下会话的工作目录，存进插件的数据目录。
+		// 定时任务：插件加的页面排在活动栏里；新建的任务记下会话的工作目录，存进插件的数据目录。
 		await click('[data-nav="page:plume.scheduled/scheduled"]');
 		await until(`document.querySelector('[data-scheduled-add]') !== null`, "打开定时任务");
 		await click("[data-scheduled-add]");

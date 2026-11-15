@@ -325,7 +325,7 @@ async function main() {
 	const tokens = new Set(
 		[...stripComments(rootBlock, true).matchAll(/--plume-([\w-]+)\s*:/g)]
 			.map((match) => match[1])
-			.filter((name) => !/^(?:k|k-.*|t-.*|e-.*|shadow-.*|control|menu-inset|menu-row|composer-.*|content|frame-pad|pane-chrome)$/.test(name)),
+			.filter((name) => !/^(?:k|k-.*|t-.*|e-.*|shadow-.*|control|menu-inset|menu-row|composer-.*|content|pane-chrome)$/.test(name)),
 	);
 	const skinText = await readFile(skinFile, "utf8");
 	const union = skinText.slice(skinText.indexOf("export type SkinToken ="), skinText.indexOf(";", skinText.indexOf("export type SkinToken =")));

@@ -777,11 +777,11 @@ export function useLiveRefresh(refresh: () => void | Promise<void>, running: boo
 ```tsx
 /**
  * 页面每一栏最上面那一行（两栏页面的栏头）：和窗口顶上那一条一样高，在正文卡片里、宿主的标题栏下面。
- * 整行拖得动窗口、双击能缩放，行里能点的控件（按钮、链接、输入框）自动不拖动，不用一个个标。贴着页面左边的那一栏给
- * `start`（两栏页面的右栏在窄窗口里换成整页时也给）：左边多让出 `--plume-top-row-inset`，宿主不给时是 12px。
- * 高度、内边距之外的排法（间距、两端对齐）由 `className` 补；行里不折行，放不下的东西自己截断。
+ * 只是一行栏头，不拖窗口：拖窗口、双击缩放归卡片外面宿主的标题栏，页面里这一行放按钮、标签都不用标 no-drag。
+ * 高度取宿主在页面外层给的 `--plume-top-row-height`；高度、左右内边距之外的排法（间距、两端对齐）由 `className` 补；
+ * 行里不折行，放不下的东西自己截断。
  */
-export function PageTopRow({ start = false, className = "", ...rest }: { start?: boolean; className?: string; children?: ReactNode; ref?: Ref<HTMLElement> } & HTMLAttributes<HTMLElement>)
+export function PageTopRow({ className = "", ...rest }: { className?: string; children?: ReactNode; ref?: Ref<HTMLElement> } & HTMLAttributes<HTMLElement>)
 ```
 
 ### `ResizeHandle`

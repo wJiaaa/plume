@@ -9,7 +9,7 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { clickVisible, clickVisibleIn, containing } from "./smoke-kit.ts";
+import { clickVisible, clickVisibleIn, containing, inDragRegion } from "./smoke-kit.ts";
 
 /** 从已有的闲置会话进入；只替换 GitLab 服务，账号、列表、评论和草稿都走实际插件。 */
 export async function checkPullRequests(options: {
@@ -263,6 +263,18 @@ export async function checkPullRequests(options: {
 		await returnToSession();
 		await openPage();
 		await selectPr();
+		// 两栏的栏头只是栏头，拖窗口归卡片上面宿主的标题栏；列表右边的拖把用方向键加宽，双击回到默认宽度。
+		for (const row of ["pr-list", "pr-detail"]) {
+			assert.equal(await page<boolean>(inDragRegion(`[data-plume-toprow="${row}"]`)), false, `${row} 的栏头不拖窗口`);
+		}
+		const side = `${root} .plume-pr-side`;
+		const sideWidth = `Math.round(document.querySelector('${side}').getBoundingClientRect().width)`;
+		const handle = `document.querySelector('${side} > [role="separator"]')`;
+		await until(`${sideWidth} === 300`, "列表是默认宽度");
+		await page(`${handle}.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))`);
+		await until(`${sideWidth} === 316`, "拖把加宽列表");
+		await page(`${handle}.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+		await until(`${sideWidth} === 300`, "双击拖把回到默认宽度");
 		await until(
 			`document.querySelector('${detail}')?.textContent.includes('failed') && ['1 项失败', '1 failed'].some(text => document.querySelector('${detail}')?.textContent.includes(text))`,
 			"失败流水线与失败检查展开",

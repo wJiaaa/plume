@@ -18,6 +18,23 @@ export default {
 - **会话里的**：工具结果的 `details`（卡片的 `result.details`），以及面板、页面拿到的 `session`（只读视图：面板是标签归属会话，页面是当前会话；`summary` 里有 `id`、`title`、`cwd`、`running` 等，`messages` 是全部消息）。
 - **逻辑入口开的**：`ui.remote()`（见下）。
 
+## 窗口里能放东西的地方
+
+主窗口从左到右：活动栏、侧栏（只有对话和设置有）、正文卡片、面板区；侧栏、正文卡片、面板区顶上连成一条顶行，拖窗口归它。插件能放东西的位置：
+
+| 位置 | 能放什么 | 用什么 |
+| --- | --- | --- |
+| 活动栏（最左边一列图标） | 一个整页，图标右上角挂数 | `ui.page`、`ui.pageBadge`、`ui.openPage` |
+| 侧栏（对话的项目和会话列表） | 会话行首空闲时的记号 | `ui.sessionMark` |
+| 顶行（正文卡片上面） | 对话：会话标题旁的局部控件、会话菜单一项、环境卡片的一节；页面：只写页面名，插件放不进东西 | `ui.sessionToolbar`、`ui.sessionMenuItem`、`ui.environmentSection` |
+| 对话的转录 | 工具卡片和说法、等人卡、代码块、跟着会话的卡片、回复下面的卡片和按钮、欢迎页那一行 | `ui.toolCard`、`ui.toolLine`、`ui.requestCard`、`ui.codeBlock`、`ui.conversationCard`、`ui.turnFooter`、`ui.replyAction`、`ui.welcomeLine` |
+| 输入框周围 | 底下那排一格、项目签那一行一格、上方独占一行、灰字建议 | `ui.composerItem`、`ui.composerChip`、`ui.composerAbove`、`ui.composerHint` |
+| 面板区（对话右边，窄窗口里在下面） | 带标签的面板，能弹成独立窗口 | `ui.panel`、`ui.openPanel` |
+| 设置 | 设置页的一节，或单独占设置侧栏一行 | `ui.settingsSection`、`ui.openSettings` |
+| 窗口外 | 提示条、截屏浮层、钉在桌面上的小窗口 | `ui.notify`、`ui.screen` |
+
+页面整块都是插件的：顶行由宿主画（页面名、拖窗口），页面里没有拖窗口的地方，不用写 `app-region`，也不用给窗口按钮让位。页面里要分栏、要列表，自己画，见「页面」。
+
 ## ui
 
 | 成员 | 用途 |
@@ -281,24 +298,44 @@ ui.page("scheduled", ScheduledPage, { title: (locale) => MESSAGES[locale].title,
 
 那一格右上角可以挂一个数，告诉人这一页上有东西在等他看（定时任务没人看见的失败）：`ui.pageBadge("scheduled", { count, label })`，数变了再调一次，`null` 或 0 拿掉；`label` 给读屏和悬停提示。人正在那一页上时不画，停用时一起拿掉。带 `attention: true` 时同时在通知菜单中显示该页面的待处理事项，`label` 是通知标题，点击打开该页面。数要跟着逻辑入口走、不等人打开页面，所以在 `apply` 里一直连着逻辑入口的 `watch`，每次推来时调它。别处的按钮（输入框上方那一行的「查看」）经 `ui.openPage(id)` 把人带到这一页。
 
-宿主在正文卡片上面画标题栏（写页面名、拖窗口），和侧栏、面板区的顶行连成窗口顶上的一条；页面从卡片的顶边开始。怎么排：
+宿主在正文卡片上面画标题栏（写页面名、拖窗口），和侧栏、面板区的顶行连成窗口顶上的一条；页面从卡片的顶边开始，自己不用留拖窗口的地方，页面里也没有哪一块拖得动窗口。怎么排：
 
 - 单栏、标题写在内容里的页面（定时任务、画廊的相册）：内容直接从卡片顶边开始。
-- 左边列表、右边详情这种两栏页面：每一栏最上面放一个 `PageTopRow`（`@plume/ui`）当栏头，分隔线从卡片顶边通到底；给 `topRow: true` 说明页面自带栏头（不影响排法）。
+- 左边列表、右边详情这种两栏页面：每一栏最上面放一个 `PageTopRow`（`@plume/ui`）当栏头，分隔线从卡片顶边通到底；左边那一栏的宽度让人拖，用 `ResizeHandle`。
 
 ```tsx
-ui.page("pull-requests", PullRequestsPage, { title, icon: GitPullRequest, topRow: true });
+ui.page("pull-requests", PullRequestsPage, { title, icon: GitPullRequest });
 
-// 贴着页面左边的那一栏给 `start`。
-<PageTopRow start>
-	<Text size="label" weight="medium">{text.title}</Text>
-	<span className="my-spacer" />
-	<IconButton label={text.refresh} icon={<RotateCw size={13} />} onClick={reload} />
-</PageTopRow>
-<PageTopRow>…右栏的标题和按钮…</PageTopRow>
+const LIST = { key: "my-plugin.list-width", initial: 300, min: 220, max: 480 };
+
+function PullRequestsPage() {
+	const [width, setWidth] = useState(() => {
+		const saved = Number(localStorage.getItem(LIST.key));
+		return saved >= LIST.min && saved <= LIST.max ? saved : LIST.initial;
+	});
+	useEffect(() => localStorage.setItem(LIST.key, String(width)), [width]);
+	return (
+		<div className="my-page">
+			{/* 左栏 `position: relative`、不裁切溢出：拖把一大半悬在右栏上。左栏要裁切（开合动画）时在外面再包一层放拖把。 */}
+			<aside className="my-list" style={{ width }}>
+				<PageTopRow>
+					<Text size="label" weight="medium">{text.title}</Text>
+					<span className="my-spacer" />
+					<IconButton label={text.refresh} icon={<RotateCw size={13} />} onClick={reload} />
+				</PageTopRow>
+				…
+				<ResizeHandle edge="end" width={width} min={LIST.min} max={LIST.max} onResize={(next) => setWidth(Math.round(next))} onReset={() => setWidth(LIST.initial)} label={text.resizeList} />
+			</aside>
+			<main className="my-detail">
+				<PageTopRow>…右栏的标题和按钮…</PageTopRow>
+				…
+			</main>
+		</div>
+	);
+}
 ```
 
-`PageTopRow` 管高度、左右内边距、整行拖窗口、行里的按钮和输入框挖成不拖动的，不用自己写 `app-region`；间距、两端对齐经 `className` 补。每一栏都要有这一行，空着的也放一个，不然那一段拖不动窗口。Windows、Linux 上窗口顶上另有一条拖窗口的带子，宿主让这一行不拖动，插件不用分平台处理。行高取宿主在页面外层给的 `--plume-top-row-height`（不是 token，皮肤改不了）；主窗口的窗口按钮在页面外面的顶行里，页面左上角不用给它们让位，两栏页面各栏按自己的宽度写。
+`PageTopRow` 只管高度和左右内边距，是一行普通的栏头：不拖窗口，行里的按钮、输入框照常点，不用写 `app-region`；间距、两端对齐经 `className` 补。行高取宿主在页面外层给的 `--plume-top-row-height`（不是 token，皮肤改不了），两栏的栏头一样高，分隔线左右对齐。窗口按钮在页面外面的顶行里，页面左上角不用给它们让位，各栏按自己的宽度写。拖过的宽度插件自己存（上面存在 `localStorage`，键名带上插件名），双击拖把回到默认宽度；窄窗口里两栏换成整页时不画拖把。
 
 ## 输入框里的一格
 

@@ -1,5 +1,5 @@
 /**
- * 插件界面入口：加载、按工具名登记卡片、画进对话；登记面板，画进面板区；登记页面，排进侧栏的去处；
+ * 插件界面入口：加载、按工具名登记卡片、画进对话；登记面板，画进面板区；登记页面，排进活动栏；
  * 登记输入框底下的一格、上方项目签那一行的一格、侧栏会话行首的记号、删除确认框里补的话和设置分区；登记截图浮层、钉图窗口的组件（截屏窗口里只画它们，见 screen.tsx）。
  *
  * 规则（见 agent-extension.md 第 5 节）：
@@ -443,8 +443,6 @@ export interface PageEntry {
 	title: LocalizedText;
 	icon?: PageOptions["icon"];
 	order: number;
-	/** 页面自己画顶行，见 PageOptions.topRow。 */
-	topRow: boolean;
 	component: ComponentType<PageProps>;
 }
 
@@ -454,9 +452,8 @@ function registerPage(plugin: string, id: unknown, component: unknown, options: 
 	// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
 	if (typeof id !== "string" || id === "") throw new Error("页面需要 id");
 	if (typeof component !== "function") throw new Error(`页面 ${id} 需要一个组件`);
-	const { title, icon, order = 0, topRow = false } = (options ?? {}) as Record<string, unknown>;
+	const { title, icon, order = 0 } = (options ?? {}) as Record<string, unknown>;
 	if (!validTitle(title)) throw new Error(`页面 ${id} 需要标题`);
-	if (typeof topRow !== "boolean") throw new Error(`页面 ${id} 的 topRow 需要是布尔值`);
 	if (icon !== undefined && typeof icon !== "function" && (typeof icon !== "object" || icon === null)) throw new Error(`页面 ${id} 的图标需要是组件`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	const key = `${plugin}/${id}`;
@@ -467,7 +464,6 @@ function registerPage(plugin: string, id: unknown, component: unknown, options: 
 		title,
 		...(icon === undefined ? {} : { icon: icon as PageEntry["icon"] }),
 		order,
-		topRow,
 		component: component as ComponentType<PageProps>,
 	};
 	pages.put(plugin, entry, { key, order });

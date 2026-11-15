@@ -374,7 +374,7 @@
 	 * 侧栏开合时，标题栏给窗口按钮让的宽度（这几行的 `padding-left`，见 window-controls.tsx 的 `ToolbarOverlap`）和侧栏宽度
 	 * 同一时长、同一缓动地滑：标题的位置是卡片左边缘加内边距，两者走同一条曲线，标题就一路朝一个方向走，不先跳开、不压到按钮上。
 	 */
-	[data-sidebar-sliding] :is([data-toolbar-inset], .plume-top-row) {
+	[data-sidebar-sliding] [data-toolbar-inset] {
 		transition: padding-left var(--plume-t-slow) var(--plume-e-out);
 	}
 	/*

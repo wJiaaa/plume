@@ -192,18 +192,11 @@ export interface PageProps {
 }
 
 export interface PageOptions {
-	/** 页面的名字：活动栏里那一格的悬停提示。 */
+	/** 页面的名字：活动栏里那一格的悬停提示，也写在正文卡片上面宿主的标题栏里。 */
 	title: LocalizedText;
 	/** 活动栏那一格的图标，颜色跟着文字走（currentColor）；不给用产品的默认图标。 */
 	icon?: ComponentType<{ size?: number; className?: string }>;
 	order?: number;
-	/**
-	 * 页面每一栏顶上自己画一行 `@plume/ui` 的 `PageTopRow`（左边列表、右边详情的两栏页面），默认 false。
-	 *
-	 * 宿主的标题栏（写页面名、拖窗口）在正文卡片外面、窗口顶上那一条里，页面总是从卡片的顶边开始，给不给这一项都一样排；
-	 * 只是说明页面自己带了栏头。宿主在页面外层给 `--plume-top-row-height`（`PageTopRow` 的高度）。
-	 */
-	topRow?: boolean;
 }
 
 /**
@@ -977,7 +970,8 @@ export interface UiContext {
 	panel(id: string, component: ComponentType<PanelProps>, options: PanelOptions): void;
 	/**
 	 * 往窗口最左边的活动栏里加一个页面：活动栏一格图标，点了整个界面换成这个页面。页面没有侧栏，活动栏右边整块都给它；
-	 * 要列表的页面在自己里面画（左边列表、右边详情，每栏顶上一行 `PageTopRow`）。按 order 从小到大排（默认 0，相同时按注册先后），
+	 * 宿主在正文卡片上面画标题栏（写页面名、拖窗口），页面从卡片的顶边开始，自己不用留拖窗口的地方。
+	 * 要列表的页面在自己里面画（左边列表、右边详情，每栏顶上一行 `PageTopRow` 当栏头，列表的宽度用 `ResizeHandle` 让人拖）。按 order 从小到大排（默认 0，相同时按注册先后），
 	 * 排在产品自己的「对话」后面。id 在插件内唯一；标题给函数的，产品每次按当前界面语言调用它。
 	 */
 	page(id: string, component: ComponentType<PageProps>, options: PageOptions): void;
