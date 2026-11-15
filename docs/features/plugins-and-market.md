@@ -29,7 +29,7 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 - 安装下载这台机器（平台、架构）的那份包，核对大小和 SHA-256，对不上或解不开都不装，装着的那份不动；解进数据目录的 `plugins/<目录名>`，agent 进程当场加载，不用重启；卸载当场撤下。
 - 按版本号判断有没有更新：市场里的版本比装着的新才算（插件仓库保证发出去的版本内容不变）；自动更新默认开，启动后一会儿、此后每半小时、每次打开市场时各检查一次；有会话在跑（或还有没结束的一次性后台命令）时等它们空闲（每分钟再看一次）再换，人点「更新」的不等。
 - 换插件（安装、更新、本地上传、卸载）时先把旧目录挪开再放入新目录，失败则全部还原、重新加载旧插件，成功后才删除旧目录。Windows 上改名会重试，文件被占用时提示关掉占用的程序。
-- 带原生模块的插件（如终端）在 Plume 开着时也能更新、卸载：Windows 上原生模块按内容复制到数据目录的 `native-cache/` 再加载，插件目录不被锁住。
+- 带原生模块的插件在 Plume 开着时也能更新、卸载：Windows 上原生模块按内容复制到数据目录的 `native-cache/` 再加载，插件目录不被锁住。
 - 本地上传的插件（「从本地上传」、`plume-plugin install`/`dev`）装在数据目录的 `local-plugins/<目录名>`，能卸载，不跟市场更新。同名时只认一份，顺序是内置、本地上传、市场装的：本地上传的压住市场装的同名插件，市场那份留在原处、不加载也不更新，卸掉本地那份后接着用市场那份（落后了照常提示更新）。
 - 开发版（`pnpm dev`）和装好的应用用同一个线上市场，装好的插件、停用名单、自动更新开关和插件数据也是同一份。
 
@@ -47,11 +47,11 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 
 ## 内置插件
 
-随应用提供、不能停用：工具（`plume.tools`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、智能标题（`plume.title`）、开新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、会话环境（`plume.environment`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）、浏览器（`plume.browser`）。
+随应用提供、不能停用：工具（`plume.tools`）、自动审核（`plume.approval`）、向你提问（`plume.ask-user`）、系统提示词（`plume.prompt`）、上下文压缩（`plume.compaction`）、待办清单（`plume.todo`）、技能（`plume.skills`）、命令（`plume.commands`）、网页搜索（`plume.web`）、智能标题（`plume.title`）、开新会话（`plume.spawn-session`）、Git（`plume.git`）、MCP（`plume.mcp`）、文件交付（`plume.delivery`）、运行诊断（`plume.diagnostics`）、会话环境（`plume.environment`）、文档预览（`plume.documents`）、侧边聊天（`plume.side-chat`）、子智能体（`plume.subagents`）、计划模式（`plume.plan`）、浏览器（`plume.browser`）、终端（`plume.terminal`）。
 
 ## 市场插件
 
-终端、网页预览、原生界面块、定时任务、会话互通、代码审阅、钩子、记忆、语言服务、索引库、下一步建议、生图与画廊、屏幕截图、使用统计、会话摘要、拉取请求、SSH、换肤工坊、IM 机器人、每日一句。各自的行为见对应模块文件。
+网页预览、原生界面块、定时任务、会话互通、代码审阅、钩子、记忆、语言服务、索引库、下一步建议、生图与画廊、屏幕截图、使用统计、会话摘要、拉取请求、SSH、换肤工坊、IM 机器人、每日一句。各自的行为见对应模块文件。
 
 ### IM 机器人
 

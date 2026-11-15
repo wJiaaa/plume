@@ -1133,7 +1133,7 @@ export interface UiContext {
 	/**
 	 * 本体文件树等处「在终端中打开」由谁接：人点了以后调 `open(directory, sessionId)`，`directory` 是要进去的目录（绝对路径），
 	 * `sessionId` 是入口所在的会话。入口是本体的，终端是插件的，所以按种类登记成接手者。每个插件一个、再登记换掉上一个，
-	 * 几个插件都登记时最后登记的接，它停用后还给前一个；没人登记时本体提示去装终端插件，`open` 抛错时把错误弹成提示条。
+	 * 几个插件都登记时最后登记的接，它停用后还给前一个；没人登记时本体提示终端插件没有加载，`open` 抛错时把错误弹成提示条。
 	 */
 	terminalOpener(open: (directory: string, sessionId: string) => void | Promise<void>): void;
 	/**

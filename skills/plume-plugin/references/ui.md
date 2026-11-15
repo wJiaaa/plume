@@ -439,7 +439,7 @@ ui.linkOpener({
 - `ui.documentViewer(extensions, Component)`：注册只读文档预览，扩展名小写且不带点；同扩展名后注册的生效，停用后恢复前一个。
 - `ui.DocumentPreview`：`{ name, identity, readBytes(signal), fallback? }`，文件面板和插件共用的文档展示；调用方负责读取与权限校验，只交数据、不交磁盘路径，identity 随文件版本改变；无匹配或渲染失败回到 fallback。
 - `ui.ProjectOpener`：以 `{ path }` 显示目录的打开方式，复用文件预览的默认应用与选择菜单；只有用户点击才调用系统打开。
-- `ui.terminalOpener(open)`：为文件树等入口登记「在终端中打开」：人点击后调用 `open(directory, sessionId)`，目录和归属会话由宿主提供。一个插件保留一个处理器，最新登记的优先；停用后恢复前一个，没有处理器时宿主提示安装并启用终端插件，执行失败弹提示条。
+- `ui.terminalOpener(open)`：为文件树等入口登记「在终端中打开」：人点击后调用 `open(directory, sessionId)`，目录和归属会话由宿主提供。一个插件保留一个处理器，最新登记的优先；停用后恢复前一个，没有处理器时宿主提示终端插件没有加载，执行失败弹提示条。
 - `ui.terminalRunner(run)`：为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener`。
 - `ui.openPath(path)`：用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令。
 - `ui.revealPath(path)`：用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回（媒体图用 `ctx.media.save` 交回、记在 `details` 里的 `path`）。菜单上的字插件自带，按平台叫访达、资源管理器、文件管理器（`@plume/ui` 的 `macKeyboard()`，`navigator.platform` 以 `Win` 开头是 Windows）。

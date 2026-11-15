@@ -1,7 +1,7 @@
 import type { MessageCatalog } from "./zh-CN.ts";
 
 export const en = {
-	"fileAction.noTerminal": "Install and enable the terminal plugin first.",
+	"fileAction.noTerminal": "The terminal plugin isn't loaded.",
 	"codeBlock.runInTerminal": "Run it in the terminal",
 	"notice.project-config-not-object": "{path} doesn't contain a JSON object.",
 	"notice.project-config-invalid-json": "{path} isn't valid JSON: {error}",

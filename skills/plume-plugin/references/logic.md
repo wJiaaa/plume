@@ -754,11 +754,11 @@ ctx.serve(api);
 
 ## 原生依赖
 
-`node-pty` 这类原生模块写进 `package.json` 的 `dependencies`。在用到时才 `require`，不在 `apply` 里、也不在文件顶上静态导入：加载失败（架构不对、系统库太旧）时只影响那一个功能，不会让整个插件 failed。例子见 `plugins/terminal/src/index.ts`。
+`node-pty` 这类原生模块写进 `package.json` 的 `dependencies`。在用到时才 `require`，不在 `apply` 里、也不在文件顶上静态导入：加载失败（架构不对、系统库太旧）时只影响那一个功能，不会让整个插件 failed。例子见 `packages/builtin/terminal/src/index.ts`。
 
 ## 测试
 
-插件自己的纯逻辑（判断、存储、解析）可以在插件目录里写测试（如 `plugins/terminal` 用 vitest，`package.json` 里加 `test` 脚本）；`pnpm check` 会跑各包的 `test`。
+插件自己的纯逻辑（判断、存储、解析）可以在插件目录里写测试（如 `terminal` 插件用 vitest，`package.json` 里加 `test` 脚本）；`pnpm check` 会跑各包的 `test`。
 
 ## 只读运行观察和后台任务
 

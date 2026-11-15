@@ -27,7 +27,7 @@ export const zhCN = {
 	"override.looseningIgnored": "会放宽权限，已被忽略：仓库里的配置只能收紧权限，放宽要在本机的设置里改",
 	"override.repoBanned": "不允许放在仓库文件里，已被忽略",
 	"fileAction.exists": "「{name}」已存在",
-	"fileAction.noTerminal": "请先安装并启用终端插件。",
+	"fileAction.noTerminal": "终端插件没有加载。",
 	"codeBlock.runInTerminal": "在终端运行",
 	"fileAction.replaceDetail": "替换会覆盖那里已有的内容，无法撤销。",
 	"fileAction.one": "「{name}」",

@@ -9,9 +9,10 @@ onlyBuiltDependencies:
   - electron
   - esbuild
 
-# koffi 的安装脚本是在没有预编译包时现编，它自带各平台的预编译包，用不上。
+# koffi、node-pty（终端插件）的安装脚本是在没有预编译包时现编，它们自带各平台的预编译包，用不上。
 ignoredBuiltDependencies:
   - koffi
+  - node-pty
 
 # 可选依赖装哪些平台的，而不只是本机的。
 #

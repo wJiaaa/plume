@@ -1191,11 +1191,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		if (process.env.PLUME_SMOKE_ONLY === "market") {
 			// 扩展（插件市场）：插件都只在市场里，装上才加载
-			const examples = ["scheduled", "terminal"];
+			const examples = ["scheduled", "usage"];
 			await click("[data-nav=market]");
 			await until(
 				`${JSON.stringify(examples)}.every((key) => document.querySelector('[data-screen=market] [data-card="' + key + '"]'))`,
-				"市场列出定时任务和终端",
+				"市场列出定时任务和使用统计",
 			);
 			await delay(500);
 			await capture(window, join(outDir, "smoke-market.png"));
@@ -1337,13 +1337,10 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 单独的段都在上面返回了；走到这里还设着段名，就是写错了或那一段已经删了，别不声不响地跑成主流程。
 		if (process.env.PLUME_SMOKE_ONLY) throw new Error(`没有这一段：PLUME_SMOKE_ONLY=${process.env.PLUME_SMOKE_ONLY}`);
 
-		// 扩展（插件市场）的界面在单独的 market 段；主流程只经 plume-plugin 装上后面要用的定时任务和终端。
+		// 扩展（插件市场）的界面在单独的 market 段；主流程只经 plume-plugin 装上后面要用的定时任务（终端是内置的）。
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-		for (const name of ["scheduled", "terminal"]) await plugin.install(name);
-		await waitFor(async () => {
-			const loaded = await agent.plugins();
-			return ["scheduled", "terminal"].every((key) => loaded.find((item) => item.key === key)?.state === "active");
-		}, "装上定时任务和终端");
+		await plugin.install("scheduled");
+		await waitFor(async () => (await agent.plugins()).find((item) => item.key === "scheduled")?.state === "active", "装上定时任务");
 
 		// 欢迎页先验浅色，后面的外观步骤再验深色，避免只覆盖本机的系统主题。
 		await click("button", "设置");
@@ -2309,6 +2306,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"plume.commands",
 			"plume.web",
 			"plume.browser",
+			"plume.terminal",
 			"plume.title",
 		])
 			if (!builtins.includes(name)) throw new Error(`内置插件 ${name} 没加载：${builtins.join()}`);

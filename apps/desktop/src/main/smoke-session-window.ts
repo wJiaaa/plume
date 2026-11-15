@@ -17,7 +17,7 @@ export async function checkSessionWindow(options: {
 	/** 原会话：最后回到它。 */
 	sessionId: string;
 	finalText: string;
-	/** 给了就验证独立窗口里打开文件交给主窗口（不依赖插件）；没给就用已装的终端插件验证面板交给主窗口。 */
+	/** 给了就验证独立窗口里打开文件交给主窗口（不依赖插件）；没给就用内置的终端插件验证面板交给主窗口。 */
 	file?: string;
 }): Promise<void> {
 	const { window, outDir, page, until, click, capture, sessionId, finalText, file } = options;

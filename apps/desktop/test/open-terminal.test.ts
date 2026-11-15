@@ -48,7 +48,7 @@ test("最近注册的终端接请求，同插件更新后旧清理不撤掉新�
 
 test("没有终端或打开失败都给出提示", async () => {
 	await openInTerminal("session", "/work");
-	assert.partialDeepStrictEqual(currentNotices().at(-1), { level: "warn", message: "请先安装并启用终端插件。" });
+	assert.partialDeepStrictEqual(currentNotices().at(-1), { level: "warn", message: "终端插件没有加载。" });
 	cleanups.push(registerTerminalOpener("failed", failing));
 	await openInTerminal("session", "/work");
 	assert.partialDeepStrictEqual(currentNotices().at(-1), { level: "error", message: "terminal unavailable" });
@@ -65,7 +65,7 @@ test("同一个回调重新登记时，旧清理也不能撤掉最新登记", as
 
 test("「在终端运行」交给最近登记的终端，带着命令和会话；没有终端时提示", async () => {
 	await runInTerminal("session", "ls");
-	assert.partialDeepStrictEqual(currentNotices().at(-1), { level: "warn", message: "请先安装并启用终端插件。" });
+	assert.partialDeepStrictEqual(currentNotices().at(-1), { level: "warn", message: "终端插件没有加载。" });
 	const first = mock.fn(),
 		second = mock.fn();
 	cleanups.push(registerTerminalRunner("first", first));

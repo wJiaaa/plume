@@ -6,7 +6,7 @@
 
 ### 有哪些
 
-`@plume/ui` 分 primitives、inputs、overlay、scroll、row、layout、motion、avatar、image、hooks、lib、i18n 几个目录（terminal 不在本体，终端的配色和字体在插件仓库的 `plugins/terminal`），都从 `@plume/ui` 一个入口导出，图标从 `@plume/ui/icons`。各组件的用法以源文件开头的注释为准，这里只列常用的：
+`@plume/ui` 分 primitives、inputs、overlay、scroll、row、layout、motion、avatar、image、hooks、lib、i18n 几个目录（terminal 不在本体，终端的配色和字体在内置插件 `packages/builtin/terminal`），都从 `@plume/ui` 一个入口导出，图标从 `@plume/ui/icons`。各组件的用法以源文件开头的注释为准，这里只列常用的：
 
 | 组件 | 用途 | 样式 |
 |---|---|---|
