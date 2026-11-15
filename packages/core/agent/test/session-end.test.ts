@@ -88,7 +88,7 @@ it("onEnded：删除、归档、换项目各说一次原因，退出时每个会
 	const moved = await service.createSession({ cwd: workspace });
 	const destination = join(dir, "elsewhere");
 	await mkdir(destination);
-	const project = await service.createProject("别处", destination);
+	const project = await service.createProject("别处", destination, undefined);
 	await service.moveSessionProject(moved.id, project.id);
 	// 目录没变的那次移动不算。
 	await service.moveSessionProject(moved.id, project.id);

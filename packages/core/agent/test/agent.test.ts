@@ -175,7 +175,7 @@ it("移动项目切换目录且保留身份、消息和状态；移出保留目�
 	const { service, session, idle } = await start([{ text: "主会话回复" }, { text: "子会话回复" }], [plugin]);
 	const destination = join(dir, "destination");
 	await mkdir(destination);
-	const project = await service.createProject("目标项目", destination);
+	const project = await service.createProject("目标项目", destination, undefined);
 	const child = await access.create({ parentId: session.id, title: "子会话" });
 	await service.setSessionPinned(session.id, true);
 	await service.setSessionUnread(session.id, true);
@@ -731,9 +731,9 @@ it("插件改会话标题：压掉多余空白、存进库，第一条消息不�
 
 it("项目登记后存盘；会话开在项目里记下项目，什么都不给开在公共目录；移除项目不动它的会话", async () => {
 	const { service } = await start([]);
-	const project = await service.createProject("  ", workspace);
+	const project = await service.createProject("  ", workspace, undefined);
 	expect(project).toMatchObject({ name: "workspace", path: workspace });
-	const later = await service.createProject("另一个", dir);
+	const later = await service.createProject("另一个", dir, undefined);
 	expect(service.listProjects().map((entry) => entry.id)).toEqual([later.id, project.id]);
 
 	const inProject = await service.createSession({ project: project.id });
@@ -744,7 +744,7 @@ it("项目登记后存盘；会话开在项目里记下项目，什么都不给�
 	await expect(service.createSession({ cwd: " " })).rejects.toThrow("工作目录不能为空");
 	await expect(service.createSession({ project: "missing" })).rejects.toThrow("没有项目 missing");
 
-	await service.updateProject(project.id, "改名", workspace);
+	await service.updateProject(project.id, "改名", workspace, undefined);
 	await service.removeProject(later.id);
 	await agent?.shutdown();
 	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "model.json"), plugins: [], log: () => undefined });
@@ -2348,7 +2348,7 @@ it("使用统计：主请求按来源分 token，记下轮次和工具；缓存�
 
 	// 编辑重发：截掉的那段之后的第一次请求，没读到缓存记成撤回，不记成改写了消息。
 	done = idle();
-	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "算了，改一下" }] });
+	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "算了，改一下" }] }, undefined);
 	await done;
 	const [bucket] = (await ctx!.model.usage()).requests;
 	expect(bucket).toMatchObject({ requests: 3, sessions: [session.id], turns: 2, tools: 1, toolErrors: 0, timedReplies: 3 });
@@ -2605,8 +2605,8 @@ it("撤回：这条和之后的全部截掉，库里跟着删；之后发给模�
 	}
 	expect((await service.getSession(session.id)).summary.messageCount).toBe(4);
 	// 回复和界面替人说的那句都不是能撤回的东西。
-	await expect(service.revertMessage(session.id, 1)).rejects.toThrow("找不到这条消息");
-	await service.revertMessage(session.id, 2);
+	await expect(service.revertMessage(session.id, 1, undefined)).rejects.toThrow("找不到这条消息");
+	await service.revertMessage(session.id, 2, undefined);
 	const rewound = await until((event): event is AgentEvent => event.type === "rewound");
 	expect(rewound).toMatchObject({ sessionId: session.id, count: 2, compactions: [] });
 	// 撤回随后报的那次会话列表到了再等空闲，不然等到的是它。
@@ -2647,10 +2647,10 @@ it("编辑重发：截掉这条和之后的，拿新的话重新跑一轮；跑�
 	service.send(session.id, { content: [{ type: "text", text: "原来的问题" }] });
 	await done;
 	const from = events.length;
-	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "改过的问题" }], displayText: "改过的问题" });
+	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "改过的问题" }], displayText: "改过的问题" }, undefined);
 	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined, from);
-	await expect(service.editMessage(session.id, 0, { content: [{ type: "text", text: "再改" }] })).rejects.toThrow("正在运行");
-	await expect(service.revertMessage(session.id, 0)).rejects.toThrow("正在运行");
+	await expect(service.editMessage(session.id, 0, { content: [{ type: "text", text: "再改" }] }, undefined)).rejects.toThrow("正在运行");
+	await expect(service.revertMessage(session.id, 0, undefined)).rejects.toThrow("正在运行");
 	const sent = sentText(model?.requests[1]);
 	expect(sent).toContain("改过的问题");
 	expect(sent).not.toContain("原来的问题");
@@ -2695,16 +2695,16 @@ it("撤回、编辑重发连文件一起退：认本体记在结果上的改动�
 	expect(result.role === "toolResult" && result.changes?.ids).toHaveLength(1);
 	expect(result.role === "toolResult" && result.changes?.ids).not.toContain("forged");
 	const plan = { files: [{ path: join(root, "a.ts"), added: 1, removed: 0, problem: null }], unrecorded: false };
-	expect(await service.revertPlan(session.id, 2)).toEqual(plan);
-	expect(await service.revertPlan(session.id, 0)).toEqual(plan);
+	expect(await service.revertPlan(session.id, 2, undefined)).toEqual(plan);
+	expect(await service.revertPlan(session.id, 0, undefined)).toEqual(plan);
 
 	// 之后被人改过：演算说得出是哪一类，连文件退被拒、对话也不截，文件不覆盖。
 	await writeFile(join(workspace, "a.ts"), "user\n");
-	expect((await service.revertPlan(session.id, 2)).files).toMatchObject([{ path: join(root, "a.ts"), problem: "modified" }]);
+	expect((await service.revertPlan(session.id, 2, undefined)).files).toMatchObject([{ path: join(root, "a.ts"), problem: "modified" }]);
 	await expect(service.revertMessage(session.id, 2, { files: true })).rejects.toThrow();
 	expect((await service.getSession(session.id)).summary.messageCount).toBe(6);
 	// 只撤对话：文件原样留着。
-	await service.revertMessage(session.id, 2);
+	await service.revertMessage(session.id, 2, undefined);
 	expect((await service.getSession(session.id)).summary.messageCount).toBe(2);
 	expect(await readFile(join(workspace, "a.ts"), "utf8")).toBe("user\n");
 
@@ -2779,9 +2779,14 @@ it("编辑重发带回存着的图：只给 media 名字，发给模型时照样
 	const sent = await until((event): event is Extract<AgentEvent, { type: "message" }> => event.type === "message" && event.message.role === "user");
 	await done;
 	const image = sent.message.content.find((block) => block.type === "image");
-	await service.editMessage(session.id, 0, {
-		content: [image!, { type: "image", data: "", mimeType: "image/png", media: "../secret.png" }, { type: "text", text: "图里是什么" }],
-	});
+	await service.editMessage(
+		session.id,
+		0,
+		{
+			content: [image!, { type: "image", data: "", mimeType: "image/png", media: "../secret.png" }, { type: "text", text: "图里是什么" }],
+		},
+		undefined,
+	);
 	await until(
 		(event): event is AgentEvent =>
 			event.type === "message" && event.message.role === "assistant" && JSON.stringify(event.message.content).includes("又看到了"),
@@ -2797,7 +2802,7 @@ it("多源项目和手动顺序落盘；主文件夹变更不搬动已有会话�
 	const extra = join(dir, "extra");
 	await mkdir(extra);
 	const project = await service.createProject("多源", workspace, [workspace, extra, extra]);
-	const other = await service.createProject("另一个", dir);
+	const other = await service.createProject("另一个", dir, undefined);
 	const a = await service.createSession({ project: project.id });
 	const b = await service.createSession({ project: project.id });
 	await service.reorderProjects(project.id, other.id, "before");
@@ -2938,7 +2943,7 @@ it("完整收尾只发一次 idle，发送与编辑重发保留会话引用", as
 	expect(view.messages[0]).toMatchObject({ sessionRefs: refs });
 	const at = events.length;
 	done = idle();
-	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "重新参考" }], sessionRefs: refs });
+	await service.editMessage(session.id, 0, { content: [{ type: "text", text: "重新参考" }], sessionRefs: refs }, undefined);
 	await done;
 	await until((event): event is Extract<AgentEvent, { type: "idle" }> => event.type === "idle", at);
 	expect((await service.getSession(session.id)).messages[0]).toMatchObject({ sessionRefs: refs });

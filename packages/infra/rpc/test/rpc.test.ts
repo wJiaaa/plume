@@ -78,6 +78,19 @@ describe("RPC", () => {
 		expect(events).toEqual(["收到中止", "收尾"]);
 	});
 
+	it("参数个数没写死的方法在代理上调不了：少传一个可选参数，CallContext 会落进它的位置", async () => {
+		const { proxy } = connect({
+			optional: (text: string, _limit?: number) => text,
+			rest: (...texts: string[]) => texts.join(""),
+			fixed: (text: string, limit: number | undefined, _call: CallContext) => `${text}${limit ?? ""}`,
+		});
+		// @ts-expect-error 可选参数
+		void proxy.optional("a").catch(() => {});
+		// @ts-expect-error 剩余参数
+		void proxy.rest("a").catch(() => {});
+		expect(await proxy.fixed("a", undefined)).toBe("a");
+	});
+
 	it("参数无法结构化克隆时以 RpcError 失败，不留挂起的请求和中止监听", async () => {
 		const [a, b] = portPair();
 		const server = new RpcChannel(b, { request: (payload) => payload });

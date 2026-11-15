@@ -45,7 +45,7 @@ Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-
 - 不确定的、待做的、要讨论的写进本地的 `notes/`（不进仓库），不写进代码注释和仓库里的文档。
 - 写插件用 skill [skills/plume-plugin](skills/plume-plugin/SKILL.md)，只靠它和公开接口（`@plume/contract` 的类型、`@plume/ui`、`@plume/styles`），不读宿主的实现；skill 不够用就补 skill，插件要的能力宿主没有就按 spec 改宿主，不在插件里绕过。改了插件接口（`PluginContext`、`UiContext`、钩子）同步 skill。
 - 插件名用小写加点分段，Plume 自己提供的插件（内置的和市场里的）都以 `plume.` 开头；内置插件放在 `packages/builtin/`，随应用发；其余插件都放在插件仓库的 `plugins/`，经插件市场安装；插件目录名只用小写字母、数字和连字符（它也是 `plume-plugin://` 的主机名）。
-- 经 `@plume/rpc` 暴露、需要响应取消的方法，参数个数写死，最后一个参数接 `CallContext`（运行时追加）。
+- 经 `@plume/rpc` 暴露的方法（`AgentService`、插件 `ctx.serve` 的接口）参数个数写死：不用可选参数和剩余参数，可能不传的写成 `x: T | undefined`。运行时把 `CallContext` 接在实际传来的参数后面，少传一个它就落进那个参数里；要响应取消的方法最后一个参数接它。`Remote<T>` 在类型上拦着，参数个数没写死的方法在代理上调不了。
 - 界面样式只用 token（`packages/client/styles/src/theme.css`），能用 `@plume/ui` 组件的不自己拼类名；规则见 [spec/tech/styling.md](spec/tech/styling.md)、[spec/tech/tokens.md](spec/tech/tokens.md)、[spec/tech/components.md](spec/tech/components.md)，由 `pnpm check:styles` 检查。
 - 术语固定：钩子、层（洋葱的一层）、逻辑入口、界面入口、工具卡片、审批卡。
 - Node ≥ 24，pnpm workspace。

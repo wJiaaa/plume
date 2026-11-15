@@ -755,7 +755,7 @@ it("撤回只作废截掉那段里的调用拿到的渠道；留下那段里拿�
 	await done(parent.id, 4);
 	const [kept1, cut] = kept as BackgroundChannel[];
 	expect(cut!.report("CUT_PENDING")).toBe(true);
-	await service.revertMessage(parent.id, 4);
+	await service.revertMessage(parent.id, 4, undefined);
 	expect(cut!.signal.aborted).toBe(true);
 	expect(cut!.report("CUT_AFTER")).toBe(false);
 	expect(kept1!.signal.aborted).toBe(false);

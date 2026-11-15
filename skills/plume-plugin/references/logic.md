@@ -735,7 +735,7 @@ Plume 自带的服务：
 
 - 接口类型写在 `src/api.ts`，两个入口共用。
 - 参数和返回值要能结构化克隆（不能传函数、类实例）。
-- 运行时会在参数末尾追加一个 `CallContext`（`{ signal }`）。要响应取消的方法，参数个数写死，最后一个参数接它；界面那边调用时不传。
+- 运行时会在实际传来的参数后面追加一个 `CallContext`（`{ signal }`），所以接口的参数个数要写死：不用可选参数和剩余参数，可能不传的写成 `x: T | undefined`、界面那边照样传 `undefined`，否则 `CallContext` 落进那个参数里（`ui.remote` 的类型会拦下这样的方法）。要响应取消的方法最后一个参数接它；界面那边调用时不传。
 - 返回异步迭代器（`async *method(…)`）的方法，每个 `yield` 推给界面；界面取消时 `signal` 中止，迭代器提前结束、`finally` 收尾。生成器卡在某个 `await` 上时要等它下一次 `yield` 才结束，所以长时间的等待自己接上 `signal`。
 - 流程中途要人在浏览器里做一步（OAuth 授权页）：逻辑入口 `yield` 那个网址，界面 `for await` 拿到后经 `ui.openExternal` 打开、打不开就 `break`（等于取消），逻辑入口接着等回调、最后 `return` 结果（界面 `await` 那次调用拿到）。逻辑入口不自己起 `open` / `xdg-open` / `rundll32`，例子是 plume.mcp 的 `login`。
 

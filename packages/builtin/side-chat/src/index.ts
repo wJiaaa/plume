@@ -225,7 +225,7 @@ export default {
 
 		ctx.serve({
 			bind: (tab: string, parentId: string) => bindings.bind(String(tab), String(parentId)),
-			open: (tab: string, parentId: string, choice?: SessionChoice) => bindings.open(String(tab), String(parentId), choice),
+			open: (tab: string, parentId: string, choice: SessionChoice | undefined) => bindings.open(String(tab), String(parentId), choice),
 			async ask(sideId: string, message: string | SessionMessage) {
 				// 界面交来的只取正文、气泡上的字和附件：不能借这条路冒充派发方（`origin`）。
 				const body: string | SessionMessage =

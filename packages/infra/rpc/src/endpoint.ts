@@ -2,7 +2,7 @@
  * 在 RpcChannel 上暴露一个对象、调用对端的对象。消息是 `{ method, args }`。
  *
  * 约定：
- * - 被调方法的最后一个参数是 CallContext，由这里追加，调用方不用传。需要响应取消的方法把参数个数写死。
+ * - 被调方法的最后一个参数是 CallContext，由这里接在实际传来的参数后面，调用方不用传。所以参数个数要写死（`Remote<T>` 在类型上拦着）。
  * - 方法返回异步迭代器（如 async generator）时，每个值作为中间值推给调用方，迭代器的 return 值是最终结果。
  */
 
@@ -29,10 +29,21 @@ export interface RemoteCall<Y, R> extends PromiseLike<R>, AsyncIterable<Y> {
 }
 
 type RemoteMethod<F> = F extends (...args: infer A) => infer R
-	? (
-			...args: A extends [...infer Head, CallContext] ? Head : A
-		) => R extends AsyncIterable<infer Y> ? RemoteCall<Y, AsyncReturn<R>> : RemoteCall<never, Awaited<R>>
+	? FixedArity<A> extends true
+		? (
+				...args: A extends [...infer Head, CallContext] ? Head : A
+			) => R extends AsyncIterable<infer Y> ? RemoteCall<Y, AsyncReturn<R>> : RemoteCall<never, Awaited<R>>
+		: ArityProblem
 	: never;
+
+/**
+ * 参数个数是不是写死的：没有可选参数和剩余参数。对端把 CallContext 接在实际传来的参数后面，
+ * 调用方少传一个可选参数，CallContext 就落进那个参数里。可能不传的值写成 `x: T | undefined`。
+ */
+type FixedArity<A extends unknown[]> = number extends A["length"] ? false : A extends Required<A> ? true : false;
+
+/** 参数个数没写死的方法在远端代理上调不了，报错时显示这一句。 */
+type ArityProblem = (problem: "rpc 方法的参数个数要写死：去掉可选参数和剩余参数，可能不传的写成 x: T | undefined") => never;
 
 type AsyncReturn<R> = R extends AsyncGenerator<unknown, infer Return, unknown> ? Return : undefined;
 

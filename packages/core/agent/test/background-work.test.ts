@@ -200,7 +200,7 @@ it("撤回截掉起它的那次调用：任务不再算在等，会话恢复为�
 	expect(await h.background(id)).toBe(true);
 	// 收尾的压缩检查放开会话以后才能撤回。
 	await vi.waitFor(async () => expect((await h.ctx().sessions.get(id))?.running).toBe(false));
-	await h.service.revertMessage(id, 0);
+	await h.service.revertMessage(id, 0, undefined);
 	await launched.idle;
 	expect(await h.background(id)).toBe(false);
 	const job = [...h.jobs.values()][0]!;

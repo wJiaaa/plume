@@ -263,7 +263,7 @@ export default {
 			// 问最早那一段（面板开着时人看到的那格）；还没有就新开一格。面板先打开，问的那句好在那边先画上。
 			async run(message, sessionId) {
 				const tab = (await api.firstTab(sessionId)) ?? crypto.randomUUID();
-				const sideId = await api.open(tab, sessionId);
+				const sideId = await api.open(tab, sessionId, undefined);
 				ui.openPanel(PANEL, sessionId, { tab });
 				void api.ask(sideId, message).catch((error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error"));
 			},

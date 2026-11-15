@@ -186,10 +186,10 @@ it("插件的子会话能编辑重发（侧边聊天的「重新提问」），�
 	const main = await service.createSession({ cwd: dir });
 	const side = await owner().create({ parentId: main.id });
 	await owner().send(side.id, "原来的问题");
-	await service.editMessage(side.id, 0, { content: [{ type: "text", text: "改过的问题" }] });
+	await service.editMessage(side.id, 0, { content: [{ type: "text", text: "改过的问题" }] }, undefined);
 	await settled(side.id, 1);
 	expect((await service.getSession(side.id)).messages.map(words)).toEqual(["改过的问题", "答：改过的问题"]);
-	await expect(service.revertMessage(side.id, 0)).rejects.toThrow("test.owner");
+	await expect(service.revertMessage(side.id, 0, undefined)).rejects.toThrow("test.owner");
 	await expect(service.editMessage(side.id, 0, { content: [{ type: "text", text: "再改" }] }, { files: true })).rejects.toThrow("test.owner");
 });
 

@@ -303,17 +303,17 @@ it("成功撤回、编辑重发、换模型和从库重载刷新快照，普通�
 	const id = launched.session.id;
 	await service.getSession(id);
 	expect(resets).toEqual([]);
-	await expect(service.revertMessage(id, 1)).rejects.toThrow();
+	await expect(service.revertMessage(id, 1, undefined)).rejects.toThrow();
 	expect(resets).toEqual([]);
 	await service.setSessionModel(id, "p/cheap");
 	expect(resets).toEqual([id]);
 	await service.setSessionModel(id, "p/cheap");
 	expect(resets).toEqual([id]);
-	await service.editMessage(id, 0, { content: [{ type: "text", text: "edited" }] });
+	await service.editMessage(id, 0, { content: [{ type: "text", text: "edited" }] }, undefined);
 	await expect.poll(() => model!.requests.length).toBe(2);
 	await expect.poll(() => service.listSessions().find((session) => session.id === id)?.running).toBe(false);
 	expect(resets).toEqual([id, id]);
-	await service.revertMessage(id, 0);
+	await service.revertMessage(id, 0, undefined);
 	expect(resets).toEqual([id, id, id]);
 	await agent!.shutdown();
 	const reopened: Plugin = {

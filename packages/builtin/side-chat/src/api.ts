@@ -14,7 +14,7 @@ export interface SideChatApi {
 	/** 按稳定标签恢复绑定；首次打开只认领未绑定的最新一段，没有则保持空白。 */
 	bind(tab: string, parentId: string): Promise<string | undefined>;
 	/** 接回这个标签的侧边聊天，没有才新建（按人在第一句之前选的 `choice` 建）；绑定落盘后返回，重复调用不会多建。 */
-	open(tab: string, parentId: string, choice?: SessionChoice): Promise<string>;
+	open(tab: string, parentId: string, choice: SessionChoice | undefined): Promise<string>;
 	/** 在侧边聊天里问一句，等它答完。排队条上拿过来的那条带着附件，整条照发。 */
 	ask(sideId: string, message: string | SessionMessage): Promise<void>;
 	/** 这个会话旁边最早开的那段侧边聊天接在哪个标签上；没有标签接着时是 undefined。 */
