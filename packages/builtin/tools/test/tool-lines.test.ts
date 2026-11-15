@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { TOOLS } from "../src/tools.ts";
 import { WAKEUP_TOOLS } from "../src/tools/wakeups.ts";
 import { TOOL_LINES } from "../src/tool-lines.ts";
+import { cronWords } from "../src/cron-words.ts";
 
 /** 本体不认工具名：转录里的说法、归类、文件签只看工具定义上的种类和这张表，这里钉住每个工具声明了什么。 */
 it("每个工具在定义上声明它做的是哪种活，读写的文件、命令、说明和后台任务从参数里取", () => {
@@ -126,4 +127,14 @@ it("monitor：跑着说「监视中」、停了说「已开始监视」，接上
 	expect(monitor!.verbFor!({ args: {}, details: undefined, live: false }, "en")).toBe("Started watching");
 	expect(monitor!.subject!({ description: "等开发服务器起来", command: "tail -f log" })).toBe("等开发服务器起来");
 	expect(monitor!.subject!({ command: "tail -f log\ngrep x" })).toBe("tail -f log");
+});
+
+it("cron 的人话：步长不整除 60、24 的不说「每 n」，只留原式", () => {
+	expect(cronWords("*/15 * * * *", "en")).toBe("Every 15 minutes");
+	// :00、:45 各一次，间隔不等长。
+	expect(cronWords("*/45 * * * *", "en")).toBeUndefined();
+	expect(cronWords("*/90 * * * *", "en")).toBeUndefined();
+	expect(cronWords("0 */6 * * *", "en")).toBe("Every 6 hours at :00");
+	expect(cronWords("30 */1 * * *", "en")).toBe("Hourly at :30");
+	expect(cronWords("0 */48 * * *", "en")).toBeUndefined();
 });
