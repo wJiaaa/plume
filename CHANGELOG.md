@@ -2,6 +2,34 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.2] - 2026-11-15
+
+<!-- plume:notes en -->
+### Changes
+
+- **A plugin can look after your chats for you, if you let it.** Turn on "Let it manage sessions" on a plugin's page in the Plugin Market (you confirm once, and can turn it off any time). That plugin can then send instructions into your chats, answer the approval and question cards they're waiting on, and stop a running turn. Every answer it gives is marked "Answered by …" under the call. Only one plugin holds this at a time, and a project's config can't turn it on.
+- **Plugins can ask you to pick a folder.** A plugin that needs a folder, such as an assistant's working folder, now opens the system folder picker, where you can also create a new folder.
+
+### For plugin authors
+
+Rebuild with SDK 0.5.2:
+
+- Removed: `ui.screen.pickDirectory`. Use `ui.pickFolder(title?)` instead; it returns the absolute path, or `null` if the user cancels.
+- New: `manage: "sessions"` on a plugin asks to manage the user's chats. Once the user turns it on, `ctx.sessions.post`, `respond`, `answer` and `stop` work on every top-level chat no other plugin stewards, and `observe` sees them. `ctx.sessions.approval(sessionId)` reads the card a chat is waiting on right now.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **插件能替你照看会话，前提是你允许。** 在插件市场里点开一个插件，打开「让它管理会话」（会先确认一次，随时可以关掉）。这个插件就能往你的会话里交代事情、答它们弹着的审批卡和提问卡、停下正在跑的一轮。它答的每一张卡，调用底下都写着「由 … 代答」。同一时间只有一个插件拿着这份授权，项目配置打不开它。
+- **插件能让你选文件夹。** 插件要一个文件夹时（比如助理的工作文件夹），会弹出系统的选文件夹对话框，也能当场新建一个。
+
+### 给插件作者
+
+请用 SDK 0.5.2 重新构建：
+
+- 删掉了 `ui.screen.pickDirectory`，改用 `ui.pickFolder(title?)`：交回绝对路径，人取消时是 `null`。
+- 新增：插件声明 `manage: "sessions"`，申请管理人的会话。人打开以后，`ctx.sessions.post`、`respond`、`answer`、`stop` 对所有没被别的插件代管的顶层会话都能用，`observe` 也看得到它们。`ctx.sessions.approval(sessionId)` 现读会话弹着的那张卡。
+
 ## [0.5.1] - 2026-11-15
 
 <!-- plume:notes en -->
