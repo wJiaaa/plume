@@ -77,6 +77,8 @@ export interface HostSessions extends Pick<
 	"list" | "get" | "messages" | "compact" | "setTitle" | "setArchived" | "models" | "jobs" | "stopJob" | "jobOutput" | "wakeups" | "cancelWakeup"
 > {
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
+	/** `owner` 是调它的插件：agent 只让它改自己建的会话。 */
+	configure(owner: string, sessionId: string, change: Parameters<SessionAccess["configure"]>[1]): ReturnType<SessionAccess["configure"]>;
 	/** `owner` 只用来记日志：开出来的会话不记在插件名下。 */
 	launch(owner: string, options: Parameters<SessionAccess["launch"]>[0]): ReturnType<SessionAccess["launch"]>;
 	/** `owner` 是交回的插件：来处要是它的工具在那里的一次调用。 */
@@ -238,6 +240,7 @@ const NO_SESSIONS: HostSessions = {
 	setTitle: missing,
 	setArchived: missing,
 	create: async (_owner, options) => missing(options?.parentId),
+	configure: async (_owner, sessionId) => missing(sessionId),
 	launch: async (_owner, options) => missing(options?.spawnedFrom?.sessionId),
 	reportBack: () => false,
 	post: async (_owner, sessionId) => missing(sessionId),
@@ -878,6 +881,10 @@ export class PluginHost {
 				create: async (options) => {
 					live();
 					return sessions.create(name, options);
+				},
+				configure: async (sessionId, change) => {
+					live();
+					return sessions.configure(name, sessionId, change);
 				},
 				launch: async (options) => {
 					live();

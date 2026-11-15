@@ -1381,6 +1381,25 @@ export interface SessionAccess {
 		cwd?: string;
 	}): Promise<SessionSummary>;
 	/**
+	 * 改本插件建的会话（子会话、独立会话）怎么跑，给了哪项改哪项、没给的不动，返回改完的摘要。和人在输入框里换模型、在侧栏换项目是同一件事：
+	 *
+	 * - `model`、`thinking`：取值同 `create`，`null` 清掉会话自己选的（子会话回到跟着父会话，独立会话回到默认）。下一轮生效；
+	 *   这一轮正在等模型时换成新模型重发。
+	 * - `project`、`cwd`：只有独立会话能换（子会话随父会话），取值同 `create`，给了 `project` 就不看 `cwd`；`cwd: null` 回到聊天目录。
+	 *   换了目录，这段对话在旧目录里就算结束（`onEnded` 报 `moved`），下一轮在新目录里接着聊，记录不丢。正在跑时抛错。
+	 *
+	 * 会话不是本插件建的，模型、思考档位、项目、目录不对时抛错，什么都不改；message 是给人看的话（按界面语言）。
+	 */
+	configure(
+		sessionId: string,
+		change: {
+			model?: string | null;
+			thinking?: ThinkingLevel | null;
+			project?: string;
+			cwd?: string | null;
+		},
+	): Promise<SessionSummary>;
+	/**
 	 * 开一个新会话并发出第一句话（定时任务到点了、人在插件界面上点了「在新会话里执行」）。新会话和人在侧栏新建的一样：
 	 * 进侧栏、不记在插件名下（没有 `owner`），人能接着聊，插件之后不能再往里发、也停不了删不了它（`steward` 开出来的除外：
 	 * 本插件能往里转话、替人答卡，见 `SessionLaunch.steward`）。第一句话照常经

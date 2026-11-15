@@ -33,7 +33,7 @@ export default {
 | `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
 | `ctx.sessions.list()` / `get` / `messages`、`compact`、`setTitle`、`setArchived`、`onDeleted` / `onArchived` / `onEnded` / `onContextReset` | 读会话的摘要和消息，现在就压缩（`/compact`）、改标题（侧栏和标题栏上那行字）、归档，会话删掉、归档、在这次运行里不再活着、上下文被重置时收通知，见下面「读会话、改会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
-| `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话）：建、发一句并等结束、停、删，见「子会话」「独立会话」 |
+| `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` / `configure(id, { model?, thinking?, project?, cwd? })` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话）：建、发一句并等结束、停、删、之后改模型和目录，见「子会话」「独立会话」 |
 | `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 子会话的后台运行：派出去、等它结束、把结果送给父会话，见「子会话」 |
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
 | `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title?, steward? })` | 开一个新的顶层会话并发出第一句话，见「开新会话」 |
@@ -620,6 +620,7 @@ const stop = await ctx.sessions.send(assistant.id, text);
 ```
 
 - `project`（项目 id）或 `cwd`（已有目录的绝对路径）二选一；都不给就放在聊天目录里。没另选模型时用默认模型。子会话不能给这两项（随父会话）。
+- 建好之后要换模型、思考档位或目录（比如人在你的设置页里挑了别的），用 `configure(id, change)`：给了哪项改哪项，`model` / `thinking` 给 `null` 回到跟随默认，`cwd: null` 回到聊天目录，给了 `project` 就不看 `cwd`。换目录时那一轮之前的记录都留着，`onEnded` 报 `moved`（这次运行里的东西随旧目录收场）；正在跑时抛错，先 `stop` 或等它结束。模型、目录不对时抛错，什么都不改。子会话只能改 `model`、`thinking`。
 - 它不进侧栏、搜索、托盘、`@` 引用和已归档列表，不能归档、下面不能挂子会话，不发系统通知；人只在你的界面里经 `ui.Conversation` 看到它（见 ui.md）。
 - 它不是顶层会话：工具调用里没有 `run.background`、`run.letter`、`run.archiveAfterTurn`、`run.parent`，`start` 抛错（后台运行只给子会话），`prompt.submit` 给的 `cwd` 不换它的目录，别的会话寄信也寄不到它。
 - 插件停用、卸载都不删它；下次启用时从 `list()` 里按 `owner === ctx.name`、没有 `parentId` 找回自己的。要它没了就 `delete`；人在设置 › 数据里按时间清理记录时也会一起清掉，所以拿着的 id 用前确认它还在。

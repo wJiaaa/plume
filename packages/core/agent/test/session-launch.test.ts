@@ -36,7 +36,7 @@ async function open(replies: FakeReply[] | ((request: Record<string, unknown>) =
 		log: () => undefined,
 	});
 	const service = agent.service;
-	await service.saveProvider({
+	const providerId = await service.saveProvider({
 		id: "",
 		name: "测试",
 		api: "anthropic-messages",
@@ -53,7 +53,7 @@ async function open(replies: FakeReply[] | ((request: Record<string, unknown>) =
 			supportsTools: true,
 		})),
 	});
-	return { service, sessions: () => sessions };
+	return { service, sessions: () => sessions, providerId };
 }
 
 it("开一个顶层会话：进侧栏、不记在插件名下，第一句经 prompt.submit，done 给出第一轮怎么结束", async () => {
@@ -352,4 +352,36 @@ it("插件的独立会话：不挂在别的会话下、记在插件名下，只�
 
 	await sessions().delete(standalone.id);
 	expect(service.listSessions().map((summary) => summary.id)).not.toContain(standalone.id);
+});
+
+it("插件改自己会话的模型、思考档位和目录：下一轮生效、记录不丢；有一项不对就都不改；子会话不能换目录，别人的会话改不了", async () => {
+	const ended: Array<[string, string]> = [];
+	const { service, sessions, providerId } = await open([{ text: "一" }, { text: "二" }], (ctx) =>
+		ctx.sessions.onEnded((sessionId, reason) => void ended.push([sessionId, reason])),
+	);
+	const standalone = await sessions().create({ title: "助理" });
+	const chats = standalone.cwd;
+	expect(await sessions().send(standalone.id, "在吗")).toEqual({ reason: "done" });
+
+	const changed = await sessions().configure(standalone.id, { model: `${providerId}/other`, thinking: "off", cwd: dir });
+	expect(changed).toMatchObject({ model: `${providerId}/other`, thinking: "off", cwd: dir });
+	expect(ended).toEqual([[standalone.id, "moved"]]);
+	expect(await sessions().send(standalone.id, "换了吗")).toEqual({ reason: "done" });
+	expect(model?.requests.at(-1)?.model).toBe("other");
+	expect((await service.getSession(standalone.id)).messages.filter((message) => message.role === "user")).toHaveLength(2);
+
+	// 模型不认识：目录也不换。
+	await expect(sessions().configure(standalone.id, { model: `${providerId}/missing`, cwd: null })).rejects.toThrow("missing");
+	expect((await sessions().get(standalone.id))?.cwd).toBe(dir);
+
+	// null 回到默认：模型跟默认、目录回聊天目录。
+	const reset = await sessions().configure(standalone.id, { model: null, cwd: null });
+	expect(reset.model).toBeUndefined();
+	expect(reset.cwd).toBe(chats);
+
+	const top = await service.createSession({ cwd: dir });
+	const child = await sessions().create({ parentId: top.id });
+	await expect(sessions().configure(child.id, { cwd: dir })).rejects.toThrow("随父会话");
+	expect(await sessions().configure(child.id, { model: `${providerId}/other` })).toMatchObject({ model: `${providerId}/other` });
+	await expect(sessions().configure(top.id, { model: null })).rejects.toThrow("test.launcher");
 });

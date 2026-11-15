@@ -464,6 +464,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			},
 			create: async (owner, options) =>
 				structuredClone(await (options?.parentId === undefined ? createStandalone(owner, options) : createChild(owner, options))),
+			configure: (owner, sessionId, change) => configureOwn(owner, sessionId, change),
 			launch: (owner, options) => launchSession(owner, options),
 			reportBack: (owner, sessionId, words, options) => reportBack(owner, sessionId, words, options),
 			post: async (owner, sessionId, message) => ({ started: postToSession(owner, sessionId, message) }),
@@ -1582,6 +1583,60 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/**
+	 * 把会话（连同它的子会话）换到项目 `project`（没有就是不属于项目）、目录 `cwd` 里：人在侧栏换项目，插件换自己独立会话的目录。
+	 * 正在跑时不换：子会话的工具目录随父会话，检查和更新之间不让一轮插进来。
+	 */
+	function moveSession(session: Session, project: { id: string } | undefined, cwd: string): void {
+		const family = withChildren(session.summary.id).map(find);
+		if (family.some((each) => each.controller || each.turn)) throw new Error(text("session.running"));
+		for (const each of family) {
+			// 目录换了，在旧目录里的这一段就结束了；下一轮在新目录里重新开始。
+			if (cwd !== each.summary.cwd) void host.sessionEnded(each.summary.id, "moved");
+			each.summary.cwd = cwd;
+			if (project) each.summary.project = project.id;
+			else delete each.summary.project;
+			delete each.projectLayer;
+			delete each.projectNotices;
+			store.saveSummary(each.summary);
+			host.sessionContextReset(each.summary.id);
+		}
+		emit({ type: "sessions", sessions: summaries() });
+		// 新目录里的项目配置可能定了另一档权限，不等下一轮，权限签现在就跟上。
+		for (const each of family) refreshProject(each);
+	}
+
+	/**
+	 * 插件改自己建的会话怎么跑（`SessionAccess.configure`）：先把要改的都核对一遍，有一项不对就什么都不改；
+	 * 目录照人在侧栏换项目的路子（`moveSession`），模型、思考档位照人在输入框里换的路子。
+	 */
+	async function configureOwn(owner: string, sessionId: string, change: Parameters<SessionAccess["configure"]>[1]): Promise<SessionSummary> {
+		const session = owned(owner, sessionId);
+		const model = change?.model;
+		if (typeof model === "string") {
+			const found = lookup(await readSettings(), model);
+			if (!found) throw new Error(text("model.unavailable", { model }));
+			if (isImageModel(found.model)) throw new Error(text("model.imageNotChat", { model: found.model.name }));
+		}
+		if (change?.thinking != null && !THINKING_LEVELS.includes(change.thinking)) throw new Error(text("thinking.unknown", { level: String(change.thinking) }));
+		const moving = change?.project !== undefined || change?.cwd !== undefined;
+		if (moving) {
+			if (session.summary.kind !== "standalone") throw new Error(text("session.childCwd"));
+			const project = change.project ? findProject(String(change.project)) : undefined;
+			let cwd = project?.path;
+			if (!cwd && change.cwd === null) {
+				await mkdir(chatsDir, { recursive: true });
+				cwd = chatsDir;
+			}
+			cwd ??= await existingCwd({ cwd: change.cwd });
+			if (!cwd) throw new Error(text("session.emptyCwd"));
+			if (cwd !== session.summary.cwd || project?.id !== session.summary.project) moveSession(session, project, cwd);
+		}
+		if (model !== undefined) await service.setSessionModel(session.summary.id, model ?? undefined);
+		if (change?.thinking !== undefined) await service.setSessionThinking(session.summary.id, change.thinking ?? undefined);
+		return structuredClone(session.summary);
+	}
+
+	/**
 	 * 插件的独立会话：不挂在任何会话下、记在插件名下（`owner`），给插件自己的页面当一直在的助手。
 	 * 和顶层会话一样按项目、目录建（`createPlain`），但不进侧栏，后台结果、会话间的信、闲下来的通知都不碰它（见各处的 `owner`）。
 	 */
@@ -2587,23 +2642,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async moveSessionProject(sessionId, projectId) {
 			const session = find(sessionId);
 			const project = projectId === undefined ? undefined : findProject(projectId);
-			const family = withChildren(sessionId).map(find);
-			if (family.some((each) => each.controller || each.turn)) throw new Error(text("session.running"));
-			// 子会话的工具目录随父会话；检查和更新之间不让一轮插进来。
-			for (const each of family) {
-				// 目录换了，在旧目录里的这一段就结束了；下一轮在新目录里重新开始。
-				if ((project?.path ?? session.summary.cwd) !== each.summary.cwd) void host.sessionEnded(each.summary.id, "moved");
-				each.summary.cwd = project?.path ?? session.summary.cwd;
-				if (project) each.summary.project = project.id;
-				else delete each.summary.project;
-				delete each.projectLayer;
-				delete each.projectNotices;
-				store.saveSummary(each.summary);
-				host.sessionContextReset(each.summary.id);
-			}
-			emit({ type: "sessions", sessions: summaries() });
-			// 新目录里的项目配置可能定了另一档权限，不等下一轮，权限签现在就跟上。
-			for (const each of family) refreshProject(each);
+			moveSession(session, project, project?.path ?? session.summary.cwd);
 		},
 		async deleteArchivedSessions() {
 			return removeIdle(
