@@ -173,9 +173,24 @@ export function dropUneventful(messages: Message[]): Message[] {
 		if (size <= PRUNE_FLOOR_CHARS) return message;
 		changed = true;
 		// i18n-exempt：发给模型的占位，不随界面语言变。
-		return derive(message, { ...message, content: [{ type: "text" as const, text: "[无结果]" }] } as ToolResultMessage);
+		return derive(message, withText(message, "[无结果]"));
 	});
 	return changed ? next : messages;
+}
+
+/**
+ * 结果的文字换成 `text`，图片原样留着：宿主记剪枝视图只记文字（`ToolResultView`），照它换掉文字块、图片不动。这里也这样换，
+ * 量的、交给摘要请求的，才和之后真正发出去的是同一份。
+ */
+export function withText(message: ToolResultMessage, text: string): ToolResultMessage {
+	let placed = false;
+	const content = message.content.flatMap((block): ToolResultMessage["content"] => {
+		if (block.type !== "text") return [block];
+		if (placed) return [];
+		placed = true;
+		return [{ ...block, text }];
+	});
+	return { ...message, content };
 }
 
 /**

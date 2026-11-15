@@ -5,6 +5,7 @@
 
 import type { FileViewDetails, Message, ToolResultMessage } from "@plume/contract";
 import { expect, it } from "vitest";
+import { dropUneventful } from "../src/prune.ts";
 import { dropStaleResults } from "../src/stale-results.ts";
 import { reply, textOf, toolResult } from "./helpers.ts";
 
@@ -95,4 +96,20 @@ it("同样的命令再跑一次、输出变了，早的那份留着：先失败�
 	const same = "src/a.ts\n".repeat(40);
 	const twice = dropStaleResults([run("a"), toolResult("a", same), run("b"), toolResult("b", same)], "/repo");
 	expect(textOf(twice[1]!)).toMatch(/^\[Duplicate bash result omitted/);
+});
+
+it("清掉的结果只换文字、图片原样留着，和宿主照剪枝视图发出去的是同一份", () => {
+	const image = { type: "image" as const, data: "iVBORw0KGgo=", mimeType: "image/png" as const };
+	const shot = (id: string): ToolResultMessage => ({
+		...toolResult(id, "page text ".repeat(40), "browser_screenshot"),
+		content: [image, { type: "text", text: "page text ".repeat(40) }, { type: "text", text: "second block" }],
+	});
+	const take = (id: string): Message => call(id, "browser_screenshot", {});
+	const first = shot("a");
+	const out = dropStaleResults([take("a"), first, take("b"), { ...shot("b"), toolCallId: "b", content: first.content }], "/repo")[1]!;
+	expect(out.content.map((block) => block.type)).toEqual(["image", "text"]);
+	expect(textOf(out)).toMatch(/^\[Duplicate browser_screenshot result omitted/);
+
+	const empty = dropUneventful([{ ...first, uneventful: true }])[0]!;
+	expect(empty.content).toEqual([image, { type: "text", text: "[无结果]" }]);
 });

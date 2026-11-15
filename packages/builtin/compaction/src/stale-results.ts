@@ -10,7 +10,7 @@
 
 import { isAbsolute, posix, relative, sep } from "node:path";
 import type { FileViewDetails, Message, ToolResultMessage } from "@plume/contract";
-import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS } from "./prune.ts";
+import { isCut, PRUNE_FLOOR_CHARS, PRUNE_THRESHOLD_CHARS, withText } from "./prune.ts";
 
 interface StaleCut {
 	index: number;
@@ -85,7 +85,7 @@ export function dropStaleResults(messages: Message[], cwd: string): Message[] {
 	return messages.map((message, index) => {
 		const notice = byIndex.get(index);
 		if (!notice || message.role !== "toolResult") return message;
-		return { ...message, content: [{ type: "text" as const, text: notice }] } satisfies ToolResultMessage;
+		return withText(message, notice);
 	});
 }
 
