@@ -20,7 +20,7 @@ const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')
 /**
  * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟后的检查）。
  * 卡片收着时开关上有圆点、说明里数着监视和待触发的检查；打开后「后台任务」一节里服务那一行有端口签、监视那一行有「监视」签，
- * 服务被认成挂着的（`TrackedJob.stand`）、会话不再算有后台的事没完，同一节里两个检查，取消掉十分钟那个；
+ * 服务被认成挂着的（`TrackedJob.stand`）、会话不再算有后台的事没完：这一轮的交付卡（写了个文件）、「继续」（清单剩一项没勾）和完成通知要的 idle 事件照样出来；同一节里两个检查，取消掉十分钟那个；
  * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那个到点——对话里出现「检查 · …」那一行、会话被叫醒开一轮，
  * 那一轮再安排一次；换成英文界面，转录里的工具行（在 memo 后面）、送达那一行和卡片不重挂就当场换过来，再换回中文；在卡片里取消它，安排它的那一行标「已停止」。最后归档这个会话：服务、监视跟着停掉（端口不再应答），
  * 之后没有「后台命令完成」那一行、不再请求模型。卡片里没有「全部停止」。这段要一分多钟，大头是等到点的一分钟。
@@ -94,9 +94,27 @@ export async function checkEnvironment(options: {
 				{ id: "toolu_env_monitor", name: "monitor", args: { command: "sleep 600", description: "冒烟用的监视" } },
 				{ id: "toolu_env_fire", name: "schedule_wakeup", args: { delay_seconds: 60, prompt: "看看服务还在不在", reason: FIRE } },
 				{ id: "toolu_env_cancel", name: "schedule_wakeup", args: { delay_seconds: 600, prompt: "十分钟后再看", reason: CANCEL } },
+				// 写个文件、留一项没勾的待办：服务和监视还在跑时，这一轮的交付卡和「继续」照样画出来。只留 pending，清单收尾不追问。
+				{ id: "toolu_env_write", name: "write", args: { path: "environment-delivery.txt", content: "smoke\n" } },
+				{
+					id: "toolu_env_todo",
+					name: "todo_write",
+					args: {
+						todos: [
+							{ content: "起服务和监视", status: "completed" },
+							{ content: "到点再看服务", status: "pending" },
+						],
+					},
+				},
 			],
 		};
 	});
+	// 冒烟里不弹系统通知；「完成」那条通知只看 idle 事件，这里直接收它。
+	const idled = new Set<string>();
+	const events = agent.watch();
+	void (async () => {
+		for await (const event of events) if (event.type === "idle") idled.add(event.sessionId);
+	})().catch(() => {});
 	try {
 		const previous = new Set((await agent.sessions()).map((item) => item.id));
 		window.webContents.send("plume:command", "new-session");
@@ -119,6 +137,11 @@ export async function checkEnvironment(options: {
 		// 服务打印了本机地址，plume.tools 经 `TrackedJob.stand` 标成挂着的；监视登记时就是挂着的。两样都还在跑，会话却不算还有后台的事没完
 		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后归档。
 		await wait(async () => (await agent.sessions()).find((item) => !previous.has(item.id))?.background !== true, "服务被认成挂着的，会话不再等它结束");
+		// 挂着的不挡这一轮收尾：交付卡、「继续」照样画出来，完成通知要的 idle 照样发出。
+		const started = (await agent.sessions()).find((item) => !previous.has(item.id))!.id;
+		await until(`document.querySelector('[data-screen=chat] [data-turn-delivery]') !== null`, "服务和监视在跑时交付卡照样画出");
+		await until(`document.querySelector('[data-screen=chat] [data-resume=unfinished] [data-resume-continue]') !== null`, "服务和监视在跑时「继续」照样出现");
+		await wait(async () => idled.has(started), "服务和监视在跑时会话照样发出 idle（完成通知看它）");
 		if ((await page<number>(`document.querySelectorAll('[data-environment-job]').length`)) !== 2) throw new Error("服务和监视应该都还在跑");
 		await until(`document.querySelectorAll('[data-environment-section$="/jobs"] [data-environment-wakeup]').length === 2`, "检查和后台命令列在同一节里，两个");
 		if (await page<boolean>(`document.querySelector('[data-environment-section$="/wakeups"], [data-environment-stop-all]') !== null`))
@@ -268,6 +291,7 @@ export async function checkEnvironment(options: {
 		if (session?.running) throw new Error("归档后会话又开了一轮");
 		await capture("smoke-environment-archived.png");
 	} finally {
+		events.cancel();
 		setModel(undefined);
 	}
 
