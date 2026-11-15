@@ -314,6 +314,22 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 			attachments.clear();
 			return;
 		}
+		if (view && running && steering) {
+			/*
+			 * 插话一推进队里就经 `queue` 事件上了排队条，往往比发送的回音先到：等回音再清空的话，那几帧同一句话在输入框和排队条上各一份。
+			 * 照排队的样子先清空，插不进再整份放回。
+			 */
+			const draft: QueuedDraft = { text: value, attachments: attachments.attachments, quotes: quoted, sessionRefs: references };
+			void agent.send(view.summary.id, { ...outgoing, steer: true }).catch((error: unknown) => {
+				notify(errorText(error), "error");
+				restoreUnqueued(scope, draft);
+			});
+			setDraft(scope, "");
+			setQuotes(scope, () => []);
+			setSessionReferences(scope, []);
+			attachments.clear();
+			return;
+		}
 		update({ sending: scope });
 		let id = view?.summary.id;
 		try {

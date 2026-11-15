@@ -175,20 +175,27 @@ export function Transcript({
 	/*
 	 * 人发了一句话就回到底部，不管翻到了哪儿：回答在末尾，留在原处就是盯着一块什么都不发生的屏幕。
 	 * 按最后一句人说的话认：换会话时它也变，但那时 `useFollowBottom` 自己会恢复位置，所以只认同一个会话里的变化。
-	 * 插话（`steered`）不算：它不是新开的一问，这一轮本来就贴着底部，跟着跳一次会在转录末尾闪一帧。
+	 *
+	 * 插话（`steered`）不按落进转录的那一刻认：模型做完手上这一步才读到它，那时人可能早翻上去在读别的了。按它上了排队条的那一刻
+	 * （人刚按下回车）认，而且只在人离开了底部时才回去：本来就贴着底部的，跟着跳一次会在转录末尾闪一帧。
 	 */
 	const lastAsk = messages.findLast((message) => message.role === "user" && !message.synthetic && !message.steered)?.timestamp;
-	const asked = useRef({ id, lastAsk });
+	const lastSteer = view.queue.findLast((entry) => entry.steered)?.id;
+	const asked = useRef({ id, lastAsk, lastSteer });
+	const away = useRef(follow.away);
+	away.current = follow.away;
 	const { returnToBottom } = follow;
 	useLayoutEffect(() => {
 		const before = asked.current;
-		asked.current = { id, lastAsk };
-		if (before.id !== id || before.lastAsk === lastAsk) return;
+		asked.current = { id, lastAsk, lastSteer };
+		if (before.id !== id) return;
+		const steered = lastSteer !== undefined && before.lastSteer !== lastSteer && away.current;
+		if (before.lastAsk === lastAsk && !steered) return;
 		range.latest();
 		returnToBottom(true);
 		// `range` 每次渲染都是新的，不进依赖：这里只认那一句话。
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
-	}, [id, lastAsk, returnToBottom]);
+	}, [id, lastAsk, lastSteer, returnToBottom]);
 
 	/*
 	 * 时间线和问题导航只看落了盘的消息：它们问的是人说过的话，正在写的那条回复每拍都换，跟着重算是白算。按内容记住时间线，
@@ -335,10 +342,11 @@ export function Transcript({
 			);
 			if (run.message.role !== "user" || run.message.synthetic) return row;
 			// 人问的一句：问题导航按 `data-question-index` 认读到了第几问、跳到哪；隔了一阵再说的，上面画一条时间。
+			// 插话不是一问（`questionsIn` 不收它），不标：标了的话读过它，导航找不到这一问，跳回第一问。
 			return (
 				<Fragment key={key}>
 					{separators.has(run.index) && <ConversationTime timestamp={run.message.timestamp} />}
-					<div data-question-index={run.index}>{row}</div>
+					<div data-question-index={run.message.steered ? undefined : run.index}>{row}</div>
 				</Fragment>
 			);
 		},
