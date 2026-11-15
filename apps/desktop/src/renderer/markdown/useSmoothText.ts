@@ -187,7 +187,13 @@ export function useSmoothText(
 		 */
 		const step = (time: number) => {
 			here.frame = 0;
-			const cut = wordCut(here.target, here.pace.cut(time), holdsWord(time, here.pace.arrivedAt, here.live));
+			/*
+			 * 放出来的字不收回。拍子给的是这一帧开始的时刻，而挂上、来字的那次提交可能落在这一帧开始之后，时间线是按那时的
+			 * `performance.now()` 排的：下一拍按更早的时刻切，就把刚画出来的字收回去。量到过收尾时一句短回复先画出第一个字、
+			 * 下一拍整段 `<p>` 被拿掉、再一拍才重新挂上，转录高度 +35、−25、+25，跟着底部的页面上下跳一下。半个词也一样：
+			 * 上游停下时放出来的半个词，再来字时 `holdsWord` 又要扣住它。
+			 */
+			const cut = Math.max(here.cut, wordCut(here.target, here.pace.cut(time), holdsWord(time, here.pace.arrivedAt, here.live)));
 			if (cut !== here.cut) {
 				here.cut = cut;
 				setShown(here.target.slice(0, cut));
