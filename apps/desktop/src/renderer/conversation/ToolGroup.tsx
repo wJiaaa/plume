@@ -17,9 +17,9 @@
  */
 
 import type { UnansweredDetails } from "@plume/contract";
-import { Collapse, motionReduced, translate, useHeldKey, useI18n } from "@plume/ui";
+import { Collapse, DURATION, motionReduced, translate, useHeldKey, useI18n } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
-import { type AnimationEvent, memo, type ReactNode, type TransitionEvent, useRef, useState } from "react";
+import { type AnimationEvent, memo, type ReactNode, type TransitionEvent, useEffect, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
 import { type CallLabel, callLabel, describePolls, diffOf, labelText, summarizeCalls } from "./call-words.ts";
@@ -343,6 +343,7 @@ function PluginRow({ enter, children }: { enter: boolean; children: ReactNode })
  *
  * 长完摘掉类名：长着时裁着（`overflow: clip`），之后不该再裁；`@starting-style` 也只该用一次，藏起来的页面（`Activity`）
  * 再显出来时不重演。被打断（`transitioncancel`，比如长到一半藏了起来）也算长完。减少动态效果时直接出现。
+ * 挂上时就藏着（`Activity` 里的面板、侧边聊天）过渡根本不跑，两个事件都不来：过了动画的时长照样摘掉，不然一直裁着，显出来时整批再长一遍。
  */
 function useGrowIn(initial: boolean): {
 	className?: string;
@@ -350,6 +351,11 @@ function useGrowIn(initial: boolean): {
 	onTransitionCancel?: (event: TransitionEvent<HTMLElement>) => void;
 } {
 	const [fresh, setFresh] = useState(() => initial && !motionReduced());
+	useEffect(() => {
+		if (!fresh) return;
+		const timer = setTimeout(() => setFresh(false), DURATION.slow * 2);
+		return () => clearTimeout(timer);
+	}, [fresh]);
 	if (!fresh) return {};
 	const done = (event: TransitionEvent<HTMLElement>) => {
 		if (event.target === event.currentTarget && event.propertyName === "height") setFresh(false);
