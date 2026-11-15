@@ -296,7 +296,10 @@ export function Scroller({
 				 * 展开一段折叠区的那一帧要用的是**按下时**元素在视口的高度；等点击冒泡上来，布局
 				 * 已经变了，量到的是展开之后的位置，锚也就锚错了地方。
 				 */
-				onPointerDownCapture={(event) => onHold?.(event.target)}
+				// 只认主键：右键（复制）、中键按下去不会开合什么，按了就停止跟随的话，回复写着时就被丢在原处。
+				onPointerDownCapture={(event) => {
+					if (event.button === 0) onHold?.(event.target);
+				}}
 				/*
 				 * 做 flex 子项，不用 `height: 100%`。
 				 *

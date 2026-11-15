@@ -665,7 +665,9 @@ export function useFollowBottom({
 	 */
 	const hold = useCallback((target: EventTarget | null) => {
 		if (!(target instanceof Element)) return;
-		const toggle = target.closest("[aria-expanded]");
+		// 弹菜单、下拉的按钮也标着 `aria-expanded`，可它们开合不改转录的高度，按了不该停止跟随。
+		const nearest = target.closest("[aria-expanded]");
+		const toggle = nearest?.hasAttribute("aria-haspopup") ? null : nearest;
 		if (state.current !== "detached" && toggle) {
 			cancelAnimationFrame(glide.current);
 			cancelAnimationFrame(chase.current);
@@ -691,6 +693,11 @@ export function useFollowBottom({
 		(instant = false) => {
 			const el = scrollRef.current;
 			if (!el) return;
+			/*
+			 * 贴底收起留下的空白垫先撤掉，再量：回去要落在真正的末尾，不然刚发的那句话停在视口中间、下面一块空要等回复填满。
+			 * 离开了底部时撤掉它看不出来；就在底部时这一下和落地是同一帧。
+			 */
+			setSlack(slack.current, 0);
 			const reading = read(el);
 			if (isDegenerate(reading)) return;
 
