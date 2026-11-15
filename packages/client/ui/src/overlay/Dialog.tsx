@@ -74,6 +74,7 @@ export function DialogFrame({
 	/** 放在正文里、滚动区上方——进度、警告，任何不能被滚走的东西。 */
 	status?: ReactNode;
 	children?: ReactNode;
+	/** 底下那一排按钮，靠右排，主按钮放最后；要把某样（删除、一句说明）放到左边，在它后面放一个 `flex: 1` 的空元素。 */
 	actions: ReactNode;
 	height?: number;
 	/**
@@ -121,7 +122,7 @@ export function DialogFrame({
 					) : null}
 				</div>
 			) : null}
-			<div className="flex shrink-0 items-center gap-2 px-5 pt-5 pb-5" data-plume-dialog-actions>
+			<div className="flex shrink-0 items-center justify-end gap-2 px-5 pt-5 pb-5" data-plume-dialog-actions>
 				{actions}
 			</div>
 		</div>

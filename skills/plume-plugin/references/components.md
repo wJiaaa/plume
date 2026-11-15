@@ -507,6 +507,7 @@ export function DialogFrame({ className = "", ...rest }: {
 	/** 放在正文里、滚动区上方——进度、警告，任何不能被滚走的东西。 */
 	status?: ReactNode;
 	children?: ReactNode;
+	/** 底下那一排按钮，靠右排，主按钮放最后；要把某样（删除、一句说明）放到左边，在它后面放一个 `flex: 1` 的空元素。 */
 	actions: ReactNode;
 	height?: number;
 	/**
