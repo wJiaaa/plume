@@ -11,6 +11,7 @@ import { relativeTo } from "../markdown/assets.ts";
 import type { Call, ToolCallBlock } from "./grouping.ts";
 import { callVerb, checklistTool, lineCommand, lineFile, lineJob, lineNote, lineSubject, lineVerb, runsCommand, toolKind, toolLine } from "./tool-lines.ts";
 import { polledJob } from "./turn-blocks.ts";
+import type { BackgroundJobInfo } from "./view-state.ts";
 
 /** 每种活（`ToolDefinition.kind`）默认的说法，存 key：这张表在模块加载时成型，那会儿窗口还没说自己是哪种语言。 */
 const KIND: Record<ToolKind, MessageKey> = {
@@ -96,7 +97,15 @@ function counted(calls: Call[]): Call[] {
 	});
 }
 
-/** 查看后台任务输出那一行：说是哪个任务（启动它的那条命令的说明），连着查了几次也说。找不到说明，就只说「查看输出」。 */
+/**
+ * 后台任务在行上叫什么：启动它的那次调用写的说明。模型没写说明时用那条命令的第一行，和「运行 …」那一行没说明时一样；
+ * 只说「查看输出」读不出查的是哪个任务。
+ */
+export function jobName(job: BackgroundJobInfo | undefined): string | undefined {
+	return job?.description || job?.command?.split("\n")[0]?.trim() || undefined;
+}
+
+/** 查看后台任务输出那一行：说是哪个任务（`jobName`），连着查了几次也说。任务找不到，就只说「查看输出」。 */
 export function describePolls(what: string | undefined, times: number): string {
 	if (what) return times > 1 ? translate("tools.outputOfTimes", { what, n: times }) : translate("tools.outputOf", { what });
 	return times > 1 ? translate("tools.outputTimes", { n: times }) : translate("tools.output");

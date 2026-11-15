@@ -13,7 +13,7 @@ import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { openFromEvent } from "../image/index.ts";
 import { AnsweredBy } from "./AnsweredBy.tsx";
 import { hasToolCard, queueTask, ToolCardSlot, usePluginRegistrations } from "../plugins.tsx";
-import { describeOne, describePolls, diffOf } from "./call-words.ts";
+import { describeOne, describePolls, diffOf, jobName } from "./call-words.ts";
 import { CodeText } from "./detail/CodeText.tsx";
 import { DiffView } from "./detail/DiffView.tsx";
 import { Section } from "./detail/Section.tsx";
@@ -211,7 +211,7 @@ export function ToolCard({
 	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
 	const unanswered = useCalls((calls) => callUnanswered(calls, latest.block.id));
 	const failed = status === "error" && !stopped && unanswered === undefined;
-	const summary = job ? describePolls(started?.description, polls?.length ?? 1) : describeOne(block, state.cwd, started?.description, result?.details);
+	const summary = job ? describePolls(jobName(started), polls?.length ?? 1) : describeOne(block, state.cwd, jobName(started), result?.details);
 	/*
 	 * 还没开跑的调用没有可看的：不能展开。参数还在写的、写完了排在前面的调用后面等着的，都没有开始时刻；从前点开是
 	 * 「等待输出…」，一条排了十二秒、只跑了几十毫秒的命令看上去是跑卡住了。

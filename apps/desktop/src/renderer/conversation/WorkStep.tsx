@@ -16,7 +16,7 @@ import { Collapse, FlowRow, RollWords, translate, useHeldKey, useI18n } from "@p
 import { CircleX, Layers } from "@plume/ui/icons";
 import { Fragment, memo, type ReactNode, useRef } from "react";
 import { AnsweredBy } from "./AnsweredBy.tsx";
-import { describeCalls, describeOne, diffOf } from "./call-words.ts";
+import { describeCalls, describeOne, diffOf, jobName } from "./call-words.ts";
 import { DiffCount } from "./DiffCount.tsx";
 import type { Call, Run } from "./grouping.ts";
 import { LiveThought } from "./LiveThought.tsx";
@@ -194,7 +194,7 @@ function StepGroup({
 
 function jobDescription(calls: CallState, block: Call["block"]): string | undefined {
 	const job = polledJob(block);
-	return job ? calls.jobs.get(job)?.description : undefined;
+	return job ? jobName(calls.jobs.get(job)) : undefined;
 }
 
 function startedAt(run: MessageRun): number | undefined {

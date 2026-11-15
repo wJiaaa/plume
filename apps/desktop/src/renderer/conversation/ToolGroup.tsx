@@ -22,7 +22,7 @@ import { ChevronRight } from "@plume/ui/icons";
 import { type AnimationEvent, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
 import { AnsweredBy } from "./AnsweredBy.tsx";
-import { type CallLabel, callLabel, describePolls, diffOf, labelText, summarizeCalls } from "./call-words.ts";
+import { type CallLabel, callLabel, describePolls, diffOf, jobName, labelText, summarizeCalls } from "./call-words.ts";
 import { type Call, type Run, runKey } from "./grouping.ts";
 import { LiveThought } from "./LiveThought.tsx";
 import { lineNote } from "./tool-lines.ts";
@@ -288,8 +288,8 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const removed = diffOf(result, "removed");
 	const label: CallLabel =
 		job && polls
-			? { verb: describePolls(started?.description, polls.length) }
-			: callLabel(draft.block, live, cwd, started?.description, result?.details, status === "pending");
+			? { verb: describePolls(jobName(started), polls.length) }
+			: callLabel(draft.block, live, cwd, jobName(started), result?.details, status === "pending");
 	const text = labelText(label);
 	// 答完了、起的任务还在后台跑的（照跑着画）有结果可看。
 	const expandable = startedAt !== undefined || result !== undefined || !live;
@@ -410,7 +410,7 @@ function Marks({
 
 function jobDescription(calls: CallState, block: Call["block"]): string | undefined {
 	const job = polledJob(block);
-	return job ? calls.jobs.get(job)?.description : undefined;
+	return job ? jobName(calls.jobs.get(job)) : undefined;
 }
 
 function thinkingStartedAt(run: MessageRun): number | undefined {
