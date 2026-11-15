@@ -49,7 +49,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 用默认模型做一次性的小调用、读花销、用生图模型出图 | `ctx.model`（`complete`、`usage`、`image`），图存进 `ctx.media` |
 | 读会话、改标题、归档 | `ctx.sessions`（`list`、`messages`、`setTitle`、`setArchived`…） |
 | 自己的子会话（侧边聊天、子 Agent），或页面上一直在的独立会话 | `ctx.sessions.create`，`send` / `start` / `wait` / `report` |
-| 开一个新的顶层会话并发出第一句话；把会话接到 Plume 之外 | `ctx.sessions.launch`；带 `steward: true` 由你代管 |
+| 开一个新的顶层会话并发出第一句话；把会话接到 Plume 之外 | `ctx.sessions.launch`；带 `steward: true` 由你代管；开在哪个项目里，项目 id 从 `ctx.sessions.projects()` 查 |
 | 替人照看全部会话：往人的会话里交代、替人答卡、停下一轮 | 声明 `manage: "sessions"`，人在插件详情里给了授权后用 `ctx.sessions.post` / `respond` / `answer` / `stop` |
 | 列项目文件、在隔离视图里读 git、读写本体记下的改动 | `ctx.workspace`、`ctx.changes` |
 | 加一种资源地址（`scheme://路径`） | `ctx.resources` |

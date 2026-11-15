@@ -5,7 +5,7 @@
 import type { Remote } from "@plume/rpc";
 import type { ComponentType, MouseEvent, ReactNode } from "react";
 import type { ChangeHunk } from "./changes.ts";
-import type { Locale, SlashCommand, ToolCall, ToolOutput } from "./plugin.ts";
+import type { Locale, ProjectInfo, SlashCommand, ToolCall, ToolOutput } from "./plugin.ts";
 import type {
 	ChildTask,
 	FileContents,
@@ -19,7 +19,7 @@ import type {
 } from "./service.ts";
 import type { AssistantMessage, DeliveredReport, UserMessage } from "@plume/llm/types";
 
-export type { Remote, SessionView, ToolCall, ToolOutput };
+export type { ProjectInfo, Remote, SessionView, ToolCall, ToolOutput };
 
 /** 回复正文中的围栏代码块；语法与内容由插件校验，宿主不执行其中的代码。 */
 export interface CodeBlockProps {
@@ -704,13 +704,6 @@ export interface ModelDefaults {
 	sessionModel?: string;
 	/** 新会话的思考档位（设置 › 常规的默认推理强度）。 */
 	thinking: ThinkingLevel;
-}
-
-/** 登记过的项目。 */
-export interface ProjectInfo {
-	id: string;
-	name: string;
-	path: string;
 }
 
 /** 屏幕上的一块矩形，逻辑像素。 */

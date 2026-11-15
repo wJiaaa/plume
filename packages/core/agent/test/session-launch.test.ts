@@ -85,7 +85,11 @@ it("开一个顶层会话：进侧栏、不记在插件名下，第一句经 pro
 
 it("项目、模型、思考档位、标题、来处都能带上；第一轮出错时 done 交回原因", async () => {
 	const { service, sessions } = await open([{ status: 401 }]);
-	const project = await service.createProject("仓库", dir, undefined);
+	const created = await service.createProject("仓库", dir, undefined);
+	// 逻辑入口自己查得到项目：只给 id、名字、目录。
+	const projects = await sessions().projects();
+	expect(projects).toEqual([{ id: created.id, name: "仓库", path: dir }]);
+	const project = projects[0]!;
 	const source = await service.createSession({ cwd: dir });
 	const { session, done } = await sessions().launch({
 		project: project.id,

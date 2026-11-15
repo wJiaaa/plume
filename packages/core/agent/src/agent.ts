@@ -492,6 +492,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 							})),
 					);
 			},
+			projects: async () => projects.map(({ id, name, path }) => ({ id, name, path })),
 			send: async (owner, sessionId, message, options) => sendChild(owned(owner, sessionId), message, options?.signal),
 			start: async (owner, sessionId, message) => {
 				const session = owned(owner, sessionId);

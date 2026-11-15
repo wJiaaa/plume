@@ -74,7 +74,20 @@ const NO_SECRETS: PluginSecrets = {
  */
 export interface HostSessions extends Pick<
 	SessionAccess,
-	"list" | "get" | "messages" | "approval" | "compact" | "setTitle" | "setArchived" | "models" | "jobs" | "stopJob" | "jobOutput" | "wakeups" | "cancelWakeup"
+	| "list"
+	| "get"
+	| "messages"
+	| "approval"
+	| "compact"
+	| "setTitle"
+	| "setArchived"
+	| "models"
+	| "projects"
+	| "jobs"
+	| "stopJob"
+	| "jobOutput"
+	| "wakeups"
+	| "cancelWakeup"
 > {
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 是调它的插件：agent 只让它改自己建的会话。 */
@@ -247,6 +260,7 @@ const NO_SESSIONS: HostSessions = {
 	respond: async (_owner, sessionId) => missing(sessionId),
 	answer: async (_owner, sessionId) => missing(sessionId),
 	models: async () => [],
+	projects: async () => [],
 	approval: () => undefined,
 	jobs: () => [],
 	stopJob: () => false,
@@ -913,6 +927,7 @@ export class PluginHost {
 					return sessions.answer(name, sessionId, toolCallId, value);
 				},
 				models: () => sessions.models(),
+				projects: () => sessions.projects(),
 				approval: (sessionId) => sessions.approval(sessionId),
 				jobs: (sessionId) => sessions.jobs(sessionId),
 				stopJob: (sessionId, jobId, force) => sessions.stopJob(sessionId, jobId, force),

@@ -33,6 +33,7 @@ export default {
 | `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
 | `ctx.sessions.list()` / `get` / `messages`、`compact`、`setTitle`、`setArchived`、`onDeleted` / `onArchived` / `onEnded` / `onContextReset` | 读会话的摘要和消息，现在就压缩（`/compact`）、改标题（侧栏和标题栏上那行字）、归档，会话删掉、归档、在这次运行里不再活着、上下文被重置时收通知，见下面「读会话、改会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
+| `ctx.sessions.projects()` | 登记过的项目 `{ id, name, path }[]`，按侧栏的顺序；`launch`、`create`、`configure` 的 `project` 填这里的 `id`。界面入口里用 `ui.useProjects()` |
 | `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` / `configure(id, { model?, thinking?, project?, cwd? })` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话）：建、发一句并等结束、停、删、之后改模型和目录，见「子会话」「独立会话」 |
 | `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 子会话的后台运行：派出去、等它结束、把结果送给父会话，见「子会话」 |
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
@@ -642,7 +643,7 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的�
 - `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`。
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」；拿着管理授权时能 `stop`，见「管理会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
-- `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, name? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
+- `project` 给了就用项目的目录，项目 id 从 `ctx.sessions.projects()` 查（外面只说了项目名时按 `name` 找，几个项目可能同名、也可能登记在同一个目录上，对不上就别猜）；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, name? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
 - 什么时候开由插件定，但开出来的每个会话都是实打实的一轮模型调用：只在到点了、人点了按钮时开，不在渲染、循环里开。界面上要把人带过去，用 `ui.openSession(session.id)`（人点了按钮时）。
 
 ## 代管会话

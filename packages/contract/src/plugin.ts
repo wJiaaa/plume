@@ -1219,12 +1219,19 @@ export interface SessionModel {
 	thinking: ThinkingOption[];
 }
 
+/** 登记过的项目。 */
+export interface ProjectInfo {
+	id: string;
+	name: string;
+	path: string;
+}
+
 /** `SessionAccess.compact` 压完的结果，`code` 同 `CompactionRun.code`。 */
 export type CompactionOutcome = { ok: true; before: number; after: number } | { ok: false; code: Exclude<CompactionCode, "done">; error?: string };
 
 /** `SessionAccess.launch` 开新会话要的东西。 */
 export interface SessionLaunch {
-	/** 开在哪个已登记的项目里（项目 id），工作目录是项目的目录。和 `cwd` 都不给时是不属于任何项目的聊天。 */
+	/** 开在哪个已登记的项目里（项目 id，见 `SessionAccess.projects`），工作目录是项目的目录。和 `cwd` 都不给时是不属于任何项目的聊天。 */
 	project?: string;
 	/** 不在项目里时的工作目录：已有目录的绝对路径。给了 `project` 时不看它。 */
 	cwd?: string;
@@ -1453,6 +1460,8 @@ export interface SessionAccess {
 	answer(sessionId: string, toolCallId: string, value: unknown): Promise<boolean>;
 	/** 可用模型目录，只含名称、窗口和思考档位。 */
 	models(): Promise<SessionModel[]>;
+	/** 登记过的项目，按侧栏的顺序：`launch`、`create`、`configure` 的 `project` 填这里的 `id`。界面入口里用 `ui.useProjects()`。 */
+	projects(): Promise<ProjectInfo[]>;
 	/**
 	 * 开始自己的子会话的一轮，立即交回句柄；首次运行固定实际模型与思考档位，续跑沿用。父轮正常结束不取消，明确停止父会话则取消。
 	 * 这一次运行结束时，本体停掉这个子会话还在跑的后台任务（`ToolRun.track`）：子会话收不到后台送达，留下来就没人管了。
