@@ -19,7 +19,7 @@ export function hasSidebar(screen: Screen): boolean {
 }
 
 /**
- * 活动栏：窗口最左边一列图标，换的是整个界面——对话、插件的页面、插件市场、设置；搜索和通知也在这里，哪一页都够得着。
+ * 活动栏：窗口最左边一列图标，换的是整个界面——对话、插件市场、插件的页面、设置；搜索和通知也在这里，哪一页都够得着。
  *
  * 以前这些入口和项目列表挤在同一根侧栏里，插件的页面要列表只能在正文里再开一列，成了三栏。分开以后侧栏只放当前界面自己的东西，
  * 页面不要侧栏就整页给它。这一列不收起、不拖宽度、不跟侧栏一起滑：开合侧栏时它一动不动，滑的只有侧栏和卡片。
@@ -43,6 +43,7 @@ export function Rail() {
 					icon={<MessagesSquare size={17} strokeWidth={1.8} />}
 					onClick={() => go("chat")}
 				/>
+				<MarketNavItem active={screen === "market"} onClick={() => go("market")} />
 				{listPages().map((page) => {
 					const Icon = page.icon ?? AppWindow;
 					const key = `page:${page.key}` as const;
@@ -62,7 +63,6 @@ export function Rail() {
 				})}
 			</div>
 			<div className="flex shrink-0 flex-col items-center gap-1.5 pt-1.5 pb-2">
-				<MarketNavItem active={screen === "market"} onClick={() => go("market")} />
 				<SidebarTools
 					sessions={sessions}
 					projects={projects}
