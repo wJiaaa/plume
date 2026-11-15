@@ -784,6 +784,27 @@ export function useLiveRefresh(refresh: () => void | Promise<void>, running: boo
 export function PageTopRow({ start = false, className = "", ...rest }: { start?: boolean; className?: string; children?: ReactNode; ref?: Ref<HTMLElement> } & HTMLAttributes<HTMLElement>)
 ```
 
+### `ResizeHandle`
+
+```tsx
+/**
+ * 窗格能拖的那条边：拖着、方向键改宽度，双击、Home 回默认。宽度由调用方存着、经 `onResize` 收新值（已夹在 `min`、`max` 里）。
+ * 它绝对定位，贴着最近的定位祖先的那条边，所以放进一个 `position: relative`、不裁切溢出的框里：窗格自己不裁切时就放在窗格里，
+ * 裁切时（开合动画要 `overflow: hidden`）在外面再包一层。
+ */
+export function ResizeHandle(props: {
+	/** 在窗格的哪一边：左边的窗格是 `end`，右边的是 `start`。 */
+	edge: "start" | "end";
+	width: number;
+	min: number;
+	max: number;
+	onResize: (next: number) => void;
+	/** 双击恢复默认。 */
+	onReset?: () => void;
+	label: string;
+})
+```
+
 ## 加载和占位
 
 ### `StatusSpinner`
