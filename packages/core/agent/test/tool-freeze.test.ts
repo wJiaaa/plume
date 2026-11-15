@@ -20,7 +20,7 @@ afterEach(async () => {
 
 const names = (request: Record<string, unknown> | undefined) => (request?.tools as Array<{ name: string }> | undefined)?.map((tool) => tool.name);
 
-// 工具表按会话冻结（plume.prompt）：一轮跑到一半装上的插件，它的工具这一轮不出现，前缀逐字节不变；下一轮开头才接在最后。
+// 工具表按会话冻结（本体，`src/prompt/frozen.ts`）：一轮跑到一半装上的插件，它的工具这一轮不出现，前缀逐字节不变；下一轮开头才接在最后。
 it("一轮中途装上带工具的插件，这一轮后续请求的工具表不变，下一轮新工具接在最后", async () => {
 	dir = await mkdtemp(join(tmpdir(), "plume-tool-freeze-"));
 	const workspace = join(dir, "workspace");

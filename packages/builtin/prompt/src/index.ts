@@ -1,21 +1,19 @@
 /**
- * 内置插件 plume.prompt：发给模型的系统提示词和消息里的环境信息。
+ * 内置插件 plume.prompt：发给模型的系统提示词写什么。
  *
- * 挂在 `model.context` 的最外层（order -1000）：先把各段系统提示词、每个新日期后面的 `<env>`、插话和打断的说明补进去，
- * 再交给里层。所以其他插件的层拿到的已经是完整的一份，按段改、删、加都和以前一样；要整个换掉系统提示词，
- * 在更里面的层里把 `sections` 换掉就行。
+ * 挂在 `model.context` 的外层（order -1000）：先把各段系统提示词补进去，再交给里层。所以其他插件的层拿到的已经是完整的一份，
+ * 按段改、删、加都和以前一样；要整个换掉系统提示词，在更里面的层里把 `sections` 换掉就行。计划模式在它外面（-1001）设好只读，
+ * 它据此点名只读那一档的 shell。
  *
- * 每次请求都按磁盘现状组一份，但发出去的是这个会话冻结的那份：里层交回来的段和模型此刻以为的不一样时，改动作为一条增量消息
- * 接在这一轮的开头（见 `update.ts`、`frozen.ts`），系统提示词这段前缀一直不变，服务商的缓存才接得上。工具表也一样：一轮里照冻结的
- * 那份发，插件装卸、重载带来的变化在下一轮开头才换上（见 `frozen.ts`）。
+ * 身份和准则人能换（设置 › 个性化「身份与准则」，见 `presets.ts`）：一个会话用哪一套在它第一次请求时定下，之后不变。
+ *
+ * 会话内冻结、中途的改动作为增量送达、消息里的日期和插话说明不在这里，由本体包在整条钩子链外面（`packages/core/agent/src/prompt/`）。
  */
 
-import { join } from "node:path";
 import type { Plugin } from "@plume/contract";
-import { withEnvironment } from "./environment.ts";
-import { FrozenPrompts } from "./frozen.ts";
+import type { PromptApi } from "./api.ts";
+import { createPresets } from "./presets.ts";
 import { findRepoRoot, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "./instructions.ts";
-import { withSteeringNote } from "./steering.ts";
 import { buildPromptSections } from "./system.ts";
 
 /** 比插件常用的 order 都小：先于它们补上默认的内容。 */
@@ -24,18 +22,25 @@ const ORDER = -1000;
 export default {
 	name: "plume.prompt",
 	apply(ctx) {
-		const frozen = new FrozenPrompts(join(ctx.dataDir, "frozen"), (message) => ctx.log.warn(message));
-		ctx.sessions.onDeleted((sessionId) => frozen.forget(sessionId));
+		const presets = createPresets(ctx);
+		ctx.sessions.onDeleted((sessionId) => presets.forget(sessionId));
+		ctx.serve({
+			view: () => presets.view(),
+			save: (id, draft) => presets.save(id, draft),
+			remove: (id) => presets.remove(id),
+			select: (id) => presets.select(id),
+		} satisfies PromptApi);
 		ctx.hook(
 			"model.context",
 			async (input, next) => {
 				const kinds = new Map(ctx.tools.list().flatMap((tool) => (tool.kind ? [[tool.name, tool.kind] as const] : [])));
-				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions] = await Promise.all([
+				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions, persona] = await Promise.all([
 					loadProjectInstructions(input.cwd),
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
 					findRepoRoot(input.cwd).then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
 					loadMagpieInstructions(ctx.appDataDir, ctx.log),
+					presets.forRequest(input),
 				]);
 				const sections = buildPromptSections({
 					cwd: input.cwd,
@@ -55,10 +60,9 @@ export default {
 					// Magpie 分发的共享指令和人自己的全局指令放进同一段。
 					customInstructions: [magpieInstructions, input.personalization.customInstructions.trim()].filter(Boolean).join("\n\n"),
 					scratchDir: input.scratchDir,
+					persona,
 				});
-				const request = await frozen.prepare(input.sessionId, input.messages);
-				const output = await next({ ...input, sections: [...sections, ...input.sections], messages: withEnvironment(withSteeringNote(request.messages)) });
-				return { ...output, ...request.settle(output.sections, output.messages, output.tools) };
+				return next({ ...input, sections: [...sections, ...input.sections] });
 			},
 			{ order: ORDER },
 		);

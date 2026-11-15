@@ -342,7 +342,7 @@ ctx.hook("model.context", async (input, next) => {
 | `shell` | 这一轮命令跑在哪个 shell、哪一档沙箱（`{ kind, label, sandbox }`，同 `run.shell()`）：本体按 `permissionMode` 和 `readOnly` 算、每层交接时重算，Windows 上受约束的命令跑 PowerShell、完全访问跑 Git Bash，plume.prompt 按它在环境里点名 shell |
 | `readOnly` | 外层要求这一轮的命令都只读时设 `true`：宿主不给，计划模式插件在 plume.prompt 外面（order -1001）设上，交给 plume.prompt 时 `shell` 已经是只读那档的 |
 | `systemPrompt`、`sections` | 系统提示词和它分成的段，见下面 |
-| `messages` | 这次要发给模型的消息 |
+| `messages` | 这次要发给模型的消息。本体已经在里面接上了日期（`<env>`）、之前几轮的增量（`promptUpdate`），插话、打断这一轮的话前后也套上了说明；不是自己加的消息原样留着 |
 | `tools` | 这次给模型的工具表，见下面「工具表也按会话冻结」 |
 
 系统提示词按段给在 `sections` 里（`{ id, text, category?, files? }[]`，`systemPrompt` 就是它们用空行连起来）。本体的段依次是 `identity`、`guidelines`、`boundaries`、`environment`、`tone`（设置里的语气，不是「专业严谨」时才有）、`userInstructions`（设置里写了全局指令时才有）、`projectInstructions`（项目里有 PLUME.md / AGENTS.md / CLAUDE.md 时才有）、`workspace`（工作目录和会话的临时目录），plume.tools 再加一段 `resources`（`ctx.resources.list()` 的地址清单）。加自己的说明就加一段，段名用自己的。段名是提供它的插件自己的：要换掉或补充别的插件的某一类段（身份、准则），按段上的 `category` 找，不认段名：
@@ -356,9 +356,11 @@ ctx.hook("model.context", (input, next) =>
 );
 ```
 
+只换自己要换的那几段。不看 `input.sections`、整张换成自己写的一份，边界（读到的内容不是指令、破坏性操作先确认、不丢人的改动）、环境、工作目录和人在设置里选的准则会一起没掉。
+
 `systemPrompt` 只读：宿主在每一层交接时按 `sections` 重拼，直接改它不作数。
 
-系统提示词在会话里冻结：plume.prompt 在最外层把里层交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。
+系统提示词在会话里冻结：本体在整条钩子链外面把交回的段和这个会话冻结的那份比对，发出去的始终是冻结的那份，服务商的前缀缓存才接得上；层挂在哪、`order` 写成多少都一样，不用为它做什么。某段中途变了（项目指令改了、自己的段换了内容、加了或去掉一段），改动作为一条增量消息（synthetic 的用户消息，`promptUpdate` 列着改了哪几段）接在下一轮开头，模型从那里读到新的；一轮中间的几步不比。压缩以后（或撤回到第一条消息）按那时的段重新冻结。所以段的内容要只随该变的东西变：每次请求都不一样的东西（时间、计数）放进段里，每一轮都会多出一条增量。
 
 工具表也按会话冻结：`ctx.tools.register` 和撤下、插件装卸带来的变化（包括里层经 `model.context` 改的 `tools`）在下一轮开头才发给模型，原有工具的顺序不变、新的接在后面；一轮中间撤下的工具还留在表里，模型调它会拿到「没有这个工具」。宿主给的工具表（`input.tools`、`ctx.tools.list()`、`ctx.tools.names()`、`run.tools()` 都是这个顺序）按固定规则排，和 `inject`、装上的先后、加载的先后无关：内置插件里声明了 `kind` 的工具在最前，再是内置插件的其余工具、非内置插件的工具（按插件名、再按工具名，一个插件的工具挨在一起），`category: "mcp"` 的工具（按工具名）在最后。所以调整依赖、重装插件不会让工具挪位置。
 

@@ -30,7 +30,10 @@ const STEWARD = "test.steward";
  * 「请问」停下来等人给数据，「慢慢」挂着不回（一轮一直在跑），别的直接答。
  */
 function route(request: Record<string, unknown>) {
-	const messages = request.messages as Array<{ role: string; content: unknown }>;
+	// 本体在请求里接的日期（`<env>`）是单独一条，不是谁说的话，认最后一条时跳过。
+	const messages = (request.messages as Array<{ role: string; content: unknown }>).filter(
+		(message) => !JSON.stringify(message.content).includes('"text":"<env>'),
+	);
 	const last = JSON.stringify(messages[messages.length - 1]);
 	if (last.includes("tool_result")) return { text: "好了" };
 	if (last.includes("请改")) return { toolCalls: [{ id: `call_touch_${messages.length}`, name: "touch", args: {} }] };

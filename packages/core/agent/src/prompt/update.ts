@@ -51,13 +51,13 @@ export function diffSections(current: ReadonlyMap<string, string>, next: Readonl
 }
 
 /**
- * 段落正文里出现这几个标签就中和掉开头的 `<`。
+ * 段落正文里出现增量自己的这两个标签就中和掉开头的 `<`。
  *
- * 项目指令是用户仓库里的文件，写什么都有可能：一个 `</system-update>` 能把后半截伪装成标签外的普通文字。`<session-summary>`
- * 与 `<dropped-history>` 是压缩认边界的记号（plume.compaction 只看 synthetic 用户消息开头有没有它们），一份讲压缩的 AGENTS.md
- * 进了增量就会被当成上一次压缩的摘要。压缩头加了新的记号时这里要跟着加。
+ * 项目指令是用户仓库里的文件，写什么都有可能：一个 `</system-update>` 能把后半截伪装成标签外的普通文字。只管这两个：
+ * 插件认自己的记号时按消息的开头认（压缩认摘要看的是合成消息是不是以它的标签开头），增量消息总以 `<system-update>` 开头，
+ * 本体不替插件记它们的标签名。
  */
-const RESERVED_TAGS = /<(\/?)(system-update|section-update|session-summary|dropped-history)\b/gi;
+const RESERVED_TAGS = /<(\/?)(system-update|section-update)\b/gi;
 
 /**
  * 把改动写成一条模型读得到、界面不画的消息。

@@ -93,7 +93,10 @@ import { isMagpie } from "./magpie.ts";
 import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImage } from "./media.ts";
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
+import { withEnvironment } from "./prompt/date.ts";
+import { preparePrompt } from "./prompt/frozen.ts";
 import { settlePrompt, validSections } from "./prompt/sections.ts";
+import { withSteeringNote } from "./prompt/steering.ts";
 import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
 import {
@@ -1179,14 +1182,27 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			tools: host.toolSpecs(),
 		};
 		await restoreImages(mediaDir, input.messages);
+		/*
+		 * 冻结、日期、插话说明包在整条钩子链外面（见 `prompt/`）：插件的层不管挂在哪、对段和工具表做了什么，都改不坏前缀缓存。
+		 * 增量、日期和插话说明在钩子链之前加：它们按「跟在本体给的历史里哪一条后面」定位，插件往里插了消息就对不上了。
+		 */
+		const record = await recordOf(session);
+		const prompt = preparePrompt(record.prompt, input.messages);
+		input.messages = withEnvironment(withSteeringNote(prompt.messages));
 		let trace: HookTrace | undefined;
-		const context = await host.run("model.context", input, async (context) => context, {
+		const hooked = await host.run("model.context", input, async (context) => context, {
 			settle: (context: ModelContext) => settleShell(settlePrompt(context)),
 			trace: (value) => (trace = value),
 		});
-		if (typeof context?.systemPrompt !== "string" || !validSections(context.sections) || !Array.isArray(context.messages) || !Array.isArray(context.tools)) {
+		if (typeof hooked?.systemPrompt !== "string" || !validSections(hooked.sections) || !Array.isArray(hooked.messages) || !Array.isArray(hooked.tools)) {
 			throw new Error(text("session.contextIncomplete"));
 		}
+		const { frozen, ...sent } = prompt.settle(hooked.sections, hooked.messages, hooked.tools);
+		if (frozen !== record.prompt) {
+			record.prompt = frozen;
+			store.saveContext(session.summary.id, record);
+		}
+		const context = settlePrompt({ ...hooked, ...sent });
 		if (trace) contextTraces.set(context, trace);
 		return context;
 	}

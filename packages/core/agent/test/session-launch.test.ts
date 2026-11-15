@@ -164,9 +164,9 @@ async function withSuggestion(replies: FakeReply[] | ((last: string) => FakeRepl
 	return { ...opened, source };
 }
 
-/** 请求体里最后一条消息的字（工具结果也算）。 */
+/** 请求体里最后一条消息的字（工具结果也算；本体接的日期 `<env>` 是单独一条，不算）。 */
 function lastText(request: Record<string, unknown>): string {
-	const messages = (request.messages ?? []) as Array<{ content: unknown }>;
+	const messages = ((request.messages ?? []) as Array<{ content: unknown }>).filter((message) => !JSON.stringify(message.content).includes('"text":"<env>'));
 	return JSON.stringify(messages.at(-1)?.content ?? "");
 }
 

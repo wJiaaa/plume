@@ -13,6 +13,7 @@
 
 import type { CompactionRun, CompactionVia, Message, ToolResultMessage } from "@plume/contract";
 import type { ContextEstimate } from "./context-breakdown.ts";
+import type { FrozenPrompt } from "./prompt/frozen.ts";
 
 /** 一次压缩。 */
 export interface Compaction {
@@ -49,6 +50,11 @@ export interface ContextRecord {
 	 * 会话删掉一起没。撤回、分叉后照留：除了对话消息，各段和截掉前一样，总数按服务商报的用量缩放，下一次请求再换成新的。
 	 */
 	estimate?: ContextEstimate;
+	/**
+	 * 这个会话冻结的系统提示词、工具表和之后的增量（见 `prompt/frozen.ts`）。撤回、分叉照留：开头那条还在就接着用，
+	 * 截掉的增量下一次请求时作废；分叉出来的会话因此和来处共用前缀。
+	 */
+	prompt?: FrozenPrompt;
 }
 
 export const emptyRecord = (): ContextRecord => ({ compactions: [], withheld: [] });
@@ -115,6 +121,7 @@ export function keptRecord(record: ContextRecord, messages: readonly Message[]):
 		...(record.viewsAt !== undefined && Object.keys(views).length > 0 ? { viewsAt: record.viewsAt } : {}),
 		...(runs.length > 0 ? { runs } : {}),
 		...(record.estimate ? { estimate: record.estimate } : {}),
+		...(record.prompt ? { prompt: record.prompt } : {}),
 	};
 }
 

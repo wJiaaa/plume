@@ -25,8 +25,11 @@ type Route = (conversation: string, replies: number) => FakeReply;
 function routed(route: Route) {
 	return (request: Record<string, unknown>): FakeReply => {
 		const messages = request.messages as Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>;
+		// 本体在请求里接的日期（`<env>`）不是哪一段对话说的话，认对话时跳过。
 		const text = (content: (typeof messages)[number]["content"]) =>
-			typeof content === "string" ? content : content.flatMap((block) => (block.type === "text" && block.text ? [block.text] : [])).join("\n");
+			typeof content === "string"
+				? content
+				: content.flatMap((block) => (block.type === "text" && block.text && !block.text.startsWith("<env>") ? [block.text] : [])).join("\n");
 		const at = messages.findLastIndex((message) => message.role === "user" && text(message.content));
 		const replies = messages.slice(at + 1).filter((message) => message.role === "assistant").length;
 		return route(at < 0 ? "" : text(messages[at]!.content), replies);

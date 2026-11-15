@@ -67,7 +67,8 @@ Magpie 可以接管 Plume 的模型和资源：
 - **全局指令**：对所有会话生效的指令（说明里提到项目级的 PLUME.md / AGENTS.md / CLAUDE.md）。
 - **语气风格**：亲和温和（默认）、专业严谨、极度精炼、直接坦率、幽默风趣。
 - 装了记忆插件时，两者之间多一节「记忆」，见 [Agent 扩展：记忆](agent-extensions.md#记忆)。
-- 存在 `~/.plume/settings.json` 的 `personalization`。
+- **身份与准则**（系统提示词插件加的一节）：选新会话用哪套身份和做事准则，内置「通用」「编程」只能看、复制，自己的能改、删；已开始的会话不受影响，见 [Agent 核心：系统提示词](agent-core.md#系统提示词)。
+- 全局指令和语气风格存在 `~/.plume/settings.json` 的 `personalization`，身份与准则存在系统提示词插件自己的数据目录。
 
 ## 智能体
 

@@ -1,0 +1,105 @@
+/* plume.prompt 设置分区「身份与准则」的布局。文字交给 Text，这里只管排版和颜色。 */
+
+.prompt-intro {
+	margin-bottom: 12px;
+}
+
+.prompt-notice {
+	margin-bottom: 12px;
+}
+
+/* 一套一行：左边是选它的那块（圈、名字、一句说明），右边是这一套能做的事。 */
+.prompt-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px 10px 4px;
+}
+
+.prompt-row + .prompt-row {
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.prompt-choice {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 12px;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color var(--plume-t-quick);
+}
+
+.prompt-choice:hover {
+	background: var(--plume-card-hover);
+}
+
+.prompt-choice-body {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.prompt-choice-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 说明只占一行：自己写的那套拿身份的开头当说明，长了截掉。 */
+.prompt-choice-detail {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.prompt-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+.prompt-editor {
+	display: flex;
+	margin-top: 16px;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+}
+
+.prompt-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.prompt-field input {
+	width: 100%;
+}
+
+.prompt-fixed summary {
+	cursor: pointer;
+}
+
+.prompt-fixed ul {
+	display: flex;
+	margin: 8px 0 0;
+	flex-direction: column;
+	gap: 6px;
+	padding-left: 18px;
+	color: var(--plume-ink-muted);
+}
+
+.prompt-buttons {
+	display: flex;
+	gap: 8px;
+}
