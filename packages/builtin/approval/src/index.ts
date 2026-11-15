@@ -23,6 +23,11 @@ export default {
 				const { request } = input;
 				if (input.permissionMode !== "auto" || input.byLayer || request.escalation !== undefined || request.subject === undefined) return next(input);
 				const { kind, subject } = request;
+				/*
+				 * `kind` 就是工具自己的名字时，它是卡上的标签，不是在说做哪类事：没写 `asks` 的工具，本体替它问的那张就是这样
+				 * （subject 也是工具名）。一件叫 `command` 的工具不能因此被当成一条叫 `command` 的命令放行。
+				 */
+				if (kind === input.tool.name) return next(input);
 				const verdict = withScratchDirs(input.scratchDirs ?? [], () => assess(kind, subject, input.cwd));
 				if (!verdict.risky) return "once";
 				// 卡片上已有的理由（读项目外时说批准意味着什么）留着；规则说不出名字的，卡片照常画。
