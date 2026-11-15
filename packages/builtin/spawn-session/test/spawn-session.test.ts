@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type {
 	LaunchedSession,
 	Message,
@@ -19,6 +19,7 @@ import { checkSpawn } from "../src/check.ts";
 import plugin from "../src/index.ts";
 import { reportTail, reportText } from "../src/prompt.ts";
 import { Reports } from "../src/reports.ts";
+import { humanTurn } from "../src/turns.ts";
 
 const BACKGROUND =
 	"这是背景：我们在把 CLI 的参数解析换成新的库，已经定了不改对外的命令名，测试要跟着改，旧的解析代码要删干净。这一块只是整个迁移里的一步：别的会话在改文档和发版脚本，这里不要碰它们，做完在自己的分支上提交。";
@@ -149,6 +150,43 @@ it("每轮汇报：收尾时还有事没回来先不交，回来以后那一轮�
 	expect(sent).toHaveLength(1);
 });
 
+it("每轮汇报：收尾时没回来的事被人停掉、没再开一轮，后台空了照样交上这一轮的，不叫醒；又跑起来了就不管", async () => {
+	vi.useFakeTimers();
+	try {
+		const child = { toolCallId: "c1", background: true, messages: [user("任务"), reply("已起后台命令，等结果")] };
+		const { reports, sent, end } = family({ s1: child, s2: { toolCallId: "c2", background: true, messages: [user("任务"), reply("等着")] } });
+		reports.launched("s1", { sessionId: "p", toolCallId: "c1" }, "标题");
+		reports.launched("s2", { sessionId: "p", toolCallId: "c2" }, "标题");
+		const ending = end("s1");
+		await vi.advanceTimersByTimeAsync(0);
+		await ending;
+		const ending2 = end("s2");
+		await vi.advanceTimersByTimeAsync(0);
+		await ending2;
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(sent).toEqual([]);
+
+		// s1 的后台被人停掉了；s2 被回来的结果叫起，交不交由那一轮收尾时定。
+		child.background = false;
+		reports.observe({ sessionId: "s2", at: 0, timestamp: 0, event: { type: "running", running: true } } as SessionObservation);
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(sent.map((one) => [one.sessionId, one.options.wake])).toEqual([["s1", false]]);
+		expect(sent[0]!.text).toContain("已起后台命令，等结果");
+	} finally {
+		vi.useRealTimers();
+	}
+});
+
+it("这一轮背后是不是人：开出来的会话交回的汇报叫起的不是；人开口时、一轮中途读进来的汇报不改这一轮是人的", () => {
+	const report = user("<report>", { synthetic: true, delivery: [{ id: "r", plugin: "plume.spawn-session", title: "t", status: "done", sessionId: "s1" }] });
+	const result = { role: "toolResult", toolCallId: "x", toolName: "bash", content: [], isError: false, timestamp: 0 } as unknown as Message;
+	expect(humanTurn([user("做个事"), reply("做完了"), report])).toBe(false);
+	expect(humanTurn([user("做个事"), report])).toBe(true);
+	expect(humanTurn([user("做个事"), spawnCall("t"), result, report])).toBe(true);
+	// 自己派出去的后台事回来的结果叫起的一轮，接着算那件事背后的人。
+	expect(humanTurn([user("做个事"), reply("等后台"), user("结果", { synthetic: true, delivery: [] })])).toBe(true);
+});
+
 it("汇报的结尾送出那一刻才写：那时弹着卡的会话点名在等用户", async () => {
 	const { reports, sent, end } = family({ s1: { toolCallId: "c1", name: "cli", messages: [user("任务"), reply("好了")] } });
 	reports.launched("s1", { sessionId: "p", toolCallId: "c1", name: "cli" }, "标题");
@@ -168,6 +206,7 @@ it("汇报的结尾送出那一刻才写：那时弹着卡的会话点名在等�
 function plugged(options: {
 	project?: string;
 	cwd?: string;
+	createdAt?: number;
 	messages?: Message[];
 	launch?: (launch: SessionLaunch) => Promise<LaunchedSession>;
 	sessions?: SessionSummary[];
@@ -177,7 +216,7 @@ function plugged(options: {
 		title: "",
 		cwd: options.cwd ?? "/repo",
 		...(options.project ? { project: options.project } : {}),
-		createdAt: 0,
+		createdAt: options.createdAt ?? 0,
 		updatedAt: 0,
 		running: false,
 		kind: "top",
@@ -387,4 +426,41 @@ it("archive_session：交给本体等这一轮收场再归档、这一轮停在�
 	expect(await tool.execute({}, run("ops"))).toEqual(refused);
 	expect(await tool.execute({}, run("main", false))).toEqual(refused);
 	expect(asked).toBe(2);
+});
+
+it("spawn_session：offer 没人选（点了不答、到时没人答）标成没人答，不当成选了在这里做", async () => {
+	const { tool } = plugged({ messages: [user("顺便把 CLI 清理一下")] });
+	const unanswered = await tool("spawn_session").execute({ initiation: "offer", title: "清理 CLI" }, run("p1", "o1"));
+	expect(unanswered).toMatchObject({ isError: true, details: { unanswered: "declined" } });
+	expect(unanswered.output).toContain("did not choose");
+});
+
+it("spawn_session：带 proposal_id 开时短名照规矩核，没给就从标题里取", async () => {
+	const messages: Message[] = [
+		user("顺便把 CLI 清理一下"),
+		{
+			role: "toolResult",
+			toolCallId: "o1",
+			toolName: "spawn_session",
+			details: { kind: "session_offer", title: "Clean CLI", choice: "new" },
+		} as unknown as Message,
+	];
+	const { tool, launched } = plugged({ messages });
+	const spawn = tool("spawn_session");
+	const brief = { initiation: "offer", proposal_id: "o1", prompt: "删掉旧解析", background: BACKGROUND };
+	expect((await spawn.execute({ ...brief, name: "Bad Name" }, run("p1", "o2"))).output).toContain("name must be");
+	expect(launched).toHaveLength(0);
+	await spawn.execute(brief, run("p1", "o3"));
+	expect(launched[0]).toMatchObject({ spawnedFrom: { toolCallId: "o1", name: "clean-cli" } });
+});
+
+it("fork、移交开出的会话带过来的建议卡在这里开不了：复制来的记录早于这个会话建成", async () => {
+	const details = { kind: "session_suggestion", title: "拆出去", summary: "s", message: "去做", expiresAt: Date.now() + 60_000 };
+	const copied = { role: "toolResult", toolCallId: "c1", toolName: "spawn_session", isError: false, details, timestamp: 1_000 } as unknown as Message;
+	const forked = plugged({ createdAt: 2_000, messages: [copied] });
+	await expect(forked.api.start("p1", "c1", { worktree: false })).rejects.toThrow("原对话");
+	expect(forked.launched).toHaveLength(0);
+	const own = plugged({ createdAt: 500, messages: [copied] });
+	await own.api.start("p1", "c1", { worktree: false });
+	expect(own.launched).toHaveLength(1);
 });

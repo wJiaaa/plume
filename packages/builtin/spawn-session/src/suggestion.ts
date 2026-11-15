@@ -87,3 +87,11 @@ export function isDismissed(value: unknown): value is TaskDismissed {
 	const one = record(value);
 	return one?.kind === "session_dismissed" && typeof one.proposalId === "string";
 }
+
+/**
+ * fork、移交开出的会话开头复制了来处的那段记录，复制来的消息带着原来的时间，早于这个会话建成：那里面的建议、offer 是在原对话里提的，
+ * 在这里开不了，也不再催人——不然两边各点一次，同一条建议开出两个会话。
+ */
+export function inherited(message: { timestamp: number }, createdAt: number): boolean {
+	return message.timestamp < createdAt;
+}

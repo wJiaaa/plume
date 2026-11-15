@@ -132,6 +132,8 @@ export const results = {
 		`The person wants "${title}" in a new session. Call spawn_session now with proposal_id "${proposalId}", prompt and background (or context "fork"), then tell them in one line and end your turn.`,
 	offerHere: (title: string) => `The person wants "${title}" done here. Do it in this conversation.`,
 	offerNever: (title: string) => `The person does not want to be asked about separate sessions. Do "${title}" here.`,
+	offerUnanswered: (title: string) =>
+		`The person did not choose: the card was dismissed or expired with nobody at the keyboard. Nothing was started. Do "${title}" here, and say in your reply that you asked and got no answer.`,
 	offerSkipped: (title: string) => `The person was not asked: they turned these offers off. Do "${title}" here.`,
 	started: (title: string, name: string | undefined, sessionId: string) =>
 		`Started "${title}" as ${handle(name, sessionId)}. It reports back here when a turn of it ends; do not wait for it or poll. Tell the person in one line.`,

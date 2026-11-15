@@ -25,11 +25,17 @@ export function lastSpeaker(messages: readonly Message[]): Speaker {
 	return { by: "runtime" };
 }
 
-/** 这一轮背后是不是人：越过运行时递来的几条，往回找到最近一句人或者信说的话。 */
+/**
+ * 这一轮背后是不是人：越过运行时递来的几条（钩子补的上下文、自己派出去的后台事的结果），往回找到最近一句人或者信说的话。
+ *
+ * 开出来的会话交回的汇报（带 `delivery.sessionId`）要看它在哪：紧跟在上一段回复后面的，是它在上一轮收尾以后叫起了新的一轮，
+ * 和信一样，人未必在；跟在人那句后面（人开口时读进攒着的）、跟在工具结果后面（一轮中途读到的）的，只是这一轮里多读了一份，接着往回找。
+ */
 export function humanTurn(messages: readonly Message[]): boolean {
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const message = messages[index]!;
 		if (message.role !== "user") continue;
+		if (message.delivery?.some((report) => report.sessionId !== undefined) && messages[index - 1]?.role === "assistant") return false;
 		const who = speaker(message);
 		if (who.by !== "runtime") return who.by === "human";
 	}

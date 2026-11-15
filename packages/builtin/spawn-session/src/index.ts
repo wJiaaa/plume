@@ -20,7 +20,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message, Plugin, SessionLaunch, SessionSummary, ThinkingLevel, ToolOutput, ToolRun } from "@plume/contract";
 import type { SpawnSessionApi, StartedSuggestion } from "./api.ts";
-import { checkArchive, checkHandOff, checkSpawn } from "./check.ts";
+import { checkArchive, checkHandOff, checkSpawn, nameOf } from "./check.ts";
 import { MESSAGES } from "./messages.ts";
 import {
 	ARCHIVE_SESSION_DESCRIPTION,
@@ -43,6 +43,7 @@ import {
 	type Briefing,
 	DISMISS_TASK,
 	HAND_OFF,
+	inherited,
 	isDismissed,
 	isOffer,
 	isSuggestion,
@@ -89,10 +90,10 @@ export default {
 		const settingsFile = join(ctx.dataDir, "settings.json");
 		let offersOn: Promise<boolean> | undefined;
 		const offers = () =>
-			(offersOn ??= readFile(settingsFile, "utf8").then(
-				(raw) => (JSON.parse(raw) as { offers?: boolean }).offers !== false,
-				() => true,
-			));
+			(offersOn ??= readFile(settingsFile, "utf8")
+				// 文件不在、写了一半或内容是 null 都按缺省：解析错也得接住，不然缓存下一个 rejected 的 promise，开关就再也打不开。
+				.then((raw) => (JSON.parse(raw) as { offers?: boolean } | null)?.offers !== false)
+				.catch(() => true));
 		const setOffers = async (on: boolean) => {
 			offersOn = Promise.resolve(on);
 			await writeFile(settingsFile, JSON.stringify({ offers: on }));
@@ -120,6 +121,8 @@ export default {
 			const log = messages ?? (await ctx.sessions.messages(parentId));
 			const result = log.find((message) => message.role === "toolResult" && message.toolCallId === callId && message.toolName === SPAWN_SESSION);
 			const details = result?.role === "toolResult" && !result.isError ? result.details : undefined;
+			const summary = result && (await ctx.sessions.get(parentId));
+			if (result && summary && inherited(result, summary.createdAt)) return { state: "closed", reason: text.inherited };
 			if (log.some((message) => message.role === "toolResult" && isDismissed(message.details) && message.details.proposalId === callId))
 				return { state: "closed", reason: text.withdrawn };
 			if (isSuggestion(details)) {
@@ -226,7 +229,15 @@ export default {
 					if (!(await offers())) return { output: results.offerSkipped(title), details: { kind: "session_offer", title, choice: "here" } };
 					const text = MESSAGES[ctx.locale()];
 					const reply = await run.request<OfferChoice>({ kind: SESSION_OFFER, title: text.offerTitle, payload: { title }, waiting: text.offerWaiting });
-					const choice = reply.answered ? reply.value : "here";
+					// 人没选（点了不答、到时没人答）不是选了「就在这里做」：照提问卡的样子标成没人答，转录画「已取消」「没人回答」，不画成出错。
+					// 停下这一轮由本体标成「已停止」，这里不重复。
+					if (!reply.answered)
+						return {
+							output: results.offerUnanswered(title),
+							isError: true,
+							...(reply.reason === "stopped" ? {} : { details: { unanswered: reply.reason } }),
+						};
+					const choice = reply.value;
 					if (choice === "never") await setOffers(false);
 					if (choice === "new") return { output: results.offerNew(title, run.toolCallId), details: { kind: "session_offer", title, choice: "new" } };
 					return {
@@ -241,7 +252,9 @@ export default {
 				const briefing: Briefing | undefined = found.suggestion ?? (request.briefing ? { title: found.title, ...request.briefing } : undefined);
 				// i18n-exempt：发给模型的话。
 				if (!briefing) return failed('That offer has no brief yet: call again with proposal_id plus prompt and background (or context "fork").');
-				const name = typeof args.name === "string" ? args.name : found.suggestion?.name;
+				// 短名和当场开的一样：给了照规矩核（不合规时宿主的报错是按界面语言写的，模型读不懂），没给用建议卡上的、或从标题里取。
+				const name = args.name === undefined && found.suggestion ? found.suggestion.name : nameOf(args.name, found.title);
+				if (typeof name === "object") return failed(name.error);
 				return startNow(run, request.proposalId, { ...briefing, ...(name ? { name } : {}) }, { proposalId: request.proposalId });
 			},
 		});

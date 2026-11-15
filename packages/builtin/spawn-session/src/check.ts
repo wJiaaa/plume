@@ -23,7 +23,7 @@ function flag(value: unknown, name: string): boolean | { error: string } {
 const NAME = /^[a-z0-9][a-z0-9-]{0,23}$/;
 
 /** 短名：给了就照宿主的规矩核，没给从标题里取（只取得出拉丁字母、数字时；取不出就不起名）。 */
-function nameOf(value: unknown, title: string): string | undefined | { error: string } {
+export function nameOf(value: unknown, title: string): string | undefined | { error: string } {
 	if (value === undefined) {
 		const derived = title
 			.toLowerCase()

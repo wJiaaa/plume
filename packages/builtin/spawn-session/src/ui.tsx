@@ -20,7 +20,7 @@ import type { ThinkingLevel } from "@plume/contract";
 import type { EnvironmentSectionProps, Remote, RequestCardProps, SessionView, ToolCardProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { ApprovalFrame, Button, FlowRow, IconButton, Text, Toggle, useI18n, WorktreeToggle } from "@plume/ui";
 import { Archive, ChevronRight, Forward, SquarePen, Undo2, X } from "@plume/ui/icons";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { SpawnSessionApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { connect, dismiss, refreshStarted, useDismissed, useStarted } from "./state.ts";
@@ -29,6 +29,7 @@ import {
 	ARCHIVE_SESSION,
 	DISMISS_TASK,
 	HAND_OFF,
+	inherited,
 	isDismissed,
 	isOffer,
 	isStarted,
@@ -72,6 +73,11 @@ function suggestionsIn(messages: SessionView["messages"]): Suggestion[] {
 /** 模型撤回了的建议（`dismiss_task`）。 */
 function withdrawnIn(messages: SessionView["messages"]): Set<string> {
 	return new Set(messages.flatMap((message) => (message.role === "toolResult" && isDismissed(message.details) ? [message.details.proposalId] : [])));
+}
+
+/** 从来处复制来的那几次调用，见 `inherited`。 */
+function inheritedIn(messages: SessionView["messages"], createdAt: number): Set<string> {
+	return new Set(messages.flatMap((message) => (message.role === "toolResult" && inherited(message, createdAt) ? [message.toolCallId] : [])));
 }
 
 /** 还能点「开始」：没过期、没被模型撤回。 */
@@ -216,32 +222,70 @@ function Suggested({ parentId, suggestion }: { parentId: string; suggestion: Sug
 	const { callId, details } = suggestion;
 	const started = useStarted(parentId).find((one) => one.callId === callId);
 	const dismissed = useDismissed().includes(callId);
-	const messages = ui.useSession(parentId)?.messages;
-	const withdrawn = useMemo(() => withdrawnIn(messages ?? []), [messages]);
 	if (started) return <Started callId={callId} title={details.title} startedId={started.sessionId} />;
-	if (withdrawn.has(callId)) return <Noted callId={callId} state="withdrawn" verb={text.noted} title={details.title} trailing={text.withdrawnLine} />;
-	if (details.expiresAt <= Date.now()) return <Noted callId={callId} state="expired" verb={text.noted} title={details.title} trailing={text.expiredLine} />;
-	// 收起只是一句记录：建议还在记录里，这里不再催人。
-	if (dismissed) return <Noted callId={callId} state="dismissed" verb={text.noted} title={details.title} trailing={text.dismissed} />;
-	return (
-		<section data-spawn-suggestion="suggested" data-spawn-call={callId} aria-label={details.title} className="plume-spawn-card">
-			<SquarePen size={15} strokeWidth={1.7} aria-hidden className="plume-spawn-card-icon" />
-			<div className="plume-spawn-card-body">
-				<Text as="p" size="label" weight="medium" className="plume-spawn-title" data-spawn-title>
-					{details.title}
-				</Text>
-				{details.summary && (
-					<Text as="p" size="caption" tone="muted" className="plume-spawn-summary" data-spawn-summary>
-						{details.summary}
+	const withdrawn = <Noted callId={callId} state="withdrawn" verb={text.noted} title={details.title} trailing={text.withdrawnLine} />;
+	const copied = <Noted callId={callId} state="inherited" verb={text.noted} title={details.title} trailing={text.inheritedLine} />;
+	const live =
+		details.expiresAt <= Date.now() ? (
+			<Noted callId={callId} state="expired" verb={text.noted} title={details.title} trailing={text.expiredLine} />
+		) : dismissed ? (
+			// 收起只是一句记录：建议还在记录里，这里不再催人。
+			<Noted callId={callId} state="dismissed" verb={text.noted} title={details.title} trailing={text.dismissed} />
+		) : (
+			<section data-spawn-suggestion="suggested" data-spawn-call={callId} aria-label={details.title} className="plume-spawn-card">
+				<SquarePen size={15} strokeWidth={1.7} aria-hidden className="plume-spawn-card-icon" />
+				<div className="plume-spawn-card-body">
+					<Text as="p" size="label" weight="medium" className="plume-spawn-title" data-spawn-title>
+						{details.title}
 					</Text>
-				)}
-				<Start parentId={parentId} suggestion={suggestion} />
-			</div>
-			<span className="plume-spawn-dismiss">
-				<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(callId)} data-spawn-dismiss />
-			</span>
-		</section>
+					{details.summary && (
+						<Text as="p" size="caption" tone="muted" className="plume-spawn-summary" data-spawn-summary>
+							{details.summary}
+						</Text>
+					)}
+					<Start parentId={parentId} suggestion={suggestion} />
+				</div>
+				<span className="plume-spawn-dismiss">
+					<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(callId)} data-spawn-dismiss />
+				</span>
+			</section>
+		);
+	return (
+		<UnlessClosed parentId={parentId} callId={callId} withdrawn={withdrawn} inherited={copied}>
+			{live}
+		</UnlessClosed>
 	);
+}
+
+/**
+ * 撤回、从来处复制来（`inherited`）要读这个对话的整段记录，而会话视图每出一个字都换一份：只让这一层跟着它重渲染，
+ * 卡片作为 children 原样交回，元素没变 React 就不往下渲（卡片里还有模型选择）。
+ */
+function UnlessClosed({
+	parentId,
+	callId,
+	withdrawn,
+	inherited: copied,
+	children,
+}: {
+	parentId: string;
+	callId: string;
+	withdrawn: ReactNode;
+	inherited: ReactNode;
+	children: ReactNode;
+}) {
+	const view = ui.useSession(parentId);
+	const messages = view?.messages;
+	const createdAt = view?.summary.createdAt;
+	const closed = useMemo(
+		() => ({
+			withdrawn: withdrawnIn(messages ?? []),
+			inherited: messages && createdAt !== undefined ? inheritedIn(messages, createdAt) : new Set<string>(),
+		}),
+		[messages, createdAt],
+	);
+	if (closed.inherited.has(callId)) return <>{copied}</>;
+	return <>{closed.withdrawn.has(callId) ? withdrawn : children}</>;
 }
 
 /** offer 答完以后在调用的位置留的那一行；选了新会话、开出来了就是那个会话的一行。 */
@@ -255,6 +299,11 @@ function Offered({ parentId, callId, title, choice }: { parentId: string; callId
 /** 对话里 `spawn_session` 的那一处。没有可画的（参数被退回、这一轮在写完之前停了）就交回通用的工具行。 */
 function SpawnCard({ sessionId, call, argumentsText, streaming, status, result, fallback }: ToolCardProps) {
 	const details = status === "done" && !result?.isError ? result?.details : undefined;
+	// 模型带 proposal_id 开的：那张建议卡、offer 那一行、环境卡片读的「开始了哪几条」得再问一遍，不然要等重挂才变。
+	const startedProposal = isStarted(details) ? details.proposalId : undefined;
+	useEffect(() => {
+		if (startedProposal) void refreshStarted(sessionId);
+	}, [sessionId, startedProposal]);
 	if (isSuggestion(details)) return <Suggested parentId={sessionId} suggestion={{ callId: call.id, details }} />;
 	if (isOffer(details)) return <Offered parentId={sessionId} callId={call.id} title={details.title} choice={details.choice} />;
 	if (isStarted(details)) return <Started callId={call.id} title={details.title} startedId={details.sessionId} />;
@@ -320,7 +369,12 @@ function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 
 /** 这个会话里的全部建议，按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再翻一遍。 */
 function useSuggestions(session: SessionView): { all: Suggestion[]; withdrawn: Set<string> } {
-	return useMemo(() => ({ all: suggestionsIn(session.messages), withdrawn: withdrawnIn(session.messages) }), [session.messages]);
+	const { messages } = session;
+	const { createdAt } = session.summary;
+	return useMemo(() => {
+		const copied = inheritedIn(messages, createdAt);
+		return { all: suggestionsIn(messages).filter((one) => !copied.has(one.callId)), withdrawn: withdrawnIn(messages) };
+	}, [messages, createdAt]);
 }
 
 /** 还在等人决定的几条：没开始、没收起、没撤回、没过期。 */

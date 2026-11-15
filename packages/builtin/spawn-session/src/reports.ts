@@ -4,6 +4,7 @@
  * 叫不叫醒来处（`wake`），看这一轮是谁引起的：开出来的第一轮、来处寄来的信引起的那一轮叫醒；人在它里面说话引起的、被停下的、
  * 出错的不叫醒，汇报留到来处下一轮开头读。后台结果叫起的那一轮（它派的子 Agent 回来了）接着算引起它的那件事。
  * 一轮收尾时还有派出去的事没回来（`SessionSummary.background`），先不交：真正的结论在回来以后那一轮里，那时再交。
+ * 那件事要是被人停掉、没再引起新的一轮，隔一阵看一眼（`LINGER_MS`），后台空了就把这一轮的汇报交上，不叫醒——人停下的事不该叫起来处。
  * 被人按停的那一轮不交——停下是人的决定，叫醒来处去处理半截结果是在和这个决定争。
  * 什么时候真叫醒由本体定：来处闲着、它开出的会话都不在跑，几份合成一次送达；连着叫醒太多次就留到人开口（见 `ReportBackOptions.wake`）。
  *
@@ -27,6 +28,9 @@ export interface ReportDeps {
 
 type Origin = NonNullable<SessionSummary["spawnedFrom"]>;
 
+/** 收尾时还有事没回来的会话，多久看一眼它的后台空了没有。只读一下摘要，便宜。 */
+const LINGER_MS = 3000;
+
 export class Reports {
 	private readonly deps: ReportDeps;
 	/** 认过的：这个会话是不是本插件的工具开出来的。 */
@@ -39,6 +43,8 @@ export class Reports {
 	private readonly waiting = new Set<string>();
 	/** 来处 → 它开出的会话 → 怎么称呼（短名，没有时是标题）。 */
 	private readonly family = new Map<string, Map<string, string>>();
+	/** 收尾时有事没回来、在看它后台空没空的，见 `linger`。 */
+	private readonly lingering = new Map<string, ReturnType<typeof setInterval>>();
 
 	constructor(deps: ReportDeps) {
 		this.deps = deps;
@@ -57,6 +63,7 @@ export class Reports {
 	}
 
 	deleted(sessionId: string): void {
+		this.stopLingering(sessionId);
 		this.ours.delete(sessionId);
 		this.firstTurn.delete(sessionId);
 		this.carry.delete(sessionId);
@@ -70,6 +77,9 @@ export class Reports {
 		if (event.type === "approval") {
 			if (event.approval) this.waiting.add(observation.sessionId);
 			else this.waiting.delete(observation.sessionId);
+		} else if (event.type === "running" && event.running) {
+			// 又跑起来了（回来的结果叫起了它、人说了话）：交不交由这一轮收尾时定。
+			this.stopLingering(observation.sessionId);
 		} else if (event.type === "turnEnd") {
 			// i18n-exempt：日志
 			void this.turnEnded(observation.sessionId, event.stop).catch((error: unknown) =>
@@ -127,13 +137,52 @@ export class Reports {
 		const wake = first || (speaker.by === "peer" && speaker.from === origin.sessionId) || (speaker.by === "runtime" && this.carry.get(sessionId) === true);
 		if (summary.background) {
 			this.carry.set(sessionId, wake);
+			this.linger(sessionId, origin, stop);
 			return;
 		}
 		this.carry.delete(sessionId);
+		this.deliver(sessionId, summary.title, origin, stop, messages, wake);
+	}
+
+	private deliver(sessionId: string, title: string, origin: Origin, stop: TurnStop, messages: readonly Message[], wake: boolean): void {
 		const status = stop.reason === "done" ? "done" : "failed";
-		const title = summary.title;
 		const delivery: DeliveryInput = { id: `${sessionId}:${messages.length}`, title, status, ...(status === "failed" ? { incomplete: true } : {}) };
 		const text = reportText({ sessionId, ...(origin.name ? { name: origin.name } : {}), title, status, reply: excerpt(lastReply(messages), REPORT_MAX) });
-		this.deps.reportBack(sessionId, text, { delivery, frame: this.frame(origin.sessionId), wake: wake && status === "done" });
+		try {
+			this.deps.reportBack(sessionId, text, { delivery, frame: this.frame(origin.sessionId), wake: wake && status === "done" });
+		} catch (error) {
+			// 宿主不认这个来处了（来处撤回到了开它的那次调用之前）：以后不再当它是本插件开的，不每轮都交一次、记一条警告，提示词里也不再说来处。
+			this.ours.set(sessionId, Promise.resolve(false));
+			throw error;
+		}
+	}
+
+	/** 等收尾时没回来的那件事：又跑起来了就不管（`observe`），后台空了还没跑就把这一轮的汇报交上，不叫醒。 */
+	private linger(sessionId: string, origin: Origin, stop: TurnStop): void {
+		this.stopLingering(sessionId);
+		const timer = setInterval(() => {
+			void (async () => {
+				const summary = await this.deps.get(sessionId);
+				if (this.lingering.get(sessionId) !== timer) return;
+				if (!summary || summary.running) return this.stopLingering(sessionId);
+				if (summary.background) return;
+				this.stopLingering(sessionId);
+				if (!this.carry.delete(sessionId)) return;
+				this.deliver(sessionId, summary.title, origin, stop, await this.deps.messages(sessionId), false);
+			})().catch((error: unknown) => {
+				this.stopLingering(sessionId);
+				// i18n-exempt：日志
+				this.deps.warn(`会话 ${sessionId} 没交回去：${String(error)}`);
+			});
+		}, LINGER_MS);
+		timer.unref?.();
+		this.lingering.set(sessionId, timer);
+	}
+
+	private stopLingering(sessionId: string): void {
+		const timer = this.lingering.get(sessionId);
+		if (timer === undefined) return;
+		clearInterval(timer);
+		this.lingering.delete(sessionId);
 	}
 }
