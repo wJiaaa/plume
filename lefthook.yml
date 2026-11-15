@@ -47,6 +47,10 @@ pre-commit:
       # 改名、挪走一个文件，指向它的链接在别的 Markdown 里；所以任何文件变了都全量查一遍。
       run: node scripts/check-links.mjs
 
+    - name: conventions
+      # 包的位置、经 contract 转出的类型从哪引、固定术语；只读文件内容，全量跑一遍不到一秒。
+      run: node scripts/check-conventions.mjs
+
 # 提交信息的格式，见 spec/tech/commits.md。这是信息还能不经 rebase 就改的唯一时刻。
 commit-msg:
   jobs:
@@ -56,7 +60,7 @@ commit-msg:
 pre-push:
   jobs:
     - name: check
-      # 类型检查、lint、格式、测试、样式、文案、插件、链接、依赖方向。
+      # 类型检查、lint、格式、测试、样式、文案、插件、链接、约定、依赖方向。
       run: pnpm check
 
     - name: knip

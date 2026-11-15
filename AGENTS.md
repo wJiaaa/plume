@@ -12,11 +12,12 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm check` | 类型检查 + lint + 格式 + 测试（各包的，加上 `pnpm test:root`：`scripts/test/` 和工具评测的单测） + 样式、文案、插件、链接检查 + 依赖方向（提交前必须通过；pre-push 钩子会跑） |
+| `pnpm check` | 类型检查 + lint + 格式 + 测试（各包的，加上 `pnpm test:root`：`scripts/test/` 和工具评测的单测） + 样式、文案、插件、链接、约定检查 + 依赖方向（提交前必须通过；pre-push 钩子会跑） |
 | `pnpm --filter <包名> test` | 只跑一个包的测试，开发中途用，交付前仍跑 `pnpm check`。只跑一个文件：用 vitest 的包在后面加文件名（`pnpm --filter <包名> test <文件名>`）；用 `node --test` 的包（看该包 `package.json` 的 `test`）跑 `pnpm --filter <包名> exec node --test --experimental-strip-types test/<文件名>` |
 | `pnpm check:styles` | 只跑样式检查（`scripts/check-styles.mjs`），九条规则见 [spec/tech/styling.md](spec/tech/styling.md) |
 | `pnpm check:plugins` | 只跑插件检查（`scripts/check-plugins.mjs`）：插件只引用公开接口；skill 跟得上插件接口；本体不按名字认插件、插件的工具和段，内置插件之间也不按名字互相认（名单在 `scripts/check-core-names.mjs`，规则见 [spec/domain/plugin-primitives.md](spec/domain/plugin-primitives.md)） |
 | `pnpm check:links` | 只查 Markdown 里的相对链接都指向存在的文件（`scripts/check-links.mjs`） |
+| `pnpm check:conventions` | 只查几条能机械判断的约定（`scripts/check-conventions.mjs`）：包放在 `packages/<组>/<包>`（contract 除外）；`@plume/contract` 转出的类型（消息类型、`CallContext`）在定义它们的包以外一律从 `@plume/contract` 引；下面「约定」里的术语不写成别名（名单在脚本里） |
 | `pnpm arch` | 只查依赖方向（dependency-cruiser，规则在 `.dependency-cruiser.cjs`）；已有的循环登记在 `.dependency-cruiser-known-violations.json`，清掉一处后 `pnpm arch:baseline` 重新生成 |
 | `pnpm lint` / `pnpm lint:fix` | oxlint（`.oxlintrc.json`），警告也算失败 / 能自动修的修掉 |
 | `pnpm fmt` / `pnpm fmt:check` | oxfmt（`.oxfmtrc.json`：tab 缩进、行宽 160，JSON 两个空格，不排 Markdown 和 `packages/core/llm`）全仓排版 / 只查不改 |
@@ -34,7 +35,7 @@
 | `pnpm catalog:update` | 从 pi.dev 拉模型目录，重写随应用发的快照 `packages/core/llm/src/catalog/model-catalog.json`（`scripts/update-model-catalog.ts`）；应用运行时自己拉最新的，快照只在首次启动和离线时用，发版前刷一次；要联网 |
 | `pnpm release <patch\|minor\|major\|x.y.z> [--no-push]` | 发版：把 `apps/desktop/package.json` 和其余非插件包的版本号改齐（`scripts/versions.mjs` 按目录算；插件的版本归插件自己），用 git-cliff（`cliff.toml`）在 `CHANGELOG.md` 里生成这一版的提交列表，提交 `chore(release): vX`，打 tag（说明是 `scripts/changelog-section.mjs` 读出的那一节），推送（这一节还没有手写的中英两段文案时停在推送前，同 `--no-push`；手推 `v*` tag 时 pre-push 钩子也查，`scripts/check-release-notes.mjs`）；要在远端的默认分支上、工作区干净、和远端一致。生成的列表是原料：发出去的文案手写成 `<!-- plume:notes en -->`、`<!-- plume:notes zh-CN -->` 两段，英文在前，两种语言各写一遍、不直译，写给用的人（先说他遇到的现象，再说现在怎样），关于页和更新对话框按界面语言只显示其中一段 |
 
-Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`。
+Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接、约定检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`，推 `v*` tag 时还查发版文案。
 
 改动插件宿主或循环时，在 `packages/core/agent/test/` 里补测试（`src/testing.ts` 有假模型服务）；改动进程、协议、界面或插件时跑 `pnpm smoke`。`packages/core/llm` 的类型声明在类型检查时生成到 `dist/`。
 
