@@ -235,11 +235,12 @@ export class BackgroundRuns {
 		return this.batches.get(parentId)?.ready === true;
 	}
 
-	/** 攒好的这一批是什么，见 `ReadyKind`；没有攒好的时是 undefined。 */
+	/** 攒好的这一批是什么，见 `ReadyKind`；没有攒好的、或者攒好的都作废了时是 undefined。 */
 	readyKind(parentId: string): ReadyKind | undefined {
 		const batch = this.batches.get(parentId);
 		if (!batch?.ready) return undefined;
 		const live = batch.reports.filter((report) => report.valid());
+		if (live.length === 0) return undefined;
 		if (live.some((report) => !("letter" in report) && !report.spawned)) return "other";
 		return live.some((report) => "letter" in report) ? "letter" : "spawned";
 	}

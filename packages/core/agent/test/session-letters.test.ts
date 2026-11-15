@@ -247,10 +247,17 @@ it("接连被信叫起十轮、人一句话也没说：第十一封不叫醒，�
 	});
 	expect((await service.getSession(target.id)).summary.running).toBe(false);
 	expect((await service.getSession(target.id)).summary.background ?? false).toBe(false);
+	// 对方接着寄：照样留着，提示不再弹第二次。
+	const notices = () => events.filter((event) => event.type === "notice" && event.sessionId === target.id && event.level === "info").length;
+	const twelfth = letter(target.id, { from: "问的", text: "第 12 封" });
+	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.background ?? false).toBe(false), { timeout: 5_000, interval: 10 });
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	expect(notices()).toBe(1);
 
 	service.send(target.id, { content: [{ type: "text", text: "人开口" }] });
 	await done(target.id, 11);
 	expect(await eleventh.read).toEqual({ status: "read" });
+	expect(await twelfth.read).toEqual({ status: "read" });
 	expect(shape((await service.getSession(target.id)).messages).slice(-3)).toEqual(["user", "letter", "assistant"]);
 	letter(target.id, { from: "问的", text: "人开口之后" });
 	await done(target.id, 12);

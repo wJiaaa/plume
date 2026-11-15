@@ -1512,6 +1512,41 @@ it("插话读到之前在排队条上标着插话，排在排着的话前面、�
 	expect(sentText(model?.requests[2])).toContain("做完再说");
 });
 
+it("插话在过 prompt.submit 时被撤回：不写进会话、不发给模型", async () => {
+	await bigFile("a.txt", 1);
+	const gate = Promise.withResolvers<void>();
+	const reached = Promise.withResolvers<void>();
+	const slow: Plugin = {
+		name: "test.slow",
+		apply: (ctx) =>
+			ctx.hook("prompt.submit", async (input, next) => {
+				if (input.text === "只看 src/") {
+					reached.resolve();
+					await gate.promise;
+				}
+				return next(input);
+			}),
+	};
+	const { service, session, until, idle } = await start(
+		[{ toolCalls: [{ id: "call_a", name: "read", args: { path: "a.txt" } }], stream: { chunkSize: 2, delayMs: 20 } }, { text: "读完了" }],
+		[slow],
+	);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下" }] });
+	await until((event): event is AgentEvent => event.type === "draft" && event.draft !== undefined);
+	service.send(session.id, { content: [{ type: "text", text: "只看 src/" }], steer: true });
+	await reached.promise;
+	const [entry] = (await service.getSession(session.id)).queue;
+	expect(await service.removeQueued(session.id, entry!.id)).toMatchObject({ preview: "只看 src/" });
+	gate.resolve();
+	await done;
+
+	expect(sentText(model?.requests[1])).not.toContain("只看 src/");
+	const view = await service.getSession(session.id);
+	expect(view.messages.some((message) => message.role === "user" && JSON.stringify(message.content).includes("只看 src/"))).toBe(false);
+	expect(view.queue).toEqual([]);
+});
+
 it("按停时还没读到的插话留在排队条上，去掉插话的标记，等人发；停着时「插进这一轮」不动它", async () => {
 	const { service, session, until, idle } = await start([{ text: "写到一半", hang: true }]);
 	const done = idle();

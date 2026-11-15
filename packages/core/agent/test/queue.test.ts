@@ -41,7 +41,7 @@ it("插话排在已有的插话后面、没标的前面，按插进来的先后�
 	expect(queues.peekSteered("s")).toBeUndefined();
 });
 
-it("「插进这一轮」标成插话排到插话后面，不插时挪到队首", () => {
+it("「插进这一轮」标成插话排到插话后面，不插时挪到插话后面、没标的最前", () => {
 	const queues = SessionQueues.open(
 		memory(),
 		() => undefined,
@@ -51,6 +51,13 @@ it("「插进这一轮」标成插话排到插话后面，不插时挪到队首"
 	const b = queues.push("s", say("b"), "b");
 	const c = queues.push("s", say("c"), "c");
 	queues.promote("s", c.id, true);
+	expect(queues.list("s").map((entry) => [entry.preview, entry.steered])).toEqual([
+		["a", true],
+		["c", true],
+		["b", undefined],
+	]);
+	// 还有插话时，不插的那条挪到插话后面：插话按插进来的先后读，不能被它隔开。
+	queues.promote("s", b.id, false);
 	expect(queues.list("s").map((entry) => [entry.preview, entry.steered])).toEqual([
 		["a", true],
 		["c", true],

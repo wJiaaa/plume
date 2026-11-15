@@ -75,7 +75,7 @@ import { errorText, type HostPages, PluginHost } from "./host.ts";
 import { activeLocale, setLocale, text } from "./i18n.ts";
 import { conversationMarkdown } from "./conversation-markdown.ts";
 import { runSteps } from "./loop.ts";
-import { BackgroundRuns, DELIVERED_HEADER, reportTexts } from "./background.ts";
+import { BackgroundRuns, DELIVERED_HEADER, type ReadyKind, reportTexts } from "./background.ts";
 import { BackgroundJobs } from "./jobs.ts";
 import { SessionWakeups } from "./wakeups.ts";
 import { lettersText } from "./letters.ts";
@@ -1664,23 +1664,37 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const id = session.summary.id;
 		if (quitting || session.controller || !sessions.has(id) || !background.hasReady(id)) return;
 		const kind = background.readyKind(id);
+		// 整批在攒着的时候都作废了（撤回）：清掉，不为它白开一轮、也不让会话一直显得在等后台。
+		if (kind === undefined) return background.holdReady(id);
 		if (kind === "spawned") {
 			const stop = session.summary.stop;
 			if (session.stopped || (stop !== undefined && stop.reason !== "done")) return background.holdReady(id);
 			if (spawnedRunning(id)) return;
 		}
-		if (session.stopped) return;
-		if (kind !== "other") {
-			if ((session.autoWakes ?? 0) >= AUTO_WAKE_LIMIT) {
-				background.holdReady(id);
-				emit({ type: "notice", sessionId: id, text: text("session.autoWakeLimit", { count: String(AUTO_WAKE_LIMIT) }), level: "info" });
-				return;
-			}
-			session.autoWakes = (session.autoWakes ?? 0) + 1;
-		}
+		if (session.stopped || !admitWake(session, kind)) return;
 		const controller = new AbortController();
 		session.controller = controller;
 		session.turn = runTurn(session, undefined, controller);
+	}
+
+	/**
+	 * 攒好的这一批要叫起一轮（闲着时叫醒，或一轮收尾时接着读）：别的会话的信、交回的（不是 `other`）计一次数，到了上限整批留到人开口，
+	 * 对话里提示一句——只说一次，对方还在不停地寄的话，每来一批弹一次就成了刷屏；人开口后计数清零，再撞上限再说。返回叫不叫。
+	 */
+	function admitWake(session: Session, kind: ReadyKind): boolean {
+		if (kind === "other") return true;
+		const id = session.summary.id;
+		const wakes = session.autoWakes ?? 0;
+		if (wakes < AUTO_WAKE_LIMIT) {
+			session.autoWakes = wakes + 1;
+			return true;
+		}
+		background.holdReady(id);
+		if (wakes === AUTO_WAKE_LIMIT) {
+			session.autoWakes = wakes + 1;
+			emit({ type: "notice", sessionId: id, text: text("session.autoWakeLimit", { count: String(AUTO_WAKE_LIMIT) }), level: "info" });
+		}
+		return false;
 	}
 
 	/**
@@ -1969,21 +1983,28 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 被这一轮接了进去，不是开了新的一轮：发给模型时据此说清它是在模型工作时说的（plume.prompt 的插话说明）。
 			prompt.steered = true;
 			const verdict = await submitPrompt(session, prompt, controller.signal);
-			const committed =
-				!controller.signal.aborted && !verdict.block && (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted));
-			// 读到一半被停下：排队条上那一条还没取走，人按停不该把刚说的话吞掉。
-			if (controller.signal.aborted) return received;
-			// 消息落进会话以后才从条上收走：反过来的话，条先空、气泡还没到，那句话有一阵子哪里都不在。
-			if (queued) queues.take(sessionId, queued.id);
-			if (verdict.block) emit({ type: "notice", sessionId, text: verdict.reason, level: "warn" });
-			else if (committed) {
+			// 过钩子的那一阵人可能在条上撤回了它（字回到输入框）：那就不写，不然这句话既在会话里、又在输入框里。
+			const allowed = () => !controller.signal.aborted && (!queued || queues.has(sessionId, queued.id));
+			const committed = !controller.signal.aborted && !verdict.block && (await commitPrompt(session, prompt, verdict.context, allowed));
+			if (committed) {
 				received = true;
 				if (!prompt.synthetic) delete session.autoWakes;
+			}
+			// 消息落进会话以后才从条上收走：反过来的话，条先空、气泡还没到，那句话有一阵子哪里都不在。写进去以后才被停下的照样收走，
+			// 不然停下后它成了普通的一条，又发一遍。
+			if (queued && committed) queues.take(sessionId, queued.id);
+			// 读到一半被停下：排队条上那一条还没写进去，人按停不该把刚说的话吞掉。
+			if (controller.signal.aborted) return received;
+			if (verdict.block) {
+				if (queued) queues.take(sessionId, queued.id);
+				emit({ type: "notice", sessionId, text: verdict.reason, level: "warn" });
 			}
 		}
 		if (controller.signal.aborted) return received;
 		let reports = background.take(session.summary.id);
-		const taken = reports.filter((report) => "letter" in report);
+		// 信和开出来的会话交回的（`delivery.sessionId`）不是这个会话自己派出去的事：没写进会话就收了场的放回去，同 `BackgroundRuns.cancelSession`。
+		const taken = reports.filter((report) => "letter" in report || report.delivery?.sessionId !== undefined);
+		let delivered = false;
 		try {
 			while (!controller.signal.aborted && reports.length > 0) {
 				const texts = reportTexts(reports);
@@ -2013,6 +2034,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted && reports.every((report) => report.valid()))) {
 					for (const letter of letters) letter.settle({ status: "read" });
 					received = true;
+					delivered = true;
 					break;
 				}
 				reports = reports.filter((report) => report.valid());
@@ -2021,12 +2043,15 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		} finally {
 			// 没写进会话就收了场的信（读到了的已经定下，不再改）：会话删掉、应用退出是 `closed`；钩子拦下的算没读到（`dropped`）；
 			// 这一轮被打断（人按停、插话、编辑重发）的留到下一轮开头读，见 `BackgroundRuns.cancelSession`。
-			const left = taken.filter((report) => report.valid());
+			// 交回同理：被打断的留到下一轮，删掉、退出、被钩子拦下的不再送。
+			const left = delivered ? [] : taken.filter((report) => report.valid());
+			const closed = quitting || !sessions.has(sessionId);
 			for (const report of left) {
-				if (quitting || !sessions.has(sessionId)) report.letter.settle({ status: "closed" });
+				if (!("letter" in report)) continue;
+				if (closed) report.letter.settle({ status: "closed" });
 				else if (!controller.signal.aborted) report.letter.settle({ status: "dropped" });
 			}
-			background.hold(sessionId, left);
+			if (!closed && controller.signal.aborted) background.hold(sessionId, left);
 		}
 	}
 
@@ -2166,6 +2191,16 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				stop.reason === "done" &&
 				(session.steering?.length || queues.hasSteered(sessionId) || background.hasReady(sessionId))
 			) {
+				// 只有信、交回在等：和闲着时被它们叫醒是一回事，同样计数、到上限留到人开口（`admitWake`）。不计的话两个会话的往来
+				// 总赶在对方收尾前攒好，就一直在收尾这里接着跑、永远撞不到上限。有人插话时人开口了，计数本来就清零。
+				if (!session.steering?.length && !queues.hasSteered(sessionId)) {
+					const kind = background.readyKind(sessionId);
+					if (kind === undefined) {
+						background.holdReady(sessionId);
+						break;
+					}
+					if (!admitWake(session, kind)) break;
+				}
 				if (await consumeBoundary(session, controller)) stop = await steps();
 			}
 			if (controller.signal.aborted) stop = { reason: "aborted" };

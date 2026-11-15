@@ -80,6 +80,11 @@ export class SessionQueues {
 		return structuredClone((this.queues.get(sessionId) ?? []).find((each) => each.steered));
 	}
 
+	/** 这一条还在不在条上（没被撤回、取走）。 */
+	has(sessionId: string, id: string): boolean {
+		return (this.queues.get(sessionId) ?? []).some((entry) => entry.id === id);
+	}
+
 	hasSteered(sessionId: string): boolean {
 		return (this.queues.get(sessionId) ?? []).some((entry) => entry.steered);
 	}
@@ -101,7 +106,8 @@ export class SessionQueues {
 		if (!entry) return false;
 		if (entry.steered) return true;
 		const rest = list.filter((each) => each !== entry);
-		this.write(sessionId, steer ? rest.toSpliced(steeredCount(rest), 0, { ...entry, steered: true }) : [entry, ...rest]);
+		// 不标插话的也排在插话后面：插话总在队首、按插进来的先后读（`peekSteered` 取第一个）。
+		this.write(sessionId, rest.toSpliced(steeredCount(rest), 0, steer ? { ...entry, steered: true } : entry));
 		return true;
 	}
 
