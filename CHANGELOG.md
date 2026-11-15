@@ -2,6 +2,48 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.0] - 2026-11-15
+
+<!-- plume:notes en -->
+### Changes
+
+- **Enter now steers the turn that's running; ⌘Enter queues after it.** Before, anything you typed while the agent worked waited for the whole turn to finish. Now Enter slips your message in: the model reads it after its current step, without being interrupted. Until then it sits at the top of the queue above the input, where you can take it back, and stopping the turn keeps it rather than throwing it away. ⌘Enter (Ctrl+Enter on Windows) still waits for the turn to end.
+- **The agent can hand work to a separate chat.** When you bring up an unrelated task, it can ask whether to open a new chat for it, open one right away when you ask, or leave a suggestion card you can start later with your own choice of model. A chat started this way reports back to the one it came from after each turn. Chats now message each other one way, and each sent message shows whether it was delivered and replied to.
+- **You can tell when the model is stuck.** The line under a running turn used to look busy even when nothing was arriving. It now says whether it's waiting for the first word or has gone quiet for N seconds, turning yellow after 15 seconds. While text is arriving it shows the tokens written, the speed and a small live trace.
+- **Tool calls are easier to follow.** A group of calls is titled by everything it did and counts up while it runs. Each row has its icon back. Rows for checks, scheduled tasks and polling follow what the background work is doing, and schedules read in plain words ("Every 5 minutes").
+- **A question you skip or that times out no longer shows as a red failure.** It's marked "Cancelled" or "Unanswered".
+- **Smoother and lighter.** Opening and closing the sidebar or panels no longer jumps or stutters. Expanding or collapsing a group of tool calls keeps the row you clicked in place. Dismissed notices slide away. Spinners and glows step on a shared beat instead of redrawing every frame, so a running chat costs much less CPU.
+- **Fixes.** Switching the app language updates the conversation right away. Right-clicking or opening a menu while a reply is streaming no longer stops it following to the bottom. The token count no longer drops at the end of each step. A chat forked from another no longer offers that chat's suggestions a second time.
+
+### For plugin authors
+
+Breaking changes; rebuild with SDK 0.5.0:
+
+- Messages between chats are one way. `LetterInput` is `from`, `text` and optional `guide`; `request`, `answer`, `re` and `recipient` are gone, and so are `LetterReceipt.answer` and `answered`. `LetterReceipt.queued` says whether the message waits for the recipient's next step.
+- `LaunchedSession.reportBack(text, delivery)` is now `ctx.sessions.reportBack(sessionId, text, options)` with `ReportBackOptions` (`delivery`, `frame`, `wake`), so a chat you started can report back on every turn, including after a restart.
+
+New: `SessionLaunch.fork` and `spawnedFrom.name`; `UnansweredDetails` on a tool result marks it "Cancelled" or "Unanswered" rather than failed; `ToolLine.verbFor`, `ToolLine.fields` (`ToolField`) and a `details` argument for `ToolLine.subject`; `SessionView.backgroundCalls` (`BackgroundCallState`); `QueuedMessage.steered` and `AgentService.steerQueued`.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **跑着的时候按回车是插话，⌘回车排到这一轮之后。** 以前 agent 干活时打的话都要等整轮做完。现在回车把话插进正在跑的这一轮，模型做完手上这一步就读到，不打断它。读到之前它排在输入框上方那条队的最前面，可以撤回；按停也不会把它吞掉。⌘回车（Windows 上 Ctrl+回车）照旧等这一轮做完再发。
+- **agent 能把事交给另一个会话去做。** 你提了一件和手上无关的事时，它可以先问你要不要另开会话；你明说要单开时当场开；它自己发现的事只留一张建议卡，你挑好模型再点开始。开出来的会话每做完一轮都会向原对话汇报。会话之间改成单向发消息，发出的那一行写着送到没有、回了没有。
+- **模型卡住时看得出来。** 以前一个字没回，运行行照样转得很忙。现在它会直说是在等第一个字，还是已经几秒没有新输出，过了 15 秒变黄；字在来时显示这一轮写了多少 token、多快，和一条跟着字跳动的小心电图。
+- **工具调用更好读。** 几次调用合成的一组，标题说的是这一组做了什么，跑着时数字跟着长；每一行前面的图标回来了。检查、定时任务、轮询那几行跟着后台的实际状态走，频率写成人话（「每 5 分钟」）。
+- **提问卡没答、到时没人答时，不再标红成「失败」。** 改标「已取消」「没人回答」。
+- **更顺、更省。** 侧栏、面板开合不再跳、不再卡；点开、收起一组工具调用时，点的那一行留在原处；关掉的提示条滑走。转圈、扫光改成跟着同一个节拍走，不再每帧重画，有会话在跑时 CPU 占用低了不少。
+- **修好的几处。** 切换界面语言后对话里的字当场换过来；回复写着时右键、打开菜单不再让它停止跟随到底部；token 数不再在每一步收尾时往回跳；从别的会话分出来的会话，不会再把原对话的建议卡开第二次。
+
+### 给插件作者
+
+有不兼容的改动，请用 SDK 0.5.0 重新构建：
+
+- 会话之间的信改成单向：`LetterInput` 只有 `from`、`text` 和可选的 `guide`，删掉 `request`、`answer`、`re`、`recipient`，`LetterReceipt` 删掉 `answer`、`answered`。新增 `LetterReceipt.queued`，说明这封信是不是要等收件方下一步才读到。
+- `LaunchedSession.reportBack(text, delivery)` 改成 `ctx.sessions.reportBack(sessionId, text, options)`，选项是 `ReportBackOptions`（`delivery`、`frame`、`wake`）：开出来的会话每一轮都能交回，重开应用后也一样。
+
+新增：`SessionLaunch.fork`、`spawnedFrom.name`；工具结果带 `UnansweredDetails` 时画成「已取消」「没人回答」，不算失败；`ToolLine.verbFor`、`ToolLine.fields`（`ToolField`），`ToolLine.subject` 多了 `details` 参数；`SessionView.backgroundCalls`（`BackgroundCallState`）；`QueuedMessage.steered`、`AgentService.steerQueued`。
+
 ## [0.4.0] - 2026-11-14
 
 <!-- plume:notes en -->
