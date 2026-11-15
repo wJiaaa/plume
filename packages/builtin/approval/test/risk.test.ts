@@ -248,6 +248,20 @@ it("临时目录和项目里写不问，应用自己的数据目录和别处要�
 	expect(assessWrite("/Users/me/project-backup/x.js", cwd).risky).toBe(true);
 });
 
+it("直接把用户主目录（~）当项目时，~ 下的钥匙和 shell 启动文件照样问，项目里别处的不问", () => {
+	const home = homedir();
+	expect(assessWrite(join(home, ".zshrc"), home).code).toBe("shell-startup");
+	expect(assessWrite(join(home, ".ssh", "authorized_keys"), home).code).toBe("write-sensitive-path");
+	expect(assessWrite(join(home, ".aws", "config"), home).code).toBe("write-sensitive-path");
+	// 项目外的钥匙按钥匙说，不只说「项目外」。
+	expect(assessWrite(join(home, ".ssh", "authorized_keys"), join(home, "project")).code).toBe("write-sensitive-path");
+
+	expect(assessWrite(join(home, "notes", "a.md"), home).risky).toBe(false);
+	// dotfiles 仓库、镜像构建上下文里的 `.bashrc` 不是这台机器正在用的那份；项目里叫 `.ssh` 的目录也不是钥匙目录。
+	expect(assessWrite(join(home, "dotfiles", ".bashrc"), home).risky).toBe(false);
+	expect(assessWrite(join(home, "project", ".ssh", "config"), join(home, "project")).risky).toBe(false);
+});
+
 it("清空项目里一个有名字的目录是收拾，不是警告", () => {
 	const cwd = "/Users/me/project";
 
