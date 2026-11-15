@@ -581,8 +581,8 @@ export type AgentEvent =
 	| { type: "fileMoved"; from: string; to: string }
 	| { type: "sessions"; sessions: SessionSummary[] }
 	/**
-	 * 一轮及其后台工作全部收尾（同 `SessionSummary.background` 落下）；系统通知不能把中间停顿说成完成。会话起着不退出的后台任务、
-	 * 约着还没触发的唤醒时不发。
+	 * 一轮及其后台工作全部收尾（同 `SessionSummary.background` 落下）；系统通知不能把中间停顿说成完成。一次性的后台命令没结束时不发；
+	 * 挂着的（监视、`TrackedJob.stand` 标过的服务、没到点的唤醒）不挡。
 	 */
 	| { type: "idle"; sessionId: string }
 	/** 项目登记、改动或移除了：全部项目，新登记的在前。 */
