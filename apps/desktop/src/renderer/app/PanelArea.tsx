@@ -78,7 +78,7 @@ export function KeepOnTopButton({ keepOnTop }: { keepOnTop: (enabled?: boolean) 
 	);
 }
 
-export function PanelIcon() {
+function PanelIcon() {
 	return (
 		<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
 			<rect x="2" y="3" width="12" height="10" rx="2" />
