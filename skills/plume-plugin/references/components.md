@@ -789,7 +789,7 @@ export function PageTopRow({ start = false, className = "", ...rest }: { start?:
 ### `StatusSpinner`
 
 ```tsx
-/** 一圈虚线，匀速转：这一条正在跑，顶替的是状态图标（任务清单的一步、工具卡的运行中）。颜色跟着周围的文字。 */
+/** 一圈虚线，匀速转：这一条正在跑，顶替的是状态图标（任务清单的一步、工具卡片的运行中）。颜色跟着周围的文字。 */
 export function StatusSpinner({ size = 14, className = "" }: { size?: number; className?: string })
 ```
 

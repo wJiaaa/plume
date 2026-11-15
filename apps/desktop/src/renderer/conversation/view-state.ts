@@ -43,7 +43,7 @@ export interface BackgroundJobInfo {
 
 /**
  * 执行中的调用此刻的输出和开始时刻。每来一段输出都变，所以不放进 `Transcript`：放进去的话一条命令每打一行字，转录里每一张
- * 工具卡、每一段活都要重画一遍。每张卡经 `useCallLive` 只订阅自己那一次调用。
+ * 工具卡片、每一段活都要重画一遍。每张卡经 `useCallLive` 只订阅自己那一次调用。
  */
 export interface CallLive {
 	progress: Readonly<Record<string, string>>;
