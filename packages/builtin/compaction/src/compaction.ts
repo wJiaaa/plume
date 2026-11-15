@@ -49,7 +49,7 @@ export async function compact(input: ContextCompact, deps: CompactDeps): Promise
 	const { history } = input;
 	/*
 	 * 一轮收尾后问的：只有能热分叉时才值得提前压——前缀几秒前刚写进缓存，摘要请求基本只付输出的钱。缓存凉了、换了模型的，
-	 * 提前做一次凉的独立请求不省钱，人还可能根本不回来，留给下一轮开头照常压。
+	 * 提前做一次凉的独立请求不省钱，人还可能根本不回来，留给下一轮开头照常压。分叉没成的也一样（见 `CompactionRequest.idle`）。
 	 */
 	if (input.idle && !forkable(input.lineage, input.model.id)) return undefined;
 	const origin = replyOrigin(history);
@@ -66,6 +66,7 @@ export async function compact(input: ContextCompact, deps: CompactDeps): Promise
 		usage: input.usage,
 		estimate: input.estimate,
 		force: input.force,
+		...(input.idle ? { idle: true } : {}),
 		floor: input.previous?.head ?? 0,
 		...(deps.artifacts ? { artifacts: deps.artifacts } : {}),
 		...(input.manual ? { manual: { instructions: input.manual.instructions, signal: input.signal, words: deps.words } } : {}),
@@ -139,6 +140,8 @@ export interface CompactionRequest {
 	estimate: TokenEstimate;
 	/** 不管量出来多满都压：超长恢复、`/compact`。 */
 	force: boolean;
+	/** 一轮收尾后问的：只从主请求分叉写摘要，分叉没成就不压，不退回独立请求和本地整理，留给下一轮开头。 */
+	idle?: boolean;
 	/** 上一次换上的头占了开头几条：新边界要在它后面。 */
 	floor: number;
 	artifacts?: ArtifactSink;
@@ -290,6 +293,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			via = "fork";
 		}
 	}
+	if (!summary && request.idle) return null;
 	/*
 	 * 独立请求只看得到交给它的那段。分叉摘要的是整段，之后从尾部再删的它都写过；独立的不是——摘要之后为了放得下再从尾部删掉的那几条，
 	 * 既不在摘要里也不在结果里，是最近的工作。要删的时候把它们并进要摘要的那段重写一次。为了少重写，发请求前先按不带摘要正文的头

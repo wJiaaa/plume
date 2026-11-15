@@ -157,6 +157,14 @@ export function createCompactor(deps: CompactorDeps) {
 			session.compacting = false;
 			put({ ...current, ...patch });
 		};
+		const discard = () => {
+			if (!run) return;
+			const id = run.id;
+			run = undefined;
+			record.runs = (record.runs ?? []).filter((each) => each.id !== id);
+			session.compacting = false;
+			changed(session);
+		};
 		const finish = (outcome: CompactionOutcome, compacted: boolean) => {
 			deps.saveContext(sessionId, record);
 			if (compacted) {
@@ -233,6 +241,11 @@ export function createCompactor(deps: CompactorDeps) {
 		}
 
 		if (result === undefined) {
+			// 一轮收尾后的那次是顺手压：插件分叉没成就留给下一轮开头，什么也没发生，开了的那一行撤掉，不记成失败。
+			if (mode.idle) {
+				discard();
+				return finish({ ok: false, code: "already-tight" }, false);
+			}
 			// 自动压缩已经开了那一行（定下要压了）却没压成：说出来，不然那一行一直挂着。
 			settle(mode.manual ? { status: "skipped", code: "already-tight" } : { status: "failed", code: "already-tight" }, mode.manual !== undefined);
 			return finish({ ok: false, code: "already-tight" }, false);

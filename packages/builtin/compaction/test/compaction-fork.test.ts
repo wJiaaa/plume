@@ -96,6 +96,13 @@ it("一轮收尾后问的：不能热分叉就什么也不做，也不画那一�
 	expect(done(await compact(warm, { models, words, kindOf })).via).toBe("fork");
 });
 
+it("一轮收尾后问的：分叉没拿到摘要就不压，不退回独立请求和本地整理", async () => {
+	const { requests, forks, models } = recorder("INDEPENDENT");
+	expect(await compact(compactInput(history(), { model: big, idle: true, lineage: hot() }), { models, words, kindOf })).toBeUndefined();
+	expect(forks).toHaveLength(1);
+	expect(requests).toHaveLength(0);
+});
+
 it("/compact 的说明进分叉的指令；手动压缩不走只剪枝的近路", async () => {
 	const { forks, models } = recorder("INDEPENDENT", "FORKED");
 	const messages = history();

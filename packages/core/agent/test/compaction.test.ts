@@ -160,7 +160,7 @@ it("一轮收尾、缓存还热时从主请求分叉压缩：系统提示词、�
 	expect(sentText(model!.requests[5])).toContain("<session-summary>\\nFORK_SUMMARY");
 });
 
-it("前缀对不上的分叉不发出去，摘要改走独立请求", async () => {
+it("一轮收尾后：前缀对不上的分叉不发出去，也不改走独立请求，开了的那一行撤掉", async () => {
 	let turn = 0;
 	// 每次组请求都改写开头那条：上一次发出去的不再是这一次的前缀（分叉沿用上一次的系统提示词，改它拦不住）。
 	const drift: Plugin = {
@@ -172,23 +172,24 @@ it("前缀对不上的分叉不发出去，摘要改走独立请求", async () =
 		},
 	};
 	const replies: FakeReply[] = [{ toolCalls: [read("c1")] }, { text: "一" }, { toolCalls: [read("c2")] }, { text: "二" }];
-	const { service, session, ask } = await start([squeezeWhenIdle(), drift], (request, index) => {
+	const { service, session, events, ask } = await start([squeezeWhenIdle(), drift], (request, index) => {
 		if (JSON.stringify(request.system ?? "").includes("handover summaries")) return { text: "INDEPENDENT_SUMMARY" };
 		return replies[index] ?? { text: "三" };
 	});
 	await ask(session.id, longText("第一件"));
 	await ask(session.id, longText("第二件"));
 
-	const after = model!.requests.slice(4);
-	expect(after.length).toBeGreaterThan(0);
-	for (const body of after) {
-		expect(body.tools).toBeUndefined();
-		expect(JSON.stringify(body.system)).toContain("handover summaries");
-	}
-	expect((await service.getSession(session.id)).compactionRuns).toMatchObject([{ status: "done", via: "independent", idle: true }]);
+	// 分叉前缀对不上，宿主没发；收尾后的那次只走分叉，不再有请求。
+	expect(model!.requests).toHaveLength(4);
+	// 那一行开过（进行中），收场时撤掉，不记成失败。
+	expect(events.some((event) => event.type === "compaction" && event.runs.some((run) => run.idle && run.status === "running"))).toBe(true);
+	const view = await service.getSession(session.id);
+	expect(view.compactionRuns).toEqual([]);
+	expect(view.compactions).toEqual([]);
+	expect(view.summary.stop).toEqual({ reason: "done" });
 });
 
-it("分叉的回复调了工具：丢掉，改走独立请求", async () => {
+it("一轮收尾后：分叉的回复调了工具就丢掉，不改走独立请求", async () => {
 	const replies: FakeReply[] = [{ toolCalls: [read("c1")] }, { text: "一" }, { toolCalls: [read("c2")] }, { text: "二" }, { toolCalls: [read("c3")] }];
 	const { service, session, ask } = await start([squeezeWhenIdle()], (request, index) => {
 		if (JSON.stringify(request.system ?? "").includes("handover summaries")) return { text: "INDEPENDENT_SUMMARY" };
@@ -198,9 +199,10 @@ it("分叉的回复调了工具：丢掉，改走独立请求", async () => {
 	await ask(session.id, longText("第二件"));
 
 	expect(model!.requests[4]?.tools).toBeDefined();
-	for (const body of model!.requests.slice(5)) expect(body.tools).toBeUndefined();
+	expect(model!.requests).toHaveLength(5);
 	const view = await service.getSession(session.id);
-	expect(view.compactionRuns).toMatchObject([{ status: "done", via: "independent" }]);
+	expect(view.compactionRuns).toEqual([]);
+	expect(view.compactions).toEqual([]);
 	// 分叉回复里的工具调用不进会话。按调用的 id 比，不在整段 JSON 里找 "c3"：随机的供应商 id（`p-c389e538`）也会含它。
 	const callIds = view.messages.flatMap((message) =>
 		message.role === "assistant" ? message.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : [])) : [],
