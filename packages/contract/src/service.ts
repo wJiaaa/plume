@@ -85,6 +85,11 @@ export interface SettingsView {
 	retryPolicy: RetryPolicy;
 	/** 人答过「以后不再问」的批准，按记下的先后；只来自本机的设置，项目配置里写的不算。 */
 	alwaysAllow: AlwaysAllow[];
+	/**
+	 * 人把会话交给哪个插件管理（`AgentService.setSessionManager`，见 `Plugin.manage`）。原样给出：那个插件停用、卸下或不再声明时
+	 * 授权不生效，但这一项还在，装回来就接着生效。只来自本机的设置，项目配置里写的不算。
+	 */
+	sessionManager?: string;
 }
 
 /**
@@ -559,6 +564,8 @@ export interface PluginStatus {
 	waitingFor?: string[];
 	/** 插件声明了要看全部会话的运行观察（`Plugin.observe`）。 */
 	observe?: "all";
+	/** 插件声明了要当会话的管理者（`Plugin.manage`）；人给没给它授权看 `SettingsView.sessionManager`。 */
+	manage?: "sessions";
 	/** 这个插件经 `ctx.provide` 提供的服务，按服务名排；没提供时没有。 */
 	provides?: ProvidedService[];
 }
@@ -712,6 +719,11 @@ export interface AgentService {
 	 * 它转进来、还排着没发出的几条一起从队里拿掉。正在跑的那一轮不停。没有代管时什么都不做。
 	 */
 	revokeSteward(sessionId: string): Promise<void>;
+	/**
+	 * 把会话交给一个插件管理（插件详情里的开关，打开前界面先确认），`null` 收回。插件要声明了 `Plugin.manage`，否则抛错；
+	 * 给了别的插件就换成它，同一时间只有一个。收回、换人时，原来那个转进各会话、还排着没发出的话一起从队里拿掉（同 `revokeSteward`）。
+	 */
+	setSessionManager(plugin: string | null): Promise<void>;
 	/** 置顶和手动未读都不改变最后活动时间。 */
 	setSessionPinned(sessionId: string, pinned: boolean): Promise<void>;
 	setSessionUnread(sessionId: string, unread: boolean): Promise<void>;

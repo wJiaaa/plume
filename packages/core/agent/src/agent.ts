@@ -343,7 +343,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	function concerned(session: Session): Set<string> {
 		const { owner, steward, parentId } = session.summary;
 		const parentSteward = parentId ? sessions.get(parentId)?.summary.steward : undefined;
-		return new Set([owner, steward, parentSteward, session.launchedBy].filter((name): name is string => name !== undefined));
+		const top = parentId ? sessions.get(parentId)?.summary : session.summary;
+		const manager = liveSessionManager && top && governs(liveSessionManager, top) ? liveSessionManager : undefined;
+		return new Set([owner, steward, parentSteward, manager, session.launchedBy].filter((name): name is string => name !== undefined));
 	}
 	let quitting = false;
 	// 删除会话不等循环收尾；退出和卸载仍须等这些已从列表移走的运行。
@@ -443,6 +445,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				const session = find(String(sessionId));
 				return structuredClone(session.messages ?? store.messages(session.summary.id));
 			},
+			approval: (sessionId) => {
+				const pending = sessions.get(String(sessionId))?.approvals?.[0];
+				return pending ? structuredClone(pending.request) : undefined;
+			},
 			jobs: (sessionId) => jobs.list(String(sessionId)),
 			stopJob: (sessionId, jobId, force) => jobs.stop(String(sessionId), String(jobId), force === true),
 			jobOutput: (sessionId, jobId) => jobs.output(String(sessionId), String(jobId)),
@@ -531,7 +537,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				}
 				await Promise.all(children.map((child) => child.turn));
 			},
-			stop: (owner, sessionId) => stopSession(owned(owner, sessionId)),
+			// 自己建的会话，或代管、管理着的顶层会话（和人按停止同一条路）。
+			stop: (owner, sessionId) => {
+				const session = find(String(sessionId));
+				stopSession(session.summary.owner === owner ? session : stewarded(owner, sessionId));
+			},
 			delete: async (owner, sessionId) => deleteTree([owned(owner, sessionId).summary.id]),
 		},
 	});
@@ -1046,10 +1056,27 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		return options.retryPolicy ?? (() => withProjectLayer({ providers: [], retryPolicy: liveRetryPolicy }, session?.projectLayer ?? {}).retryPolicy);
 	}
 
+	/** 人把会话交给哪个插件管理（`StoredSettings.sessionManager`），同 `liveRetryPolicy` 每次读设置都跟上；`stewarded` 同步要用。 */
+	let liveSessionManager: string | undefined;
+
 	async function readSettings(): Promise<StoredSettings> {
 		const settings = await keys.withKeys(normalizeSettings(await files.read<unknown>(settingsFile)));
 		liveRetryPolicy = settings.retryPolicy;
+		liveSessionManager = settings.sessionManager;
 		return settings;
+	}
+
+	/**
+	 * 这个插件此刻能不能当会话的管理者：人把会话交给了它（`setSessionManager`），它装着、在跑、还声明着 `Plugin.manage`。
+	 * 停用、卸下、更新后不再声明时就不能，设置里那一项留着，装回来接着生效。
+	 */
+	function manages(plugin: string): boolean {
+		return liveSessionManager === plugin && host.status().some((status) => status.name === plugin && status.state === "active" && status.manage === "sessions");
+	}
+
+	/** 插件能不能像代管一样动这个顶层会话：代管着它，或它没有别的插件代管、而这个插件拿着管理授权。 */
+	function governs(plugin: string, summary: SessionSummary): boolean {
+		return summary.kind === "top" && (summary.steward === plugin || (summary.steward === undefined && manages(plugin)));
 	}
 
 	function applyProjectConfig(session: Session, configured: Awaited<ReturnType<typeof layerProjectSettings>>): void {
@@ -1856,7 +1883,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	function stewarded(plugin: string, sessionId: unknown): Session {
 		const session = find(String(sessionId));
-		if (session.summary.kind !== "top" || session.summary.steward !== plugin) throw new Error(text("session.notStewarded", { id: session.summary.id, plugin }));
+		if (!governs(plugin, session.summary)) throw new Error(text("session.notStewarded", { id: session.summary.id, plugin }));
 		return session;
 	}
 
@@ -1868,7 +1895,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const session = find(String(sessionId));
 		if (session.summary.kind !== "child") return stewarded(plugin, session.summary.id);
 		const parent = session.summary.parentId ? sessions.get(session.summary.parentId) : undefined;
-		if (parent?.summary.kind !== "top" || parent.summary.steward !== plugin)
+		if (!parent || !governs(plugin, parent.summary))
 			throw new Error(text("session.stewardChildParent", { id: session.summary.id, parent: String(session.summary.parentId), plugin }));
 		return session;
 	}
@@ -2334,6 +2361,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	// 会话、设置和写入函数就绪后再加载：插件在 apply 里也可以发起子会话。
+	// 插件一加载就可能动会话：管理授权（`liveSessionManager`）先从设置里读上来。
+	await readSettings();
 	await host.load(options.plugins);
 
 	const service: AgentService = {
@@ -2626,6 +2655,25 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 它转进来、还没轮到的几条一起拿掉：停止代管是不要它再往这里说话，排着的也是它说的。
 			queues.remove(session.summary.id, (entry) => entry.origin === "plugin" && entry.fromPlugin === plugin);
 			log("agent", "info", `会话 ${session.summary.id} 停止由插件 ${plugin} 代管`);
+		},
+		async setSessionManager(plugin) {
+			const next = plugin === null ? undefined : String(plugin);
+			if (next !== undefined && !host.status().some((status) => status.name === next && status.manage === "sessions"))
+				throw new Error(text("session.cannotManage", { plugin: next }));
+			const previous = await changeSettings((settings) => {
+				const before = settings.sessionManager;
+				if (next === undefined) delete settings.sessionManager;
+				else settings.sessionManager = next;
+				liveSessionManager = next;
+				return before;
+			});
+			if (previous === next) return;
+			// 收回、换人同停止代管：原来那个转进它管着的会话、还没轮到的几条一起拿掉。它自己代管的会话不归这份授权，不动。
+			if (previous !== undefined)
+				for (const session of sessions.values())
+					if (session.summary.kind === "top" && session.summary.steward === undefined)
+						queues.remove(session.summary.id, (entry) => entry.origin === "plugin" && entry.fromPlugin === previous);
+			log("agent", "info", next === undefined ? `收回插件 ${previous} 管理会话的授权` : `把会话交给插件 ${next} 管理`);
 		},
 		async setSessionPinned(sessionId, pinned) {
 			const session = find(sessionId);

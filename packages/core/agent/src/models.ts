@@ -38,6 +38,8 @@ export interface StoredSettings {
 	thinking?: ThinkingLevel;
 	/** 模型请求的重试策略，读入时已按 `normalizeRetryPolicy` 收好；没设过用 `@plume/llm` 的默认策略。 */
 	retryPolicy?: RetryPolicy;
+	/** 人把会话交给哪个插件管理，见 `SettingsView.sessionManager`。 */
+	sessionManager?: string;
 }
 
 /** 两条批准是不是同一条：同一个名下、同一个 subject。 */
@@ -82,18 +84,20 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9-]*$/;
  */
 export function normalizeSettings(raw: unknown): StoredSettings {
 	if (!raw || typeof raw !== "object") return { providers: [] };
-	const { providers, defaultModel, favoriteModels, imageModel, permissionMode, alwaysAllow, magpie, personalization, thinking, retryPolicy } = raw as {
-		providers?: unknown;
-		defaultModel?: unknown;
-		favoriteModels?: unknown;
-		imageModel?: unknown;
-		permissionMode?: unknown;
-		alwaysAllow?: unknown;
-		magpie?: unknown;
-		personalization?: unknown;
-		thinking?: unknown;
-		retryPolicy?: unknown;
-	};
+	const { providers, defaultModel, favoriteModels, imageModel, permissionMode, alwaysAllow, magpie, personalization, thinking, retryPolicy, sessionManager } =
+		raw as {
+			providers?: unknown;
+			defaultModel?: unknown;
+			favoriteModels?: unknown;
+			imageModel?: unknown;
+			permissionMode?: unknown;
+			alwaysAllow?: unknown;
+			magpie?: unknown;
+			personalization?: unknown;
+			thinking?: unknown;
+			retryPolicy?: unknown;
+			sessionManager?: unknown;
+		};
 	const tuned = normalizePersonalization(personalization);
 	const own = Array.isArray(providers) ? (providers as StoredProvider[]).filter((provider) => !isMagpie(provider.id)) : [];
 	const gateway = magpieProvider(magpie);
@@ -108,6 +112,7 @@ export function normalizeSettings(raw: unknown): StoredSettings {
 		...(tuned ? { personalization: tuned } : {}),
 		...(THINKING_LEVELS.includes(thinking as ThinkingLevel) ? { thinking: thinking as ThinkingLevel } : {}),
 		...(retryPolicy === undefined ? {} : { retryPolicy: normalizeRetryPolicy(retryPolicy) }),
+		...(typeof sessionManager === "string" && sessionManager ? { sessionManager } : {}),
 	};
 }
 
@@ -163,6 +168,7 @@ export function settingsView(settings: StoredSettings): SettingsView {
 		thinking: settings.thinking ?? DEFAULT_THINKING,
 		retryPolicy: normalizeRetryPolicy(settings.retryPolicy),
 		alwaysAllow: settings.alwaysAllow ?? [],
+		...(settings.sessionManager ? { sessionManager: settings.sessionManager } : {}),
 	};
 }
 

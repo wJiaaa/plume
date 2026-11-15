@@ -1029,6 +1029,13 @@ export const zhCN = {
 	"plugins.serviceReplaces": "{service}（替换了 {plugins} 提供的）",
 	"plugins.serviceReplacedBy": "{service}（没生效，生效的是 {plugin} 提供的）",
 	"plugins.observesAll": "能看到所有会话的运行情况：发给模型的内容、模型的回复、等人答的卡",
+	"plugins.manageSessions": "让它管理会话",
+	"plugins.manageSessionsDetail":
+		"打开后，它能看到你的会话，往里发话、替你答审批卡和提问、停下正在跑的一轮。别的插件代管的会话不归它；删会话和「以后不再问」仍然只有你能做。",
+	"plugins.manageSessionsOther": "现在由 {name} 管理会话，打开会换成它。",
+	"plugins.manageSessionsConfirm": "让 {name} 管理你的会话？",
+	"plugins.manageSessionsConfirmDetail": "它会像你一样在会话里发话、替你批准改文件和跑命令（包括申请更宽的沙箱）。随时可以在这里关掉。",
+	"plugins.manageSessionsAllow": "允许",
 	"about.intro": "查看当前版本、更新内容，手动检查更新、设置自动检查的频率。",
 	"about.checking": "正在检查…",
 	"about.checkInterval": "自动检查更新",

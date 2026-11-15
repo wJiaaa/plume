@@ -16,8 +16,8 @@ import { normalizeSettings, settingsView, type StoredSettings } from "./models.t
 import { text } from "./i18n.ts";
 
 type Plain = Record<string, unknown>;
-// magpie 同样能携带供应商密钥，不能绕过 providers 的限制。
-const PROJECT_FORBIDDEN = new Set(["providers", "apiKey", "credentials", "githubToken", "mcpServers", "magpie"]);
+// magpie 同样能携带供应商密钥，不能绕过 providers 的限制；把会话交给哪个插件管理只能人在本机设。
+const PROJECT_FORBIDDEN = new Set(["providers", "apiKey", "credentials", "githubToken", "mcpServers", "magpie", "sessionManager"]);
 
 function isRecord(value: unknown): value is Plain {
 	return value !== null && typeof value === "object" && !Array.isArray(value);

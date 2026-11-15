@@ -37,8 +37,9 @@ export default {
 | `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 子会话的后台运行：派出去、等它结束、把结果送给父会话，见「子会话」 |
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
 | `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title?, steward? })` | 开一个新的顶层会话并发出第一句话，见「开新会话」 |
-| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 往自己代管的会话里转话、替人答它弹着的卡，见「代管会话」 |
+| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 往自己代管（或管理）的会话里转话、替人答它弹着的卡，见「代管会话」「管理会话」 |
 | `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……），见「只读运行观察和后台任务」 |
+| `ctx.sessions.approval(sessionId)` | 这个会话此刻弹着的那张卡（审批或等人给数据），没有是 undefined；`observe` 只推变化，晚到时用它补上，见「管理会话」 |
 | `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 列出、读输出、停掉工具登记的后台任务，列出、取消定时唤醒，见「只读运行观察和后台任务」 |
 | `ctx.pages` | 驱动界面入口画的网页（`<webview>`）、在临时沙箱里检查一页，见「网页」 |
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见「`/` 命令」），停用时撤下 |
@@ -639,7 +640,7 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的�
 - 返回 `{ session, done, idle }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）。
 - **交回来处**：`ctx.sessions.reportBack(sessionId, text, { delivery, frame?, wake? })` 把开出来的会话一轮的结果作为一条运行时送达交回它的 `spawnedFrom` 那个会话（`delivery` 和 `report` 的同一个形状，宿主填上它的 id，默认画成「来自关联会话」一行、点了过去；`frame` 同 `report`，同一次送达里你交的几份合成一段）。每一轮都可以交，重启以后也能交：认的是 `spawnedFrom`，不是句柄；要知道它哪一轮收场了，声明 `observe: "all"` 看 `turnEnd`。`wake: true` 请宿主叫醒来处：只在来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑（还有在跑的就等最后一个停下再一起送）、接连被叫起没到上限时叫醒，否则留到来处下一轮开头读；不给就不叫醒。来处删了、归档了、正在退出时返回 false；`spawnedFrom.toolCallId` 不是你的工具在来处的一次调用、或你的插件停用了时抛错。
 - `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`。
-- 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
+- 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」；拿着管理授权时能 `stop`，见「管理会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
 - `project` 给了就用项目的目录；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, name? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
 - 什么时候开由插件定，但开出来的每个会话都是实打实的一轮模型调用：只在到点了、人点了按钮时开，不在渲染、循环里开。界面上要把人带过去，用 `ui.openSession(session.id)`（人点了按钮时）。
@@ -663,13 +664,28 @@ await ctx.sessions.respond(asker, approval.toolCallId, "once"); // 审批卡（�
 await ctx.sessions.answer(asker, request.toolCallId, { answer: "先备份" }); // 等人给数据的卡：值由那个工具核
 ```
 
-- `post` 往里转一句话：排进和人同一条队，闲着当场开一轮，返回 `{ started }`。`respond`、`answer` 替人答它和挂在它下面的子会话弹着的那张卡：审批卡（含提权）用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答；答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的会话抛错。
+- `post` 往里转一句话：排进和人同一条队，闲着当场开一轮，返回 `{ started }`。`ctx.sessions.stop(sessionId)` 停下它正在跑的那一轮，和人按停止一样。`respond`、`answer` 替人答它和挂在它下面的子会话弹着的那张卡：审批卡（含提权）用 `respond`，等人给数据的卡用 `answer` 交数据、`respond(…, "reject")` 不答；答上了返回 true，卡已经不在、不是这一张返回 false。不是你代管的会话抛错。
 - 会话还是人的顶层会话：进侧栏，人能接着聊，标题旁写着「由 你的显示名 代管」；权限照这个会话的设置，不因话是你转来的而变。钩子里 `session.steward` 是代管它的插件。
 - 转来的话画成人的气泡、标着「你的显示名 转来」，模型读到的前面有一句本体写的来处说明（插件从 Plume 之外转来、发送者 Plume 没核实）；`prompt.submit` 的 `launched` 为 true。
 - 卡只答弹着的那一张（`approval` 事件里的那张），人在桌面上照样能点，谁先到算谁的。「以后不再问」不给插件，只有 `once`、`reject`。你答的那次调用底下写「由 你的显示名 代答」，模型读到的结果里也写明是你转达的。外面答的人是不是该答的人，由你确认，本体不核。
 - 挂在代管会话下面的子会话（模型派的子智能体、人开的侧边聊天，不管是哪个插件建的）弹的卡也归你答：`approval` 事件的 `sessionId` 是那个子会话，`ctx.sessions.get(sessionId)` 的 `parentId` 是你代管的会话；答的时候传子会话的 id，规矩和答代管会话自己的卡一样。往里转话只能转进代管会话自己，`post` 给子会话抛错。
 - 人在会话菜单里点「停止代管」以后，`post`、`respond`、`answer` 都抛错（子会话的卡也一样），你转来还排着的话一起拿掉；插件停用后也抛错。停止代管时已经弹着的卡，之后只能人答。只能动自己代管的会话，不能事后认领人已有的会话。
 - 例子是仓库里的测试插件 `packages/testing/steward-probe`（面板代替外面的人）。
+
+## 管理会话
+
+个人助理这类插件要替人照看全部对话：看哪个会话在跑、卡在哪张卡上，往人自己开的会话里交代一句，替人批准，停下跑偏的一轮。在默认导出上和 `inject` 并列写 `manage: "sessions"`（别的值加载失败）：
+
+```ts
+export default { name: "acme.assistant", manage: "sessions", apply(ctx) { /* … */ } } satisfies Plugin;
+```
+
+- 声明只是申请，不带权限。插件市场的详情页对装着的插件画一个「让它管理会话」的开关，人打开（先确认一次）后你才拿到授权；同一时间只有一个插件拿着，人交给别的插件、关掉开关，或你被停用、卸下、更新后不再声明时就失效。
+- 拿着授权时，没有别的插件代管的顶层会话都按你代管算：`post`、`respond`、`answer` 照「代管会话」那几条用（挂在它们下面的子会话弹的卡也能答），`ctx.sessions.stop(sessionId)` 停下正在跑的一轮（和人按停止同一条路），`observe` 收得到它们的观察，不用另写 `observe: "all"`。别的插件代管着的会话还归那个插件。
+- 会话摘要上不记 `steward`，标题旁也不写「由 X 代管」：管理是人给你的一份授权，不是哪个会话的属性。你转来的话照样标着「你的显示名 转来」，你答的卡照样写「由 你的显示名 代答」。
+- 弹着的卡经 `observe` 的 `approval` 事件推，但那只推变化：拿到授权之前、插件重新加载之前就弹着的卡收不到。要知道一个会话此刻在等什么，读 `ctx.sessions.approval(sessionId)`（子会话的卡传子会话的 id）。
+- 授权在不在，试一下就知道：没有授权时 `post`、`respond`、`answer`、`stop` 抛错，message 说的是会话不由你代管或管理；收回授权时你转来还排着的话一起拿掉。交给模型的话里要说清是怎么回事，让它提醒人去插件详情里打开。
+- 「以后不再问」、删会话、开新会话之外改别的会话的设置（模型、目录），授权都不包括。开新会话照旧用 `launch`；列会话、读消息、改标题、归档本来就不要授权。
 
 ## 服务：插件给插件用的一组方法
 
@@ -767,7 +783,7 @@ ctx.serve(api);
 
 `hooks` 是一次钩子调用经过了哪几层（`HookTrace`）：`layers` 外层在前，每层是 `{ plugin, order, outcome, changedInput?, changedOutput? }`，`outcome` 是 `next`（往里交了）、`answered`（自己给了结果）、`failed`（这一层抛错；里层的错只记在出错的那一层）；`inner` 是最里层（本体）走到了（`ran`）、被本体按外层的设定停下（`stopped`，如外层设了 `readOnly` 的写文件调用），没有时是没走到。只记有没有改，不记参数和结果的内容。`tool.execute`、`tool.approve` 带 `toolCallId`，`model.context` 带它组出的那次请求的 `requestId`（同 `request` 的 `id`），`prompt.submit` 两样都不带；`step.end`、`context.compact` 不记，没有插件层的钩子调用也不记。自己的层没按预期生效（被外层拦下、被里层改回）时，看调用轨迹里这次调用的「经过的钩子」。
 
-只收到和你有关的会话的观察：你建的（子会话、独立会话）、你代管的和挂在它下面的子会话、你经 `launch` 开出还没兑现 `idle` 的。要看全部会话（诊断轨迹、给每个会话写摘要、一轮收场后跑用户的钩子、在任意会话里等一轮收场再做事），在默认导出上和 `inject` 并列写 `observe: "all"`；别的值加载失败。插件市场的详情页会对装着的插件写一句「能看到所有会话的运行情况」，只在真要看全部时写。
+只收到和你有关的会话的观察：你建的（子会话、独立会话）、你代管或管理的和挂在它下面的子会话、你经 `launch` 开出还没兑现 `idle` 的。要看全部会话（诊断轨迹、给每个会话写摘要、一轮收场后跑用户的钩子、在任意会话里等一轮收场再做事），在默认导出上和 `inject` 并列写 `observe: "all"`；别的值加载失败。插件市场的详情页会对装着的插件写一句「能看到所有会话的运行情况」，只在真要看全部时写。
 
 ```ts
 export default {

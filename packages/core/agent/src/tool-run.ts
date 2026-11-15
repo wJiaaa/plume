@@ -128,13 +128,13 @@ export interface CallCommands {
 }
 
 /**
- * 卡是代管插件替人答的：结果上记着是哪个插件（界面写一行），交给模型的正文后面也写明，模型不会把它当成人在 Plume 里亲手点的。
+ * 卡是代管（或管理，见 `Plugin.manage`）这个会话的插件替人答的：结果上记着是哪个插件（界面写一行），交给模型的正文后面也写明，模型不会把它当成人在 Plume 里亲手点的。
  * 只陈述是谁答的，不评判这次放行或回答算不算数：权限照会话的设置，已经由本体定过了。
  */
 function relayed(message: ToolResultMessage, plugin: string | undefined): ToolResultMessage {
 	if (!plugin) return message;
 	// i18n-exempt：交给模型的工具结果。
-	const note = `[The approval or answer for this call was relayed by the plugin "${plugin}" that stewards this session, not given by the user in Plume's interface.]`;
+	const note = `[The approval or answer for this call was relayed by the plugin "${plugin}" that stewards or manages this session, not given by the user in Plume's interface.]`;
 	const [first, ...rest] = message.content;
 	const content =
 		first?.type === "text" ? [{ ...first, text: `${first.text}\n\n${note}` }, ...rest] : [{ type: "text" as const, text: note }, ...message.content];

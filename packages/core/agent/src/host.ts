@@ -74,7 +74,7 @@ const NO_SECRETS: PluginSecrets = {
  */
 export interface HostSessions extends Pick<
 	SessionAccess,
-	"list" | "get" | "messages" | "compact" | "setTitle" | "setArchived" | "models" | "jobs" | "stopJob" | "jobOutput" | "wakeups" | "cancelWakeup"
+	"list" | "get" | "messages" | "approval" | "compact" | "setTitle" | "setArchived" | "models" | "jobs" | "stopJob" | "jobOutput" | "wakeups" | "cancelWakeup"
 > {
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 是调它的插件：agent 只让它改自己建的会话。 */
@@ -247,6 +247,7 @@ const NO_SESSIONS: HostSessions = {
 	respond: async (_owner, sessionId) => missing(sessionId),
 	answer: async (_owner, sessionId) => missing(sessionId),
 	models: async () => [],
+	approval: () => undefined,
 	jobs: () => [],
 	stopJob: () => false,
 	jobOutput: async (sessionId) => missing(sessionId),
@@ -751,6 +752,9 @@ export class PluginHost {
 		}
 		status.name = plugin.name;
 		if (plugin.observe === "all") status.observe = "all";
+		// 更新后不再声明的，授权跟着失效（agent 每次现看这一项）。
+		if (plugin.manage === "sessions") status.manage = "sessions";
+		else delete status.manage;
 		if (this.records.some((other) => other !== record && other.status.name === plugin.name)) {
 			return fail(new Error(text("plugin.nameTaken", { name: plugin.name, key: record.entry.key })));
 		}
@@ -909,6 +913,7 @@ export class PluginHost {
 					return sessions.answer(name, sessionId, toolCallId, value);
 				},
 				models: () => sessions.models(),
+				approval: (sessionId) => sessions.approval(sessionId),
 				jobs: (sessionId) => sessions.jobs(sessionId),
 				stopJob: (sessionId, jobId, force) => sessions.stopJob(sessionId, jobId, force),
 				jobOutput: (sessionId, jobId) => sessions.jobOutput(sessionId, jobId),
@@ -1163,6 +1168,7 @@ function validPlugin(module: unknown): Plugin {
 		throw new Error(text("plugin.badInject", { name: plugin.name }));
 	}
 	if (plugin.observe !== undefined && plugin.observe !== "all") throw new Error(text("plugin.badObserve", { name: plugin.name }));
+	if (plugin.manage !== undefined && plugin.manage !== "sessions") throw new Error(text("plugin.badManage", { name: plugin.name }));
 	return plugin as Plugin;
 }
 

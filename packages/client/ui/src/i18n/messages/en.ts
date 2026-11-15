@@ -1070,6 +1070,14 @@ export const en = {
 	"plugins.serviceReplaces": "{service} (replaces the one from {plugins})",
 	"plugins.serviceReplacedBy": "{service} (not in effect; {plugin} provides it)",
 	"plugins.observesAll": "Can see how every session runs: what is sent to the model, its replies, and cards waiting for an answer",
+	"plugins.manageSessions": "Let it manage sessions",
+	"plugins.manageSessionsDetail":
+		"When on, it can see your sessions, post into them, answer approval cards and questions for you, and stop a running turn. Sessions stewarded by another plugin stay with that plugin; deleting sessions and “Don’t ask again” stay with you.",
+	"plugins.manageSessionsOther": "{name} manages sessions now; turning this on hands them to this plugin instead.",
+	"plugins.manageSessionsConfirm": "Let {name} manage your sessions?",
+	"plugins.manageSessionsConfirmDetail":
+		"It can post into your sessions and approve file changes and commands for you, including requests for a wider sandbox. You can turn it off here at any time.",
+	"plugins.manageSessionsAllow": "Allow",
 	"about.intro": "The version you are on, what changed, checking by hand, and how often to check on its own.",
 	"about.checking": "Checking…",
 	"about.checkInterval": "Check for updates",

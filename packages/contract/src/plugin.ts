@@ -16,6 +16,7 @@ import type {
 	PermissionMode,
 	Personalization,
 	OutgoingMessage,
+	PendingRequest,
 	SessionKind,
 	SessionSummary,
 	ThinkingLevel,
@@ -251,7 +252,7 @@ export interface ToolRun {
 	 */
 	exec(command: string, options?: { cwd?: string; env?: Record<string, string>; recordChanges?: boolean }): Promise<RunProcess>;
 	/**
-	 * 申请这次调用的命令跑在比权限模式更宽的一档（提权）。本体弹提权卡（`ApprovalRequest.escalation`），只认人答，或代管这个会话的插件
+	 * 申请这次调用的命令跑在比权限模式更宽的一档（提权）。本体弹提权卡（`ApprovalRequest.escalation`），只认人答，或代管（管理）这个会话的插件
 	 * 经 `ctx.sessions.respond` 转达；完全访问、外层放行、钩子 tool.approve、「以后不再问」都不替人答。批了，这次调用之后的 `exec`
 	 * 都跑在那一档，调用答完就作废，什么都不累积。`readOnly` 下、没给理由、要的不比当前宽、人拒绝时不批，`message` 是交给模型的说明。
 	 * `title`、`detail` 是卡上的标题和正文（要跑的命令），`justification` 是模型给的理由，原样给人看。只在这次调用里用。
@@ -918,7 +919,7 @@ export type CompactSummary =
  * 权限模式的含义在本体，到不了这里：完全访问、tool.execute 外层设了 `approved`、`subject` 答过「以后不再问」的，本体直接放行。
  * 提权（`request.escalation`）只能由人答：它在完全访问下也到这里，层答放行不算数、本体照样弹卡，层答拒绝照算；
  * 最里层照本体原本问的那一条弹卡（层交下去的 `request` 不算），层拿到人的回答后改成放行也不算。
- * 弹出来的卡可以由人点，也可以由代管这个会话的插件经 `ctx.sessions.respond` 转达，那条路不经这里。
+ * 弹出来的卡可以由人点，也可以由代管（管理）这个会话的插件经 `ctx.sessions.respond` 转达，那条路不经这里。
  * 工具要人给答案（`ToolRun.request`）不是审批，不到这里。
  * 内置插件 plume.approval 在里层（order 1000）按帮我批准（`auto`）的风险规则放行，命中规则的把理由写进卡片再交给里层；
  * 要在它之前替人答、或整个换掉这套规则的层挂在外面（order 小于 1000）；只管真要弹给人的那些（它放行的到不了里面，到了的
@@ -1296,7 +1297,9 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
  * 不开放任意向用户会话发送消息的能力：插件够得着的会话都从宿主给的句柄来，目标不由插件随手填。
  * - 新开的会话：`launch` 开一个新的顶层会话、发出第一句话，之后它就是人的会话，插件不能再往里发；
  * - 代管的会话：`launch({ steward: true })` 开出来的那些，人没停止代管时，开它的插件能经 `post` 往里转话、经 `respond`、`answer`
- *   替人答它和挂在它下面的子会话弹的卡；别的会话（人已有的、别的插件代管的）不行，也不能事后认领；
+ *   替人答它和挂在它下面的子会话弹的卡、经 `stop` 停下它正在跑的那一轮；别的会话（人已有的、别的插件代管的）不行，插件自己也不能事后认领；
+ * - 管理的会话：声明了 `Plugin.manage` 的插件，人在插件详情里把会话交给它管理（`AgentService.setSessionManager`）以后，
+ *   没有别的插件代管的顶层会话它都能像代管一样转话、答卡、停下，人收回授权就不行了。同一时间只有一个插件拿着这份授权；
  * - 开出它的那个会话：`reportBack` 把开出来的会话一轮的结果交回去，来处要是本插件的工具在那里的一次调用；
  * - 调用所在的会话：`ToolRun.background` 送后台结果、`ToolRun.archiveAfterTurn` 收尾后归档；
  * - 子会话的父会话：插件自己建的子会话里，它注册的工具的那次调用拿得到 `ToolRun.parent`（排活、停下、接着做），
@@ -1309,7 +1312,7 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
 export interface SessionAccess {
 	/**
 	 * 只读观察请求、工具开始、审批、重试和运行状态；副本不含配置密钥，停用时自动撤下。
-	 * 只收到和本插件有关的会话的：本插件建的（`owner` 是它的子会话、独立会话），本插件代管的会话和挂在它下面的子会话，
+	 * 只收到和本插件有关的会话的：本插件建的（`owner` 是它的子会话、独立会话），本插件代管或管理（`Plugin.manage`）的会话和挂在它下面的子会话，
 	 * 本插件经 `launch` 开出、还没兑现 `idle` 的会话。要看全部会话的（诊断轨迹、按每个会话的运行状态做事）在 `Plugin.observe` 声明 `"all"`。
 	 */
 	observe(listener: (observation: SessionObservation) => void): void;
@@ -1319,6 +1322,11 @@ export interface SessionAccess {
 	get(sessionId: string): Promise<SessionSummary | undefined>;
 	/** 一个会话存下的全部消息，是会话里的原文，不受压缩影响。没有这个会话时抛错。 */
 	messages(sessionId: string): Promise<Message[]>;
+	/**
+	 * 这个会话此刻弹着的那张卡（审批或等人给数据，同 `SessionView.approval`）；没有卡、没有这个会话时是 undefined。
+	 * `observe` 只推变化，插件晚到（刚拿到管理授权、刚重新加载）时用它补上已经弹着的那张。只读：要答经 `respond`、`answer`。
+	 */
+	approval(sessionId: string): PendingRequest | undefined;
 	/** 会话里登记过的后台任务（`ToolRun.track`），结束了的也在，按登记的先后；没有这个会话、没登记过时是空数组。 */
 	jobs(sessionId: string): BackgroundJobInfo[];
 	/** 叫一项后台任务停下（`force` 是强杀）；没有这一项、已经结束时返回 false，停不掉时抛错。 */
@@ -1419,22 +1427,22 @@ export interface SessionAccess {
 	 */
 	reportBack(sessionId: string, text: string, options: ReportBackOptions): boolean;
 	/**
-	 * 往本插件代管的会话里转一句话（外面的人经插件发来的消息）：排进这个会话的队（和人在输入框里排的同一条，落盘），
+	 * 往本插件代管的会话里转一句话（外面的人经插件发来的消息；拿着管理授权的插件对没有别的插件代管的顶层会话也能转，见 `Plugin.manage`）：排进这个会话的队（和人在输入框里排的同一条，落盘），
 	 * 会话闲着就当场开一轮，正在跑就排着，不插进这一轮。气泡标着来自本插件（`UserMessage.origin` 是 `plugin`，`fromPlugin` 是本插件），
 	 * 模型读到的前面多一句本体写的来处说明：这是代管插件转来的，不是人在 Plume 的输入框里打的。权限、审批照这个会话的设置，不因来处而变。
-	 * `started` 是排上那一刻它就开始了。会话不在、不是本插件代管的（没代管过、人停止了代管）、是子会话（子会话里的一轮归建它的插件发起）、
+	 * `started` 是排上那一刻它就开始了。会话不在、不是本插件代管或管理的（没代管过、人停止了代管或收回了管理授权）、是子会话（子会话里的一轮归建它的插件发起）、
 	 * 已归档、话为空时抛错。
 	 * 回复和收场经 `observe`（`response`、`turnEnd`）和 `messages` 读；哪些转出去由插件自己定。
 	 */
 	post(sessionId: string, message: string): Promise<{ started: boolean }>;
 	/**
-	 * 替人答本插件代管的会话里弹着的那张审批卡（`approval` 事件、`SessionView.approval` 里第一张，按 `toolCallId` 认）：`once` 放行这一次，
+	 * 替人答本插件代管（或管理，见 `post`）的会话里弹着的那张审批卡（`approval` 事件、`SessionView.approval` 里第一张，按 `toolCallId` 认）：`once` 放行这一次，
 	 * `reject` 拒绝；对等人给数据的卡（`HumanRequest`）`reject` 是不答。和人在桌面上点卡同一条路，提权也算：人和插件谁先答算谁的，
 	 * 另一边的卡随之收起。「以后不再问」改的是人的设置，插件答不了。卡上的东西怎么转给外面的人、答的人是不是该答的人，由插件负责确认。
 	 * 挂在代管会话下面的子会话（模型派的子智能体、人开的侧边聊天，不管是哪个插件建的）弹的卡也能这样答，`sessionId` 传子会话的 id
 	 * （`approval` 事件带的那个）；看的是父会话此刻是不是本插件代管着。
-	 * 答上了返回 true；那张卡已经不在（答过了、过期了、这一轮停了）、不是这一张时返回 false。会话不是本插件代管的（子会话：父会话不是）时抛错，
-	 * 人停止代管以后也抛错：那时还弹着的卡只能人答。
+	 * 答上了返回 true；那张卡已经不在（答过了、过期了、这一轮停了）、不是这一张时返回 false。会话不是本插件代管或管理的（子会话：父会话不是）时抛错，
+	 * 人停止代管、收回管理授权以后也抛错：那时还弹着的卡只能人答。
 	 * 这次调用的结果里记着是哪个插件代答的（`ToolResultMessage.answeredBy`），模型读到的结果后面也写明这一点。
 	 */
 	respond(sessionId: string, toolCallId: string, decision: "once" | "reject"): Promise<boolean>;
@@ -1463,7 +1471,10 @@ export interface SessionAccess {
 	 * 这句话照常经 `prompt.submit`，界面画成人的气泡。正在跑、不是自己建的会话时抛错。`signal` 中止时这一轮停下。
 	 */
 	send(sessionId: string, text: string | SessionMessage, options?: { signal?: AbortSignal }): Promise<TurnStop>;
-	/** 停下自己子会话正在跑的那一轮；没在跑什么都不做。 */
+	/**
+	 * 停下正在跑的那一轮，和人按停止同一条路；没在跑什么都不做。能停的：自己建的会话（子会话、独立会话），
+	 * 本插件代管或管理的顶层会话（见 `post`）。别的会话抛错。
+	 */
 	stop(sessionId: string): void;
 	/** 删掉自己建的子会话（和它下面的子会话）；正在跑的先停下。 */
 	delete(sessionId: string): Promise<void>;
@@ -1886,5 +1897,12 @@ export interface Plugin {
 	 * 不写就是只看和自己有关的会话。内置插件也一样要写。
 	 */
 	observe?: "all";
+	/**
+	 * `"sessions"`：插件要当会话的管理者（个人助理替人照看全部对话）。只是声明，不带权限：插件市场的详情页对装着的插件画一个开关，
+	 * 人打开（先确认）后它才拿到授权（`SettingsView.sessionManager`），之后没有别的插件代管的顶层会话都按本插件代管算：
+	 * `ctx.sessions` 的 `post`、`respond`、`answer`、`stop` 对它们可用，`observe` 收得到它们的观察。授权记在本机设置里，
+	 * 同一时间只给一个插件；人关掉开关、插件停用或卸下时失效。「以后不再问」、删会话仍然只有人能做。
+	 */
+	manage?: "sessions";
 	apply(ctx: PluginContext): void | Promise<void>;
 }

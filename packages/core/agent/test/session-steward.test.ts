@@ -398,3 +398,81 @@ it("不在代管会话下面的子会话，代管插件答不了；别的插件�
 	expect(result).toMatchObject({ isError: false });
 	expect(result?.answeredBy).toBeUndefined();
 });
+
+/** 声明了 `manage: "sessions"` 的插件：人把会话交给它管理以后，没有别的插件代管的顶层会话都按它代管算。 */
+function managerPlugin() {
+	const state: { ctx?: PluginContext; observed: { sessionId: string; type: string }[] } = { observed: [] };
+	const plugin: Plugin = {
+		name: "test.manager",
+		manage: "sessions",
+		apply(ctx) {
+			state.ctx = ctx;
+			ctx.sessions.observe((observation) => state.observed.push({ sessionId: observation.sessionId, type: observation.event.type }));
+		},
+	};
+	return { plugin, state };
+}
+
+it("人把会话交给管理者以后，它能往人自己的会话里转话、答卡、停下，也看得到它；别的插件代管的会话不归它；没声明的插件拿不到授权", async () => {
+	const { plugin, state } = managerPlugin();
+	const { service, steward, launch, card, settledView } = await open({}, [plugin]);
+	const manager = state.ctx!.sessions;
+	const mine = await service.createSession({ cwd: dir });
+	await expect(manager.post(mine.id, "x")).rejects.toThrow("不由插件 test.manager 代管");
+	await expect(service.setSessionManager("test.other")).rejects.toThrow("没有声明要管理会话");
+	// 授权之前就弹着的卡：观察里没有（那时还不归它），`approval` 读得到，拿到授权后照样能答。
+	service.send(mine.id, { content: [{ type: "text", text: "请改一下" }] });
+	const early = await card(mine.id);
+	expect(state.observed).not.toContainEqual({ sessionId: mine.id, type: "approval" });
+	expect(manager.approval(mine.id)).toMatchObject({ toolCallId: early.toolCallId });
+	await expect(manager.respond(mine.id, early.toolCallId, "once")).rejects.toThrow("不由插件 test.manager 代管");
+	expect((await service.getSettings()).sessionManager).toBeUndefined();
+
+	await service.setSessionManager("test.manager");
+	expect((await service.getSettings()).sessionManager).toBe("test.manager");
+	expect(await manager.respond(mine.id, early.toolCallId, "once")).toBe(true);
+	await settledView(mine.id);
+	expect(manager.approval(mine.id)).toBeUndefined();
+	expect(await manager.post(mine.id, "请改一下")).toEqual({ started: true });
+	const asked = await card(mine.id, (request) => request.toolCallId !== early.toolCallId);
+	expect(state.observed).toContainEqual({ sessionId: mine.id, type: "approval" });
+	expect(await manager.respond(mine.id, asked.toolCallId, "once")).toBe(true);
+	const view = await settledView(mine.id);
+	expect(view.messages.find((message) => message.role === "user" && message.origin === "plugin")).toMatchObject({ fromPlugin: "test.manager" });
+	expect(results(view.messages).map((result) => result.answeredBy)).toEqual(["test.manager", "test.manager"]);
+	expect(textOf(results(view.messages)[1])).toContain("stewards or manages this session");
+	// 摘要上不记代管：管理是人给插件的一份授权，不是这个会话的属性。
+	expect(service.listSessions().find((item) => item.id === mine.id)?.steward).toBeUndefined();
+
+	// 停下：和人按停止同一条路，弹着的卡跟着收起。
+	service.send(mine.id, { content: [{ type: "text", text: "请改第二处" }] });
+	await card(mine.id, (request) => request.toolCallId !== asked.toolCallId && request.toolCallId !== early.toolCallId);
+	manager.stop(mine.id);
+	expect((await settledView(mine.id)).approval).toBeUndefined();
+
+	// 别的插件代管的会话归那个插件。
+	const stewardOwned = await launch();
+	await expect(manager.post(stewardOwned, "x")).rejects.toThrow("不由插件 test.manager 代管");
+	expect(await steward.post(stewardOwned, "还是我的")).toEqual({ started: true });
+});
+
+it("收回授权以后都不行了，它转进来还排着的几条一起拿掉；授权只认本机设置，项目配置里写的不算", async () => {
+	const { plugin, state } = managerPlugin();
+	const { service, card } = await open({}, [plugin]);
+	const manager = state.ctx!.sessions;
+	const mine = await service.createSession({ cwd: dir });
+	await service.setSessionManager("test.manager");
+	service.send(mine.id, { content: [{ type: "text", text: "请改一下" }] });
+	const asked = await card(mine.id);
+	expect(await manager.post(mine.id, "排着的")).toEqual({ started: false });
+	service.queue(mine.id, { content: [{ type: "text", text: "人排的" }] }, "人排的");
+	await vi.waitFor(async () => expect((await service.getSession(mine.id)).queue).toHaveLength(2));
+
+	await service.setSessionManager(null);
+	expect((await service.getSession(mine.id)).queue.map((entry) => entry.preview)).toEqual(["人排的"]);
+	await expect(manager.post(mine.id, "还想说")).rejects.toThrow("不由插件 test.manager 代管");
+	await expect(manager.respond(mine.id, asked.toolCallId, "once")).rejects.toThrow("不由插件 test.manager 代管");
+	expect(() => manager.stop(mine.id)).toThrow("不由插件 test.manager 代管");
+	const stored = JSON.parse(await readFile(join(dir, "settings.json"), "utf8")) as { sessionManager?: string };
+	expect(stored.sessionManager).toBeUndefined();
+});

@@ -42,8 +42,11 @@ import {
 	Plug,
 	Settings2,
 	Trash2,
+	UserCog,
 } from "@plume/ui/icons";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { modelsAgent, refreshModels, settingsView, subscribeModels } from "../models/store.ts";
+import { saveFailed } from "../settings/controls.tsx";
 import { listPluginSettingsSections, localized, type SettingsSectionEntry, usePluginUis } from "../plugins.tsx";
 import { Toggle } from "../settings/controls.tsx";
 import type { SettingsSection } from "../settings/pages.tsx";
@@ -100,6 +103,7 @@ function DetailBody({
 	const { t } = useI18n();
 	const confirm = useConfirmer();
 	const more = usePopover();
+	const manager = useSyncExternalStore(subscribeModels, settingsView)?.sessionManager;
 	const act = useInstall(item);
 	const installed = isInstalled(item);
 	const enabled = isEnabled(item);
@@ -198,6 +202,41 @@ function DetailBody({
 					<Eye size={13} strokeWidth={2} className="mt-0.5 shrink-0" />
 					<span className="min-w-0 break-words">{t("plugins.observesAll")}</span>
 				</p>
+			)}
+
+			{/*
+			 * 声明了要当会话管理者的（`Plugin.manage`）：授权由人在这里给，打开前确认一次（它能替人批准，提权也算）；关掉是往严了收，直接关。
+			 * 同一时间只给一个插件，别的插件拿着时说一声，打开就换过来。停用的插件开关灰着：授权只在它开着时生效。
+			 */}
+			{item.status?.manage === "sessions" && (
+				<div className="mt-4 flex items-start gap-3 rounded-panel bg-card-hover px-4 py-2.5" data-plugin-manages-sessions="">
+					<UserCog size={13} strokeWidth={2} className="mt-1 shrink-0 text-ink-muted" />
+					<div className="min-w-0 flex-1">
+						<p className="text-label text-ink">{t("plugins.manageSessions")}</p>
+						<p className="pt-0.5 text-detail text-ink-muted">{t("plugins.manageSessionsDetail")}</p>
+						{manager && manager !== item.status.name && (
+							<p className="pt-0.5 text-detail text-ink-muted">{t("plugins.manageSessionsOther", { name: manager })}</p>
+						)}
+					</div>
+					<Toggle
+						checked={manager === item.status.name}
+						disabled={!enabled}
+						ariaLabel={t("plugins.manageSessions")}
+						onChange={(on) => {
+							const name = item.status?.name;
+							if (!name) return;
+							const apply = (next: string | null) => void modelsAgent().setSessionManager(next).then(refreshModels).catch(saveFailed);
+							if (!on) apply(null);
+							else
+								confirm.ask({
+									title: t("plugins.manageSessionsConfirm", { name: item.name }),
+									detail: t("plugins.manageSessionsConfirmDetail"),
+									confirmLabel: t("plugins.manageSessionsAllow"),
+									onConfirm: () => apply(name),
+								});
+						}}
+					/>
+				</div>
 			)}
 
 			{/*

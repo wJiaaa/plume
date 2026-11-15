@@ -50,6 +50,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 读会话、改标题、归档 | `ctx.sessions`（`list`、`messages`、`setTitle`、`setArchived`…） |
 | 自己的子会话（侧边聊天、子 Agent），或页面上一直在的独立会话 | `ctx.sessions.create`，`send` / `start` / `wait` / `report` |
 | 开一个新的顶层会话并发出第一句话；把会话接到 Plume 之外 | `ctx.sessions.launch`；带 `steward: true` 由你代管 |
+| 替人照看全部会话：往人的会话里交代、替人答卡、停下一轮 | 声明 `manage: "sessions"`，人在插件详情里给了授权后用 `ctx.sessions.post` / `respond` / `answer` / `stop` |
 | 列项目文件、在隔离视图里读 git、读写本体记下的改动 | `ctx.workspace`、`ctx.changes` |
 | 加一种资源地址（`scheme://路径`） | `ctx.resources` |
 | 跑长期的东西（子进程、定时器、文件）给自己的界面用 | `ctx.serve`（界面经 `ui.remote()` 调），清理登记 `ctx.effect` |
@@ -80,7 +81,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 - 替换模型调用或 agent 循环；换掉审批卡（本体只有一张）；改存下的模型回复（显示时拿掉标记用 `ui.replyText`）。
 - 在没有用户停止操作时让本来要接着做的一轮停下（`step.end` 只能多做或给结束换原因）。
-- 任意往会话里写东西或发起一轮。能写的只有：自己的子会话和独立会话、钩子的 `say` / `context`、后台结果（`report`、`run.background()` 的渠道）、`run.letter` 寄的信（标着来自哪个会话）、`launch` 开出来的新会话的第一句、代管会话里转的话，以及自己的子会话里经 `run.parent` / `handToParent` 排进它父会话的任务。不能往别的已有会话里发、不能指定任意父会话或冒充用户授权。
+- 任意往会话里写东西或发起一轮。能写的只有：自己的子会话和独立会话、钩子的 `say` / `context`、后台结果（`report`、`run.background()` 的渠道）、`run.letter` 寄的信（标着来自哪个会话）、`launch` 开出来的新会话的第一句、代管会话里转的话（人给了管理授权时，也包括人的会话里转的话），以及自己的子会话里经 `run.parent` / `handToParent` 排进它父会话的任务。没有人给的授权不能往别的已有会话里发、不能指定任意父会话或冒充用户授权。
 - 没人点按钮时替人发送；绕过公开草稿接口操纵输入框；新增钩子或界面扩展点。
 
 **需求要用到做不到的能力时，停下来报告缺的是哪个能力、哪个插件需要它**，这是宿主的改动，不在插件里绕过（不改宿主代码、不碰宿主内部对象、不往页面上自己挂 DOM 冒充扩展点）。
