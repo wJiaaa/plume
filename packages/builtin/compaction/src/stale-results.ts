@@ -1,8 +1,8 @@
 /**
  * 已经被后来的观察顶替掉的工具结果，清成一句话。
  *
- * 按大小剪是因为结果大；这里剪是因为它「死了」：同一个文件又读了一遍、文件被改了、同一个工具用同样的参数又跑了一次。后来的那份是现在的
- * 观察，早的那份是一张模型不会再要的快照（要的话 `recall`）。
+ * 按大小剪是因为结果大；这里剪是因为它「死了」：同一个文件又读了一遍、文件被改了、同一个工具用同样的参数又跑了一次、回来的也一字不差。
+ * 后来的那份是现在的观察，早的那份是一张模型不会再要的快照（要的话 `recall`）。
  *
  * 只在压缩里做：压缩本来就要重写前缀，会话中途改写已经发出去的内容，为省几百字让整段缓存作废不划算。清空不删：没有结果的调用会让之后的
  * 每个请求都被拒。
@@ -21,7 +21,8 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 	const calls = callsById(messages);
 	const latestReads = new Map<string, Window[]>();
 	const mutated = new Set<string>();
-	const seenExact = new Set<string>();
+	/** 同样的调用（工具名加参数）后来成功跑过的，各自回来的文字。 */
+	const seenExact = new Map<string, Set<string>>();
 	const cuts: StaleCut[] = [];
 
 	for (let index = messages.length - 1; index >= 0; index--) {
@@ -45,7 +46,12 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 		 * 信它的话两次读的中段都没了。
 		 */
 		const returned = view?.verbatim && goesOutWhole(message) ? windowOf(view) : undefined;
-		const duplicate = seenExact.has(fingerprint);
+		/*
+		 * 参数一样不等于看到的一样：测试、构建、`git status` 隔一会儿再跑，输出就变了，早的那份（多半是失败的那次）正是后来改动的理由。
+		 * 回来的文字一字不差才算重复。
+		 */
+		const output = textOf(message);
+		const duplicate = seenExact.get(fingerprint)?.has(output) === true;
 		const superseded = view !== undefined && (mutated.has(key) || coversAny(latestReads.get(key), windowOf(view)));
 
 		if (duplicate || superseded) {
@@ -58,7 +64,7 @@ function staleCuts(messages: Message[], cwd: string): StaleCut[] {
 		 * 失败、被取消的调用什么也没观察到，不能顶替更早的那次。不只是读：重复的 edit 失败往往正是因为第一次已经改上了，清掉那次成功只剩
 		 * 失败，模型就以为改动从没落地。
 		 */
-		if (!message.isError) seenExact.add(fingerprint);
+		if (!message.isError) seenExact.set(fingerprint, (seenExact.get(fingerprint) ?? new Set()).add(output));
 		// 出了错的结果上记着改动，也是真改了：两边的路径都是解析好的绝对路径（`FileChanges.paths`、`FileViewDetails.path`），比全等。
 		for (const path of message.changes?.paths ?? []) mutated.add(pathKey(path));
 		if (key && returned) {
@@ -173,10 +179,15 @@ function textChars(message: ToolResultMessage, points = false): number {
 	return message.content.reduce((sum, block) => sum + (block.type === "text" ? (points ? [...block.text].length : block.text.length) : 0), 0);
 }
 
+/** 结果里的文字，比较是不是同一份输出用。 */
+function textOf(message: ToolResultMessage): string {
+	return message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\u0000");
+}
+
 function supersededNotice(path: string): string {
 	return `[Earlier read of \`${path}\` superseded by a later observation. The latest read, or the edit that replaced it, is below. Full text stays in the session — recall or read again if you need that snapshot.]`;
 }
 
 function duplicateNotice(tool: string): string {
-	return `[Duplicate ${tool} result omitted; a later call used the same arguments. Full text stays in the session.]`;
+	return `[Duplicate ${tool} result omitted; a later call used the same arguments and returned the same output. Full text stays in the session.]`;
 }

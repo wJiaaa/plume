@@ -85,3 +85,14 @@ it("同样的调用又跑了一次时早的那份清掉，标了要照着做的�
 	expect(textOf(twice(false)[1]!)).not.toBe(body);
 	expect(textOf(twice(true)[1]!)).toBe(body);
 });
+
+it("同样的命令再跑一次、输出变了，早的那份留着：先失败后通过的测试，失败那次的报错不清", () => {
+	const run = (id: string): Message => call(id, "bash", { command: "pnpm test" });
+	const failed = `FAIL src/a.test.ts\n${"expected 1, received 2\n".repeat(20)}`;
+	const out = dropStaleResults([run("a"), { ...toolResult("a", failed), isError: true }, run("b"), toolResult("b", "all tests passed")], "/repo");
+	expect(textOf(out[1]!)).toBe(failed);
+	// 一字不差的才算重复。
+	const same = "src/a.ts\n".repeat(40);
+	const twice = dropStaleResults([run("a"), toolResult("a", same), run("b"), toolResult("b", same)], "/repo");
+	expect(textOf(twice[1]!)).toMatch(/^\[Duplicate bash result omitted/);
+});
