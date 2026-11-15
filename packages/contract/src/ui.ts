@@ -1203,6 +1203,11 @@ export interface UiContext {
 	 */
 	revealPath(path: string): Promise<void>;
 	/**
+	 * 用户点击时弹出系统的选文件夹对话框（能当场新建文件夹），交回选中的那个的绝对路径，取消是 null。
+	 * `title` 是对话框的标题（macOS 上不显示）。和侧栏新建项目时选文件夹是同一个对话框。
+	 */
+	pickFolder(title?: string): Promise<string | null>;
+	/**
 	 * 像人点了回复里的网址那样打开 HTTP(S) 链接：有插件接手点击（`LinkOpener.takesClicks`，比如内置浏览器）时开在它那里，否则系统浏览器。
 	 * `sessionId` 是链接所在的会话；规则同 `openExternal`，只在用户点击时调。
 	 */

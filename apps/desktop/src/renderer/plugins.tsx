@@ -1587,6 +1587,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (!(await window.plume.files.exists(path).catch(() => false))) throw new Error(translate("filePanel.unreadableAt", { path }));
 			await window.plume.files.reveal(path);
 		},
+		pickFolder: async (title) => (await window.plume.pickFolder(typeof title === "string" ? title : undefined)) ?? null,
 		openLink: async (url, sessionId) => {
 			const href = externalWebUrl(url);
 			const opener = clickOpener();

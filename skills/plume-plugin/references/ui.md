@@ -82,6 +82,7 @@ export default {
 | `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
 | `ui.openPath(path)` | 用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开，见「文件、终端和系统打开」 |
 | `ui.revealPath(path)` | 用户点击后在系统的文件管理器里选中它（「在访达中显示」），同上 |
+| `ui.pickFolder(title?)` | 用户点击后弹出系统的选文件夹对话框，交回绝对路径，取消是 null，同上 |
 | `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开，见「网址、文件签的打开方式」 |
 | `ui.settingsSection(id, Component, options)` | 加一节设置，见「设置分区」 |
 | `ui.ModelSelect` | 产品的模型下拉，见「复用产品的组件」 |
@@ -443,6 +444,7 @@ ui.linkOpener({
 - `ui.terminalRunner(run)`：为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener`。
 - `ui.openPath(path)`：用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令。
 - `ui.revealPath(path)`：用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回（媒体图用 `ctx.media.save` 交回、记在 `details` 里的 `path`）。菜单上的字插件自带，按平台叫访达、资源管理器、文件管理器（`@plume/ui` 的 `macKeyboard()`，`navigator.platform` 以 `Win` 开头是 Windows）。
+- `ui.pickFolder(title?)`：用户点击后弹出系统的选文件夹对话框（能当场新建文件夹），交回选中的绝对路径，取消是 null；和侧栏新建项目选文件夹是同一个。选好的路径交给逻辑入口用（比如 `ctx.sessions.create({ cwd })`），逻辑入口那边仍要按它自己的规矩核对。截屏的 `ui.screen.pickDirectory` 是给截图选保存位置的，别的场合用这个。
 
 ## 图片
 
