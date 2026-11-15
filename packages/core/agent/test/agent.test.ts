@@ -368,6 +368,19 @@ it("上下文分段：发请求前没有，发过以后按那次请求分段、�
 	expect(breakdown?.memoryFiles).toEqual([]);
 });
 
+it("上下文分段跟着会话存下：重开应用后还没发请求也照样分段", async () => {
+	const { service, session, idle } = await start([{ text: "好" }]);
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
+	await done;
+	const before = await service.contextBreakdown(session.id);
+	expect(before?.segments.length).toBeGreaterThan(0);
+
+	await agent!.shutdown();
+	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "model.json"), plugins: BUILTINS, log: () => undefined });
+	expect(await agent.service.contextBreakdown(session.id)).toEqual(before);
+});
+
 it("上下文分段：项目指令和记忆按插件标的文件列出来源", async () => {
 	await writeFile(join(workspace, "AGENTS.md"), "用 pnpm。\n".repeat(200));
 	const memory: Plugin = {
@@ -1374,10 +1387,10 @@ it("context.compact 的层给的边界会拆开调用和结果时当作压缩失
 	expect(events.some((event) => event.type === "compaction" && event.runs.some((run) => run.status === "failed"))).toBe(true);
 });
 
-it("服务商说超长：压缩一次再发，失败的那条不进会话", async () => {
-	// 短到六条以内、或摘要还没原文长的对话没什么可压的：先读两个文件攒出一段过去（不到拒收时剪成一行的那么大）。
+it("服务商说超长：先压缩一次再发，不把大结果剪成一行，失败的那条不进会话", async () => {
+	// 短到六条以内、或摘要还没原文长的对话没什么可压的：先读两个文件攒出一段过去。b.txt 超过拒收时剪成一行的那条线，超长不该走那条路。
 	await bigFile("a.txt", 100);
-	await bigFile("b.txt", 100);
+	await bigFile("b.txt", 300);
 	const { service, session, events, idle } = await start([
 		{ toolCalls: [{ id: "call_a", name: "read", args: { path: "a.txt" } }] },
 		{ toolCalls: [{ id: "call_b", name: "read", args: { path: "b.txt" } }] },
@@ -1395,6 +1408,8 @@ it("服务商说超长：压缩一次再发，失败的那条不进会话", asyn
 
 	expect(model?.requests).toHaveLength(6);
 	expect(sentText(model?.requests[5])).toContain("SUMMARY_TEXT");
+	expect(sentText(model?.requests[5])).not.toContain("characters of output withheld");
+	expect(storedWithheld(session.id)).toEqual([]);
 	const view = await service.getSession(session.id);
 	expect(view.messages.map((message) => message.role)).toEqual([
 		"user",
@@ -1430,11 +1445,38 @@ it("服务商拒收：过大的工具结果剪成一行再发一次，记下来�
 	const view = await service.getSession(session.id);
 	expect(textOf(view.messages.find((message) => message.role === "toolResult"))).toContain("00299");
 	expect(view.summary.stop).toEqual({ reason: "done" });
-	const stored = JSON.parse(storedRows<{ context: string }>("SELECT context FROM sessions WHERE id = ?", session.id)[0]?.context ?? "null") as {
-		withheld: string[];
-	};
-	expect(stored.withheld).toEqual(["call_big"]);
+	expect(storedWithheld(session.id)).toEqual(["call_big"]);
 });
+
+it("服务商拒收、剪成一行重发仍被拒：撤销剪的那些，下一轮照原文发", async () => {
+	await bigFile("big.txt", 300);
+	const { service, session, idle } = await start([
+		{ toolCalls: [{ id: "call_big", name: "read", args: { path: "big.txt" } }] },
+		{ status: 400 },
+		{ status: 400 },
+		{ text: "好" },
+	]);
+	let done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "读一下 big.txt" }] });
+	await done;
+
+	expect(model?.requests).toHaveLength(3);
+	expect(sentText(model?.requests[2])).toContain("characters of output withheld");
+	expect(storedWithheld(session.id)).toEqual([]);
+
+	done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "再试试" }] });
+	await done;
+	expect(model?.requests).toHaveLength(4);
+	expect(sentText(model?.requests[3])).toContain("00299");
+	expect(sentText(model?.requests[3])).not.toContain("characters of output withheld");
+});
+
+/** 会话库里记着的、剪成一行的那些工具结果。 */
+function storedWithheld(sessionId: string): string[] {
+	return (JSON.parse(storedRows<{ context: string }>("SELECT context FROM sessions WHERE id = ?", sessionId)[0]?.context ?? "null") as { withheld: string[] })
+		.withheld;
+}
 
 it("打断：停下正在跑的那一轮，等它收完尾再拿这条开始；发给模型时带上打断的说明", async () => {
 	const { service, session, until, idle } = await start([{ text: "写着写着", hang: true }, { text: "好，改做这个" }]);

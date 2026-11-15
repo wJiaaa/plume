@@ -85,7 +85,7 @@ import { openSessionDb, protectSource } from "./session-db.ts";
 import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
-import { contextBreakdown, type ContextEstimate, estimateContext } from "./context-breakdown.ts";
+import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
 import { isMagpie } from "./magpie.ts";
 import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImage } from "./media.ts";
 import { drawImages, findImageModel } from "./images.ts";
@@ -233,8 +233,6 @@ interface Session {
 	projectLayer?: Record<string, unknown>;
 	projectRead?: Promise<StoredSettings>;
 	projectNotices?: string;
-	/** 最近一次发出去的请求每段估了多少，给 `contextBreakdown`。只在内存里：重开应用后到下一次请求前没有。 */
-	contextEstimate?: ContextEstimate;
 	/** 上一次主请求之后历史被有意改写过（压缩、剪枝、撤回）：下一条回复记账时归因缓存未命中用，见 `diagnoseCache`。 */
 	cacheBoundary?: "compaction" | "rewind";
 	controller?: AbortController;
@@ -1264,7 +1262,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		// 同一个位置上一次失败的回复没写进会话（拒收、超长以后重发）：那条「放弃了」不再算数。
 		const redone = session.hiccups.filter((hiccup) => !(hiccup.outcome === "gave_up" && hiccup.at === at()));
 		if (redone.length !== session.hiccups.length) hiccups(redone);
-		session.contextEstimate = estimateContext(context, (tool) => host.tool(tool)?.definition.category);
+		// 分段估算跟着会话落盘（`ContextRecord.estimate`）：重开应用后、下一次请求前点开读数，照样分段。
+		const record = await recordOf(session);
+		record.estimate = estimateContext(context, (tool) => host.tool(tool)?.definition.category);
+		store.saveContext(sessionId, record);
 		const previous = session.sent?.segments;
 		// 记下这次请求的请求头，压缩从它分叉（`SentRequest`）；请求体的分段指纹在出门前补上。
 		const sent: SentRequest = {
@@ -2610,9 +2611,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async contextBreakdown(sessionId) {
 			const session = find(sessionId);
-			if (!session.contextEstimate) return null;
+			const { estimate } = await recordOf(session);
+			if (!estimate) return null;
 			const { model } = resolveModel(await readSessionSettings(session), modelOf(session));
-			return contextBreakdown(session.contextEstimate, await messagesOf(session), model.contextWindow);
+			return contextBreakdown(estimate, await messagesOf(session), model.contextWindow);
 		},
 		async storageUse() {
 			return storageUse(summaries(), store.sizes());
@@ -2852,7 +2854,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				(await readSessionFile(session.summary.cwd, path, sessionRoots(session.summary))) ??
 				(await readManagedMedia(mediaDir, path)) ??
 				// 「记忆文件」里列的那几个，在会话边界外也只读放行，见 `readListedFile`。
-				readListedFile(session.contextEstimate?.memoryFiles.map((file) => file.path) ?? [], path)
+				readListedFile((await recordOf(session)).estimate?.memoryFiles.map((file) => file.path) ?? [], path)
 			);
 		},
 		async locateFiles(sessionId, written) {

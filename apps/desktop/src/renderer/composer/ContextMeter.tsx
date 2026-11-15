@@ -118,7 +118,7 @@ function MemoryFiles({ breakdown, onOpen }: { breakdown: ContextBreakdown; onOpe
 
 /**
  * 点开后的读数。分段只在开着时向 agent 进程要：它每次现算，关着时不必跟着每条消息算。开着时来了新消息就再要一次。
- * 要到之前（`undefined`）只画总数；给不出分段（本次启动后这个会话还没发过请求，或者出错）时，已用的整个算一段。
+ * 要到之前（`undefined`）只画总数；给不出分段（这个会话还没发过请求，或者出错）时，已用的整个算一段。
  */
 function Detail({
 	sessionId,

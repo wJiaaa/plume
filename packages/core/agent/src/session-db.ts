@@ -36,7 +36,7 @@ import { billedParts, diagnoseCache, type PreviousRequest, type SpendNote, TOKEN
 /**
  * 表结构和它的版本。不做迁移：别的版本写的库报出路径和原因，原样留着不动。改表就把版本加一，免得旧库少一张表也能混过去。
  *
- * - `sessions.context`：压缩和被剪掉的结果（`ContextRecord`），没压过、没剪过时是 null。
+ * - `sessions.context`：压缩、被剪掉的结果和最近一次请求的分段估算（`ContextRecord`），还没发过请求、没压过、没剪过时是 null。
  * - `drafts` / `draft_chunks`：正在流式输出的回复，见下面的「流式草稿」。
  * - `queue`：会话排着的话（`QueuedMessage[]`，见 `queue.ts`），一个会话一行，队空了就删掉那一行；随会话一起删。
  * - `spend`：每次计费的调用，见 `insertSpend`。没有外键：会话删了它还在，`session_id` 照样留着；不属于会话的调用

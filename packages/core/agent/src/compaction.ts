@@ -13,6 +13,7 @@
 
 import type { CompactionRun, CompactionVia } from "@plume/contract";
 import type { Message, ToolResultMessage } from "@plume/llm/types";
+import type { ContextEstimate } from "./context-breakdown.ts";
 
 /** 一次压缩。 */
 export interface Compaction {
@@ -44,6 +45,11 @@ export interface ContextRecord {
 	viewsAt?: number;
 	/** 转录里那几行压缩，旧的在前。 */
 	runs?: CompactionRun[];
+	/**
+	 * 最近一次发出去的主请求每段估了多少，给上下文用量的分段（`contextBreakdown`）。和会话存在同一行，重开应用后点开照样分段，
+	 * 会话删掉一起没。撤回、分叉后照留：除了对话消息，各段和截掉前一样，总数按服务商报的用量缩放，下一次请求再换成新的。
+	 */
+	estimate?: ContextEstimate;
 }
 
 export const emptyRecord = (): ContextRecord => ({ compactions: [], withheld: [] });
@@ -109,6 +115,7 @@ export function keptRecord(record: ContextRecord, messages: readonly Message[]):
 		...(Object.keys(views).length > 0 ? { views } : {}),
 		...(record.viewsAt !== undefined && Object.keys(views).length > 0 ? { viewsAt: record.viewsAt } : {}),
 		...(runs.length > 0 ? { runs } : {}),
+		...(record.estimate ? { estimate: record.estimate } : {}),
 	};
 }
 
