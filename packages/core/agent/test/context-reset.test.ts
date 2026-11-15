@@ -230,9 +230,20 @@ it("取消的压缩不采纳结果、不刷新", async () => {
 
 it("拒收后的工具输出裁剪也刷新，无内容可裁时不刷新", async () => {
 	const test = await compactor(undefined);
-	expect(await test.instance.withhold(test.session)).toBe(true);
+	expect(await test.instance.withhold(test.session)).toBeTypeOf("function");
 	expect(test.reset).toHaveBeenCalledExactlyOnceWith("s1");
 	expect(test.onCompacted).toHaveBeenCalledExactlyOnceWith(test.session);
-	expect(await test.instance.withhold(test.session)).toBe(false);
+	expect(await test.instance.withhold(test.session)).toBeUndefined();
 	expect(test.reset).toHaveBeenCalledTimes(1);
+});
+
+it("撤销拒收后的裁剪：剪掉的回到原样，存下来并刷新", async () => {
+	const test = await compactor(undefined);
+	const undo = await test.instance.withhold(test.session);
+	expect(test.record.withheld).not.toEqual([]);
+	await undo?.();
+	expect(test.record.withheld).toEqual([]);
+	expect(test.save).toHaveBeenLastCalledWith("s1", test.record);
+	expect(test.reset).toHaveBeenCalledTimes(2);
+	expect(test.onCompacted).toHaveBeenCalledTimes(2);
 });

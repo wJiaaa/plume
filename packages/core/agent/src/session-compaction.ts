@@ -287,16 +287,29 @@ export function createCompactor(deps: CompactorDeps) {
 		}
 	}
 
-	/** 服务商拒收以后，把发给模型的历史里过大的工具结果剪成一行，记下来，重启以后照样剪着。剪了返回 true。 */
-	async function withhold(session: CompactingSession): Promise<boolean> {
+	/**
+	 * 服务商拒收以后，把发给模型的历史里过大的工具结果剪成一行，记下来，重启以后照样剪着。剪了返回撤销它的函数，没有可剪的返回 undefined。
+	 * 重发没成就撤销：拒收不一定是因为内容（参数不被支持、中转不认某个字段），剪了也没用的话，不该让这些结果从此对模型只剩一行。
+	 */
+	async function withhold(session: CompactingSession): Promise<(() => Promise<void>) | undefined> {
 		const record = await deps.recordOf(session);
 		const ids = oversized(historyFor(await deps.messagesOf(session), record), record);
-		if (ids.length === 0) return false;
+		if (ids.length === 0) return undefined;
 		record.withheld.push(...ids);
+		rewritten(session, record);
+		return async () => {
+			const current = await deps.recordOf(session);
+			const undone = new Set(ids);
+			current.withheld = current.withheld.filter((id) => !undone.has(id));
+			rewritten(session, current);
+		};
+	}
+
+	/** 剪成一行的记录变了：存下来，发给模型的历史跟着变，依赖旧历史的状态重置。 */
+	function rewritten(session: CompactingSession, record: ContextRecord): void {
 		deps.saveContext(session.summary.id, record);
 		host.sessionContextReset(session.summary.id);
 		deps.onCompacted?.(session);
-		return true;
 	}
 
 	return { compact, withhold, changed };

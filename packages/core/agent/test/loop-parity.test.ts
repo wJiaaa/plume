@@ -105,7 +105,7 @@ async function setup(replies: AssistantMessage[], plugins: Plugin[] = []) {
 			notices.push(text);
 		},
 		compact: async () => false,
-		withhold: async () => false,
+		withhold: async () => undefined,
 		permission: async () => ({ mode: "full", alwaysAllow: [] }),
 		ask: async () => "once",
 		requestHuman: async () => ({ answered: false, reason: "declined" }),

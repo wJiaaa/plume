@@ -2,7 +2,7 @@
  * agent 循环：一轮从用户消息开始，一步一次模型请求加它要的工具，直到模型不再调用工具。
  *
  * 循环守会让会话坏掉的几条线：每个工具调用都要有结果、步数有上限、停下就停下、历史放得进窗口
- * （太满了先压缩；服务商嫌超长就压一次再发，拒收就把过大的工具结果剪成一行再发，各只一次）。
+ * （太满了先压缩；服务商嫌超长就压一次再发，还是不收就把过大的工具结果剪成一行再发、没成就撤销，各只一次）。
  * 每一步收尾时的自然结论也在本体：截断了接着写、空回复催一句（`recovery.ts`），原地打转时提醒换个思路
  * （`repetition.ts`）。插件经 `step.end` 包在它外面，可以改写或整个换掉它，但只能让循环多跑几步、
  * 给结束换个原因，拦不下本来要跑的那一步，出错和用户停止也轮不到它说话。
@@ -47,8 +47,8 @@ export interface TurnScope {
 	notice(text: string, level?: NoticeLevel): void;
 	/** 太满了就压缩一次；`force` 是超长恢复，不管多满都压。压了返回 true。 */
 	compact(context: ModelContext, force: boolean): Promise<boolean>;
-	/** 拒收恢复：把过大的工具结果剪成一行。剪了返回 true。 */
-	withhold(): Promise<boolean>;
+	/** 拒收恢复：把过大的工具结果剪成一行。剪了返回撤销它的函数，没有可剪的返回 undefined。 */
+	withhold(): Promise<(() => Promise<void>) | undefined>;
 	permission: ToolScope["permission"];
 	ask: ToolScope["ask"];
 	requestHuman: ToolScope["requestHuman"];
@@ -150,8 +150,9 @@ export async function runSteps(scope: TurnScope): Promise<TurnStop> {
 }
 
 /**
- * 一次请求，服务商不收时各恢复一次：拒收（超长也算）先剪掉过大的工具结果再发，这最便宜；还是超长就压缩一次再发。重发的不再回到这里，
- * 恢复不了的照原样交回（写进会话，这一轮以出错结束）。失败的那条在恢复成功时不写进会话。
+ * 一次请求，服务商不收时各恢复一次：超长先压缩一次再发——较早的历史换成摘要，刚回来、模型还没看过的结果原样留着；还是不收（拒收，
+ * 或压不了、压完仍超长）就把过大的工具结果剪成一行再发，重发没成就撤销剪的那些。重发的不再回到这里，恢复不了的照原样交回
+ * （写进会话，这一轮以出错结束）。失败的那条在恢复成功时不写进会话。
  */
 async function requestReply(scope: TurnScope): Promise<AssistantMessage> {
 	// 换了模型放手的那次什么都没做，不算一步：从组上下文、看要不要压缩起整个重来，新模型的窗口可能小一些。
@@ -166,14 +167,20 @@ async function attempt(scope: TurnScope): Promise<AssistantMessage | "switched">
 	if (await scope.compact(context, false)) context = await scope.context();
 	let reply = await scope.request(context);
 	if (reply === "switched") return reply;
-	if (rejected(reply) && !scope.signal.aborted && (await scope.withhold())) {
-		scope.notice(text("loop.requestRejected"), "warn");
-		reply = await scope.request(await scope.context());
-		if (reply === "switched") return reply;
-	}
 	if (reply.stopReason === "error" && isContextOverflow(reply.failure) && !scope.signal.aborted) {
 		scope.notice(text("loop.contextOverflow"), "warn");
-		if (await scope.compact(await scope.context(), true)) reply = await scope.request(await scope.context());
+		if (await scope.compact(await scope.context(), true)) {
+			reply = await scope.request(await scope.context());
+			if (reply === "switched") return reply;
+		}
+	}
+	if (rejected(reply) && !scope.signal.aborted) {
+		const undo = await scope.withhold();
+		if (undo) {
+			scope.notice(text("loop.requestRejected"), "warn");
+			reply = await scope.request(await scope.context());
+			if (reply === "switched" || reply.stopReason === "error" || reply.stopReason === "aborted") await undo();
+		}
 	}
 	return reply;
 }
