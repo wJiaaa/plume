@@ -214,6 +214,8 @@ interface Session {
 	summary: SessionSummary;
 	messages: Message[] | undefined;
 	draft?: AssistantMessage;
+	/** 观察者（`SessionObservation` 的 draft）看过快照、还没作废也没落进会话的那次请求的 id，见 `observeDraft`。 */
+	observedDraft?: string;
 	/** 在等人答的审批，按问的先后：第一张弹给人，其余排着，见 `askUser`。 */
 	approvals?: PendingApproval[];
 	progress: Map<string, string>;
@@ -954,7 +956,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (note) session.cacheBoundary = undefined;
 		messages.push(message);
 		// 回复落进会话就顶替了它的草稿：界面收到这条 message 时一并换下草稿，不另发一次清空，见 `StreamTurn.draft`。
-		if (message.role === "assistant") session.draft = undefined;
+		if (message.role === "assistant") {
+			session.draft = undefined;
+			// 观察者那边这条回复已经以 response 给全了，落进会话就不再作废。
+			session.observedDraft = undefined;
+		}
 		emit({ type: "message", sessionId: session.summary.id, message, count: messages.length });
 		emit({ type: "sessions", sessions: summaries() });
 		return true;
@@ -1040,6 +1046,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/** 没落进会话的回复（拒收、超长后要重发的，这一轮出错收场的）不该一直挂在界面上。 */
 	function dropStaleDraft(session: Session): void {
 		if (session.draft) setDraft(session, undefined);
+		if (session.observedDraft) observeDraft(session, session.observedDraft, undefined);
+	}
+
+	/**
+	 * 把 `id` 那次请求写着的回复推给订了草稿的观察者；undefined 是作废，观察者没看过这次请求的快照时不说。
+	 * 和界面的草稿分开记：界面只要最新那份，观察者要按请求认出哪一截作废了（重试从头写、放手、没写进会话）。
+	 */
+	function observeDraft(session: Session, id: string, draft: AssistantMessage | undefined): void {
+		if (!draft && session.observedDraft !== id) return;
+		session.observedDraft = draft ? id : undefined;
+		observe(session.summary.id, { type: "draft", id, draft });
 	}
 
 	function setRunning(session: Session, running: boolean): void {
@@ -1315,33 +1332,48 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const traced = contextTraces.get(context);
 		if (traced) observe(sessionId, { type: "hooks", requestId, ...traced }, sent.at);
 		observe(sessionId, { type: "request", id: requestId, provider: provider.name, model: model.id, ...input }, sent.at);
-		const reply = await streamTurn({
-			provider,
-			model,
-			context: input,
-			options: {
-				signal,
-				maxTokens: sent.maxTokens,
-				cacheKey: sent.cacheKey,
-				thinking: sent.thinking,
-				retryPolicy: retryPolicyFor(session),
-				onPayload: (body) => {
-					sent.segments = payloadSegments(body);
+		let reply: Awaited<ReturnType<typeof streamTurn>>;
+		try {
+			reply = await streamTurn({
+				provider,
+				model,
+				context: input,
+				options: {
+					signal,
+					maxTokens: sent.maxTokens,
+					cacheKey: sent.cacheKey,
+					thinking: sent.thinking,
+					retryPolicy: retryPolicyFor(session),
+					onPayload: (body) => {
+						sent.segments = payloadSegments(body);
+					},
 				},
-			},
-			draft: (draft) => setDraft(session, draft),
-			// 边流边落盘：进程中途没了，下次打开时已经收到的字作为停下的回复还在。
-			keep: (partial) => store.draft(sessionId, partial),
-			retry: (info) => hiccups(foldRetry(session.hiccups, info, Date.now(), at())),
-			settled: (info) => hiccups(settleHiccups(session.hiccups, info, at())),
-			onSwitch: (listener) => {
-				const listeners = (session.switching ??= new Set());
-				listeners.add(listener);
-				return () => listeners.delete(listener);
-			},
-		});
+				draft: (draft) => {
+					setDraft(session, draft);
+					// 放手、抛错时 streamTurn 先清掉界面的草稿；观察者的作废按收场的方式在下面说，排在 response 之后。
+					if (draft) observeDraft(session, requestId, draft);
+				},
+				// 边流边落盘：进程中途没了，下次打开时已经收到的字作为停下的回复还在。
+				keep: (partial) => store.draft(sessionId, partial),
+				retry: (info) => {
+					// 重试从头再写：观察者已经看过的那截作废，之后同一次请求的快照从空的起。
+					observeDraft(session, requestId, undefined);
+					hiccups(foldRetry(session.hiccups, info, Date.now(), at()));
+				},
+				settled: (info) => hiccups(settleHiccups(session.hiccups, info, at())),
+				onSwitch: (listener) => {
+					const listeners = (session.switching ??= new Set());
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+			});
+		} catch (error) {
+			observeDraft(session, requestId, undefined);
+			throw error;
+		}
 		if ("switched" in reply) {
 			if (reply.reply) observe(sessionId, { type: "response", id: requestId, reply: reply.reply });
+			observeDraft(session, requestId, undefined);
 			return "switched";
 		}
 		// 和上一次主请求比前缀从哪变了：缓存未命中的归因证据，随回复存下。重开应用后的第一次没得比。

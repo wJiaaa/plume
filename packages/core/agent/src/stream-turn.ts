@@ -9,7 +9,10 @@ import type { AssistantMessage } from "@plume/contract";
 import type { LlmContext, ModelConfig, ProviderConfig, RequestOptions } from "@plume/llm/types";
 import type { RetryInfo, RetrySettled } from "./hiccups.ts";
 
-/** 草稿快照最快多久推一次：每个 token 都推的话，长回复会把整条消息来回复制几千遍。 */
+/**
+ * 草稿快照最快多久推一次：每个 token 都推的话，长回复会把整条消息来回复制几千遍。节流掉的那份到点补推：模型写完一段停下来想
+ * （或网关卡住）时，最后几个字不能等到下一个事件才出现。
+ */
 const DRAFT_INTERVAL_MS = 50;
 
 export interface StreamTurn {
@@ -73,10 +76,18 @@ export async function streamTurn(turn: StreamTurn): Promise<AssistantMessage | S
 	});
 	const stop = turn.options.signal;
 	const switched = () => release.signal.aborted && !stop?.aborted;
+	let pushedAt = 0;
+	/** 节流掉、到点补推的那一份；推了新的、重试、流收场时撤掉，过时的快照不能在它们之后冒出来。 */
+	let trailing: ReturnType<typeof setTimeout> | undefined;
+	const cancelTrailing = () => {
+		clearTimeout(trailing);
+		trailing = undefined;
+	};
 	const stream = streamAssistant(turn.provider, turn.model, turn.context, {
 		...turn.options,
 		signal: stop ? AbortSignal.any([stop, release.signal]) : release.signal,
 		onRetry: ({ delayMs, reason, failure }) => {
+			cancelTrailing();
 			if (!pending) base = retries;
 			retries += 1;
 			pending = true;
@@ -93,7 +104,6 @@ export async function streamTurn(turn: StreamTurn): Promise<AssistantMessage | S
 		}
 		return { switched: true, ...(reply ? { reply } : {}) };
 	};
-	let pushedAt = 0;
 	/*
 	 * 写完了的正文块，和最近一份快照。`text_end` 不带快照：正文写完到这条回复收尾之间界面收不到任何东西，分不清是写完了还是
 	 * 停住了（有的网关在这里空一两秒）。所以拿最近那份快照推一次，之后每次推都给这些块标上 `ended`。只标在推出去的副本上：
@@ -105,6 +115,11 @@ export async function streamTurn(turn: StreamTurn): Promise<AssistantMessage | S
 		message.content.some((block) => ended.has(block))
 			? { ...message, content: message.content.map((block) => (block.type === "text" && ended.has(block) ? { ...block, ended: true as const } : block)) }
 			: message;
+	const push = (message: AssistantMessage) => {
+		cancelTrailing();
+		pushedAt = Date.now();
+		turn.draft(marked(message));
+	};
 	try {
 		while (true) {
 			const next = await stream.next();
@@ -126,23 +141,23 @@ export async function streamTurn(turn: StreamTurn): Promise<AssistantMessage | S
 				const block = latest?.content.findLast((candidate) => candidate.type === "text");
 				if (!latest || !block) continue;
 				ended.add(block);
-				pushedAt = Date.now();
-				turn.draft(marked(latest));
+				push(latest);
 				continue;
 			}
 			if (!("partial" in event)) continue;
 			latest = event.partial;
 			turn.keep(event.partial);
-			if (Date.now() - pushedAt >= DRAFT_INTERVAL_MS) {
-				pushedAt = Date.now();
-				turn.draft(marked(event.partial));
-			}
+			const wait = pushedAt + DRAFT_INTERVAL_MS - Date.now();
+			if (wait <= 0) push(event.partial);
+			// 补推的是到点时最新的那份，这期间来的字都在里面。
+			else trailing ??= setTimeout(() => latest && push(latest), wait);
 		}
 	} catch (error) {
 		if (switched()) return letGo();
 		turn.draft(undefined);
 		throw error;
 	} finally {
+		cancelTrailing();
 		unsubscribe?.();
 		turn.keep(undefined);
 	}

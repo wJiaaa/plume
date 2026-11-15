@@ -42,6 +42,15 @@ export interface SessionObservation {
 		| { type: "request"; id: string; provider: string; model: string; systemPrompt: string; messages: Message[]; tools: ToolSpec[] }
 		| { type: "response"; id: string; reply: AssistantMessage }
 		/**
+		 * 会话的一次模型请求正在写的回复，只推给订阅时给了 `{ drafts: true }` 的观察者（见 `SessionAccess.observe`）。`id` 同那次请求的
+		 * `request`、`response`。`draft` 是到此刻为止的整条快照（不是增量），写完了的正文块带 `ended: true`（一个块写完，不是一个自然段写完）；
+		 * 快照之间有节流，最后几个字不一定有快照，以 `response` 为准。`draft` 是 undefined 时，这个 `id` 到此为止推过的东西作废：
+		 * 连接断了要重试时在 `response` 之前来，之后同一个 `id` 的快照从空的起；别的作废说的是这次请求写的没进会话（请求抛错、被拒、超长后压缩重发、
+		 * 换了模型），之后同一个 `id` 不再有快照，有 `response` 时排在它后面。没推过快照的请求不发作废；被停下、出错收场的回复写进了会话，不作废。
+		 * 一个 `id` 的事件依次是 `request`、`draft`…（重试时夹着作废）、`response`、可能还有一次作废；一轮的 `turnEnd` 在它的全部请求之后。
+		 */
+		| { type: "draft"; id: string; draft: AssistantMessage | undefined }
+		/**
 		 * 一次钩子调用经过了哪几层、每层做了什么，有插件挂了这个钩子时才有。`tool.execute`、`tool.approve` 带它所在的那次工具调用
 		 * （`tool.approve` 一次调用里问几次就有几条），`model.context` 带组出来的那次请求（同 `request` 的 `id`；组了没发出去的不记），
 		 * `prompt.submit` 两样都不带（每条要写进会话的消息一条，拦下的也记）。`step.end`、`context.compact` 不记。

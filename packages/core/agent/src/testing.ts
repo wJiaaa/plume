@@ -15,6 +15,10 @@ export interface FakeReply {
 	status?: number;
 	/** 写完内容不收尾，一直挂着，直到客户端断开：用来在流到一半时按停止。 */
 	hang?: boolean;
+	/** 写完内容不收尾就关掉连接：回复只传了一半，客户端按断线重试。 */
+	cut?: boolean;
+	/** 正文先发前 `at` 个字，停在那里，等 `until` 兑现（或客户端断开）再发剩下的：用来看后面还在生成时前面那段推没推出去。 */
+	pause?: { at: number; until: Promise<unknown> };
 	/** 撞上输出上限：stop_reason 是 max_tokens。 */
 	truncated?: boolean;
 	/** 报的缓存读写 token，加在按请求体估的输入之外。 */
@@ -75,12 +79,16 @@ export async function fakeAnthropic(replies: FakeReply[] | ((request: Record<str
 			}),
 		];
 		let index = 0;
+		/** 发到第几帧（不含）停下等 `pause.until`。 */
+		let pauseAt = -1;
 		if (reply.text) {
+			const parts = reply.pause ? [reply.text.slice(0, reply.pause.at), reply.text.slice(reply.pause.at)] : pieces(reply.text, reply.stream?.chunkSize);
 			frames.push(
 				frame("content_block_start", { index, content_block: { type: "text", text: "" } }),
-				...pieces(reply.text, reply.stream?.chunkSize).map((text) => frame("content_block_delta", { index, delta: { type: "text_delta", text } })),
-				frame("content_block_stop", { index }),
+				...parts.map((text) => frame("content_block_delta", { index, delta: { type: "text_delta", text } })),
 			);
+			if (reply.pause) pauseAt = frames.length - 1;
+			frames.push(frame("content_block_stop", { index }));
 			index++;
 		}
 		for (const call of calls) {
@@ -92,13 +100,18 @@ export async function fakeAnthropic(replies: FakeReply[] | ((request: Record<str
 			index++;
 		}
 		response.writeHead(200, { "content-type": "text/event-stream" });
-		if (reply.hang) {
+		if (reply.hang || reply.cut) {
 			response.write(frames.join(""));
+			if (reply.cut) response.end();
 			return;
 		}
 		const stop = reply.truncated ? "max_tokens" : calls.length > 0 ? "tool_use" : "end_turn";
 		frames.push(frame("message_delta", { delta: { stop_reason: stop }, usage: { output_tokens: 10 } }), frame("message_stop"));
-		if (reply.stream) {
+		if (reply.pause) {
+			response.write(frames.slice(0, pauseAt).join(""));
+			await Promise.race([reply.pause.until, new Promise((resolve) => response.once("close", resolve))]);
+			if (!response.destroyed) response.end(frames.slice(pauseAt).join(""));
+		} else if (reply.stream) {
 			for (const chunk of frames) {
 				if (response.destroyed) return;
 				response.write(chunk);

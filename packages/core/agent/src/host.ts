@@ -288,8 +288,11 @@ interface ProvidedCommands {
 }
 
 export class PluginHost {
-	/** `all`：插件声明了要看全部会话（`Plugin.observe`），不然只收和它有关的会话的，见 `observe`。 */
-	private readonly observers = new Set<{ plugin: string; all: boolean; listener: (observation: SessionObservation) => void }>();
+	/**
+	 * `all`：插件声明了要看全部会话（`Plugin.observe`），不然只收和它有关的会话的，见 `observe`。
+	 * `drafts`：订阅时要了正在写的回复（`SessionAccess.observe` 的 `drafts`）；没要的收不到 `draft`，每份快照也不为它复制。
+	 */
+	private readonly observers = new Set<{ plugin: string; all: boolean; drafts: boolean; listener: (observation: SessionObservation) => void }>();
 	private readonly records: PluginRecord[] = [];
 	/** 工具名 → 登记过的同名工具，后登记的在最后、生效；它撤下后前一个恢复。 */
 	private readonly tools = new Map<string, RegisteredTool[]>();
@@ -359,8 +362,10 @@ export class PluginHost {
 	 * 开出它还在等它闲下来的，由 agent 按会话算好）：没声明 `observe: "all"` 的插件只收这些会话的。
 	 */
 	observe(observation: SessionObservation, concerned: ReadonlySet<string>): void {
-		for (const { plugin, all, listener } of this.observers) {
+		const draft = observation.event.type === "draft";
+		for (const { plugin, all, drafts, listener } of this.observers) {
 			if (!all && !concerned.has(plugin)) continue;
+			if (draft && !drafts) continue;
 			try {
 				void Promise.resolve(listener(structuredClone(observation))).catch((error: unknown) => {
 					this.options.log(plugin, "error", `运行观察失败：${errorText(error)}`);
@@ -962,10 +967,10 @@ export class PluginHost {
 					own(() => void this.stoppedListeners.delete(entry));
 					this.stoppedListeners.add(entry);
 				},
-				observe: (listener) => {
+				observe: (listener, options) => {
 					live();
 					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, all: record.plugin?.observe === "all", listener };
+					const entry = { plugin: name, all: record.plugin?.observe === "all", drafts: options?.drafts === true, listener };
 					own(() => void this.observers.delete(entry));
 					this.observers.add(entry);
 				},

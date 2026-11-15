@@ -51,6 +51,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 自己的子会话（侧边聊天、子 Agent），或页面上一直在的独立会话 | `ctx.sessions.create`，`send` / `start` / `wait` / `report` |
 | 开一个新的顶层会话并发出第一句话；把会话接到 Plume 之外 | `ctx.sessions.launch`；带 `steward: true` 由你代管；开在哪个项目里，项目 id 从 `ctx.sessions.projects()` 查 |
 | 替人照看全部会话：往人的会话里交代、替人答卡、停下一轮 | 声明 `manage: "sessions"`，人在插件详情里给了授权后用 `ctx.sessions.post` / `respond` / `answer` / `stop` |
+| 模型还在写时就把写好的段落转出去（IM） | `ctx.sessions.observe(listener, { drafts: true })` 的 `draft`，按 `id` 和 `response` 对上，见 [logic.md](references/logic.md)「正在写的回复（草稿）」 |
 | 列项目文件、在隔离视图里读 git、读写本体记下的改动 | `ctx.workspace`、`ctx.changes` |
 | 加一种资源地址（`scheme://路径`） | `ctx.resources` |
 | 跑长期的东西（子进程、定时器、文件）给自己的界面用 | `ctx.serve`（界面经 `ui.remote()` 调），清理登记 `ctx.effect` |

@@ -39,7 +39,7 @@ export default {
 | `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
 | `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title?, steward? })` | 开一个新的顶层会话并发出第一句话，见「开新会话」 |
 | `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 往自己代管（或管理）的会话里转话、替人答它弹着的卡，见「代管会话」「管理会话」 |
-| `ctx.sessions.observe(listener)` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……），见「只读运行观察和后台任务」 |
+| `ctx.sessions.observe(listener, { drafts? })` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；给 `drafts: true` 另收正在写的回复，见「只读运行观察和后台任务」「正在写的回复（草稿）」 |
 | `ctx.sessions.approval(sessionId)` | 这个会话此刻弹着的那张卡（审批或等人给数据），没有是 undefined；`observe` 只推变化，晚到时用它补上，见「管理会话」 |
 | `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 列出、读输出、停掉工具登记的后台任务，列出、取消定时唤醒，见「只读运行观察和后台任务」 |
 | `ctx.pages` | 驱动界面入口画的网页（`<webview>`）、在临时沙箱里检查一页，见「网页」 |
@@ -794,6 +794,44 @@ export default {
 		ctx.sessions.observe(({ sessionId, event }) => record(sessionId, event));
 	},
 } satisfies Plugin;
+```
+
+### 正在写的回复（草稿）
+
+`response` 要等一次模型输出整条写完才来。要边写边转出去（转到 IM，写完一段发一段）时，订阅时给 `{ drafts: true }`，这个监听器另外收到 `draft` 事件；没给的监听器收不到，原来的 `observe(listener)` 不变。范围和别的观察一样，看自己建的、代管或管理的会话不用写 `observe: "all"`。
+
+- `{ type: "draft", id, draft }`：`id` 同这次请求的 `request`、`response`，按它把快照和最终回复对上；一轮里每一步（每次请求模型）各有一个 `id`。`draft` 是到此刻为止的整条 `AssistantMessage`（不是增量），几十毫秒一份；写完了的正文块带 `ended: true`，它说的是这一块正文写完了（后面可能接工具调用），不是一个自然段写完了，段落怎么切由你定。
+- `draft` 是 `undefined`：这个 `id` 到此为止推过的作废。连接断了要从头重写时在 `response` 之前来，之后同一个 `id` 的快照从空的起；别的作废说的是这次请求写的没进会话（请求抛错、被拒、超长后压缩重发、换了模型），之后同一个 `id` 不再有快照，有 `response` 时排在它后面。没推过快照的请求不发作废。
+- 一个 `id` 的事件依次是 `request`、`draft`…（中间可能有作废）、`response`、可能还有一次作废；一轮的 `turnEnd` 在它的全部请求之后。快照有节流，最后几个字不一定有快照，以 `response` 为准；被停下、出错收场的回复照样以 `response` 给出（`reply.stopReason` 是 `aborted`、`error`），写进了会话，不作废。
+- 已经转出去的收不回来：作废以后是重发、撤回提示还是不管，由你定。
+
+```ts
+const textOf = (message: AssistantMessage) => message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+/** 请求 id → 这次请求已经发出去几个字。 */
+const sent = new Map<string, number>();
+ctx.sessions.observe(
+	({ sessionId, event }) => {
+		if (sessionId !== mine) return;
+		if (event.type === "draft") {
+			// 作废：这次请求推过的不算了，重写的快照从头算（已经发出去的收不回，见上）
+			if (!event.draft) return void sent.delete(event.id);
+			const text = textOf(event.draft);
+			const end = text.lastIndexOf("\n\n") + 2; // 只发空行前面写完的整段
+			const from = sent.get(event.id) ?? 0;
+			if (end > from) {
+				forward(text.slice(from, end));
+				sent.set(event.id, end);
+			}
+		}
+		if (event.type === "response") {
+			// 收尾只发还没发的那截，不重复
+			const rest = textOf(event.reply).slice(sent.get(event.id) ?? 0).trim();
+			if (rest) forward(rest);
+			sent.delete(event.id);
+		}
+	},
+	{ drafts: true },
+);
 ```
 
 工具经 `run.track`、`run.schedule` 登记进本体的后台任务和定时唤醒（见「后台与会话间递话」），任何插件都经 `ctx.sessions` 读、停、取消，不用声明 `inject`：

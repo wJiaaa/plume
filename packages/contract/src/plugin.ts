@@ -1321,8 +1321,9 @@ export interface SessionAccess {
 	 * 只读观察请求、工具开始、审批、重试和运行状态；副本不含配置密钥，停用时自动撤下。
 	 * 只收到和本插件有关的会话的：本插件建的（`owner` 是它的子会话、独立会话），本插件代管或管理（`Plugin.manage`）的会话和挂在它下面的子会话，
 	 * 本插件经 `launch` 开出、还没兑现 `idle` 的会话。要看全部会话的（诊断轨迹、按每个会话的运行状态做事）在 `Plugin.observe` 声明 `"all"`。
+	 * 正在写的回复（`draft`，几十毫秒一份整条快照）只推给给了 `{ drafts: true }` 的这一个监听器，范围同上；要边写边转出去的（转到 IM）才订。
 	 */
-	observe(listener: (observation: SessionObservation) => void): void;
+	observe(listener: (observation: SessionObservation) => void, options?: { drafts?: boolean }): void;
 	/** 全部会话的摘要（含归档的、子会话），最近活动的在前。只为找一个会话时用 `get`。 */
 	list(): Promise<SessionSummary[]>;
 	/** 一个会话的摘要；没有这个会话（删掉了、id 不对）时是 undefined。给钩子之外拿不到 `SessionScope` 的地方（`serve` 的方法、事件回调）用。 */
