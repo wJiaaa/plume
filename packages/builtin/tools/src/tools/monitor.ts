@@ -98,7 +98,7 @@ export const monitorTool: Tool<MonitorArgs> = {
 				description: `Stop after this many milliseconds without output. Default ${DEFAULT_IDLE_MS}, max ${MAX_IDLE_MS}.`,
 			},
 		},
-		required: ["command"],
+		required: ["command", "description"],
 		additionalProperties: false,
 	},
 	mutating: true,

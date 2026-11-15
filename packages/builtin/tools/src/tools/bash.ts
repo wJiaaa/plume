@@ -92,7 +92,7 @@ export const bashTool: Tool<BashArgs> = {
 				description: "One sentence on why the wider mode is needed. Shown to the user verbatim.",
 			},
 		},
-		required: ["command"],
+		required: ["command", "description"],
 		additionalProperties: false,
 	},
 	mutating: true,
