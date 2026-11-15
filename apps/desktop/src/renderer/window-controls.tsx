@@ -1,5 +1,5 @@
 /**
- * 窗口顶行左端的按钮：后退、前进、侧栏开关。macOS 上从红绿灯后面开始放，Windows、Linux 上放进顶上那条带子（`WindowHeader`），
+ * 窗口顶行左端的按钮：后退、前进、侧栏开关（插件的页面换成它经 `ui.usePageToolbar` 放的按钮）。macOS 上从红绿灯后面开始放，Windows、Linux 上放进顶上那条带子（`WindowHeader`），
  * 起点见 titlebar.ts；位置和 no-drag 由调用方管，这里只有按钮和那条带子。
  */
 
@@ -14,11 +14,11 @@ import { useWindowOverlay } from "./window-overlay.ts";
 const TOOLBAR_GAP = 10;
 
 /**
- * 侧栏收起时，窗口左上角有多宽归顶行按钮：后退、前进之间 `gap-1.5`，开关前 `gap-0.5`，再留一段空当。
- * 没有侧栏的界面（插件市场、插件的页面）不放侧栏开关，少一颗。
+ * 侧栏收起时，窗口左上角有多宽归顶行按钮：后退、前进之间 `gap-1.5`，后面每颗按钮前 `gap-0.5`，再留一段空当。
+ * 后面的按钮是对话、设置的侧栏开关，或者插件页面经 `ui.usePageToolbar` 放的那几颗；插件市场一颗没有。
  */
-export function toolbarReserved(start: number, toggle: boolean): number {
-	return start + TOOLBAR_BUTTON * (toggle ? 3 : 2) + 6 + (toggle ? 2 : 0) + TOOLBAR_GAP;
+export function toolbarReserved(start: number, extra: number): number {
+	return start + TOOLBAR_BUTTON * (2 + extra) + 6 + 2 * extra + TOOLBAR_GAP;
 }
 
 /**

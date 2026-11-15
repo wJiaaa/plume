@@ -20,6 +20,10 @@ const zhCN = {
 	replies: "模型的回复",
 	noReplies: "还没有回复",
 	missed: "那张卡已经不在了",
+	pageTitle: "探针页面",
+	pageHint: "只给冒烟验证页面放在窗口左上角的按钮。",
+	hideList: "收起探针列表",
+	showList: "展开探针列表",
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = {
@@ -42,5 +46,9 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		replies: "Model replies",
 		noReplies: "No replies yet",
 		missed: "That card is gone",
+		pageTitle: "Probe page",
+		pageHint: "Only for the smoke test of page buttons in the window's top-left corner.",
+		hideList: "Hide probe list",
+		showList: "Show probe list",
 	},
 };

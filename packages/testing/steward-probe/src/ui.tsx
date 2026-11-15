@@ -6,7 +6,7 @@
 
 import type { PanelProps, Remote, UiContext, UiPlugin } from "@plume/contract/ui";
 import { Button, Text, TextArea, useI18n } from "@plume/ui";
-import { Plug } from "@plume/ui/icons";
+import { PanelLeftClose, PanelLeftOpen, Plug } from "@plume/ui/icons";
 import { type CSSProperties, useEffect, useState } from "react";
 import { NAME, type ProbeApi, type ProbeView } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
@@ -207,6 +207,24 @@ function stewardPanel(ui: UiContext, api: Remote<ProbeApi>) {
 	};
 }
 
+/** 探针页面：经 `ui.usePageToolbar` 在窗口左上角放一颗开合按钮，冒烟看它画在哪、点了页面跟着变。 */
+function probePage(ui: UiContext) {
+	return function ProbePage() {
+		const text = MESSAGES[useI18n().resolvedLocale];
+		const [open, setOpen] = useState(true);
+		ui.usePageToolbar([
+			{ id: "list", label: open ? text.hideList : text.showList, icon: open ? PanelLeftClose : PanelLeftOpen, onClick: () => setOpen((was) => !was) },
+		]);
+		return (
+			<div data-steward-probe-page={open ? "open" : "closed"} style={COLUMN}>
+				<Text as="p" size="detail" tone="faint">
+					{text.pageHint}
+				</Text>
+			</div>
+		);
+	};
+}
+
 export default {
 	name: NAME,
 	apply(ui) {
@@ -216,5 +234,6 @@ export default {
 			description: (locale) => MESSAGES[locale].description,
 			icon: Plug,
 		});
+		ui.page("probe", probePage(ui), { title: (locale) => MESSAGES[locale].pageTitle, icon: Plug });
 	},
 } satisfies UiPlugin;

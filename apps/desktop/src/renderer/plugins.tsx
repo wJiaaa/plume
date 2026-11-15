@@ -40,6 +40,7 @@ import type {
 	NotifyLevel,
 	PageOptions,
 	PageProps,
+	PageToolbarItem,
 	PanelOptions,
 	PanelProps,
 	PinnedShotProps,
@@ -66,7 +67,19 @@ import type {
 } from "@plume/contract/ui";
 import { text } from "@plume/styles";
 import { MenuItem, MenuSeparator, translate, useI18n } from "@plume/ui";
-import { Component, type ComponentType, type ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+	Component,
+	type ComponentType,
+	createContext,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { EffortTrigger, ModelTrigger } from "./models/index.ts";
 import { ModelSelect } from "./models/ModelSelect.tsx";
 import { modelsAgent, refreshModels, settingsView, subscribeModels, useModels } from "./models/store.ts";
@@ -499,6 +512,67 @@ function setPageBadge(plugin: string, id: unknown, badge: unknown): void {
 /** 页面那一行右端的数；没有时为空。变化经 usePluginUis 通知。 */
 export function pageBadge(key: string): { count: number; label: LocalizedText; attention?: boolean } | undefined {
 	return pageBadges.get(key);
+}
+
+/** 正在画的是哪个页面（`PageEntry.key`）：`ui.usePageToolbar` 靠它认出按钮放给哪一页、是不是自己插件的页面。 */
+const CurrentPage = createContext<string | undefined>(undefined);
+
+export interface PageToolbar {
+	/** 哪一次 `usePageToolbar` 放的：一页只认一处，两处轮流覆盖会互相叫对方重画、停不下来。 */
+	owner: object;
+	buttons: readonly Omit<PageToolbarItem, "onClick">[];
+	click(id: string): void;
+}
+
+/** 页面经 `ui.usePageToolbar` 放进窗口左上角的按钮，按页面的 key；页面卸下时撤掉。 */
+const pageToolbars = new Map<string, PageToolbar>();
+
+function usePageToolbar(plugin: string, items: readonly PageToolbarItem[]): void {
+	const key = useContext(CurrentPage);
+	// i18n-exempt：给插件作者的报错，页面的边界接住只进日志。
+	if (!key?.startsWith(`${plugin}/`)) throw new Error("usePageToolbar 只能在本插件的页面组件里调用");
+	if (!Array.isArray(items)) throw new Error("usePageToolbar 需要一个数组");
+	const ids = new Set<string>();
+	for (const item of items as readonly Partial<PageToolbarItem>[]) {
+		if (typeof item?.id !== "string" || item.id === "" || ids.has(item.id)) throw new Error("页面按钮的 id 要是本页唯一的非空字符串");
+		ids.add(item.id);
+		if (typeof item.label !== "string" || item.label === "") throw new Error(`页面按钮 ${item.id} 需要 label`);
+		if (typeof item.icon !== "function" && (typeof item.icon !== "object" || item.icon === null)) throw new Error(`页面按钮 ${item.id} 的图标需要是组件`);
+		if (typeof item.onClick !== "function") throw new Error(`页面按钮 ${item.id} 需要 onClick`);
+	}
+	const latest = useRef(items);
+	const owner = useRef({}).current;
+	useLayoutEffect(() => {
+		latest.current = items;
+		const current = pageToolbars.get(key);
+		if (current && current.owner !== owner) throw new Error("一个页面只能有一处调用 usePageToolbar");
+		// 页面每次渲染都会传一个新数组：只有看得见的东西变了才叫窗口外壳重画，不然外壳重画又带着页面重画，没完没了。
+		const shown = current?.buttons;
+		if (
+			shown?.length === items.length &&
+			shown.every((button, index) => button.id === items[index]!.id && button.label === items[index]!.label && button.icon === items[index]!.icon)
+		)
+			return;
+		pageToolbars.set(key, {
+			owner,
+			buttons: items.map(({ id, label, icon }) => ({ id, label, icon })),
+			click: (id) => latest.current.find((item) => item.id === id)?.onClick(),
+		});
+		notifyPluginSignals();
+	});
+	useLayoutEffect(
+		() => () => {
+			if (pageToolbars.get(key)?.owner !== owner) return;
+			pageToolbars.delete(key);
+			notifyPluginSignals();
+		},
+		[key, owner],
+	);
+}
+
+/** 这个页面放在窗口左上角的按钮；没有时为空。变化经 usePluginUis 通知。 */
+export function pageToolbar(key: string): PageToolbar | undefined {
+	return pageToolbars.get(key);
 }
 
 interface ComposerItemEntry {
@@ -1566,6 +1640,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			host?.openPage(key);
 		},
 		pageBadge: live((id, badge) => setPageBadge(name, id, badge)),
+		usePageToolbar: (items) => usePageToolbar(name, items),
 		openExternal: async (url) => {
 			await window.plume.openExternal(externalWebUrl(url));
 		},
@@ -1797,7 +1872,9 @@ export function PageSlot({ page, props }: { page: PageEntry; props: PageProps })
 				setFailed(true);
 			}}
 		>
-			<Page {...props} />
+			<CurrentPage.Provider value={page.key}>
+				<Page {...props} />
+			</CurrentPage.Provider>
 		</Boundary>
 	);
 }

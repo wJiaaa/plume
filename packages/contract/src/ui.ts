@@ -199,6 +199,17 @@ export interface PageOptions {
 	order?: number;
 }
 
+/** 页面经 `UiContext.usePageToolbar` 放进窗口左上角那一排的一颗图标按钮。 */
+export interface PageToolbarItem {
+	/** 在这一页的按钮里唯一。 */
+	id: string;
+	/** 悬停提示和读屏念的名字，组件按自己的界面语言给；开合这类按钮随状态换字（「收起主机列表」「展开主机列表」）。 */
+	label: string;
+	/** 15px 的图标，颜色跟着文字走（currentColor）；开合这类按钮随状态换图标。 */
+	icon: ComponentType<{ size?: number; strokeWidth?: number }>;
+	onClick(): void;
+}
+
 /**
  * 皮肤能改的 token，对应 @plume/styles theme.css 里的 `--plume-<名字>`；theme.css 加减 token 时同步这里。
  *
@@ -975,6 +986,12 @@ export interface UiContext {
 	 * 排在产品自己的「对话」后面。id 在插件内唯一；标题给函数的，产品每次按当前界面语言调用它。
 	 */
 	page(id: string, component: ComponentType<PageProps>, options: PageOptions): void;
+	/**
+	 * 在页面组件里调用的 hook：往窗口左上角那一排（后退、前进后面）放这一页的图标按钮，比如开合页面里的列表；对话里那颗侧栏开关就在这个位置。
+	 * 只在本插件 `page` 注册的组件（及其子组件）里调用，别处调用抛错；页面卸下时按钮跟着撤掉。每次渲染传当前的按钮，
+	 * `id`、`label`、`icon` 变了宿主才重画那一排，`onClick` 总是调最近一次渲染给的。传空数组不放按钮。
+	 */
+	usePageToolbar(items: readonly PageToolbarItem[]): void;
 	/** 换皮肤：可重复调用更新，null 撤下自己的皮肤；最后注册的生效，撤下后前一个恢复。 */
 	skin(skin: Skin | null): void;
 	/** 应用的主题偏好，就是设置 › 外观那三张主题卡片（跟随系统、浅色、深色）；在组件里用，偏好变了跟着重画。 */

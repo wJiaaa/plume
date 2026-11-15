@@ -37,7 +37,7 @@ function toolResult(request: Record<string, unknown>, id: string): string | unde
 
 /**
  * 插件代管会话（`launch({ steward: true })`、`ctx.sessions.post`、`respond`、`answer`），经测试插件「代管探针」（packages/testing/steward-probe）
- * 走一遍真界面：构建、装上它；在它的面板里开一个代管会话，标题栏标着由它代管；面板转进一句话开一轮，气泡标「代管探针 转来」，
+ * 走一遍真界面：构建、装上它；先进它的页面看 `ui.usePageToolbar` 放在窗口左上角的按钮；在它的面板里开一个代管会话，标题栏标着由它代管；面板转进一句话开一轮，气泡标「代管探针 转来」，
  * 模型读到的前面有来处说明；假模型新建文件弹审批卡，面板上「允许这一次」，桌面上的卡跟着收起，那次调用底下写「由 代管探针 代答」；
  * 再调 `ask_user`，面板交回答案，模型拿到的就是它；面板列出模型的回复。再转一句让模型派一个子 Agent（plume.subagents 的子会话），
  * 子 Agent 新建文件弹的审批卡压在桌面的输入框上方，面板也收到、注明是子会话弹的，面板「允许这一次」，桌面的卡收起，
@@ -81,6 +81,32 @@ export async function checkSteward(options: {
 	await runPluginCli(plugin.cli, ["build", dir]);
 	await runPluginCli(plugin.cli, ["install", dir, "--to", plugin.uploadDir]);
 	await waitFor(async () => (await agent.plugins()).some((status) => status.name === PROBE && status.state === "active"), "代管探针已启用");
+
+	/*
+	 * 探针页面经 `ui.usePageToolbar` 放的按钮：画在窗口左上角后退、前进后面，标题栏里的页面名让到它右边（或在它下面那一行），
+	 * 点了页面跟着开合、按钮换字；离开页面按钮跟着撤掉。
+	 */
+	const pageNav = `[data-nav="page:${PROBE}/probe"]`;
+	const pageButton = (label: string) => `button[aria-label="${label}"]`;
+	await click(pageNav);
+	await until(
+		`document.querySelector('[data-steward-probe-page="open"]') !== null && document.querySelector('${pageButton("收起探针列表")}') !== null`,
+		"探针页面的按钮出现",
+	);
+	const clear = await page<boolean>(`(() => {
+		const button = document.querySelector('${pageButton("收起探针列表")}').getBoundingClientRect();
+		const title = document.querySelector('[data-plume-screen-title]').getBoundingClientRect();
+		return button.right <= title.left || button.bottom <= title.top;
+	})()`);
+	if (!clear) throw new Error("代管会话：探针页面的按钮压在页面名上");
+	await capture("page-toolbar.png");
+	await click(pageButton("收起探针列表"));
+	await until(
+		`document.querySelector('[data-steward-probe-page="closed"]') !== null && document.querySelector('${pageButton("展开探针列表")}') !== null`,
+		"点按钮收起探针列表",
+	);
+	await click('[data-nav="chat"]');
+	await until(`document.querySelector('${pageButton("展开探针列表")}') === null`, "离开探针页面后按钮撤掉");
 
 	const requests: string[] = [];
 	let answered: string | undefined;

@@ -16,7 +16,7 @@ import { ImageViewerHost } from "./image/index.ts";
 import { Toaster } from "./toast/index.ts";
 import { InputMenu } from "./composer/InputMenu.tsx";
 import { useManagedSkin } from "./appearance-settings.ts";
-import { checkPanels, listPages, listPanels, matchesShortcut, PageSlot, usePluginUis } from "./plugins.tsx";
+import { checkPanels, listPages, listPanels, matchesShortcut, PageSlot, pageToolbar, usePluginUis } from "./plugins.tsx";
 import { MarketScreen } from "./market/market.tsx";
 import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
@@ -64,11 +64,13 @@ function Shell() {
 	// 插件运行中装卸时面板跟着出现、消失。
 	usePluginUis();
 	const panelInWorkspace = screen === "chat" && listPanels().length > 0;
+	// 插件的页面放在后退、前进后面的按钮（`ui.usePageToolbar`）；页面没有侧栏，和侧栏开关不会同时出现。
+	const pageTools = screen.startsWith("page:") ? pageToolbar(screen.slice("page:".length)) : undefined;
 	/*
 	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`ToolbarOverlap`，卡片里的顶行取用）；
 	 * 有顶上那条带子时它们在带子里，卡片不用让。开合时它和侧栏宽度一起滑，见 styles.css 的 `[data-sidebar-sliding]`。
 	 */
-	const overlap = pushed || HEADER_BAR ? 0 : Math.max(0, toolbarReserved(titlebar.start, sided) - RAIL_WIDTH - 1);
+	const overlap = pushed || HEADER_BAR ? 0 : Math.max(0, toolbarReserved(titlebar.start, (sided ? 1 : 0) + (pageTools?.buttons.length ?? 0)) - RAIL_WIDTH - 1);
 	const available = windowWidth - RAIL_WIDTH - (pushed ? width : 0);
 	useLayoutEffect(() => {
 		if (!panelWindow && panelWidth === 0) setPanel({ width: available * 0.4 });
@@ -202,6 +204,11 @@ function Shell() {
 					<SidebarIcon open={navOpen} />
 				</ToolbarButton>
 			)}
+			{pageTools?.buttons.map(({ id, label, icon: Icon }) => (
+				<ToolbarButton key={id} label={label} onClick={() => pageTools.click(id)}>
+					<Icon size={15} strokeWidth={1.9} />
+				</ToolbarButton>
+			))}
 		</>
 	);
 

@@ -25,6 +25,7 @@ export default {
 | 位置 | 能放什么 | 用什么 |
 | --- | --- | --- |
 | 活动栏（最左边一列图标） | 一个整页，图标右上角挂数 | `ui.page`、`ui.pageBadge`、`ui.openPage` |
+| 窗口左上角（后退、前进后面） | 页面自己的图标按钮，比如开合页面里的列表 | `ui.usePageToolbar` |
 | 侧栏（对话的项目和会话列表） | 会话行首空闲时的记号 | `ui.sessionMark` |
 | 顶行（正文卡片上面） | 对话：会话标题旁的局部控件、会话菜单一项、环境卡片的一节；页面：只写页面名，插件放不进东西 | `ui.sessionToolbar`、`ui.sessionMenuItem`、`ui.environmentSection` |
 | 对话的转录 | 工具卡片和说法、等人卡、代码块、跟着会话的卡片、回复下面的卡片和按钮、欢迎页那一行 | `ui.toolCard`、`ui.toolLine`、`ui.requestCard`、`ui.codeBlock`、`ui.conversationCard`、`ui.turnFooter`、`ui.replyAction`、`ui.welcomeLine` |
@@ -47,6 +48,7 @@ export default {
 | `ui.toolLine(tool, { verb, verbFor, subject, file, note, command, job, fields, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
 | `ui.page(id, Component, options)` | 往活动栏加一个页面，见「页面」 |
+| `ui.usePageToolbar(items)` | 页面组件里调用的 hook，往窗口左上角后退、前进后面放这一页的图标按钮，见「页面」 |
 | `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤，见「皮肤」 |
 | `ui.useTheme()` / `ui.setTheme(theme)` | 读、改应用的主题偏好（设置 › 外观的跟随系统、浅色、深色），见「皮肤」 |
 | `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`，见「皮肤」 |
@@ -336,6 +338,25 @@ function PullRequestsPage() {
 ```
 
 `PageTopRow` 只管高度和左右内边距，是一行普通的栏头：不拖窗口，行里的按钮、输入框照常点，不用写 `app-region`；间距、两端对齐经 `className` 补。行高取宿主在页面外层给的 `--plume-top-row-height`（不是 token，皮肤改不了），两栏的栏头一样高，分隔线左右对齐。窗口按钮在页面外面的顶行里，页面左上角不用给它们让位，各栏按自己的宽度写。拖过的宽度插件自己存（上面存在 `localStorage`，键名带上插件名），双击拖把回到默认宽度；窄窗口里两栏换成整页时不画拖把。
+
+列表能收起的页面（SSH 的主机列表），开合按钮放进窗口左上角、后退和前进后面，和对话里的侧栏开关同一个位置：在页面组件里调 `ui.usePageToolbar`，宿主照它自己的按钮画（同样大小、悬停提示），标题栏里的页面名跟着往右让。
+
+```tsx
+function HostsPage() {
+	const [collapsed, setCollapsed] = useState(false);
+	ui.usePageToolbar([
+		{
+			id: "hosts",
+			label: collapsed ? text.showHosts : text.hideHosts,
+			icon: collapsed ? PanelLeftOpen : PanelLeftClose,
+			onClick: () => setCollapsed((was) => !was),
+		},
+	]);
+	…
+}
+```
+
+每次渲染传当前的按钮，`id`、`label`、`icon` 变了宿主才重画，`onClick` 总是调最近一次给的；不放就传空数组。只能在本插件 `ui.page` 注册的组件（或它的子组件）里调，一页只调一处，页面卸下时按钮跟着撤掉。只放和整页有关的按钮，某一栏自己的操作（刷新、新建）还放在那一栏的 `PageTopRow` 里。
 
 ## 输入框里的一格
 
