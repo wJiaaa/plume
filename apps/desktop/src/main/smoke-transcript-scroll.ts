@@ -9,6 +9,13 @@ const CALLS = Array.from({ length: 6 }, (_, index) => `toolu_scroll_${index + 1}
 /** 第二轮：又一个工具组，后面只跟一句短话，于是贴着底部时工具组标题就在视口里。 */
 const PROMPT_AGAIN = "再列一次";
 const CALLS_AGAIN = Array.from({ length: 6 }, (_, index) => `toolu_scroll_again_${index + 1}`);
+/**
+ * 第三轮：工具行一行一行流进一张点开着的卡片，人贴着底部看。先回两次调用，好让这一组能点开；第二批参数切成小块慢慢流，
+ * 一行隔两百来毫秒冒出来一行，和真模型一次发出一串调用时差不多。
+ */
+const PROMPT_ROWS = "一个一个浏览目录";
+const ROWS_FIRST = Array.from({ length: 2 }, (_, index) => `toolu_rows_first_${index + 1}`);
+const ROWS_STREAM = Array.from({ length: 14 }, (_, index) => `toolu_rows_stream_${index + 1}`);
 const REPLY = Array.from(
 	{ length: 70 },
 	(_, index) => `第 ${index + 1} 段：这是一段用来撑长转录的说明文字，回复一边写一边长，跟随底部要把它平稳地带进视口。`,
@@ -22,6 +29,8 @@ interface Frame {
 	view: number;
 	head: number | null;
 	blank: number;
+	/** 运行行的下沿高出视口下沿多少，负的是被压到了视口外；没有运行行时是 null。 */
+	running: number | null;
 	/** 内容下沿比视口下沿低多少：跟着底部时就是落后了多少最新的字。 */
 	lag: number;
 }
@@ -42,6 +51,9 @@ interface Phase {
  * - 位置不往回跳；
  * - 视口底下不能空出来（内容到不了视口底，却又不是在顶上）——贴着底部收起除外：那时位置留在原处，收起的那截变成
  *   底下的一块空（`useFollowBottom` 的 `slackRef`），往上滚一下再滚回底部，它就得没了。
+ *
+ * 最后一轮工具行一行一行流进点开着的卡片，人贴着底部看：上面的内容往上走要连成一条，不能来一行顶一下、停一下；
+ * 卡片下面的运行行不能被顶出视口；一轮收尾时回复的字不能先画出来又收回去（页面跟着上下跳）。
  */
 export async function checkTranscriptScroll(options: {
 	window: BrowserWindow;
@@ -61,6 +73,14 @@ export async function checkTranscriptScroll(options: {
 	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 	setModel((request) => {
 		const messages = JSON.stringify(request.messages);
+		// 后几轮的请求里带着前几轮的整段历史，所以越晚的一轮越先认。
+		if (messages.includes(ROWS_STREAM.at(-1)!)) return { text: "看完了。" };
+		if (messages.includes(ROWS_FIRST.at(-1)!))
+			return {
+				toolCalls: ROWS_STREAM.map((id, index) => ({ id, name: "ls", args: { path: `apps/api/src/services/module-${index + 1}/` } })),
+				stream: { chunkSize: 3, delayMs: 16 },
+			};
+		if (messages.includes(PROMPT_ROWS)) return { toolCalls: ROWS_FIRST.map((id) => ({ id, name: "ls", args: { path: "." } })) };
 		if (messages.includes(CALLS_AGAIN.at(-1)!)) return { text: "列好了。" };
 		if (messages.includes(PROMPT_AGAIN)) return { toolCalls: CALLS_AGAIN.map((id) => ({ id, name: "ls", args: { path: "." } })) };
 		if (messages.includes(CALLS.at(-1)!)) return { text: REPLY, stream: { chunkSize: 18, delayMs: 30 } };
@@ -96,13 +116,21 @@ export async function checkTranscriptScroll(options: {
 				const log = window.__scroll;
 				const view = scroller.getBoundingClientRect();
 				const target = log.target?.isConnected ? log.target.getBoundingClientRect().top - view.top : null;
-				return { top: scroller.scrollTop, height: scroller.scrollHeight, view: scroller.clientHeight, head: target, blank: log.blank(view), lag: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight };
+				// 运行行的下沿高出视口下沿多少：负的就是被压到视口外了。
+				const running = [...session.querySelectorAll('[data-plume-running]')].at(-1);
+				const runningBottom = running ? view.bottom - running.getBoundingClientRect().bottom : null;
+				return { top: scroller.scrollTop, height: scroller.scrollHeight, view: scroller.clientHeight, head: target, blank: log.blank(view), lag: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight, running: runningBottom };
 			};
 			const tick = (t) => {
 				const log = window.__scroll;
 				log.frame++;
 				if (log.phase) log.phase.frames.push({ t, frame: log.frame, ...sample() });
-				requestAnimationFrame(tick);
+				/*
+				 * 下一帧的取样排在页面自己的 rAF 后面（贴底追赶的弹簧、行露出）：画完这一帧再约。直接在这里约的话它排在最前，
+				 * 读到的是弹簧这一帧还没写的位置，而有尺寸变化的帧又被下面的观察器换成写过之后的——两种混着记，追赶就被量成
+				 * 一帧不动、一帧走两步。
+				 */
+				setTimeout(() => requestAnimationFrame(tick), 0);
 			};
 			requestAnimationFrame(tick);
 			/*
@@ -118,9 +146,9 @@ export async function checkTranscriptScroll(options: {
 			for (const child of scroller.children) observer.observe(child);
 		})()`);
 
-		const phase = (name: string) =>
+		const phase = (name: string, target = head) =>
 			page(
-				`(() => { const log = window.__scroll; log.target = ${head}; log.phase = { name: ${JSON.stringify(name)}, frames: [] }; log.phases.push(log.phase); })()`,
+				`(() => { const log = window.__scroll; log.target = ${target}; log.phase = { name: ${JSON.stringify(name)}, frames: [] }; log.phases.push(log.phase); })()`,
 			);
 		// 脚本自己要滚动、发话之前先停下记录：那些位置变化是脚本做的，不算在点的那一下头上。
 		const stop = () => page(`window.__scroll.phase = null`);
@@ -240,10 +268,36 @@ export async function checkTranscriptScroll(options: {
 		await sleep(900);
 		await stop();
 
+		/*
+		 * 贴着底部看工具行一行一行流进点开着的卡片：内容往上走的速度要连成一条，不能每来一行先猛顶一下、再停住
+		 * （人说的「一抖一抖」），运行行也不能被压到视口外。点开工具组会停止跟随（`hold`），所以点开后像人一样滚回底部。
+		 */
+		const heads = await page<number>(`document.querySelectorAll('[data-screen=chat] .tool-group-head[aria-expanded]').length`);
+		await page(`document.querySelector('.cm-content').focus()`);
+		await window.webContents.insertText(PROMPT_ROWS);
+		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发第三句");
+		await clickVisible(page, `[data-composer-send=send]`);
+		await until(`document.querySelectorAll('[data-screen=chat] .tool-group-head[aria-expanded]').length > ${heads}`, "第三轮的工具组能点开");
+		await press();
+		await until(`${head}.getAttribute('aria-expanded') === 'true'`, "点开第三轮的工具组");
+		await page(
+			`(() => { const e = window.__scroller; e.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true })); e.scrollTop = e.scrollHeight; })()`,
+		);
+		await phase("live-rows-following", "null");
+		await until(`document.querySelector('[data-screen=chat] [data-plume-session]')?.textContent.includes('看完了。')`, "第三轮写完", 30_000);
+		// 写完以后再记一会儿：运行行换成回复和底下那一行的那几帧也算在里面。
+		await sleep(600);
+		await stop();
+		await capture(window, join(outDir, "smoke-transcript-scroll-rows.png"));
+
 		const phases = await page<Phase[]>(`window.__scroll.phases.map(p => ({ name: p.name, frames: p.frames }))`);
 		const report = phases.map(({ name, frames }) => {
 			const steps = frames.slice(1).map((frame, index) => frame.top - frames[index]!.top);
 			const heads = frames.filter((frame) => frame.head !== null).map((frame) => frame.head!);
+			// 每帧往上走了多少，按一帧 1000/60ms 归一：录到的帧间隔不齐，直接比位移会把掉帧当成加速。
+			const speeds = frames.slice(1).map((frame, index) => ((frame.top - frames[index]!.top) * (1000 / 60)) / Math.max(1, frame.t - frames[index]!.t));
+			const jolts = speeds.slice(1).map((speed, index) => Math.abs(speed - speeds[index]!));
+			const runnings = frames.filter((frame) => frame.running !== null).map((frame) => frame.running!);
 			return {
 				name,
 				frames: frames.length,
@@ -254,6 +308,10 @@ export async function checkTranscriptScroll(options: {
 				maxBack: Math.round(Math.max(0, ...steps.map((step) => -step))),
 				maxStep: Math.round(Math.max(0, ...steps.map(Math.abs))),
 				maxLag: Math.round(Math.max(0, ...frames.map((frame) => frame.lag))),
+				// 停住（不到半像素一帧）的下一帧就走了 3px 以上：一下猛顶。
+				kicks: speeds.slice(1).filter((speed, index) => speeds[index]! < 0.5 && speed > 3).length,
+				maxJolt: Math.round(Math.max(0, ...jolts) * 10) / 10,
+				minRunning: runnings.length ? Math.round(Math.min(...runnings)) : null,
 			};
 		});
 		await writeFile(join(outDir, "transcript-scroll.json"), JSON.stringify({ report, phases }, null, 1));
@@ -261,9 +319,17 @@ export async function checkTranscriptScroll(options: {
 		/*
 		 * 每一段被点的标题都留在原处（不到半个像素：差 1px 的那种是位置在两个设备像素间来回跳）、位置不往回跳；
 		 * 贴着底部收起的那几段底下许空着，别的不许。
+		 *
+		 * 工具行流进来那一段另外量往上走得顺不顺：停住后猛顶的帧（改之前每来一行一次，16 次）、相邻两帧速度差（改之前 60px，
+		 * 改之后 5px 上下）、运行行有没有被压到视口外（改之前每来一行被顶下去 32px 再追回来）。门槛比量到的留了余量，机器忙时
+		 * 偶尔掉一帧不至于误报。
 		 */
 		const bad = report.filter(
-			(one) => (!one.name.startsWith("idle-collapse-at-bottom") && one.maxBlank > 4) || one.backSteps > 0 || (one.headDrift ?? 0) > 0.5,
+			(one) =>
+				(!one.name.startsWith("idle-collapse-at-bottom") && one.maxBlank > 4) ||
+				one.backSteps > 0 ||
+				(one.headDrift ?? 0) > 0.5 ||
+				(one.name === "live-rows-following" && (one.kicks > 2 || one.maxJolt > 12 || (one.minRunning ?? -1) < 0)),
 		);
 		if (bad.length) throw new Error(`转录滚动不稳：${JSON.stringify(bad)}`);
 	} catch (error) {
