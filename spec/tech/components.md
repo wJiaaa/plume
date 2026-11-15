@@ -23,7 +23,7 @@
 | `Card` | 工具卡片的外框：标题、副标题、状态、正文 | `card` |
 | `AgentAvatar`、`AvatarPile`、`assignAvatars` | 智能体头像、状态表情与叠放；按种类稳定分配，插件与产品共用 | `ui/motion.css` |
 | `Collapse` | 展开、收起时保留内容直到尺寸过渡完成，支持减少动态效果 | `ui/motion.css` |
-| `FlowRow` | 转录里的过程行：思考、一段工具活、压缩、送达和来信那一行，插件的工具卡片画成一行时也用它（建议新会话写到一半、开始以后） | `ui/flow.css` |
+| `FlowRow` | 转录里的过程行：思考、一段工具活、压缩、送达和来信那一行，插件的工具卡片画成一行时也用它（建议新会话写到一半、开始以后，侧边聊天交出去以后） | `ui/flow.css` |
 | `ApprovalFrame`、`ApprovalExpiry` | 审批卡的外框（收放的标题栏、类型小标签、倒计时、+N）和每秒走的「m:ss 后失效」；产品的通用审批卡、插件的提问卡共用外框，自己画外框的插件卡（计划、MCP 表单）只用倒计时 | Tailwind 类 |
 | `Sideways` | 横向标签栏，普通鼠标滚轮横滚，触摸板保持原生方向；PR 账号标签复用 | `ui/scroll.css` |
 | `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |
@@ -31,7 +31,7 @@
 | `useMovableBar`、`useToolbarPlacement`、`HANDLES` 等选区几何 | 标注工具条的落点和拖动：看图器里贴窗口底边、截图浮层里跟着选区；选区的手柄、移动、缩放 | 无 |
 | `PageTopRow` | 页面每一栏最上面那一行（两栏页面的栏头）：顶行高、左右内边距，不拖窗口（拖窗口归宿主的标题栏） | Tailwind 类 |
 
-只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
+只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`proposal`（转录里等人点的提议卡：建议新会话、侧边聊天交出去；输入框上方等人答的卡用 `ApprovalFrame`）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
 
 悬停提示靠 `data-plume-tip` 属性，`main.tsx` 启动时调一次 `installTooltips()`。弹层只留在触发元素所在的那一列：正文是 `<main>`，面板列带 `plume-panel` 类。
 
@@ -47,7 +47,7 @@
 
 - 外观五种：`primary` 一处只有一个，是要按的那个；`ghost`（默认）是平常的按钮，放在 primary 旁边；`subtle` 没有描边，用于一排动作；`soft` 有底没描边，用于 primary 旁边一排要一眼看出是按钮的选择；`danger` 用于破坏性操作，只在悬停时上色。
 - 高度三档：`md` 32（默认，对话框和表单底部）、`sm` 26（面板里的行）、`xs` 20（跟在一行小字后面）。没有别的高度。`className` 只放布局，不改外观。
-- 一组按钮的顺序：primary 在前，取消在后。
+- 一组按钮的顺序：primary 在最后（最右），像发送键；取消、拒绝、「以后不再问」这类和它方向相反或一直生效的推到最左，和其余的隔开（`Confirm`、审批卡、提问卡、提议卡都这样排）。
 - 异步操作用 `loading`：变淡、不能再按、宽度不变。不要自己换成转圈或改文字。
 - 一组选择里选中的那个用 `pressed`（只有 ghost、subtle 有样式），会带上 `aria-pressed`。
 - 只有图标、没有文字时传 `label`（悬停提示兼无障碍名）；更常见的情况直接用 `IconButton`。

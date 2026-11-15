@@ -96,6 +96,21 @@ export const card = {
 	},
 };
 
+/**
+ * 转录里一张等人点的提议卡：图标和标题一行，下面一两句说明，再下面一排按钮靠右、要按的那颗在最后。建议新会话（plume.spawn-session）、
+ * 侧边聊天把活交出去（plume.side-chat）共用。图标放在标题行而不是单占左边一列：说明和按钮排满整张卡，侧边聊天三百来像素宽的面板里也排得开。
+ * 输入框上方等人答的卡不用它，用 `@plume/ui` 的 `ApprovalFrame`。
+ */
+export const proposal = {
+	frame: "relative w-full max-w-[420px] rounded-panel border border-line bg-card/30 px-3 py-2.5",
+	head: "flex items-start gap-1.5",
+	/** 标题前 14px 的图标：和标题第一行的字居中。 */
+	icon: "mt-[3px] shrink-0 text-ink-muted",
+	/** 说明至多三行。 */
+	summary: "mt-0.5 line-clamp-3",
+	actions: "mt-2 flex flex-wrap items-center justify-end gap-1.5",
+};
+
 const PRE = "max-h-72 overflow-auto rounded-lg border border-line-soft bg-code-bg font-mono text-code text-code-fg";
 
 export const code = {
