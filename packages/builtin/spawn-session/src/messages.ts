@@ -30,7 +30,7 @@ const zhCN = {
 	dismissing: "撤回建议",
 	offerTitle: "要另开一个会话吗？",
 	offerWaiting: "等你选要不要另开会话",
-	offerNew: "新会话",
+	offerNew: "开新会话",
 	offerNewTip: "另开一个会话去做这件事，这个对话接着做手上的事",
 	offerHere: "就在这里做",
 	offerNever: "以后不再问",

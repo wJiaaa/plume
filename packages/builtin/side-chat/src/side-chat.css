@@ -1,68 +1,13 @@
-/* 侧边聊天里交出去的那张卡片：面板常常只有三百来像素宽，三颗按钮要的就是那一列的宽度，图标放进标题那一行。 */
-.plume-side-dispatch {
-	width: 100%;
-	max-width: 420px;
-	border: 1px solid var(--plume-line);
-	border-radius: var(--plume-radius-panel);
-	padding: 10px 12px;
+/*
+ * 侧边聊天里交出去的那张卡片：外框、标题行、说明和按钮排是 `@plume/styles` 的 `proposal`（和主对话里建议新会话那张同一副骨架）。
+ * 选过以后缩成一行过程行：后面跟着的是交出去的那件事，标题不加粗；开出来的会话没跑完时行尾标红。
+ */
+.plume-side-plain {
+	font-weight: normal;
 }
 
-.plume-side-dispatch-title {
-	display: flex;
-	align-items: flex-start;
-	gap: 6px;
-	margin: 0;
-}
-
-.plume-side-dispatch-title svg {
-	margin-top: 3px;
-	flex-shrink: 0;
-	color: var(--plume-ink-muted);
-}
-
-.plume-side-dispatch-instruction {
-	margin: 2px 0 0;
-	display: -webkit-box;
-	-webkit-line-clamp: 3;
-	-webkit-box-orient: vertical;
-	overflow: hidden;
-}
-
-.plume-side-dispatch-actions {
-	margin-top: 8px;
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-}
-
-/* 选过以后缩成一行：图标、说了什么、交出去的标题。 */
-.plume-side-dispatch-chosen {
-	display: flex;
-	min-width: 0;
-	max-width: 100%;
-	align-items: center;
-	gap: 6px;
-	color: var(--plume-ink-muted);
-}
-
-.plume-side-dispatch-chosen > :last-child {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.plume-side-dispatch-open {
-	border: 0;
-	background: transparent;
-	padding: 0;
-	cursor: pointer;
-	text-align: start;
-}
-
-.plume-side-dispatch-open:hover {
-	color: var(--plume-ink);
+.plume-side-failed {
+	color: var(--plume-danger);
 }
 
 /* 关标签确认框里的「不再询问」：只占自己那一截宽，整行点得到。 */

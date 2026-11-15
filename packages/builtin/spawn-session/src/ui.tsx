@@ -18,8 +18,9 @@
 
 import type { ThinkingLevel } from "@plume/contract";
 import type { EnvironmentSectionProps, Remote, RequestCardProps, SessionView, ToolCardProps, UiContext, UiPlugin } from "@plume/contract/ui";
+import { proposal } from "@plume/styles";
 import { ApprovalFrame, Button, FlowRow, IconButton, Text, Toggle, useI18n, WorktreeToggle } from "@plume/ui";
-import { Archive, ChevronRight, Forward, SquarePen, Undo2, X } from "@plume/ui/icons";
+import { Archive, BellOff, ChevronRight, Forward, MessageCircle, SquarePen, Undo2, X } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { SpawnSessionApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
@@ -154,7 +155,7 @@ function Start({ parentId, suggestion }: { parentId: string; suggestion: Suggest
 		}
 	};
 	return (
-		<div className="plume-spawn-actions">
+		<div className={proposal.actions}>
 			{offersWorktree && <WorktreeToggle size="sm" iconOnly on={worktree} onChange={setWorktree} />}
 			<div className="plume-spawn-run">
 				<ui.ModelControls model={model} {...(thinking ? { thinking } : {})} onModelChange={setModel} onThinkingChange={setThinking} disabled={starting} />
@@ -232,19 +233,19 @@ function Suggested({ parentId, suggestion }: { parentId: string; suggestion: Sug
 			// 收起只是一句记录：建议还在记录里，这里不再催人。
 			<Noted callId={callId} state="dismissed" verb={text.noted} title={details.title} trailing={text.dismissed} />
 		) : (
-			<section data-spawn-suggestion="suggested" data-spawn-call={callId} aria-label={details.title} className="plume-spawn-card">
-				<SquarePen size={15} strokeWidth={1.7} aria-hidden className="plume-spawn-card-icon" />
-				<div className="plume-spawn-card-body">
-					<Text as="p" size="label" weight="medium" className="plume-spawn-title" data-spawn-title>
+			<section data-spawn-suggestion="suggested" data-spawn-call={callId} aria-label={details.title} className={`${proposal.frame} plume-spawn-card`}>
+				<p className={`${proposal.head} plume-spawn-head`}>
+					<SquarePen size={14} strokeWidth={1.7} aria-hidden className={proposal.icon} />
+					<Text size="label" weight="medium" data-spawn-title>
 						{details.title}
 					</Text>
-					{details.summary && (
-						<Text as="p" size="caption" tone="muted" className="plume-spawn-summary" data-spawn-summary>
-							{details.summary}
-						</Text>
-					)}
-					<Start parentId={parentId} suggestion={suggestion} />
-				</div>
+				</p>
+				{details.summary && (
+					<Text as="p" size="caption" tone="muted" className={proposal.summary} data-spawn-summary>
+						{details.summary}
+					</Text>
+				)}
+				<Start parentId={parentId} suggestion={suggestion} />
 				<span className="plume-spawn-dismiss">
 					<IconButton size="xs" label={text.dismiss} icon={<X size={12} strokeWidth={1.9} />} onClick={() => dismiss(callId)} data-spawn-dismiss />
 				</span>
@@ -320,8 +321,8 @@ function HandOffCard({ call, status, result, fallback }: ToolCardProps) {
 }
 
 /**
- * offer 的卡：压在输入框上方，外框和审批卡同一个（`ApprovalFrame`）。标题下面是模型起的那件事，下面三颗：
- * 「新会话」是主按钮（人提了一件新事，模型才会问），「就在这里做」，「以后不再问」最轻。
+ * offer 的卡：压在输入框上方，外框和审批卡同一个（`ApprovalFrame`），按钮也照审批卡排：默认高度、带图标，主按钮「开新会话」在最后
+ * （人提了一件新事，模型才会问）；「以后不再问」一直生效，推到最左和另两颗隔开，和审批卡把「拒绝」推到最左一个道理。
  */
 function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 	const text = useText();
@@ -342,23 +343,38 @@ function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 	return (
 		<ApprovalFrame
 			requestId={request.toolCallId}
-			icon={<SquarePen size={15} strokeWidth={1.8} className="plume-spawn-card-icon" />}
+			icon={<SquarePen size={15} strokeWidth={1.8} className="plume-spawn-offer-icon" />}
 			title={text.offerTitle}
 			expiresAt={request.expiresAt}
 			queued={queued}
 		>
-			<div className="plume-spawn-offer" data-spawn-offer={request.toolCallId}>
-				<Text as="p" size="label" data-spawn-title>
+			<div data-spawn-offer={request.toolCallId}>
+				<Text as="p" size="label" className="plume-spawn-offer-text" data-spawn-title>
 					{payload.title}
 				</Text>
 				<div className="plume-spawn-offer-actions">
-					<Button size="sm" variant="ghost" disabled={busy} label={text.offerNeverTip} onClick={() => void choose("never")} data-spawn-offer-choice="never">
+					<Button
+						variant="subtle"
+						disabled={busy}
+						label={text.offerNeverTip}
+						icon={<BellOff size={14} />}
+						className="plume-spawn-offer-never"
+						onClick={() => void choose("never")}
+						data-spawn-offer-choice="never"
+					>
 						{text.offerNever}
 					</Button>
-					<Button size="sm" variant="subtle" disabled={busy} onClick={() => void choose("here")} data-spawn-offer-choice="here">
+					<Button variant="subtle" disabled={busy} icon={<MessageCircle size={14} />} onClick={() => void choose("here")} data-spawn-offer-choice="here">
 						{text.offerHere}
 					</Button>
-					<Button size="sm" variant="primary" disabled={busy} label={text.offerNewTip} onClick={() => void choose("new")} data-spawn-offer-choice="new">
+					<Button
+						variant="primary"
+						disabled={busy}
+						label={text.offerNewTip}
+						icon={<SquarePen size={14} />}
+						onClick={() => void choose("new")}
+						data-spawn-offer-choice="new"
+					>
 						{text.offerNew}
 					</Button>
 				</div>

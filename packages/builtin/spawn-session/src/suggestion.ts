@@ -34,7 +34,7 @@ export interface SessionSuggestion extends Briefing {
 	expiresAt: number;
 }
 
-/** 一次 offer：问了人要不要另开，人选了什么。选「新会话」时模型带着 `proposal_id` 再调一次补上简报。 */
+/** 一次 offer：问了人要不要另开，人选了什么。选「开新会话」时模型带着 `proposal_id` 再调一次补上简报。 */
 export interface SessionOffer {
 	kind: "session_offer";
 	title: string;

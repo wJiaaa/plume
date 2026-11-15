@@ -1,17 +1,33 @@
-/* 对话里那张建议卡片：标题、一两句理由、「开始」那一排，右上角收起。 */
-.plume-spawn-card {
-	position: relative;
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	width: 100%;
-	max-width: 420px;
-	padding: 10px 12px;
-	border: 1px solid var(--plume-line);
-	border-radius: var(--plume-radius-panel);
-	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
+/*
+ * 对话里那张建议卡片：外框、标题行、说明和按钮排是 `@plume/styles` 的 `proposal`，和侧边聊天交出去的那张同一副骨架。
+ * 这里只有它自己的：右上角的收起，和「开始」那一排的分组。`.plume-spawn-card` 只留给下面的闪一下认卡片。
+ */
+
+/* 收起钉在右上角，只让开标题那一行：它单占右边一列的话，下面「开始」那一排右边白空着一截。 */
+.plume-spawn-dismiss {
+	position: absolute;
+	top: 10px;
+	right: 8px;
 }
 
+.plume-spawn-head {
+	padding-right: 24px;
+}
+
+/*
+ * 工作树开关在左，模型、档位和「开始」在右（`.plume-spawn-run`）。差一点放不下时先截短模型名，不为几个像素换行；
+ * 剩下的地方不到 200px（环境卡片那一列）才整组换到下一行。
+ */
+.plume-spawn-run {
+	display: flex;
+	flex: 1 1 200px;
+	min-width: 0;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+}
+
+/* 环境卡片里还没开始的那一条：图标、标题和理由。 */
 .plume-spawn-card-icon {
 	flex-shrink: 0;
 	margin-top: 2px;
@@ -23,51 +39,12 @@
 	flex: 1;
 }
 
-.plume-spawn-card-body > p {
-	margin: 0;
-}
-
-/*
- * 收起钉在右上角，只让开标题那一行：它单占右边一列的话，下面「开始」那一排右边白空着 30px，
- * 420px 的卡片里两个开关、「Claude Sonnet 5.5」和「开始」就差这几个像素放不下。
- */
-.plume-spawn-dismiss {
-	position: absolute;
-	top: 10px;
-	right: 8px;
-}
-
-.plume-spawn-card-body > .plume-spawn-title {
-	padding-right: 24px;
-}
-
 .plume-spawn-card-body > .plume-spawn-summary {
 	margin-top: 2px;
 	display: -webkit-box;
 	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
-}
-
-/*
- * 开关在左，模型、档位和「开始」在右（`.plume-spawn-run`）。差一点放不下时先截短模型名，不为几个像素换行；
- * 剩下的地方不到 200px（环境卡片那一列）才整组换到下一行。间距 4px：420px 的卡片里两个开关加上「Claude Sonnet 5.5」这样的名字刚好一排。
- */
-.plume-spawn-actions {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 4px;
-	margin-top: 8px;
-}
-
-.plume-spawn-run {
-	display: flex;
-	flex: 1 1 200px;
-	min-width: 0;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 4px;
 }
 
 /* 过程行的标题本是「思考」这种两三个字的词，加粗读作标签；这里后面跟着的是会话名，不加粗。 */
@@ -173,21 +150,25 @@
 	background: var(--plume-danger);
 }
 
-/* offer 的卡：模型起的那件事，下面三颗按钮靠右，主按钮在最后。 */
-.plume-spawn-offer {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 0 16px 12px;
+/* offer 的卡：内边距照审批卡的正文和底部那一排（`ApprovalOverlay`），「以后不再问」推到最左。 */
+.plume-spawn-offer-icon {
+	flex-shrink: 0;
+	color: var(--plume-accent);
 }
 
-.plume-spawn-offer > p {
-	margin: 0;
+.plume-spawn-offer-text {
+	padding: 8px 16px;
 }
 
 .plume-spawn-offer-actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	justify-content: flex-end;
 	gap: 6px;
+	padding: 4px 16px 12px;
+}
+
+.plume-spawn-offer-never {
+	margin-right: auto;
 }

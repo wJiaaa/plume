@@ -3,14 +3,17 @@
  *
  * 交给主会话是排进它的队列（`handToParent`，和人在主输入框里排的同一条队），开新会话经逻辑入口的 `launch` 开在主会话
  * 所在的项目里、记着从这张卡开出来（`spawnedFrom`），在这里做是替人对侧边聊天说一句「就在这里做」——它手上有那条指令，
- * 接着做就是。选过以后缩成一行；开新会话的那一行点了过去。
+ * 接着做就是。选过以后缩成一行过程行（`FlowRow`）；开新会话的那一行和建议新会话开始以后的那一行一个样：在跑时扫光、没跑完标红，点了过去。
+ *
+ * 卡片的外框、标题行、说明和按钮排是 `@plume/styles` 的 `proposal`，和主对话里的建议新会话卡同一副骨架；要按的那颗在最后。
  *
  * 参数还在写、或者被点名直接派了的，都是普通的工具行（`fallback`）。
  */
 
 import type { Remote, ToolCardProps, UiContext } from "@plume/contract/ui";
-import { Button, Text, useI18n } from "@plume/ui";
-import { Forward, MessageCircle, SquarePen } from "@plume/ui/icons";
+import { proposal } from "@plume/styles";
+import { Button, FlowRow, Text, useI18n } from "@plume/ui";
+import { ChevronRight, Forward, MessageCircle, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import type { SideChatApi } from "./api.ts";
 import { isDispatchSuggestion } from "./controls.ts";
@@ -35,8 +38,8 @@ function subscribe(listener: () => void): () => void {
 }
 
 const CHOSEN_ICON: Record<Choice, ReactNode> = {
-	main: <Forward size={13} strokeWidth={1.8} aria-hidden />,
-	here: <MessageCircle size={13} strokeWidth={1.8} aria-hidden />,
+	main: <Forward size={13} strokeWidth={1.8} />,
+	here: <MessageCircle size={13} strokeWidth={1.8} />,
 };
 
 export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
@@ -65,26 +68,15 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 
 		if (!ready) return <>{fallback}</>;
 
-		if (started)
-			return (
-				<div data-side-dispatch="new" data-side-dispatch-call={call.id}>
-					<button type="button" className="plume-side-dispatch-open plume-side-dispatch-chosen" onClick={() => ui.openSession(started)}>
-						<SquarePen size={13} strokeWidth={1.8} aria-hidden />
-						<Text size="detail">{text.dispatchedNew}</Text>
-						<Text size="detail" tone="faint">
-							{details.title}
-						</Text>
-					</button>
-				</div>
-			);
+		if (started) return <Started ui={ui} callId={call.id} title={details.title} startedId={started} />;
 		if (choice)
 			return (
-				<div data-side-dispatch={choice} data-side-dispatch-call={call.id} className="plume-side-dispatch-chosen">
-					{CHOSEN_ICON[choice]}
-					<Text size="detail">{choice === "main" ? text.dispatchedMain : text.dispatchHere}</Text>
-					<Text size="detail" tone="faint">
-						{details.title}
-					</Text>
+				<div data-side-dispatch={choice} data-side-dispatch-call={call.id}>
+					<FlowRow
+						icon={CHOSEN_ICON[choice]}
+						title={<span className="plume-side-plain">{choice === "main" ? text.dispatchedMain : text.dispatchHere}</span>}
+						summary={details.title}
+					/>
 				</div>
 			);
 
@@ -110,27 +102,27 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 		};
 
 		return (
-			<section data-side-dispatch="pending" data-side-dispatch-call={call.id} aria-label={details.title} className="plume-side-dispatch">
-				<p className="plume-side-dispatch-title">
-					<Forward size={14} strokeWidth={1.7} aria-hidden />
+			<section data-side-dispatch="pending" data-side-dispatch-call={call.id} aria-label={details.title} className={proposal.frame}>
+				<p className={proposal.head}>
+					<Forward size={14} strokeWidth={1.7} aria-hidden className={proposal.icon} />
 					<Text size="label" weight="medium">
 						{details.title}
 					</Text>
 				</p>
-				<Text as="p" size="caption" tone="muted" className="plume-side-dispatch-instruction" data-plume-tip={details.instruction}>
+				<Text as="p" size="caption" tone="muted" className={proposal.summary} data-plume-tip={details.instruction}>
 					{details.instruction}
 				</Text>
-				<div className="plume-side-dispatch-actions">
+				<div className={proposal.actions}>
 					<Button
 						size="sm"
-						variant="primary"
-						loading={busy === "main"}
+						variant="soft"
+						loading={busy === "here"}
 						disabled={busy !== null}
-						label={text.dispatchToMainTip}
-						onClick={() => void act("main")}
-						data-side-dispatch-action="main"
+						label={text.dispatchHereTip}
+						onClick={() => void act("here")}
+						data-side-dispatch-action="here"
 					>
-						{text.dispatchToMain}
+						{text.dispatchHere}
 					</Button>
 					<Button
 						size="sm"
@@ -145,17 +137,47 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 					</Button>
 					<Button
 						size="sm"
-						variant="soft"
-						loading={busy === "here"}
+						variant="primary"
+						loading={busy === "main"}
 						disabled={busy !== null}
-						label={text.dispatchHereTip}
-						onClick={() => void act("here")}
-						data-side-dispatch-action="here"
+						label={text.dispatchToMainTip}
+						onClick={() => void act("main")}
+						data-side-dispatch-action="main"
 					>
-						{text.dispatchHere}
+						{text.dispatchToMain}
 					</Button>
 				</div>
 			</section>
 		);
 	};
+}
+
+/**
+ * 卡片开出来的会话那一行：在跑时摘要扫光，没跑完（出错、跑到上限、卡住）在行尾标红，点了过去。
+ * 跑完、没跑完是侧栏行首那个记号，人打开看过就清掉，这里跟着退回只写标题。
+ */
+function Started({ ui, callId, title, startedId }: { ui: UiContext; callId: string; title: string; startedId: string }) {
+	const text = MESSAGES[useI18n().resolvedLocale];
+	const running = ui.useSession(startedId)?.summary.running === true;
+	const activity = ui.useSessionActivity(startedId);
+	const failed = !running && activity === "failed";
+	return (
+		<div data-side-dispatch="new" data-side-dispatch-call={callId}>
+			<FlowRow
+				icon={<SquarePen size={13} strokeWidth={1.8} />}
+				title={<span className="plume-side-plain">{text.dispatchedNew}</span>}
+				summary={title}
+				running={running}
+				trailing={
+					<>
+						{failed && <span className="plume-side-failed">{text.dispatchedFailed}</span>}
+						{/* 点了是去那个会话，不是就地展开：箭头自己画。 */}
+						<ChevronRight size={12} strokeWidth={2} aria-hidden />
+					</>
+				}
+				onToggle={() => void ui.openSession(startedId)}
+				label={failed ? `${title} · ${text.dispatchedFailed}` : title}
+			/>
+		</div>
+	);
 }

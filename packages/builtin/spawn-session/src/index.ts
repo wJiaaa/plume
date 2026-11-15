@@ -1,7 +1,7 @@
 /**
  * plume.spawn-session 的逻辑入口：开别的会话、把手上的事移交出去、做完归档自己。
  *
- * - `spawn_session` 按 `initiation` 分三种：`offer` 弹一张卡问人「新会话 / 就在这里做」，调用等着人选（`run.request`）；
+ * - `spawn_session` 按 `initiation` 分三种：`offer` 弹一张卡问人「开新会话 / 就在这里做」，调用等着人选（`run.request`）；
  *   `user_asked` 当场开；`own_initiative` 只在对话里留一张建议卡，人点了「开始」（或让模型带 `proposal_id` 开）才开。
  *   卡片本身就是同意，所以不审批。人选过「以后不再问」后 offer 不弹卡，直接答「就在这里做」。
  * - 只有人说的话引起的那一轮能开会话、能问：别的会话寄来的信、开出来的会话的第一轮（那是来处交代的）里只能提建议。
@@ -245,7 +245,7 @@ export default {
 						details: { kind: "session_offer", title, choice: "here" },
 					};
 				}
-				// 带 proposal_id：开一张建议卡，或者补上人选了「新会话」的那次 offer 的简报。
+				// 带 proposal_id：开一张建议卡，或者补上人选了「开新会话」的那次 offer 的简报。
 				const found = await proposal(run.sessionId, request.proposalId, messages);
 				if (found.state === "started") return { output: results.alreadyStarted(found.name, found.sessionId) };
 				if (found.state === "closed") return failed(found.reason);
