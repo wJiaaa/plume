@@ -97,15 +97,15 @@ export function Scroller({
 		if (el && seenTop.current !== null) el.scrollTop = seenTop.current;
 	}, [viewport]);
 
-	const [metrics, setMetrics] = useState({ height: 0, overflow: false, atTop: true, atBottom: true });
+	const [overflowing, setOverflowing] = useState(false);
 	const [active, setActive] = useState(false);
 	/*
 	 * 滑块的位置和长度不进 state，直接写到它身上。
 	 *
 	 * 贴底跟随每帧都在挪 `scrollTop`，滑块跟着动半个像素就是一次 React 重画、一次样式写入。几个面板
 	 * 同时在输出时，一个面板的 scroll 回调刚写完，下一个面板的 scroll 回调读 `scrollHeight`，就为它把
-	 * 整页的样式和布局强制算一遍——量过，这里一处占了渲染进程 12%。只有边缘渐隐和要不要画滑块这几样
-	 * 真的改变渲染，留在 state 里。
+	 * 整页的样式和布局强制算一遍——量过，这里一处占了渲染进程 12%。只有要不要画滑块真的改变渲染，
+	 * 留在 state 里；边缘渐隐的深度也直接写，见下面 `fade`。
 	 *
 	 * 写也不能弄脏布局：这一写就夹在各个面板的 scroll 回调之间，写 `top` 会让紧接着读 `scrollTop`
 	 * 的下一个面板再排一遍版，量到强制布局翻了一倍多（401 → 980 次 / 3s）。位置走 `transform`，只动绘制；长度取整，
@@ -122,6 +122,39 @@ export function Scroller({
 		if (element.style.height !== height) element.style.height = height;
 	}, []);
 
+	/*
+	 * 边缘渐隐的深度：那一头藏了多少就淡多深，封顶到渐隐深度，直接写到视口上，不进 state、不走过渡。
+	 *
+	 * 必须和内容在同一帧到位。换会话、内容整块换掉、打开就停在底部时，新内容是在一次排版里出来的；深度要是
+	 * 晚一帧（经 rAF 或 React 重画）或者走一段定时过渡，那一帧内容就不带遮罩画出来，标题栏底下那一截先
+	 * 清清楚楚亮一下再暗下去——看着就是闪一下。所以尺寸观察器里（排版之后、绘制之前）当场量、当场写，
+	 * 滚动走 `queueMeasure`，滚动事件和它的 rAF 在同一帧。
+	 *
+	 * 按距离而不是「有/没有」两档：从顶上往下推时推开几像素就淡几像素，本来就连续，用不着过渡。
+	 * 只在变了的时候写：贴底跟随时深度一直是满的，输出再快也不写，不给下一个面板的读逼出排版。
+	 */
+	const edges = useRef({ top, bottom, fadeTop });
+	edges.current = { top, bottom, fadeTop };
+	const fade = useRef({ top: 0, bottom: 0 });
+	const readFade = useCallback((el: HTMLDivElement, scrollTop: number, scrollHeight: number, clientHeight: number) => {
+		const hidden = scrollHeight - clientHeight;
+		const { top, bottom, fadeTop } = edges.current;
+		// 取整：高分屏上 `scrollTop` 带小数，零点几像素的变化不值得写一次。
+		const depthTop = top === "fade" && hidden > 1 ? Math.round(Math.min(scrollFade(clientHeight, "top", fadeTop), Math.max(0, scrollTop))) : 0;
+		const depthBottom = bottom === "fade" && hidden > 1 ? Math.round(Math.min(scrollFade(clientHeight, "bottom"), Math.max(0, hidden - scrollTop))) : 0;
+		return () => {
+			if (fade.current.top !== depthTop) el.style.setProperty("--plume-fade-top", `${depthTop}px`);
+			if (fade.current.bottom !== depthBottom) el.style.setProperty("--plume-fade-bottom", `${depthBottom}px`);
+			fade.current = { top: depthTop, bottom: depthBottom };
+		};
+	}, []);
+	const paintFade = useCallback(() => {
+		const el = viewport.current;
+		if (el) readFade(el, el.scrollTop, el.scrollHeight, el.clientHeight)();
+	}, [viewport, readFade]);
+	// 哪一头要渐隐变了（转录离开底部时底下才淡）就当场补上，不等下一次滚动。
+	useLayoutEffect(paintFade, [top, bottom, fadeTop, paintFade]);
+
 	/** 只读，交回写的那一半——好让 `queueMeasure` 把几个面板的读全排在写前面。 */
 	const read = useCallback<Measure>(() => {
 		const el = viewport.current;
@@ -134,22 +167,19 @@ export function Scroller({
 		const travel = clientHeight - thumbHeight;
 		const progress = scrollHeight - clientHeight <= 0 ? 0 : scrollTop / (scrollHeight - clientHeight);
 		const newThumbTop = travel * progress;
-		const newAtTop = scrollTop <= 1;
-		const newAtBottom = scrollTop >= scrollHeight - clientHeight - 1;
+		const writeFade = readFade(el, scrollTop, scrollHeight, clientHeight);
 
 		return () => {
 			geometry.current = { top: newThumbTop, height: thumbHeight };
 			paintThumb();
-			setMetrics((prev) => {
-				if (prev.height === clientHeight && prev.overflow === overflow && prev.atTop === newAtTop && prev.atBottom === newAtBottom) return prev;
-				return { height: clientHeight, overflow, atTop: newAtTop, atBottom: newAtBottom };
-			});
+			writeFade();
+			setOverflowing(overflow);
 		};
-	}, [viewport, paintThumb]);
+	}, [viewport, paintThumb, readFade]);
 	const measure = useCallback(() => read()(), [read]);
 
 	// 滑块是 `overflow` 变真时才挂上的，那一刻它身上还没有位置。
-	useLayoutEffect(paintThumb, [metrics.overflow, paintThumb]);
+	useLayoutEffect(paintThumb, [overflowing, paintThumb]);
 
 	useLayoutEffect(() => {
 		const el = viewport.current;
@@ -185,6 +215,8 @@ export function Scroller({
 		const observer = new ResizeObserver(() => {
 			const el = viewport.current;
 			if (el) onResize?.(el);
+			// 跟随方把位置改完之后再量渐隐，内容出来的这一帧就带着该有的遮罩。见上面 `fade`。
+			paintFade();
 			scheduleMeasure();
 		});
 		const watch = () => {
@@ -205,7 +237,7 @@ export function Scroller({
 			observer.disconnect();
 			mutations.disconnect();
 		};
-	}, [measure, read, onResize, viewport]);
+	}, [measure, read, onResize, viewport, paintFade]);
 
 	// 拖动会延续到滑块外面，所以监听挂在 window 上。
 	useEffect(() => {
@@ -274,12 +306,8 @@ export function Scroller({
 	 * 走 360px。两种溢出状态各试一遍才分得清——只测「可滚且到底」那一半，会把这个毛病当成 `contain`
 	 * 本来该做的事放过去。
 	 */
-	const chain = overscroll === "auto" || !metrics.overflow ? "overscroll-auto" : "overscroll-contain";
+	const chain = overscroll === "auto" || !overflowing ? "overscroll-auto" : "overscroll-contain";
 
-	// 两边都只在那个方向确实藏着东西时才有意义。
-	const hiddenAbove = metrics.overflow && !metrics.atTop;
-	const showTopFade = top === "fade" && hiddenAbove;
-	const showBottomFade = bottom === "fade" && metrics.overflow && !metrics.atBottom;
 	const fades = top === "fade" || bottom === "fade";
 
 	return (
@@ -311,7 +339,7 @@ export function Scroller({
 				 */
 				/*
 				 * 渐隐是这个元素上的遮罩，两个深度就是它全部的状态——零就是没有渐隐，所以同一条声明管两头、
-				 * 两个方向，两者之间的过渡就是一个长度在插值。只在可能有渐隐的地方挂上这个类：遮罩会把滚动面
+				 * 两个方向，深度跟着滚过的距离变（见上面 `fade`）。只在可能有渐隐的地方挂上这个类：遮罩会把滚动面
 				 * 提升成单独的合成层，永远不会柔化的滚动面没理由付这个代价。
 				 */
 				/*
@@ -330,7 +358,7 @@ export function Scroller({
 					/*
 					 * 类名必须正好是 `plume-fade-y`。
 					 *
-					 * 下面那个 `style` 只写 `--plume-fade-top` 和 `--plume-fade-bottom` 两个变量，遮罩是
+					 * `fade` 只往视口上写 `--plume-fade-top` 和 `--plume-fade-bottom` 两个变量，遮罩是
 					 * `.plume-fade-y`（`ui/scroll.css`）画的。类名一改，变量照样写得出去，遮罩规则却不再命中，
 					 * 于是每一个带渐隐的滚动面——转录、侧栏、设置页、浮层——上下边缘都是硬切。
 					 *
@@ -338,19 +366,11 @@ export function Scroller({
 					 */
 				} ${fades ? "plume-fade-y" : ""} ${contentClassName}`}
 				tabIndex={-1}
-				style={
-					fades
-						? ({
-								"--plume-fade-top": showTopFade ? `${scrollFade(metrics.height, "top", fadeTop)}px` : "0px",
-								"--plume-fade-bottom": showBottomFade ? `${scrollFade(metrics.height, "bottom")}px` : "0px",
-							} as React.CSSProperties)
-						: undefined
-				}
 			>
 				{children}
 			</div>
 
-			{metrics.overflow && (
+			{overflowing && (
 				<div
 					/*
 					 * 贴着边，压在边上所有东西之上，自己不接点击。

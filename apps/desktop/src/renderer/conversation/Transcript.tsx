@@ -370,8 +370,8 @@ export function Transcript({
 								contentClassName="px-7 pt-5 pb-[var(--plume-bottom-inset)] @min-[520px]:pr-6 @min-[520px]:pl-12"
 								fadeTop={32}
 								/*
-								 * 跟着底部走的时候底下不渐隐：输出时内容每长一截就离底几像素、追上又贴底，渐隐跟着一开一合，每一次都是遮罩深度的
-								 * 一段过渡、整块转录重画一遍。读者滚开了才是「下面还有」，那时再淡。
+								 * 跟着底部走的时候底下不渐隐：输出时内容每长一截就离底几像素、追上又贴底，渐隐跟着一开一合，每一次都是遮罩深度
+								 * 变一下、整块转录重画一遍。读者滚开了才是「下面还有」，那时再淡。
 								 */
 								bottom={follow.away ? "fade" : "none"}
 								scrollRef={follow.scrollRef}

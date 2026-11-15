@@ -213,7 +213,11 @@ div.plume-composer:focus-within {
  * 「虚线」从来不是边框，而是一段两档渐变的终点。
  *
  * 两个深度默认都是零，所有档都塌到两端之一，遮罩整个不透明——所以「没有渐隐」是同一条声明换了数字，
- * 出现是一个长度在插值，而不是第二层叠在第一层上淡入。
+ * 而不是第二层叠在第一层上淡入。
+ *
+ * 深度由 `Scroller` 按那一头藏了多少、和内容在同一帧写进来，这里不走过渡：定时过渡会让换会话、内容整块
+ * 换掉时，内容先不带遮罩亮一帧，再在两百多毫秒里暗下去，看着就是闪一下。从顶上往下推时深度跟着距离
+ * 一像素一像素长出来，本来就连续。
  * ------------------------------------------------------------------------- */
 
 @property --plume-fade-top {
@@ -267,9 +271,6 @@ div.plume-composer:focus-within {
 		color-mix(in srgb, black 6%, transparent) calc(100% - var(--plume-fade-bottom) * 0.12),
 		transparent 100%
 	);
-	transition:
-		--plume-fade-top var(--plume-t-base) var(--plume-e-out),
-		--plume-fade-bottom var(--plume-t-base) var(--plume-e-out);
 }
 
 /*
