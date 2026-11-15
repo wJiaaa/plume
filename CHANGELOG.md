@@ -2,6 +2,18 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.4] - 2026-11-15
+
+<!-- plume:notes en -->
+### Changes
+
+- **Command rows say what they're for.** Some models never added a short description when running a shell command, so the chat showed only the raw command, and checking on a background command just said "Read output" without saying which one. The assistant is now asked for a description every time, and if one is still missing, the "Read output" row names the command it's checking.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **命令那一行说清在做什么。** 有的模型跑命令时从不写一句说明，对话里只剩命令原文；查看后台命令的进度时只写「查看输出」，看不出查的是哪一个。现在每次都要求模型写说明；万一还是没写，「查看输出」那一行会带上它查的那条命令。
+
 ## [0.5.3] - 2026-11-15
 
 <!-- plume:notes en -->
