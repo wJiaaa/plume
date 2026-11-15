@@ -1317,7 +1317,6 @@ function screenFor(plugin: string, active: () => boolean): ScreenCapture {
 		// 撤下时已经清掉了这个插件的快捷键，晚到的不再登记回去。
 		setShortcut: (accelerator) =>
 			active() ? window.plume.screen.setShortcut(plugin, accelerator) : Promise.reject(new Error("The plugin UI has been unloaded.")),
-		pickDirectory: (title) => window.plume.screen.pickDirectory(title),
 		desktopDirectory: () => window.plume.screen.desktopDirectory(),
 	};
 }

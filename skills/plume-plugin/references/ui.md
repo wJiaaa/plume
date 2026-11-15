@@ -90,7 +90,7 @@ export default {
 | `ui.useModelDefaults()` | React hook：`{ defaultModel?, sessionModel?, thinking }`——新会话的默认模型、当前会话的模型、默认思考档位，「跟随」时写哪个模型名用它 |
 | `ui.useProjects()` | React hook：侧栏里的项目 `{ id, name, path }[]`，随增删更新；几个项目可能登记在同一个目录上 |
 | `ui.usePluginDisplayName()` | React hook：返回 `(plugin) => string \| undefined`，按插件名（`owner`、`fromPlugin` 里的那种）查人看到的显示名，和侧栏会话卡片、「来自…」同一份；停用、卸载了或还没读到时是 undefined，退回一个通用的词，不把 `plume.xxx` 这种插件名画给人 |
-| `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、选文件夹，见「截屏」 |
+| `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、桌面路径，见「截屏」 |
 | `ui.screenOverlay(Component)` | 截图浮层里画的组件 |
 | `ui.pinnedShot(Component)` | 钉在桌面上的截图窗口里画的组件 |
 | `ui.ComposerSend` | 产品的发送／停止按钮，见「会话变化与停止按钮」 |
@@ -444,7 +444,7 @@ ui.linkOpener({
 - `ui.terminalRunner(run)`：为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener`。
 - `ui.openPath(path)`：用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令。
 - `ui.revealPath(path)`：用户点击后在系统的文件管理器里打开上级目录并选中它（「在访达中显示」）；和 `ui.openPath` 不同，文件夹不进到里面、文件不交给程序，所以不会运行它；不存在时抛错（话给人看）。路径同样由逻辑入口交回（媒体图用 `ctx.media.save` 交回、记在 `details` 里的 `path`）。菜单上的字插件自带，按平台叫访达、资源管理器、文件管理器（`@plume/ui` 的 `macKeyboard()`，`navigator.platform` 以 `Win` 开头是 Windows）。
-- `ui.pickFolder(title?)`：用户点击后弹出系统的选文件夹对话框（能当场新建文件夹），交回选中的绝对路径，取消是 null；和侧栏新建项目选文件夹是同一个。选好的路径交给逻辑入口用（比如 `ctx.sessions.create({ cwd })`），逻辑入口那边仍要按它自己的规矩核对。截屏的 `ui.screen.pickDirectory` 是给截图选保存位置的，别的场合用这个。
+- `ui.pickFolder(title?)`：用户点击后弹出系统的选文件夹对话框（能当场新建文件夹），交回选中的绝对路径，取消是 null；和侧栏新建项目选文件夹是同一个。选好的路径交给逻辑入口用（比如 `ctx.sessions.create({ cwd })`），逻辑入口那边仍要按它自己的规矩核对。截屏插件选保存位置也用它。
 
 ## 图片
 
@@ -599,7 +599,7 @@ function ModelSetting() {
 
 - `start()`：拍下指针所在的那块屏幕，开一层盖住它的浮层，浮层里画 `ui.screenOverlay` 注册的组件。没给屏幕录制权限时返回 false（系统会弹授权）。
 - `setShortcut(accelerator | null)`：全局快捷键（Electron accelerator 写法，如 `Alt+A`），按下等于 `start()`；被占了返回 `taken`，写法不认是 `invalid`。界面入口在主窗口、浮层、钉图窗口里各跑一份，只有主窗口的设置生效，在 `apply` 里按设置调就行。
-- `pickDirectory(title)`、`desktopDirectory()`：选保存目录、没设时的默认目录。
+- `desktopDirectory()`：系统桌面的路径，没设保存位置时存到这里；选保存位置用 `ui.pickFolder`。
 
 浮层组件（`ScreenOverlayProps`）拿到这一次的 `session`（整屏快照的 RGBA 像素、屏幕在全局坐标里的位置、色彩空间、指针位置），每次截图换一个 id、组件重新挂上。背景画好后调 `ready()` 宿主才把浮层亮出来；结束时调 `finish(png?)`（给了 PNG data URL 就放进剪贴板）、`cancel()` 或 `pin(png, at)`（钉成置顶小窗口）；`copy(png)` 只进剪贴板；`passThrough(true)` 让点击穿过浮层（浮层上只剩一句提示时）；Esc 是宿主注册的全局键，经 `onEscape` 订阅。
 

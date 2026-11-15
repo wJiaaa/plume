@@ -736,8 +736,6 @@ export interface ScreenCapture {
 	 * 传 null 取消。同一个插件只有一个，后设的替换先设的。被别的程序占了是 `taken`，写法不认识是 `invalid`。
 	 */
 	setShortcut(accelerator: string | null): Promise<"ok" | "taken" | "invalid">;
-	/** 系统的选文件夹对话框（保存位置用）；取消是 null。 */
-	pickDirectory(title: string): Promise<string | null>;
 	/** 系统桌面文件夹的路径：没设保存位置时存到这里。 */
 	desktopDirectory(): Promise<string>;
 }

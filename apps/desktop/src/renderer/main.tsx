@@ -130,7 +130,6 @@ declare global {
 			screen: {
 				start(): Promise<boolean>;
 				setShortcut(plugin: string, accelerator: string | null): Promise<"ok" | "taken" | "invalid">;
-				pickDirectory(title: string): Promise<string | null>;
 				desktopDirectory(): Promise<string>;
 				onSession(listener: (session: ScreenCaptureSession) => void): void;
 				onEscape(listener: () => void): void;

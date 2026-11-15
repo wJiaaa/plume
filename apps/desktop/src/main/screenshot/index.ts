@@ -7,7 +7,7 @@
  * 别的页面发来的不理：插件的界面代码在主窗口里也跑着，不该能收起、钉住一次不属于它的截屏。
  */
 
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
 import type { ScreenRect } from "@plume/contract/ui";
 import { normalizeShortcut } from "./accelerator.ts";
 import {
@@ -94,12 +94,6 @@ export function registerScreenshot(): void {
 		return "ok";
 	});
 
-	ipcMain.handle("plume:screen:pick-directory", async (event, title: unknown): Promise<string | null> => {
-		const options: OpenDialogOptions = { title: typeof title === "string" ? title : undefined, properties: ["openDirectory", "createDirectory"] };
-		const window = BrowserWindow.fromWebContents(event.sender);
-		const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
-		return result.canceled ? null : (result.filePaths[0] ?? null);
-	});
 	ipcMain.handle("plume:screen:desktop", () => app.getPath("desktop"));
 
 	// 浮层页面 → 主进程。

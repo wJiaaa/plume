@@ -212,7 +212,6 @@ contextBridge.exposeInMainWorld("plume", {
 	screen: {
 		start: () => ipcRenderer.invoke("plume:screen:start"),
 		setShortcut: (plugin: string, accelerator: string | null) => ipcRenderer.invoke("plume:screen:shortcut", plugin, accelerator),
-		pickDirectory: (title: string) => ipcRenderer.invoke("plume:screen:pick-directory", title),
 		desktopDirectory: () => ipcRenderer.invoke("plume:screen:desktop"),
 		onSession: (listener: (session: unknown) => void) => {
 			ipcRenderer.on("plume:screen:session", (_event, session: unknown) => listener(session));
