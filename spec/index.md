@@ -24,6 +24,7 @@
 | rule | 何时读（when） | 触发文件（files） |
 |---|---|---|
 | [plugin-primitives](./domain/plugin-primitives.md) ⚠️ | 给插件加接口（钩子、服务、`ToolRun`、`ctx`、`ui` 的成员）；本体要对插件的工具、提示词段、送达、会话区别对待；插件之间要互相用；`pnpm check:plugins` 报本体认了插件 | `packages/contract/src/{plugin,ui,service}.ts`、`packages/core/agent/src/**`、`apps/desktop/src/renderer/plugins.tsx`、`apps/desktop/src/renderer/conversation/**`、`scripts/check-core-names.mjs` |
+| [session-data](./domain/session-data.md) ⚠️ | 存按会话记的数据（本体的库和文件、插件 `dataDir`、界面 localStorage、内存里按会话 id 的表）；改删会话、删全部归档、按日期清除的流程 | `packages/core/agent/src/agent.ts`（`deleteTree`）、`packages/core/agent/src/session-db.ts`、插件里的 `ctx.sessions.onDeleted`、`apps/desktop/src/renderer/app/sessions.ts`（`forgetSessions`） |
 
 会话、插件宿主、钩子的设计在 [`agent-extension.md`](../agent-extension.md)。
 
