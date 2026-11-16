@@ -2,6 +2,38 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.5] - 2026-11-16
+
+<!-- plume:notes en -->
+### Changes
+
+- **The task panel shows only what's running in the background.** It used to mix background work with the to-do list and a log of every tool run, which was hard to read. Now called "Background jobs", it lists background commands and sub-agents together in Running and Finished groups, one card each. A running card shows how long it has been going and a stop button; click a sub-agent's card to open it. Tool runs are still in the call trace, and the to-do list stays above the input box.
+- **The sidebar no longer says a chat is done while it's still waiting.** When a turn ended but a sub-agent or background command hadn't come back yet, the chat was marked done, then started running again once the result arrived. It now keeps showing as running ("Waiting on background work" on hover) until everything is back.
+- **No warning the moment you send a message.** The "waiting" hint used to appear right away, even though a short wait before the first word is normal. Now nothing shows until the model has been silent for 15 seconds, and then the hint appears in a warning color.
+- **Plugin Market moved up in the activity bar.** It now sits right under Chats instead of at the bottom with Search, Notifications and Settings. Number badges on the bar are no longer cut off on the right.
+- **Cards that start a new chat look alike.** The card suggesting a new chat and the side chat's hand-off card now share one layout, with the main button last. The card asking whether to start a new chat, above the input box, has the same buttons as approval cards.
+
+### For plugin authors
+
+- New: a code block's `send(text, event, displayText?)` takes an optional third argument. The model gets the full text and the user's bubble shows `displayText`, the same as on tool cards.
+- New: the UI service `subagents.tasks` (provided by plume.subagents) lists a chat's sub-agents with `watch`, and can `open` or `stop` one.
+- New: `proposal` in `@plume/styles`, for cards that wait in the transcript for a click.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **任务面板只放后台在跑的事。** 原来后台任务、待办清单和每次工具调用的记录挤在一起，读着很乱。现在它叫「后台任务」，后台命令和子 Agent 列在一起，分「运行中」「已结束」两组，一项一张卡片。还在跑的写着跑了多久，能直接停下；点子 Agent 的卡片就打开它。工具调用的记录在调用轨迹里看，待办清单还在输入框上方。
+- **会话还在等结果时，侧栏不再说它做完了。** 一轮停下、子 Agent 或后台命令还没回来时，侧栏先亮「已完成」，结果回来又跑起来。现在它一直显示在跑（悬停写「等待后台任务」），全都回来了才算完。
+- **消息一发出去不再马上提示在等。** 第一个字到之前等一会儿本来正常，原来却立刻挂上「静候回音」。现在模型满 15 秒没出声才提示，一出来就是警示色。
+- **插件市场在活动栏里往上挪了。** 紧挨在「对话」下面，不再和搜索、通知、设置挤在底部；活动栏上的数字角标也不再被切掉右边一截。
+- **能开新会话的几张卡长得一样了。** 建议新会话的卡和侧边聊天交出去的卡用同一种排法，主按钮在最后；输入框上方问要不要另开会话的那张卡，按钮和审批卡一样。
+
+### 给插件作者
+
+- 新增：回复里代码块的 `send(text, event, displayText?)` 可以给第三个参数。模型收到全文，用户气泡里显示 `displayText`，和工具卡片一样。
+- 新增：界面服务 `subagents.tasks`（由 plume.subagents 提供），用 `watch` 拿到一个会话的子 Agent，能 `open` 打开、`stop` 停下其中一个。
+- 新增：`@plume/styles` 的 `proposal`，给转录里等人点的卡片用。
+
 ## [0.5.4] - 2026-11-15
 
 <!-- plume:notes en -->
