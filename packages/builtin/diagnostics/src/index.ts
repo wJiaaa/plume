@@ -70,7 +70,7 @@ export default {
 				// 截过的结果带 `spill`（全文在会话的 `spill/`），命令的完整输出带 `outputPath`（`tool-output/`）。都在这一个临时目录里。
 				const path = detailsPath(details);
 				if (typeof path !== "string") throw new Error(words().outputGone);
-				const root = await realpath(join(ctx.appDataDir, "scratch", id));
+				const root = await realpath(await ctx.sessions.scratchDir(id));
 				const actual = await realpath(path);
 				const part = relative(root, actual);
 				if (!part || part.startsWith("..") || isAbsolute(part)) throw new Error(words().outputGone);

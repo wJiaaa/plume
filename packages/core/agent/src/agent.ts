@@ -445,6 +445,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			jobs: (sessionId) => jobs.list(String(sessionId)),
 			stopJob: (sessionId, jobId, force) => jobs.stop(String(sessionId), String(jobId), force === true),
 			jobOutput: (sessionId, jobId) => jobs.output(String(sessionId), String(jobId)),
+			scratchDir: async (sessionId) => scratchDir(find(String(sessionId)).summary.id),
 			wakeups: (sessionId) => wakeups.list(String(sessionId)),
 			cancelWakeup: (sessionId, id) => wakeups.cancel(String(sessionId), String(id)),
 			compact: (sessionId, options) => compactNow(String(sessionId), typeof options?.instructions === "string" ? options.instructions.trim() : ""),

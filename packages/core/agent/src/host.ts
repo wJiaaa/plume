@@ -86,6 +86,7 @@ export interface HostSessions extends Pick<
 	| "jobs"
 	| "stopJob"
 	| "jobOutput"
+	| "scratchDir"
 	| "wakeups"
 	| "cancelWakeup"
 > {
@@ -265,6 +266,7 @@ const NO_SESSIONS: HostSessions = {
 	jobs: () => [],
 	stopJob: () => false,
 	jobOutput: async (sessionId) => missing(sessionId),
+	scratchDir: missing,
 	wakeups: () => [],
 	cancelWakeup: () => false,
 	start: async (_owner, sessionId) => missing(sessionId),
@@ -937,6 +939,7 @@ export class PluginHost {
 				jobs: (sessionId) => sessions.jobs(sessionId),
 				stopJob: (sessionId, jobId, force) => sessions.stopJob(sessionId, jobId, force),
 				jobOutput: (sessionId, jobId) => sessions.jobOutput(sessionId, jobId),
+				scratchDir: (sessionId) => sessions.scratchDir(sessionId),
 				wakeups: (sessionId) => sessions.wakeups(sessionId),
 				cancelWakeup: (sessionId, id) => sessions.cancelWakeup(sessionId, id),
 				send: async (sessionId, message, options) => {

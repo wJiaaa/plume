@@ -1348,6 +1348,11 @@ export interface SessionAccess {
 	stopJob(sessionId: string, jobId: string, force: boolean): boolean;
 	/** 一项后台任务的尾部输出，见 `BackgroundJobOutput`；没有这一项时抛错。 */
 	jobOutput(sessionId: string, jobId: string): Promise<BackgroundJobOutput>;
+	/**
+	 * 这个会话的临时目录（同 `ToolRun.scratchDir`）：工具截掉的全文、命令的完整输出都在里面，结果的 `details` 里记着路径。
+	 * 要按路径读回这些文件的（诊断面板「查看完整输出」）用它确认路径在不在里面，不自己拼。目录可能还没建；没有这个会话时抛错。
+	 */
+	scratchDir(sessionId: string): Promise<string>;
 	/** 会话里还没触发的唤醒（`ToolRun.schedule`），按下一次触发的先后；没有时是空数组。 */
 	wakeups(sessionId: string): SessionWakeup[];
 	/** 取消一个还没触发的唤醒；已经触发了、不存在时返回 false。 */

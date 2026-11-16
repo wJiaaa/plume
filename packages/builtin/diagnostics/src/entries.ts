@@ -190,6 +190,7 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 			});
 		}
 	}
+	const lastRequest = observations.findLastIndex((item) => item.event.type === "request");
 	for (const [index, observation] of observations.entries()) {
 		const { event, timestamp, at } = observation;
 		const common = { turn: atTurn(Math.max(0, at - 1)), ts: timestamp };
@@ -202,11 +203,7 @@ export function entriesOf(view: SessionView, observations: TraceObservation[], p
 				requestId: event.id,
 				source: "request",
 				summary: event.model,
-				status: reply
-					? replyStatus(reply)
-					: view.summary.running && index === observations.findLastIndex((item) => item.event.type === "request")
-						? "running"
-						: "interrupted",
+				status: reply ? replyStatus(reply) : view.summary.running && index === lastRequest ? "running" : "interrupted",
 				startedAt: timestamp,
 				finishedAt: response?.timestamp,
 				durationMs: reply?.durationMs,
