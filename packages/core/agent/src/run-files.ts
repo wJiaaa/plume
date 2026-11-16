@@ -356,10 +356,6 @@ function recordedChanges(messages: readonly Message[]): { ids: string[]; warning
 }
 
 /**
- * 把一次要问的读弹给人：经过闸（`ToolRun.ask` 那一条路），完全访问、「以后不再问」照常放行。
- * 标题只给文件名（整条绝对路径会折成两行），正文给那条路径（卡片上是等宽字体），`reason` 说批准意味着什么，不复述标题。
- */
-/**
  * 改 Plume 自己的目录：工具在 `edit` 里问的（写文件的工具带着 diff 问）只认人答；工具没问、或者问了却不是人点的头，本体在写之前自己再问一次人。
  * 人不点头就不写，抛出去的话交给模型。
  */
@@ -402,6 +398,10 @@ async function confirmCommandAppData(call: CallFiles, command: string, scope: { 
 	if (!asked.approved) throw new Error(`用户没有批准这条改动 Plume 数据目录的命令：${touched.join(", ")}。${DECLINED}`);
 }
 
+/**
+ * 把一次要问的读弹给人：经过闸（`ToolRun.ask` 那一条路），完全访问、「以后不再问」照常放行。
+ * 标题只给文件名（整条绝对路径会折成两行），正文给那条路径（卡片上是等宽字体），`reason` 说批准意味着什么，不复述标题。
+ */
 async function confirm(call: CallFiles, request: ReadRequest): Promise<{ ok: true } | { ok: false; message: string }> {
 	// 没有问人的入口时拒绝而不是放行：没人可问，就是没人同意过。
 	// i18n-exempt：交给模型的结果。

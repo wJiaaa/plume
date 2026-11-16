@@ -876,8 +876,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	async function compactNow(sessionId: string, instructions: string): Promise<{ done: Promise<CompactionOutcome> }> {
 		const session = find(sessionId);
 		if (quitting || held(session)) throw new Error(text("compaction.busy"));
-		// 压缩改写的是会话的历史，承载不可写时和发消息一样拦下。
-
 		// 没有可用的模型就当场说，不画一行注定失败的压缩。
 		resolveModel(await readSessionSettings(session), modelOf(session));
 		if (held(session)) throw new Error(text("compaction.busy"));
@@ -989,13 +987,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		emit({ type: "sessions", sessions: summaries() });
 	}
 
-	/** 编辑、撤回的对象：人发的第 `index` 条，不能是界面替人说的那句。界面里插件的子会话没有这两样。 */
 	/**
-	 * 截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
+	 * 编辑、撤回的对象：人发的第 `index` 条（不能是界面替人说的那句）在会话里实际是第几条。
+	 *
+	 * 先做截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
 	 * 插件在界面上开了 `ConversationProps.reask`（侧边聊天）就是同意宿主替它重跑这一问；撤回、退文件仍然不行。
-	 */
-	/**
-	 * 第 `index` 条人发的消息在会话里实际是第几条。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
+	 *
+	 * 再认位置。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
 	 * 按时间戳认回那一条，同 `forkSession`；认不出就报错，不截错地方。
 	 */
 	async function sentAt(session: Session, index: number, options: { reask?: boolean; timestamp?: unknown } = {}): Promise<number> {
@@ -1758,7 +1756,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		}
 	}
 
-	/** 没有运行时同步占住循环，随后只跑这一轮；忙时由现有循环消费。 */
 	/**
 	 * 攒好的送达叫醒闲着的会话。别的会话的信、开出来的会话的交回（`ReadyKind` 不是 `other`）另有规矩，防几个会话原地互相叫醒，
 	 * 见 `LetterReceipt`、`ReportBackOptions.wake`：

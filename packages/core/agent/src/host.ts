@@ -464,7 +464,7 @@ export class PluginHost {
 	}
 
 	/**
-	 * 依次加载。名字要先导入模块才知道，所以关掉的插件也会被导入（顶层代码会执行），只是不调 apply。
+	 * 依次加载。停用着的插件不导入（见 `loadOne`），名字先用 key 顶着。
 	 */
 	async load(entries: PluginEntry[]): Promise<void> {
 		for (const entry of entries) await this.loadOne(entry);
