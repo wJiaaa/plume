@@ -80,7 +80,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 模型设置存在 `~/.plume/settings.json`（0600），只有 agent 进程读写，每次用到都重新读；供应商的 API key 不写进它，加密（AES-256-GCM）存在数据目录的 `credentials.json`，钥匙是同目录的 `vault.key`，两个都是 0600（`packages/core/agent/src/vault.ts`）；插件的 `ctx.secrets` 也用这把钥匙，按插件名派生子钥（HKDF），各插件的密文互相解不开，密文由插件写回自己的配置；读设置时填回供应商上，手写进 `settings.json` 的 key 照样能用、下次保存时挪走；Magpie 写的网关 key 仍在 `settings.json` 的 `magpie` 块里。冒烟验证用 `.smoke/` 里的一份。格式是若干供应商（协议、地址、key、模型列表）加一个默认模型，读写和挑模型的规则在 `packages/core/agent/src/models.ts`：会话选了模型且还可用就用它，否则用默认模型，默认模型失效时落到第一个可用的。会话设置分全局和项目两层：当前工作目录的 `cwd/.plume/config.json` 覆盖全局，只读这一处、不向上找；对象深合并，数组和标量整体替换，再经过同一套校验。项目层不接受 `providers`、`apiKey`、`credentials`、`githubToken`、`mcpServers` 或 `magpie`，`hooks` 不合入，也不自动启用钩子；配置无效时使用全局设置并提示位置，不回显文件原文。
 
-路径固定是为了 Magpie：它的 Agent 插件（`integrations/magpie`）往这个文件写顶层的 `magpie` 块和 `defaultModel`，读入时合成一个「Magpie」供应商排在最后，写盘时拿掉，在 Plume 里改不了（`packages/core/agent/src/magpie.ts`）。
+路径固定是为了 Magpie：它的 Agent 插件（`integrations/magpie`）往这个文件写顶层的 `magpie` 块和 `defaultModel`，读入时合成一个「Magpie」供应商排在最后，写盘时从 `providers` 拿掉；Plume 里的编辑写回 `magpie` 块，删除时移除该块（`packages/core/agent/src/magpie.ts`）。
 
 模型目录（上下文、能力、价格的参考值，见 `@plume/llm/model-catalog`）缓存在 `~/.plume/model-catalog.json`：agent 进程启动时先读缓存，再每小时同步一次（`packages/core/agent/src/model-catalog-sync.ts`），界面经 `modelCatalog(版本)` 取，版本没变不传整份；冒烟验证不同步。导出、导入供应商的文件由主进程弹系统对话框选路径（`plume:providers:save-path` / `open-path`），读写文件的是 agent 进程；导出的文件带 key，权限只给本人。
 

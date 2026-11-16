@@ -33,7 +33,6 @@ import { Card } from "../layout.tsx";
 
 export function ProviderModels({
 	models,
-	managed,
 	defaultModelId,
 	testing,
 	testingModelIds,
@@ -48,8 +47,6 @@ export function ProviderModels({
 	onSetDefault,
 }: {
 	models: ModelConfig[];
-	/** 由 Magpie 管理：只能测试和设默认，不能增删改。 */
-	managed: boolean;
 	defaultModelId: string | null;
 	/** 供应商自己的连接测试；拉取不该和它抢。 */
 	testing: boolean;
@@ -141,7 +138,7 @@ export function ProviderModels({
 							{t("common.done")}
 						</Button>
 					</>
-				) : managed ? null : (
+				) : (
 					<>
 						{/*
 						 * 这几颗都带字、都不画框：`subtle` 就是为这种成排的动作留的。字补上是因为云朵下载这个图标
@@ -193,7 +190,6 @@ export function ProviderModels({
 								key={model.id}
 								model={model}
 								isDefault={isImageModel(model) ? imageModelId === model.id : defaultModelId === model.id}
-								managed={managed}
 								testing={testingModelIds?.has(model.id) ?? false}
 								testResult={modelTestResults?.[model.id]}
 								onTest={() => onTestModel?.(model.id)}
@@ -225,7 +221,6 @@ const CAPABILITIES: { has: (model: ModelConfig) => boolean; label: MessageKey; I
 function ModelRow({
 	model,
 	isDefault,
-	managed,
 	testing,
 	testResult,
 	onTest,
@@ -236,7 +231,6 @@ function ModelRow({
 }: {
 	model: ModelConfig;
 	isDefault: boolean;
-	managed: boolean;
 	testing: boolean;
 	testResult?: ProviderTestResult;
 	onTest: () => void;
@@ -258,7 +252,7 @@ function ModelRow({
 				{/* 整个名字就是进编辑的入口；行尾两颗按钮是仅有的另外两扇门。 */}
 				<button
 					type="button"
-					onClick={selection ? selection.onToggle : managed ? undefined : onEdit}
+					onClick={selection ? selection.onToggle : onEdit}
 					className="flex min-w-0 flex-1 items-center gap-3 text-left"
 					data-model-row={model.modelId}
 					// 模型 id 常被别名、徽标和右侧几列挤到只剩一截，悬停时给出完整的 id。
@@ -342,35 +336,31 @@ function ModelRow({
 						>
 							{isImageModel(model) ? t("providerModels.makeDefaultImage") : t("providerModels.makeDefault")}
 						</MenuItem>
-						{!managed && (
-							<>
-								<MenuItem
-									icon={<Pencil size={13} strokeWidth={1.8} />}
-									onClick={() => {
-										menu.close();
-										onEdit();
-									}}
-								>
-									{t("providerModels.editOne")}
-								</MenuItem>
-								<MenuSeparator />
-								<MenuItem
-									danger
-									icon={<Trash2 size={13} strokeWidth={1.8} />}
-									onClick={() => {
-										menu.close();
-										confirm.ask({
-											title: t("providerModels.deleteConfirm", { id: model.modelId }),
-											detail: isDefault ? t("providerModels.deleteDefaultDetail") : undefined,
-											confirmLabel: t("common.delete"),
-											onConfirm: onRemove,
-										});
-									}}
-								>
-									{t("providerModels.deleteOne")}
-								</MenuItem>
-							</>
-						)}
+						<MenuItem
+							icon={<Pencil size={13} strokeWidth={1.8} />}
+							onClick={() => {
+								menu.close();
+								onEdit();
+							}}
+						>
+							{t("providerModels.editOne")}
+						</MenuItem>
+						<MenuSeparator />
+						<MenuItem
+							danger
+							icon={<Trash2 size={13} strokeWidth={1.8} />}
+							onClick={() => {
+								menu.close();
+								confirm.ask({
+									title: t("providerModels.deleteConfirm", { id: model.modelId }),
+									detail: isDefault ? t("providerModels.deleteDefaultDetail") : undefined,
+									confirmLabel: t("common.delete"),
+									onConfirm: onRemove,
+								});
+							}}
+						>
+							{t("providerModels.deleteOne")}
+						</MenuItem>
 					</MenuBody>
 				</Popover>
 			)}

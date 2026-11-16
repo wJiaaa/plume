@@ -30,7 +30,7 @@ export interface StoredSettings {
 	permissionMode?: PermissionMode;
 	/** 人答过「以后不再问」的东西，按发起审批的一方分开记，见 `AlwaysAllow`。 */
 	alwaysAllow?: AlwaysAllow[];
-	/** Magpie 写的网关，原样留着，写盘时原样写回。 */
+	/** Magpie 写的网关；在 Plume 里的编辑也写回这一块。 */
 	magpie?: unknown;
 	/** 没设过的项用 `DEFAULT_PERSONALIZATION`。 */
 	personalization?: Partial<Personalization>;

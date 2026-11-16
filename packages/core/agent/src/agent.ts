@@ -89,7 +89,7 @@ import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
 import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
-import { isMagpie } from "./magpie.ts";
+import { isMagpie, magpieGateway } from "./magpie.ts";
 import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImage } from "./media.ts";
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
@@ -2425,20 +2425,19 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		saveProvider({ apiKey, ...provider }) {
 			return changeSettings((settings) => {
-				// Magpie 的供应商每次读设置都按 magpie 块重建，在这里改了也存不下，所以直接拒绝。
-				if (isMagpie(provider.id)) throw new Error(text("provider.magpieManaged"));
 				const id = provider.id || `p-${randomUUID().slice(0, 8)}`;
 				const index = settings.providers.findIndex((candidate) => candidate.id === id);
 				if (provider.id && index < 0) throw new Error(text("provider.notFound", { id: provider.id }));
 				const saved = checkProvider({ ...provider, id, apiKey: apiKey?.trim() || settings.providers[index]?.apiKey });
 				if (index < 0) settings.providers.push(saved);
 				else settings.providers[index] = saved;
+				if (isMagpie(id)) settings.magpie = magpieGateway(saved);
 				return id;
 			});
 		},
 		async deleteProvider(providerId) {
 			await changeSettings((settings) => {
-				if (isMagpie(providerId)) throw new Error(text("provider.magpieManaged"));
+				if (isMagpie(providerId)) delete settings.magpie;
 				settings.providers = settings.providers.filter((provider) => provider.id !== providerId);
 			});
 		},

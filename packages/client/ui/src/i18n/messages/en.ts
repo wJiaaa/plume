@@ -561,8 +561,7 @@ export const en = {
 	"modelSettings.addProvider": "Add a provider",
 	"modelSettings.noProviders": "No providers set up yet",
 	"modelSettings.addFirst": "Add the first one",
-	"modelSettings.magpieManaged":
-		"This provider is managed by Magpie: switch models or disconnect on Magpie's Agent page. Here you can test it and make one of its models the default.",
+	"modelSettings.magpieManaged": "Connected through Magpie. You can edit it here. When Magpie syncs its model list again, it replaces your model edits.",
 	"providerTransfer.importTip": "Import providers from a JSON file",
 	"providerTransfer.exportTip": "Export providers to a JSON file",
 	"providerTransfer.exportConfirm": "Export your providers?",

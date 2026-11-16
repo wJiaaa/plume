@@ -6,7 +6,7 @@
  *
  * 文本框每敲一个字就存，不等失焦：等失焦的话，敲完地址直接点「测试」测的是上一个地址，而那正是最不愿意相信答案的时候。
  * key 不下发到界面：输入框一开始是空的，已经存过 key 时提示「已保存」，填了新的才替换。
- * Magpie 的供应商由 Magpie 管：只能测试、设默认模型，其余都不能改。
+ * Magpie 的供应商使用同一套编辑操作，agent 进程把修改写回 magpie 块。
  */
 
 import type { ApiFormat, ProviderTestResult } from "@plume/contract";
@@ -49,7 +49,7 @@ export function ProviderEditor({
 	onSetDefault,
 }: {
 	provider: ProviderEntry;
-	/** 由 Magpie 管理，只能测试和设默认。 */
+	/** 通过 Magpie 接入，提示同步模型列表会覆盖本地模型修改。 */
 	managed: boolean;
 	defaultModelId: string | null;
 	testResult: ProviderTestResult | null;
@@ -81,7 +81,7 @@ export function ProviderEditor({
 		 * 作为 flex 子项它不会小于内容的最小高度，窗格矮到连那都放不下时，滚动的是整个编辑器。
 		 */
 		<div className="@container flex flex-1 flex-col" data-provider-editor={provider.id}>
-			<ProviderHeading provider={provider} managed={managed} onChange={onChange} onRemove={onRemove} />
+			<ProviderHeading provider={provider} onChange={onChange} onRemove={onRemove} />
 
 			{managed && (
 				<Notice tone="accent" className="mt-5" data-provider-managed="">
@@ -103,7 +103,6 @@ export function ProviderEditor({
 							<TextInput
 								mono
 								value={baseUrl}
-								disabled={managed}
 								onChange={(value) => {
 									setBaseUrl(value);
 									onChange({ baseUrl: value.trim() });
@@ -115,11 +114,7 @@ export function ProviderEditor({
 						</FieldRow>
 
 						<FieldRow label={t("provider.apiFormat")}>
-							{managed ? (
-								<span className="text-label text-ink-muted">{API_OPTIONS.find((option) => option.value === provider.api)?.label}</span>
-							) : (
-								<Segmented value={provider.api} onChange={(api) => onChange({ api })} options={API_OPTIONS} />
-							)}
+							<Segmented value={provider.api} onChange={(api) => onChange({ api })} options={API_OPTIONS} />
 							<span role="img" aria-label={t("provider.apiFormatDetail")} data-plume-tip={t("provider.apiFormatDetail")} className="shrink-0 text-ink-faint">
 								<CircleHelp size={14} strokeWidth={1.8} />
 							</span>
@@ -131,19 +126,15 @@ export function ProviderEditor({
 							// 只有失败的话要紧：有东西要修，而只有端点知道是什么。
 							note={testResult && !testResult.ok ? <p className="text-detail break-words text-danger">{testResult.message}</p> : null}
 						>
-							{managed ? (
-								<span className="min-w-0 flex-1 text-label text-ink-muted">{t("secretInput.saved")}</span>
-							) : (
-								<SecretInput
-									value={apiKey}
-									saved={provider.hasKey}
-									onChange={(value) => {
-										setApiKey(value);
-										if (value.trim()) onChange({ apiKey: value });
-									}}
-									placeholder="sk-…"
-								/>
-							)}
+							<SecretInput
+								value={apiKey}
+								saved={provider.hasKey}
+								onChange={(value) => {
+									setApiKey(value);
+									if (value.trim()) onChange({ apiKey: value });
+								}}
+								placeholder="sk-…"
+							/>
 							<TestButton result={testResult} testing={testing} onTest={onTest} />
 						</FieldRow>
 					</Card>
@@ -151,14 +142,13 @@ export function ProviderEditor({
 
 				<ProviderModels
 					models={provider.models}
-					managed={managed}
 					defaultModelId={defaultModelId}
 					testing={testing}
 					testingModelIds={testingModelIds}
 					modelTestResults={modelTestResults}
 					fetchingModels={fetchingModels}
 					fetchModelsError={fetchModelsError}
-					{...(managed ? {} : { onFetchModels })}
+					onFetchModels={onFetchModels}
 					onTestModel={onTestModel}
 					onEdit={onEditModel}
 					onRemove={onRemoveModel}
@@ -224,17 +214,7 @@ function TestButton({ result, testing, onTest }: { result: ProviderTestResult | 
 }
 
 /** 名字、它是什么，以及对整个供应商能做的事。 */
-function ProviderHeading({
-	provider,
-	managed,
-	onChange,
-	onRemove,
-}: {
-	provider: ProviderEntry;
-	managed: boolean;
-	onChange: (patch: ProviderPatch) => void;
-	onRemove: () => void;
-}) {
+function ProviderHeading({ provider, onChange, onRemove }: { provider: ProviderEntry; onChange: (patch: ProviderPatch) => void; onRemove: () => void }) {
 	const { t } = useI18n();
 	const [name, setName] = useState(provider.name);
 	const [renaming, setRenaming] = useState(false);
@@ -257,8 +237,6 @@ function ProviderHeading({
 						onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
 						className="-mx-1.5 h-7 w-full max-w-[320px] rounded-md bg-card px-1.5 text-title font-semibold text-ink"
 					/>
-				) : managed ? (
-					<span className="block h-7 truncate text-title font-semibold tracking-tight text-ink">{provider.name}</span>
 				) : (
 					// 名字本身就是改名的入口：旁边再放一支笔是第二样说同一件事的东西。
 					<button
@@ -273,30 +251,26 @@ function ProviderHeading({
 				<p className="text-detail text-ink-muted">{t("provider.summary", { api, n: provider.models.length })}</p>
 			</div>
 
-			{!managed && (
-				<>
-					{/* 开关同时说状态和动作。 */}
-					<Toggle checked={provider.enabled} onChange={(enabled) => onChange({ enabled })} ariaLabel={t("provider.enable")} />
-					{/* 两个动作都看得见：藏在 ⋯ 后面的话，哪个都得先打开菜单才找得到。 */}
-					<span className="flex items-center">
-						<IconButton label={t("provider.rename")} onClick={() => setRenaming(true)} icon={<Pencil size={14} strokeWidth={1.8} />} data-provider-rename="" />
-						<IconButton
-							label={t("provider.delete")}
-							tone="danger"
-							onClick={() =>
-								confirm.ask({
-									title: t("provider.deleteConfirm", { name: provider.name }),
-									detail: t("provider.deleteDetail", { n: provider.models.length }),
-									confirmLabel: t("common.delete"),
-									onConfirm: onRemove,
-								})
-							}
-							icon={<Trash2 size={14} strokeWidth={1.8} />}
-							data-provider-delete=""
-						/>
-					</span>
-				</>
-			)}
+			{/* 开关同时说状态和动作。 */}
+			<Toggle checked={provider.enabled} onChange={(enabled) => onChange({ enabled })} ariaLabel={t("provider.enable")} />
+			{/* 两个动作都看得见：藏在 ⋯ 后面的话，哪个都得先打开菜单才找得到。 */}
+			<span className="flex items-center">
+				<IconButton label={t("provider.rename")} onClick={() => setRenaming(true)} icon={<Pencil size={14} strokeWidth={1.8} />} data-provider-rename="" />
+				<IconButton
+					label={t("provider.delete")}
+					tone="danger"
+					onClick={() =>
+						confirm.ask({
+							title: t("provider.deleteConfirm", { name: provider.name }),
+							detail: t("provider.deleteDetail", { n: provider.models.length }),
+							confirmLabel: t("common.delete"),
+							onConfirm: onRemove,
+						})
+					}
+					icon={<Trash2 size={14} strokeWidth={1.8} />}
+					data-provider-delete=""
+				/>
+			</span>
 
 			{confirm.element}
 		</div>
