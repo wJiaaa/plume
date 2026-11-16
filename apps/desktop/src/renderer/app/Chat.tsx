@@ -79,6 +79,16 @@ export function ChatScreen({
 	const slideTarget =
 		slideWidth !== undefined || (app.panelMoving && layout.arrangement === "row") ? (slideWidth ?? size.width) - Number(landed.chat.right) : undefined;
 	/*
+	 * 侧栏开合时面板区的宽度也可能一路在变：横排时面板顶着上限（给正文留够 420px），上下排时它就是整条宽。里面的网页、终端
+	 * 跟着每帧改尺寸的话，每帧都是一次重排（网页是另一个进程，还要和这边同步合成）。滑着时内容定在这一路最窄的宽度上，
+	 * 和转录的正文一样（见 `TranscriptFloor`）：变窄时点下去当场换好，变宽时滑完再铺开。起点在开滑那一下量：这时 `size` 还是滑之前的。
+	 * 滑着换了排法的不定：两头的宽度不是同一样东西。
+	 */
+	const slideFrom = useRef<number | undefined>(undefined);
+	if (slideWidth === undefined) slideFrom.current = undefined;
+	else slideFrom.current ??= layout.panelWidth;
+	const panelFloor = slideFrom.current !== undefined && landed.arrangement === layout.arrangement ? Math.min(slideFrom.current, landed.panelWidth) : undefined;
+	/*
 	 * 侧栏开合、拖宽度时，这里每一帧都因 `size` 重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃 `size`：
 	 * 元素留住，React 就跳过这两棵子树，只改外层的位置和尺寸。
 	 */
@@ -139,7 +149,7 @@ export function ChatScreen({
 					{panelArea}
 				</aside>
 			)}
-			<PanelLayer layout={layout} />
+			<PanelLayer layout={layout} floor={panelFloor} />
 			{layout.shown && !layout.single && !layout.stacked && (
 				<PanelResizer width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width, 0)} />
 			)}
