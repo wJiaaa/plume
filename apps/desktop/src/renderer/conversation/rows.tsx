@@ -62,13 +62,12 @@ export const MessageRow = memo(function MessageRow(props: RowProps) {
 			// 一次送达里可以既有后台结果、又有别的会话的信：各画各的那一行。
 			const delivery = message.delivery?.length && transcript ? <DeliveryRow delivery={message.delivery} sessionId={transcript.sessionId} /> : null;
 			const letters = message.peer?.length ? <PeerLetterRow letters={message.peer} stateKey={`peer-${props.index}`} /> : null;
-			return delivery && letters ? (
-				<>
+			if (!delivery && !letters) return null;
+			return (
+				<div className="flex flex-col gap-2.5">
 					{delivery}
 					{letters}
-				</>
-			) : (
-				(delivery ?? letters)
+				</div>
 			);
 		}
 		const fallback = <UserBubble message={message} index={props.index} last={props.last === true} />;
