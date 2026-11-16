@@ -8,6 +8,7 @@
  *   plume-plugin build [目录]
  *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/local-plugins，Plume 开着就当场加载
  *   plume-plugin dev [目录] [--to 目录]      构建、装上，之后一改源码就重新来一遍
+ *   plume-plugin pack [目录] [--out 目录]    构建，打出能交给别人「从本地上传」的文件夹，缺省放在 release/ 下
  *   plume-plugin link [目录]               重新链到这份 SDK（Plume 挪了位置、npm 删了链接时）
  */
 
@@ -17,6 +18,7 @@ import { devPlugin } from "../lib/dev.mjs";
 import { initPlugin } from "../lib/init.mjs";
 import { installPlugin } from "../lib/install.mjs";
 import { linkSdk } from "../lib/link.mjs";
+import { packPlugin } from "../lib/pack.mjs";
 
 const USAGE = `用法：
   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
@@ -24,6 +26,7 @@ const USAGE = `用法：
   plume-plugin build [目录]
   plume-plugin install [目录] [--to 目录]
   plume-plugin dev [目录] [--to 目录]
+  plume-plugin pack [目录] [--out 目录]
   plume-plugin link [目录]`;
 
 const [command, ...rest] = process.argv.slice(2);
@@ -52,10 +55,17 @@ try {
 	} else if (command === "build") {
 		console.log(`✓ ${await buildPlugin(dir)}`);
 	} else if (command === "install") {
-		console.log(`✓ 装到 ${installPlugin(dir, flags.to)}；Plume 开着的话已经加载`);
+		const installed = installPlugin(dir, flags.to);
+		// 装到别处（--to）时 Plume 不看那里，不说已经加载。
+		console.log(flags.to ? `✓ 装到 ${installed}` : `✓ 装到 ${installed}；Plume 开着的话已经加载`);
 	} else if (command === "dev") {
 		devPlugin(dir, { root: flags.to });
 		console.log("盯着 src/、package.json、README.md，改了就重新构建、装上；Ctrl+C 结束");
+	} else if (command === "pack") {
+		const packed = await packPlugin(dir, flags.out);
+		console.log(`✓ ${packed.dir}`);
+		console.log("  把这个文件夹交给别人，在 Plume 的插件市场「创建插件 › 从本地上传」里选它");
+		if (packed.problems.length > 0) console.log(`  发到市场前还要补：\n${packed.problems.map((problem) => `  - ${problem}`).join("\n")}`);
 	} else if (command === "link") {
 		linkSdk(dir);
 		console.log("✓ 已链到这份 SDK");

@@ -22,6 +22,27 @@ function targets() {
 	};
 }
 
+/** `start` 所在的 pnpm workspace 根目录（往上找 pnpm-workspace.yaml），不在 workspace 里是 undefined。 */
+export function workspaceOf(start) {
+	for (let dir = resolve(start); dir !== dirname(dir); dir = dirname(dir)) {
+		if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+	}
+	return undefined;
+}
+
+/**
+ * 独立项目的链接不在了（npm 装别的包时删掉了它不认识的链接、Plume 挪了位置）就重新链上，返回链没链。
+ * workspace 里的插件由 pnpm 装 SDK，不动。
+ * @param {string} target 插件目录
+ */
+export function ensureLinked(target) {
+	const dir = resolve(target);
+	if (workspaceOf(dir) !== undefined) return false;
+	if (Object.keys(targets()).every((name) => existsSync(join(dir, "node_modules", name, "package.json")))) return false;
+	linkSdk(dir);
+	return true;
+}
+
 /** @param {string} target 插件目录 */
 export function linkSdk(target) {
 	const dir = resolve(target);
