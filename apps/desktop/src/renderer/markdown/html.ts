@@ -8,10 +8,8 @@
  * 所以名单里没有的，原样保留。
  */
 
-import type { Inline } from "./inline.ts";
+import type { Inline, InlineTag } from "./inline-token.ts";
 
-/** 按本来样子画出来的 HTML：每一个都有能照办的含义。 */
-export type InlineTag = "kbd" | "sub" | "sup" | "mark";
 const RENDERED = new Set<string>(["kbd", "sub", "sup", "mark"]);
 
 /** 能对应到已有 token 的 HTML。 */

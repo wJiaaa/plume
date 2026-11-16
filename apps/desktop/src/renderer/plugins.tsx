@@ -32,6 +32,8 @@ import type {
 	ExtensionsSectionProps,
 	ConversationDraft,
 	ConversationProps,
+	FilePreviewProps,
+	MarkdownProps,
 	LinkOpener,
 	LocalizedText,
 	ModelControlsProps,
@@ -88,12 +90,10 @@ import { useSessionActivity } from "./sidebar/activity.ts";
 import { notify } from "./toast/index.ts";
 import { DiffView } from "./conversation/detail/DiffView.tsx";
 import { DocumentPreview, registerDocumentViewer } from "./files/document-viewers.tsx";
-import { PluginFilePreview } from "./files/PluginFilePreview.tsx";
 import { ProjectOpener } from "./files/ProjectOpener.tsx";
 import { findFile, openFile } from "./files/open-file.ts";
 import { droppedPaths } from "./files/paths.ts";
 import { usePathMenu } from "./markdown/PathMenu.tsx";
-import { PluginMarkdown } from "./markdown/PluginMarkdown.tsx";
 import { addToolLine, removeToolLines, setToolTable } from "./conversation/tool-lines.ts";
 import { externalWebUrl } from "./plugin-navigation.ts";
 import { openViewer } from "./image/index.ts";
@@ -1192,6 +1192,12 @@ export interface PluginHost {
 	openPage(key: string): void;
 	/** `ui.Conversation`：转录要的「去设置」「引用到输入框」在正文那边。 */
 	Conversation: ComponentType<ConversationProps>;
+	/**
+	 * `ui.Markdown`、`ui.FilePreview`：产品的正文渲染器和文件预览。经 host 接进来而不在这里直接引：正文里的链接、代码块要读这个文件
+	 * 登记的表（打开方式、代码块卡片），直接引就成了 plugins.tsx → 正文 → plugins.tsx 的环。
+	 */
+	Markdown: ComponentType<MarkdownProps>;
+	FilePreview: ComponentType<FilePreviewProps>;
 	/** `ui.useProjects`：侧栏登记的项目。React hook。 */
 	useProjects(): readonly ProjectInfo[];
 	/** `ui.usePluginDisplayName`：市场目录在 market/store.ts，它引用这个文件，所以经 host 接进来。React hook。 */
@@ -1211,6 +1217,16 @@ function HostConversation(props: ConversationProps) {
 }
 
 let host: PluginHost | undefined;
+
+function HostMarkdown(props: MarkdownProps) {
+	const Rendered = host?.Markdown;
+	return Rendered ? <Rendered {...props} /> : null;
+}
+
+function HostFilePreview(props: FilePreviewProps) {
+	const Rendered = host?.FilePreview;
+	return Rendered ? <Rendered {...props} /> : null;
+}
 
 const NO_PROJECTS: readonly ProjectInfo[] = [];
 const NO_DISPLAY_NAME = (): undefined => undefined;
@@ -1575,7 +1591,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		droppedPaths: (transfer) => droppedPaths(transfer, window.plume.files.pathFor),
 		useFileMenu: usePathMenu,
 		FileDiff: DiffView,
-		FilePreview: PluginFilePreview,
+		FilePreview: HostFilePreview,
 		DocumentPreview,
 		documentViewer: (extensions, component) => owned(registerDocumentViewer(extensions, component)),
 		turnFooter: live((id, component, options) => registerTurnFooter(name, id, component, options)),
@@ -1684,7 +1700,7 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		},
 		Conversation: HostConversation,
 		ChatBackgroundSettings: PluginChatBackgroundSettings,
-		Markdown: PluginMarkdown,
+		Markdown: HostMarkdown,
 		ModelSelect: PluginModelSelect,
 		ModelControls: PluginModelControls,
 		useModelDefaults,

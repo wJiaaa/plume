@@ -16,6 +16,8 @@ import { follow, heldView, openNew, select } from "./sessions.ts";
 import { closeTab, openFileTab, panelScope, persistTabs, removeTab, scopeOf, setTabs, showPanel, tabsOf, togglePanel } from "./panels.ts";
 import { openSessionFor, pluginDraft, quoteInPanel } from "./actions.ts";
 import { PluginConversation } from "./Chat.tsx";
+import { PluginMarkdown } from "../markdown/PluginMarkdown.tsx";
+import { PluginFilePreview } from "../files/PluginFilePreview.tsx";
 import { ProjectFilePanel, ProjectFiles } from "./PanelArea.tsx";
 
 export function start(service: Remote<AgentService>): void {
@@ -74,6 +76,8 @@ export function start(service: Remote<AgentService>): void {
 		openSettings: (key) => update({ screen: "settings", settingsSection: `plugin:${key}`, drawerOpen: false }),
 		openPage: (key) => update({ screen: `page:${key}`, drawerOpen: false }),
 		Conversation: PluginConversation,
+		Markdown: PluginMarkdown,
+		FilePreview: PluginFilePreview,
 		useProjects: () => useAppPick((current) => current.projects),
 		usePluginDisplayName,
 		useSessionModel: () => {
