@@ -3,6 +3,15 @@
  */
 
 @layer components {
+	/*
+	 * 画完了的一轮在屏幕外不布局也不画，见 `Transcript.tsx` 的 `TurnFrame`。`content-visibility` 带着绘制隔离，伸出外框的
+	 * 阴影、焦点环会被裁掉（实测伸出 5px 的那圈就没了）：裁切边往外放 48px，盖得住最大的阴影（`--plume-shadow-rest` 往下 40px）。
+	 */
+	[data-plume-turn-skip] {
+		content-visibility: auto;
+		overflow-clip-margin: 48px;
+	}
+
 	/* 气泡里的 Markdown 跟气泡的行高走，不用回复正文那副舒展的行距和字距：一句短话在气泡里不该比旁边的回复松。 */
 	.plume-user-bubble .markdown {
 		font-size: inherit;

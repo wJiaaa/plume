@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
@@ -332,6 +333,74 @@ export async function checkTranscriptScroll(options: {
 				(one.name === "live-rows-following" && (one.kicks > 2 || one.maxJolt > 12 || (one.minRunning ?? -1) < 0)),
 		);
 		if (bad.length) throw new Error(`转录滚动不稳：${JSON.stringify(bad)}`);
+
+		/*
+		 * 画完了的轮在屏幕外跳过布局（`TurnFrame`），最后一轮不跳；上面几段点开收起、跟着底部都是在这样的转录上量的。
+		 * 跳过之前写下的占位高度就是它画出来的真高度：拿掉跳过再量，高度一分不差。
+		 */
+		const turns = `[...document.querySelectorAll('[data-screen=chat] [data-plume-transcript-rows] > [data-plume-turn]')]`;
+		const marks = await page<{ skip: boolean; same: boolean }[]>(`${turns}.map((turn) => {
+			const placeholder = parseFloat(turn.style.containIntrinsicBlockSize.replace('auto', '')) || 0;
+			return { skip: turn.hasAttribute('data-plume-turn-skip'), same: !turn.hasAttribute('data-plume-turn-skip') || Math.abs(placeholder - turn.getBoundingClientRect().height) < 1 };
+		})`);
+		console.log("PLUME_SMOKE_TURN_SKIP", JSON.stringify(marks));
+		assert.ok(marks.length >= 3, `每一轮一个外框：${JSON.stringify(marks)}`);
+		assert.ok(
+			marks.slice(0, -1).every((mark) => mark.skip && mark.same) && !marks.at(-1)!.skip,
+			`画完的轮跳过、占位是真高度，最后一轮不跳：${JSON.stringify(marks)}`,
+		);
+
+		/*
+		 * 点过「显示更早」的长对话：读者回到底部，多挂出来、在视口上方一屏以外的那几轮收回去（`trimBehind`），眼前的不动。
+		 * 先说几句短话，让转录长过一个窗口（20 块）。
+		 */
+		const showEarlier = `document.querySelector('[data-screen=chat] [data-plume-show-earlier]')`;
+		for (let index = 1; index <= 30 && !(await page<boolean>(`Boolean(${showEarlier})`)); index++) {
+			await page(`document.querySelector('.cm-content').focus()`);
+			await window.webContents.insertText(`短问 ${index}`);
+			await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, `可以发短问 ${index}`);
+			await clickVisible(page, `[data-composer-send=send]`);
+			await until(
+				`[...document.querySelectorAll('[data-screen=chat] [data-plume-session] [data-question-index]')].some((row) => row.textContent.includes(${JSON.stringify(`短问 ${index}`)})) && document.querySelector('[data-composer-send=send]') !== null && !document.querySelector('[data-composer-send=stop]')`,
+				`短问 ${index} 答完`,
+			);
+		}
+		await until(`Boolean(${showEarlier})`, "转录长过一个窗口");
+		const count = () => page<number>(`${turns}.length`);
+		const windowed = await count();
+		// 停在底部点「显示更早」：挂出来的那几轮不当场又被收回去（读者没离开过底部）。
+		await clickVisible(page, `[data-screen=chat] [data-plume-show-earlier]`);
+		await until(`${turns}.length > ${windowed}`, "显示更早挂出前面几轮");
+		const widened = await count();
+		await sleep(500);
+		assert.equal(await count(), widened, "停在底部点「显示更早」，挂出来的不被当场收回");
+		// 像人一样往上翻到顶、再滚回底部（先一个滚轮，跟随底部才认这是人在滚）。回去的那一路逐帧记最后一轮的位置：收回前后不跳。
+		const scrollTo = (end: "top" | "bottom") =>
+			page(
+				`(() => { const e = window.__scroller; e.dispatchEvent(new WheelEvent('wheel', { deltaY: ${end === "top" ? -120 : 120}, bubbles: true })); e.scrollTop = ${end === "top" ? 0 : "e.scrollHeight"}; })()`,
+			);
+		await scrollTo("top");
+		await sleep(300);
+		// 先开始逐帧记再滚回去：收回就发生在到底的那一下的滚动事件里。
+		await page(`(() => { window.__trim = (async () => {
+			const out = [];
+			for (let i = 0; i < 40; i++) {
+				await new Promise(requestAnimationFrame);
+				const e = window.__scroller;
+				out.push({ turns: ${turns}.length, top: Math.round(${turns}.at(-1).getBoundingClientRect().top * 10) / 10, lag: e.scrollHeight - e.scrollTop - e.clientHeight });
+			}
+			return out;
+		})(); })()`);
+		await scrollTo("bottom");
+		await until(`${turns}.length < ${widened}`, "离开过底部再回来，收回多挂出来的轮");
+		const trimmed = await page<{ turns: number; top: number; lag: number }[]>("window.__trim");
+		console.log("PLUME_SMOKE_TURN_TRIM", JSON.stringify({ windowed, widened, kept: await count(), frames: trimmed }));
+		// 到底以后的每一帧：还在底部、最后一轮不挪，收回前后（`turns` 变了的那一帧）都一样。
+		const landed = trimmed.slice(trimmed.findIndex((frame) => frame.lag <= 2));
+		assert.ok(
+			landed.every((frame) => frame.lag <= 2 && Math.abs(frame.top - landed[0]!.top) < 1),
+			`收回时眼前不动、还在底部：${JSON.stringify(trimmed)}`,
+		);
 	} catch (error) {
 		// 失败时也把已经记下的帧留下，好看是哪一步、哪一帧出的事。
 		const phases = await page<Phase[]>(`window.__scroll?.phases.map(p => ({ name: p.name, frames: p.frames })) ?? []`).catch(() => []);

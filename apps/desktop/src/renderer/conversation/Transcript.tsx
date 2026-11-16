@@ -356,6 +356,44 @@ export function Transcript({
 		[onCarryOn, onOpenSettings, showThinking, plugins, renderUserMessage, replyText],
 	);
 
+	/*
+	 * 读者停在底部时，把往上翻时多挂出来的那几轮收回去：不收的话它们一直挂着、按会话记着，往回翻过几次的会话每次布局都按几倍的量算。
+	 * 回到末尾那一下（`latest`）不收，见那里；这里只在真的停在底部、要收的整轮都在视口上方一屏以外时收，按轮的边界收。
+	 * 收掉的在视口上方，浏览器的滚动锚定和跟随底部（`pin`）都把眼前的留在原处。
+	 * 还得是离开过底部一屏以上又回来的：转录短到一屏装得下时，停在底部点「显示更早」，挂出来的那几轮不能当场又被收回去。
+	 */
+	const rowsRef = useRef<HTMLDivElement>(null);
+	const trimFacts = useRef({ blocks, end: range.end, total: allBlocks.length, keepLast: range.keepLast });
+	trimFacts.current = { blocks, end: range.end, total: allBlocks.length, keepLast: range.keepLast };
+	const leftBottom = useRef(false);
+	useLayoutEffect(() => {
+		leftBottom.current = false;
+	}, [id]);
+	const followScroll = follow.onScroll;
+	const onScroll = useCallback(
+		(el: HTMLDivElement) => {
+			followScroll(el);
+			const { blocks: mounted, end, total, keepLast } = trimFacts.current;
+			const rows = rowsRef.current;
+			const fromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
+			if (fromBottom > el.clientHeight) leftBottom.current = true;
+			if (!rows || !leftBottom.current || end !== total || mounted.length <= WINDOW_TURNS || fromBottom > 2) return;
+			const frames = rows.querySelectorAll(":scope > [data-plume-turn]");
+			const above = el.getBoundingClientRect().top - el.clientHeight;
+			const turns = turnsOf(mounted);
+			let cut = 0;
+			for (const [index, next] of turns.slice(1).entries()) {
+				// 第 `index` 轮整个在上面那一屏以外：下一轮的顶边还在那条线上方。
+				if (mounted.length - next.from < WINDOW_TURNS || !(frames[index + 1]!.getBoundingClientRect().top <= above)) break;
+				cut = next.from;
+			}
+			if (cut === 0) return;
+			leftBottom.current = false;
+			keepLast(mounted.length - cut);
+		},
+		[followScroll],
+	);
+
 	// 开合滑动时把正文定在这一路最窄的宽度上，见 `TranscriptFloor`。直接写在节点上，不经 React 重画转录。
 	const floor = useContext(TranscriptFloor);
 	const cellRef = useRef<HTMLDivElement>(null);
@@ -395,7 +433,7 @@ export function Transcript({
 								 */
 								bottom={follow.away ? "fade" : "none"}
 								scrollRef={follow.scrollRef}
-								onScroll={follow.onScroll}
+								onScroll={onScroll}
 								onResize={follow.onResize}
 								onUserScroll={follow.onUserScroll}
 								onHold={follow.hold}
@@ -413,33 +451,38 @@ export function Transcript({
 											</Button>
 										</div>
 									)}
-									<div className="flex flex-col gap-2.5" data-plume-transcript-rows="">
-										{blocks.map((block, at) => {
-											// 后面已经开了下一轮：这一轮里还在演的字一次补齐，见 `Superseded`。不按有没有下一轮决定套不套：套上、拿掉会让整块重挂。
-											const superseded = block.turn !== allBlocks[allBlocks.length - 1]?.turn;
-											if (block.kind === "plain") {
-												const run = block.runs[0];
-												return run ? (
-													<Superseded.Provider key={runKey(run)} value={superseded}>
-														{draw(run)}
-													</Superseded.Provider>
-												) : null;
-											}
-											/*
-											 * 按开这一轮的那句话起名，不按第一行：跑着的那一轮刚发出时下面是空的，第一行等它开口才有。
-											 * 按第一行起名，开口那一下整块就卸掉重建。没有开口那句的（会话的第 0 轮）才退回第一行。
-											 */
-											const opener = allBlocks[range.start + at - 1];
-											const head = (opener?.turn === block.turn ? opener : block).runs[0];
-											const key = `process:${head ? runKey(head) : block.turn}`;
-											// 按回合算，不按块的位置：正文一开始流式输出，过程就不再排在末尾。和全部的最后一轮比，不和窗口里的：往回翻过页，窗口末尾不是在跑的那一轮。
-											const live = running && block.turn === allBlocks[allBlocks.length - 1]?.turn;
-											return (
-												<Superseded.Provider key={key} value={superseded}>
-													<ProcessBlock block={block} live={live} draw={draw} lastUser={holds(block, lastUser) ? lastUser : undefined} />
-												</Superseded.Provider>
-											);
-										})}
+									<div ref={rowsRef} className="flex flex-col gap-2.5" data-plume-transcript-rows="">
+										{turnsOf(blocks).map(({ turn, from, count }) => (
+											<TurnFrame key={`turn:${turn}`} settled={turn !== allBlocks[allBlocks.length - 1]?.turn}>
+												{blocks.slice(from, from + count).map((block, offset) => {
+													const at = from + offset;
+													// 后面已经开了下一轮：这一轮里还在演的字一次补齐，见 `Superseded`。不按有没有下一轮决定套不套：套上、拿掉会让整块重挂。
+													const superseded = block.turn !== allBlocks[allBlocks.length - 1]?.turn;
+													if (block.kind === "plain") {
+														const run = block.runs[0];
+														return run ? (
+															<Superseded.Provider key={runKey(run)} value={superseded}>
+																{draw(run)}
+															</Superseded.Provider>
+														) : null;
+													}
+													/*
+													 * 按开这一轮的那句话起名，不按第一行：跑着的那一轮刚发出时下面是空的，第一行等它开口才有。
+													 * 按第一行起名，开口那一下整块就卸掉重建。没有开口那句的（会话的第 0 轮）才退回第一行。
+													 */
+													const opener = allBlocks[range.start + at - 1];
+													const head = (opener?.turn === block.turn ? opener : block).runs[0];
+													const key = `process:${head ? runKey(head) : block.turn}`;
+													// 按回合算，不按块的位置：正文一开始流式输出，过程就不再排在末尾。和全部的最后一轮比，不和窗口里的：往回翻过页，窗口末尾不是在跑的那一轮。
+													const live = running && block.turn === allBlocks[allBlocks.length - 1]?.turn;
+													return (
+														<Superseded.Provider key={key} value={superseded}>
+															<ProcessBlock block={block} live={live} draw={draw} lastUser={holds(block, lastUser) ? lastUser : undefined} />
+														</Superseded.Provider>
+													);
+												})}
+											</TurnFrame>
+										))}
 										{range.end === allBlocks.length && footerTimestamp !== null && <TurnFooters session={view} timestamp={footerTimestamp} />}
 									</div>
 									{more > 0 && (
@@ -522,6 +565,46 @@ const ProcessBlock = memo(function ProcessBlock({
 	}));
 	return <TurnWork entries={entries} />;
 });
+
+/** 窗口里的块按轮分段：连着的同一轮是一段，`from` 是它在窗口里的第一块。 */
+function turnsOf(blocks: readonly TurnBlock[]): { turn: number; from: number; count: number }[] {
+	const out: { turn: number; from: number; count: number }[] = [];
+	for (const [at, block] of blocks.entries()) {
+		const last = out[out.length - 1];
+		if (last && last.turn === block.turn) last.count++;
+		else out.push({ turn: block.turn, from: at, count: 1 });
+	}
+	return out;
+}
+
+/**
+ * 一轮的外框。后面又开了一轮（`settled`）以后，它在屏幕外时不布局也不画（`content-visibility`，见 conversation.css）。
+ *
+ * 不这样的话，屏幕外挂着的每一轮在宽度一变时都要整段重新断行：拖侧栏、面板区的分隔线，拖窗口，长对话每一帧都是一次全量布局，
+ * 点过「显示更早」的会话更重。最后一轮不跳：它在写，跳过的话屏幕外长高不算进滚动高度，跟随底部和「回到最新」都量不准。
+ *
+ * 开跳之前先把这一刻的真高度写进 `contain-intrinsic-block-size`：一块从没画过就跳过时，浏览器按这个值给它占位，
+ * 不写的话占位是零，换会话回来按 `scrollTop` 放回读的位置就落到别处。之后的 `auto` 让浏览器记住它每次画出来的高度。
+ * 宽度变了、它在屏幕外时高度停在上一次画出来的那样，滚到它那里才重新断行，那时它在视口上方，浏览器的滚动锚定补得上。
+ */
+function TurnFrame({ settled, children }: { settled: boolean; children: ReactNode }) {
+	const ref = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		const element = ref.current;
+		if (!element || !settled) return;
+		element.style.containIntrinsicBlockSize = `auto ${element.getBoundingClientRect().height}px`;
+		element.setAttribute("data-plume-turn-skip", "");
+		return () => {
+			element.removeAttribute("data-plume-turn-skip");
+			element.style.containIntrinsicBlockSize = "";
+		};
+	}, [settled]);
+	return (
+		<div ref={ref} data-plume-turn="" className="flex flex-col gap-2.5">
+			{children}
+		</div>
+	);
+}
 
 /** 这一块里有没有第 `index` 条消息画成的那一行。 */
 function holds(block: TurnBlock, index: number): boolean {
