@@ -44,6 +44,7 @@ import { loadAppearance, registerAppearanceIpc } from "./appearance.ts";
 import { sessionFromUrl } from "./deep-link.ts";
 import { registerFilesIpc } from "./files.ts";
 import { registerKeepAwake } from "./keep-awake.ts";
+import { openLogFile } from "./log-file.ts";
 import { registerOpenTargetsIpc } from "./open-targets.ts";
 import { registerPanelWindowsIpc } from "./panel-windows.ts";
 import { registerSessionWindowsIpc } from "./session-windows.ts";
@@ -193,6 +194,14 @@ async function boot(): Promise<void> {
 	});
 	const dataDir = plumeHome();
 	const settingsFile = await userSettingsFile();
+	const writeLog = openLogFile(dataDir);
+	// 窗口里的告警和报错（插件界面入口渲染出错、订阅失败）也记进日志；网页（<webview>）里的不记，那是别人的页面。
+	app.on("web-contents-created", (_event, contents) => {
+		if (contents.getType() !== "window") return;
+		contents.on("console-message", (event) => {
+			if (event.level === "warning" || event.level === "error") writeLog(`ui ${event.level}`, event.message);
+		});
+	});
 	// 插件：从市场（market-remote.ts）装进 ~/.plume/plugins 的，本地上传进 ~/.plume/local-plugins 的
 	// （冒烟时 PLUME_HOME 在冒烟目录里）。开发版和装好的应用用同一份；同名时谁生效见 market.ts 的 found。
 	// 内置插件是仓库的 packages/builtin/，同样随应用放进资源目录。
@@ -258,8 +267,14 @@ async function boot(): Promise<void> {
 			...(smoke ? {} : { [CATALOG_FILE_ENV]: join(plumeHome(), "model-catalog.json") }),
 		},
 	});
-	child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(prefixLines("[agent] ", chunk)));
-	child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(prefixLines("[agent] ", chunk)));
+	child.stdout?.on("data", (chunk: Buffer) => {
+		process.stdout.write(prefixLines("[agent] ", chunk));
+		writeLog("agent", chunk.toString());
+	});
+	child.stderr?.on("data", (chunk: Buffer) => {
+		process.stderr.write(prefixLines("[agent] ", chunk));
+		writeLog("agent", chunk.toString());
+	});
 	const agent = connectAgent(child);
 	const notifyEvent = createNotifications({
 		active: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed() && window.isVisible() && window.isFocused() && !window.isMinimized()),
@@ -277,6 +292,8 @@ async function boot(): Promise<void> {
 	child.once("exit", (code) => {
 		if (quitting) return;
 		console.error(`agent 进程退出，退出码 ${code}`);
+		// i18n-exempt：运行日志，写给排查的人看。
+		writeLog("main", `agent 进程退出，退出码 ${code}`);
 		for (const window of BrowserWindow.getAllWindows()) window.webContents.send("plume:agent-exited", code);
 	});
 
