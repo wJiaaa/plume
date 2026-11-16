@@ -10,6 +10,8 @@ type Rect = { left: number; top: number; width: number; height: number };
 
 /** 卡片标题栏里的面板开关：它打开面板区，开始页上的「项目文件」是宿主自己的面板，不用先装插件。 */
 const PANEL_TOGGLE = "[data-panel-toggle] button";
+/** 对话卡片里转录的正文那一栏，嵌在里面的子转录不算。 */
+const TRANSCRIPT_TEXT = JSON.stringify("[data-panel-layout] > main [data-plume-session]");
 const SIDEBAR = 'aside[aria-label="侧边栏"]';
 /** 顶行的后退：从插件市场、设置页回到刚才的会话。 */
 const BACK = 'button[aria-label^="后退"]';
@@ -547,6 +549,19 @@ export async function checkDesktopCompat(options: {
 			else assert.ok(!held[switched]!.moving, `${label}：环境卡片滑完才换：${JSON.stringify(held)}`);
 		};
 		const laneOf = `(document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null)`;
+		/**
+		 * 开合时转录的正文一路只平移、不跟着那一栏每帧重新断行（见 `TranscriptFloor`）：宽度最多三样——滑之前、滑着时、滑完。
+		 * 跟着每帧变的话长转录每帧一次全量布局，动画掉帧。一路上也不伸出对话卡片。
+		 */
+		const textSteady = (label: string, held: { text: number; fits: boolean }[]) => {
+			const widths = [...new Set(held.map((sample) => sample.text))];
+			console.log("PLUME_DESKTOP_COMPAT_TEXT " + JSON.stringify({ label, widths }));
+			assert.ok(widths.length <= 3, `${label}：转录正文滑着时不重新断行：${JSON.stringify(held.map((sample) => sample.text))}`);
+			assert.ok(
+				held.every((sample) => sample.fits),
+				`${label}：转录正文不伸出对话卡片：${JSON.stringify(held)}`,
+			);
+		};
 
 		// ── 6. 面板区开合时两张卡片一起滑，环境卡片不闪 ──────────────────
 		// 环境卡片开着：宽的时候停靠在右边那一列，面板区打开后那一栏变窄，它浮到转录上。
@@ -557,11 +572,22 @@ export async function checkDesktopCompat(options: {
 		await page(`document.querySelector('[data-environment]').setAttribute('data-smoke-same-card', '')`);
 		const PANEL_LAYER = '[data-panel-layer]:not(.invisible) [data-panel="plume/files"]';
 		const panelSample = `(() => { const box = (s) => document.querySelector(s)?.getBoundingClientRect(), area = document.querySelector('[data-panel-area]');
-			const content = box(${JSON.stringify(PANEL_LAYER)}), card = document.querySelector('[data-environment]'), chat = box('[data-panel-layout] > main');
-			return { chat: Math.round(chat.right * 10) / 10, width: Math.round(chat.width * 10) / 10, icon: Math.round((chat.right - box('[data-panel-layout] > main [data-environment-toggle]').right) * 10) / 10, area: Math.round(area.getBoundingClientRect().left * 10) / 10,
+			const content = box(${JSON.stringify(PANEL_LAYER)}), card = document.querySelector('[data-environment]'), chat = box('[data-panel-layout] > main'), text = box(${TRANSCRIPT_TEXT});
+			return { chat: Math.round(chat.right * 10) / 10, text: Math.round(text.width), fits: text.left >= chat.left - 0.5 && text.right <= chat.right + 0.5, width: Math.round(chat.width * 10) / 10, icon: Math.round((chat.right - box('[data-panel-layout] > main [data-environment-toggle]').right) * 10) / 10, area: Math.round(area.getBoundingClientRect().left * 10) / 10,
 				content: content ? Math.round(content.left * 10) / 10 : null, moving: getComputedStyle(area).transitionProperty.includes('right'),
 				lane: card?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null, same: Boolean(card?.hasAttribute('data-smoke-same-card')) }; })()`;
-		type PanelFrame = { chat: number; width: number; icon: number; area: number; content: number | null; moving: boolean; lane: string | null; same: boolean };
+		type PanelFrame = {
+			chat: number;
+			text: number;
+			fits: boolean;
+			width: number;
+			icon: number;
+			area: number;
+			content: number | null;
+			moving: boolean;
+			lane: string | null;
+			same: boolean;
+		};
 		for (const phase of ["打开", "收起"] as const) {
 			const start = await page<PanelFrame>(panelSample);
 			await page(`(() => { window.__smokeHold = (async () => {
@@ -593,6 +619,7 @@ export async function checkDesktopCompat(options: {
 			const offsets = new Set(sliding.flatMap((sample) => (sample.content === null ? [] : [Math.round(sample.content - sample.area)])));
 			assert.ok(offsets.size === 1, `${phase}：面板内容跟着卡片走：${JSON.stringify(held)}`);
 			laneSteady(phase, held, phase === "打开");
+			textSteady(phase, held);
 			await settle();
 			assert.equal(await page<string | null>(laneOf), phase === "打开" ? "floating" : "docked", `${phase}：落定后环境卡片的放法`);
 			assert.ok(await page<boolean>(`getComputedStyle(document.querySelector('[data-panel-area]')).transitionProperty === 'all'`), `${phase}：滑完撤掉动画`);
@@ -603,10 +630,10 @@ export async function checkDesktopCompat(options: {
 		await press(PANEL_TOGGLE);
 		await until(`${panelShown} && ${laneOf} === 'floating'`, "侧栏开着、面板区开着时环境卡片浮着");
 		await settle();
-		const sidebarSample = `(() => { const card = document.querySelector('[data-environment]'), chat = document.querySelector('[data-panel-layout] > main').getBoundingClientRect();
-			return { width: Math.round(chat.width * 10) / 10, moving: Boolean(document.querySelector('[data-sidebar-sliding]')),
+		const sidebarSample = `(() => { const card = document.querySelector('[data-environment]'), chat = document.querySelector('[data-panel-layout] > main').getBoundingClientRect(), text = document.querySelector(${TRANSCRIPT_TEXT}).getBoundingClientRect();
+			return { width: Math.round(chat.width * 10) / 10, text: Math.round(text.width), fits: text.left >= chat.left - 0.5 && text.right <= chat.right + 0.5, moving: Boolean(document.querySelector('[data-sidebar-sliding]')),
 				lane: card?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null, same: Boolean(card?.hasAttribute('data-smoke-same-card')) }; })()`;
-		type SidebarFrame = { width: number; moving: boolean; lane: string | null; same: boolean };
+		type SidebarFrame = { width: number; text: number; fits: boolean; moving: boolean; lane: string | null; same: boolean };
 		for (const phase of ["收起", "展开"] as const) {
 			const start = await page<SidebarFrame>(sidebarSample);
 			await page(`(() => { window.__smokeHold = (async () => {
@@ -630,6 +657,7 @@ export async function checkDesktopCompat(options: {
 				`侧栏${phase}：对话那一栏真的滑了：${JSON.stringify(held)}`,
 			);
 			laneSteady(`侧栏${phase}`, held, phase === "展开");
+			textSteady(`侧栏${phase}`, held);
 			await settle();
 			assert.equal(await page<string | null>(laneOf), phase === "收起" ? "docked" : "floating", `侧栏${phase}：落定后环境卡片的放法`);
 		}
