@@ -100,7 +100,7 @@ async function served(t: { after: (fn: () => Promise<void>) => void }): Promise<
 		resources: { register: () => () => {} },
 		log: { warn: () => {}, info: () => {}, error: () => {} },
 		effect: (fn: () => void | Promise<void>) => void effects.push(fn),
-		sessions: { onDeleted: () => {} },
+		sessions: { onDeleted: () => {}, list: async () => [] },
 		tools: { register: () => () => {} },
 		hook: () => {},
 		commands: { provide: () => {} },

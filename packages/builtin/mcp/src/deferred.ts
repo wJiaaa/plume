@@ -10,6 +10,8 @@ export class DeferredSessions {
 	private readonly file: string;
 	private readonly ids: Promise<Set<string>>;
 	private writing: Promise<void> = Promise.resolve();
+	/** 这次加载以后改成按需搜索的：清扫时一定留着。 */
+	private readonly added = new Set<string>();
 
 	constructor(file: string) {
 		this.file = file;
@@ -28,14 +30,25 @@ export class DeferredSessions {
 
 	async add(sessionId: string): Promise<void> {
 		const ids = await this.ids;
+		this.added.add(sessionId);
 		if (ids.has(sessionId)) return;
 		ids.add(sessionId);
 		await this.save(ids);
 	}
 
 	async delete(sessionId: string): Promise<void> {
+		this.added.delete(sessionId);
 		const ids = await this.ids;
 		if (ids.delete(sessionId)) await this.save(ids);
+	}
+
+	/** 只留这些会话的：删会话时插件没在跑留下的，加载时清掉。 */
+	async keepOnly(live: Iterable<string>): Promise<void> {
+		const keep = new Set([...live, ...this.added]);
+		const ids = await this.ids;
+		const before = ids.size;
+		for (const id of ids) if (!keep.has(id)) ids.delete(id);
+		if (ids.size !== before) await this.save(ids);
 	}
 
 	/** 排着写：先后两次改动不互相覆盖。写不进去只是重开后可能翻回去一次，不挡这一轮。 */

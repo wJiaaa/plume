@@ -93,6 +93,15 @@ export default {
 			connections.closeSession(sessionId);
 			documents.remove(sessionId);
 		});
+		// 删会话时插件没在跑（停用着、删到一半退出）留下的文档和记录，对着现有的会话清掉。
+		void ctx.sessions
+			.list()
+			.then(async (all) => {
+				const live = all.map((session) => session.id);
+				documents.keepOnly(live);
+				await deferred.keepOnly(live);
+			})
+			.catch((error: unknown) => ctx.log.warn(`清理已删会话的文档失败：${error instanceof Error ? error.message : String(error)}`));
 
 		ctx.tools.register(searchTool(() => connections.tools().filter((tool) => !tool.pinned)));
 		ctx.tools.register(callTool(() => connections.tools()));

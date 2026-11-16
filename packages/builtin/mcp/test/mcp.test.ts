@@ -746,7 +746,7 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 		resources: { register: () => () => {} },
 		log: { warn: () => {}, info: () => {}, error: () => {} },
 		effect: () => {},
-		sessions: { onDeleted: () => {} },
+		sessions: { onDeleted: () => {}, list: async () => [] },
 		tools: { register: () => () => {} },
 		hook: () => {},
 		commands: { provide: () => {} },

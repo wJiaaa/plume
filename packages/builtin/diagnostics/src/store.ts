@@ -92,6 +92,14 @@ export class DiagnosticStore {
 		});
 		this.versions.delete(sessionId);
 	}
+	/** 只留这些会话的：删会话时插件没在跑（停用着、删到一半退出）留下的，加载时清掉。 */
+	keepOnly(live: ReadonlySet<string>): void {
+		const keep = JSON.stringify([...live]);
+		this.transaction(() => {
+			this.db.prepare("DELETE FROM observations WHERE session NOT IN (SELECT value FROM json_each(?))").run(keep);
+			this.db.prepare("DELETE FROM parts WHERE session NOT IN (SELECT value FROM json_each(?))").run(keep);
+		});
+	}
 	close(): void {
 		this.db.close();
 	}

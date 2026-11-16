@@ -27,8 +27,21 @@ export default {
 			async (jobId, sessionId) => (await ctx.sessions.jobOutput(sessionId, jobId)).text,
 			() => words().invalidListeners,
 		);
-		ctx.sessions.observe((value) => store.append(value));
-		ctx.sessions.onDeleted((id) => store.delete(id));
+		/** 加载以后才记下的会话：清扫时一定还在，不等 `list()` 回来才算它。 */
+		const recorded = new Set<string>();
+		ctx.sessions.observe((value) => {
+			recorded.add(value.sessionId);
+			store.append(value);
+		});
+		ctx.sessions.onDeleted((id) => {
+			recorded.delete(id);
+			store.delete(id);
+		});
+		// 删会话时没在跑（停用着、删到一半退出）留下的轨迹，加载时对着现有的会话清掉。
+		void ctx.sessions
+			.list()
+			.then((all) => store.keepOnly(new Set([...all.map((session) => session.id), ...recorded])))
+			.catch((error: unknown) => ctx.log.warn(`清理已删会话的轨迹失败：${error instanceof Error ? error.message : String(error)}`));
 		const session = async (id: string) => {
 			if (typeof id !== "string" || !id) throw new Error(words().missingSession);
 			const all = await ctx.sessions.list();

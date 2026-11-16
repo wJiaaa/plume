@@ -38,6 +38,9 @@ export default {
 	name: "plume.plan",
 	async apply(ctx) {
 		const store = await PlanStore.open(ctx.dataDir, (message) => ctx.log.warn(message));
+		// 删会话时插件没在跑（停用着、删到一半退出）留下的开关，对着现有的会话清掉。
+		const live = new Set((await ctx.sessions.list()).map((session) => session.id));
+		for (const id of store.snapshot().sessions) if (!live.has(id)) store.forget(id);
 		/** 子会话 → 父会话；顶层会话记 null。父子关系建了就不变，查过就记下。 */
 		const parents = new Map<string, string | null>();
 		const turns = new Map<string, Turn>();

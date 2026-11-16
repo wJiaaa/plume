@@ -24,6 +24,11 @@ export default {
 	apply(ctx) {
 		const presets = createPresets(ctx);
 		ctx.sessions.onDeleted((sessionId) => presets.forget(sessionId));
+		// 删会话时插件没在跑（停用着、删到一半退出）留下的身份与准则，对着现有的会话清掉。
+		void ctx.sessions
+			.list()
+			.then((all) => presets.keepOnly(all.map((session) => session.id)))
+			.catch((error: unknown) => ctx.log.warn(`清理已删会话的身份与准则失败：${error instanceof Error ? error.message : String(error)}`));
 		ctx.serve({
 			view: () => presets.view(),
 			save: (id, draft) => presets.save(id, draft),
