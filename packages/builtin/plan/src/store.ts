@@ -26,11 +26,11 @@ export class PlanStore {
 
 	static async open(dataDir: string, warn: (message: string) => void): Promise<PlanStore> {
 		const store = new PlanStore(join(dataDir, "state.json"), warn);
-		const saved = await readFile(store.file, "utf8").then(
-			(text) => JSON.parse(text) as { sessions?: unknown },
-			() => ({ sessions: [] }),
-		);
-		if (Array.isArray(saved.sessions)) for (const id of saved.sessions) if (typeof id === "string") store.on.add(id);
+		// 解析失败也当作没开过：写在 `then` 的第二个回调里接不住 `JSON.parse` 抛的错，整个插件会加载失败。
+		const saved = await readFile(store.file, "utf8")
+			.then((text) => JSON.parse(text) as { sessions?: unknown } | null)
+			.catch(() => null);
+		if (Array.isArray(saved?.sessions)) for (const id of saved.sessions) if (typeof id === "string") store.on.add(id);
 		return store;
 	}
 
