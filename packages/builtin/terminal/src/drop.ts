@@ -3,21 +3,23 @@
  * 访达里的文件和文件面板里的行都算，读路径由宿主做（`ui.droppedPaths`）。
  */
 
-import { windowsKeyboard } from "./keys.ts";
+import type { ShellDialect } from "./api.ts";
 
 /**
- * 一条路径作为 shell 的一个词。
+ * 一条路径作为 shell 的一个词，按这个标签里跑的 shell 的规矩（`TerminalTab.dialect`）。
  *
- * POSIX：每个字都不是 shell 的特殊字时原样，否则加单引号——单引号里什么都不解释，文件名里的 `$HOME`、反引号
- * 仍是文件名。Windows：双引号，cmd、PowerShell、Git Bash 都把它读成一个词；PowerShell 偏爱的单引号 cmd 不认。
+ * POSIX（含 Windows 上的 Git Bash）和 PowerShell：每个字都不是 shell 的特殊字时原样，否则加单引号——单引号里什么都不解释，
+ * 文件名里的 `$HOME`、反引号仍是文件名；PowerShell 的单引号里 `'` 写两遍（弯引号它也当引号，同 `cdCommand`）。
+ * cmd 只认双引号；双引号里它照样展开 `%X%`，这在 cmd 里没有办法转义，只有名字里带两个 `%` 的路径会受影响。
  */
-export function shellWord(path: string, platform = navigator.platform): string {
+export function shellWord(path: string, dialect: ShellDialect): string {
+	if (dialect === "cmd") return /[\s&()^;,=!%]/.test(path) ? `"${path}"` : path;
 	// 引号写成 \x27、\x60：原样写在正则里，文案检查会把它们当成字符串的开头。
-	if (windowsKeyboard(platform)) return /[\s&()^;,\x27\x60$%!@{}[\]]/.test(path) ? `"${path}"` : path;
+	if (dialect === "powershell") return /^[\w.:\\/~+-]+$/.test(path) ? path : `\x27${path.replace(/[\u0027\u2018-\u201b]/g, "$&$&")}\x27`;
 	return /^[\w@%+=:,./~-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`;
 }
 
 /** 拖进来要打的字：几个词用空格隔开，末尾留一个空格好接着打。 */
-export function dropText(paths: string[], platform = navigator.platform): string {
-	return paths.length === 0 ? "" : `${paths.map((path) => shellWord(path, platform)).join(" ")} `;
+export function dropText(paths: string[], dialect: ShellDialect): string {
+	return paths.length === 0 ? "" : `${paths.map((path) => shellWord(path, dialect)).join(" ")} `;
 }

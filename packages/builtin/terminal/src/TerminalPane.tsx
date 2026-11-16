@@ -362,7 +362,7 @@ export function TerminalPane({
 						if (!terminal || !paths) return;
 						event.preventDefault();
 						// 经 paste，和右键粘贴一样：打在提示符上，不会直接执行。
-						const typed = dropText(paths);
+						const typed = dropText(paths, mineRef.current?.dialect ?? "posix");
 						if (typed) terminal.paste(typed);
 						terminal.focus();
 					}}
