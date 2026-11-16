@@ -99,7 +99,10 @@ export function normalizeSettings(raw: unknown): StoredSettings {
 			sessionManager?: unknown;
 		};
 	const tuned = normalizePersonalization(personalization);
-	const own = Array.isArray(providers) ? (providers as StoredProvider[]).filter((provider) => !isMagpie(provider.id)) : [];
+	// 手改坏的一项（`null`、没有 id）跳过，不让它在 `provider.id` 上抛错、连带所有读设置的地方都失败。
+	const own = Array.isArray(providers)
+		? (providers as (StoredProvider | null)[]).filter((provider): provider is StoredProvider => typeof provider?.id === "string" && !isMagpie(provider.id))
+		: [];
 	const gateway = magpieProvider(magpie);
 	return {
 		providers: gateway ? [...own, gateway] : own,

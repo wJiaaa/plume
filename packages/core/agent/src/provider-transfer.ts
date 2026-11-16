@@ -115,7 +115,7 @@ export function applyImport(existing: StoredProvider[], chosen: StoredProvider[]
 		// 文件里 key 为空表示「没导出」，从不表示「清掉我已有的」。
 		const merged = current && !provider.apiKey?.trim() ? { ...provider, ...(current.apiKey ? { apiKey: current.apiKey } : {}) } : provider;
 		if (current) {
-			byId.set(provider.id, merged);
+			byId.set(provider.id, { ...merged, name: current.name });
 			continue;
 		}
 		const name = uniqueProviderName(names, merged.name);
@@ -159,6 +159,7 @@ function readModel(raw: unknown): ModelEntry | null {
 	const modelId = str(raw.modelId);
 	if (!modelId) return null;
 	const pricing = readPricing(raw.pricing);
+	const thinkingOptions = readThinkingOptions(raw.thinkingOptions);
 	return {
 		modelId,
 		name: str(raw.name) || modelId,
@@ -169,10 +170,28 @@ function readModel(raw: unknown): ModelEntry | null {
 		supportsImages: raw.supportsImages !== false,
 		supportsTools: raw.supportsTools !== false,
 		...(pricing ? { pricing } : {}),
-		...(Array.isArray(raw.thinkingOptions) ? { thinkingOptions: raw.thinkingOptions as ModelEntry["thinkingOptions"] } : {}),
+		...(thinkingOptions.length > 0 ? { thinkingOptions } : {}),
 		// 只在写了时带上：没写是「按名字判断」，手写的文件要的就是这个。
 		...(typeof raw.imageOutput === "boolean" ? { imageOutput: raw.imageOutput } : {}),
 	};
+}
+
+/** 思考档位逐项检查：要有字符串的 `id`，形状不对的那一档丢掉，不让一份手改坏的文件在发请求按档位解析时才出错。 */
+function readThinkingOptions(raw: unknown): NonNullable<ModelEntry["thinkingOptions"]> {
+	if (!Array.isArray(raw)) return [];
+	return raw.flatMap((option: unknown) => {
+		if (!isRecord(option) || typeof option.id !== "string" || !option.id.trim()) return [];
+		const budget = option.budgetTokens;
+		return [
+			{
+				id: option.id.trim(),
+				label: str(option.label) || option.id.trim(),
+				detail: str(option.detail),
+				...(option.isDefault === true ? { isDefault: true } : {}),
+				...(typeof budget === "number" && Number.isInteger(budget) && budget > 0 ? { budgetTokens: budget } : {}),
+			},
+		];
+	});
 }
 
 /** 只有每次算费用都要的输入、输出两项都在时才有价格。 */

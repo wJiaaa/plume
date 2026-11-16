@@ -233,12 +233,28 @@ describe("导入导出", () => {
 		});
 	});
 
+	it("思考档位逐项检查：形状不对的那一档丢掉", () => {
+		const bundle = parseBundle(
+			JSON.stringify({
+				kind: "plume.providers",
+				providers: [
+					{
+						id: "relay",
+						baseUrl: "https://r.invalid",
+						models: [{ modelId: "gpt", thinkingOptions: [null, { label: "没有 id" }, { id: "high", label: "高", detail: "", budgetTokens: -1 }] }],
+					},
+				],
+			}),
+		);
+		expect(bundle.ok && bundle.providers[0]?.models[0]?.thinkingOptions).toEqual([{ id: "high", label: "高", detail: "" }]);
+	});
+
 	it("新加的名字避开重名，替换的保留原名", () => {
 		expect(uniqueProviderName(["A", "A 2"], "A")).toBe("A 3");
 		const existing = [{ ...own, name: "A" }];
 		expect(
 			applyImport(existing, [
-				{ ...own, name: "A" },
+				{ ...own, name: "改过的名字" },
 				{ ...own, id: "p-2", name: "A" },
 			]).map((provider) => provider.name),
 		).toEqual(["A", "A 2"]);

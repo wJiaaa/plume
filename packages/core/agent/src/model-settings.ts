@@ -6,13 +6,14 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { AgentService, AlwaysAllow, SettingsView } from "@plume/contract";
 import { isImageModel } from "@plume/llm/image-models";
 import { activeModelCatalog } from "@plume/llm/model-catalog";
 import { normalizeRetryPolicy } from "@plume/llm/retry-policy";
 import { THINKING_LEVELS } from "@plume/llm/thinking-options";
+import { writeFileAtomic } from "./atomic-write.ts";
 import { text } from "./i18n.ts";
 import type { JsonFiles } from "./json-files.ts";
 import { isMagpie, magpieGateway } from "./magpie.ts";
@@ -72,21 +73,30 @@ export function createModelSettings(options: {
 		liveSessionManager = settings.sessionManager;
 	};
 
+	/** 正在改的次数：改的时候别处读到的可能是写之前的那份，不拿它盖掉内存里的值。 */
+	let changing = 0;
+
 	async function read(): Promise<StoredSettings> {
 		const settings = await keys.withKeys(normalizeSettings(await files.read<unknown>(settingsFile)));
-		follow(settings);
+		if (changing === 0) follow(settings);
 		return settings;
 	}
 
 	let queue: Promise<unknown> = Promise.resolve();
 	function changeSettings<T>(edit: (settings: StoredSettings) => T | Promise<T>): Promise<T> {
 		const run = queue.then(async () => {
-			const settings = await read();
-			const result = await edit(settings);
-			follow(settings);
-			// 0600：key 已经不在里面了，剩下的照样写着这台机器上的每个项目和连的每个服务。
-			await files.write(settingsFile, await keys.takeKeys(fileSettings(settings)), 0o600);
-			return result;
+			changing++;
+			try {
+				const settings = await read();
+				const result = await edit(settings);
+				// 0600：key 已经不在里面了，剩下的照样写着这台机器上的每个项目和连的每个服务。
+				await files.write(settingsFile, await keys.takeKeys(fileSettings(settings)), 0o600);
+				// 写成了才跟上：写失败时内存里还是盘上那份。
+				follow(settings);
+				return result;
+			} finally {
+				changing--;
+			}
 		});
 		queue = run.catch(() => undefined);
 		return run;
@@ -196,7 +206,8 @@ export function createModelSettings(options: {
 			const own = fileSettings(await read()).providers;
 			const { text: body, containsSecrets } = serializeBundle(own);
 			await mkdir(dirname(file), { recursive: true });
-			await writeFile(file, body, { mode: 0o600 });
+			// 不直接 `writeFile`：它只在新建文件时给 `mode`，覆盖一份已有的 0644 文件时，带着明文 key 的导出谁都能读。
+			await writeFileAtomic(file, body, { mode: 0o600 });
 			return { providers: own.length, containsSecrets };
 		},
 		async previewProviderImport(file) {
