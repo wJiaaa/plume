@@ -79,18 +79,25 @@ test("读不成文件的路径是不是文件夹，由 agent 按会话边界回�
 	assert.equal(await isFolder("session", "/project/README.md"), false);
 });
 
-test("终端印的路径：绝对路径按会话边界认，相对路径只认唯一的文件", async () => {
+test("终端印的路径：绝对路径本机有这个文件就认（会话目录外的也认），相对路径只认唯一的文件", async () => {
 	connectFiles({
-		listDirectory: async (_sessionId: string, path: string) => {
-			if (path === "/project/src") return [directory("/project/src/lib"), file("/project/src/a.ts")];
-			throw new Error("outside");
-		},
-		locateFiles: async (_sessionId: string, relative: string) =>
-			({ "a.ts": ["/project/src/a.ts"], "b.ts": ["/project/x/b.ts", "/project/y/b.ts"], lib: ["/project/src/lib/"] })[relative] ?? [],
+		// 绝对路径和相对路径一样交给 locateFiles：它对绝对路径只看本机有没有，文件夹带结尾的分隔符。
+		locateFiles: async (_sessionId: string, written: string) =>
+			(
+				{
+					"/project/src/a.ts": ["/project/src/a.ts"],
+					"/project/src/lib": ["/project/src/lib/"],
+					"/Users/me/Desktop/notes.md": ["/Users/me/Desktop/notes.md"],
+					"a.ts": ["/project/src/a.ts"],
+					"b.ts": ["/project/x/b.ts", "/project/y/b.ts"],
+					lib: ["/project/src/lib/"],
+				} as Record<string, string[]>
+			)[written] ?? [],
 	} as unknown as Remote<AgentService>);
 	assert.equal(await findFile("session", "/project/src/a.ts"), "/project/src/a.ts");
 	assert.equal(await findFile("session", "/project/src/lib"), null);
-	assert.equal(await findFile("session", "/etc/passwd"), null);
+	assert.equal(await findFile("session", "/Users/me/Desktop/notes.md"), "/Users/me/Desktop/notes.md");
+	assert.equal(await findFile("session", "/nowhere/missing.md"), null);
 	assert.equal(await findFile("session", "a.ts"), "/project/src/a.ts");
 	assert.equal(await findFile("session", "b.ts"), null);
 	assert.equal(await findFile("session", "lib"), null);

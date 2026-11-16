@@ -53,7 +53,7 @@ it("拒绝路径片段、伪造绝对路径、数据目录其他文件、目录�
 	expect(await managedMediaPath(mediaDir, join(mediaDir, directory))).toBeNull();
 });
 
-it("普通文件面板可读托管图片，缺失会话、其他目录和写操作不因此获得权限", async () => {
+it("普通文件面板可读托管图片和会话目录外的文件，缺失会话读不到，列目录和写操作不因此获得权限", async () => {
 	const cwd = join(dir, "workspace");
 	await mkdir(cwd);
 	const path = join(mediaDir, name);
@@ -64,8 +64,8 @@ it("普通文件面板可读托管图片，缺失会话、其他目录和写操�
 		const session = await agent.service.createSession({ cwd });
 		expect(await agent.service.readFile(session.id, path)).toMatchObject({ binary: true, bytes: Buffer.from(PNG, "base64").length });
 		expect(await agent.filePath(session.id, path)).toBe(await realpath(path));
-		expect(await agent.service.readFile(session.id, outside)).toBeNull();
-		expect(await agent.filePath(session.id, outside)).toBeNull();
+		expect(await agent.service.readFile(session.id, outside)).toMatchObject({ text: "outside" });
+		expect(await agent.filePath(session.id, outside)).toBe(await realpath(outside));
 		expect(await agent.service.readFile("missing", path)).toBeNull();
 		expect(await agent.filePath("missing", path)).toBeNull();
 		await expect(agent.service.listDirectory(session.id, mediaDir)).rejects.toThrow();

@@ -1088,13 +1088,12 @@ export interface UiContext {
 	 */
 	quoteInPanel(panelId: string, sessionId: string, quote: DraftQuote): void;
 	/**
-	 * 在指定会话的文件面板打开已有文件，读取仍受该会话的文件边界约束；会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也算在边界里。
-	 * 唯一的例外是这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的项目指令、项目记忆来源），在边界外也能只读打开。
+	 * 在指定会话的文件面板只读打开已有文件，本机哪里的都行（见 `AgentService.readFile`）；会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也行。
 	 */
 	openFile(path: string, sessionId: string): Promise<void>;
 	/**
 	 * 纯文字里印出来的一条路径（终端输出、日志）在这个会话里指的那个文件，返回绝对路径。绝对路径看它在不在；相对路径先按会话工作目录、
-	 * 项目源文件夹拼，不在就按结尾找，只认唯一的一个。不存在、不止一个、是文件夹、在会话文件边界外都是 null；答出来的 `openFile` 打得开。
+	 * 项目源文件夹拼，不在就按结尾找，只认唯一的一个。不存在、不止一个、是文件夹都是 null；答出来的 `openFile` 打得开。
 	 */
 	findFile(path: string, sessionId: string): Promise<string | null>;
 	/**

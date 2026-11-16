@@ -401,7 +401,7 @@ ctx.hook("model.context", (input, next) => {
 });
 ```
 
-段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：标了 `category: "conventions"`、`category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；换掉它的指令段时记得带上 `category`，否则算成系统提示词；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
+段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：标了 `category: "conventions"`、`category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里只读打开（文件面板看哪里的文件都行，会话目录外的也一样）；别的段带了不显示。plume.prompt 给每份项目指令标了来源；换掉它的指令段时记得带上 `category`，否则算成系统提示词；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
 
 ```ts
 const text = `<project_memory>\n${body}\n</project_memory>`;

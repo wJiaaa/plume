@@ -43,8 +43,6 @@ export function FileHeader({
 	const tree = usePopover();
 	const bases = roots ?? (cwd ? [cwd] : []);
 	const inside = rootOf(bases, path);
-	// 会话目录外的文件（「记忆文件」里只读打开的那些）不能在外部打开或在访达里显示，按钮也不给。不知道会话目录时（插件的预览）照常给。
-	const external = bases.length === 0 || inside !== undefined;
 	// 会话目录外的文件没有相对位置可写，写它所在的文件夹，不借工作目录的名字。
 	const crumb = inside
 		? path
@@ -102,12 +100,8 @@ export function FileHeader({
 			{(kind === "json" || kind === "text" || (kind === "markdown" && showSource)) && (
 				<IconButton size="xs" label={t("fileActions.wrap")} active={wrap} icon={<WrapText {...ICON} />} onClick={() => setWrap(!wrap)} />
 			)}
-			{external && (
-				<>
-					<IconButton size="xs" label={openLabel(opener)} icon={<ExternalLink {...ICON} />} onClick={() => attachmentActions.openIn(target, opener.id)} />
-					<IconButton size="xs" label={t(revealKey())} icon={<FolderOpen {...ICON} />} onClick={() => attachmentActions.reveal(target)} />
-				</>
-			)}
+			<IconButton size="xs" label={openLabel(opener)} icon={<ExternalLink {...ICON} />} onClick={() => attachmentActions.openIn(target, opener.id)} />
+			<IconButton size="xs" label={t(revealKey())} icon={<FolderOpen {...ICON} />} onClick={() => attachmentActions.reveal(target)} />
 		</div>
 	);
 }

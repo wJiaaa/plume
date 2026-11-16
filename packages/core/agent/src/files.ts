@@ -1,8 +1,8 @@
 /**
- * 文件面板要的两件事：读会话工作目录或项目源目录里的一个文件，以及把回复里写得不全的路径找成真实的文件。
+ * 文件面板要的几件事：只读看一个文件（本机哪里都行，见 `viewablePath`），在会话工作目录或项目源目录里列目录、动文件，
+ * 以及把回复里写得不全的路径找成真实的文件。
  *
- * 放在 agent 进程而不是渲染进程：渲染进程能写出任何路径，这里先问它在不在会话的工作目录里，过了检查
- * 才读，读的就是检查过的那个路径——检查和打开之间不换字符串。
+ * 放在 agent 进程而不是渲染进程：渲染进程能写出任何路径，这里先解析、检查，读的就是检查过的那个路径——检查和打开之间不换字符串。
  */
 
 import { constants, type Dirent } from "node:fs";
@@ -88,25 +88,25 @@ async function resolveInsideCwd(cwd: string, target: string, projectRoots: reado
 	return resolve(real);
 }
 
-/** 读工作目录里的一个文件给界面看。不在目录里、不存在、不是文件都返回 null。 */
-export async function readSessionFile(cwd: string, target: string, projectRoots: readonly string[] = []): Promise<FileContents | null> {
-	const path = await resolveInsideCwd(cwd, target, projectRoots);
-	return path ? readContents(path) : null;
+/**
+ * 人在文件面板里只读看的那个文件，解析过软链的真实路径；路径不成立、不存在时是 null。
+ *
+ * 会话边界（`resolveInsideCwd`）管的是动手的操作：改名、写、删、列目录。只读看不设边界，工作目录外、数据目录、密钥文件都给看：
+ * 点开的是人自己，看的是他自己这台机器，内容只到人眼前、不交给模型；插件的逻辑入口本来就跑在 agent 进程里、能直接读这些文件，
+ * 挡住界面拦不住谁。相对路径按工作目录拼。只留一条和边界无关的：网络共享和设备路径照 `remotePathAllowed`，在任何 IO 之前判。
+ */
+async function viewablePath(cwd: string, target: string, projectRoots: readonly string[]): Promise<string | null> {
+	if (typeof target !== "string" || !target || target.includes("\0")) return null;
+	const full = isAbsolute(target) || isRemoteOrDevicePath(target) ? target : join(cwd, target);
+	if (![cwd, ...projectRoots].some((root) => remotePathAllowed(full, root))) return null;
+	const real = await realpath(full).catch(() => null);
+	return real ? resolve(real) : null;
 }
 
-/**
- * 会话最近一次请求的提示词里标出来源的文件（`PromptSection.files`，「记忆文件」列的那几个），在会话边界外也给界面只读看：
- * 工作目录上层的指令文件、插件数据目录里的项目记忆。它们已经整段发给了模型，打开看不多暴露什么。不放宽别处：只认 `listed`
- * 里的路径，两边解析软链后比；`listed` 是宿主从那次请求记下的，界面编一个路径进来也只能读到这几个。只读：写、改名、列目录都不经这里。
- */
-export async function readListedFile(listed: readonly string[], target: string): Promise<FileContents | null> {
-	const absolute = (path: string) => typeof path === "string" && isAbsolute(path) && !isRemoteOrDevicePath(path) && !path.includes("\0");
-	if (!absolute(target) || !listed.some((path) => resolve(path) === resolve(target))) return null;
-	const [real, allowed] = await Promise.all([
-		realpath(target).catch(() => null),
-		Promise.all(listed.filter(absolute).map((path) => realpath(path).catch(() => null))),
-	]);
-	return real && allowed.includes(real) ? readContents(real) : null;
+/** 读一个文件给文件面板看，见 `viewablePath`。不存在、不是文件都返回 null。 */
+export async function readSessionFile(cwd: string, target: string, projectRoots: readonly string[] = []): Promise<FileContents | null> {
+	const path = await viewablePath(cwd, target, projectRoots);
+	return path ? readContents(path) : null;
 }
 
 async function readContents(path: string): Promise<FileContents | null> {
@@ -174,13 +174,13 @@ export async function readSessionFileBytes(
 }
 
 /**
- * 工作目录里这个文件的真实路径，给主进程按路径发图片、PDF、音视频（`plume-media://f/…`）。
+ * 这个文件的真实路径，给主进程按路径发图片、PDF、音视频（`plume-media://f/…`），也给文档预览读原始数据。
  *
- * 和 `readSessionFile` 是同一道检查：不在目录里、不存在、不是文件都返回 null。主进程拿到的是解析过软链的
+ * 和 `readSessionFile` 是同一道检查（`viewablePath`）：不存在、不是文件都返回 null。主进程拿到的是解析过软链的
  * 路径，直接读它，不再拿界面给的字符串去打开。
  */
 export async function sessionFilePath(cwd: string, target: string, projectRoots: readonly string[] = []): Promise<string | null> {
-	const path = await resolveInsideCwd(cwd, target, projectRoots);
+	const path = await viewablePath(cwd, target, projectRoots);
 	if (!path) return null;
 	const info = await stat(path).catch(() => null);
 	return info?.isFile() ? path : null;

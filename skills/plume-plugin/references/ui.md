@@ -491,8 +491,8 @@ ui.linkOpener({
 
 ## 文件、终端和系统打开
 
-- `ui.openFile(path, sessionId)`：在指定会话的文件面板打开文件；读取仍受会话目录边界约束，会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也在边界里，只有这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的来源）在边界外也能只读打开；独立窗口里交给主窗口对应会话。
-- `ui.findFile(path, sessionId)`：纯文字里印出来的路径（终端输出）指的那个文件，返回绝对路径：绝对路径看在不在，相对路径先按会话目录拼、再按结尾找唯一的一个；不存在、不止一个、文件夹、边界外都是 `null`，答出来的 `ui.openFile` 打得开。
+- `ui.openFile(path, sessionId)`：在指定会话的文件面板只读打开文件，本机哪里的都行，会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也行；独立窗口里交给主窗口对应会话。
+- `ui.findFile(path, sessionId)`：纯文字里印出来的路径（终端输出）指的那个文件，返回绝对路径：绝对路径看在不在，相对路径先按会话目录拼、再按结尾找唯一的一个；不存在、不止一个、文件夹都是 `null`，答出来的 `ui.openFile` 打得开。
 - `ui.droppedPaths(transfer)`：拖放带着的本机绝对路径（访达的文件、文件面板的行），不带路径是 `null`；在 `drop` 里同步调，`dragover` 时只答空数组。
 - `ui.useFileMenu(root)`：组件内调用的 hook，返回 `{ open, onContextMenu(event, { path, onOpen }), element }`；复用打开方式、在访达中显示和复制路径菜单。
 - `ui.documentViewer(extensions, Component)`：注册只读文档预览，扩展名小写且不带点；同扩展名后注册的生效，停用后恢复前一个。

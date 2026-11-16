@@ -409,34 +409,20 @@ it("上下文分段：项目指令和记忆按插件标的文件列出来源", a
 	expect(learned?.tokens).toBe(tokensOf("memory"));
 });
 
-it("记忆文件在会话目录外也能在文件面板里只读打开，只限这个会话最近一次请求标出的那几个", async () => {
-	const memoryDir = join(dir, "plugin-memory");
-	await mkdir(memoryDir);
-	const learned = join(memoryDir, "learned.md");
-	await writeFile(learned, "- 记下的\n");
-	await writeFile(join(memoryDir, "other.md"), "没标出来\n");
-	const memory: Plugin = {
-		name: "test.memory-source",
-		apply(ctx) {
-			ctx.hook("model.context", (input, next) => {
-				const text = "<project_memory>\n- 记下的\n</project_memory>";
-				return next({ ...input, sections: [...input.sections, { id: "learned", text, category: "memory", files: [{ path: learned, chars: text.length }] }] });
-			});
-		},
-	};
-	const { service, session, idle } = await start([{ text: "好" }], [memory]);
-	// 还没发过请求：没有记忆文件，目录外的照样不读。
-	expect(await service.readFile(session.id, learned)).toBeNull();
-	const done = idle();
-	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
-	await done;
-
-	expect(await service.readFile(session.id, learned)).toMatchObject({ text: "- 记下的\n" });
-	expect(await service.readFile(session.id, join(memoryDir, "other.md"))).toBeNull();
-	await expect(service.listDirectory(session.id, memoryDir)).rejects.toThrow();
-	// 别的会话没发过这次请求，读不到。
-	const other = await service.createSession({ cwd: workspace });
-	expect(await service.readFile(other.id, learned)).toBeNull();
+it("文件面板只读看不设会话边界：目录外的、数据目录里的密钥文件都读得到，列目录仍只限会话目录", async () => {
+	const outside = join(dir, "elsewhere");
+	await mkdir(outside);
+	const notes = join(outside, "迁移步骤.md");
+	await writeFile(notes, "# 步骤\n");
+	await mkdir(join(dir, ".plume"), { recursive: true });
+	const secret = join(dir, ".plume", "settings.json");
+	await writeFile(secret, "{}\n");
+	const { service, session } = await start([]);
+	expect(await service.readFile(session.id, notes)).toMatchObject({ text: "# 步骤\n" });
+	expect(await service.readFile(session.id, secret)).toMatchObject({ text: "{}\n" });
+	expect(await service.readFile(session.id, join(outside, "missing.md"))).toBeNull();
+	expect(await service.readFile(session.id, outside)).toBeNull();
+	await expect(service.listDirectory(session.id, outside)).rejects.toThrow();
 });
 
 it("用户拒绝时不执行，外层预先放行时不问", async () => {
