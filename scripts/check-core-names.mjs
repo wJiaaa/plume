@@ -64,7 +64,6 @@ const BUILTIN_MARKS = {
 const MARKET_PLUGINS = [
 	"plume.followups",
 	"plume.hooks",
-	"plume.im",
 	"plume.image",
 	"plume.index",
 	"plume.lsp",

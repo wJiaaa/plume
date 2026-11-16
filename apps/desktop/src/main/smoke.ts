@@ -2028,29 +2028,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click("[aria-label=设置章节] button", "存储");
 		await until(`/\\d/.test(document.querySelector('[data-usage-total]')?.textContent ?? '')`, "存储页量出会话记录");
 		await capture(window, join(outDir, "smoke-storage.png"));
-		// 插件的设置放在哪：IM 机器人只和自己有关，画进它在市场里的详情、不占设置导航；使用统计占导航一行，详情里给去那里的入口。
-		await plugin.install("im");
-		await waitFor(async () => (await agent.plugins()).some((status) => status.key === "im" && status.state === "active"), "装上 im 插件");
+		// 插件的设置放在哪：使用统计占设置导航一行，市场详情里给去那里的入口。
 		await click("button", "返回工作区");
 		await click("[data-nav=market]");
-		await until(`document.querySelector('[data-screen=market] [data-card="im"] > button') !== null`, "市场列出 IM 机器人");
-		await click(`[data-card="im"] > button`);
-		await until(
-			`document.querySelector('[data-plugin-detail="im"] [data-plugin-settings-section="plume.im/im"] [role=switch]') !== null`,
-			"IM 的设置画在详情里",
-		);
-		await delay(300);
-		await capture(window, join(outDir, "smoke-plugin-settings-inline.png"));
-		await click('nav[aria-label="插件市场"] button');
-		await until(`document.querySelector('[data-card="usage"] > button') !== null`, "回到市场网格");
+		await until(`document.querySelector('[data-screen=market] [data-card="usage"] > button') !== null`, "市场列出使用统计");
 		await click(`[data-card="usage"] > button`);
 		await until(`document.querySelector('[data-plugin-detail="usage"] [data-plugin-settings] button') !== null`, "使用统计的详情里有去设置的入口");
 		await click("[data-plugin-detail] [data-plugin-settings] button", "去 设置 › 使用统计");
 		await until(`document.querySelector('[data-screen=settings][data-section="plugin:plume.usage/usage"]') !== null`, "从详情去设置 › 使用统计");
-		if (
-			await page(`[...document.querySelectorAll('[aria-label=设置章节] button')].some((button) => ['IM 机器人', '插件'].includes(button.textContent.trim()))`)
-		)
-			throw new Error("设置导航里不该有 IM 机器人，也不该再有「插件」");
+		if (await page(`[...document.querySelectorAll('[aria-label=设置章节] button')].some((button) => button.textContent.trim() === '插件')`))
+			throw new Error("设置导航里不该再有「插件」");
 		// 常规页：「运行期间不让电脑休眠」经主进程存进数据目录，关回去不留系统声明。
 		await click("[aria-label=设置章节] button", "常规");
 		await until(`document.querySelector('[data-screen=settings][data-section=general]') !== null`, "打开常规设置");
