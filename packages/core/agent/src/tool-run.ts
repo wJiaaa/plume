@@ -36,6 +36,7 @@ import type {
 	WakeupInput,
 } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
+import { argumentProblems, coerceArgs } from "./tool-args.ts";
 import { errorText, type PluginHost } from "./host.ts";
 import { REJECTED } from "./declined.ts";
 import { sameGrant } from "./models.ts";
@@ -189,13 +190,16 @@ function storable(details: unknown, call: ToolCallContent, scope: ToolScope): un
 /**
  * 回复里的调用参数换成规范名（`ToolDefinition.aliases`），在回复写进会话之前：之后每个按参数做判断的地方（tool.execute、tool.approve 的层，
  * 审批，转录，压缩）和工具自己读的是同一份。只在执行前换的话，层看到的和存下的就是模型写的那份，一条读 `path` 的守卫读不到 `file`，放过去，工具却照样读了。
+ * 同时按 `parameters` 整理模型常写错类型的参数（`"10"` 写成数字、可选参数的 `null` 去掉，见 `tool-args.ts`）。
  * 换过的调用丢掉流里收到的参数原文（`argumentsText`）：回放时发的、算 token 时数的都该是存下的这一份，模型往后在历史里看到的也是规范的写法。
  */
 export function canonicalCalls(reply: AssistantMessage, host: PluginHost): AssistantMessage {
 	let changed = false;
 	const content = reply.content.map((block) => {
 		if (block.type !== "toolCall") return block;
-		const args = canonicalArgs(block.arguments, host.tool(block.name)?.definition.aliases);
+		const definition = host.tool(block.name)?.definition;
+		// 先换规范名再整理类型：整理按规范名找声明。
+		const args = coerceArgs(canonicalArgs(block.arguments, definition?.aliases), definition?.parameters);
 		if (args === block.arguments) return block;
 		changed = true;
 		const { argumentsText, ...call } = block;
@@ -318,6 +322,10 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	const tool = scope.host.tool(call.name);
 	// i18n-exempt：工具结果是发给模型的，不随界面语言变。
 	if (!tool) return [toolResult(call, { output: `没有名为 ${call.name} 的工具。`, isError: true })];
+	// 参数和声明对不上的不执行、不弹审批卡，告诉模型哪一项错了。
+	const problems = argumentProblems(call.arguments, tool.definition.parameters);
+	if (problems.length > 0)
+		return [toolResult(call, { output: `Invalid arguments for "${call.name}": ${problems.join("; ")}. Fix them and re-issue the call.`, isError: true })];
 
 	let shown = "";
 	let pushedAt = 0;
