@@ -54,6 +54,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 模型还在写时就把写好的段落转出去（IM） | `ctx.sessions.observe(listener, { drafts: true })` 的 `draft`，按 `id` 和 `response` 对上，见 [logic.md](references/logic.md)「正在写的回复（草稿）」 |
 | 列项目文件、在隔离视图里读 git、读写本体记下的改动 | `ctx.workspace`、`ctx.changes` |
 | 加一种资源地址（`scheme://路径`） | `ctx.resources` |
+| 插件自己的设置（存盘、设置分区里读改） | `ctx.settings`，界面 `ui.useSettings`；不自己写 `settings.json` |
+| 把状态实时推给自己的界面（按会话的、全局的） | `ctx.store` / `ctx.sessionStore`，界面 `ui.useStore` / `ui.useSessionStore`；不自己写推送循环、不自己在 `onDeleted` 里清 |
 | 跑长期的东西（子进程、定时器、文件）给自己的界面用 | `ctx.serve`（界面经 `ui.remote()` 调），清理登记 `ctx.effect` |
 | 驱动面板里的网页（`<webview>`），或在临时沙箱里检查一页 | `ctx.pages` |
 | HTTP(S) 请求走系统代理 | `ctx.fetch` |
@@ -92,8 +94,11 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 1. **定名字**：插件名小写加点分段（Plume 自己提供的插件都以 `plume.` 开头）；目录名只用小写字母、数字和连字符，它也是 `plume-plugin://` 的主机名。
 2. **搭目录**：`plume-plugin init <目录>` 从模板生成，模板里是一个能跑的工具加卡片，改成自己的。命令在 `~/.plume/bin/plume-plugin`（Windows 的 cmd、PowerShell 里是同目录的 `plume-plugin.cmd`；Plume 启动过一次就有，用 Plume 自己的运行时跑，不用装 Node 和 npm）。Plume 的插件仓库（plume-plugins）里用 `pnpm plugin init plugins/<目录名>`。
 3. **写逻辑入口**（logic.md），要画东西时**写界面入口**（ui.md、components.md），有界面或给人看的文字时照 style-i18n.md。
-4. **构建和加载**：独立项目用 `plume-plugin dev`，插件仓库里用 `pnpm plugin dev plugins/<目录名>`：构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。
+4. **构建和加载**：独立项目用 `plume-plugin dev`，插件仓库里用 `pnpm plugin dev plugins/<目录名>`：构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。出了问题看数据目录的 `logs/plume.log`（`~/.plume/logs/plume.log`）：逻辑入口的 `ctx.log`、`console`、加载失败的原因，界面入口渲染出错、`console.warn` / `console.error` 都记在这里，一行带着来源和插件名；加载失败的原因也显示在插件详情页。
 5. **自检**：对照下面的清单，再跑检查（独立项目 `plume-plugin check`：类型检查加插件规则；仓库里 `pnpm check`）。
+6. **交给别人用**：`plume-plugin pack` 构建并打出 `release/<目录名>/`，只含发给插件的文件；对方在插件市场「创建插件 › 从本地上传」里选这个文件夹。本地上传的不跟市场更新，发新版时对方重新上传。
+
+独立项目里用 npm 装第三方包会删掉 `node_modules` 里指向 SDK 的链接，`plume-plugin check` 发现了会自己链回来（也可以手动 `plume-plugin link`）。构建会把用的 SDK 版本写进 `dist/build.json`：Plume 更新后插件加载失败时，报错后面会说插件是按哪一版 SDK 构建的，按新版重新构建一次。
 
 ## 目录骨架
 
@@ -128,7 +133,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 - [ ] 两个入口的 `name` 相同，`satisfies Plugin` / `satisfies UiPlugin`。
 - [ ] 只 `import type` `@plume/contract`；没有引用公开接口以外的东西。
-- [ ] 工具结果里给模型的写进 `output`，给卡片的写进 `details`；卡片先校验 `details`，认不出就返回 `fallback`。
+- [ ] 工具结果里给模型的写进 `output`，给卡片的写进 `details`；卡片先校验 `details`，认不出就返回 `fallback`。参数的类型、`enum` 本体已按 `parameters` 查过，不再逐个 `typeof`。
+- [ ] 设置用 `ctx.settings`、推给界面的状态用 `ctx.store` / `ctx.sessionStore`，没有自己读写 `settings.json`、自己写 watch 推送循环。
 - [ ] 钩子的层：不需要处理的调用原样 `next(input)`；`order` 选得对（见 logic.md）；出错直接抛，不吞。
 - [ ] 逻辑入口自己起的定时器、子进程、监听登记了 `ctx.effect`；界面入口在 apply 中启动的订阅、远端 watch 登记 `ui.effect` 清理（如 `ui.effect(() => call.cancel())`），停用、重载或 apply 失败时都会执行。
 - [ ] 界面：没写 Tailwind 类；文字用 `Text`，组件只用 components.md 里列的；自己的 CSS 只管布局，颜色只取 `var(--plume-*)`；浅色、深色都能看。

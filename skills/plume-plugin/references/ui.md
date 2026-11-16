@@ -13,9 +13,10 @@ export default {
 } satisfies UiPlugin;
 ```
 
-界面入口的数据只有两个来源：
+界面入口的数据只有这几个来源：
 
 - **会话里的**：工具结果的 `details`（卡片的 `result.details`），以及面板、页面拿到的 `session`（只读视图：面板是标签归属会话，页面是当前会话；`summary` 里有 `id`、`title`、`cwd`、`running` 等，`messages` 是全部消息）。
+- **逻辑入口登记的值**：`ui.useSettings()`、`ui.useStore(key)`、`ui.useSessionStore(key, sessionId)`（React hook，变了自动重画，见 [logic.md](logic.md)「设置和运行状态」）。
 - **逻辑入口开的**：`ui.remote()`（见下）。
 
 ## 窗口里能放东西的地方
@@ -119,6 +120,8 @@ export default {
 | `ui.Conversation` | 产品的对话视图组件：画一个会话（插件自己的子会话、独立会话），可选底下一个输入框，见「画一个子会话」 |
 | `ui.Markdown` | 复用产品的正文渲染，见「复用产品的组件」 |
 | `ui.remote<T>()` | 调自己逻辑入口经 `ctx.serve` 开的对象，见「remote」 |
+| `ui.useSettings<T>()` | `[设置, 改的函数]`：自己逻辑入口 `ctx.settings` 的那份，两边改了都重画；拿到之前是 undefined。改的函数交回校验过的值，校验不过以错误结束（提示用 `ui.notify`），不用自己回滚 |
+| `ui.useStore<T>(key)`、`ui.useSessionStore<T>(key, sessionId)` | 自己逻辑入口 `ctx.store`、`ctx.sessionStore` 的当前值，`set` 了重画；拿到之前是 undefined |
 | `ui.provide(name, service)` / `ui.useService(name)` | 界面入口之间的服务：一方提供，别的插件的组件里按名字拿到（没人提供是 undefined），见下文「服务」 |
 
 ## 会话变化与停止按钮
