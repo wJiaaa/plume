@@ -68,7 +68,17 @@ async function mergeInCheckout(repo: string, base: string, branch: string, messa
  * 少了写没人开着的文件。挪的时候带上旧值，中间有新提交落进来就失败，而不是把它盖掉。
  */
 async function mergeUnchecked(repo: string, base: string, branch: string, message: string, commits: number): Promise<MergeOutcome> {
-	const result = await git(repo, ["merge-tree", "--write-tree", "--name-only", "--no-messages", END_OF_OPTIONS, base, branch]).then(
+	// 两头先定成提交再算：合并树、提交的父亲、挪分支时带的旧值是同一个 `baseTip`，算的时候基分支落了新提交，挪就会失败。
+	const baseTip = await git(repo, ["rev-parse", `refs/heads/${base}`]).then(
+		(text) => text.trim(),
+		() => "",
+	);
+	const branchTip = await git(repo, ["rev-parse", `refs/heads/${branch}`]).then(
+		(text) => text.trim(),
+		() => "",
+	);
+	if (!baseTip || !branchTip) return { kind: "refused", reason: "failed", detail: "git rev-parse" };
+	const result = await git(repo, ["merge-tree", "--write-tree", "--name-only", "--no-messages", END_OF_OPTIONS, baseTip, branchTip]).then(
 		(text) => ({ clean: true, text, code: 0 }),
 		(error: { stdout?: string; code?: number }) => ({ clean: false, text: String(error.stdout ?? ""), code: error.code ?? -1 }),
 	);
@@ -79,21 +89,12 @@ async function mergeUnchecked(repo: string, base: string, branch: string, messag
 		return { kind: "refused", reason: "failed", detail: result.text.trim() || "git merge-tree" };
 	}
 	const [tree] = lines;
-	const baseTip = await git(repo, ["rev-parse", `refs/heads/${base}`]).then(
-		(text) => text.trim(),
-		() => "",
-	);
-	const branchTip = await git(repo, ["rev-parse", `refs/heads/${branch}`]).then(
-		(text) => text.trim(),
-		() => "",
-	);
-	const commit =
-		tree && baseTip && branchTip
-			? await git(repo, ["commit-tree", tree, "-p", baseTip, "-p", branchTip, "-m", message]).then(
-					(text) => text.trim(),
-					() => "",
-				)
-			: "";
+	const commit = tree
+		? await git(repo, ["commit-tree", tree, "-p", baseTip, "-p", branchTip, "-m", message]).then(
+				(text) => text.trim(),
+				() => "",
+			)
+		: "";
 	if (!commit) return { kind: "refused", reason: "failed", detail: "git commit-tree" };
 	const moved = await run(repo, ["update-ref", `refs/heads/${base}`, commit, baseTip]);
 	return moved.ok ? { kind: "merged", commits, base } : { kind: "refused", reason: "failed", ...(moved.error ? { detail: moved.error } : {}) };

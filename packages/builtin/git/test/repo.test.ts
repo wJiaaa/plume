@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -85,4 +85,27 @@ test("blob：只认仓库里的图片", async () => {
 	const blob = await readDiffBlob(dir, "dot.png", "work");
 	assert.equal(blob?.bytes, 4);
 	assert.ok(blob?.dataUrl.startsWith("data:image/png;base64,"));
+});
+
+test("符号链接按 git 的样子读：内容是指向的路径，不顺着读到仓库外", { skip: process.platform === "win32" }, async () => {
+	const outside = await mkdtemp(join(tmpdir(), "plume-git-outside-"));
+	try {
+		await writeFile(join(outside, "secret.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+		await writeFile(join(outside, "long.txt"), "1\n2\n3\n4\n5\n");
+		await mkdir(join(outside, "dir"));
+		await writeFile(join(outside, "dir", "x.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+		await symlink(join(outside, "secret.png"), join(dir, "link.png"));
+		await symlink(join(outside, "long.txt"), join(dir, "link.txt"));
+		await symlink(join(outside, "dir"), join(dir, "linked"));
+		assert.equal(await readDiffBlob(dir, "link.png", "work"), null);
+		assert.equal(await readDiffBlob(dir, "linked/x.png", "work"), null);
+		const status = await gitStatus(dir);
+		// 链接的内容是一行路径，不是目标文件的五行。
+		assert.equal(status.unstaged.find((file) => file.path === "link.txt")?.added, 1);
+	} finally {
+		await rm(join(dir, "link.png"), { force: true });
+		await rm(join(dir, "link.txt"), { force: true });
+		await rm(join(dir, "linked"), { force: true });
+		await rm(outside, { recursive: true, force: true });
+	}
 });

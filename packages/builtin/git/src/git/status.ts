@@ -10,7 +10,7 @@ import type { GitOperation, GitStatus, GitStatusFile, OpResult, UpstreamDistance
 import { classify, readCapped } from "./diff.ts";
 import { END_OF_OPTIONS, git, mapLimit, MAX_BLOB_BYTES, MAX_FILES, run } from "./exec.ts";
 import { parseNumstat, parseStatusZ, statusBranch } from "./parse.ts";
-import { gitBranch, isGitRepo } from "./probe.ts";
+import { gitBranch } from "./probe.ts";
 import { classifyRemote } from "./remote-state.ts";
 import { withView, type RepoView } from "./view.ts";
 
@@ -158,7 +158,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		unpushed: null,
 		head: null,
 	};
-	if (!(await isGitRepo(cwd))) return empty;
+	// 不在仓库里时视图不搭、交回 null（`ctx.workspace.git`），不另起一次 `rev-parse` 先问：一轮进行时这里每 1.5 秒跑一次。
 	return (await withView(cwd, (view) => gitStatusIn(view)).catch(() => null)) ?? empty;
 }
 
@@ -270,9 +270,9 @@ export async function stagePaths(cwd: string, paths: string[]): Promise<OpResult
 	return run(cwd, ["add", "--", ...paths]);
 }
 
-/** 用 `restore --staged` 而不是 `reset`：第一个提交之前 `reset HEAD` 没有东西可对。 */
+/** 用 `reset` 而不是 `restore --staged`：第一个提交之前 `restore --staged` 解析不了 `HEAD`、直接失败，`reset` 会把文件退回未跟踪。 */
 export async function unstagePaths(cwd: string, paths: string[]): Promise<OpResult> {
-	return run(cwd, ["restore", "--staged", "--", ...paths]);
+	return run(cwd, ["reset", "-q", "--", ...paths]);
 }
 
 /**

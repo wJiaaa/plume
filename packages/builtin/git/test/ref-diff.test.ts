@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { commitDiff, commitDiffSummary, diffRefs } from "../src/git/history.ts";
+import { stagePaths, unstagePaths } from "../src/git/status.ts";
 import { usePlainView } from "./plain-view.ts";
 
 let dir: string;
@@ -62,6 +63,20 @@ test("改名又改了内容：之前那一边读来处，行数和列表一致",
 	const { loaded, listed } = await counted(git("rev-parse", "HEAD"));
 	assert.deepEqual(loaded, [["new.txt", "renamed", 1, 1]]);
 	assert.deepEqual(listed, loaded);
+});
+
+test("第一个提交之前：暂存的看得到内容，也能取消暂存", async () => {
+	await writeFile(join(repo, "a.txt"), lines(3));
+	assert.deepEqual(await stagePaths(repo, ["a.txt"]), { ok: true });
+
+	const staged = await diffRefs(repo, "HEAD", null);
+	assert.deepEqual(
+		staged.files.map((file) => [file.path, file.status, file.added, file.removed]),
+		[["a.txt", "added", 3, 0]],
+	);
+
+	assert.deepEqual(await unstagePaths(repo, ["a.txt"]), { ok: true });
+	assert.equal(git("status", "--porcelain"), "?? a.txt");
 });
 
 test("diff.renames=copies 时的复制：两个路径都读掉，后面的文件不错位", async () => {

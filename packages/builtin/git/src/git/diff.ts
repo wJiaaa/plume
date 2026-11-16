@@ -5,7 +5,7 @@
  * 大文件有上限：生成出来的包没人逐行看，放在内存里也帮不了谁。
  */
 
-import { open } from "node:fs/promises";
+import { lstat, open, readlink, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { ChangeHunk } from "@plume/contract";
 import type { DiffBlob, DiffFile, FileStatus, WorkspaceDiff } from "../api.ts";
@@ -13,7 +13,7 @@ import { readBlobs, type BlobRead } from "./blobs.ts";
 import { mapLimit, MAX_BLOB_BYTES, MAX_FILES } from "./exec.ts";
 import { computeDiff } from "@plume/platform";
 import { parseStatusZ } from "./parse.ts";
-import { gitBranch, isGitRepo } from "./probe.ts";
+import { gitBranch } from "./probe.ts";
 import { withView, type RepoView } from "./view.ts";
 
 /**
@@ -22,9 +22,8 @@ import { withView, type RepoView } from "./view.ts";
  */
 export async function collectWorkspaceDiff(cwd: string, base: "head" | "index" = "head"): Promise<WorkspaceDiff> {
 	const empty: WorkspaceDiff = { files: [], added: 0, removed: 0, branch: null };
-	if (!(await isGitRepo(cwd))) return empty;
-	const branch = await gitBranch(cwd);
-	return (await withView(cwd, (view) => workspaceDiffIn(view, base, branch)).catch(() => null)) ?? empty;
+	// 不在仓库里时视图不搭、交回 null，不另起一次 `rev-parse` 先问（同 `gitStatus`）。
+	return (await withView(cwd, async (view) => workspaceDiffIn(view, base, await gitBranch(cwd))).catch(() => null)) ?? empty;
 }
 
 async function workspaceDiffIn(view: RepoView, base: "head" | "index", branch: string | null): Promise<WorkspaceDiff> {
@@ -107,8 +106,17 @@ async function readWorking(cwd: string, path: string): Promise<Side> {
 /**
  * 工作区的一个文件；超过 `cap` 时只给大小。先看大小再读：先读后比会把项目里每个没跟踪的视频、数据库导出
  * 在每次刷新时都读进内存一遍。读不了时为空。
+ *
+ * 符号链接的内容是它指向的路径，和 git 存的一样（`link`）：顺着链接读的话，指向仓库外的链接会把外面的文件读进面板，
+ * diff 也成了「路径对比目标文件全文」。
  */
-export async function readCapped(path: string, cap: number): Promise<{ buffer: Buffer | null; bytes: number } | null> {
+export async function readCapped(path: string, cap: number): Promise<{ buffer: Buffer | null; bytes: number; link?: true } | null> {
+	const info = await lstat(path).catch(() => null);
+	if (!info) return null;
+	if (info.isSymbolicLink()) {
+		const target = await readlink(path, { encoding: "buffer" }).catch(() => null);
+		return target ? { buffer: target, bytes: target.length, link: true } : null;
+	}
 	const handle = await open(path, "r").catch(() => null);
 	if (!handle) return null;
 	try {
@@ -188,10 +196,15 @@ export async function readDiffBlob(cwd: string, path: string, side: "head" | "wo
 	if (!type) return null;
 	const inside = resolveInside(cwd, path);
 	if (!inside) return null;
-	const buffer =
-		side === "head"
-			? await withView(cwd, (view) => view.gitBuffer(["show", `HEAD:${path}`])).catch(() => null)
-			: ((await readCapped(inside, MAX_PREVIEW_BYTES))?.buffer ?? null);
+	let buffer: Buffer | null;
+	if (side === "head") buffer = await withView(cwd, (view) => view.gitBuffer(["show", `HEAD:${path}`])).catch(() => null);
+	else {
+		// 按字面在里面还不够：路径上一段目录是链到外面的符号链接时，真实位置在仓库外。
+		const [root, actual] = await Promise.all([realpath(cwd).catch(() => null), realpath(inside).catch(() => null)]);
+		if (!root || !actual || !actual.startsWith(root + sep)) return null;
+		const read = await readCapped(inside, MAX_PREVIEW_BYTES);
+		buffer = read && !read.link ? read.buffer : null;
+	}
 	if (!buffer || buffer.length === 0 || buffer.length > MAX_PREVIEW_BYTES) return null;
 	return { dataUrl: `data:${type};base64,${buffer.toString("base64")}`, bytes: buffer.length };
 }
