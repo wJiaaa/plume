@@ -172,3 +172,12 @@
 .plume-spawn-offer-never {
 	margin-right: auto;
 }
+
+/* 模型、档位和「开新会话」一组：和「就在这里做」多隔开一点，读得出它们只管新会话；放不下时整组换到下一行，模型名先截短。 */
+.plume-spawn-offer-run {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+}

@@ -323,17 +323,20 @@ function HandOffCard({ call, status, result, fallback }: ToolCardProps) {
 /**
  * offer 的卡：压在输入框上方，外框和审批卡同一个（`ApprovalFrame`），按钮也照审批卡排：默认高度、带图标，主按钮「开新会话」在最后
  * （人提了一件新事，模型才会问）；「以后不再问」一直生效，推到最左和另两颗隔开，和审批卡把「拒绝」推到最左一个道理。
+ * 模型和思考档位紧挨在「开新会话」左边，和建议卡的「开始」一个排法：先定新会话怎么跑，最后点开新会话。从默认的起步，没动过就不交。
  */
 function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 	const text = useText();
 	const [busy, setBusy] = useState(false);
+	const [model, setModel] = useState("");
+	const [thinking, setThinking] = useState<ThinkingLevel>();
 	const payload = request.payload as { title?: unknown } | undefined;
 	if (typeof payload?.title !== "string") return <>{fallback}</>;
 	const choose = async (choice: "new" | "here" | "never") => {
 		if (busy) return;
 		setBusy(true);
 		try {
-			await answer(choice);
+			await answer(choice === "new" ? { choice, ...(model ? { model } : {}), ...(thinking ? { thinking } : {}) } : { choice });
 		} catch (error) {
 			ui.notify(String(error), "error");
 		} finally {
@@ -367,16 +370,19 @@ function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 					<Button variant="subtle" disabled={busy} icon={<MessageCircle size={14} />} onClick={() => void choose("here")} data-spawn-offer-choice="here">
 						{text.offerHere}
 					</Button>
-					<Button
-						variant="primary"
-						disabled={busy}
-						label={text.offerNewTip}
-						icon={<SquarePen size={14} />}
-						onClick={() => void choose("new")}
-						data-spawn-offer-choice="new"
-					>
-						{text.offerNew}
-					</Button>
+					<div className="plume-spawn-offer-run">
+						<ui.ModelControls model={model} {...(thinking ? { thinking } : {})} onModelChange={setModel} onThinkingChange={setThinking} disabled={busy} />
+						<Button
+							variant="primary"
+							disabled={busy}
+							label={text.offerNewTip}
+							icon={<SquarePen size={14} />}
+							onClick={() => void choose("new")}
+							data-spawn-offer-choice="new"
+						>
+							{text.offerNew}
+						</Button>
+					</div>
 				</div>
 			</div>
 		</ApprovalFrame>

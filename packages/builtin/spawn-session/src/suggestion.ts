@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from "@plume/contract";
+
 /**
  * 几件工具留给卡片的东西。逻辑入口把它们写成工具结果的 `details`，会话记录里存着：明天重开这个对话，卡片还在，
  * 带着它要开始时的那段话。界面入口读回来画卡片，「开始」时逻辑入口再从记录里读一遍，不信界面交来的。两边都要这些形状，所以单放。
@@ -34,11 +36,16 @@ export interface SessionSuggestion extends Briefing {
 	expiresAt: number;
 }
 
-/** 一次 offer：问了人要不要另开，人选了什么。选「开新会话」时模型带着 `proposal_id` 再调一次补上简报。 */
+/**
+ * 一次 offer：问了人要不要另开，人选了什么。选「开新会话」时模型带着 `proposal_id` 再调一次补上简报，
+ * 开出来的会话用人在卡上选的模型、思考档位（`model`、`thinking`，没动过的不记，用默认的）。
+ */
 export interface SessionOffer {
 	kind: "session_offer";
 	title: string;
 	choice: "new" | "here";
+	model?: string;
+	thinking?: ThinkingLevel;
 }
 
 /** 当场开出来的会话：`user_asked`、带 `proposal_id` 的那次、移交。 */
