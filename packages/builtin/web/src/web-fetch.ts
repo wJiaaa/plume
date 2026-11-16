@@ -25,11 +25,22 @@ const MAX_TEXT = RESULT_MAX_CHARS - 2000;
 const TRUNCATED = "\n\n… [truncated]";
 /** 真实的 URL 都够用；一兆的查询串不算 URL。 */
 const MAX_URL_LENGTH = 2048;
-/** 跳转次数。`http → https → www → 规范地址` 三次绰绰有余，更长的是循环或者在耍花样。 */
+/** 跳转次数。`http → https → www → 规范地址` 三次绰绰有余（都算同站，见 `sameSite`），更长的是循环或者在耍花样。 */
 const MAX_REDIRECTS = 3;
 /** 每一跳的时限，连接、响应头、正文都算在内。 */
 const HOP_TIMEOUT_MS = 30_000;
 const USER_AGENT = "Plume/0.1";
+
+/**
+ * 跳转跟不跟：同一个主机（开头的 `www.` 有没有都算），协议不变或从 http 升到 https，端口不变（都没写就是各自的默认端口）。
+ * 网站最常见的那几跳（`http → https`、`x.com → www.x.com`）都在这里面；降回 http、换主机、换端口的不跟。
+ */
+export function sameSite(from: URL, to: URL): boolean {
+	const host = (url: URL) => url.hostname.replace(/^www\./, "");
+	if (host(from) !== host(to)) return false;
+	if (from.protocol !== to.protocol && !(from.protocol === "http:" && to.protocol === "https:")) return false;
+	return to.port === from.port;
+}
 
 function errorResult(output: string): ToolOutput {
 	return { output, isError: true };
@@ -42,7 +53,7 @@ export function webFetchTool(): ToolDefinition {
 		category: "web",
 		// i18n-exempt：发给模型的工具说明
 		description:
-			"Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.",
+			"Fetch a URL as readable text. Public, private and local addresses work; redirects are followed within the same site (same host, http → https, with or without www.), a redirect anywhere else is refused, so fetch that address yourself.",
 		// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
 		describe: (args) => `Fetch ${typeof args.url === "string" ? args.url : ""}`.trim(),
 		parameters: {
@@ -62,7 +73,7 @@ export function webFetchTool(): ToolDefinition {
 
 			const first = checkTarget(args.url);
 			if ("error" in first) return errorResult(first.error);
-			const origin = first.url.origin;
+			const start = first.url;
 
 			let current = first.url;
 			let response: IncomingMessage;
@@ -77,7 +88,7 @@ export function webFetchTool(): ToolDefinition {
 			for (let hop = 0; ; hop++) {
 				deadline = AbortSignal.timeout(HOP_TIMEOUT_MS);
 				try {
-					// 每一跳自己处理，跳转才守得住同源和次数。
+					// 每一跳自己处理，跳转才守得住同站和次数。
 					response = await get(current, AbortSignal.any([run.signal, deadline]));
 				} catch (error) {
 					return errorResult(`Request failed: ${failure(error)}`);
@@ -96,14 +107,14 @@ export function webFetchTool(): ToolDefinition {
 					return errorResult(`Redirected to an address that cannot be parsed: ${location}`);
 				}
 				/*
-				 * 离开原来那个源的跳转拒绝，不跟。
+				 * 离开原来那个站的跳转拒绝，不跟（同站见 `sameSite`）。
 				 *
-				 * 对这次抓取做的判断是对那个源做的；跟到另一个源就把判断带到了没做过判断的地方，也是把抓一个公开网页变成
+				 * 对这次抓取做的判断是对那个站做的；跟到另一个站就把判断带到了没做过判断的地方，也是把抓一个公开网页变成
 				 * 抓别的东西的捷径。让模型对新地址再调一次，多花一次调用，判断的粒度和目的地的粒度保持一致。
 				 */
-				if (next.origin !== origin) {
+				if (!sameSite(start, next)) {
 					return errorResult(
-						`Refused a redirect that leaves the original origin (${origin} → ${next.origin}). Fetch ${next.href} explicitly if that is what you want.`,
+						`Refused a redirect that leaves the original site (${start.origin} → ${next.origin}). Fetch ${next.href} explicitly if that is what you want.`,
 					);
 				}
 				const checked = checkTarget(next.href);
@@ -134,7 +145,7 @@ export function webFetchTool(): ToolDefinition {
 
 			let raw: string;
 			try {
-				raw = decoderFor(contentType).decode(buffer);
+				raw = decoderFor(contentType, kind === "html" ? buffer : undefined).decode(buffer);
 			} catch (error) {
 				return errorResult(error instanceof Error ? error.message : String(error));
 			}
@@ -255,6 +266,9 @@ async function readBody(response: IncomingMessage, limit: number): Promise<Buffe
 	return Buffer.concat(chunks);
 }
 
+/** `<meta charset="gbk">` 和 `<meta http-equiv="Content-Type" content="text/html; charset=gbk">` 两种写法。 */
+const META_CHARSET = /<meta[^>]+charset\s*=\s*["']?([\w.:-]+)/i;
+
 /** 这个工具能读成文字的几类正文。 */
 function classifyContentType(contentType: string): "html" | "text" | undefined {
 	const mime = contentType.replace(/;.*$/s, "").trim().toLowerCase();
@@ -268,13 +282,17 @@ function classifyContentType(contentType: string): "html" | "text" | undefined {
 }
 
 /**
- * 按响应声明的 charset 解码。
+ * 按响应声明的 charset 解码；响应头没写的网页再看开头的 `<meta charset>`（老的中文、日文页面常常只在这里写 GBK、Shift_JIS），
+ * 都没有才按 UTF-8。
  *
  * 声明了 `TextDecoder` 不认识的 charset 时报错，不退回 UTF-8：把 Shift_JIS 当 UTF-8 解出来是一页乱码，模型会很有把握地总结一堆噪音。
  * 报错说出是哪个 charset，人能据此处理。
  */
-function decoderFor(contentType: string): InstanceType<typeof TextDecoder> {
-	const charset = /;\s*charset\s*=\s*"?([^";]+)"?/i.exec(contentType)?.[1]?.trim().toLowerCase();
+export function decoderFor(contentType: string, html?: Buffer): InstanceType<typeof TextDecoder> {
+	const declared = /;\s*charset\s*=\s*"?([^";]+)"?/i.exec(contentType)?.[1];
+	// 声明按规范要在前 1024 字节里；charset 的名字都是 ASCII，按 latin1 读不会被前面的多字节字搅乱。
+	const sniffed = declared ?? (html ? META_CHARSET.exec(html.subarray(0, 1024).toString("latin1"))?.[1] : undefined);
+	const charset = sniffed?.trim().toLowerCase();
 	if (!charset) return new TextDecoder("utf-8");
 	try {
 		return new TextDecoder(charset);

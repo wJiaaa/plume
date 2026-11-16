@@ -245,7 +245,7 @@ Come back to this conversation once, after a delay ("check the CI result in 10 m
 
 ## web_fetch
 
-Fetch a URL as readable text. Public, private and local addresses work; a redirect to another origin is refused, so fetch that address yourself.
+Fetch a URL as readable text. Public, private and local addresses work; redirects are followed within the same site (same host, http → https, with or without www.), a redirect anywhere else is refused, so fetch that address yourself.
 
 {"type":"object","properties":{"url":{"type":"string","description":"Absolute http(s) URL."},"format":{"type":"string","enum":["text","raw"],"description":"Output format. Default text."}},"required":["url"],"additionalProperties":false}
 

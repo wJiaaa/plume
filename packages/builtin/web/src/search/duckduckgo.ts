@@ -113,22 +113,18 @@ function stripTags(html: string): string {
 export function parseResults(html: string): SearchSource[] {
 	const sources: SearchSource[] = [];
 	const linkPattern = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-	const snippetPattern = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+	const snippetPattern = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
 
-	const snippets: string[] = [];
-	for (const match of html.matchAll(snippetPattern)) snippets.push(stripTags(match[1] ?? ""));
-
-	let index = 0;
-	for (const match of html.matchAll(linkPattern)) {
+	// 摘要只在这条链接和下一条链接之间找：有一条结果没有摘要时，按序号配对会让后面每条都配上别人的摘要。
+	const links = [...html.matchAll(linkPattern)];
+	links.forEach((match, at) => {
 		const url = unwrapRedirect(match[1] ?? "");
-		if (!url) {
-			index += 1;
-			continue;
-		}
+		if (!url) return;
 		const title = stripTags(match[2] ?? "");
-		const snippet = snippets[index];
+		const between = html.slice((match.index ?? 0) + match[0].length, links[at + 1]?.index ?? html.length);
+		const found = snippetPattern.exec(between)?.[1];
+		const snippet = found === undefined ? "" : stripTags(found);
 		sources.push({ url, ...(title ? { title } : {}), ...(snippet ? { snippet } : {}) });
-		index += 1;
-	}
+	});
 	return sources;
 }
