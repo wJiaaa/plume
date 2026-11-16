@@ -10,9 +10,11 @@
 
 import { thinkingOptionsFor } from "@plume/llm/thinking-options";
 import type { ModelEntry, ProviderSettings } from "@plume/contract";
-import type { StoredProvider } from "./models.ts";
 
 const MAGPIE_PROVIDER_ID = "magpie";
+
+/** 带着 key 的供应商，和 `models.ts` 的 `StoredProvider` 同形；写在这里不引 models.ts，那边读写设置时引的是这里。 */
+type KeyedProvider = ProviderSettings & { apiKey?: string };
 
 /** 和新建模型的默认值一样：Magpie 不知道的就不给，不是 0。 */
 const DEFAULT_CONTEXT_WINDOW = 200_000;
@@ -47,7 +49,7 @@ export function isMagpie(providerId: string): boolean {
  *
  * Magpie 断开时逐键恢复或删除，删空的父对象会留成 `{}`，所以缺字段是常态而不是损坏。
  */
-export function magpieProvider(gateway: unknown): StoredProvider | undefined {
+export function magpieProvider(gateway: unknown): KeyedProvider | undefined {
 	if (!gateway || typeof gateway !== "object") return undefined;
 	const { baseUrl, apiKey, models, name, api, enabled } = gateway as Partial<MagpieGateway>;
 	if (typeof baseUrl !== "string" || !baseUrl || typeof apiKey !== "string" || !apiKey) return undefined;
@@ -64,7 +66,7 @@ export function magpieProvider(gateway: unknown): StoredProvider | undefined {
 }
 
 /** 只有编辑这个供应商时才转换，保存其他设置不改 Magpie 原本写下的字段。 */
-export function magpieGateway(provider: StoredProvider): MagpieGateway {
+export function magpieGateway(provider: KeyedProvider): MagpieGateway {
 	return {
 		name: provider.name,
 		api: provider.api,
