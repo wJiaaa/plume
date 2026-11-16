@@ -84,7 +84,7 @@ export default {
 - `findImageModel` 按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个。
 - `image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错。
 
-`ctx.media` 是会话媒体目录：`save({ data, mimeType })` 存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；`read(name)` 按名字读回 base64；`nameOf(path)` 在一个路径是这个目录里的图时交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示。
+`ctx.media` 是会话媒体目录：`save({ data, mimeType, sessionId })` 存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径，`sessionId` 写它属于哪个会话（工具里是 `run.sessionId`），那个会话删掉、别的会话也不用它时图一起删，不写的一直留着；`read(name)` 按名字读回 base64；`nameOf(path)` 在一个路径是这个目录里的图时交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示。
 
 ### 读会话、改会话
 

@@ -88,7 +88,7 @@ import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
 import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
-import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImage } from "./media.ts";
+import { imageNameOf, MEDIA_NAME, parkImages, readImage, removeImages, restoreImages, saveImage, sweepImages } from "./media.ts";
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
 import { withEnvironment } from "./prompt/date.ts";
@@ -406,9 +406,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		notice: (sessionId, text, level) => emit({ type: "notice", sessionId, text, level }),
 		media: {
-			save: async ({ data, mimeType }) => {
+			save: async ({ data, mimeType, sessionId }) => {
 				const name = await saveImage(mediaDir, String(data), String(mimeType));
 				if (!name) throw new Error(text("media.badType"));
+				// 记在说的那个会话名下，随它删；没说会话的算插件的，一直留着（见 `media_refs`）。
+				store.holdMedia(typeof sessionId === "string" && sessionId ? sessionId : null, name);
 				return { name, path: join(mediaDir, name) };
 			},
 			read: (name) => readImage(mediaDir, String(name)),
@@ -552,6 +554,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			repetition: new RepetitionWatch(),
 		});
 	}
+
+	/*
+	 * 删会话删到一半退出（或删的时候删不掉）留下的：没有会话用着的图。
+	 * 在任何会话开跑、插件加载之前清：这时刚存下还没写进会话的图还不会有。
+	 */
+	await sweepImages(mediaDir, store.mediaInUse()).catch((error: unknown) => log("agent", "warn", `清理没人用的图失败：${errorText(error)}`));
 
 	const projects = await openProjects(files, join(dataDir, "projects.json"), (list) => emit({ type: "projects", projects: list }));
 
@@ -714,7 +722,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 插件按会话记的东西（读过的文件之类）跟着清掉。
 			host.sessionDeleted(id);
 		}
-		store.delete(ids);
+		// 没有会话再用的图连文件、缩略图一起删；删不掉的下次启动再清。
+		const released = store.delete(ids);
+		void removeImages(mediaDir, released).catch((error: unknown) => log("agent", "warn", `删不掉没人用的图：${errorText(error)}`));
 		queues.forget(ids);
 		handed.forget(ids);
 		// 等它闲下来的人不用再等了：它不在了。

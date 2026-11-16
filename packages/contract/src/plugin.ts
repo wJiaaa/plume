@@ -1180,11 +1180,15 @@ export interface PluginSecrets {
 
 /**
  * 会话的媒体目录：会话里的图片挪出消息后按内容（sha1）存在这里，消息里只留名字（`ImageContent.media`）。
- * 存进去的名字和会话存图时起的一样，同一张图不会存两份。
+ * 存进去的名字和会话存图时起的一样，同一张图不会存两份。图跟着用它的会话走：最后一个用它的会话删掉时文件一起删。
  */
 export interface MediaAccess {
-	/** 存一张图，交回名字和磁盘上的绝对路径。只认 PNG、JPEG、WebP、GIF、BMP，别的抛错。 */
-	save(image: { data: string; mimeType: string }): Promise<{ name: string; path: string }>;
+	/**
+	 * 存一张图，交回名字和磁盘上的绝对路径。只认 PNG、JPEG、WebP、GIF、BMP，别的抛错。
+	 * `sessionId` 是这张图属于哪个会话（工具里存的就是 `run.sessionId`）：那个会话删掉、也没有别的会话用着时图一起删。
+	 * 不给的算插件自己的，一直留着；会话已经不在时这张图不算它的。
+	 */
+	save(image: { data: string; mimeType: string; sessionId?: string }): Promise<{ name: string; path: string }>;
 	/** 按名字读回一张图；名字不是这个目录的、文件不在时是 null。 */
 	read(name: string): Promise<{ data: string; mimeType: string } | null>;
 	/** 一个绝对路径是不是这个目录里的图：是的话交回名字，不是是 null。 */

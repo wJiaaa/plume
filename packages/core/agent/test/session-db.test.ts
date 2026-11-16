@@ -97,6 +97,32 @@ it("删掉的会话连同消息和草稿一起没了，之后迟到的写入什�
 	expect(rows("SELECT session_id FROM records")).toEqual([{ session_id: "b" }]);
 });
 
+it("图按会话记：分叉的、插件说了会话的都算，最后一个用它的会话删掉时才交回；插件没说会话的一直留着", () => {
+	const db = open();
+	const a = "a".repeat(40) + ".png";
+	const b = "b".repeat(40) + ".png";
+	const c = "c".repeat(40) + ".png";
+	const picture = (media: string, from?: string): Message => ({
+		role: "user",
+		content: [{ type: "image", data: "", mimeType: "image/png", media, ...(from ? { from } : {}) }],
+		timestamp: 1,
+	});
+	db.create(summary("one"));
+	db.append(summary("one"), picture(a, b));
+	db.copy(summary("fork"), [picture(a)], { runs: [] } as never);
+	db.create(summary("other"));
+	db.holdMedia("other", c);
+	db.holdMedia(null, c);
+	db.holdMedia("gone", b);
+	expect(db.mediaInUse()).toEqual(new Set([a, b, c]));
+	// 分叉还用着 a；b 只有 one 用（不在的会话记不上）。
+	expect(db.delete(["one"])).toEqual([b]);
+	expect(db.delete(["fork"])).toEqual([a]);
+	// c 插件自己也留着一份。
+	expect(db.delete(["other"])).toEqual([]);
+	expect(db.mediaInUse()).toEqual(new Set([c]));
+});
+
 it("排着的话一个会话一行：换掉、清空删行，随会话一起删，删掉以后迟到的写入不写回来", () => {
 	const db = open();
 	db.create(summary("a"));

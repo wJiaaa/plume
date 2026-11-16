@@ -30,6 +30,7 @@ import type {
 import type { AssistantContent } from "@plume/llm/types";
 import type { ContextRecord } from "./compaction.ts";
 import { text } from "./i18n.ts";
+import { mediaNames } from "./media.ts";
 import { kindOf } from "./session-scope.ts";
 import { billedParts, diagnoseCache, type PreviousRequest, type SpendNote, TOKEN_PARTS, thinkingMs } from "./usage-record.ts";
 
@@ -42,8 +43,11 @@ import { billedParts, diagnoseCache, type PreviousRequest, type SpendNote, TOKEN
  * - `spend`：每次计费的调用，见 `insertSpend`。没有外键：会话删了它还在，`session_id` 照样留着；不属于会话的调用
  *   （插件经 `ctx.model.complete` 发的）是 null。会话里一步步发的请求（主请求）还记着 `prompt` 往后那些列，
  *   别的调用那些列是 null，见 `usage-record.ts`。
+ * - `media_refs`：哪个会话用着 `session-media` 里的哪张图（按内容存，几个会话可能共用一张）。消息写进会话时记上它带的图，
+ *   插件经 `ctx.media.save` 存图时记上它说的会话；会话删掉时这几行一起删，没人再用的图由调用方删文件（`delete` 交回名字）。
+ *   插件存图没说会话时记在空串名下，算插件的，不随哪个会话删。截掉的消息（撤回、编辑重发）带过的图仍记着，会话删时才放开。
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const SCHEMA = `
 	CREATE TABLE sessions (
 		id TEXT PRIMARY KEY,
@@ -73,6 +77,12 @@ const SCHEMA = `
 		session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
 		entries TEXT NOT NULL
 	);
+	CREATE TABLE media_refs (
+		session_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		PRIMARY KEY (session_id, name)
+	) WITHOUT ROWID;
+	CREATE INDEX media_refs_name ON media_refs (name);
 	CREATE TABLE spend (
 		id INTEGER PRIMARY KEY,
 		session_id TEXT,
@@ -158,8 +168,12 @@ export interface SessionDb {
 	truncate(summary: SessionSummary, keep: number, record: ContextRecord): void;
 	/** 新建一条会话，带着这些消息和压缩记录（分叉）。花销不拷：那些钱是原会话花的。 */
 	copy(summary: SessionSummary, messages: Message[], record: ContextRecord): void;
-	/** 删掉这几条会话，一次把空间还回去。 */
-	delete(sessionIds: string[]): void;
+	/** 删掉这几条会话，一次把空间还回去。交回删完以后没有会话再用的图（`session-media` 里的名字），文件由调用方删。 */
+	delete(sessionIds: string[]): string[];
+	/** 记下这个会话用着这张图（插件经 `ctx.media.save` 存的）；`null` 是插件没说会话，一直留着。会话已经不在时不记。 */
+	holdMedia(sessionId: string | null, name: string): void;
+	/** 有人用着的图，启动时清掉没人用的文件（删到一半退出留下的）。 */
+	mediaInUse(): Set<string>;
 	/** 记一次不在会话消息里的调用（压缩摘要、插件的一次性调用）的花销。 */
 	spend(sessionId: string | null, reply: AssistantMessage): void;
 	/** 花销表按小时、供应商、模型合好。 */
@@ -353,16 +367,38 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			});
 		},
 		delete(sessionIds) {
-			if (sessionIds.length === 0) return;
-			transaction(db, () => {
+			if (sessionIds.length === 0) return [];
+			const released = transaction(db, () => {
+				const names = new Set<string>();
 				for (const sessionId of sessionIds) {
 					forget(sessionId);
+					for (const row of db.prepare("SELECT name FROM media_refs WHERE session_id = ?").all(sessionId)) names.add(String(row.name));
+					db.prepare("DELETE FROM media_refs WHERE session_id = ?").run(sessionId);
 					db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
 				}
+				const used = db.prepare("SELECT 1 FROM media_refs WHERE name = ? LIMIT 1");
+				return [...names].filter((name) => used.get(name) === undefined);
 			});
 			// 立刻把空间还回去。vacuum 搬动的页都经过 WAL，不 checkpoint 的话库变小了、WAL 却胀到差不多同样大。
 			db.exec("PRAGMA incremental_vacuum");
 			db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+			return released;
+		},
+		holdMedia(sessionId, name) {
+			db.prepare("INSERT OR IGNORE INTO media_refs (session_id, name) SELECT ?, ? WHERE ? = '' OR EXISTS (SELECT 1 FROM sessions WHERE id = ?)").run(
+				sessionId ?? "",
+				name,
+				sessionId ?? "",
+				sessionId ?? "",
+			);
+		},
+		mediaInUse() {
+			return new Set(
+				db
+					.prepare("SELECT DISTINCT name FROM media_refs")
+					.all()
+					.map((row) => String(row.name)),
+			);
 		},
 		draft(sessionId, draft) {
 			let stream = streams.get(sessionId);
@@ -502,7 +538,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 					// 延迟事务只在源库上取读快照；BEGIN IMMEDIATE 会连附加的源库也抢写锁。
 					out.exec("BEGIN");
 					out.prepare("INSERT INTO sessions SELECT * FROM src.sessions WHERE id = ?").run(sessionId);
-					for (const table of ["records", "drafts", "draft_chunks", "queue", "spend"]) {
+					for (const table of ["records", "drafts", "draft_chunks", "queue", "spend", "media_refs"]) {
 						out.prepare(`INSERT INTO ${table} SELECT * FROM src.${table} WHERE session_id = ?`).run(sessionId);
 					}
 					out.exec("COMMIT");
@@ -619,6 +655,8 @@ function appendRecord(db: DatabaseSync, sessionId: string, message: Message): vo
 		JSON.stringify(message),
 		sessionId,
 	);
+	// 带的图记在这个会话名下（`media_refs`）：分叉拷过去的消息也走这里，新会话有自己的一份。
+	for (const name of mediaNames(message)) db.prepare("INSERT OR IGNORE INTO media_refs (session_id, name) VALUES (?, ?)").run(sessionId, name);
 }
 
 /** 在一个写事务里跑 `fn`；已经在事务里时并进外面那个。 */
