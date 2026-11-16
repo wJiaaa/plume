@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -17,6 +17,17 @@ test("改成按需搜索的会话记进文件：重开（新建一份）还在�
 		const reopened = new DeferredSessions(file);
 		assert.equal(await reopened.has("a"), true);
 		assert.equal(await reopened.has("b"), false);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("文件内容坏了当作没有，不让之后每次查都抛错", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-deferred-"));
+	try {
+		const file = join(dir, "deferred-sessions.json");
+		await writeFile(file, "{not json");
+		assert.equal(await new DeferredSessions(file).has("a"), false);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

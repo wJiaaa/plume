@@ -13,13 +13,13 @@ export class DeferredSessions {
 
 	constructor(file: string) {
 		this.file = file;
-		this.ids = readFile(file, "utf8").then(
-			(raw) => {
+		// 解析失败也落到空集合：写在 `then` 的第二个回调里接不住 `JSON.parse` 抛的错，之后每次 `has` 都会抛。
+		this.ids = readFile(file, "utf8")
+			.then((raw) => {
 				const parsed: unknown = JSON.parse(raw);
 				return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
-			},
-			() => new Set<string>(),
-		);
+			})
+			.catch(() => new Set<string>());
 	}
 
 	async has(sessionId: string): Promise<boolean> {

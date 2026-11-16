@@ -17,7 +17,7 @@ import { MAX_DOCUMENT_BYTES, MAX_DOCUMENTS, type DocumentRef } from "./document-
 export function qualifiedToolName(server: string, tool: string, taken: ReadonlySet<string> = new Set()): string {
 	const clean = sanitize(tool);
 	const plain = `mcp__${sanitize(server)}__${clean}`;
-	if (clean === tool && plain.length <= 64 && !taken.has(plain)) return plain;
+	if (clean === tool && sanitize(server) === server && plain.length <= 64 && !taken.has(plain)) return plain;
 	const hash = createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
 	return `${plain.slice(0, 64 - hash.length - 1)}_${hash}`;
 }

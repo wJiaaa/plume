@@ -9,7 +9,7 @@ import type { McpApi } from "../src/api.ts";
 import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
 import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
-import { missingFor, placeholdersOf, resolveServer } from "../src/placeholders.ts";
+import { missingFor, placeholdersOf, resolveServer, secretValues } from "../src/placeholders.ts";
 import { bindArguments, commandSegment, splitArguments } from "../src/prompts.ts";
 import { callTool, deferredSection, findTool, type McpTool, rank, searchTool } from "../src/search.ts";
 import { mcpResource } from "../src/resources.ts";
@@ -338,6 +338,8 @@ test("工具名：放得下又没改过字的原样，否则截短加哈希，�
 	const long = qualifiedToolName("server", "x".repeat(80));
 	assert.equal(long.length, 64);
 	assert.notEqual(qualifiedToolName("a", "b", new Set(["mcp__a__b"])), "mcp__a__b");
+	// 服务名改过字也加哈希：「a b」和「a_b」不会因为谁先登记而抢同一个名字。
+	assert.match(qualifiedToolName("a b", "t"), /^mcp__a_b__t_[0-9a-f]{8}$/);
 });
 
 test("参数 Schema 不是 object 的换成任意参数；array 补上 items", () => {
@@ -821,4 +823,18 @@ test("写盘时像密钥的值加密，空位、不像密钥的、已经加密�
 	assert.deepEqual(await openServers(sealed, fakeSecrets), servers);
 	const lost = await openServers([{ ...servers[0]!, env: { GITHUB_TOKEN: `${SEALED}lost`, DEBUG: "1" } } as ServerConfig], fakeSecrets);
 	assert.deepEqual(lost[0]!.transport === "stdio" && lost[0]!.env, { GITHUB_TOKEN: "", DEBUG: "1" });
+});
+
+test("要从输出里遮掉的值：填进空位的、名字像密钥的环境变量、跟在像密钥的参数名后面的参数", () => {
+	const server: ServerConfig = {
+		id: "s",
+		name: "s",
+		transport: "stdio",
+		enabled: true,
+		command: "srv",
+		args: ["--token=sk-literal-123", "--api-key", "ak-literal-456", "--auth", "${AUTH}", "--verbose", "--port=8080"],
+		env: { GITHUB_TOKEN: "ghp-own-value", MODE: "debug-mode" },
+	};
+	const values = secretValues(server, { AUTH: "bearer-from-shell" });
+	assert.deepEqual(new Set(values), new Set(["sk-literal-123", "ak-literal-456", "bearer-from-shell", "ghp-own-value"]));
 });
