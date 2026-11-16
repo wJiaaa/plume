@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { createInterface } from "node:readline";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
@@ -107,7 +107,11 @@ export const grepTool: Tool<GrepArgs> = {
 			 */
 			if (!(await stat(root).catch(() => null))) return errorResult(`Path not found: ${normalizedArgs.path}. Nothing was searched.`);
 		}
-		const viaRipgrep = await runRipgrep(normalizedArgs, root, ctx);
+		// 仓库里看到的文件和 `glob`、兜底是同一份：git 列的，隐藏的也在内。见 `project-files.ts`。按原文重试时同一份，只算一次。
+		const scope = (await insideGitWorkTree(root)) ? ["--hidden", "--glob", "!.git"] : [];
+		const viaRipgrep = await runRipgrep(normalizedArgs, root, ctx, false, scope);
+		// 没有 ripgrep：按原文重试也起不来，直接走兜底。
+		if (viaRipgrep === MISSING) return runFallback(normalizedArgs, root, ctx);
 		if (viaRipgrep) return viaRipgrep;
 
 		/*
@@ -117,8 +121,8 @@ export const grepTool: Tool<GrepArgs> = {
 		 * 重试也走 ripgrep：直接落到 JavaScript 的兜底会为 ripgrep 几毫秒就答得上的问题把整棵树走一遍。
 		 */
 		if (!compiles(normalizedArgs.pattern)) {
-			const literally = await runRipgrep(normalizedArgs, root, ctx, true);
-			if (literally) return literally;
+			const literally = await runRipgrep(normalizedArgs, root, ctx, true, scope);
+			if (literally && literally !== MISSING) return literally;
 		}
 		return runFallback(normalizedArgs, root, ctx);
 	},
@@ -141,21 +145,31 @@ function ripgrepCommand(): string {
 	return process.env.PLUME_RIPGREP?.trim() || "rg";
 }
 
-async function runRipgrep(args: GrepArgs, root: string, ctx: ToolContext, literal = false): Promise<ToolResult | null> {
+/** 起不来 ripgrep（没装、找不到）：和「起来了但没搜成」（模式编译不了）分开，前者不必再试一次。 */
+const MISSING = "missing";
+
+/**
+ * 只列文件用文本模式（一行一个路径），列命中的行用 JSON 模式。JSON 没搜成时不再换文本模式试：两次的模式、引擎一样，
+ * 编译不了的照样编译不了。
+ */
+async function runRipgrep(args: GrepArgs, root: string, ctx: ToolContext, literal: boolean, scope: string[]): Promise<ToolResult | typeof MISSING | null> {
 	const limit = Math.min(args.limit ?? MAX_MATCHES, MAX_MATCHES);
-	// 仓库里看到的文件和 `glob`、兜底是同一份：git 列的，隐藏的也在内。见 `project-files.ts`。
-	const scope = (await insideGitWorkTree(root)) ? ["--hidden", "--glob", "!.git"] : [];
-	if (args.files_only) return runRipgrepText(args, root, ctx, literal, limit, true, scope);
-	const fromJson = await runRipgrepJson(args, root, ctx, literal, limit, scope);
-	if (fromJson) return fromJson;
-	return runRipgrepText(args, root, ctx, literal, limit, false, scope);
+	if (args.files_only) return runRipgrepText(args, root, ctx, literal, limit, scope);
+	return runRipgrepJson(args, root, ctx, literal, limit, scope);
 }
 
 /**
  * ripgrep 自己知道命中的位置（`submatches.start`），用它比在排好的行里再搜一遍准：
  * 环视或正则引擎不同时，再搜一遍会落回行首。
  */
-async function runRipgrepJson(args: GrepArgs, root: string, ctx: ToolContext, literal: boolean, limit: number, scope: string[]): Promise<ToolResult | null> {
+async function runRipgrepJson(
+	args: GrepArgs,
+	root: string,
+	ctx: ToolContext,
+	literal: boolean,
+	limit: number,
+	scope: string[],
+): Promise<ToolResult | typeof MISSING | null> {
 	// `--crlf` 让 `$` 匹配在 `\r\n` 之前：没有它，`foo$` 永远匹配不到 CRLF 文件的行。
 	const argv = ["--json", "--crlf", "--max-count", String(limit), ...scope];
 	if (literal) argv.push("--fixed-strings");
@@ -167,6 +181,8 @@ async function runRipgrepJson(args: GrepArgs, root: string, ctx: ToolContext, li
 	// 每个文件的命中数：到了 `--max-count` 的文件被 ripgrep 截住了，总数就只是下限。
 	const perFile = new Map<string, number>();
 	let capped = false;
+	/** 每一行出自哪个文件（绝对路径），和收到的行一一对应：密钥文件的行要按文件问过才留下，见 `withoutDenied`。 */
+	const owners: string[] = [];
 	const run = await collectRipgrep(
 		argv,
 		ctx,
@@ -193,35 +209,36 @@ async function runRipgrepJson(args: GrepArgs, root: string, ctx: ToolContext, li
 			const byteStart = event.type === "match" ? event.data?.submatches?.[0]?.start : undefined;
 			const matchAt = typeof byteStart === "number" ? utf8ByteOffsetToIndex(raw, byteStart) : undefined;
 			lines.push(shortenLine(`${rel}:${lineNo}:${raw}`, args.pattern, { literal, ignoreCase: args.case_insensitive }, matchAt));
+			owners.push(resolve(ctx.cwd, pathText));
 			return true;
 		},
 		limit,
 	);
-	return run && ripgrepResult(run, args, limit, literal, completed, capped);
+	if (!run) return MISSING;
+	const kept = await withoutDenied(run.lines, owners, ctx);
+	const result = ripgrepResult(
+		{ ...run, lines: kept.lines, count: run.count - (run.lines.length - kept.lines.length) },
+		args,
+		limit,
+		literal,
+		completed,
+		capped,
+	);
+	return result && withDeniedNote(result, kept.denied, ctx.cwd);
 }
 
-/**
- * 文本模式里的 `displayPath`。一行是 `路径:行号:内容`，路径里可能有冒号，拆不开，只能按前缀剥：
- * ripgrep 报的路径以传进去的 `root` 打头，`root` 在工作区里就以工作区根打头。
- */
-function shownPath(text: string, cwd: string): string {
-	return text.startsWith(`${cwd}${sep}`) ? text.slice(cwd.length + 1) : text;
-}
-
+/** 只列文件：一行一个路径。只有文件名、没有内容，不用为密钥文件问人。 */
 async function runRipgrepText(
 	args: GrepArgs,
 	root: string,
 	ctx: ToolContext,
 	literal: boolean,
 	limit: number,
-	filesOnly: boolean,
 	scope: string[],
-): Promise<ToolResult | null> {
-	const argv = ["--no-heading", "--with-filename", "--line-number", "--color=never", "--crlf", "--max-count", String(limit), ...scope];
+): Promise<ToolResult | typeof MISSING | null> {
+	const argv = ["--color=never", "--crlf", "--files-with-matches", ...scope];
 	if (literal) argv.push("--fixed-strings");
 	if (args.case_insensitive) argv.push("-i");
-	if (filesOnly) argv.push("--files-with-matches");
-	if (args.context) argv.push("-C", String(args.context));
 	if (args.glob) argv.push("--glob", args.glob);
 	argv.push("--", args.pattern, root);
 	const run = await collectRipgrep(
@@ -229,14 +246,35 @@ async function runRipgrepText(
 		ctx,
 		(line, lines, keep) => {
 			if (!keep) return true;
-			const shown = shownPath(line, ctx.cwd);
-			lines.push(shortenLine(shown, args.pattern, { literal, ignoreCase: args.case_insensitive }));
+			// 一行就是一个路径，和 JSON 模式一样写成相对工作区、`/` 分隔的。
+			lines.push(shortenLine(displayPath(ctx.cwd, line), args.pattern, { literal, ignoreCase: args.case_insensitive }));
 			return true;
 		},
 		limit,
 	);
-	// 文本模式分不清是哪个文件到了上限，保守地按总数判断；`files_only` 每个文件只有一行，没有这个上限。
-	return run && ripgrepResult(run, args, limit, literal, false, !filesOnly && run.count >= limit);
+	return run ? ripgrepResult(run, args, limit, literal) : MISSING;
+}
+
+/**
+ * 命中的行里出自密钥文件的（ssh 私钥、Plume 的设置和凭据……，见 `RunFiles`）：批准过搜索的根不算数，按文件问一次，
+ * 不批准的那些行拿掉。别的文件在已经过了边界的根下面，`read` 直接放行、不问。只有文件名的结果（`files_only`）不用问。
+ */
+async function withoutDenied(lines: string[], owners: readonly string[], ctx: ToolContext): Promise<{ lines: string[]; denied: string[] }> {
+	const denied = new Set<string>();
+	for (const owner of new Set(owners)) if (!(await ctx.files.read(owner)).ok) denied.add(owner);
+	if (denied.size === 0) return { lines, denied: [] };
+	return { lines: lines.filter((_line, index) => !denied.has(owners[index] as string)), denied: [...denied] };
+}
+
+/** 拿掉了哪几个文件的命中，照实说：不说的话，模型会以为那些文件里没有。 */
+function withDeniedNote(result: ToolResult, denied: readonly string[], cwd: string): ToolResult {
+	if (denied.length === 0) return result;
+	// i18n-exempt：工具结果是发给模型的。
+	const note = `\n\n[matches in ${denied.map((path) => displayPath(cwd, path)).join(", ")} are not shown: the user did not allow reading ${denied.length === 1 ? "that file" : "those files"}]`;
+	return {
+		...result,
+		content: result.content.map((part, index) => (index === result.content.length - 1 && part.type === "text" ? { ...part, text: part.text + note } : part)),
+	};
 }
 
 /** 一次 ripgrep 留下的：退出码、收到的行、stderr 的样本。 */
@@ -361,6 +399,8 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 	// ripgrep 的 `--glob` 照 gitignore 的规矩：不带 `/` 的模式比文件名，任意深度都算；带了才比整条路径。
 	const globTarget = args.glob?.includes("/") ? (rel: string) => rel : (rel: string) => rel.slice(rel.lastIndexOf("/") + 1);
 	const lines: string[] = [];
+	/** 同 JSON 模式：每一行出自哪个文件，`files_only` 不记。 */
+	const owners: string[] = [];
 	const contextLines = args.context ?? 0;
 
 	const scanFile = async (path: string): Promise<void> => {
@@ -395,6 +435,7 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 			const last = Math.min(fileLines.length - 1, i + contextLines);
 			for (let c = Math.max(0, i - contextLines, shownTo + 1); c <= last; c++) {
 				lines.push(shortenLine(`${rel}:${c + 1}:${fileLines[c]}`, args.pattern, opts, c === i ? found.index : undefined));
+				owners.push(path);
 			}
 			shownTo = Math.max(shownTo, last);
 		}
@@ -429,7 +470,9 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 			}
 	}
 	// 满了就停，没扫完的部分还有多少命中不知道——所以要说「可能还有」，不能当成全部。
-	return formatMatches(lines, args, limit, literal, lines.length, "", lines.length >= limit);
+	const stopped = lines.length >= limit;
+	const kept = args.files_only ? { lines, denied: [] } : await withoutDenied(lines, owners, ctx);
+	return withDeniedNote(formatMatches(kept.lines, args, limit, literal, kept.lines.length, "", stopped), kept.denied, ctx.cwd);
 }
 
 /**

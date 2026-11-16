@@ -15,6 +15,12 @@ it("裸的 cat/head/tail 改道到 read", () => {
 	expect(rerouteShellCommand("  tail -n 50 log.txt", ALL)?.tool).toBe("read");
 });
 
+it("跟着文件看的 tail 放行：read 跟不了", () => {
+	for (const follow of ["tail -f app.log", "tail -F app.log", "tail -fn 100 app.log", "tail -n 20 -f app.log", "tail --follow=name app.log"]) {
+		expect(rerouteShellCommand(follow, ALL), follow).toBeNull();
+	}
+});
+
 it("裸的 grep/rg、find/fd、ls 各改道到对应工具", () => {
 	expect(rerouteShellCommand("grep -rn foo src", ALL)?.tool).toBe("grep");
 	expect(rerouteShellCommand("rg 'TODO' .", ALL)?.tool).toBe("grep");
