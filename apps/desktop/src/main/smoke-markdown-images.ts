@@ -7,7 +7,7 @@ import { net, protocol, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { clickEachVisible, clickVisible } from "./smoke-kit.ts";
 
-/** 无图片插件的真窗口验证显示、目录边界、文件刷新；网络仅替换指定测试域名。 */
+/** 无图片插件的真窗口验证本机只读图片、远程加载限制、文件刷新；网络仅替换指定测试域名。 */
 export async function checkMarkdownImages(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
@@ -69,7 +69,7 @@ export async function checkMarkdownImages(options: {
 			'# Markdown 文档图片\n\n![文档相对图](../picture.svg)\n\n<img src="../picture.svg" width="100" height="50" alt="徽章一"> <img src="../picture.svg" width="100" height="50" alt="徽章二">\n\n![远程图](https://markdown-images.invalid/document.svg)',
 		);
 		setModel(() => ({
-			text: `本地图片：\n\n![本地图](picture.svg)\n\n![损坏图](broken.svg) ![缺失图](missing.svg) ![越界图](escaped.svg)\n\n![远程引用](https://markdown-images.invalid/reply.svg)\n\n[图片文档](${join(docs, "readme.md")})`,
+			text: `本地图片：\n\n![本地图](picture.svg)\n\n![损坏图](broken.svg) ![缺失图](missing.svg) ![目录外图](escaped.svg)\n\n![远程引用](https://markdown-images.invalid/reply.svg)\n\n[图片文档](${join(docs, "readme.md")})`,
 		}));
 		await send("显示图片");
 		const image = '[data-screen=chat] img.md-image[alt="本地图"]';
@@ -78,7 +78,9 @@ export async function checkMarkdownImages(options: {
 			`!document.querySelector('[data-screen=chat] img[alt="损坏图"]') && document.querySelector('[data-screen=chat]')?.textContent.includes('缺失图')`,
 			"失败保留链接",
 		);
-		assert.equal(await page(`document.querySelectorAll('[data-screen=chat] img[alt="越界图"], [data-screen=chat] img[alt="远程引用"]').length`), 0);
+		// 本机文件只读预览不受会话目录限制，软链指向目录外也照常显示；回复里的远程引用仍不自动加载。
+		await until(`document.querySelector('[data-screen=chat] img[alt="目录外图"]')?.naturalWidth === 240`, "目录外软链图片加载");
+		assert.equal(await page(`document.querySelectorAll('[data-screen=chat] img[alt="远程引用"]').length`), 0);
 		assert.equal(remoteRequests, 0, "回复不请求远端");
 		const first = await page<string>(`document.querySelector(${JSON.stringify(image)}).src`);
 		assert.match(first, /\?v=\d/);
