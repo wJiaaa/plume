@@ -50,6 +50,7 @@ import {
 	TextFiles,
 	toAbsolute,
 	withPluginView,
+	writesAppData,
 } from "@plume/workspace";
 import { DECLINED } from "./declined.ts";
 import { text } from "./i18n.ts";
@@ -61,7 +62,7 @@ export interface CallFiles {
 	cwd: string;
 	/** 这个会话的临时目录（`scratch://`）。 */
 	scratchDir: string;
-	/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`），写进去不受「不写 Plume 的数据目录」限制；不给时只算 `scratchDir`。 */
+	/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`），写进去不算改 Plume 的数据目录、不用人亲自点头；不给时只算 `scratchDir`。 */
 	scratchDirs?: readonly string[];
 	/** 外层要求这次调用不改动工作区（`ToolExecution.readOnly`）：`change`、`write` 一律拒绝。 */
 	readOnly?: boolean;
@@ -74,6 +75,11 @@ export interface CallFiles {
 	shell(): Promise<ShellInfo>;
 	/** 经过闸问一次（`ToolRun.ask` 那一条路）。不给就是没人可问（只在直接造它的测试里）。 */
 	ask?(content: ApprovalContent): Promise<ApprovalDecision>;
+	/**
+	 * 写 Plume 自己的目录（`writesAppData`）时用：`work` 跑着的期间，这次调用的问都只认人在卡上答（同提权：权限模式、「以后不再问」、
+	 * 帮我批准都不替人点头，卡上没有「以后不再问」），交回时说人在其间点没点过头。不给就是没人可问，这类写入一律拒绝。
+	 */
+	appData?<T>(work: () => Promise<T>): Promise<{ value: T; approved: boolean }>;
 	/** 调用答完以后再用就抛错。 */
 	alive(what: string): void;
 }
@@ -132,7 +138,7 @@ export class Workspace {
 	private readonly observed = new WeakMap<SandboxProcess, CommandObservation>();
 
 	/**
-	 * @param dataDir Plume 的数据目录：各会话的临时目录在它的 `scratch/` 下（读都不问），隔离视图、改动快照在它下面，文件工具不写它。
+	 * @param dataDir Plume 的数据目录：各会话的临时目录在它的 `scratch/` 下（读都不问），隔离视图、改动快照在它下面，文件工具写它要人亲自点头。
 	 * @param sessions `session://` 读别的会话用；`ctx.changes` 按它找会话的工作目录，撤销按它看哪些会话还在跑。
 	 * @param plugins `plugin://` 读插件的说明用：现在启用着的插件。
 	 */
@@ -253,7 +259,8 @@ export class Workspace {
 				const input = String(path);
 				let written: FileStamp | undefined;
 				const done = await this.textFiles.change(changeScope, input, async (file) => {
-					const answer = await edit({ path: file.path, text: file.before, stamp: file.stamp });
+					const run = () => edit({ path: file.path, text: file.before, stamp: file.stamp });
+					const answer = (await writesAppData(changeScope, file.path)) ? await guardAppData(call, file.path, run) : await run();
 					if (answer?.text !== undefined) {
 						// i18n-exempt：给插件作者的报错，作为工具结果交给模型。
 						if (typeof answer.text !== "string") throw new Error("ToolRun.files.change 的 edit 交回的 text 必须是字符串");
@@ -347,6 +354,25 @@ function recordedChanges(messages: readonly Message[]): { ids: string[]; warning
  * 把一次要问的读弹给人：经过闸（`ToolRun.ask` 那一条路），完全访问、「以后不再问」照常放行。
  * 标题只给文件名（整条绝对路径会折成两行），正文给那条路径（卡片上是等宽字体），`reason` 说批准意味着什么，不复述标题。
  */
+/**
+ * 改 Plume 自己的目录：工具在 `edit` 里问的（写文件的工具带着 diff 问）只认人答；工具没问、或者问了却不是人点的头，本体在写之前自己再问一次人。
+ * 人不点头就不写，抛出去的话交给模型。
+ */
+async function guardAppData<A extends { text?: string }>(call: CallFiles, path: string, edit: () => Promise<A>): Promise<A> {
+	const ask = call.ask;
+	// i18n-exempt：交给模型的结果。
+	if (!call.appData || !ask) throw new Error(`改动 Plume 的数据目录需要用户亲自批准，而这个会话没有可以询问的人：${path}`);
+	const edited = await call.appData(edit);
+	// 插件交回的可能不是对象，同下面 `answer?.text`。
+	if ((edited.value as A | undefined)?.text === undefined || edited.approved) return edited.value;
+	const asked = await call.appData(() =>
+		ask({ kind: "modify", title: text("files.writeAppData", { name: basename(path) || path }), detail: path, reason: text("files.writeAppDataScope") }),
+	);
+	// i18n-exempt：交给模型的结果。
+	if (!asked.approved) throw new Error(`用户没有批准改动 Plume 的数据目录：${path}。${DECLINED}`);
+	return edited.value;
+}
+
 async function confirm(call: CallFiles, request: ReadRequest): Promise<{ ok: true } | { ok: false; message: string }> {
 	// 没有问人的入口时拒绝而不是放行：没人可问，就是没人同意过。
 	// i18n-exempt：交给模型的结果。

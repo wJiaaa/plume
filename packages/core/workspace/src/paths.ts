@@ -1,6 +1,6 @@
 /**
- * 模型写的路径指的是哪里、交给模型时怎么写，以及哪里不写。读边界（`read-access.ts`）和写边界（这里的 `resolveWritePath`）
- * 都按这里解析出的绝对路径判定。
+ * 模型写的路径指的是哪里、交给模型时怎么写，以及哪里要人亲自点头（Plume 自己的目录）。读边界（`read-access.ts`）和写边界
+ * （这里的 `resolveWriteTarget`、`writesAppData`）都按这里解析出的绝对路径判定。
  */
 
 import { realpath } from "node:fs/promises";
@@ -45,7 +45,7 @@ export function displayPath(cwd: string, absolute: string): string {
 }
 
 /**
- * 写边界用到的几样：会话的工作目录，同一脉的会话的临时目录（`ToolRun.scratchDirs`，写进去不用问人），Plume 的数据目录。
+ * 写边界用到的几样：会话的工作目录，同一脉的会话的临时目录（`ToolRun.scratchDirs`，写进去不用问人），Plume 的数据目录（写进去要人点头）。
  * 附件（`ToolRun.allowedPaths`）不在里面：拖一个文件进来是「看看这个」，不是「可以改它」。
  */
 export interface WriteScope {
@@ -56,35 +56,50 @@ export interface WriteScope {
 
 /**
  * Plume 自己的目录：数据目录（模型设置和 API key、会话、插件和插件开关、命令），和缺省的 `~/.plume`（换了数据目录时它还在）。
- * 写得到它们的工具，一次看起来和别的调用没两样的调用就能改掉自己的权限。
+ * 写得到它们，一次看起来和别的调用没两样的调用就能改掉自己的权限，所以写它们要人亲自点头，见 `writesAppData`。
  */
 function appHomes(dataDir: string): string[] {
 	return [join(homedir(), ".plume"), dataDir];
 }
 
 /**
- * 模型要**写**的路径，只拒绝 Plume 自己的目录。
- *
- * 工作区外不在这里拒：写的时候审批卡照样会问。拒了的话，人说「存到桌面」，模型会改用
- * `cat > ~/Desktop/… <<EOF`——一样写到那里，只是卡片上没有 diff、没有「先读再写」的检查。
- * shell 不认的拒绝不是边界，只是绕路。
- *
- * 工作区本身在 Plume 的目录下的照样能写，同一脉的会话的临时目录也能写；别的会话的临时目录不行：那是别的对话的草稿和原始输出。
+ * 模型要**写**的路径，解析成绝对路径。哪里都不在这里拒：工作区外写的时候审批卡照样会问，Plume 自己的目录要人亲自点头
+ * （`writesAppData`）。拒了的话，人说「存到桌面」「改一下 ~/.plume 里的设置」，模型会改用 `cat > … <<EOF`——一样写到那里，
+ * 只是卡片上没有 diff、没有「先读再写」的检查。shell 不认的拒绝不是边界，只是绕路。
  */
 export function resolveWritePath(scope: WriteScope, input: string): string {
 	if (!input || typeof input !== "string") throw new Error("A path is required.");
 	// 与读取侧同一套写法解析：Windows 上 `/c/…`、`~\` 读得到，写也得认。
-	const absolute = toAbsolute(scope.cwd, input);
-	if (writable([scope.cwd, ...scope.scratchDirs], appHomes(scope.dataDir), absolute)) return absolute;
-	// i18n-exempt：发给模型的话。
-	throw new Error(
-		`${input} is inside Plume's own data directory, which file tools do not write. Tell the user what to change there instead of changing it another way.`,
-	);
+	return toAbsolute(scope.cwd, input);
 }
 
-/** Plume 自己的目录以外都行——除非那就是工作区或临时目录。 */
-function writable(roots: string[], homes: string[], absolute: string): boolean {
-	return homes.every((appHome) => !withinOrIs(appHome, absolute)) || roots.some((root) => withinOrIs(root, absolute));
+/** 在 Plume 自己的目录里——除非那就是工作区或同一脉的会话的临时目录（别的会话的临时目录算在里面：那是别的对话的草稿和原始输出）。 */
+function insideAppHome(roots: string[], homes: string[], absolute: string): boolean {
+	return homes.some((appHome) => withinOrIs(appHome, absolute)) && !roots.some((root) => withinOrIs(root, absolute));
+}
+
+/** 解析软链后的真实路径；还不存在的，取已有的上级目录的真实路径再拼回去。 */
+async function canonical(path: string): Promise<string> {
+	try {
+		return await realpath(path);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT" || dirname(path) === path) throw error;
+		return resolve(await canonical(dirname(path)), basename(path));
+	}
+}
+
+/**
+ * 写 `target`（绝对路径）是不是在改 Plume 自己的目录：是的话这次写入只认人在卡上答，权限模式、「以后不再问」、帮我批准都不替人点头。
+ * 两边都按真实路径比，链接借不了道。
+ */
+export async function writesAppData(scope: WriteScope, target: string): Promise<boolean> {
+	const [real, root, scratch, homes] = await Promise.all([
+		canonical(target),
+		canonical(scope.cwd),
+		Promise.all(scope.scratchDirs.map(canonical)),
+		Promise.all(appHomes(scope.dataDir).map(canonical)),
+	]);
+	return insideAppHome([root, ...scratch], homes, real);
 }
 
 /**
@@ -92,24 +107,8 @@ function writable(roots: string[], homes: string[], absolute: string): boolean {
  */
 export async function resolveWriteTarget(scope: WriteScope, input: string): Promise<string> {
 	const absolute = resolveWritePath(scope, input);
-	const canonical = async (path: string): Promise<string> => {
-		try {
-			return await realpath(path);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT" || dirname(path) === path) throw error;
-			return resolve(await canonical(dirname(path)), basename(path));
-		}
-	};
 	const target = await canonical(absolute);
-	const [root, scratch, realHomes] = await Promise.all([
-		canonical(scope.cwd),
-		Promise.all(scope.scratchDirs.map(canonical)),
-		Promise.all(appHomes(scope.dataDir).map(canonical)),
-	]);
-	if (!writable([root, ...scratch], realHomes, target)) {
-		// i18n-exempt：发给模型的话。
-		throw new Error(`${input} links into Plume's own data directory, which file tools do not write.`);
-	}
+	const [root, scratch] = await Promise.all([canonical(scope.cwd), Promise.all(scope.scratchDirs.map(canonical))]);
 	/*
 	 * A link that looks like it is in the workspace and lands outside it is still refused. The
 	 * approval card names the path as written, so it would read "Edit notes.md" over a change to

@@ -30,6 +30,8 @@ const zhCN = {
 	"files.readOutside": "读取当前项目之外的位置：{name}",
 	"files.readSecretScope": "密钥按文件单独批准；同一目录下的其他密钥仍会再问一次。",
 	"files.readTreeScope": "批准后，这个会话读取 {grant} 里的文件不再询问。",
+	"files.writeAppData": "改动 Plume 的数据目录：{name}",
+	"files.writeAppDataScope": "这里放着 Plume 自己的设置、权限、插件和会话，每次写入都要你亲自批准，完全访问下也问。",
 	"changes.undoBusy": "正在撤销改动，请稍后重试。",
 	"changes.undoRunning": "仍有任务或命令可能修改文件，请等它们结束后再撤销。",
 	"changes.undoEmpty": "没有可撤销的变更。",
@@ -222,6 +224,9 @@ const en: Record<TextKey, string> = {
 	"files.readOutside": "Read outside the current project: {name}",
 	"files.readSecretScope": "Credentials are approved one file at a time; other keys in the same folder will still ask.",
 	"files.readTreeScope": "Once approved, this session reads files in {grant} without asking.",
+	"files.writeAppData": "Change Plume's data folder: {name}",
+	"files.writeAppDataScope":
+		"This folder holds Plume's own settings, permissions, plugins and conversations. Every write here needs your approval, even with full access.",
 	"changes.undoBusy": "Changes are being undone. Please try again shortly.",
 	"changes.undoRunning": "A task or command may still modify files. Wait for it to finish before undoing.",
 	"changes.undoEmpty": "There are no changes to undo.",

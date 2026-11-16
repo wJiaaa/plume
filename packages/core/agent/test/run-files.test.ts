@@ -270,7 +270,8 @@ it("change 交回现在的内容，写下以后记进这次调用；不写就不
 	expect(kept).toEqual({ value: "export const value = 1;\n", path: join(cwd, "core.ts") });
 	expect(await idle.recorded()).toBeUndefined();
 
-	await expect(idle.files.change(join(data, "settings.json"), async () => ({ text: "{}", value: null }))).rejects.toThrow(/Plume's own data directory/);
+	// 改 Plume 的数据目录要人亲自点头；这里没有能问的人，就不写。
+	await expect(idle.files.change(join(data, "settings.json"), async () => ({ text: "{}", value: null }))).rejects.toThrow(/没有可以询问的人/);
 	const readOnly = workspace.call(call({ readOnly: true })).files;
 	await expect(readOnly.change("core.ts", async () => ({ text: "bad", value: null }))).rejects.toThrow(/may not change files/);
 	expect(await readOnly.write("scratch://notes.md", "bad")).toMatchObject({ ok: false });

@@ -5,7 +5,7 @@
  * 列项目文件、经 `ctx.resources` 登记资源地址、经 `ctx.changes` 汇总和撤销改动。这里只认路径、目录、数据目录和会话 id，不认会话的内容、不认循环。
  *
  * - 读边界（`read-access.ts`）：哪里不问、哪里要问、批准覆盖多大，一条命令写明要读哪些路径。
- * - 写边界（`paths.ts` 的 `resolveWritePath`、`resolveWriteTarget`）：Plume 自己的目录不写，链接不越界。
+ * - 写边界（`paths.ts` 的 `resolveWriteTarget`、`writesAppData`）：Plume 自己的目录只认人亲自点头，链接不越界。
  * - 改动记录（`change-store.ts`、`text-file.ts`、`command-changes.ts`、`change-lock.ts`）：替模型写文件、观测命令时存的快照，撤销和它的门闩。
  * - 资源地址（`resources/`）：`scheme://` 的路由和本体自己的四个 scheme。
  * - 隔离视图下的 git（`host-git.ts`）和项目文件清单（`project-files.ts`）。
@@ -13,7 +13,7 @@
 
 export { authorizeCommandReads, type ReadRequest, type ReadScope } from "./read-access.ts";
 export { readTarget } from "./read.ts";
-export { toAbsolute } from "./paths.ts";
+export { toAbsolute, writesAppData } from "./paths.ts";
 export { ChangeLock } from "./change-lock.ts";
 export { ChangeStore } from "./change-store.ts";
 export type { ChangeWords } from "./change-words.ts";

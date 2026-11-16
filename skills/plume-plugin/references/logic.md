@@ -229,7 +229,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 写、改用户的文件也经 `run.files`，不要自己 `writeFile`：本体守写的边界，并把改动记成快照，撤回时连文件一起退、交付卡能看和撤销靠的就是它。plume.tools 的 write、edit、bash、bash_output 就是这么用的。
 
-- `run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件）不写，同一脉会话的临时目录能写、别的会话的不能，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。
+- `run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件，别的会话的临时目录也算）能写但只认人亲自点头（`edit` 里的 `run.ask` 同提权，完全访问、帮我批准、「以后不再问」都不替人答；工具没问的本体在写之前替它问人，人不点头就抛错），同一脉会话的临时目录照常写，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。
 - 同一个文件（包括经硬链接、别名）的几次 `change` 排队；`edit(current)` 拿到 `{ path, text, stamp }`（`path` 是真正要写的那个文件，`text` 是现在的内容、不存在时是 null，`stamp` 是 `{ mtimeMs, size }`），交回 `{ text?, value }`：给了 `text` 本体就在写之前再核一遍文件没被别处改过（期间被改了、被换成别的文件、新文件被别人先建了都抛错，一个字节不写）、写下、记快照；不给就不写，`value` 原样交回。
 - 返回 `{ value, path, written? }`，`written` 是写下以后的 `stamp`（给「读过以后有没有变」的检查用）。撤销进行中、外层要求只读（`run.readOnly`）时抛错；快照存不下来时抛错，文件已经写下，`message` 照实说。
 - `run.files.write(address, content)` 写资源地址（只有 `scratch://` 可写），交回 `{ ok: true, path? }` 或 `{ ok: false, message }`。

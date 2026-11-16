@@ -394,9 +394,13 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 	 * 的工具在执行前问的），subject 记在注册它的插件名下；`core` 是本体（`run.files` 的读边界、`run.escalate`），记在本体名下；
 	 * `layer` 是 tool.execute 的某一层（`ToolExecution.ask`）。两个名下的批准互不放行，见 `AlwaysAllow`。
 	 */
-	const approve = async (from: ToolExecution, request: ApprovalContent, asker: "plugin" | "core" | "layer"): Promise<ApprovalDecision> => {
+	const approve = async (from: ToolExecution, original: ApprovalContent, asker: "plugin" | "core" | "layer"): Promise<ApprovalDecision> => {
 		const { mode, alwaysAllow } = await permission();
-		const humanOnly = request.escalation !== undefined;
+		// 正在改 Plume 自己的目录（`CallFiles.appData`）：和提权一样只认人答。卡上不给「以后不再问」，拿掉 subject。
+		const appData = appDataDepth > 0;
+		const { subject: _subject, ...unbound } = original;
+		const request: ApprovalContent = appData ? unbound : original;
+		const humanOnly = request.escalation !== undefined || appData;
 		const byLayer = asker === "layer";
 		const grant: AlwaysAllow | undefined =
 			byLayer || humanOnly || request.subject === undefined ? undefined : { subject: request.subject, ...(asker === "plugin" ? { plugin: tool.plugin } : {}) };
@@ -431,8 +435,23 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		// i18n-exempt：抛出去会作为工具结果交给模型。
 		if (decision !== "once" && decision !== "always" && decision !== "reject") throw new Error(`tool.approve 给的结论不认得：${String(decision)}`);
 		// 提权：层的拒绝照算；放行只认人答的。层没往里交就照样弹卡，往里交了就用人的回答，层拿到人的拒绝再交回放行也不算。
-		if (humanOnly) return decision === "reject" ? "reject" : (answered ?? (await askWith(request, undefined)));
-		return decision;
+		if (!humanOnly) return decision;
+		const human = decision === "reject" ? "reject" : (answered ?? (await askWith(request, undefined)));
+		if (appData && human !== "reject") appDataApproved++;
+		return human;
+	};
+	/** `CallFiles.appData` 正跑着几件，和其间人点头放行过几次。 */
+	let appDataDepth = 0;
+	let appDataApproved = 0;
+	const guardAppData = async <T>(work: () => Promise<T>): Promise<{ value: T; approved: boolean }> => {
+		appDataDepth++;
+		const before = appDataApproved;
+		try {
+			const value = await work();
+			return { value, approved: appDataApproved > before };
+		} finally {
+			appDataDepth--;
+		}
 	};
 	const execution: ToolExecution = {
 		sessionId: scope.sessionId,
@@ -482,6 +501,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				signal: input.signal,
 				shell: commands.shell,
 				ask: coreAsk,
+				appData: guardAppData,
 				alive,
 			});
 			const run: ToolRun = {
