@@ -13,7 +13,7 @@ import type { OutgoingMessage } from "@plume/contract";
 import { ChoiceMark, Confirm, PanelEmpty, Text, useI18n } from "@plume/ui";
 import { MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
-import type { SideChatApi } from "./api.ts";
+import type { SideChatApi, SideChatSettings } from "./api.ts";
 import { dispatchCard } from "./DispatchCard.tsx";
 import { MESSAGES } from "./messages.ts";
 import { TaskStrip } from "./TaskStrip.tsx";
@@ -46,20 +46,7 @@ function SideChatPanel({ session, tab, setTitle, onClose }: PanelProps) {
 	const side = ui.useSession(sideId);
 	const [asking, setAsking] = useState<((sure: boolean) => void) | undefined>(undefined);
 	// 还没开的这段要用的模型：第一句之前输入框里先画它，人没动过就照它开。
-	const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
-	useEffect(() => {
-		if (sideId) return;
-		let current = true;
-		void api.model().then(
-			(value) => {
-				if (current) setDefaultModel(value);
-			},
-			(error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error"),
-		);
-		return () => {
-			current = false;
-		};
-	}, [sideId]);
+	const defaultModel = ui.useSettings<SideChatSettings>()[0]?.model;
 
 	// 只恢复绑定，不在挂载时新建；卸载不能删除绑定或子会话。
 	useEffect(() => {
@@ -193,43 +180,20 @@ function CloseQuestion({ answer }: { answer: (sure: boolean) => void }) {
 function ModelSetting() {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const defaults = ui.useModelDefaults();
-	const [model, setModel] = useState<string | undefined>(undefined);
-	const [busy, setBusy] = useState(true);
-	useEffect(() => {
-		let alive = true;
-		void api
-			.model()
-			.then(
-				(value: string | undefined) => {
-					if (alive) setModel(value);
-				},
-				(error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error"),
-			)
-			.finally(() => {
-				if (alive) setBusy(false);
-			});
-		return () => {
-			alive = false;
-		};
-	}, []);
+	const [settings, set] = ui.useSettings<SideChatSettings>();
 	const inherited = defaults.sessionModel ?? defaults.defaultModel;
 	return (
 		<ui.ModelSelect
 			ariaLabel={text.modelTitle}
-			value={model ?? ""}
-			disabled={busy}
+			value={settings?.model ?? ""}
+			disabled={settings === undefined}
 			inheritLabel={text.followMain}
 			{...(inherited ? { inheritedModelId: inherited } : {})}
 			inheritedSource={text.followMainShort}
 			inheritDetail={text.modelDetail}
-			onChange={(next) => {
-				const previous = model;
-				setModel(next || undefined);
-				void api.setModel(next || undefined).catch((error: unknown) => {
-					setModel(previous);
-					ui.notify(error instanceof Error ? error.message : String(error), "error");
-				});
-			}}
+			onChange={(next) =>
+				void set({ model: next || undefined }).catch((error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error"))
+			}
 		/>
 	);
 }

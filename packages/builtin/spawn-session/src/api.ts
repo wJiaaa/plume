@@ -30,7 +30,14 @@ export interface SpawnSessionApi {
 	start(parentId: string, callId: string, choice: StartChoice): Promise<string>;
 	/** 卡片上给不给工作树开关：提建议的对话在项目里、那里是 git 仓库。 */
 	offersWorktree(parentId: string): Promise<boolean>;
-	/** 人提了新的事时先弹卡问要不要另开（设置 › 常规里的开关；offer 卡上的「以后不再问」把它关掉）。 */
-	offers(): Promise<boolean>;
-	setOffers(on: boolean): Promise<void>;
+}
+
+/** 设置（`ctx.settings`），设置分区经 `ui.useSettings` 读、改。 */
+export interface SpawnSettings {
+	/** 人提了新的事时先弹卡问要不要另开（设置 › 常规里的开关；offer 卡上的「以后不再问」把它关掉）；缺省开着。 */
+	offers: boolean;
+}
+
+export function normalizeSettings(saved: Record<string, unknown>): SpawnSettings {
+	return { offers: saved.offers !== false };
 }

@@ -22,7 +22,7 @@ import { proposal } from "@plume/styles";
 import { ApprovalFrame, Button, FlowRow, IconButton, Text, Toggle, useI18n, WorktreeToggle } from "@plume/ui";
 import { Archive, BellOff, ChevronRight, Forward, MessageCircle, SquarePen, Undo2, X } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import type { SpawnSessionApi } from "./api.ts";
+import type { SpawnSessionApi, SpawnSettings } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { connect, dismiss, refreshStarted, useDismissed, useStarted } from "./state.ts";
 import spawnCss from "./spawn-session.css";
@@ -487,29 +487,13 @@ function StartedEntry({ callId, title, startedId }: { callId: string; title: str
 /** 设置 › 常规里的开关：offer 卡上点过「以后不再问」后，在这里打开回来。 */
 function OffersSetting() {
 	const text = useText();
-	const [on, setOn] = useState<boolean | undefined>(undefined);
-	useEffect(() => {
-		let alive = true;
-		void api.offers().then(
-			(value) => alive && setOn(value),
-			(error: unknown) => ui.notify(String(error), "error"),
-		);
-		return () => {
-			alive = false;
-		};
-	}, []);
+	const [settings, set] = ui.useSettings<SpawnSettings>();
 	return (
 		<Toggle
-			checked={on ?? true}
-			disabled={on === undefined}
+			checked={settings?.offers ?? true}
+			disabled={settings === undefined}
 			ariaLabel={text.offersTitle}
-			onChange={(next) => {
-				setOn(next);
-				void api.setOffers(next).catch((error: unknown) => {
-					setOn(!next);
-					ui.notify(String(error), "error");
-				});
-			}}
+			onChange={(next) => void set({ offers: next }).catch((error: unknown) => ui.notify(String(error), "error"))}
 		/>
 	);
 }

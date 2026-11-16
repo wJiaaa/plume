@@ -11,15 +11,15 @@
  *   人没点名交给主会话时只留一张卡片，人在卡上选交给主会话、开新会话（`launch`），还是就在这里做。
  * - `/btw 问题`：开一个新的侧边聊天问这句话，打开面板；主对话里什么都不留。
  * - 排队条上的「在侧边聊天中打开」（界面入口的 `ui.queueAction`）：那条排着的话拿到最早那段侧边聊天去问，附件跟着走。
- * - `ctx.serve`：面板列出、新开、提问、停止、关掉侧边聊天；设置 › 智能体里「侧边聊天默认模型」读写 `settings.json`；
- *   交出去的卡片上「开新会话」。
+ * - `ctx.serve`：面板列出、新开、提问、停止、关掉侧边聊天；交出去的卡片上「开新会话」。
+ * - `ctx.settings`：设置 › 智能体里「侧边聊天默认模型」。
  */
 
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message, Plugin, PromptSection, SessionMessage } from "@plume/contract";
 import type { SessionChoice } from "@plume/contract/ui";
-import type { LaunchChoice, SideChatApi } from "./api.ts";
+import { type LaunchChoice, normalizeSettings, type SideChatApi } from "./api.ts";
 import { createSideChatBindings } from "./bindings.ts";
 import { changeIds, sideChangesNote } from "./changes.ts";
 import { CONTROL_MAIN, DISPATCH_TASK, isDispatchSuggestion } from "./controls.ts";
@@ -72,16 +72,11 @@ export default {
 				.catch((error: unknown) => ctx.log.warn(`读到哪里没存上：${String(error)}`));
 		};
 		// 新的侧边聊天用哪个模型；没选就跟随主会话。只管新开的，已经开着的沿用它开时的模型。
-		const settingsFile = join(ctx.dataDir, "settings.json");
-		const saved = await readFile(settingsFile, "utf8").then(
-			(text) => (JSON.parse(text) as { model?: unknown }).model,
-			() => undefined,
-		);
-		let model = typeof saved === "string" ? saved : undefined;
-		let writingSettings: Promise<void> = Promise.resolve();
+		const settings = await ctx.settings({ model: undefined }, normalizeSettings);
 
 		/** `choice`：人在面板里第一句之前选的模型和档位（只取这两样，不对时 `create` 抛错）；`/btw`、排队条新开的没有，用上面的默认。 */
 		async function open(parentId: string, choice?: SessionChoice): Promise<string> {
+			const model = settings.get().model;
 			const picked = choice
 				? { ...(choice.model ? { model: choice.model } : {}), ...(choice.thinking ? { thinking: choice.thinking } : {}) }
 				: model
@@ -244,7 +239,6 @@ export default {
 				ctx.sessions.stop(sideOf(String(sideId)));
 			},
 			close: (tab: string) => bindings.close(String(tab)),
-			model: async () => model,
 			started: (sideId: string, callId: string) => startedFrom(String(sideId), String(callId)),
 			launch(sideId: string, callId: string, choice: LaunchChoice) {
 				const key = `${String(sideId)}:${String(callId)}`;
@@ -274,17 +268,6 @@ export default {
 					})().finally(() => launching.delete(key));
 				launching.set(key, pending);
 				return pending;
-			},
-			setModel(next: string | undefined) {
-				const value = typeof next === "string" && next ? next : undefined;
-				writingSettings = writingSettings
-					.catch(() => undefined)
-					.then(async () => {
-						await writeFile(`${settingsFile}.tmp`, JSON.stringify(value ? { model: value } : {}, null, 2));
-						await rename(`${settingsFile}.tmp`, settingsFile);
-						model = value;
-					});
-				return writingSettings;
 			},
 		} satisfies SideChatApi);
 	},

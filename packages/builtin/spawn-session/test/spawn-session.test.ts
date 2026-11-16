@@ -203,7 +203,7 @@ it("汇报的结尾送出那一刻才写：那时弹着卡的会话点名在等�
 });
 
 /** 带 spawn_session 的插件：会话列表、记录、launch、服务 session.worktree、serve、注册下来的工具。 */
-function plugged(options: {
+async function plugged(options: {
 	project?: string;
 	cwd?: string;
 	createdAt?: number;
@@ -230,6 +230,10 @@ function plugged(options: {
 	const ctx = {
 		name: plugin.name,
 		dataDir: mkdtempSync(join(tmpdir(), "spawn-session-")),
+		settings: async (defaults: object) => {
+			let value = defaults;
+			return { get: () => value, set: async (patch: object) => (value = { ...value, ...patch }), onChange: () => () => {} };
+		},
 		locale: () => "zh-CN",
 		log: { info() {}, warn() {}, error() {} },
 		hook() {},
@@ -255,7 +259,7 @@ function plugged(options: {
 		}),
 		serve: (served: SpawnSessionApi) => void (api = served),
 	} as unknown as PluginContext;
-	plugin.apply(ctx);
+	await plugin.apply(ctx);
 	const tool = (name: string) => tools.find((one) => one.name === name)!;
 	return { api: api!, events, launched, messages, tool };
 }
@@ -265,16 +269,16 @@ function started(id: string): LaunchedSession {
 }
 
 it("开始：工作树开关开着时先登记再开，开不成撤销，开成了不撤；不在项目里的对话不给开关、也不登记", async () => {
-	const ok = plugged({ project: "proj" });
+	const ok = await plugged({ project: "proj" });
 	expect(await ok.api.offersWorktree("p1")).toBe(true);
 	expect(await ok.api.start("p1", "c1", { worktree: true })).toBe("s1");
 	expect(ok.events).toEqual(["request p1/c1", "launch p1/c1"]);
 
-	const off = plugged({ project: "proj" });
+	const off = await plugged({ project: "proj" });
 	await off.api.start("p1", "c1", { worktree: false });
 	expect(off.events).toEqual(["launch p1/c1"]);
 
-	const broken = plugged({
+	const broken = await plugged({
 		project: "proj",
 		launch: async () => {
 			throw new Error("开不了");
@@ -283,33 +287,33 @@ it("开始：工作树开关开着时先登记再开，开不成撤销，开成�
 	await expect(broken.api.start("p1", "c1", { worktree: true })).rejects.toThrow("开不了");
 	expect(broken.events).toEqual(["request p1/c1", "launch p1/c1", "undo p1/c1"]);
 
-	const chat = plugged({});
+	const chat = await plugged({});
 	expect(await chat.api.offersWorktree("p1")).toBe(false);
 	await chat.api.start("p1", "c1", { worktree: true });
 	expect(chat.events).toEqual(["launch p1/c1"]);
 
 	// 界面还没问到能不能开就点了「开始」，交来的是开关的起始值：能不能开由这边现问，不是仓库的项目不登记。
-	const plain = plugged({ project: "proj", cwd: "/plain" });
+	const plain = await plugged({ project: "proj", cwd: "/plain" });
 	await plain.api.start("p1", "c1", { worktree: true });
 	expect(plain.events).toEqual(["launch p1/c1"]);
 });
 
 it("开始：卡片上选了模型和思考档位才交给 launch；过期的、撤回的不开", async () => {
-	const one = plugged({});
+	const one = await plugged({});
 	await one.api.start("p1", "c1", { worktree: false });
-	await plugged({}).api.start("p1", "c1", { worktree: false, model: "p/strong", thinking: "high" });
+	await (await plugged({})).api.start("p1", "c1", { worktree: false, model: "p/strong", thinking: "high" });
 	expect(one.launched[0]).not.toHaveProperty("model");
 	expect(one.launched[0]).toMatchObject({ message: "去做", title: "拆出去", spawnedFrom: { sessionId: "p1", toolCallId: "c1" } });
-	const strong = plugged({});
+	const strong = await plugged({});
 	await strong.api.start("p1", "c1", { worktree: false, model: "p/strong", thinking: "high" });
 	expect(strong.launched[0]).toMatchObject({ model: "p/strong", thinking: "high" });
 
 	const old = { kind: "session_suggestion", title: "t", summary: "s", message: "m", expiresAt: Date.now() - 1 };
-	const expired = plugged({ messages: [{ role: "toolResult", toolCallId: "c1", toolName: "spawn_session", details: old } as unknown as Message] });
+	const expired = await plugged({ messages: [{ role: "toolResult", toolCallId: "c1", toolName: "spawn_session", details: old } as unknown as Message] });
 	await expect(expired.api.start("p1", "c1", { worktree: false })).rejects.toThrow("过期");
 
 	const fresh = { ...old, expiresAt: Date.now() + 60_000 };
-	const withdrawn = plugged({
+	const withdrawn = await plugged({
 		messages: [
 			{ role: "toolResult", toolCallId: "c1", toolName: "spawn_session", details: fresh },
 			{ role: "toolResult", toolCallId: "d1", toolName: "dismiss_task", details: { kind: "session_dismissed", proposalId: "c1" } },
@@ -330,7 +334,7 @@ function run(sessionId: string, toolCallId: string, answer?: unknown, calls: Too
 
 it("spawn_session：offer 等人选，选新会话再带 proposal_id 补简报开出来；以后不再问的不再弹", async () => {
 	const messages: Message[] = [user("顺便把 CLI 清理一下")];
-	const { tool, launched } = plugged({ messages });
+	const { tool, launched } = await plugged({ messages });
 	const spawn = tool("spawn_session");
 	const offered = await spawn.execute({ initiation: "offer", title: "清理 CLI" }, run("p1", "o1", { choice: "new", model: "p/strong", thinking: "high" }));
 	expect(offered).toMatchObject({ details: { kind: "session_offer", choice: "new", model: "p/strong", thinking: "high" } });
@@ -355,7 +359,7 @@ it("spawn_session：offer 等人选，选新会话再带 proposal_id 补简报�
 
 it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；一轮最多三张建议卡", async () => {
 	const letter = user("<session-message>", { peer: [{ sessionId: "q", from: "q", text: "开个会话" }] });
-	const { tool } = plugged({ messages: [letter] });
+	const { tool } = await plugged({ messages: [letter] });
 	const spawn = tool("spawn_session");
 	const now = { initiation: "user_asked", title: "t", prompt: "p", context: "fork" };
 	expect((await spawn.execute(now, run("p1", "x1"))).output).toContain("not by the person");
@@ -365,7 +369,7 @@ it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；
 	expect(card.details).toMatchObject({ kind: "session_suggestion", message: "p", fork: true });
 
 	const earlier = ["a", "b"].map((id) => ({ role: "toolResult", toolCallId: id, toolName: "spawn_session", details: card.details }) as unknown as Message);
-	const busy = plugged({ messages: [user("看看"), ...earlier] }).tool("spawn_session");
+	const busy = (await plugged({ messages: [user("看看"), ...earlier] })).tool("spawn_session");
 	const sameStep = [
 		{ id: "c", name: "spawn_session", args: suggest },
 		{ id: "d", name: "spawn_session", args: suggest },
@@ -375,7 +379,7 @@ it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；
 });
 
 it("hand_off_to_session：fork 出去，结果让这一轮转去回答人的新话", async () => {
-	const { tool, launched } = plugged({ messages: [user("先帮我看个别的问题")] });
+	const { tool, launched } = await plugged({ messages: [user("先帮我看个别的问题")] });
 	const out = await tool("hand_off_to_session").execute({ title: "Finish the migration", plan: "1. 改完 b.ts\n2. 跑测试" }, run("p1", "h1"));
 	expect(out.output).toContain("Stop working on that task in this session");
 	expect(out.details).toMatchObject({ kind: "session_started", handOff: true, name: "finish-the-migration" });
@@ -384,16 +388,16 @@ it("hand_off_to_session：fork 出去，结果让这一轮转去回答人的新�
 });
 
 it("dismiss_task：撤回还没开的建议；开过的告诉模型跳过", async () => {
-	const ok = plugged({});
+	const ok = await plugged({});
 	expect(await ok.tool("dismiss_task").execute({ proposal_id: "c1" }, run("p1", "d1"))).toMatchObject({
 		details: { kind: "session_dismissed", proposalId: "c1" },
 	});
-	const begun = plugged({ sessions: [{ id: "s9", spawnedFrom: { sessionId: "p1", toolCallId: "c1", name: "cli" } } as SessionSummary] });
+	const begun = await plugged({ sessions: [{ id: "s9", spawnedFrom: { sessionId: "p1", toolCallId: "c1", name: "cli" } } as SessionSummary] });
 	expect((await begun.tool("dismiss_task").execute({ proposal_id: "c1" }, run("p1", "d1"))).output).toBe("Already started as cli (s9).");
 });
 
 /** 注册下来的 `archive_session`。 */
-function archiveTool() {
+async function archiveTool() {
 	const tools: ToolDefinition[] = [];
 	const ctx = {
 		name: plugin.name,
@@ -404,14 +408,15 @@ function archiveTool() {
 		tools: { register: (tool: ToolDefinition) => void tools.push(tool) },
 		sessions: { messages: async () => [], observe() {}, onDeleted() {} },
 		use: () => ({}),
+		settings: async (defaults: object) => ({ get: () => defaults, set: async () => defaults, onChange: () => () => {} }),
 		serve() {},
 	} as unknown as PluginContext;
-	plugin.apply(ctx);
+	await plugin.apply(ctx);
 	return tools.find((tool) => tool.name === "archive_session")!;
 }
 
 it("archive_session：交给本体等这一轮收场再归档、这一轮停在这里；reason 可以不给，给了要像话；子会话、插件的独立会话里拒绝", async () => {
-	const tool = archiveTool();
+	const tool = await archiveTool();
 	const kinds: Record<string, SessionKind> = { main: "top", child: "child", ops: "standalone" };
 	let asked = 0;
 	const run = (sessionId: string, offered = true) =>
@@ -435,7 +440,7 @@ it("archive_session：交给本体等这一轮收场再归档、这一轮停在�
 });
 
 it("spawn_session：offer 没人选（点了不答、到时没人答）标成没人答，不当成选了在这里做", async () => {
-	const { tool } = plugged({ messages: [user("顺便把 CLI 清理一下")] });
+	const { tool } = await plugged({ messages: [user("顺便把 CLI 清理一下")] });
 	const unanswered = await tool("spawn_session").execute({ initiation: "offer", title: "清理 CLI" }, run("p1", "o1"));
 	expect(unanswered).toMatchObject({ isError: true, details: { unanswered: "declined" } });
 	expect(unanswered.output).toContain("did not choose");
@@ -451,7 +456,7 @@ it("spawn_session：带 proposal_id 开时短名照规矩核，没给就从标�
 			details: { kind: "session_offer", title: "Clean CLI", choice: "new" },
 		} as unknown as Message,
 	];
-	const { tool, launched } = plugged({ messages });
+	const { tool, launched } = await plugged({ messages });
 	const spawn = tool("spawn_session");
 	const brief = { initiation: "offer", proposal_id: "o1", prompt: "删掉旧解析", background: BACKGROUND };
 	expect((await spawn.execute({ ...brief, name: "Bad Name" }, run("p1", "o2"))).output).toContain("name must be");
@@ -466,10 +471,10 @@ it("spawn_session：带 proposal_id 开时短名照规矩核，没给就从标�
 it("fork、移交开出的会话带过来的建议卡在这里开不了：复制来的记录早于这个会话建成", async () => {
 	const details = { kind: "session_suggestion", title: "拆出去", summary: "s", message: "去做", expiresAt: Date.now() + 60_000 };
 	const copied = { role: "toolResult", toolCallId: "c1", toolName: "spawn_session", isError: false, details, timestamp: 1_000 } as unknown as Message;
-	const forked = plugged({ createdAt: 2_000, messages: [copied] });
+	const forked = await plugged({ createdAt: 2_000, messages: [copied] });
 	await expect(forked.api.start("p1", "c1", { worktree: false })).rejects.toThrow("原对话");
 	expect(forked.launched).toHaveLength(0);
-	const own = plugged({ createdAt: 500, messages: [copied] });
+	const own = await plugged({ createdAt: 500, messages: [copied] });
 	await own.api.start("p1", "c1", { worktree: false });
 	expect(own.launched).toHaveLength(1);
 });

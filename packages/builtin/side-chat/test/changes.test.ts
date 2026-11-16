@@ -61,6 +61,7 @@ async function fixture(t: TestContext) {
 		tools: { register: () => () => {} },
 		commands: { provide() {} },
 		serve() {},
+		settings: async (defaults: object) => ({ get: () => defaults, set: async (patch: object) => ({ ...defaults, ...patch }), onChange: () => () => {} }),
 		sessions: {
 			list: async () => [...sessions.values()],
 			get: async (id: string) => sessions.get(id),

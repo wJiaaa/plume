@@ -28,9 +28,6 @@ export interface SideChatApi {
 	stop(sideId: string): void;
 	/** 关闭标签，删除绑定和对应子会话；卸载界面不能调用这里。 */
 	close(tab: string): Promise<void>;
-	/** 新的侧边聊天用的模型（`SessionModel.id`）；没选时是 undefined，跟随主会话。 */
-	model(): Promise<string | undefined>;
-	setModel(model: string | undefined): Promise<void>;
 	/**
 	 * 交出去的卡片上点了「开新会话」：在主会话的项目（不在项目里时是它的目录）里开一个新会话，第一句是卡上那条指令，
 	 * 记着从这次调用开出来（`spawnedFrom`），用卡上选的模型和思考档位（`choice`，没选就是默认的）。同一张卡开过就不再开，返回开出来的会话 id。
@@ -38,4 +35,14 @@ export interface SideChatApi {
 	launch(sideId: string, callId: string, choice: LaunchChoice): Promise<string>;
 	/** 这张卡开过的会话；没开过是 undefined。 */
 	started(sideId: string, callId: string): Promise<string | undefined>;
+}
+
+/** 设置（`ctx.settings`），设置分区和面板经 `ui.useSettings` 读、改。 */
+export interface SideChatSettings {
+	/** 新的侧边聊天用的模型（`SessionModel.id`）；没选时是 undefined，跟随主会话。 */
+	model: string | undefined;
+}
+
+export function normalizeSettings(saved: Record<string, unknown>): SideChatSettings {
+	return { model: typeof saved.model === "string" && saved.model ? saved.model : undefined };
 }
