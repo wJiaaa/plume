@@ -209,7 +209,7 @@ describe("拼进系统提示词", () => {
 		const empty = guidelines({ identity: "x", guidelines: "  " });
 		expect(empty).toMatch(/^Guidelines:\n- Write local file references/);
 		expect(empty).toContain("- Do not invent file paths");
-		expect(empty).toContain("Reading or writing outside the workspace asks the user for approval");
+		expect(empty).toContain("Reading anywhere on this machine");
 	});
 
 	it("编程那套比通用多三条改代码的准则，其余一样", () => {

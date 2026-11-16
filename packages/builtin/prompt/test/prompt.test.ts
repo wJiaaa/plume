@@ -78,9 +78,10 @@ describe("系统提示词的段", () => {
 		expect(buildPromptSections({ ...base, tools: bash }).find((section) => section.id === "environment")?.text).not.toContain("Commands run in");
 	});
 
-	it("项目的别的源码目录：写、改文件要先问人，按种类点名这一轮写、改文件的工具，没有就不点名", () => {
+	it("项目的别的源码目录：请求批准下写、改文件要先问人，按种类点名这一轮写、改文件的工具，没有就不点名", () => {
 		const workspace = (tools: SystemPromptInput["tools"]) =>
-			buildPromptSections({ ...base, projectRoots: ["/work/app", "/work/lib"], tools }).find((section) => section.id === "workspace")?.text;
+			buildPromptSections({ ...base, permissionMode: "ask", projectRoots: ["/work/app", "/work/lib"], tools }).find((section) => section.id === "workspace")
+				?.text;
 		const basic = [
 			{ name: "read", kind: "view" as const },
 			{ name: "write", kind: "create" as const },
@@ -93,24 +94,30 @@ describe("系统提示词的段", () => {
 		expect(workspace([{ name: "read", kind: "view" }])).toContain("Writing there is not free: writing or editing a file there asks the user first,");
 	});
 
-	it("工作区外怎么说跟着权限模式走：要批准的两档说要批准，完全访问说哪里都不问（计划模式下只说读），项目其他目录也不再说写要先问", () => {
+	it("工作区外怎么说跟着权限模式走：请求批准说要批准，帮我批准说读哪里都不问、密钥和风险写入才问，完全访问说哪里都不问（计划模式下只说读），改 ~/.plume 总要问", () => {
 		const prompt = (input: Partial<SystemPromptInput>) => joinSections(buildPromptSections({ ...base, projectRoots: ["/work/app", "/work/lib"], ...input }));
-		for (const permissionMode of ["ask", "auto"] as const) {
-			const text = prompt({ permissionMode });
-			expect(text).toContain("Reading or writing outside the workspace asks the user for approval");
-			expect(text).toContain("Writing there is not free:");
-			expect(text).not.toContain("Full access is on");
-		}
+		const ask = prompt({ permissionMode: "ask" });
+		expect(ask).toContain("Reading or writing outside the workspace asks the user for approval");
+		expect(ask).toContain("Writing there is not free:");
+		expect(ask).not.toContain("Full access is on");
+		const auto = prompt({ permissionMode: "auto" });
+		expect(auto).toContain("Reading anywhere on this machine");
+		expect(auto).toContain("except credential files");
+		expect(auto).toContain("Changing Plume's own data directory (~/.plume) always asks the user");
+		expect(auto).not.toContain("Reading or writing outside the workspace asks the user for approval");
+		expect(auto).not.toContain("Writing there is not free");
 		const full = prompt({ permissionMode: "full" });
 		expect(full).toContain(
 			"Full access is on: reading and writing anywhere on this machine — other projects, other workspaces, the user's own configuration — needs no approval",
 		);
-		// 完全访问下本体直接放行，「要批准」「写要先问」都是假话。
+		// 完全访问下本体直接放行，「要批准」「写要先问」都是假话；只有改 ~/.plume 照样问。
 		expect(full).not.toContain("asks the user for approval");
 		expect(full).not.toContain("Writing there is not free");
+		expect(full).toContain("Changing Plume's own data directory (~/.plume) always asks the user");
 		const planning = prompt({ permissionMode: "full", readOnly: true });
 		expect(planning).toContain("Full access is on: reading anywhere on this machine");
 		expect(planning).not.toContain("reading and writing anywhere");
+		expect(planning).not.toContain("~/.plume");
 	});
 
 	it("取证用的改动去哪改，跟着工作区走", () => {

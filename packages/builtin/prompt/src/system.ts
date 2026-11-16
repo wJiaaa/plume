@@ -126,18 +126,32 @@ function fixedGuidelines(input: Pick<SystemPromptInput, "permissionMode" | "read
 }
 
 /**
- * 工作区外怎么说，跟着权限模式走。
+ * 工作区外怎么说，跟着权限模式走，三档各说实话：
  *
- * 要批准的两档必须说：不说的话模型只看见一个莫名其妙的失败，然后换 `cat`、`cat > … <<EOF` 去绕。完全访问下不能照这句说：
- * 本体在那一档直接放行（`tool-run.ts`），说「要批准」是一句假话，模型照它把本机当禁区，用户点名本机配置过的东西（一个 ssh 别名）它不去查，
- * 转去猜。两种说法都点明工作区不是能看的范围的边界。
+ * - 请求批准：工作区外读写都问人。必须说：不说的话模型只看见一个莫名其妙的失败，然后换 `cat`、`cat > … <<EOF` 去绕。
+ * - 帮我批准：读哪里都不问，只有密钥文件问（plume.approval 的 `assessView`）；文件工具写项目外的普通目录不问，系统目录、钥匙目录、
+ *   shell 启动文件问；命令仍在只许写工作区和临时目录的沙箱里，往外写要提权。
+ * - 完全访问：本体直接放行（`tool-run.ts`），说「要批准」是一句假话，模型照它把本机当禁区，用户点名本机配置过的东西（一个 ssh 别名）
+ *   它不去查，转去猜。
+ *
+ * 每档都点明工作区不是能看的范围的边界；能写的两档说清改 Plume 自己的数据目录（`~/.plume`）总要人亲自点头（`RunFiles.change`），
+ * 让模型用文件工具去写、卡上有 diff，而不是换 shell 绕过去。
  */
 function outsideGuideline(input: Pick<SystemPromptInput, "permissionMode" | "readOnly">): string {
-	if (input.permissionMode !== "full") {
+	const appData = input.readOnly
+		? ""
+		: " Changing Plume's own data directory (~/.plume) always asks the user, in every permission mode — use the file tools for it so the user sees the diff, never a shell command.";
+	if (input.permissionMode === "ask") {
 		return "Reading or writing outside the workspace asks the user for approval — that is a rule, not a malfunction, and not a reason to guess instead of looking. Use the file tools for it.";
 	}
+	if (input.permissionMode === "auto") {
+		const writing = input.readOnly
+			? ""
+			: " The file tools write outside the workspace without approval too, except system directories, key directories and shell startup files, which ask; shell commands still run in a sandbox that only writes the workspace and temporary directories.";
+		return `Reading anywhere on this machine — other projects, other workspaces, the user's own configuration — needs no approval, except credential files (API keys, SSH keys, Plume's settings), which ask; look there whenever the task needs it instead of guessing.${writing}${appData}`;
+	}
 	const access = input.readOnly ? "reading anywhere on this machine" : "reading and writing anywhere on this machine";
-	return `Full access is on: ${access} — other projects, other workspaces, the user's own configuration — needs no approval, so look there whenever the task needs it instead of guessing.`;
+	return `Full access is on: ${access} — other projects, other workspaces, the user's own configuration — needs no approval, so look there whenever the task needs it instead of guessing.${appData}`;
 }
 
 /**
@@ -221,9 +235,9 @@ export function buildPromptSections(input: SystemPromptInput): PromptSection[] {
 Files that exist only to get this answer — a script to check a hypothesis, downloaded sample data, output you needed once — go here, whether or not the user said so; it is deleted with the conversation. Files the user will keep, run or commit go in the working directory, and nothing else does: no documentation, README or example files they did not ask for.`
 		: "";
 	const otherRoots = (input.projectRoots ?? []).map((root) => root.replace(/\\/g, "/")).filter((root) => root !== cwd);
-	// 完全访问下写哪里都不问，「写那里要先问」是假话；写的规矩由准则里工作区外那条说。
+	// 只有请求批准下写项目外要先问；另两档这么说是假话，写的规矩由准则里工作区外那条说。
 	const writing =
-		input.permissionMode === "full" ? "" : ` Writing there is not free: ${writersAsk(input.tools)}, as for any path outside the working directory.`;
+		input.permissionMode === "ask" ? ` Writing there is not free: ${writersAsk(input.tools)}, as for any path outside the working directory.` : "";
 	const sources = otherRoots.length
 		? `\n\nThis project also covers these folders — read, search and list them without asking:\n${otherRoots.map((root) => `- ${root}`).join("\n")}\nUse absolute paths there; a relative path resolves against the working directory.${writing}`
 		: "";

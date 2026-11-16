@@ -289,6 +289,8 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 		[{ text: "我来改。", toolCalls: [{ id: "call_note", name: "note", args: { text: "买菜" } }, readHello, edit] }, { text: "改好了" }],
 		[notes],
 	);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "把 hello 改成 hi" }] });
@@ -434,6 +436,8 @@ it("用户拒绝时不执行，外层预先放行时不问", async () => {
 	};
 	const bash = { id: "call_bash", name: "bash", args: { command: "cat hello.txt" } };
 	const { service, session, events, until, idle } = await start([{ toolCalls: [bash, readHello, edit] }, { text: "好" }], [allowRead]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "看一下再改" }] });
@@ -929,6 +933,8 @@ it("流到一半按停止：开了头的工具调用补一条「已停止」的�
 
 it("等审批时按停止：结果说它从没执行，标成已停止", async () => {
 	const { service, session, until, idle } = await start([{ toolCalls: [readHello, edit] }]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
 	await until((event): event is AgentEvent => event.type === "approval" && event.approval !== undefined);
@@ -959,6 +965,8 @@ it("回复写完时草稿由那条 message 顶替，不先发一次清空", asyn
 
 it("调用开始执行时记下时刻：等审批的也算开始了，跑完就作废", async () => {
 	const { service, session, events, until, idle } = await start([{ toolCalls: [readHello, edit] }, { text: "好了" }]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
 	await until((event): event is AgentEvent => event.type === "approval" && event.approval !== undefined);
@@ -2336,6 +2344,8 @@ it("归档、删归档、按日期清：花销留着，正在跑的不删", asyn
 	let ctx: PluginContext | undefined;
 	const plugin: Plugin = { name: "test.usage", apply: (context) => void (ctx = context) };
 	const { service, session, until, idle } = await start([{ text: "好" }, { text: "我来改。", toolCalls: [readHello, edit] }], [plugin]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const requests = async () => ((await ctx?.model.usage())?.requests ?? []).reduce((sum, bucket) => sum + bucket.requests, 0);
 	let done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
