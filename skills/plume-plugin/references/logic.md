@@ -204,7 +204,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 ### 命令
 
-跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。
+跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。完全访问下命令写明要改 Plume 的数据目录（重定向、`cp`、`sed -i`、`rm`……指到 `~/.plume`）时，本体在起它之前问人、只认人答，人不点头 `run.exec` 就抛错，把错误交给模型即可。
 
 - 本体按权限模式选沙箱档：请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错。用用户的 shell、向登录 shell 要的环境起命令。
 - 返回 `RunProcess`：`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像被沙箱拒了时交回本体给模型的那句说明（说出实际跑的那一档、说清是策略拒绝不是命令出错），原样放进结果，不像交回 `undefined`。

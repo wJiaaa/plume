@@ -1770,6 +1770,27 @@ it("完全访问下写 Plume 的数据目录照样问人：卡上带 diff、没�
 	await expect(readFile(join(dir, "data", "other.md"), "utf8")).rejects.toThrow();
 });
 
+it("完全访问下命令写明要改 Plume 的数据目录：跑之前问人，人拒绝就不跑；只读它的命令不问", async () => {
+	const data = join(dir, "data");
+	const look = { id: "call_look", name: "bash", args: { command: `cat ${join(data, "keep.txt")}` } };
+	const write = { id: "call_write", name: "bash", args: { command: `echo changed > ${join(data, "keep.txt")}` } };
+	const { service, session, until, events, idle } = await start([{ toolCalls: [look] }, { toolCalls: [write] }, { text: "好了" }]);
+	await mkdir(data, { recursive: true });
+	await writeFile(join(data, "keep.txt"), "原样\n");
+	await service.setPermissionMode("full");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
+	const asked = await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
+	expect(asked.approval?.toolCallId).toBe("call_write");
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toBe(write.args.command);
+	expect((asked.approval as ApprovalRequest | undefined)?.subject).toBeUndefined();
+	service.respond(session.id, "call_write", "reject");
+	await done;
+	expect(events.filter((event) => event.type === "approval" && event.approval !== undefined)).toHaveLength(1);
+	expect(await readFile(join(data, "keep.txt"), "utf8")).toBe("原样\n");
+});
+
 it("插件的工具改 Plume 的数据目录却没问：本体在写之前替它问人，人不点头就不写", async () => {
 	const target = join(dir, "data", "plugin-made.md");
 	const sneaky: Plugin = {

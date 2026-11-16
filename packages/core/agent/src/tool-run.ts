@@ -502,6 +502,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 				shell: commands.shell,
 				ask: coreAsk,
 				appData: guardAppData,
+				permission: async () => (await permission()).mode,
 				alive,
 			});
 			const run: ToolRun = {

@@ -18,6 +18,7 @@ import type {
 	FileStamp,
 	InstalledPlugin,
 	Message,
+	PermissionMode,
 	PluginChanges,
 	PluginResources,
 	PluginWorkspace,
@@ -28,7 +29,7 @@ import type {
 	ShellInfo,
 	ToolRun,
 } from "@plume/contract";
-import { withinOrIs } from "@plume/platform";
+import { dialectsOf, withinOrIs } from "@plume/platform";
 import {
 	ArtifactStore,
 	artifactResource,
@@ -36,6 +37,7 @@ import {
 	ChangeLock,
 	ChangeStore,
 	type ChangeWords,
+	commandWritesAppData,
 	CommandChanges,
 	type CommandObservation,
 	gitListedFiles,
@@ -80,6 +82,8 @@ export interface CallFiles {
 	 * 帮我批准都不替人点头，卡上没有「以后不再问」），交回时说人在其间点没点过头。不给就是没人可问，这类写入一律拒绝。
 	 */
 	appData?<T>(work: () => Promise<T>): Promise<{ value: T; approved: boolean }>;
+	/** 这次调用所在项目现在的权限模式。完全访问下命令不进沙箱，命令写明要改 Plume 自己的目录时本体先问人（`exec`）。 */
+	permission?(): Promise<PermissionMode>;
 	/** 调用答完以后再用就抛错。 */
 	alive(what: string): void;
 }
@@ -305,6 +309,7 @@ export class Workspace {
 			files,
 			exec: (exec) => async (command, options) => {
 				const { recordChanges, ...rest } = options ?? {};
+				await confirmCommandAppData(call, String(command), { ...changeScope, cwd: rest.cwd ?? call.cwd });
 				if (recordChanges !== true) return exec(command, options);
 				call.alive("ToolRun.exec");
 				const observation = await this.commands.begin({ sessionId: call.sessionId, cwd: rest.cwd ?? call.cwd });
@@ -371,6 +376,30 @@ async function guardAppData<A extends { text?: string }>(call: CallFiles, path: 
 	// i18n-exempt：交给模型的结果。
 	if (!asked.approved) throw new Error(`用户没有批准改动 Plume 的数据目录：${path}。${DECLINED}`);
 	return edited.value;
+}
+
+/**
+ * 完全访问下命令不进沙箱：一行命令写明要改 Plume 自己的目录（`commandWritesAppData`：重定向、`cp`、`sed -i`、`rm`……）时，
+ * 先问人，只认人答（同 `guardAppData`），人不点头就不跑、抛出去的话交给模型。只认写明的：脚本里写的、拼出来的路径认不出来。
+ * 别的档不问：命令在只许写工作区和临时目录的沙箱里，写不到那里，要写得提权，提权本来就只认人答。
+ */
+async function confirmCommandAppData(call: CallFiles, command: string, scope: { cwd: string; scratchDirs: readonly string[]; dataDir: string }): Promise<void> {
+	if (call.readOnly || !call.permission || (await call.permission()) !== "full") return;
+	const touched = await commandWritesAppData(scope, command, dialectsOf(await call.shell()));
+	if (!touched.length) return;
+	const ask = call.ask;
+	// i18n-exempt：交给模型的结果。
+	if (!call.appData || !ask) throw new Error(`这条命令要改 Plume 的数据目录，需要用户亲自批准，而这个会话没有可以询问的人：${touched.join(", ")}`);
+	const asked = await call.appData(() =>
+		ask({
+			kind: "command",
+			title: text("files.commandAppData", { name: basename(touched[0]!) || touched[0]! }),
+			detail: command,
+			reason: text("files.writeAppDataScope"),
+		}),
+	);
+	// i18n-exempt：交给模型的结果。
+	if (!asked.approved) throw new Error(`用户没有批准这条改动 Plume 数据目录的命令：${touched.join(", ")}。${DECLINED}`);
 }
 
 async function confirm(call: CallFiles, request: ReadRequest): Promise<{ ok: true } | { ok: false; message: string }> {
