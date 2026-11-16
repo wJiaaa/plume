@@ -1,77 +1,123 @@
 import type { ChangeHunk } from "@plume/contract";
-import { OverlayScrollbar, translate } from "@plume/ui";
-import { useRef } from "react";
+import { OverlayScrollbar, useI18n } from "@plume/ui";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import type { Token } from "../../markdown/highlight.ts";
 import { useDiffHighlight } from "./diff-highlight.ts";
+
+/** 一屏代码约十几行。整段保留原文、行号和滚动尺寸，只给眼前的一两页铺配色片段。 */
+const PAGE = 24;
 
 /**
  * 统一 diff：左边一栏行号，加的行一条绿色竖条、删的行一条红色，代码在底下照语法上色。
- *
- * 长行横着滚，这就是分层的原因：行铺在和最长那行一样宽的一层上，底色和分隔线跟着整行走，不在折叠处断掉；行号和竖条钉在
- * 左边，行长到要横着滚的时候正是最想知道在哪一行的时候。hunk 头、截断提示这些不是代码的东西也钉住，横滚走了谁也帮不上。
+ * 行铺在和最长那行一样宽的一层上，行号和竖条钉在左边，横滚时仍能看见。
  */
-export function DiffView({
+export const DiffView = memo(function DiffView({
 	hunks,
 	path,
 	showPath = false,
 	maxLines = 600,
 }: {
 	hunks: ChangeHunk[];
-	/** 是哪个文件：语法按扩展名定，没有路径就只能画纯文本。画不画在上面是 `showPath` 的事。 */
 	path?: string;
 	showPath?: boolean;
 	maxLines?: number;
 }) {
-	let emitted = 0;
+	const { t } = useI18n();
 	const scroller = useRef<HTMLDivElement>(null);
-	// 语法加载完之前、认不出的文件都是 null：行退回纯文本，diff 从不等解析器才读得了。
-	const coloured = useDiffHighlight(hunks, path);
-
+	// 显示上限也约束解析：末尾根本不画的代码，不参与两边的语法分析。
+	const shown = useMemo(() => {
+		const visible: ChangeHunk[] = [];
+		let remaining = maxLines;
+		for (const hunk of hunks) {
+			if (remaining <= 0) break;
+			visible.push(hunk.lines.length <= remaining ? hunk : { ...hunk, lines: hunk.lines.slice(0, remaining) });
+			remaining -= hunk.lines.length;
+		}
+		return { hunks: visible, paged: maxLines - remaining > PAGE, truncated: remaining < 0 || visible.length < hunks.length };
+	}, [hunks, maxLines]);
+	const [pages, setPages] = useState<ReadonlySet<number> | null>(null);
+	// 等第一屏原文已排版、确实露出来才启动长段的整段解析，不让语法加载抢点击那一帧。
+	const coloured = useDiffHighlight(shown.hunks, !shown.paged || pages !== null ? path : undefined);
+	useEffect(() => {
+		if (!shown.paged || !scroller.current) return;
+		const observer = new IntersectionObserver((entries) => {
+			setPages((previous) => {
+				const next = new Set(previous);
+				for (const entry of entries) {
+					const page = Number((entry.target as HTMLElement).dataset.diffPage);
+					if (entry.isIntersecting) next.add(page);
+					else next.delete(page);
+				}
+				return !previous && next.size === 0 ? null : next;
+			});
+		});
+		for (const page of scroller.current.querySelectorAll("[data-diff-page]")) observer.observe(page);
+		return () => observer.disconnect();
+	}, [shown]);
+	let offset = 0;
 	return (
 		<div className="plume-scroll-host relative">
-			{/* 代码字号，不是界面字号：这里是代码，跟着「代码字号」走。 */}
 			<div ref={scroller} className="tool-diff-scroll overflow-x-auto font-mono text-code">
 				<div className="w-max min-w-full">
 					{showPath && path && <div className="sticky left-0 w-max border-b border-line-soft px-3 py-1.5 text-caption text-ink-faint">{path}</div>}
-					{hunks.map((hunk, hunkIndex) => (
-						<div key={hunkIndex} className="border-b border-line-soft last:border-b-0">
-							{hunkIndex > 0 && (
-								<div className="sticky left-0 w-max bg-shell/60 px-3 py-0.5 text-caption text-ink-faint">
-									@@ -{hunk.oldStart} +{hunk.newStart} @@
-								</div>
-							)}
-							{hunk.lines.map((line, lineIndex) => {
-								if (emitted >= maxLines) return null;
-								// 配色和这些行按同一个次序生成，数到第几行就是第几份配色。
-								const tokens = coloured?.[emitted];
-								emitted += 1;
-								const kind = line.type === "add" ? "tool-diff-add" : line.type === "remove" ? "tool-diff-remove" : "";
-								return (
-									<div key={lineIndex} className={`flex ${kind}`}>
-										{/* 钉住的两栏要有不透明的底：行的底色是半透明的，代码横滚时会从数字中间穿过去。 */}
-										<span className="tool-diff-gutter sticky left-0 z-[1] w-[42px] shrink-0 pr-2 text-right select-none">
-											{line.newLine ?? line.oldLine ?? ""}
-										</span>
-										<span className="tool-diff-rail sticky left-[42px] z-[1] w-[3px] shrink-0" />
-										{/* 语法没加载完时底色和竖条已经说了改动，字先用中性色，不闪一下整片绿或整片红。 */}
-										<span className="tool-diff-code shrink-0 px-2.5 whitespace-pre text-ink">
-											{tokens?.length
-												? tokens.map((token, index) => (
-														<span key={index} className={token.className}>
-															{token.text}
-														</span>
-													))
-												: line.text || " "}
-										</span>
+					{shown.hunks.map((hunk, hunkIndex) => {
+						const start = offset;
+						offset += hunk.lines.length;
+						return (
+							<div key={hunkIndex} className="border-b border-line-soft last:border-b-0">
+								{hunkIndex > 0 && (
+									<div className="sticky left-0 w-max bg-shell/60 px-3 py-0.5 text-caption text-ink-faint">
+										@@ -{hunk.oldStart} +{hunk.newStart} @@
 									</div>
-								);
-							})}
-						</div>
-					))}
-					{emitted >= maxLines && <div className="sticky left-0 w-max px-3 py-1.5 text-caption text-ink-faint">{translate("diffView.truncated")}</div>}
+								)}
+								{Array.from({ length: Math.ceil(hunk.lines.length / PAGE) }, (_, i) => {
+									const first = i * PAGE;
+									const page = start + first;
+									return <DiffPage key={page} lines={hunk.lines} first={first} page={page} colours={!shown.paged || pages?.has(page) ? coloured : null} />;
+								})}
+							</div>
+						);
+					})}
+					{shown.truncated && <div className="sticky left-0 w-max px-3 py-1.5 text-caption text-ink-faint">{t("diffView.truncated")}</div>}
 				</div>
 			</div>
-			{/* 画出来而不用原生的：macOS 把滚动条藏到有东西动才出来，一行字跑出右边又没有滑块，读起来像被截断了。 */}
 			<OverlayScrollbar viewport={scroller} orientation="horizontal" placement="sticky" />
 		</div>
 	);
-}
+});
+
+const DiffPage = memo(function DiffPage({
+	lines,
+	first,
+	page,
+	colours,
+}: {
+	lines: ChangeHunk["lines"];
+	first: number;
+	page: number;
+	colours: Token[][] | null;
+}) {
+	return (
+		<div data-diff-page={page}>
+			{lines.slice(first, first + PAGE).map((line, i) => {
+				const tokens = colours?.[page + i];
+				const kind = line.type === "add" ? "tool-diff-add" : line.type === "remove" ? "tool-diff-remove" : "";
+				return (
+					<div key={i} className={`flex ${kind}`}>
+						<span className="tool-diff-gutter sticky left-0 z-[1] w-[42px] shrink-0 pr-2 text-right select-none">{line.newLine ?? line.oldLine ?? ""}</span>
+						<span className="tool-diff-rail sticky left-[42px] z-[1] w-[3px] shrink-0" />
+						<span className="tool-diff-code shrink-0 px-2.5 whitespace-pre text-ink">
+							{tokens?.length
+								? tokens.map((token, j) => (
+										<span key={j} className={token.className}>
+											{token.text}
+										</span>
+									))
+								: line.text || " "}
+						</span>
+					</div>
+				);
+			})}
+		</div>
+	);
+});

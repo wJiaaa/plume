@@ -14,7 +14,7 @@
 
 import type { BackgroundCallState, ChangeHunk } from "@plume/contract";
 import { activeLocale, CopyMark, type MessageKey, Scroller, translate, useNow } from "@plume/ui";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useMemo } from "react";
 import { relativeTo } from "../markdown/assets.ts";
 import { CodeText } from "./detail/CodeText.tsx";
 import { DiffView } from "./detail/DiffView.tsx";
@@ -56,6 +56,12 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 	const shown = (path: string) => (cwd ? (relativeTo(cwd, path) ?? path) : path);
 
 	const hunks = hunksOf(result);
+	const kind = toolKind(block.name);
+	const args = (block.arguments ?? {}) as Record<string, unknown>;
+	const file = kind === "view" ? lineFile(block.name, args) : undefined;
+	const read = !hunks && file && !failed ? result : undefined;
+	// 收起过渡中详情仍挂着。只按读取结果拆行，否则同一份代码会被当成新的 diff，在消失前重新上色一次。
+	const numbered = useMemo(() => (read ? numberedLines(resultText(read.content)) : null), [read]);
 	if (hunks) {
 		const path = declaredDiff(result)?.path;
 		const file = typeof path === "string" ? path : undefined;
@@ -70,8 +76,6 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 	}
 
 	const output = job ? pollOutput(reads.flatMap((read) => (read ? [resultText(read.content)] : []))) : result ? resultText(result.content) : (progress ?? "");
-	const kind = toolKind(block.name);
-	const args = (block.arguments ?? {}) as Record<string, unknown>;
 	const command = job
 		? (started?.command ?? (result?.details as { command?: unknown } | undefined)?.command)
 		: runsCommand(kind)
@@ -138,8 +142,6 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 		);
 	}
 
-	const file = kind === "view" ? lineFile(block.name, args) : undefined;
-	const numbered = file && result && !failed ? numberedLines(output) : null;
 	if (file && numbered) {
 		return (
 			<>

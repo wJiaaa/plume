@@ -46,7 +46,8 @@ function highlightHunks(hunks: ChangeHunk[], toLines: (code: string) => Token[][
 	const rows: Token[][] = [];
 	for (const hunk of hunks) {
 		const after = toLines(side(hunk, "remove"));
-		const before = toLines(side(hunk, "add"));
+		// 读取文件全是上下文行，只用新文件的配色；没有删除行时不必再解析一遍旧文件。
+		const before = hunk.lines.some((line) => line.type === "remove") ? toLines(side(hunk, "add")) : [];
 		let a = 0;
 		let b = 0;
 		for (const line of hunk.lines) {

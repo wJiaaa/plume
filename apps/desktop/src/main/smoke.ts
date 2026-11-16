@@ -1001,7 +1001,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		}
 
 		if (process.env.PLUME_SMOKE_ONLY === "transcript-scroll") {
-			await checkTranscriptScroll({ window, outDir, setModel: (next) => (override = next), capture });
+			await checkTranscriptScroll({ window, workspace, outDir, setModel: (next) => (override = next), capture });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "transcript-scroll" }));
 			window.webContents.debugger.detach();
 			await shutdown();
