@@ -1299,7 +1299,6 @@ export const en = {
 	"cleanup.confirmDetail": "Conversations last active in {range}, together with their transcripts, freeing about {size}. This cannot be undone.",
 	"cleanup.confirmSome": { one: "Delete {n} conversation?", other: "Delete {n} conversations?" },
 	"cleanup.doneRemoved": { one: "Deleted {n} conversation, freed {size}", other: "Deleted {n} conversations, freed {size}" },
-	"cleanup.doneSkipped": "{n} still running, left alone",
 	"cleanup.empty": "No records yet",
 	"cleanup.nothing": "No conversations in this range",
 	"cleanup.range": "Date range",

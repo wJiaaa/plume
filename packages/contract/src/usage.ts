@@ -120,6 +120,4 @@ export interface ClearResult {
 	removed: number;
 	/** 释放了多少字节（按删之前量到的记录大小算）。 */
 	freed: number;
-	/** 正在跑、所以没动的那几条。 */
-	skipped: number;
 }

@@ -1257,7 +1257,6 @@ export const zhCN = {
 	"cleanup.confirmDetail": "{range} 内最后活动过的会话，连同它们的对话记录一起删除，约释放 {size}。这个操作无法撤销。",
 	"cleanup.confirmSome": "删除 {n} 条会话？",
 	"cleanup.doneRemoved": "已删除 {n} 条会话，释放 {size}",
-	"cleanup.doneSkipped": "{n} 条正在运行，没有删除",
 	"cleanup.empty": "暂无记录",
 	"cleanup.nothing": "这段时间里没有会话",
 	"cleanup.range": "时间范围",

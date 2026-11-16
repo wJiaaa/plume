@@ -627,17 +627,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		store.saveSummary(session.summary);
 	};
 
-	/**
-	 * 删掉这几条会话，正在跑的跳过：删一条正在执行工具的会话，省下的那点空间远不如它正在做的事值钱。
-	 * 判断和删除在同一步里，中间没有 `await`，一轮不会恰好在这时开始、随后连同会话一起被删掉。返回删掉的那些。
-	 */
-	function removeIdle(sessionIds: string[]): string[] {
-		// 子会话（侧边聊天、子 Agent）在跑也算这个会话在忙。
-		const idle = sessionIds.filter((id) => sessions.has(id) && withChildren(id).every((each) => !sessions.get(each)?.turn));
-		if (idle.length > 0) deleteTree(idle);
-		return idle;
-	}
-
 	function find(sessionId: string): Session {
 		const session = sessions.get(sessionId);
 		if (!session) throw new Error(text("session.notFound", { id: sessionId }));
@@ -2532,12 +2521,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const project = projectId === undefined ? undefined : projects.find(projectId);
 			moveSession(session, project, project?.path ?? session.summary.cwd);
 		},
+		/** 归档的全删，正在跑的（自己或子会话）一样：`deleteTree` 先停下再删。 */
 		async deleteArchivedSessions() {
-			return removeIdle(
-				summaries()
-					.filter((summary) => summary.archived)
-					.map((summary) => summary.id),
-			).length;
+			const archived = summaries()
+				.filter((summary) => summary.archived)
+				.map((summary) => summary.id);
+			deleteTree(archived);
+			return archived.length;
 		},
 		async contextBreakdown(sessionId) {
 			const session = find(sessionId);
@@ -2555,8 +2545,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 只挑顶层会话，子会话跟着它删（`deleteTree`），释放量也连着它们算。
 			const matched = sessionTrees(summaries(), store.sizes()).filter(({ summary }) => withinRange(summary, range));
 			const bytes = new Map(matched.map(({ summary, bytes: size }) => [summary.id, size]));
-			const removed = removeIdle([...bytes.keys()]);
-			return { removed: removed.length, freed: removed.reduce((sum, id) => sum + (bytes.get(id) ?? 0), 0), skipped: matched.length - removed.length };
+			// 正在跑的也删：`deleteTree` 先停下它和它的子会话。
+			deleteTree([...bytes.keys()]);
+			return { removed: bytes.size, freed: [...bytes.values()].reduce((sum, size) => sum + size, 0) };
 		},
 		async exportSessions(file) {
 			if (!isAbsolute(file)) throw new Error(text("storage.exportPath"));

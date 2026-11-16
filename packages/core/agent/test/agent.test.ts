@@ -2361,7 +2361,7 @@ it.skipIf(process.platform !== "darwin")("帮我批准下看不出风险的命�
 	expect(await readFile(join(workspace, "made.txt"), "utf8")).toBe("x\n");
 });
 
-it("归档、删归档、按日期清：花销留着，正在跑的不删", async () => {
+it("归档、删归档、按日期清：花销留着，正在跑的先停下再删", async () => {
 	let ctx: PluginContext | undefined;
 	const plugin: Plugin = { name: "test.usage", apply: (context) => void (ctx = context) };
 	const { service, session, until, idle } = await start([{ text: "好" }, { text: "我来改。", toolCalls: [readHello, edit] }], [plugin]);
@@ -2382,17 +2382,16 @@ it("归档、删归档、按日期清：花销留着，正在跑的不删", asyn
 	// 删会话不动花销。
 	expect(await requests()).toBe(1);
 
-	// 等审批的那一轮还在跑：清全部时跳过它。
+	// 等审批的那一轮还在跑：清全部时一样删，先停下那一轮。
 	const running = await service.createSession({ cwd: workspace });
-	const idleOne = await service.createSession({ cwd: workspace });
+	await service.createSession({ cwd: workspace });
 	done = idle();
 	service.send(running.id, { content: [{ type: "text", text: "改一下" }] });
 	await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
-	expect(await service.clearSessions({ from: null, to: null })).toMatchObject({ removed: 1, skipped: 1 });
-	expect(service.listSessions().map((summary) => summary.id)).toEqual([running.id]);
-	expect(service.listSessions().some((summary) => summary.id === idleOne.id)).toBe(false);
-	service.stop(running.id);
+	expect(await service.clearSessions({ from: null, to: null })).toMatchObject({ removed: 2 });
+	expect(service.listSessions()).toEqual([]);
 	await done;
+	expect(await requests()).toBe(2);
 });
 
 it("按日期清只挑顶层会话：子会话不单独算，跟着父会话删", async () => {
@@ -2401,7 +2400,7 @@ it("按日期清只挑顶层会话：子会话不单独算，跟着父会话删"
 	const { service, session } = await start([], [plugin]);
 	const child = await ctx!.sessions.create({ parentId: session.id });
 	expect((await service.storageUse()).sessions).toBe(1);
-	expect(await service.clearSessions({ from: null, to: null })).toMatchObject({ removed: 1, skipped: 0 });
+	expect(await service.clearSessions({ from: null, to: null })).toMatchObject({ removed: 1 });
 	expect(service.listSessions().some((summary) => summary.id === child.id || summary.id === session.id)).toBe(false);
 });
 
