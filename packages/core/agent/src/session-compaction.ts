@@ -24,7 +24,7 @@ import type {
 import type { PrefixSegment } from "@plume/llm/prefix-fingerprint";
 import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
 import { cacheHotMs } from "@plume/llm/vendors";
-import { type ContextRecord, historyFor, latest, oversized } from "./compaction.ts";
+import { type ContextRecord, historyFor, latest, oversized, rewrittenAt } from "./compaction.ts";
 import { errorText, type PluginHost } from "./host.ts";
 import { sessionScope } from "./session-scope.ts";
 import { contextUsage, textTokens, tokenEstimate, toolTokens } from "./token-estimate.ts";
@@ -128,8 +128,11 @@ export function createCompactor(deps: CompactorDeps) {
 		const head = history.length - (messages.length - (previous?.keptFrom ?? 0));
 
 		let run: CompactionRun | undefined;
+		/** 这一次改过 `record`（开过那一行、记下剪枝或边界）。没改的不落库：每次请求前都问一次，绝大多数是「不用压」。 */
+		let dirty = false;
 		const put = (next: CompactionRun) => {
 			run = next;
+			dirty = true;
 			const runs = record.runs ?? [];
 			const at = runs.findIndex((each) => each.id === next.id);
 			record.runs = at < 0 ? [...runs, next] : runs.map((each, index) => (index === at ? next : each));
@@ -163,11 +166,12 @@ export function createCompactor(deps: CompactorDeps) {
 			const id = run.id;
 			run = undefined;
 			record.runs = (record.runs ?? []).filter((each) => each.id !== id);
+			dirty = true;
 			session.compacting = false;
 			changed(session);
 		};
 		const finish = (outcome: CompactionOutcome, compacted: boolean) => {
-			deps.saveContext(sessionId, record);
+			if (dirty || compacted) deps.saveContext(sessionId, record);
 			if (compacted) {
 				host.sessionContextReset(sessionId);
 				deps.onCompacted?.(session);
@@ -191,9 +195,8 @@ export function createCompactor(deps: CompactorDeps) {
 				? { model: sent.model, at: sent.at, ...withHot(cacheHotMs(provider.baseUrl, model.modelId || model.id)) }
 				: undefined;
 		const tierLines = (model.pricing?.tiers ?? []).map((tier) => tier.aboveTokens).sort((a, b) => a - b);
-		// 历史最近一次被改写：上一次压缩完成的时刻和最近一次剪枝（`viewsAt`）里晚的那个。
-		const rewritten = Math.max(previous?.at ?? -Infinity, record.viewsAt ?? -Infinity);
-		const rewrittenAt = Number.isFinite(rewritten) ? rewritten : undefined;
+		const rewritten = rewrittenAt(record, messages);
+		let cloned: Message[] | undefined;
 		const input: ContextCompact = {
 			sessionId,
 			session: sessionScope(session.summary),
@@ -205,11 +208,14 @@ export function createCompactor(deps: CompactorDeps) {
 				maxOutputTokens: model.maxOutputTokens,
 				...(tierLines.length > 0 ? { tierLines } : {}),
 			},
-			history: structuredClone(history),
+			// 用到才克隆：多数请求前的检查插件只看用量就答「不用压」，不为它把整段历史复制一遍。
+			get history() {
+				return (cloned ??= structuredClone(history));
+			},
 			...(previous ? { previous: { head } } : {}),
-			...(rewrittenAt !== undefined ? { rewrittenAt } : {}),
+			...(rewritten !== undefined ? { rewrittenAt: rewritten } : {}),
 			request: { systemPrompt: context.systemPrompt, messages: context.messages, tools: context.tools },
-			usage: contextUsage(context.messages, { staleAt: rewrittenAt, overhead: textTokens(context.systemPrompt) + toolTokens(context.tools) }),
+			usage: contextUsage(context.messages, { staleAt: rewritten, overhead: textTokens(context.systemPrompt) + toolTokens(context.tools) }),
 			estimate: tokenEstimate,
 			force: mode.force,
 			...(mode.manual ? { manual: { instructions: mode.manual.instructions } } : {}),

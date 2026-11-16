@@ -68,12 +68,16 @@ function filesOf(key: MemoryKey, section: PromptSection): ContextEstimate["memor
 		.map((file) => ({ key, path: file.path, tokens: Math.ceil(file.chars * perChar) }));
 }
 
-export function contextBreakdown(estimate: ContextEstimate, messages: readonly Message[], limit: number): ContextBreakdown {
+/**
+ * `messages` 是发给模型的那份历史（`historyFor`，压缩过的是摘要加之后的原文），`staleAt` 是它最近一次被改写的时刻（`rewrittenAt`）：
+ * 和压缩判断有多满时给 `contextUsage` 的是同一对，刚压完、还没发下一次请求时不再拿压缩前的用量充数。
+ */
+export function contextBreakdown(estimate: ContextEstimate, messages: readonly Message[], limit: number, staleAt?: number): ContextBreakdown {
 	const guesses = estimate.segments;
 	const keys = Object.keys(guesses) as ContextSegmentKey[];
 	const guessed = keys.reduce((sum, key) => sum + guesses[key], 0);
 	// 服务商量的数（加上最近一条回复之后的消息），和压缩判断有多满用的是同一个（`ContextCompact.usage`）。
-	const usage = contextUsage(messages);
+	const usage = contextUsage(messages, staleAt === undefined ? {} : { staleAt });
 	const total = usage.measured ? usage.tokens : null;
 	const scale = scaler(total !== null && guessed > 0 ? total / guessed : 1);
 	const sized = Object.fromEntries(keys.map((key) => [key, scale(guesses[key])])) as Record<ContextSegmentKey, number>;

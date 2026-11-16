@@ -70,6 +70,15 @@ export function latest(record: ContextRecord, messages: readonly Message[]): Com
 }
 
 /**
+ * 历史最近一次被改写的时刻：上一次压缩完成和最近一次剪枝（`viewsAt`）里晚的那个；都没有时为空。
+ * 这之前的回复报的用量量的是改写前的历史，不再算数（`contextUsage` 的 `staleAt`）。
+ */
+export function rewrittenAt(record: ContextRecord, messages: readonly Message[]): number | undefined {
+	const at = Math.max(latest(record, messages)?.at ?? -Infinity, record.viewsAt ?? -Infinity);
+	return Number.isFinite(at) ? at : undefined;
+}
+
+/**
  * 发给模型的历史：最新一次压缩的头加它之后的原文，剪过的结果换成剪过的那份。返回新数组，不改会话里的。
  *
  * 头的时间戳一律是压缩完成的时刻：每次重建都是同一份，量用量时也按它认出边界之前的回复不算数。

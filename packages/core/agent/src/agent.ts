@@ -65,7 +65,7 @@ import { renameWithRetry } from "./atomic-write.ts";
 import { jsonFiles } from "./json-files.ts";
 import { openProjects } from "./projects.ts";
 import { createModelSettings } from "./model-settings.ts";
-import { type ContextRecord, emptyRecord, historyFor, keptRecord } from "./compaction.ts";
+import { type ContextRecord, emptyRecord, historyFor, keptRecord, rewrittenAt } from "./compaction.ts";
 import { createCompactor, type CompactMode, marks, runsOf, type SentRequest, settleStaleRuns } from "./session-compaction.ts";
 import { projectRootsFor } from "./project-roots.ts";
 import { layerProjectSettings, projectLayerView, withProjectLayer } from "./project-config.ts";
@@ -2543,10 +2543,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async contextBreakdown(sessionId) {
 			const session = find(sessionId);
-			const { estimate } = await recordOf(session);
-			if (!estimate) return null;
+			const record = await recordOf(session);
+			if (!record.estimate) return null;
 			const { model } = resolveModel(await readSessionSettings(session), modelOf(session));
-			return contextBreakdown(estimate, await messagesOf(session), model.contextWindow);
+			const messages = await messagesOf(session);
+			return contextBreakdown(record.estimate, historyFor(messages, record), model.contextWindow, rewrittenAt(record, messages));
 		},
 		async storageUse() {
 			return storageUse(summaries(), store.sizes());
