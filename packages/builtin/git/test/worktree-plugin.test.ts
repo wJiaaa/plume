@@ -35,9 +35,9 @@ afterEach(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 
-/** 只给工作树那一半用到的那几样：会话摘要、钩子、删除和归档的监听、归档、serve、provide。 */
-async function load() {
-	const summaries: SessionSummary[] = [];
+/** 只给工作树那一半用到的那几样：会话摘要、钩子、删除和归档的监听、归档、serve、provide。`existing` 是加载时已经有的会话。 */
+async function load(existing: SessionSummary[] = []) {
+	const summaries: SessionSummary[] = [...existing];
 	let submit: ((input: PromptSubmit, next: (input: PromptSubmit) => Promise<PromptVerdict>) => Promise<PromptVerdict>) | undefined;
 	let deleted: ((id: string) => void) | undefined;
 	let archived: ((id: string, archived: boolean) => void) | undefined;
@@ -165,7 +165,7 @@ test("之后的轮：目录被收走了就检出回来；检不出来退回项�
 	assert.ok(record?.error);
 });
 
-test("删除、归档收回目录；取消归档检出回来；有改动的留着", async () => {
+test("归档收回目录、取消归档检出回来；删除连同没提交的改动、没合并的分支一起删", async () => {
 	const { api, session, send, deleted, archived, settle } = await load();
 	await api.chooseWorktree(repo, true);
 	const one = session("aaaaaaaa-1");
@@ -181,11 +181,38 @@ test("删除、归档收回目录；取消归档检出回来；有改动的留�
 	await settle(one.id);
 	assert.ok(existsSync(tree.root));
 
+	await writeFile(join(tree.root, "done.txt"), "x\n");
+	git(tree.root, "add", "--", "done.txt");
+	git(tree.root, "commit", "-q", "-m", "unmerged");
 	await writeFile(join(tree.root, "draft.txt"), "x\n");
 	deleted(one.id);
 	await settle(one.id);
-	assert.ok(existsSync(tree.root));
+	assert.equal(existsSync(tree.root), false);
+	assert.equal(git(repo, "branch", "--list", tree.branch), "");
 	assert.equal(await api.worktreeRecord(one.id), null);
+});
+
+test("删会话时插件没在跑：再加载时会话已经不在的工作树、分支照样删，还在的不动", async () => {
+	const first = await load();
+	await first.api.chooseWorktree(repo, true);
+	const gone = first.session("aaaaaaaa-1");
+	await first.send(gone, true);
+	await first.api.chooseWorktree(repo, true);
+	const kept = first.session("bbbbbbbb-2");
+	await first.send(kept, true);
+	const goneTree = (await first.api.worktreeRecord(gone.id))?.worktree;
+	const keptTree = (await first.api.worktreeRecord(kept.id))?.worktree;
+	assert.ok(goneTree && keptTree);
+
+	const again = await load([kept]);
+	// 加载时的清理先问宿主再排进会话的队，等它排上。
+	for (let tries = 0; tries < 100 && (await again.api.worktreeRecord(gone.id)); tries++) await new Promise((done) => setTimeout(done, 20));
+	await again.settle(gone.id);
+	assert.equal(await again.api.worktreeRecord(gone.id), null);
+	assert.equal(existsSync(goneTree.root), false);
+	assert.equal(git(repo, "branch", "--list", goneTree.branch), "");
+	assert.ok(existsSync(keptTree.root));
+	assert.ok(await again.api.worktreeRecord(kept.id));
 });
 
 test("合并、同步：对话在跑时拒绝", async () => {

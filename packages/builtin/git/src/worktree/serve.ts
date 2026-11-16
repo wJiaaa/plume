@@ -6,7 +6,7 @@
  *   要不要：人在新对话里发的，看输入框上的开关；从某次工具调用开出来的（`spawnedFrom`，比如建议新会话的卡片），看那次调用
  *   有没有经服务 `session.worktree` 登记过；插件开的别的会话（定时任务）不开。这两种都不碰输入框上的开关——那是人给正在写的那个新对话选的。建不成就记下 git 的原话，对话照样在项目里跑，界面上一直有提醒。
  * - 之后的每一轮：目录被收走了就检出回来；检不出来退回项目目录，记下原因。
- * - 删除、归档会话收回目录（有没提交的改动就不收），取消归档检出回来。
+ * - 删除会话连同工作树和分支一起删（没提交的改动、没合并的提交都不留）；归档收回目录（有没提交的改动就不收），取消归档检出回来。
  *
  * 不注册工具：agent 在工作树里用 bash 跑 git 就行，这里管的是对话放在哪、人怎么把它收回来。
  * 提供服务 `session.worktree`：别的插件开出来的会话也能要一棵。
@@ -21,6 +21,7 @@ import type { ListedWorktree, SessionWorktree, WorktreeApi, WorktreeSettings } f
 import {
 	cleanOldWorktrees,
 	createSessionWorktree,
+	discardWorktree,
 	linkedWorktrees,
 	reclaimWorktree,
 	removeLinkedWorktree,
@@ -152,15 +153,23 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 		return cwd ? { ...verdict, cwd } : verdict;
 	});
 
-	// 删了：目录收走，分支上的提交都在基分支里时分支一起删。有没提交的改动就留着目录。
-	ctx.sessions.onDeleted((sessionId) => {
+	// 删了：工作树和分支跟着对话一起删，没提交的、没合并的都不留。
+	const discard = (sessionId: string) =>
 		void serial(sessionId, async () => {
 			const tree = (await store.record(sessionId))?.worktree;
-			if (tree) await reclaimWorktree(tree, { dropMergedBranch: true });
+			if (tree) await discardWorktree(tree);
 			await store.setRecord(sessionId, null);
 			// i18n-exempt：日志
-		}).catch((error: unknown) => ctx.log.warn(`收回会话 ${sessionId} 的工作树失败：${String(error)}`));
-	});
+		}).catch((error: unknown) => ctx.log.warn(`删除会话 ${sessionId} 的工作树失败：${String(error)}`));
+	ctx.sessions.onDeleted(discard);
+	// 删会话时插件没在跑（停用着、删到一半退出）留下的：加载时逐个问宿主，会话已经不在的照样删。
+	void store
+		.records()
+		.then(async (records) => {
+			for (const sessionId of records.keys()) if (!(await ctx.sessions.get(sessionId))) discard(sessionId);
+		})
+		// i18n-exempt：日志
+		.catch((error: unknown) => ctx.log.warn(`清理已删会话的工作树失败：${String(error)}`));
 
 	// 归档时和删除一样收走；取消归档时在原来的路径检出回来。
 	ctx.sessions.onArchived((sessionId, archived) => {
