@@ -4,11 +4,11 @@
  * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经 `ctx.resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
-import type { Plugin, SlashCommand } from "@plume/contract";
+import type { Message, Plugin, SlashCommand } from "@plume/contract";
 import type { SkillRow, SkillsApi, SkillsView } from "./api.ts";
 import { computeDiff } from "@plume/platform";
 import { formatCatalogue, formatInvocation, loadSkills, personalDir, type PluginBundle, type Skill, skillSources } from "./loader.ts";
@@ -68,8 +68,26 @@ export default {
 			}
 			return settings;
 		};
-		const writeSettings = (settings: Settings) =>
-			writeFile(settingsFile, `${JSON.stringify({ disabled: [...settings.disabled], preferred: settings.preferred }, null, "\t")}\n`);
+		/**
+		 * 读、改、写回，排成一队：设置页连着拨两个开关时，后一次不会拿写之前的那份盖掉前一次。先写在旁边再改名，写到一半不留半个文件。
+		 */
+		let editing: Promise<unknown> = Promise.resolve();
+		const editSettings = (change: (settings: Settings) => void): Promise<void> => {
+			const run = editing.then(async () => {
+				const settings = await readSettings();
+				change(settings);
+				const tmp = `${settingsFile}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
+				await mkdir(dirname(settingsFile), { recursive: true });
+				await writeFile(tmp, `${JSON.stringify({ disabled: [...settings.disabled], preferred: settings.preferred }, null, "\t")}\n`);
+				await rename(tmp, settingsFile).catch(async (error: unknown) => {
+					await rm(tmp, { force: true });
+					throw error;
+				});
+				perTurn.clear();
+			});
+			editing = run.catch(() => undefined);
+			return run;
+		};
 
 		/**
 		 * 加载着的插件，连自己：自己随包带着写插件的技能 plume-plugin（插件市场的「新建插件」点名它）。
@@ -93,6 +111,27 @@ export default {
 		const enabledSkills = async (cwd: string | undefined): Promise<Skill[]> => {
 			const { skills, settings, builtins } = await load(cwd);
 			return skills.filter((skill) => builtinSkill(skill, builtins) || !settings.disabled.has(skill.path));
+		};
+
+		/**
+		 * 一轮里读到的技能（按会话记，换了一轮、换了目录就重读）。目录每一轮现读，装上、写好一个技能下一轮就有；
+		 * 一轮里每一步都扫六类目录、读每份 `SKILL.md` 只是重复同一个答案。在设置页改了开关、删了技能的也清掉。
+		 */
+		const perTurn = new Map<string, { turn: string; skills: Promise<Skill[]> }>();
+		ctx.sessions.onDeleted((sessionId) => perTurn.delete(sessionId));
+		const skillsThisTurn = (sessionId: string, cwd: string | undefined, messages: readonly Message[]): Promise<Skill[]> => {
+			// 这一轮从人最后说的那句起：那条消息的时间就是这一轮的记号。
+			const opened = messages.findLast((message) => message.role === "user")?.timestamp ?? 0;
+			const turn = `${cwd ?? ""}\0${opened}`;
+			const cached = perTurn.get(sessionId);
+			if (cached?.turn === turn) return cached.skills;
+			const skills = enabledSkills(cwd);
+			perTurn.set(sessionId, { turn, skills });
+			// 读失败的不留着：下一步重读，而不是整轮都拿到同一个错。
+			skills.catch(() => {
+				if (perTurn.get(sessionId)?.skills === skills) perTurn.delete(sessionId);
+			});
+			return skills;
 		};
 
 		/** 按会话记：上下文里已经有的技能正文（指纹）。 */
@@ -128,15 +167,20 @@ export default {
 						isError: true,
 					};
 				}
-				const output = formatInvocation(skill, typeof args.args === "string" ? args.args : undefined);
-				// 同一份正文已经在上下文里了，再放一遍只是占地方。压缩掉以后 model.context 重新数，就又能放了。
+				const extra = typeof args.args === "string" ? args.args.trim() : "";
+				const output = formatInvocation(skill, extra || undefined);
+				/*
+				 * 同一份正文已经在上下文里了，再放一遍只是占地方。压缩掉以后 model.context 重新数，就又能放了。
+				 * 按正文认、不带 `args`：换个参数再调同一个技能，正文还是那一份，只把这次的参数交回去。
+				 */
 				const seen = injected.get(run.sessionId) ?? new Set<string>();
 				injected.set(run.sessionId, seen);
-				const key = fingerprint(output);
+				const key = fingerprint(formatInvocation(skill));
 				const duplicate = seen.has(key);
 				seen.add(key);
+				const already = `Skill "${skill.name}" is already loaded in the current context. Follow its instructions above.`;
 				return {
-					output: duplicate ? `Skill "${skill.name}" is already loaded in the current context. Follow its instructions above.` : output,
+					output: duplicate ? (extra ? `${already}\n\n${extra}` : already) : output,
 					details: { name: skill.name, path: skill.path, scope: skill.scope },
 					// 技能正文是要照着做的说明：压缩不剪它，也不当作被顶替的旧观察清掉。
 					instructions: true,
@@ -146,14 +190,18 @@ export default {
 
 		// 没有可用的技能时连工具一起藏起来：一个永远只会报「没有这个技能」的工具只是占地方。
 		ctx.hook("model.context", async (input, next) => {
-			// 上下文里有哪些技能正文，按真正要发的历史重数：压缩过就该允许重新载入。
+			const skills = await skillsThisTurn(input.sessionId, input.cwd, input.messages);
+			// 上下文里有哪些技能正文，按真正要发的历史重数：压缩过就该允许重新载入。结果后面可能接着那次的参数，按开头认正文。
+			const bodies = skills.map((skill) => formatInvocation(skill));
 			const seen = new Set<string>();
 			for (const message of input.messages) {
 				if (message.role !== "toolResult" || message.toolName !== TOOL || message.isError) continue;
-				for (const part of message.content) if (part.type === "text") seen.add(fingerprint(part.text));
+				for (const part of message.content) {
+					const body = part.type === "text" ? bodies.find((candidate) => part.text.startsWith(candidate)) : undefined;
+					if (body) seen.add(fingerprint(body));
+				}
 			}
 			injected.set(input.sessionId, seen);
-			const skills = await enabledSkills(input.cwd);
 			if (skills.length === 0) return next({ ...input, tools: input.tools.filter((tool) => tool.name !== TOOL) });
 			const catalogue = formatCatalogue(skills);
 			return next(catalogue ? { ...input, sections: [...input.sections, { id: "skills", text: catalogue, category: "skills" }] } : input);
@@ -226,12 +274,12 @@ export default {
 			async setEnabled(paths, enabled, cwd) {
 				const { files } = await listed(cwd);
 				if (!Array.isArray(paths) || !paths.every((path) => typeof path === "string" && files.has(path))) throw new Error(text().notALoadedSkill);
-				const settings = await readSettings();
-				for (const path of paths) {
-					if (enabled) settings.disabled.delete(path);
-					else settings.disabled.add(path);
-				}
-				await writeSettings(settings);
+				await editSettings((settings) => {
+					for (const path of paths) {
+						if (enabled) settings.disabled.delete(path);
+						else settings.disabled.add(path);
+					}
+				});
 			},
 			async folder(path, cwd) {
 				// 一组的目录就是它里面一个技能的上上级（`<目录>/<技能>/SKILL.md`），按读到过的技能认，指不到别处。
@@ -246,6 +294,7 @@ export default {
 				if ((await bundles()).some((plugin) => file.startsWith(`${join(plugin.root, "skills")}${sep}`))) throw new Error(text().pluginSkillKept);
 				// 移到系统的废纸篓（回收站），不直接删：技能是人写的或装的，删错了还能拿回来。
 				await ctx.trash(dirname(file));
+				perTurn.clear();
 			},
 			async diff(winner, loser, cwd) {
 				const [before, after] = await Promise.all([readFile(await known(winner, cwd), "utf8"), readFile(await known(loser, cwd), "utf8")]);
@@ -255,9 +304,10 @@ export default {
 				const { view } = await listed(cwd);
 				const same = view.diagnostics.some((item) => item.problem === "shadowed" && item.name === name && (item.path === path || item.detail === path));
 				if (typeof name !== "string" || !same) throw new Error(text().notALoadedSkill);
-				const settings = await readSettings();
-				settings.preferred[name] = await known(path, cwd);
-				await writeSettings(settings);
+				const chosen = await known(path, cwd);
+				await editSettings((settings) => {
+					settings.preferred[name] = chosen;
+				});
 				return { wroteTo: tilde(settingsFile) };
 			},
 		} satisfies SkillsApi);
