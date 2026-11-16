@@ -7,7 +7,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { linkSync, lstatSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync } from "node:fs";
-import { chmod, lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Stats } from "node:fs";
 import type { FileChangesSummary, UndoProblem } from "@plume/contract";
@@ -242,6 +242,19 @@ export class ChangeStore {
 	/** 读一份快照；标识不对、文件被换成链接、内容对不上时抛错。 */
 	read(sessionId: string, id: string): Promise<RecordedChange> {
 		return readFileChange(this.dataDir, sessionId, id, this.words());
+	}
+
+	/**
+	 * 启动时清一遍：不在 `live` 里的会话的快照目录（删会话删到一半退出留下的）。目录名是会话 id 的哈希，按还在的会话算回来比。
+	 * 要在任何会话开始记改动之前跑。
+	 */
+	static async prune(dataDir: string, live: Iterable<string>): Promise<void> {
+		const root = join(dataDir, "changes");
+		const kept = new Set([...live].map((sessionId) => directory(dataDir, sessionId).slice(root.length + 1)));
+		const entries = await readdir(root).catch(() => [] as string[]);
+		await Promise.all(
+			entries.filter((entry) => !kept.has(entry)).map((entry) => rm(join(root, entry), { recursive: true, force: true }).catch(() => undefined)),
+		);
 	}
 
 	/** 会话删掉了：快照一起删，之后的记录不再落盘。 */

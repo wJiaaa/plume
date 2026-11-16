@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { extractDocumentText } from "@plume/document-text";
@@ -89,6 +89,7 @@ import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
 import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
 import { imageNameOf, MEDIA_NAME, parkImages, readImage, removeImages, restoreImages, saveImage, sweepImages } from "./media.ts";
+import { ChangeStore } from "@plume/workspace";
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
 import { withEnvironment } from "./prompt/date.ts";
@@ -556,10 +557,16 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	/*
-	 * 删会话删到一半退出（或删的时候删不掉）留下的：没有会话用着的图。
-	 * 在任何会话开跑、插件加载之前清：这时刚存下还没写进会话的图还不会有。
+	 * 删会话删到一半退出（或删的时候删不掉）留下的：没有会话用着的图、不在了的会话的临时目录和改动快照。
+	 * 在任何会话开跑、插件加载之前清：这时刚存下还没写进会话的图、刚记下的快照都还不会有。
 	 */
 	await sweepImages(mediaDir, store.mediaInUse()).catch((error: unknown) => log("agent", "warn", `清理没人用的图失败：${errorText(error)}`));
+	await Promise.all(
+		(await readdir(join(dataDir, "scratch")).catch(() => [] as string[]))
+			.filter((id) => !sessions.has(id))
+			.map((id) => rm(scratchDir(id), { recursive: true, force: true }).catch(() => undefined)),
+	);
+	await ChangeStore.prune(dataDir, sessions.keys()).catch((error: unknown) => log("agent", "warn", `清理改动快照失败：${errorText(error)}`));
 
 	const projects = await openProjects(files, join(dataDir, "projects.json"), (list) => emit({ type: "projects", projects: list }));
 
