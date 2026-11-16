@@ -77,6 +77,8 @@ it("找文件：按原样拼得上的直接给，裸文件名在目录里按结�
 	expect(await locateSessionFiles(cwd, "deep/approvals.ts", join(dir, "data"))).toEqual([join(cwd, "src", "deep", "approvals.ts")]);
 	expect(await locateSessionFiles(cwd, "src/", join(dir, "data"))).toEqual([`${join(cwd, "src")}/`]);
 	expect(await locateSessionFiles(cwd, "nothing.ts", join(dir, "data"))).toEqual([]);
+	// 网络共享的写法在任何 IO 之前拦下：POSIX 上 `//x` 就是 `/x`，没拦的话这里会答「在」。
+	expect(await locateSessionFiles(cwd, `/${join(cwd, "readme.md")}`, join(dir, "data"))).toEqual([]);
 });
 
 // 程序写成 sh 脚本，Windows 上起不来，测不出有没有被执行。
