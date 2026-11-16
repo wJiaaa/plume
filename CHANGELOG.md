@@ -2,70 +2,45 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
-## [0.6.0] - 2026-11-16
+## [0.6.0] - 2026-11-17
 
-### 新功能
+<!-- plume:notes en -->
+### Changes
 
-- **core**: 工具参数先按声明的类型整理，整理后还对不上的不执行，告诉模型哪一项错了 (`c00a403`)
-- **core**: 插件的设置和运行状态由本体存盘、推给界面，插件不再自己写读写文件和推送循环 (`b339bcc`)
-- **electron**: 应用的运行日志写进 <数据目录>/logs/plume.log，插件出错时有处可查 (`f280a61`)
-- 插件 SDK 加 pack 命令打出能交给别人的文件夹，npm 装过包后 check 自己把 SDK 链回来 (`81de4d5`)
-- 插件加载失败时说明它按哪一版插件 SDK 构建、和这版 Plume 带的对不上 (`7b83db0`)
-- **core**: 插件经 ctx.sessions.scratchDir 拿会话的临时目录，诊断面板读完整输出不再自己拼路径 (`d2ad1b0`)
-- **desktop**: 面板区开合按会话记，切换会话时各回各的 (`fad9009`)
-- **core**: 支持编辑并保存 Magpie 接管的模型配置 (`cf317d6`)
+- **Deleting a chat cleans up what it left behind.** Worktrees, chat branches, panel tabs, drafts and attachments now go with the chat, along with images and thumbnails no other chat still uses; running chats are stopped with their sub-agents and background commands before deletion.
+- **Each chat remembers its panel area.** Switching chats or restarting Plume now restores whether that chat's panel area was open, instead of sharing one open/closed setting across the window.
+- **New chats start on your default model.** A temporary model choice in one chat no longer carries over to the next new chat, including after switching projects or using `/clear`.
+- **Magpie providers can be edited in Plume.** You can now change their connection, key and models, test them, disable them or remove them; a later Magpie sync will still replace the connection, key and model list.
+- **Panel transitions no longer end with a jump in text width.** Chat text follows the conversation column throughout opening and closing, while finished rounds outside the viewport skip layout and painting to keep long chats responsive.
+- **Long code and diffs are smoother to expand and collapse.** Highlighting is reused and applied to visible sections instead of rebuilding the entire block, so repeated toggles during a reply do less work without dropping the last lines or their highlighting.
+- **Background notifications have room to breathe.** Adjacent notifications delivered in the same record now have spacing between them, without changing the gaps around single notifications or tool summaries.
+- **Unreadable key files no longer erase saved keys.** Plume reports a key-store read failure instead of treating it as an empty store, and MCP call cards hide secret values in command arguments and environment variables.
+- **Search asks before returning secret-file contents.** Approving a folder no longer silently approves grep results from private keys and credential files inside it, while glob now distinguishes a missing folder from an empty result.
+- **Web pages and terminal paths work in more cases.** Reading a page follows same-site redirects between bare and `www` hosts or from HTTP to HTTPS, older page encodings are recognized, and files dropped into a terminal are quoted for that tab's shell, including PowerShell and cmd.
 
-### 修复
+### For plugin authors
 
-- **core**: 会话状态无人订阅时释放加载缓存 (`7021ce6`)
-- **desktop**: 删掉会话后回复里路径的核对结论不再留在 localStorage (`30c29d7`)
-- **core**: 删会话时它的工作树和分支一起删，没提交的改动、没合并的提交也不留 (`b97b003`)
-- **core**: 主会话删掉后侧边聊天的标签记录不再留在 tabs.json 里 (`dcfa22a`)
-- **core**: 插件停用着时删掉的会话，诊断、MCP、计划、提示词插件加载时补删它们的记录 (`7da5591`)
-- **core**: 删会话删到一半退出时漏下的临时目录、改动快照，下次启动时补删 (`9c78fa7`)
-- **core**: 删会话时它用过、别的会话不再用的图连同缩略图一起删 (`d67cf84`)
-- **core**: 删除全部归档、按日期清除时正在跑的会话也删，先停下再删 (`237b13a`)
-- **core**: 计划插件的状态文件坏了不再让整个插件加载失败 (`9b9b7b4`)
-- **core**: 命令目录里的符号链接跟着读，拿 dotfiles 链进来的 / 命令也能用 (`65706ba`)
-- **core**: pushd、PowerShell 的 Set-Location 这类换目录的命令也算离开工作区 (`2dc9177`)
-- **core**: 拖文件进终端时按这个标签跑的 shell 加引号，PowerShell 里路径中的 $ 不再被展开 (`7d59fa7`)
-- **core**: 第一个提交之前也能取消暂存、看暂存的 diff，工作区里的符号链接不再顺着读到仓库外 (`5182b74`)
-- **core**: web_fetch 跟着同站的跳转走，只在 meta 里写了编码的老网页不再解成乱码 (`38c0c10`)
-- **core**: grep 命中落在密钥文件里时按文件再问一次，glob 给了不存在的目录时说找不到 (`cabf304`)
-- **core**: stop_subagent 停一个已经结束的子智能体时照实说它早已结束 (`694c8cd`)
-- **core**: 连着拨两个技能开关不再互相覆盖，同一技能换参数再调不再重复塞一遍正文 (`2ad6dd3`)
-- **core**: MCP 服务 stderr 里填进空位的值、命令行参数里的 token 也遮成 [secret] (`4ad1d4e`)
-- **core**: 回复里写的网络共享路径不再在画出来时就被访问 (`fca5b7e`)
-- **core**: 存图按内容去重，已有的不再重写，写的时候不会被读到半张 (`6a8e550`)
-- **core**: 导出整个会话库时不许导到库文件自己身上 (`f031c3d`)
-- **core**: 导出供应商覆盖已有文件时也收紧成 0600，导入不改已有供应商的名字 (`5136928`)
-- **core**: 密文文件被占用或没权限读时报错，不再当成空的、下次保存设置把 key 全删掉 (`90f35c1`)
-- **core**: 会话互发消息时，对方在压缩或收尾也算在忙，回执说消息在排队 (`45eb4a9`)
-- **core**: 压缩、剪枝之后输入框旁的上下文用量不再沿用改写前的数 (`d242876`)
-- **desktop**: 删掉会话后不再留下它的面板标签、开合、草稿和侧栏收起记录 (`ef2220e`)
-- **electron**: 装好的应用不再因 PLUME_SMOKE_OUT 进入冒烟，冒烟代码只在冒烟时加载 (`5ada7b5`)
-- **desktop**: 新会话使用默认模型，不再沿用临时选择 (`6ce8f80`)
+- **Settings and live state have shared host APIs.** SDK 0.6.0 adds `ctx.settings`, `ctx.store` and `ctx.sessionStore`, with matching UI subscriptions, so plugins no longer need their own settings files or state-push loops; session state is removed with its chat, and values loaded only for display are released after the last subscriber leaves.
+- **Plugin builds are easier to share and diagnose.** `plume-plugin pack` produces a folder for local upload, builds record their SDK version for load-error messages, and plugin logs and window warnings are collected in Plume's rotating log file.
 
-### 性能
+<!-- plume:notes zh-CN -->
+### 改动
 
-- **desktop**: 侧栏开合时面板里的网页、终端不再跟着逐帧改尺寸 (`56706b4`)
-- **desktop**: 长对话里拖分隔线、拖窗口时不再每帧重排屏幕外的每一轮 (`9df7fc2`)
-- **core**: 没到压缩线时不再先把大结果存成产物，提示词、清单钩子也不再每步重复找 (`4b56d04`)
+- **删对话时，留下的东西一起清理。** 工作树、会话分支、面板标签、草稿和附件现在随对话一起删除，没有其他对话再用到的图片和缩略图也会清掉；还在运行的对话会先停下子 Agent 和后台命令，再删除。
+- **每个对话各记各的面板区开合。** 切回对话或重启 Plume 后，面板区会恢复这个对话上次开着或收着的状态，不再整个窗口共用一份。
+- **新对话回到默认模型。** 在某个对话里临时换的模型不再被下一个新对话沿用，切换项目或执行 `/clear` 后也用设置里的默认模型。
+- **Magpie 接管的供应商可以直接改。** 在 Plume 里就能改连接、密钥和模型，测试、停用或删除；Magpie 再次同步时，仍会覆盖连接、密钥和模型列表。
+- **面板收起时，正文不再到最后才突然变宽。** 对话文字在整个开合过程中跟随栏宽排版，已经结束且滚出屏幕的轮仍跳过布局和绘制，减少长对话的排版开销。
+- **长代码和 diff 收放更顺。** 高亮结果会复用，只给可见部分上色，不再每次收放都重建整段高亮，回复还在生成时反复展开也能看全末行和高亮。
+- **一起送达的后台通知不再挤成一团。** 同一条记录里的相邻通知之间补上间距，单条通知和上下工具摘要的间距保持不变。
+- **密钥文件读不到时，不再把已存密钥写空。** 读取密钥库失败会直接报错，不再当作空库保存，MCP 调用卡片里的命令参数和环境变量也会遮住密钥值。
+- **搜索命中密钥文件时会单独问你。** 批准过一个目录，不再意味着里面的私钥和凭据内容也能直接出现在 grep 结果里，glob 遇到不存在的目录也会明确提示，不再混作没有匹配。
+- **读网页和往终端拖文件少些意外。** 网页读取能跟随同站点有无 `www`、HTTP 升 HTTPS 的跳转，并识别老网页的编码；拖进终端的路径按该标签实际使用的 shell 加引号，PowerShell 和 cmd 也能正确处理。
 
-### 重构
+### 给插件作者
 
-- **core**: title、side-chat、spawn-session 的设置改用 ctx.settings，界面用 ui.useSettings (`a71a2ab`)
-- **core**: 子智能体登记簿改存插件自己的 SQLite，一个任务一行，删父会话时连同它的任务一起删 (`99b2039`)
-- **desktop**: 渲染进程里登记着的依赖环清零 (`3433738`)
-- **core**: 模型设置和项目登记拆出 agent.ts，会话忙不忙统一经 held 判断 (`f9ff943`)
-
-### 文档
-
-- 插件文档写上 ctx.settings、ctx.store、ctx.sessionStore、参数检查、pack 和日志 (`7365f4e`)
-- 写明会话删掉时和它有关的数据一律删，只有使用统计留着 (`c5275b6`)
-- **core**: 本体里几段错位、过时的注释挪回原处或删掉 (`5cf4879`)
-- 冒烟各段的说明挪进 docs/smoke.md，ARCHITECTURE 的内置插件拆成一节 (`6850e36`)
-- 写明插件之间的密钥、观察和代管限制只是接口约束，不是安全边界 (`70ffb41`)
+- **设置和实时状态由本体统一管理。** SDK 0.6.0 提供 `ctx.settings`、`ctx.store`、`ctx.sessionStore` 及对应的界面订阅，不必再自己写设置文件和推送循环；会话状态随对话删除，只为显示而加载的值在最后一个订阅者离开后释放。
+- **构建结果更容易分享，加载失败也更好排查。** `plume-plugin pack` 可以打出供本地上传的文件夹，构建会记下 SDK 版本并在加载失败时提示，插件日志和窗口告警统一写进 Plume 的轮转日志。
 
 ## [0.5.6] - 2026-11-16
 
