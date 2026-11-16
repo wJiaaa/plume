@@ -842,7 +842,18 @@ export interface AgentService {
 	 * 方法返回异步迭代器时逐个推回，调用方取消时方法收到的 signal 中止。
 	 */
 	callPlugin(plugin: string, method: string, args: unknown[], call: CallContext): Promise<unknown>;
+	/**
+	 * 订阅插件经 `ctx.settings`（`kind` 是 `settings`，`key` 不看）、`ctx.store`、`ctx.sessionStore`（给 `sessionId`）登记的值，
+	 * 给它的界面入口用（`ui.useSettings`、`ui.useStore`、`ui.useSessionStore`）。先推一次当前值，之后每次改了推最新的那份
+	 * （来不及推的中间值跳过）；插件还没登记、停用着时等它登记，不报错。
+	 */
+	watchPluginValue(plugin: string, kind: PluginValueKind, key: string, sessionId: string | undefined, call: CallContext): AsyncGenerator<unknown, void>;
+	/** 界面改插件的设置（`ui.useSettings` 的第二项），同 `PluginSettings.set`：合并、校验、写盘、通知，交回改好的值。 */
+	setPluginSettings(plugin: string, patch: Record<string, unknown>): Promise<unknown>;
 }
+
+/** `AgentService.watchPluginValue` 订阅的是哪一种。 */
+export type PluginValueKind = "settings" | "store" | "session";
 
 /** 项目配置错误只携带位置，不把配置原文送进界面。 */
 export type ConfigProblem = { kind: "not-object"; path: string } | { kind: "invalid-json"; path: string; detail: string };

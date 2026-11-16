@@ -12,6 +12,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { activeLocale, text } from "./i18n.ts";
+import { jsonFiles } from "./json-files.ts";
+import { PluginValues } from "./plugin-values.ts";
 import { Workspace } from "./run-files.ts";
 import type {
 	CallContext,
@@ -321,6 +323,8 @@ export class PluginHost {
 	private queue: Promise<unknown> = Promise.resolve();
 	/** 插件的 `ctx.resources`、`ctx.workspace` 和工具调用的 `ToolRun.files` 背后的那一份，见 `run-files.ts`。 */
 	readonly workspace: Workspace;
+	/** 插件的 `ctx.settings`、`ctx.store`、`ctx.sessionStore`，界面经 `AgentService.watchPluginValue` 订阅。 */
+	readonly values = new PluginValues(jsonFiles());
 
 	constructor(
 		private readonly options: {
@@ -380,6 +384,7 @@ export class PluginHost {
 
 	/** 会话删掉了：告诉登记过 `ctx.sessions.onDeleted` 的插件。某个插件出错只记日志，不拦着别的。 */
 	sessionDeleted(sessionId: string): void {
+		this.values.forgetSession(sessionId);
 		void this.workspace
 			.forget(sessionId)
 			.catch((error: unknown) => this.options.log("agent", "error", `删掉会话 ${sessionId} 的改动快照失败：${errorText(error)}`));
@@ -1101,6 +1106,18 @@ export class PluginHost {
 			effect: (dispose) => {
 				if (typeof dispose !== "function") throw new Error(text("plugin.effectNotFunction"));
 				own(dispose);
+			},
+			settings: async (defaults, normalize) => {
+				live();
+				return this.values.createSettings(name, join(dataDir, "settings.json"), defaults, normalize, own, (message) => log.warn(message));
+			},
+			store: (key, initial) => {
+				live();
+				return this.values.createStore(name, key, initial, own);
+			},
+			sessionStore: (key, initial, load) => {
+				live();
+				return this.values.createSessionStore(name, key, initial, load, own, (message) => log.warn(message));
 			},
 			serve: (api) => {
 				if (typeof api !== "object" || api === null) throw new Error(text("plugin.serveNotObject"));

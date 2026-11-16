@@ -102,6 +102,7 @@ import { captureWindow } from "./image/capture-window.ts";
 import { requestReveal } from "./conversation/reveal.ts";
 import { setManagedSkin, updateAppearance, useAppearance } from "./appearance-settings.ts";
 import { uiLifetime } from "./ui-lifetime.ts";
+import { usePluginValue } from "./plugin-values.ts";
 import { provideUiService, removeUiServices, uiService } from "./ui-services.ts";
 import { skinRegistry } from "./skins.ts";
 import { PluginChatBackgroundSettings } from "./plugin-background.tsx";
@@ -1465,6 +1466,7 @@ const lifetimes = new Map<string, ReturnType<typeof uiLifetime>>();
 
 function context(name: string, agent: Remote<AgentService>): UiContext {
 	const lifetime = uiLifetime((error) => console.error(`[${name}] 界面入口清理失败：`, error));
+	const setSettings = async (patch: object): Promise<unknown> => await agent.setPluginSettings(name, patch as Record<string, unknown>);
 	lifetimes.set(name, lifetime);
 	const owned = (dispose: () => void) => {
 		if (!lifetime.active) {
@@ -1707,6 +1709,13 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 		useProjects: () => (host ? host.useProjects() : NO_PROJECTS),
 		usePluginDisplayName: () => (host ? host.usePluginDisplayName() : NO_DISPLAY_NAME),
 		remote: () => pluginRemote(agent, name),
+		// 改的函数每次渲染都是同一个，放进依赖不会让 effect 反复跑。
+		useSettings: <T extends object>(): [T | undefined, (patch: Partial<T>) => Promise<T>] => [
+			usePluginValue<T>(agent, name, "settings", "", undefined),
+			setSettings as (patch: Partial<T>) => Promise<T>,
+		],
+		useStore: (key) => usePluginValue(agent, name, "store", key, undefined),
+		useSessionStore: (key, sessionId) => usePluginValue(agent, name, "session", key, sessionId),
 	};
 }
 

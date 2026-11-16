@@ -2823,6 +2823,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async callPlugin(plugin, method, args, call) {
 			return host.call(plugin, method, args, call);
 		},
+		watchPluginValue(plugin, kind, key, sessionId, call) {
+			return host.values.watch(plugin, kind, key, sessionId, call.signal);
+		},
+		async setPluginSettings(plugin, patch) {
+			return host.values.setSettings(plugin, patch);
+		},
 		setLocale(locale) {
 			setLocale(locale);
 		},

@@ -1660,6 +1660,33 @@ export interface WebPages {
 /** 逻辑入口的 HTTP 请求；桌面版使用系统代理，不共享浏览器 cookie，不跟随重定向。 */
 export type PluginFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** `ctx.settings` 的结果。 */
+export interface PluginSettings<T extends object> {
+	/** 当前的设置。 */
+	get(): T;
+	/** 合并进当前值、过 `normalize`、写盘、通知界面和 `onChange`，交回改好的值。 */
+	set(patch: Partial<T>): Promise<T>;
+	/** 设置变了（这边改的、界面改的）时调，返回取消订阅的函数；停用时自动撤下。 */
+	onChange(listener: (value: T) => void): () => void;
+}
+
+/** `ctx.store` 的结果。 */
+export interface PluginStore<T> {
+	get(): T;
+	/** 换成新值并推给界面。 */
+	set(value: T): void;
+	update(change: (value: T) => T): void;
+}
+
+/** `ctx.sessionStore` 的结果。 */
+export interface PluginSessionStore<T> {
+	get(sessionId: string): T;
+	set(sessionId: string, value: T): void;
+	update(sessionId: string, change: (value: T) => T): void;
+	/** 回到 `initial`，不再占内存。会话删掉时本体自己做。 */
+	delete(sessionId: string): void;
+}
+
 export interface PluginContext {
 	readonly name: string;
 	/** 插件私有的数据目录，加载前已创建。 */
@@ -1691,6 +1718,24 @@ export interface PluginContext {
 	 * 每个值推给界面，界面取消时 signal 中止。参数和返回值要能结构化克隆。
 	 */
 	serve(api: object): void;
+	/**
+	 * 插件自己的设置：一份对象，存在 `dataDir` 的 `settings.json`，界面入口经 `ui.useSettings()` 读、改，两边改了都通知两边。
+	 * 读的时候和 `defaults` 浅合并，再交给 `normalize`（给了的话）校验、补齐；界面改的、逻辑入口改的都先合并进当前值、再过 `normalize`，
+	 * 它抛错就不改、`set` 失败。没给 `normalize` 时只收 `defaults` 里有的键。写入排队、整份替换，连着改两项不会互相盖掉。
+	 * 一个插件只能调一次，停用时收回。界面看得到全部内容：密钥不放这里（经 `ctx.secrets` 封好放进自己的文件）。
+	 */
+	settings<T extends object>(defaults: T, normalize?: (saved: Record<string, unknown>) => T): Promise<PluginSettings<T>>;
+	/**
+	 * 插件的一份运行状态，界面入口经 `ui.useStore(key)` 订阅，`set` 了界面跟着重画。只在内存里，停用或重启就回到 `initial`。
+	 * 值要能结构化克隆，不宜太大（每次改都整份发给界面）；一连串事件、要中途取消的长调用仍走 `serve`。同一个 `key` 只能登记一次。
+	 */
+	store<T>(key: string, initial: T): PluginStore<T>;
+	/**
+	 * 同 `store`，但每个会话一份（`ui.useSessionStore(key, sessionId)`）：会话删掉时那一份跟着丢掉。没设过的会话读到 `initial`；
+	 * 给了 `load` 的（值有一部分存在盘上，比如上次生成的摘要），界面订阅一个这次还没设过的会话时先调它，读到之前界面拿到的是 undefined，
+	 * 读完前又 `set` 过的以 `set` 的为准；它抛错就记日志、用 `initial`。逻辑入口的 `get` 不调 `load`。
+	 */
+	sessionStore<T>(key: string, initial: T, load?: (sessionId: string) => Promise<T>): PluginSessionStore<T>;
 	readonly log: Logger;
 	/** 插件自己调一次模型、画图、读花销，见 `ModelAccess`。 */
 	readonly model: ModelAccess;
