@@ -332,19 +332,25 @@ it("spawn_session：offer 等人选，选新会话再带 proposal_id 补简报�
 	const messages: Message[] = [user("顺便把 CLI 清理一下")];
 	const { tool, launched } = plugged({ messages });
 	const spawn = tool("spawn_session");
-	const offered = await spawn.execute({ initiation: "offer", title: "清理 CLI" }, run("p1", "o1", "new"));
-	expect(offered).toMatchObject({ details: { kind: "session_offer", choice: "new" } });
+	const offered = await spawn.execute({ initiation: "offer", title: "清理 CLI" }, run("p1", "o1", { choice: "new", model: "p/strong", thinking: "high" }));
+	expect(offered).toMatchObject({ details: { kind: "session_offer", choice: "new", model: "p/strong", thinking: "high" } });
 	expect(offered.output).toContain('proposal_id "o1"');
 	messages.push({ role: "toolResult", toolCallId: "o1", toolName: "spawn_session", details: offered.details } as unknown as Message);
 	expect((await spawn.execute({ initiation: "offer", proposal_id: "o1" }, run("p1", "o2"))).isError).toBe(true);
 	const done = await spawn.execute({ initiation: "offer", proposal_id: "o1", prompt: "删掉旧解析", background: BACKGROUND, name: "cli" }, run("p1", "o2"));
 	expect(done).toMatchObject({ details: { kind: "session_started", sessionId: "s1", proposalId: "o1", name: "cli" } });
-	expect(launched[0]).toMatchObject({ title: "清理 CLI", spawnedFrom: { sessionId: "p1", toolCallId: "o1", name: "cli" } });
+	// 开出来的会话用人在卡上选的模型、档位。
+	expect(launched[0]).toMatchObject({
+		title: "清理 CLI",
+		model: "p/strong",
+		thinking: "high",
+		spawnedFrom: { sessionId: "p1", toolCallId: "o1", name: "cli" },
+	});
 
-	expect((await spawn.execute({ initiation: "offer", title: "别的事" }, run("p1", "o3", "here"))).details).toMatchObject({ choice: "here" });
-	expect((await spawn.execute({ initiation: "offer", title: "别的事" }, run("p1", "o4", "never"))).output).toContain("does not want to be asked");
+	expect((await spawn.execute({ initiation: "offer", title: "别的事" }, run("p1", "o3", { choice: "here" }))).details).toMatchObject({ choice: "here" });
+	expect((await spawn.execute({ initiation: "offer", title: "别的事" }, run("p1", "o4", { choice: "never" }))).output).toContain("does not want to be asked");
 	// 选过「以后不再问」：不弹卡（这里的 request 会答 new），直接在这里做。
-	expect((await spawn.execute({ initiation: "offer", title: "又一件" }, run("p1", "o5", "new"))).output).toContain("turned these offers off");
+	expect((await spawn.execute({ initiation: "offer", title: "又一件" }, run("p1", "o5", { choice: "new" }))).output).toContain("turned these offers off");
 });
 
 it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；一轮最多三张建议卡", async () => {
@@ -353,7 +359,7 @@ it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；
 	const spawn = tool("spawn_session");
 	const now = { initiation: "user_asked", title: "t", prompt: "p", context: "fork" };
 	expect((await spawn.execute(now, run("p1", "x1"))).output).toContain("not by the person");
-	expect((await spawn.execute({ initiation: "offer", title: "t" }, run("p1", "x2", "new"))).isError).toBe(true);
+	expect((await spawn.execute({ initiation: "offer", title: "t" }, run("p1", "x2", { choice: "new" }))).isError).toBe(true);
 	const suggest = { initiation: "own_initiative", title: "t", summary: "s", prompt: "p", context: "fork" };
 	const card = await spawn.execute(suggest, run("p1", "x3"));
 	expect(card.details).toMatchObject({ kind: "session_suggestion", message: "p", fork: true });
@@ -452,6 +458,9 @@ it("spawn_session：带 proposal_id 开时短名照规矩核，没给就从标�
 	expect(launched).toHaveLength(0);
 	await spawn.execute(brief, run("p1", "o3"));
 	expect(launched[0]).toMatchObject({ spawnedFrom: { toolCallId: "o1", name: "clean-cli" } });
+	// 卡上没动过模型、档位：不给，用默认的。
+	expect(launched[0]).not.toHaveProperty("model");
+	expect(launched[0]).not.toHaveProperty("thinking");
 });
 
 it("fork、移交开出的会话带过来的建议卡在这里开不了：复制来的记录早于这个会话建成", async () => {

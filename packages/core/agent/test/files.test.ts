@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { operateSessionFile } from "../src/file-operations.ts";
 import { createAgent } from "../src/index.ts";
-import { locateSessionFiles, readListedFile, readSessionFile, readSessionFileBytes, listSessionDirectory, sessionFilePath } from "../src/files.ts";
+import { locateSessionFiles, readSessionFile, readSessionFileBytes, listSessionDirectory, sessionFilePath } from "../src/files.ts";
 
 let dir: string;
 let cwd: string;
@@ -47,42 +47,26 @@ it("超过读取上限只读开头", async () => {
 	expect(read?.bytes).toBe(600 * 1024);
 });
 
-it("目录外的路径不读：绝对路径、`..`、软链逃逸、文件夹、不存在的", async () => {
+it("只读看不设会话边界：绝对路径、`..`、软链指到目录外的都读得到；文件夹、不存在的、网络共享不读", async () => {
 	await symlink(join(dir, "secret.txt"), join(cwd, "link.txt"));
 	await symlink(dir, join(cwd, "up"));
-	expect(await readSessionFile(cwd, join(dir, "secret.txt"))).toBeNull();
-	expect(await readSessionFile(cwd, "../secret.txt")).toBeNull();
-	expect(await readSessionFile(cwd, "link.txt")).toBeNull();
-	expect(await readSessionFile(cwd, "up/secret.txt")).toBeNull();
+	expect((await readSessionFile(cwd, join(dir, "secret.txt")))?.text).toBe("目录外\n");
+	expect((await readSessionFile(cwd, "../secret.txt"))?.text).toBe("目录外\n");
+	expect((await readSessionFile(cwd, "link.txt"))?.text).toBe("目录外\n");
+	expect((await readSessionFile(cwd, "up/secret.txt"))?.text).toBe("目录外\n");
 	expect(await readSessionFile(cwd, "src")).toBeNull();
 	expect(await readSessionFile(cwd, "missing.txt")).toBeNull();
 	expect(await readSessionFile(cwd, "\\\\evil\\share\\a.png")).toBeNull();
 });
 
-it("提示词标出来源的文件在目录外也只读给：只认清单里那几个原路径，相对路径、软链借道、清单外的都不给", async () => {
-	const memory = join(dir, "memory", "learned.md");
-	await mkdir(join(dir, "memory"));
-	await writeFile(memory, "- 记下的\n");
-	await writeFile(join(dir, "memory", "MEMORY.md"), "清单外\n");
-	await symlink(join(dir, "secret.txt"), join(dir, "memory", "alias.md"));
-	const listed = [memory, join(dir, "memory", "missing.md")];
-	expect(await readListedFile(listed, memory)).toMatchObject({ text: "- 记下的\n", truncated: false });
-	expect(await readListedFile(listed, join(dir, "memory", "MEMORY.md"))).toBeNull();
-	expect(await readListedFile(listed, join(dir, "secret.txt"))).toBeNull();
-	expect(await readListedFile(listed, join(dir, "memory", "alias.md"))).toBeNull();
-	expect(await readListedFile(listed, "learned.md")).toBeNull();
-	expect(await readListedFile(listed, join(dir, "memory", "missing.md"))).toBeNull();
-	expect(await readListedFile([join(dir, "memory")], join(dir, "memory"))).toBeNull();
-	expect(await readListedFile([], memory)).toBeNull();
-});
-
-it("按路径发文件：只给工作目录里的文件，给的是解析过软链的真实路径", async () => {
+it("按路径发文件：给的是解析过软链的真实路径，目录外的也给", async () => {
 	await symlink(join(dir, "secret.txt"), join(cwd, "link.txt"));
+	const secret = await realpath(join(dir, "secret.txt"));
 	expect(await sessionFilePath(cwd, "readme.md")).toBe(await realpath(join(cwd, "readme.md")));
 	expect(await sessionFilePath(cwd, join(cwd, "src", "deep", "approvals.ts"))).toBe(await realpath(join(cwd, "src", "deep", "approvals.ts")));
-	expect(await sessionFilePath(cwd, "../secret.txt")).toBeNull();
-	expect(await sessionFilePath(cwd, join(dir, "secret.txt"))).toBeNull();
-	expect(await sessionFilePath(cwd, "link.txt")).toBeNull();
+	expect(await sessionFilePath(cwd, "../secret.txt")).toBe(secret);
+	expect(await sessionFilePath(cwd, join(dir, "secret.txt"))).toBe(secret);
+	expect(await sessionFilePath(cwd, "link.txt")).toBe(secret);
 	expect(await sessionFilePath(cwd, "src")).toBeNull();
 	expect(await sessionFilePath(cwd, "missing.txt")).toBeNull();
 });
@@ -152,7 +136,8 @@ it("文档完整读取守目录、版本和取消边界", async () => {
 	const signal = new AbortController().signal;
 	const view = await readSessionFile(cwd, "readme.md");
 	expect(Buffer.from(await readSessionFileBytes(cwd, "readme.md", view!.modifiedAt, signal)).toString()).toBe("# 你好\n");
-	await expect(readSessionFileBytes(cwd, "../secret.txt", undefined, signal)).rejects.toThrow();
+	expect(Buffer.from(await readSessionFileBytes(cwd, "../secret.txt", undefined, signal)).toString()).toBe("目录外\n");
+	await expect(readSessionFileBytes(cwd, "src", undefined, signal)).rejects.toThrow();
 	await expect(readSessionFileBytes(cwd, "readme.md", 0, signal)).rejects.toThrow();
 	const cancelled = new AbortController();
 	cancelled.abort();
@@ -189,17 +174,15 @@ it("SQLite 文档快照包含尚未 checkpoint 的 WAL 提交", async () => {
 	}
 });
 
-it("源目录可以预览、列目录和改名；未登记目录、软链逃逸和根目录改名仍拒绝", async () => {
+it("源目录可以列目录和改名；未登记目录列不了，根目录改名仍拒绝", async () => {
 	const source = join(dir, "source");
 	await mkdir(source);
 	await writeFile(join(source, "a.txt"), "额外源文件");
 	await symlink(join(dir, "secret.txt"), join(source, "escape.txt"));
-	expect(await readSessionFile(cwd, join(source, "a.txt"))).toBeNull();
+	await expect(listSessionDirectory(cwd, source)).rejects.toThrow();
 	expect((await readSessionFile(cwd, join(source, "a.txt"), [source]))?.text).toBe("额外源文件");
 	expect(Buffer.from(await readSessionFileBytes(cwd, join(source, "a.txt"), undefined, new AbortController().signal, [source])).toString()).toBe("额外源文件");
 	expect((await listSessionDirectory(cwd, source, [source])).map((entry) => entry.name)).toEqual(["a.txt"]);
-	expect(await sessionFilePath(cwd, join(source, "escape.txt"), [source])).toBeNull();
-	expect(await readSessionFile(cwd, "../secret.txt", [source])).toBeNull();
 	expect(await operateSessionFile(cwd, { type: "rename", from: source, to: join(dir, "renamed") }, [source])).toMatchObject({ ok: false });
 	expect(await operateSessionFile(cwd, { type: "rename", from: join(source, "a.txt"), to: join(source, "b.txt") }, [source])).toMatchObject({ ok: true });
 });

@@ -204,7 +204,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 ### 命令
 
-跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。
+跑 shell 命令用 `run.exec(command, { cwd?, env?, recordChanges? })`，不要自己起进程。档位、提权都在本体，插件换不掉；plume.tools 的 bash、monitor 就是这么用的。完全访问下命令写明要改 Plume 的数据目录（重定向、`cp`、`sed -i`、`rm`……指到 `~/.plume`）时，本体在起它之前问人、只认人答，人不点头 `run.exec` 就抛错，把错误交给模型即可。
 
 - 本体按权限模式选沙箱档：请求批准只读，帮我批准只能写项目目录和临时目录，完全访问不设限，外层设了 `readOnly` 一律只读；macOS 用 seatbelt，Windows 用受限令牌，Linux 没有后端，给不了那一档时抛错。用用户的 shell、向登录 shell 要的环境起命令。
 - 返回 `RunProcess`：`onOutput`、`onExit`、`onError`、`kill`，加上实际跑的那一档 `mode` 和 `denied(output)`：输出像被沙箱拒了时交回本体给模型的那句说明（说出实际跑的那一档、说清是策略拒绝不是命令出错），原样放进结果，不像交回 `undefined`。
@@ -229,7 +229,7 @@ const answer = reply.answered ? checkReply(question, reply.value) : undefined; /
 
 写、改用户的文件也经 `run.files`，不要自己 `writeFile`：本体守写的边界，并把改动记成快照，撤回时连文件一起退、交付卡能看和撤销靠的就是它。plume.tools 的 write、edit、bash、bash_output 就是这么用的。
 
-- `run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件）不写，同一脉会话的临时目录能写、别的会话的不能，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。
+- `run.files.change(path, edit)`：`path` 照读文件那几种写法解析，Plume 自己的数据目录（设置、会话、插件，别的会话的临时目录也算）能写但只认人亲自点头（`edit` 里的 `run.ask` 同提权，完全访问、帮我批准、「以后不再问」都不替人答；工具没问的本体在写之前替它问人，人不点头就抛错），同一脉会话的临时目录照常写，工作区外照样能写（要不要问人归工具，用 `run.ask`，卡片 `subject` 用 `edit` 拿到的 `path`），看着在工作区里、链接到外面的拒绝。
 - 同一个文件（包括经硬链接、别名）的几次 `change` 排队；`edit(current)` 拿到 `{ path, text, stamp }`（`path` 是真正要写的那个文件，`text` 是现在的内容、不存在时是 null，`stamp` 是 `{ mtimeMs, size }`），交回 `{ text?, value }`：给了 `text` 本体就在写之前再核一遍文件没被别处改过（期间被改了、被换成别的文件、新文件被别人先建了都抛错，一个字节不写）、写下、记快照；不给就不写，`value` 原样交回。
 - 返回 `{ value, path, written? }`，`written` 是写下以后的 `stamp`（给「读过以后有没有变」的检查用）。撤销进行中、外层要求只读（`run.readOnly`）时抛错；快照存不下来时抛错，文件已经写下，`message` 照实说。
 - `run.files.write(address, content)` 写资源地址（只有 `scratch://` 可写），交回 `{ ok: true, path? }` 或 `{ ok: false, message }`。
@@ -401,7 +401,7 @@ ctx.hook("model.context", (input, next) => {
 });
 ```
 
-段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：标了 `category: "conventions"`、`category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里打开，文件在会话目录外（插件数据目录里的记忆、工作目录上层的指令）也能只读看，只认这次请求标出的这几个路径；别的段带了不显示。plume.prompt 给每份项目指令标了来源；换掉它的指令段时记得带上 `category`，否则算成系统提示词；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
+段里有内容是从文件读来的，就在段上带 `files: [{ path, chars }]`（`path` 绝对路径，`chars` 是那一截在 `text` 里的字数，连同包着它的标签）：标了 `category: "conventions"`、`category: "memory"` 的段的来源会按文件列在上下文用量的「记忆文件」里，人点了在文件面板里只读打开（文件面板看哪里的文件都行，会话目录外的也一样）；别的段带了不显示。plume.prompt 给每份项目指令标了来源；换掉它的指令段时记得带上 `category`，否则算成系统提示词；自己出 `projectMemory` 段的插件也该标。改了某段 `text` 的层要么跟着改 `files`，要么去掉它（`{ id, text }` 新建的段本来就没有）。
 
 ```ts
 const text = `<project_memory>\n${body}\n</project_memory>`;

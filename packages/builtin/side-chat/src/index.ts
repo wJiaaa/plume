@@ -19,7 +19,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message, Plugin, PromptSection, SessionMessage } from "@plume/contract";
 import type { SessionChoice } from "@plume/contract/ui";
-import type { SideChatApi } from "./api.ts";
+import type { LaunchChoice, SideChatApi } from "./api.ts";
 import { createSideChatBindings } from "./bindings.ts";
 import { changeIds, sideChangesNote } from "./changes.ts";
 import { CONTROL_MAIN, DISPATCH_TASK, isDispatchSuggestion } from "./controls.ts";
@@ -246,7 +246,7 @@ export default {
 			close: (tab: string) => bindings.close(String(tab)),
 			model: async () => model,
 			started: (sideId: string, callId: string) => startedFrom(String(sideId), String(callId)),
-			launch(sideId: string, callId: string) {
+			launch(sideId: string, callId: string, choice: LaunchChoice) {
 				const key = `${String(sideId)}:${String(callId)}`;
 				const pending =
 					launching.get(key) ??
@@ -265,6 +265,9 @@ export default {
 							...(parent.project ? { project: parent.project } : { cwd: parent.cwd }),
 							message: details.instruction,
 							title: details.title,
+							// 卡上没动过就不给，用默认模型、默认推理强度；认不认得由宿主核。
+							...(choice.model ? { model: choice.model } : {}),
+							...(choice.thinking ? { thinking: choice.thinking } : {}),
 							spawnedFrom: { sessionId: parentId, toolCallId: String(callId) },
 						});
 						return session.id;

@@ -160,17 +160,11 @@ export function locateFiles(sessionId: string, written: string): Promise<string[
 /**
  * 纯文字里印出来的一条路径（终端输出）在会话里指的那个文件，见 `UiContext.findFile`。
  *
- * 绝对路径列它所在的目录来认：问 agent 而不是主进程，文件面板打不开的（会话目录外）就不算。相对路径交给
- * `locateFiles`，它先按原样拼、再按结尾找；文件夹带着结尾的分隔符，不算。不止一个时不替人挑。
+ * 交给 `locateFiles`：绝对路径看本机有没有（文件面板只读看哪里都行），相对路径先按原样拼、再按结尾找；
+ * 文件夹带着结尾的分隔符，不算。不止一个时不替人挑。
  */
 export async function findFile(sessionId: string, written: string): Promise<string | null> {
 	if (!agent || !written) return null;
-	if (/^([A-Za-z]:)?[\\/]/.test(written)) {
-		const parent = written.slice(0, Math.max(written.lastIndexOf("/"), written.lastIndexOf("\\"))) || written.slice(0, 1);
-		const entries = await agent.listDirectory(sessionId, parent).catch(() => []);
-		const name = baseName(written);
-		return entries.some((entry) => !entry.isDirectory && entry.name === name) ? written : null;
-	}
 	const files = ((await locateFiles(sessionId, written)) ?? []).filter((path) => !/[/\\]$/.test(path));
 	return files.length === 1 ? files[0]! : null;
 }

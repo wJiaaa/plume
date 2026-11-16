@@ -147,16 +147,23 @@ test("卡片上「开新会话」开在主会话的项目里、记着从哪张�
 	const f = await fixture(t);
 	assert.deepEqual(f.tools, ["read_main_chat", "dispatch_task", "control_main"]);
 	assert.equal(await f.api.started("side", "call-1"), undefined);
-	const [first, second] = await Promise.all([f.api.launch("side", "call-1"), f.api.launch("side", "call-1")]);
+	const [first, second] = await Promise.all([f.api.launch("side", "call-1", {}), f.api.launch("side", "call-1", {})]);
 	assert.equal(first, "new-1");
 	assert.equal(second, "new-1");
-	assert.equal(await f.api.launch("side", "call-1"), "new-1");
+	assert.equal(await f.api.launch("side", "call-1", {}), "new-1");
 	assert.deepEqual(f.launched, [
 		{ project: "p1", message: "把 /w/a.ts 的类型错误修掉", title: "修好 a.ts", spawnedFrom: { sessionId: "main", toolCallId: "call-1" } },
 	]);
 	assert.equal(await f.api.started("side", "call-1"), "new-1");
-	await assert.rejects(f.api.launch("side", "call-2"), /卡片/);
-	await assert.rejects(f.api.launch("main", "call-1"));
+	await assert.rejects(f.api.launch("side", "call-2", {}), /卡片/);
+	await assert.rejects(f.api.launch("main", "call-1", {}));
+});
+
+test("卡片上选了模型和思考档位：开出来的会话用它们", async (t) => {
+	const f = await fixture(t);
+	await f.api.launch("side", "call-1", { model: "p/strong", thinking: "high" });
+	assert.equal(f.launched[0]?.model, "p/strong");
+	assert.equal(f.launched[0]?.thinking, "high");
 });
 
 test("普通会话的工具表里没有侧边聊天专用的三件", async (t) => {

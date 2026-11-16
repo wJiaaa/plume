@@ -48,6 +48,7 @@ import {
 	isOffer,
 	isSuggestion,
 	SESSION_OFFER,
+	type SessionOffer,
 	type SessionStarted,
 	type SessionSuggestion,
 	SPAWN_SESSION,
@@ -57,8 +58,11 @@ import { humanTurn, suggestionsThisTurn } from "./turns.ts";
 
 const TOOLS = new Set([SPAWN_SESSION, HAND_OFF, DISMISS_TASK, ARCHIVE_SESSION]);
 
-/** offer 卡上人能选的。 */
-type OfferChoice = "new" | "here" | "never";
+/** 新会话用的模型、思考档位：卡上没动过的不给，用默认的。 */
+type ModelChoice = { model?: string; thinking?: ThinkingLevel };
+
+/** offer 卡上人能选的；选「开新会话」时带上卡上选的模型、思考档位。 */
+type OfferChoice = ({ choice: "new" } & ModelChoice) | { choice: "here" } | { choice: "never" };
 
 function failed(output: string): ToolOutput {
 	return { output, isError: true };
@@ -66,7 +70,7 @@ function failed(output: string): ToolOutput {
 
 /** 一条提议（建议卡、offer）现在怎样：还能开、开过了、不能开（为什么）。 */
 type Proposal =
-	| { state: "open"; title: string; briefing?: Briefing; suggestion?: SessionSuggestion }
+	| { state: "open"; title: string; briefing?: Briefing; suggestion?: SessionSuggestion; choice?: ModelChoice }
 	| { state: "started"; sessionId: string; name?: string }
 	| { state: "closed"; reason: string };
 
@@ -129,7 +133,12 @@ export default {
 				if (details.expiresAt <= Date.now()) return { state: "closed", reason: text.expired };
 				return { state: "open", title: details.title, suggestion: details };
 			}
-			if (isOffer(details) && details.choice === "new") return { state: "open", title: details.title };
+			if (isOffer(details) && details.choice === "new")
+				return {
+					state: "open",
+					title: details.title,
+					choice: { ...(details.model ? { model: details.model } : {}), ...(details.thinking ? { thinking: details.thinking } : {}) },
+				};
 			return { state: "closed", reason: text.gone };
 		}
 
@@ -139,7 +148,7 @@ export default {
 		const offersWorktree = async (parent: SessionSummary) => (parent.project ? worktrees.available(parent.cwd) : false);
 
 		/** 从 `parentId` 里 `callId` 那次调用开出一个会话；同一次调用只开一次。 */
-		function launch(parentId: string, callId: string, briefing: Briefing, choice: { model?: string; thinking?: ThinkingLevel } = {}): Promise<SessionSummary> {
+		function launch(parentId: string, callId: string, briefing: Briefing, choice: ModelChoice = {}): Promise<SessionSummary> {
 			const key = `${parentId}\n${callId}`;
 			const pending =
 				launching.get(key) ??
@@ -177,9 +186,15 @@ export default {
 		}
 
 		/** 当场开，答模型开出了谁。 */
-		async function startNow(run: ToolRun, callId: string, briefing: Briefing, extra: Partial<SessionStarted> = {}): Promise<ToolOutput> {
+		async function startNow(
+			run: ToolRun,
+			callId: string,
+			briefing: Briefing,
+			extra: Partial<SessionStarted> = {},
+			choice: ModelChoice = {},
+		): Promise<ToolOutput> {
 			try {
-				const session = await launch(run.sessionId, callId, briefing);
+				const session = await launch(run.sessionId, callId, briefing, choice);
 				const details: SessionStarted = {
 					kind: "session_started",
 					title: briefing.title,
@@ -237,11 +252,21 @@ export default {
 							isError: true,
 							...(reply.reason === "stopped" ? {} : { details: { unanswered: reply.reason } }),
 						};
-					const choice = reply.value;
-					if (choice === "never") await setOffers(false);
-					if (choice === "new") return { output: results.offerNew(title, run.toolCallId), details: { kind: "session_offer", title, choice: "new" } };
+					const answer = reply.value;
+					if (answer.choice === "never") await setOffers(false);
+					if (answer.choice === "new") {
+						// 卡上选的模型、档位记在这次 offer 的结果里，模型带 proposal_id 补简报时从记录里取（`proposal`）。
+						const details: SessionOffer = {
+							kind: "session_offer",
+							title,
+							choice: "new",
+							...(answer.model ? { model: answer.model } : {}),
+							...(answer.thinking ? { thinking: answer.thinking } : {}),
+						};
+						return { output: results.offerNew(title, run.toolCallId), details };
+					}
 					return {
-						output: choice === "never" ? results.offerNever(title) : results.offerHere(title),
+						output: answer.choice === "never" ? results.offerNever(title) : results.offerHere(title),
 						details: { kind: "session_offer", title, choice: "here" },
 					};
 				}
@@ -255,7 +280,7 @@ export default {
 				// 短名和当场开的一样：给了照规矩核（不合规时宿主的报错是按界面语言写的，模型读不懂），没给用建议卡上的、或从标题里取。
 				const name = args.name === undefined && found.suggestion ? found.suggestion.name : nameOf(args.name, found.title);
 				if (typeof name === "object") return failed(name.error);
-				return startNow(run, request.proposalId, { ...briefing, ...(name ? { name } : {}) }, { proposalId: request.proposalId });
+				return startNow(run, request.proposalId, { ...briefing, ...(name ? { name } : {}) }, { proposalId: request.proposalId }, found.choice);
 			},
 		});
 

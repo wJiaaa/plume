@@ -72,7 +72,7 @@ import { projectRootsFor } from "./project-roots.ts";
 import { layerProjectSettings, projectLayerView, withProjectLayer } from "./project-config.ts";
 import { operateSessionFile } from "./file-operations.ts";
 import { managedMediaPath, readManagedMedia } from "./media-access.ts";
-import { listSessionDirectory, locateSessionFiles, readListedFile, readSessionFile, readSessionFileBytes, sessionFilePath } from "./files.ts";
+import { listSessionDirectory, locateSessionFiles, readSessionFile, readSessionFileBytes, sessionFilePath } from "./files.ts";
 import { foldRetry, settleHiccups } from "./hiccups.ts";
 import { errorText, type HostPages, PluginHost } from "./host.ts";
 import { activeLocale, setLocale, text } from "./i18n.ts";
@@ -2989,12 +2989,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async readFile(sessionId, path) {
 			const session = sessions.get(sessionId);
 			if (!session) return null;
-			return (
-				(await readSessionFile(session.summary.cwd, path, sessionRoots(session.summary))) ??
-				(await readManagedMedia(mediaDir, path)) ??
-				// 「记忆文件」里列的那几个，在会话边界外也只读放行，见 `readListedFile`。
-				readListedFile((await recordOf(session)).estimate?.memoryFiles.map((file) => file.path) ?? [], path)
-			);
+			return (await readSessionFile(session.summary.cwd, path, sessionRoots(session.summary))) ?? readManagedMedia(mediaDir, path);
 		},
 		async locateFiles(sessionId, written) {
 			const session = sessions.get(sessionId);

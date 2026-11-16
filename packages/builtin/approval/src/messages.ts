@@ -58,7 +58,6 @@ const zhCN = {
 
 	// 写文件：`assessWrite`。
 	"write-sensitive-path": "写入项目之外的敏感路径",
-	"write-outside-project": "写入当前项目之外的位置",
 };
 
 export type RiskCode = keyof typeof zhCN;
@@ -110,7 +109,6 @@ export const RISK_TEXT: Record<Locale, Record<RiskCode, string>> = {
 		"scheduled-task": "Changes scheduled tasks",
 		firewall: "Changes the firewall configuration",
 		"write-sensitive-path": "Writes to a sensitive location outside the project",
-		"write-outside-project": "Writes outside the current project",
 	} satisfies Record<RiskCode, string>,
 };
 

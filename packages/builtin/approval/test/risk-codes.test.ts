@@ -34,7 +34,7 @@ it("危险的命令报出它犯的规则", () => {
 it("危险的写报出它犯的规则", () => {
 	expect(assessWrite("/etc/hosts", "/work/app").code).toBe("write-sensitive-path");
 	expect(assessWrite("/home/me/.zshrc", "/work/app").code).toBe("shell-startup");
-	expect(assessWrite("/work/other/a.ts", "/work/app").code).toBe("write-outside-project");
+	expect(assessWrite("/work/other/a.ts", "/work/app").risky).toBe(false);
 });
 
 it("每个危险的判断都说得出理由，两种语言都有", () => {

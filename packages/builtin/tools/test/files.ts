@@ -16,7 +16,7 @@ const DATA_DIR = join(tmpdir(), "plume-tools-test-data");
 
 type Input = Omit<ToolContext, "files" | "projectFiles" | "resources" | "rejection"> &
 	Partial<Pick<ToolContext, "files" | "projectFiles" | "resources" | "rejection">> & {
-		/** Plume 的数据目录：改动快照记在它下面，文件工具不写它。 */
+		/** Plume 的数据目录：改动快照记在它下面，文件工具写它要人亲自点头。 */
 		dataDir?: string;
 		sessionId?: string;
 		/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`）。 */

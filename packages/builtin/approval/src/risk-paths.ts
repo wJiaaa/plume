@@ -1,11 +1,12 @@
 /**
  * 能写到哪里。
  *
- * 问的是地方而不是命令：项目和草稿目录是干活的地方，别处都值得人看一眼。
+ * 问的是地方而不是命令：系统目录、钥匙目录、shell 启动文件值得人看一眼，别处（项目外的其他目录也算）是正常干活。
+ * Plume 自己的数据目录不归这里：本体在写之前只认人答（`RunFiles.change`）。
  */
 
 import { homedir } from "node:os";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import { within, withinOrIs } from "@plume/platform";
 import { SAFE, risky, underScratchRoot, type RiskVerdict } from "./risk-shared.ts";
 import { PROTECTED_PATH } from "./risk-tables.ts";
@@ -25,7 +26,7 @@ function homeForm(path: string): string | null {
 /**
  * 写这个路径要不要人来定。
  *
- * 项目里面，写就是工作，不值得打断。项目外面（系统目录、某人的 SSH 密钥）是另一回事，不管是谁要写。
+ * 写就是工作，不值得打断，项目外的普通目录也一样。系统目录、某人的 SSH 密钥是另一回事，不管是谁要写。
  * 用户主目录（`~`）里的钥匙目录和 `~` 下的 shell 启动文件在项目里也问：直接把 `~` 当项目打开时，它们都在「项目里」。
  */
 export function assessWrite(path: string, cwd: string): RiskVerdict {
@@ -35,6 +36,8 @@ export function assessWrite(path: string, cwd: string): RiskVerdict {
 	 * 不是那张表要管的，反过来的顺序会让每个临时文件都像是在动系统。这里不带 `cwd`：项目不是草稿目录，项目里的钥匙下面照样问。
 	 */
 	if (underScratchRoot(normalised)) return SAFE;
+	// Plume 自己的设置、权限、插件和会话：本体在写之前本来就只认人答，这里也照实说它有风险。
+	if (withinOrIs(join(homedir(), ".plume"), normalised)) return risky("write-sensitive-path");
 	const fromHome = homeForm(normalised);
 	if (fromHome !== null && PROTECTED_PATH.test(` ${fromHome}`)) return risky("write-sensitive-path");
 	// 启动文件只认 `~` 这一层的：项目里别处的 `.bashrc`（dotfiles 仓库、镜像的构建上下文）不是这台机器正在用的那份。
@@ -43,5 +46,5 @@ export function assessWrite(path: string, cwd: string): RiskVerdict {
 	if (withinOrIs(cwd, normalised)) return SAFE;
 	if (PROTECTED_PATH.test(` ${normalised}`)) return risky("write-sensitive-path");
 	if (SHELL_STARTUP.test(normalised)) return risky("shell-startup");
-	return risky("write-outside-project");
+	return SAFE;
 }

@@ -800,12 +800,12 @@ export interface AgentService {
 	 */
 	documentText(name: string, data: Uint8Array): Promise<DocumentText | null>;
 	/**
-	 * 给文件面板读一个文件。只认这个会话工作目录和项目源文件夹里的路径，另加这个会话最近一次请求的「记忆文件」
-	 * （`ContextBreakdown.memoryFiles`，只读、按原路径给）；不在这些里、不存在、是文件夹都返回 null。
+	 * 给文件面板只读看一个文件：本机哪里都行，工作目录外、数据目录、密钥文件也给（点开的是人自己），相对路径按会话工作目录拼；
+	 * 写、改名、列目录仍只限会话工作目录和项目源文件夹。不存在、是文件夹都返回 null。
 	 * 太长的只读开头（`truncated`），不是文字的只报大小（`binary`）。
 	 */
 	readFile(sessionId: string, path: string): Promise<FileContents | null>;
-	/** 文档预览的原始数据，受同一会话读取边界约束，最多 64 MiB；版本不符时报错。 */
+	/** 文档预览的原始数据，读得到的范围同 `readFile`，最多 64 MiB；版本不符时报错。 */
 	readFileBytes(sessionId: string, path: string, modifiedAt: number | undefined, call: CallContext): Promise<Uint8Array>;
 	/** 列出会话目录或项目源文件夹里的一级目录，不跟随软链。 */
 	/** `@` 菜单列会话或已登记项目的源目录顶层；新聊天没有目录时为空。 */

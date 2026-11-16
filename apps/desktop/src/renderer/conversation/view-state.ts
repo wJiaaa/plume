@@ -153,6 +153,15 @@ export function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 
 export const Transcript = createContext<TranscriptState | null>(null);
 
+/**
+ * 侧栏、面板区开合，对话那一栏正滑着时，转录那一格（转录和问题导航占的那一块）在这一路上最窄有多宽；不在滑时是 undefined。
+ *
+ * 滑着时那一格每一帧一个宽度，正文跟着它的话每一帧都要整段重新断行：面板区开着、正文窄于 `--plume-content` 时，
+ * 长转录在这 340ms 里每帧都是一次全量布局，动画就掉帧。转录按这个宽度把正文定住，一路上只平移不断行：
+ * 变窄时点下去当场按滑完的宽度断一次，变宽时滑完再断一次。只给最外层的转录：嵌在里面的子转录跟着外层的宽度走。
+ */
+export const TranscriptFloor = createContext<number | undefined>(undefined);
+
 export function useTranscript(): TranscriptState {
 	const value = useContext(Transcript);
 	// i18n-exempt：写错了才会走到的开发者报错。

@@ -1,7 +1,13 @@
 /** 逻辑入口经 `ctx.serve` 开给界面入口的接口。 */
 
-import type { SessionMessage } from "@plume/contract";
+import type { SessionMessage, ThinkingLevel } from "@plume/contract";
 import type { SessionChoice } from "@plume/contract/ui";
+
+/** 卡片上给新会话选的模型（`SessionModel.id`）、思考档位：没动过的不给，用默认的。 */
+export interface LaunchChoice {
+	model?: string;
+	thinking?: ThinkingLevel;
+}
 
 export interface SideChatEntry {
 	id: string;
@@ -27,9 +33,9 @@ export interface SideChatApi {
 	setModel(model: string | undefined): Promise<void>;
 	/**
 	 * 交出去的卡片上点了「开新会话」：在主会话的项目（不在项目里时是它的目录）里开一个新会话，第一句是卡上那条指令，
-	 * 记着从这次调用开出来（`spawnedFrom`）。同一张卡开过就不再开，返回开出来的会话 id。
+	 * 记着从这次调用开出来（`spawnedFrom`），用卡上选的模型和思考档位（`choice`，没选就是默认的）。同一张卡开过就不再开，返回开出来的会话 id。
 	 */
-	launch(sideId: string, callId: string): Promise<string>;
+	launch(sideId: string, callId: string, choice: LaunchChoice): Promise<string>;
 	/** 这张卡开过的会话；没开过是 undefined。 */
 	started(sideId: string, callId: string): Promise<string | undefined>;
 }

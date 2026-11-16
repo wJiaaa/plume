@@ -275,16 +275,18 @@ export function useFollowBottom({
 	const anchor = useRef<{ el: Element; top: number; until: number } | null>(null);
 
 	/*
-	 * 读者眼前那一块（见 `firstInView`）、它离视口顶多远，以及记下时视口有多宽。
+	 * 读者眼前那一块（见 `firstInView`）、它离视口顶多远，以及记下时视口和它自己各有多宽。
 	 *
 	 * 宽度一变正文就重新断行，上面的内容跟着变高变矮。浏览器的滚动锚定在这里不补：窄窗格里开合
 	 * 侧栏，不靠这里时眼前那一段一路被带走 171px；停在离底部 150px 处收起侧栏，画面一帧上跳 123px、
 	 * 几乎贴底，展开又跳回来。侧栏、右栏开合，拖分隔线、拖窗口都走这一处。
 	 *
 	 * 只管宽度变了的那一帧，也只在读者滚开时管：跟着底部的由 `pin` 送到底，按住东西的由 `settle`。
+	 * 视口不变、正文那一栏自己换了宽度也算（对话开合时定住的正文宽度滑完放开，见宿主转录的 `TranscriptFloor`）：
+	 * 那一栏的宽度改在眼前那一块的祖先上，浏览器的滚动锚定照样不补。
 	 * 曾经由侧栏动画接管正文那一栏的宽度来补这件事，它和跟随底部、浏览器的滚动夹位轮流打架。
 	 */
-	const place = useRef<{ node: Element; top: number; width: number } | null>(null);
+	const place = useRef<{ node: Element; top: number; width: number; nodeWidth: number } | null>(null);
 
 	const read = (el: HTMLDivElement): Reading => ({
 		scrollTop: el.scrollTop,
@@ -366,18 +368,22 @@ export function useFollowBottom({
 		if (state.current !== "detached") return;
 		const edge = el.getBoundingClientRect().top;
 		const node = firstInView(el, edge);
-		if (node) place.current = { node, top: node.getBoundingClientRect().top - edge, width: el.clientWidth };
+		if (!node) return;
+		const box = node.getBoundingClientRect();
+		place.current = { node, top: box.top - edge, width: el.clientWidth, nodeWidth: box.width };
 	}, []);
 
 	/**
-	 * 宽度变了，把眼前那一行放回原来的高度。和 `settle` 一样只碰 `scrollTop`，在 `ResizeObserver`
+	 * 视口或眼前那一块的宽度变了，把眼前那一行放回原来的高度。和 `settle` 一样只碰 `scrollTop`，在 `ResizeObserver`
 	 * 的回调里同步跑完。按屏幕上的位置量：哪一帧浏览器自己锚定过，这里就量到没漂，不会补两遍。
 	 */
 	const keepPlace = useCallback(
 		(el: HTMLDivElement) => {
 			const kept = place.current;
-			if (!kept || state.current !== "detached" || el.clientWidth === kept.width || !kept.node.isConnected) return;
-			const drift = kept.node.getBoundingClientRect().top - el.getBoundingClientRect().top - kept.top;
+			if (!kept || state.current !== "detached" || !kept.node.isConnected) return;
+			const box = kept.node.getBoundingClientRect();
+			if (el.clientWidth === kept.width && box.width === kept.nodeWidth) return;
+			const drift = box.top - el.getBoundingClientRect().top - kept.top;
 			if (Math.abs(drift) >= 0.5) write(el, el.scrollTop + drift);
 		},
 		[write],

@@ -6,6 +6,7 @@
 
 import type { RiskCode, RiskParams } from "./messages.ts";
 import { assessCommand, assessWrite } from "./risk.ts";
+import { SECRET_PATH } from "./risk-tables.ts";
 
 export interface AssessVerdict {
 	risky: boolean;
@@ -19,16 +20,19 @@ export interface AssessVerdict {
 export function assess(kind: string, subject: string, cwd: string): AssessVerdict {
 	if (kind === "command") return assessCommand(subject, cwd);
 	if (kind === "create" || kind === "modify") return assessWrite(subject, cwd);
-	/*
-	 * 读走到这里，已经被读的工具自己判过了（`assessRead`）。
-	 *
-	 * 命令和写文件不一样：对它们，这里就是判断本身；而读的工具只有路径出了工作区才会来问。在这里重新判只可能推翻那个结论，
-	 * 而 `risky: false` 意味着问题拟好了、没给任何人看，就被本该发问的这一方答了「行」。
-	 *
-	 * 下面兜底的那一行本来也会这么答。单写出来，是因为两者一致是巧合而不是设计：兜底说的是「这个判断没听说过的种类」，
-	 * 而读是它认识的。以后有人收窄兜底时，得是有意删掉这一行才行。
-	 */
-	if (kind === "view") return { risky: true };
+	if (kind === "view") return assessView(subject);
 	// 没见过的种类，这个判断不是为它写的，交给人。
 	return { risky: true };
+}
+
+/**
+ * 读：本体的读边界（`run.files` 读出了工作区、命令里写明了工作区外的路径）问过来的，`subject` 是 `read:<批准范围>`。
+ *
+ * 帮我批准下读哪里都不问，只有本机的密钥文件（供应商 key、Plume 的设置、ssh 私钥、云凭据……）要人点头：读别的项目、系统文件
+ * 是 agent 正常看环境，读了也读不坏；钥匙读了就是交出去了。密钥的批准范围就是那个文件本身，所以按 `subject` 认得出来。
+ * 认不出 `read:` 的读（插件的工具自己写的 `view`）交给人。
+ */
+function assessView(subject: string): AssessVerdict {
+	if (!subject.startsWith("read:")) return { risky: true };
+	return { risky: SECRET_PATH.test(subject.slice("read:".length)) };
 }

@@ -476,7 +476,12 @@ export function createWorkspace(web: WebPages, defaultZoom: () => Promise<number
 			// 人关掉标签以后，尺寸的通知还可能晚到一次。
 			if (!entry || !(width > 0) || !(height > 0)) return;
 			entry.size = { width, height };
-			if (entry.view.viewport) await applyView(entry);
+			const viewport = entry.view.viewport;
+			/*
+			 * 面板区跟着侧栏开合、拖分隔线时这里每帧来一次。缩小的比例没变（面板仍比仿真的视口宽）就不再落一遍：
+			 * 每次都是两趟跨进程调用，外加页面按设备仿真重排一次。
+			 */
+			if (viewport && Math.min(1, width / viewport.width, height / viewport.height) !== entry.scale) await applyView(entry);
 		},
 		navigates(id) {
 			const entry = entryOf(id);

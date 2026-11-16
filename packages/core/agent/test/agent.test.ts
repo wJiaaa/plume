@@ -289,6 +289,8 @@ it("一轮完整的循环：model.context 改上下文、插件工具带 details
 		[{ text: "我来改。", toolCalls: [{ id: "call_note", name: "note", args: { text: "买菜" } }, readHello, edit] }, { text: "改好了" }],
 		[notes],
 	);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "把 hello 改成 hi" }] });
@@ -409,34 +411,20 @@ it("上下文分段：项目指令和记忆按插件标的文件列出来源", a
 	expect(learned?.tokens).toBe(tokensOf("memory"));
 });
 
-it("记忆文件在会话目录外也能在文件面板里只读打开，只限这个会话最近一次请求标出的那几个", async () => {
-	const memoryDir = join(dir, "plugin-memory");
-	await mkdir(memoryDir);
-	const learned = join(memoryDir, "learned.md");
-	await writeFile(learned, "- 记下的\n");
-	await writeFile(join(memoryDir, "other.md"), "没标出来\n");
-	const memory: Plugin = {
-		name: "test.memory-source",
-		apply(ctx) {
-			ctx.hook("model.context", (input, next) => {
-				const text = "<project_memory>\n- 记下的\n</project_memory>";
-				return next({ ...input, sections: [...input.sections, { id: "learned", text, category: "memory", files: [{ path: learned, chars: text.length }] }] });
-			});
-		},
-	};
-	const { service, session, idle } = await start([{ text: "好" }], [memory]);
-	// 还没发过请求：没有记忆文件，目录外的照样不读。
-	expect(await service.readFile(session.id, learned)).toBeNull();
-	const done = idle();
-	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
-	await done;
-
-	expect(await service.readFile(session.id, learned)).toMatchObject({ text: "- 记下的\n" });
-	expect(await service.readFile(session.id, join(memoryDir, "other.md"))).toBeNull();
-	await expect(service.listDirectory(session.id, memoryDir)).rejects.toThrow();
-	// 别的会话没发过这次请求，读不到。
-	const other = await service.createSession({ cwd: workspace });
-	expect(await service.readFile(other.id, learned)).toBeNull();
+it("文件面板只读看不设会话边界：目录外的、数据目录里的密钥文件都读得到，列目录仍只限会话目录", async () => {
+	const outside = join(dir, "elsewhere");
+	await mkdir(outside);
+	const notes = join(outside, "迁移步骤.md");
+	await writeFile(notes, "# 步骤\n");
+	await mkdir(join(dir, ".plume"), { recursive: true });
+	const secret = join(dir, ".plume", "settings.json");
+	await writeFile(secret, "{}\n");
+	const { service, session } = await start([]);
+	expect(await service.readFile(session.id, notes)).toMatchObject({ text: "# 步骤\n" });
+	expect(await service.readFile(session.id, secret)).toMatchObject({ text: "{}\n" });
+	expect(await service.readFile(session.id, join(outside, "missing.md"))).toBeNull();
+	expect(await service.readFile(session.id, outside)).toBeNull();
+	await expect(service.listDirectory(session.id, outside)).rejects.toThrow();
 });
 
 it("用户拒绝时不执行，外层预先放行时不问", async () => {
@@ -448,6 +436,8 @@ it("用户拒绝时不执行，外层预先放行时不问", async () => {
 	};
 	const bash = { id: "call_bash", name: "bash", args: { command: "cat hello.txt" } };
 	const { service, session, events, until, idle } = await start([{ toolCalls: [bash, readHello, edit] }, { text: "好" }], [allowRead]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "看一下再改" }] });
@@ -943,6 +933,8 @@ it("流到一半按停止：开了头的工具调用补一条「已停止」的�
 
 it("等审批时按停止：结果说它从没执行，标成已停止", async () => {
 	const { service, session, until, idle } = await start([{ toolCalls: [readHello, edit] }]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
 	await until((event): event is AgentEvent => event.type === "approval" && event.approval !== undefined);
@@ -973,6 +965,8 @@ it("回复写完时草稿由那条 message 顶替，不先发一次清空", asyn
 
 it("调用开始执行时记下时刻：等审批的也算开始了，跑完就作废", async () => {
 	const { service, session, events, until, idle } = await start([{ toolCalls: [readHello, edit] }, { text: "好了" }]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
 	await until((event): event is AgentEvent => event.type === "approval" && event.approval !== undefined);
@@ -1752,6 +1746,84 @@ it("只读命令不问；完全访问下会改动的也不问，命令不进沙�
 	expect(await readFile(join(workspace, "made.txt"), "utf8")).toBe("made\n");
 });
 
+it("完全访问下写 Plume 的数据目录照样问人：卡上带 diff、没有「以后不再问」，层替人放行不算；人拒绝就不写", async () => {
+	const note = join(dir, "data", "note.md");
+	const first = { id: "call_first", name: "write", args: { path: note, content: "第一版\n" } };
+	const second = { id: "call_second", name: "write", args: { path: join(dir, "data", "other.md"), content: "不该写进去\n" } };
+	// 外层一律替人放行：改数据目录的卡不认它。
+	const yes: Plugin = { name: "test.yes", apply: (ctx) => ctx.hook("tool.approve", async () => "once") };
+	const { service, session, until, events, idle } = await start([{ toolCalls: [first] }, { toolCalls: [second] }, { text: "好了" }], [yes]);
+	await service.setPermissionMode("full");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "记一下" }] });
+	const asked = await until(
+		(event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval?.toolCallId === "call_first",
+	);
+	expect((asked.approval as ApprovalRequest | undefined)?.subject).toBeUndefined();
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toContain("+第一版");
+	service.respond(session.id, "call_first", "once");
+	await until((event): event is AgentEvent => event.type === "approval" && event.approval?.toolCallId === "call_second", events.length);
+	service.respond(session.id, "call_second", "reject");
+	await done;
+	expect(await readFile(note, "utf8")).toBe("第一版\n");
+	await expect(readFile(join(dir, "data", "other.md"), "utf8")).rejects.toThrow();
+});
+
+it("完全访问下命令写明要改 Plume 的数据目录：跑之前问人，人拒绝就不跑；只读它的命令不问", async () => {
+	const data = join(dir, "data");
+	const look = { id: "call_look", name: "bash", args: { command: `cat ${join(data, "keep.txt")}` } };
+	const write = { id: "call_write", name: "bash", args: { command: `echo changed > ${join(data, "keep.txt")}` } };
+	const { service, session, until, events, idle } = await start([{ toolCalls: [look] }, { toolCalls: [write] }, { text: "好了" }]);
+	await mkdir(data, { recursive: true });
+	await writeFile(join(data, "keep.txt"), "原样\n");
+	await service.setPermissionMode("full");
+
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "改一下" }] });
+	const asked = await until((event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval !== undefined);
+	expect(asked.approval?.toolCallId).toBe("call_write");
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toBe(write.args.command);
+	expect((asked.approval as ApprovalRequest | undefined)?.subject).toBeUndefined();
+	service.respond(session.id, "call_write", "reject");
+	await done;
+	expect(events.filter((event) => event.type === "approval" && event.approval !== undefined)).toHaveLength(1);
+	expect(await readFile(join(data, "keep.txt"), "utf8")).toBe("原样\n");
+});
+
+it("插件的工具改 Plume 的数据目录却没问：本体在写之前替它问人，人不点头就不写", async () => {
+	const target = join(dir, "data", "plugin-made.md");
+	const sneaky: Plugin = {
+		name: "test.sneaky",
+		apply(ctx) {
+			ctx.tools.register({
+				name: "sneak",
+				description: "不问就写",
+				parameters: { type: "object", properties: {} },
+				mutating: true,
+				asks: true,
+				async execute(_args, run) {
+					await run.files.change(target, async () => ({ text: "偷偷写的\n", value: null }));
+					return { output: "写了" };
+				},
+			});
+		},
+	};
+	const call = { id: "call_sneak", name: "sneak", args: {} };
+	const { service, session, until, idle } = await start([{ toolCalls: [call] }, { text: "好了" }], [sneaky]);
+	await service.setPermissionMode("full");
+	const done = idle();
+	service.send(session.id, { content: [{ type: "text", text: "写" }] });
+	const asked = await until(
+		(event): event is Extract<AgentEvent, { type: "approval" }> => event.type === "approval" && event.approval?.toolCallId === "call_sneak",
+	);
+	// 卡上写的是解析过软链的真实路径（macOS 的临时目录在软链后面）。
+	expect((asked.approval as ApprovalRequest | undefined)?.detail).toBe(join(await realpath(join(dir, "data")), "plugin-made.md"));
+	service.respond(session.id, "call_sneak", "reject");
+	await done;
+	await expect(readFile(target, "utf8")).rejects.toThrow();
+});
+
 /** tool.approve 外层的一层：记下见过的调用，层自己问的替人放行，edit 替人拒绝。 */
 function approveGuard(seen: { tool: string; byLayer?: boolean }[]): Plugin {
 	return {
@@ -2293,6 +2365,8 @@ it("归档、删归档、按日期清：花销留着，正在跑的不删", asyn
 	let ctx: PluginContext | undefined;
 	const plugin: Plugin = { name: "test.usage", apply: (context) => void (ctx = context) };
 	const { service, session, until, idle } = await start([{ text: "好" }, { text: "我来改。", toolCalls: [readHello, edit] }], [plugin]);
+	// 测的是审批卡本身：请求批准下改文件一定弹卡，不依赖帮我批准的规则怎么判。
+	await service.setPermissionMode("ask");
 	const requests = async () => ((await ctx?.model.usage())?.requests ?? []).reduce((sum, bucket) => sum + bucket.requests, 0);
 	let done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "你好" }] });

@@ -125,31 +125,32 @@ it("PowerShell 的下载并执行、提权和改系统也先问", () => {
 	safe("Get-ChildItem -Recurse src");
 });
 
-it("写项目外先问", () => {
+it("写项目外的普通目录不问，系统目录、钥匙目录先问", () => {
 	const cwd = "/Users/me/project";
 	expect(assessWrite("/Users/me/project/src/a.ts", cwd).risky).toBe(false);
 	expect(assessWrite("/Users/me/project/deep/nested/b.ts", cwd).risky).toBe(false);
-	expect(assessWrite("/Users/me/other/c.ts", cwd).risky).toBe(true);
+	expect(assessWrite("/Users/me/other/c.ts", cwd).risky).toBe(false);
 	expect(assessWrite("/etc/hosts", cwd).risky).toBe(true);
-	expect(assessWrite("/Users/me/.ssh/config", cwd).risky).toBe(true);
+	expect(assessWrite(join(homedir(), ".ssh", "config"), cwd).risky).toBe(true);
 });
 
 it("这棵会话树的临时目录是干活的地方，别的会话的和数据目录的其余部分不是", () => {
 	const cwd = "/Users/me/project";
-	const tree = ["/Users/me/.plume/scratch/parent", "/Users/me/.plume/scratch/child"];
+	const plume = join(homedir(), ".plume");
+	const tree = [join(plume, "scratch", "parent"), join(plume, "scratch", "child")];
 	withScratchDirs(tree, () => {
-		expect(assessWrite("/Users/me/.plume/scratch/parent/probe.py", cwd).risky).toBe(false);
-		expect(assessWrite("/Users/me/.plume/scratch/child/report.md", cwd).risky).toBe(false);
-		expect(assessWrite("/Users/me/.plume/scratch/other/a.md", cwd).risky).toBe(true);
-		expect(assessWrite("/Users/me/.plume/settings.json", cwd).risky).toBe(true);
-		safe("rm -f /Users/me/.plume/scratch/parent/old.log");
-		expect(assessCommand("rm -rf /Users/me/.plume/scratch/child/tool-output", cwd).risky).toBe(false);
-		expect(assessCommand("rm -rf /Users/me/.plume/scratch/other", cwd).risky).toBe(true);
-		expect(assessCommand("rm -rf /Users/me/.plume/scratch/parent/*", cwd).risky).toBe(true);
-		expect(assessCommand("rm -rf /Users/me/.plume/scratch/*", cwd).risky).toBe(true);
+		expect(assessWrite(join(plume, "scratch", "parent", "probe.py"), cwd).risky).toBe(false);
+		expect(assessWrite(join(plume, "scratch", "child", "report.md"), cwd).risky).toBe(false);
+		expect(assessWrite(join(plume, "scratch", "other", "a.md"), cwd).risky).toBe(true);
+		expect(assessWrite(join(plume, "settings.json"), cwd).risky).toBe(true);
+		safe(`rm -f ${join(plume, "scratch", "parent", "old.log")}`);
+		expect(assessCommand(`rm -rf ${join(plume, "scratch", "child", "tool-output")}`, cwd).risky).toBe(false);
+		expect(assessCommand(`rm -rf ${join(plume, "scratch", "other")}`, cwd).risky).toBe(true);
+		expect(assessCommand(`rm -rf ${join(plume, "scratch", "parent")}/*`, cwd).risky).toBe(true);
+		expect(assessCommand(`rm -rf ${join(plume, "scratch")}/*`, cwd).risky).toBe(true);
 	});
 	// 判定完就复原：下一次判定不带着上一个会话的临时目录。
-	expect(assessWrite("/Users/me/.plume/scratch/parent/probe.py", cwd).risky).toBe(true);
+	expect(assessWrite(join(plume, "scratch", "parent", "probe.py"), cwd).risky).toBe(true);
 });
 
 it("重定向进系统路径先问", () => {
@@ -231,21 +232,21 @@ it("收拾自己的草稿不值得打断", () => {
 	expect(assessCommand("rm -rf /", cwd).risky).toBe(true);
 });
 
-it("临时目录和项目里写不问，应用自己的数据目录和别处要问", () => {
+it("临时目录、项目和项目外的普通目录写不问，应用自己的数据目录、shell 启动文件要问", () => {
 	const cwd = "/Users/me/project";
 	const home = join(homedir(), ".plume");
 
 	expect(assessWrite(join(tmpdir(), "probe.mjs"), cwd).risky).toBe(false);
 	expect(assessWrite(join(cwd, "src", "index.js"), cwd).risky).toBe(false);
 
-	// 值得问的：应用自己的设置和会话，以及别的任何地方。
+	// 值得问的：应用自己的设置和会话、shell 启动文件。
 	expect(assessWrite(join(home, "settings.json"), cwd).risky).toBe(true);
 	expect(assessWrite(join(home, "sessions", "x.jsonl"), cwd).risky).toBe(true);
-	expect(assessWrite("/Users/me/other-project/x.js", cwd).risky).toBe(true);
 	expect(assessWrite(join(homedir(), ".zshrc"), cwd).risky).toBe(true);
 
-	// 名字开头一样的兄弟目录不在项目里。
-	expect(assessWrite("/Users/me/project-backup/x.js", cwd).risky).toBe(true);
+	// 别的项目、名字开头一样的兄弟目录：项目外的普通目录，照常干活。
+	expect(assessWrite("/Users/me/other-project/x.js", cwd).risky).toBe(false);
+	expect(assessWrite("/Users/me/project-backup/x.js", cwd).risky).toBe(false);
 });
 
 it("直接把用户主目录（~）当项目时，~ 下的钥匙和 shell 启动文件照样问，项目里别处的不问", () => {
@@ -319,7 +320,8 @@ it("用反斜杠往外走的 cd 也算离开了工作区", () => {
 });
 
 it("写文件按路径判，不按拼法", () => {
-	expect(assessWrite("/Users/me/project/../other/x.ts", "/Users/me/project").code).toBe("write-outside-project");
+	// 项目外的普通目录不算风险。
+	expect(assessWrite("/Users/me/project/../other/x.ts", "/Users/me/project").risky).toBe(false);
 	expect(assessWrite("/Users/me/project/", "/Users/me/project").risky).toBe(false);
 });
 

@@ -491,8 +491,8 @@ ui.linkOpener({
 
 ## 文件、终端和系统打开
 
-- `ui.openFile(path, sessionId)`：在指定会话的文件面板打开文件；读取仍受会话目录边界约束，会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也在边界里，只有这个会话最近一次请求的「记忆文件」（`PromptSection.files` 标的来源）在边界外也能只读打开；独立窗口里交给主窗口对应会话。
-- `ui.findFile(path, sessionId)`：纯文字里印出来的路径（终端输出）指的那个文件，返回绝对路径：绝对路径看在不在，相对路径先按会话目录拼、再按结尾找唯一的一个；不存在、不止一个、文件夹、边界外都是 `null`，答出来的 `ui.openFile` 打得开。
+- `ui.openFile(path, sessionId)`：在指定会话的文件面板只读打开文件，本机哪里的都行，会话媒体目录里的图（`ctx.media.save` 交回的 `path`）也行；独立窗口里交给主窗口对应会话。
+- `ui.findFile(path, sessionId)`：纯文字里印出来的路径（终端输出）指的那个文件，返回绝对路径：绝对路径看在不在，相对路径先按会话目录拼、再按结尾找唯一的一个；不存在、不止一个、文件夹都是 `null`，答出来的 `ui.openFile` 打得开。
 - `ui.droppedPaths(transfer)`：拖放带着的本机绝对路径（访达的文件、文件面板的行），不带路径是 `null`；在 `drop` 里同步调，`dragover` 时只答空数组。
 - `ui.useFileMenu(root)`：组件内调用的 hook，返回 `{ open, onContextMenu(event, { path, onOpen }), element }`；复用打开方式、在访达中显示和复制路径菜单。
 - `ui.documentViewer(extensions, Component)`：注册只读文档预览，扩展名小写且不带点；同扩展名后注册的生效，停用后恢复前一个。
@@ -548,7 +548,7 @@ ui.queueAction({
 
 - `ui.Markdown`：`{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走。
 - `ui.ModelSelect`：产品的模型下拉，`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说。设置页里的用法见「设置分区」的 `session-models`。
-- `ui.ModelControls`：输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片），选的再交给 `ctx.sessions.launch`。
+- `ui.ModelControls`：输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片、要不要另开的卡、侧边聊天交出去的卡），选的再交给 `ctx.sessions.launch`。
 
 ## `@` 菜单、`/` 命令列表
 

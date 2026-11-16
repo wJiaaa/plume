@@ -39,3 +39,25 @@ it("工具名撞上种类名时不当成那类事判：叫 command 的工具照�
 	expect(await run(asking("bash", { kind: "command", title: "Run", detail: "ls", subject: "ls" }), next)).toBe("once");
 	expect(next).toHaveBeenCalledTimes(1);
 });
+
+it("帮我批准下读哪里都不问，只有密钥文件交给人", async () => {
+	const run = layer();
+	const next = vi.fn(async () => "reject" as const);
+	const read = (grant: string) => asking("read", { kind: "view", title: "Read", detail: grant, subject: `read:${grant}` });
+	expect(await run(read("/Users/me/other-project"), next)).toBe("once");
+	expect(await run(read("/Users/me/.plume"), next)).toBe("once");
+	expect(next).not.toHaveBeenCalled();
+	for (const secret of ["/Users/me/.plume/settings.json", "/Users/me/.plume/credentials.json", "/Users/me/.ssh/id_ed25519", "/Users/me/.aws/credentials"])
+		expect(await run(read(secret), next), secret).toBe("reject");
+	expect(next).toHaveBeenCalledTimes(4);
+});
+
+it("帮我批准下写项目外的普通目录不问，系统目录、钥匙目录照样问", async () => {
+	const run = layer();
+	const next = vi.fn(async () => "reject" as const);
+	const write = (path: string) => asking("write", { kind: "create", title: "Create", detail: "", subject: path });
+	expect(await run(write("/Users/me/Desktop/notes.md"), next)).toBe("once");
+	expect(next).not.toHaveBeenCalled();
+	expect(await run(write("/etc/hosts"), next)).toBe("reject");
+	expect(next).toHaveBeenCalledTimes(1);
+});

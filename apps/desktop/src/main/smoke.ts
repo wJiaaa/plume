@@ -1915,9 +1915,9 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			throw new Error("回复里的 :followup 标记不该画出来");
 		await until(`document.querySelector('[data-screen=chat] .cm-placeholder')?.textContent === ${JSON.stringify(FOLLOWUP_HINT)}`, "下一步建议成了输入框的灰字");
 		// 侧边聊天的面板区还开着，对话列窄，输入框底下那一排为放下模型名按设计让出了圆环（`composer/fit.ts`，display: none）：
-		// 把窗口放宽给它地方，看它回来、点得到；看完放回原来的大小。
-		const meterWindowSize = window.getSize();
-		window.setSize(1600, meterWindowSize[1]!);
+		// 先收起面板区给它地方，看它回来、点得到；看完再打开。不靠放宽窗口：前面拖宽面板时存下了面板区的宽度，窗口放宽多出来的先还给面板，对话列还是最窄那么宽。
+		await click("[data-panel-toggle] button");
+		await until(`document.querySelector('[data-panel-area]')?.inert === true`, "收起面板区给圆环地方");
 		await until(
 			`(() => {
 			const meter = document.querySelector('[data-screen=chat] [data-plume-context-meter]');
@@ -1937,7 +1937,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await capture(window, join(outDir, "smoke-context-meter.png"));
 		await click("[data-screen=chat] [data-plume-context-meter]");
 		await until(`document.querySelector('[data-plume-popover][role=group]') === null`, "再点一次收起上下文用量");
-		window.setSize(meterWindowSize[0]!, meterWindowSize[1]!);
+		await click("[data-panel-toggle] button");
+		await until(`document.querySelector('[data-panel-area]')?.inert === false`, "看完圆环再打开面板区");
 		await delay(300);
 		await capture(window, join(outDir, "smoke-followups.png"));
 		await page(`document.querySelector('[data-screen=chat] .cm-content').focus()`);

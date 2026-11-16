@@ -116,7 +116,7 @@ it("系统提示词写着会话的临时目录和地址清单；scratch:// 落�
 	}
 });
 
-it("界面能打开同一脉的会话临时目录里的文件和文件夹，别的会话的不行，也不能改掉临时目录本身", async () => {
+it("界面能打开同一脉的会话临时目录里的文件和文件夹，别的会话的只能只读看、列不了，也不能改掉临时目录本身", async () => {
 	let sessions: PluginContext["sessions"] | undefined;
 	const owner: Plugin = { name: "test.children", apply: (ctx) => void (sessions = ctx.sessions) };
 	agent = await createAgent({
@@ -144,9 +144,9 @@ it("界面能打开同一脉的会话临时目录里的文件和文件夹，别�
 	expect(await service.readFile(own.id, childLog)).toMatchObject({ text: "全文" });
 	expect(await service.readFile(child.id, report)).toMatchObject({ text: "# 报告" });
 
-	expect(await service.readFile(other.id, report)).toBeNull();
-	expect(await service.readFile(other.id, childLog)).toBeNull();
-	expect(await agent.filePath(other.id, report)).toBeNull();
+	// 只读看不设会话边界，别的会话也看得到；列目录、动文件仍只限同一脉。
+	expect(await service.readFile(other.id, report)).toMatchObject({ text: "# 报告" });
+	expect(await agent.filePath(other.id, report)).toBe(await realpath(report));
 	await expect(service.listDirectory(other.id, scratch)).rejects.toThrow();
 
 	expect(await service.fileOperation(own.id, { type: "rename", from: scratch, to: `${scratch}-renamed` })).toMatchObject({ ok: false });
@@ -198,7 +198,7 @@ it("工具和审批拿到的 scratchDirs 是同一脉的会话的临时目录：
 	expect(seen.run).not.toContain(scratch(other.id));
 });
 
-it("内置的 write 按同一脉的会话放行：写进子会话的临时目录不问，写别的会话的临时目录被拒", async () => {
+it("内置的 write 按同一脉的会话放行：写进子会话的临时目录不问，写别的会话的临时目录要人点头，人拒绝就不写", async () => {
 	// 审批比的是解析过软链的路径；macOS 的系统临时目录在软链后面，数据目录换成真实路径才和正式环境（`~/.plume`）一样。
 	dir = await realpath(dir);
 	workspace = join(dir, "workspace");
@@ -224,12 +224,16 @@ it("内置的 write 按同一脉的会话放行：写进子会话的临时目录
 	writeChild.path = join(dir, "data", "scratch", child.id, "report.md");
 	writeOther.path = join(dir, "data", "scratch", other.id, "a.md");
 
-	// 要问人的话，这一轮会停在审批卡上，`turn` 等到超时。
-	await turn("交接一下");
+	// 别的会话的临时目录算 Plume 的数据目录：弹卡问人，这里替人拒绝。写子会话的那一个不问。
+	const rejecting = setInterval(() => service.respond(session.id, "call_other", "reject"), 10);
+	try {
+		await turn("交接一下");
+	} finally {
+		clearInterval(rejecting);
+	}
 	expect(await readFile(writeChild.path, "utf8")).toBe("子会话的报告");
 	const refused = (await results()).find((result) => result.toolCallId === "call_other");
-	expect(refused?.isError).toBe(true);
-	expect(JSON.stringify(refused?.content)).toContain("Plume's own data directory");
+	expect(JSON.stringify(refused?.content)).toMatch(/rejected|拒绝/i);
 	await expect(access(writeOther.path)).rejects.toThrow();
 });
 
@@ -255,17 +259,22 @@ it("分叉、建议开出的新会话和来源同一脉：两头互相够得着�
 	const forked = await put(forkOfFork.id, "分叉的草稿");
 	const spawned = await put(launched.session.id, "新会话的草稿");
 
-	// 分叉里复制过来的链接指着来源的临时目录；来源也看得到分叉、新会话的。
-	for (const id of [fork.id, forkOfFork.id, launched.session.id]) expect(await service.readFile(id, source)).toMatchObject({ text: "来源的草稿" });
-	expect(await service.readFile(session.id, forked)).toMatchObject({ text: "分叉的草稿" });
-	expect(await service.readFile(forkOfFork.id, spawned)).toMatchObject({ text: "新会话的草稿" });
-	expect(await service.readFile(other.id, source)).toBeNull();
-	expect(await service.readFile(other.id, forked)).toBeNull();
+	// 只读看不设边界，同一脉按列得出临时目录来认：分叉里复制过来的链接指着来源的临时目录；来源也列得出分叉、新会话的。
+	const lists = (id: string, path: string) =>
+		service.listDirectory(id, join(path, "..")).then(
+			(entries) => entries.some((entry) => entry.name === "note.md"),
+			() => false,
+		);
+	for (const id of [fork.id, forkOfFork.id, launched.session.id]) expect(await lists(id, source)).toBe(true);
+	expect(await lists(session.id, forked)).toBe(true);
+	expect(await lists(forkOfFork.id, spawned)).toBe(true);
+	expect(await lists(other.id, source)).toBe(false);
+	expect(await lists(other.id, forked)).toBe(false);
 
 	// 分叉和新会话只经来源连着：来源删掉，它们就不再同一脉。
 	await service.deleteSession(session.id);
-	expect(await service.readFile(forkOfFork.id, spawned)).toBeNull();
-	expect(await service.readFile(fork.id, forked)).toMatchObject({ text: "分叉的草稿" });
+	expect(await lists(forkOfFork.id, spawned)).toBe(false);
+	expect(await lists(fork.id, forked)).toBe(true);
 });
 
 it("shownImages 里只给人看的大图也挪进媒体目录，会话里只留名字；details 里同名的键本体不碰", async () => {
