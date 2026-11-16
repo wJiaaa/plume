@@ -15,20 +15,34 @@ export function setSidebar(patch: { open?: boolean; width?: number }): void {
 	writeSidebarPrefs({ open: state.sidebarOpen, width: state.sidebarWidth });
 }
 
-export function setPanel(patch: { open?: boolean; width?: number }): void {
-	update({
-		...(patch.open === undefined ? {} : { panelOpen: patch.open }),
-		// 手动调宽立即接管，不能沿用尚未结束的开合动画。
-		...(patch.width === undefined ? {} : { panelWidth: patch.width, panelMoving: false }),
-	});
+export function setPanel(patch: { width: number }): void {
+	// 手动调宽立即接管，不能沿用尚未结束的开合动画。
+	update({ panelWidth: patch.width, panelMoving: false });
+	persistPanelPrefs();
+}
+
+/** 会话 `scope` 的面板区开没开（面板窗口里开局就记成开着）。 */
+export const panelOpenIn = (current: Chrome, scope = scopeOf(current)): boolean => current.panelOpen[scope] === true;
+
+/** 直接改会话 `scope` 的开合，不带动画；人点的走 `togglePanel`。 */
+export function setPanelOpen(scope: string, open: boolean): void {
+	if (panelOpenIn(state, scope) === open) return;
+	const { [scope]: _, ...rest } = state.panelOpen;
+	update({ panelOpen: open ? { ...rest, [scope]: true } : rest });
+	persistPanelPrefs();
+}
+
+/** 面板窗口里的开合是假的（总开着），会话窗口没有面板区：都不写回去，免得盖掉主窗口记的。 */
+function persistPanelPrefs(): void {
+	if (panelWindow || sessionWindow) return;
 	writePanelPrefs({ open: state.panelOpen, width: state.panelWidth });
 }
 
-/** 人打开或收起面板区：开关、收起按钮、Esc、点外面都走这里，只有这几下带动画。 */
+/** 打开或收起会话 `scope` 的面板区：开关、收起按钮、Esc、点外面都走这里，只有眼前这个会话的这几下带动画。 */
 export function togglePanel(open: boolean, scope = scopeOf(state)): void {
 	if (open && state.panelLeaving) finishPanelLeave();
-	update({ panelMoving: true, ...(!open ? { panelMaximized: { ...state.panelMaximized, [scope]: false } } : {}) });
-	setPanel({ open });
+	update({ ...(scope === scopeOf(state) ? { panelMoving: true } : {}), ...(!open ? { panelMaximized: { ...state.panelMaximized, [scope]: false } } : {}) });
+	setPanelOpen(scope, open);
 }
 
 export const scopeOf = (current: Chrome): string => current.currentId ?? "";
@@ -133,7 +147,7 @@ export function showPanel(key: string, fresh = false, sessionId?: string, option
 		const next = named ? tabs : [...(state.panelTabs[scope] ? tabs : []), { id: options.tab, panel: key, ...(owner ? { sessionId: owner } : {}) }];
 		const stay = options.background && next.some((tab) => tab.id === active);
 		setTabs(scope, { tabs: next, active: stay ? active : options.tab });
-		if (!options.background && scope === scopeOf(state) && !state.panelOpen) togglePanel(true);
+		if (!options.background && !panelOpenIn(state, scope)) togglePanel(true, scope);
 		return;
 	}
 	const open =
@@ -154,7 +168,7 @@ export function showPanel(key: string, fresh = false, sessionId?: string, option
 		setTabs(scope, { tabs: [...tabs, { id }], active: id });
 		launch(id, key, scope, owner);
 	}
-	if (scope === scopeOf(state) && !state.panelOpen) togglePanel(true);
+	if (!panelOpenIn(state, scope)) togglePanel(true, scope);
 }
 
 /** 本体的文件面板，见 `openFileTab`。 */
@@ -203,7 +217,7 @@ export async function openFileTab(path: string, lines?: LineRange | null, owner?
 	if (tabs.some((tab) => tab.id === id)) setTabs(scope, { tabs, active: id });
 	// 一个标签都没开过时 `tabsOf` 给的是一张临时的开始页，文件标签替掉它，不并排留着。
 	else setTabs(scope, { tabs: [...(state.panelTabs[scope] ? tabs : []), { id, panel: FILE_PANEL, file: { path, sessionId } }], active: id });
-	if (scope === scopeOf(state) && !state.panelOpen) togglePanel(true);
+	if (!panelOpenIn(state, scope)) togglePanel(true, scope);
 }
 
 /** 标签 ✕ 前先问的，见 PanelProps.onClose。 */
@@ -225,7 +239,7 @@ export async function closeTab(id: string, scope = scopeOf(state)): Promise<void
 	}
 	if (
 		scope === scopeOf(state) &&
-		state.panelOpen &&
+		panelOpenIn(state, scope) &&
 		!state.panelMaximized[scope] &&
 		layoutMode(state.windowWidth) !== "compact" &&
 		tabsOf(state).tabs.filter((tab) => !state.panelWindows.some((entry) => entry.tab === tab.id)).length === 1
@@ -254,7 +268,7 @@ export function removeTab(id: string, scope: string): void {
 	if (rest.length === 0) {
 		update({ panelMaximized: { ...state.panelMaximized, [scope]: false } });
 		setTabs(scope, undefined);
-		if (scope === scopeOf(state) && state.panelOpen) togglePanel(false);
+		if (panelOpenIn(state, scope)) togglePanel(false, scope);
 		return;
 	}
 	setTabs(scope, { tabs: rest, active: active === id ? (rest[index] ?? rest[index - 1])!.id : active });
@@ -265,6 +279,11 @@ const tabHandles = new Map<string, Pick<PanelProps, "setTitle" | "onClose">>();
 
 /** 空白页第一次发出去、成了会话 `id`：空白页上开着的标签交给它。 */
 export function handOverBlankTabs(id: string): void {
+	// 开合也交过去：空白页上开着（哪怕只有开始页），成了会话也开着；下一个空白页从收着开始。
+	if (panelOpenIn(state, "")) {
+		setPanelOpen(id, true);
+		setPanelOpen("", false);
+	}
 	const draftTabs = state.panelTabs[""];
 	if (!draftTabs) return;
 	for (const tab of draftTabs.tabs) tabHandles.delete(tab.id);

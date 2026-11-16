@@ -18,7 +18,7 @@ import { flushChildDrafts } from "../conversation/child-drafts.ts";
 import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.tsx";
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
-import { closeTab, handlesOf, launch, openStartTab, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
+import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { parked } from "./sessions.ts";
 
@@ -32,7 +32,7 @@ function panelGroup(app: Chrome, scope: string): PanelTabs {
 export function panelLayout(app: Chrome, size: { width: number; height: number }, share: number) {
 	const scope = scopeOf(app);
 	const group = panelGroup(app, scope);
-	const shown = listPanels().length > 0 && group.tabs.length > 0 && app.panelOpen;
+	const shown = listPanels().length > 0 && group.tabs.length > 0 && panelOpenIn(app, scope);
 	return {
 		shown,
 		...panelGeometry({

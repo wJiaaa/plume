@@ -36,7 +36,7 @@ import {
 	useAppPick,
 	useChrome,
 } from "./state.ts";
-import { finishPanelLeave, scopeOf, tabsOf, togglePanel } from "./panels.ts";
+import { finishPanelLeave, panelOpenIn, scopeOf, tabsOf, togglePanel } from "./panels.ts";
 import { PANEL_MOTION, PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, PanelResizer, PanelToggle } from "./PanelArea.tsx";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { createPlugin, sidebarActions } from "./actions.ts";
@@ -202,7 +202,7 @@ export function ScreenCard({ header, fatal, children }: { header: ReactNode; fat
 function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean {
 	return (
 		app.screen === "chat" &&
-		!app.panelOpen &&
+		!panelOpenIn(app) &&
 		(listPanels(nextTurnCwd(app, session), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel))
 	);
 }
