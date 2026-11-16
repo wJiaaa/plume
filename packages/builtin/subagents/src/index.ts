@@ -3,7 +3,7 @@
  * 子代理交回的结果经资源地址 `agent://<id>` 读（`resource.ts`），一次只取要的那个字段。
  */
 
-import type { CallContext, Plugin, PromptSection, SessionMessage, StepEnd, StepVerdict, ToolKind, ToolOutput } from "@plume/contract";
+import type { CallContext, Message, Plugin, PromptSection, SessionMessage, StepEnd, StepVerdict, ToolKind, ToolOutput } from "@plume/contract";
 import type { SubagentsApi } from "./api.ts";
 import { allows, DEFAULT_AGENT, YIELD_TOOL, type AgentDefinition } from "./agents.ts";
 import { awaitingEmptyNudge, AwaitWatch } from "./awaiting.ts";
@@ -168,6 +168,26 @@ export default {
 			},
 		});
 
+		/**
+		 * 一轮里能派的种类（按会话记，换了一轮、换了目录就重读）。定义每一轮现读，写好一份下一轮就有；一轮里每一步都 readdir、
+		 * 读每份 `.md` 只是重复同一个答案。在设置页改了、删了、开关了的清掉。
+		 */
+		const perTurn = new Map<string, { turn: string; agents: Promise<AgentDefinition[]> }>();
+		ctx.sessions.onDeleted((sessionId) => perTurn.delete(sessionId));
+		const agentsThisTurn = (sessionId: string, cwd: string, messages: readonly Message[]): Promise<AgentDefinition[]> => {
+			// 这一轮从人最后说的那句起：那条消息的时间就是这一轮的记号。
+			const turn = `${cwd}\0${messages.findLast((message) => message.role === "user")?.timestamp ?? 0}`;
+			const cached = perTurn.get(sessionId);
+			if (cached?.turn === turn) return cached.agents;
+			const agents = registry.enabled(cwd);
+			perTurn.set(sessionId, { turn, agents });
+			agents.catch(() => {
+				if (perTurn.get(sessionId)?.agents === agents) perTurn.delete(sessionId);
+			});
+			return agents;
+		};
+		const changedDefinitions = <T>(done: Promise<T>): Promise<T> => done.finally(() => perTurn.clear());
+
 		ctx.hook("model.context", async (input, next) => {
 			const record = registry.identity(input.sessionId);
 			if (!record) {
@@ -175,7 +195,7 @@ export default {
 				const context = await next(input);
 				const tools = context.tools.filter((tool) => tool.name !== YIELD_TOOL && (input.session.kind === "top" || !TOP_ONLY.has(tool.name)));
 				if (!tools.some((tool) => tool.name === "task")) return { ...context, tools };
-				const agents = await registry.enabled(input.cwd);
+				const agents = await agentsThisTurn(input.sessionId, input.cwd, input.messages);
 				// 种类全关掉了：没有能派的，task 也不给模型，免得它调了只拿到错误。
 				if (agents.length === 0) return { ...context, tools: tools.filter((tool) => tool.name !== "task") };
 				return { ...context, tools, sections: [...context.sections, { id: "subagents", text: catalogue(agents), category: "catalog" }] };
@@ -268,8 +288,13 @@ export default {
 				const id = typeof args.id === "string" ? args.id : "";
 				const task = registry.list(run.sessionId).find((entry) => entry.id === id);
 				if (!task) return failed("No such sub-agent belongs to this conversation.");
+				// 已经结束的照实说：说「已停止」的话，模型以为停下了一件在跑的事。没送出的回报照样撤销。
+				const running = isActive(task);
 				registry.stop(task.session);
-				return { output: `Sub-agent ${id} stopped.`, details: { id: task.id, session: task.session, parent: task.parent, agent: task.agent } };
+				return {
+					output: running ? `Sub-agent ${id} stopped.` : `Sub-agent ${id} had already finished (${task.state}); nothing was running.`,
+					details: { id: task.id, session: task.session, parent: task.parent, agent: task.agent },
+				};
 			},
 		});
 		ctx.serve({
@@ -280,10 +305,13 @@ export default {
 			faces: (parentId: string) => registry.faces(parentId),
 			catalog: (project: string | null) => registry.catalog(project),
 			read: (project: string | null, id: string) => registry.read(project, id),
-			save: (project: string | null, input: AgentSave) => registry.save(project, input),
-			remove: (project: string | null, id: string, revision: string) => registry.remove(project, id, revision),
+			save: (project: string | null, input: AgentSave) => changedDefinitions(registry.save(project, input)),
+			remove: (project: string | null, id: string, revision: string) => changedDefinitions(registry.remove(project, id, revision)),
 			setModel: (agent: string, choice: ModelChoice) => registry.setModel(agent, choice),
-			setEnabled: (agent: string, enabled: boolean) => registry.setEnabled(agent, enabled),
+			setEnabled: (agent: string, enabled: boolean) => {
+				registry.setEnabled(agent, enabled);
+				perTurn.clear();
+			},
 		} satisfies SubagentsApi);
 	},
 } satisfies Plugin;
