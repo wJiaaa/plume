@@ -181,6 +181,44 @@ describe("插件的设置和运行状态", () => {
 		b.stop();
 	});
 
+	it("按会话的状态带 load：最后一个订阅者走了就丢掉读回来的，下次订阅再读；set 过的留着", async () => {
+		const h = host();
+		const reads: string[] = [];
+		let store!: { get(sessionId: string): string; set(sessionId: string, value: string): void };
+		await h.load([
+			entry({
+				name: "p",
+				apply(ctx) {
+					store = ctx.sessionStore("summary", "none", async (sessionId) => {
+						reads.push(sessionId);
+						return `saved ${sessionId}`;
+					});
+				},
+			}),
+		]);
+		// 结束订阅：停下后再取一次，让生成器走到 finally。
+		const close = async (watch: ReturnType<typeof subscribe>) => {
+			watch.stop();
+			await watch.next();
+		};
+		const a = subscribe(h, "p", "session", "summary", "a");
+		const again = subscribe(h, "p", "session", "summary", "a");
+		expect(await a.next()).toBe("saved a");
+		expect(await again.next()).toBe("saved a");
+		await close(a);
+		// 还有人看着：不丢。
+		expect(store.get("a")).toBe("saved a");
+		await close(again);
+		expect(store.get("a")).toBe("none");
+		const back = subscribe(h, "p", "session", "summary", "a");
+		expect(await back.next()).toBe("saved a");
+		expect(reads).toEqual(["a", "a"]);
+		store.set("a", "fresh");
+		expect(await back.next()).toBe("fresh");
+		await close(back);
+		expect(store.get("a")).toBe("fresh");
+	});
+
 	it("停用时撤下：订阅者等着，界面改设置报错", async () => {
 		const h = host();
 		await h.load([

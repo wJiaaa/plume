@@ -17,6 +17,8 @@ interface Source {
 	read(sessionId: string): { value: unknown } | undefined;
 	/** 按会话的来源：会话删掉时丢掉它那份。 */
 	forget?(sessionId: string): void;
+	/** 按会话的来源：这个会话最后一个订阅者走了。 */
+	release?(sessionId: string): void;
 }
 
 interface Watch {
@@ -90,7 +92,10 @@ export class PluginValues {
 		} finally {
 			watch.wakers.delete(waker);
 			signal.removeEventListener("abort", waker);
-			if (watch.wakers.size === 0) watches.delete(id);
+			if (watch.wakers.size === 0) {
+				watches.delete(id);
+				this.sources.get(base)?.release?.(id);
+			}
 			if (watches.size === 0) this.watches.delete(base);
 		}
 	}
@@ -196,6 +201,16 @@ export class PluginValues {
 		const values = new Map<string, T>();
 		/** 正在读的会话；读完前又被 `set` 过的，读到的旧值不要。 */
 		const loading = new Set<string>();
+		/**
+		 * 值是 `load` 读回来的会话（插件没 `set` 过）：没人看着时丢掉，下次订阅再读，不然翻过的会话一个个都留在内存里。
+		 * 插件 `set` 的不丢：它不一定读得回来。
+		 */
+		const loaded = new Set<string>();
+		const watched = (sessionId: string) => this.watches.get(base)?.has(sessionId) === true;
+		const release = (sessionId: string) => {
+			if (!loaded.delete(sessionId)) return;
+			values.delete(sessionId);
+		};
 		const get = (sessionId: string) => (values.has(sessionId) ? (values.get(sessionId) as T) : initial);
 		const read = (sessionId: string): { value: unknown } | undefined => {
 			if (values.has(sessionId) || !load) return { value: get(sessionId) };
@@ -205,27 +220,37 @@ export class PluginValues {
 					.then(() => load(sessionId))
 					.then(
 						(value) => {
-							if (!values.has(sessionId)) values.set(sessionId, value);
+							if (!values.has(sessionId)) {
+								values.set(sessionId, value);
+								loaded.add(sessionId);
+							}
 						},
 						(error: unknown) => {
 							log(text("plugin.storeLoad", { key, error: errorText(error) }));
-							if (!values.has(sessionId)) values.set(sessionId, initial);
+							if (!values.has(sessionId)) {
+								values.set(sessionId, initial);
+								loaded.add(sessionId);
+							}
 						},
 					)
 					.finally(() => {
 						loading.delete(sessionId);
-						this.changed(base, sessionId);
+						// 读的时候订阅者已经走了：没人要这份，不留。
+						if (watched(sessionId)) this.changed(base, sessionId);
+						else release(sessionId);
 					});
 			}
 			return undefined;
 		};
 		const forget = (sessionId: string) => {
+			loaded.delete(sessionId);
 			if (!values.delete(sessionId)) return;
 			this.changed(base, sessionId);
 		};
-		this.declare(plugin, base, { read, forget }, own);
+		this.declare(plugin, base, { read, forget, release }, own);
 		const set = (sessionId: string, value: T) => {
 			values.set(String(sessionId), value);
+			loaded.delete(String(sessionId));
 			this.changed(base, String(sessionId));
 		};
 		return {
