@@ -227,6 +227,8 @@ export function openSessionDb(path: string, log: (message: string) => void): Ses
 
 function sessionStore(db: DatabaseSync, log: (message: string) => void): SessionDb {
 	const streams = new Map<string, DraftStream>();
+	/** 库文件本身的路径：导出时不许替换它（`protectSource`）。 */
+	const mainFile = () => (db.prepare("PRAGMA database_list").all() as { name: string; file: string }[]).find((entry) => entry.name === "main")!.file;
 	/** 上一批草稿没写进去，还没成功过：只说一次，不是每次重试都说。 */
 	let failing = false;
 
@@ -465,6 +467,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			return new Map(rows.map((row) => [row.session_id, row.bytes]));
 		},
 		exportTo(path) {
+			protectSource(mainFile(), path);
 			// `VACUUM INTO` 而不是拷文件：WAL 里还没并回库文件的也在里面，流式回复写着的时候也是一份完整的快照。
 			// 它不肯覆盖已有的文件，所以先写在旁边再改名；写到一半失败，原来那个文件不受影响。
 			const partial = `${path}.${process.pid}.partial`;
@@ -479,7 +482,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 		},
 		exportSession(sessionId, path) {
 			if (!db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) throw new Error(`Session not found: ${sessionId}`);
-			const source = (db.prepare("PRAGMA database_list").all() as { name: string; file: string }[]).find((entry) => entry.name === "main")!.file;
+			const source = mainFile();
 			protectSource(source, path);
 			const stream = streams.get(sessionId);
 			if (stream) {

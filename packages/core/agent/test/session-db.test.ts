@@ -511,6 +511,7 @@ it("拒绝源库、sidecar、相对别名、符号链接和硬链接目标，源
 		...["-wal", "-shm", "-journal"].map((suffix) => `${path}${suffix}`),
 	]) {
 		expect(() => db.exportSession("a", target)).toThrow(/不能覆盖|Cannot overwrite/);
+		expect(() => db.exportTo(target)).toThrow(/不能覆盖|Cannot overwrite/);
 	}
 	db.append(summary("a", 2), user("还能写"));
 	expect(db.messages("a")).toEqual([user("还能写")]);
