@@ -2,6 +2,28 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.5.6] - 2026-11-16
+
+<!-- plume:notes en -->
+### Changes
+
+- **Pick a model when you start a new chat from a card.** When the assistant asked whether to take something to a new chat, or the side chat handed work off, the new chat always started on your default model and you had to change it afterwards. Both cards now let you choose the model and thinking level right next to "New chat". The side chat's hand-off card is now a simple list of destinations (hand to the main chat, new chat, do it here); click a row to send it there.
+- **"Approve for me" asks less.** Looking at another project, checking a config file on your Mac, or saving a result to the Desktop all used to need a click, so it was easy to start approving without reading. Now reading anywhere is allowed except secret files like API keys, SSH keys and cloud credentials, and writing outside the project only asks for system folders, key folders, shell startup files and Plume's own data folder.
+- **Changing Plume's own settings always asks you.** Edits to `~/.plume` (settings, permissions, plugins, chats) used to be refused outright, so the assistant could never change a setting for you, and in Full access it could still slip a shell command past. Now every such change asks you first, in every mode, with no "don't ask again". In Full access, a shell command that plainly writes there asks before it runs.
+- **Files outside the chat folder open in the file panel.** If the assistant saved a file somewhere else, like your Desktop, clicking its link in the reply said it couldn't be read. Any file on your Mac now opens read-only in the file panel, with buttons to open it in its default app or show it in Finder.
+- **Smoother sidebar and panel animations.** With the browser panel open and a long chat, opening or closing the sidebar or the panel area stuttered because the whole conversation was re-laid out on every frame. The text now slides and is laid out only at the start and end, and if you had scrolled up, the line you were reading stays put.
+- **`/review` stays in your chat.** Code review used to open a separate "Review · …" chat in the sidebar that wrote back and forth with yours. It now sends review sub-agents from the chat you're in, lists every finding as they wrote it, and that chat decides what to fix and fixes it. Update the Review plugin from the Plugin Market to get this.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **从卡片开新会话时能选模型了。** 助手问要不要另开会话、侧边聊天把事交出去时，开出来的会话总用默认模型，想换只能开出来再改。现在两张卡上「开新会话」旁边就能选模型和思考档位。侧边聊天的交出卡改成一列去处：交给主会话、开新会话、在这里做，点哪一行就交到哪。
+- **「帮我批准」问得少了。** 看一眼别的项目、查一下本机的配置、把结果存到桌面，原来都要人点，点多了就容易不看就点。现在读哪里都不问，只有 API key、SSH 私钥、云凭据这类密钥文件要批准；写项目外的地方只在系统目录、钥匙目录、shell 启动文件和 Plume 自己的数据目录时才问。
+- **改 Plume 自己的设置，每次都问你。** 原来改 `~/.plume`（设置、权限、插件、会话）一律拒绝，想让助手帮你改个设置做不到，完全访问下它却能用命令绕过去写。现在任何权限下改这里都先问你，也没有「以后不再问」；完全访问下，命令里写明要改这里的，跑之前先问。
+- **会话目录外的文件也能在文件面板里打开。** 助手把文件存到桌面这类别处时，点回复里的链接只提示「读不到」，像是文件不存在。现在本机任何文件都能在文件面板里只读打开，顶上还能用默认应用打开、在访达中显示。
+- **侧栏和面板区开合更顺了。** 开着浏览器面板、对话又长时，开合侧栏或面板区会卡，因为每一帧都要把整段对话重新排一遍。现在正文只跟着平移，开头和结尾各排一次；滚上去读着的那一行也留在原处。
+- **`/review` 就在当前对话里审。** 原来代码审阅会在侧栏另开一个「审阅 · …」会话，和你的对话来回写信。现在由你正在用的对话派审阅子智能体，发现照它们写的原样列出来，由这个对话决定修哪几条、自己修。去插件市场把「代码审阅」插件更新一下就能用上。
+
 ## [0.5.5] - 2026-11-16
 
 <!-- plume:notes en -->
