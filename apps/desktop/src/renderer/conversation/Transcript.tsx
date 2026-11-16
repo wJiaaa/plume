@@ -7,7 +7,7 @@ import type { BackgroundCallState, Message, SessionView, ToolResultMessage } fro
 import type { ConversationProps } from "@plume/contract/ui";
 import { BackToLatest, Button, motionReduced, Scroller, tailSignature, translate, useFollowBottom, useI18n } from "@plume/ui";
 import { ChevronDown, ChevronUp } from "@plume/ui/icons";
-import { Fragment, memo, type ReactNode, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Superseded } from "../markdown/useSmoothText.ts";
 import { hasToolCard, ownsToolRow, TurnFooters, usePluginRegistrations, useQuoteActions } from "../plugins.tsx";
 import { CompactionRow } from "./CompactionRows.tsx";
@@ -42,7 +42,6 @@ import {
 	expandInTranscript,
 	Transcript as TranscriptContext,
 	TranscriptCalls,
-	TranscriptFloor,
 	TranscriptLive,
 	type TranscriptState,
 	useTranscriptWindow,
@@ -394,25 +393,6 @@ export function Transcript({
 		[followScroll],
 	);
 
-	// 开合滑动时把正文定在这一路最窄的宽度上，见 `TranscriptFloor`。直接写在节点上，不经 React 重画转录。
-	const floor = useContext(TranscriptFloor);
-	const cellRef = useRef<HTMLDivElement>(null);
-	const sessionRef = useRef<HTMLDivElement>(null);
-	useLayoutEffect(() => {
-		const cell = cellRef.current;
-		const column = sessionRef.current;
-		const box = column?.parentElement;
-		if (floor === undefined || !cell || !column || !box) return;
-		// 那一格比放正文的地方多出来的是滚动区的左右内衬，按此刻的量；窄到跨过 `@min-[520px]` 时内衬差 16px，落在右边 24px 的内衬里。
-		const style = getComputedStyle(box);
-		const inset = cell.clientWidth - box.clientWidth + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-		// 宽过 `--plume-content` 的部分由 `max-width` 截掉，和平常一样。
-		column.style.width = `${Math.max(0, floor - inset)}px`;
-		return () => {
-			column.style.width = "";
-		};
-	}, [floor, id]);
-
 	return (
 		<TranscriptContext.Provider value={state}>
 			{/* 没给的转录清成 null：嵌在主对话卡片里的子转录不能借到主对话的这三样。 */}
@@ -420,7 +400,7 @@ export function Transcript({
 				<TranscriptCalls.Provider value={callState}>
 					<TranscriptLive.Provider value={live}>
 						{/* `@container`：栏太窄时问题导航贴到最边上、左右内衬对称，按这一栏量，不按窗口量。 */}
-						<div ref={cellRef} className="@container relative flex min-h-0 flex-1 flex-col">
+						<div className="@container relative flex min-h-0 flex-1 flex-col">
 							<Scroller
 								className="flex-1"
 								// 底下留出「回到最新」的高度，它不压在最新那条消息上。见 `scroll.css` 的 `--plume-bottom-inset`。
@@ -439,7 +419,7 @@ export function Transcript({
 								onHold={follow.hold}
 							>
 								{/* 一个会话一棵树：换会话时整棵重挂，运行行的停留、展开过的连接记录这些行里的状态不带到另一个会话。 */}
-								<div key={id} ref={sessionRef} className="mx-auto flex w-full max-w-[var(--plume-content)] flex-col" data-plume-session={id}>
+								<div key={id} className="mx-auto flex w-full max-w-[var(--plume-content)] flex-col" data-plume-session={id}>
 									{/* 只挂最近的几轮：一天的会话上千条消息，全挂上每次重绘都要走整棵树。其余的点一下才挂。 */}
 									{hidden > 0 && (
 										<div className="mb-4 flex items-center justify-center">

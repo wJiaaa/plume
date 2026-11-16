@@ -9,7 +9,6 @@ import { layoutMode, panelWidthFor } from "../layout.ts";
 import { ChatBackdrop } from "../chat-backdrop.tsx";
 import { notify } from "../toast/index.ts";
 import { Transcript } from "../conversation/Transcript.tsx";
-import { TranscriptFloor } from "../conversation/view-state.ts";
 import type { MessageEdits } from "../conversation/message-edits.ts";
 import type { DraftQuote } from "../conversation/quote.ts";
 import { Welcome } from "../composer/Welcome.tsx";
@@ -81,7 +80,7 @@ export function ChatScreen({
 	/*
 	 * 侧栏开合时面板区的宽度也可能一路在变：横排时面板顶着上限（给正文留够 420px），上下排时它就是整条宽。里面的网页、终端
 	 * 跟着每帧改尺寸的话，每帧都是一次重排（网页是另一个进程，还要和这边同步合成）。滑着时内容定在这一路最窄的宽度上，
-	 * 和转录的正文一样（见 `TranscriptFloor`）：变窄时点下去当场换好，变宽时滑完再铺开。起点在开滑那一下量：这时 `size` 还是滑之前的。
+	 * 变窄时点下去当场换好，变宽时滑完再铺开。起点在开滑那一下量：这时 `size` 还是滑之前的。
 	 * 滑着换了排法的不定：两头的宽度不是同一样东西。
 	 */
 	const slideFrom = useRef<number | undefined>(undefined);
@@ -324,10 +323,9 @@ const LANE_DOCK_WIDTH = LANE_WIDTH + 520;
 /** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）；不在滑时是 undefined。 */
 const ChatSlide = createContext<number | undefined>(undefined);
 
-/** `floor`：正滑着时这一列在这一路上最窄有多宽（就是定停靠、浮动的那个宽度），转录按它定住正文；不在滑时是 undefined。 */
-function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean; floor: number | undefined } {
+function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean } {
 	const slideTarget = useContext(ChatSlide);
-	const [room, setRoom] = useState<{ float: boolean; dock: boolean; floor: number | undefined }>({ float: false, dock: false, floor: undefined });
+	const [room, setRoom] = useState({ float: false, dock: false });
 	useLayoutEffect(() => {
 		if (!column) return;
 		/*
@@ -342,8 +340,7 @@ function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolea
 			const width = end === undefined ? column.clientWidth : Math.min(start, end);
 			const float = width >= CARD_FLOAT_WIDTH;
 			const dock = width >= LANE_DOCK_WIDTH;
-			const floor = end === undefined ? undefined : width;
-			setRoom((before) => (before.float === float && before.dock === dock && before.floor === floor ? before : { float, dock, floor }));
+			setRoom((before) => (before.float === float && before.dock === dock ? before : { float, dock }));
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -433,10 +430,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 			<ChatBackdrop empty={!loading && view.messages.length === 0 && !view.draft} headerHeight={headerHeight} />
 			{laneCards}
 			<div className={`relative col-start-1 row-start-1 flex min-h-0 flex-col${docked ? " mr-[324px]" : ""}`}>
-				{/* 停靠时转录那一格再让出右边那一列；滑着时停靠不变（见 `useCardRoom`），这一格最窄就是这么宽。 */}
-				<TranscriptFloor.Provider value={room.floor === undefined ? undefined : room.floor - (docked ? LANE_WIDTH : 0)}>
-					{loading ? <ChatLoading /> : <Conversation view={view} />}
-				</TranscriptFloor.Provider>
+				{loading ? <ChatLoading /> : <Conversation view={view} />}
 				{/* 浮着的卡片自己不挡点击：卡片之间、卡片旁边的空处点下去还是转录。 */}
 				{roomToFloat && !laneOpen && !loading && (
 					<div

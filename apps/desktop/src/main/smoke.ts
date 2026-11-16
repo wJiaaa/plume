@@ -54,6 +54,7 @@ import { checkOpenFile } from "./smoke-open-file.ts";
 import { checkSkinStudio } from "./smoke-skin-studio.ts";
 import { checkSteer } from "./smoke-steer.ts";
 import { checkTranscriptScroll } from "./smoke-transcript-scroll.ts";
+import { checkPanelTranscript } from "./smoke-panel-transcript.ts";
 import { checkUsage } from "./smoke-usage.ts";
 import { checkMemoryFiles } from "./smoke-memory-files.ts";
 import { checkInputMenu } from "./smoke-input-menu.ts";
@@ -982,6 +983,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "conversations") {
 			await checkConversations({ window, agent, workspace, outDir, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "conversations" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "panel-transcript") {
+			await checkPanelTranscript({ window, outDir, setModel: (next) => (override = next) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "panel-transcript" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();

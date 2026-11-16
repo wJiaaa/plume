@@ -549,14 +549,8 @@ export async function checkDesktopCompat(options: {
 			else assert.ok(!held[switched]!.moving, `${label}：环境卡片滑完才换：${JSON.stringify(held)}`);
 		};
 		const laneOf = `(document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null)`;
-		/**
-		 * 开合时转录的正文一路只平移、不跟着那一栏每帧重新断行（见 `TranscriptFloor`）：宽度最多三样——滑之前、滑着时、滑完。
-		 * 跟着每帧变的话长转录每帧一次全量布局，动画掉帧。一路上也不伸出对话卡片。
-		 */
-		const textSteady = (label: string, held: { text: number; fits: boolean }[]) => {
-			const widths = [...new Set(held.map((sample) => sample.text))];
-			console.log("PLUME_DESKTOP_COMPAT_TEXT " + JSON.stringify({ label, widths }));
-			assert.ok(widths.length <= 3, `${label}：转录正文滑着时不重新断行：${JSON.stringify(held.map((sample) => sample.text))}`);
+		// 正文跟随实际栏宽；逐帧连续性由 panel-transcript 段验证。这里同时开着环境卡片，检查正文不越界。
+		const textFits = (label: string, held: { fits: boolean }[]) => {
 			assert.ok(
 				held.every((sample) => sample.fits),
 				`${label}：转录正文不伸出对话卡片：${JSON.stringify(held)}`,
@@ -619,7 +613,7 @@ export async function checkDesktopCompat(options: {
 			const offsets = new Set(sliding.flatMap((sample) => (sample.content === null ? [] : [Math.round(sample.content - sample.area)])));
 			assert.ok(offsets.size === 1, `${phase}：面板内容跟着卡片走：${JSON.stringify(held)}`);
 			laneSteady(phase, held, phase === "打开");
-			textSteady(phase, held);
+			textFits(phase, held);
 			await settle();
 			assert.equal(await page<string | null>(laneOf), phase === "打开" ? "floating" : "docked", `${phase}：落定后环境卡片的放法`);
 			assert.ok(await page<boolean>(`getComputedStyle(document.querySelector('[data-panel-area]')).transitionProperty === 'all'`), `${phase}：滑完撤掉动画`);
@@ -657,7 +651,7 @@ export async function checkDesktopCompat(options: {
 				`侧栏${phase}：对话那一栏真的滑了：${JSON.stringify(held)}`,
 			);
 			laneSteady(`侧栏${phase}`, held, phase === "展开");
-			textSteady(`侧栏${phase}`, held);
+			textFits(`侧栏${phase}`, held);
 			await settle();
 			assert.equal(await page<string | null>(laneOf), phase === "收起" ? "docked" : "floating", `侧栏${phase}：落定后环境卡片的放法`);
 		}

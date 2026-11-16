@@ -93,6 +93,7 @@ const EXEMPT = [
 	// 后台命令送达的冒烟按中文界面读那一行，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-background-job.ts",
 	"apps/desktop/src/main/smoke-transcript-scroll.ts",
+	"apps/desktop/src/main/smoke-panel-transcript.ts",
 	// 环境卡片的冒烟按中文界面读开关的说明、端口和唤醒，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-environment.ts",
 	"apps/desktop/src/main/smoke-peers.ts",
