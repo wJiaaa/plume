@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -153,4 +153,22 @@ test("设置页切到项目：列出项目和个人两层；项目的文件只�
 
 	await assert.rejects(api!.create("new-one", "workspace", null), /先在页面顶上切到一个项目/);
 	await assert.rejects(api!.folder("workspace", null), /先在页面顶上切到一个项目/);
+});
+
+test("符号链接按指向的东西算：链进来的命令文件和目录都读", { skip: process.platform === "win32" }, async () => {
+	const root = await mkdtemp(join(tmpdir(), "plume-commands-test-"));
+	try {
+		const dotfiles = join(root, "dotfiles");
+		const dir = join(root, "commands");
+		await mkdir(join(dotfiles, "ops"), { recursive: true });
+		await mkdir(dir);
+		await writeFile(join(dotfiles, "ship.md"), "发版");
+		await writeFile(join(dotfiles, "ops", "deploy.md"), "部署");
+		await symlink(join(dotfiles, "ship.md"), join(dir, "ship.md"));
+		await symlink(join(dotfiles, "ops"), join(dir, "ops"));
+		const { commands } = await loadCommands([{ dir, scope: "user", origin: "plume" }]);
+		assert.deepEqual(commands.map((command) => command.name).sort(), ["ops:deploy", "ship"]);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
 });
