@@ -2171,7 +2171,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
 		const peer: PeerLetter = { id: randomUUID(), sessionId: from.summary.id, from: address, text: words, cwd: from.summary.cwd };
-		const queued = to.summary.running;
+		// 「会话在不在忙」只看 `held`（见 `Session.controller`），不另看 `summary.running`。
+		const queued = held(to);
 		const read = background.letter(to.summary.id, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
 		to.stopped = false;
 		return { id: peer.id!, queued, read };
