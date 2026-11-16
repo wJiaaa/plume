@@ -7,9 +7,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ImageContent, Message } from "@plume/contract";
+import { writeFileAtomic } from "./atomic-write.ts";
 
 /** 这么短的 base64（约 6KB 的图）留在消息里，挪出去反而多一次读文件。 */
 const INLINE_IMAGE_CHARS = 8000;
@@ -38,8 +39,17 @@ export async function saveImage(dir: string, data: string, mimeType: string): Pr
 	if (!extension) return null;
 	const bytes = Buffer.from(data, "base64");
 	const name = `${createHash("sha1").update(bytes).digest("hex")}.${extension}`;
+	const path = join(dir, name);
+	// 按内容起的名字：在了就是同一张图，不再写。写的话先写在旁边再改名，`plume-media://` 正好来读时读不到半张。
+	if (
+		await access(path).then(
+			() => true,
+			() => false,
+		)
+	)
+		return name;
 	await mkdir(dir, { recursive: true });
-	await writeFile(join(dir, name), bytes);
+	await writeFileAtomic(path, bytes);
 	return name;
 }
 
