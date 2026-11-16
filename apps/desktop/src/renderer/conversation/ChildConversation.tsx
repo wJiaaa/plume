@@ -19,6 +19,7 @@ import { seedChildText } from "./child-drafts.ts";
 import type { MessageEdits } from "./message-edits.ts";
 import { PluginPart } from "../plugins.tsx";
 import { Transcript } from "./Transcript.tsx";
+import { TranscriptFloor } from "./view-state.ts";
 
 /** 子会话任务上那几样操作。`withdraw` 交回收回的那句话，已经发出去了就是 undefined。 */
 export interface ChildTaskActions {
@@ -106,19 +107,22 @@ export function ChildConversation({
 				<div className="flex min-h-0 flex-1 flex-col">{empty}</div>
 			) : (
 				view && (
-					<Arrival.Provider value={arrival}>
-						<FileScope.Provider value={files}>
-							<Transcript
-								view={view}
-								{...(composer && !composer.disabled && (!running || composer.mode === "steer") ? { onSend } : {})}
-								onOpenSettings={onOpenSettings}
-								onQuote={onQuote}
-								{...(edits ? { edits } : {})}
-								{...(renderUserMessage ? { renderUserMessage } : {})}
-								{...(replyText ? { replyText } : {})}
-							/>
-						</FileScope.Provider>
-					</Arrival.Provider>
+					// 嵌在主对话里的子转录跟着外层定住的宽度走，不按主对话那一格自己再定一次，见 `TranscriptFloor`。
+					<TranscriptFloor.Provider value={undefined}>
+						<Arrival.Provider value={arrival}>
+							<FileScope.Provider value={files}>
+								<Transcript
+									view={view}
+									{...(composer && !composer.disabled && (!running || composer.mode === "steer") ? { onSend } : {})}
+									onOpenSettings={onOpenSettings}
+									onQuote={onQuote}
+									{...(edits ? { edits } : {})}
+									{...(renderUserMessage ? { renderUserMessage } : {})}
+									{...(replyText ? { replyText } : {})}
+								/>
+							</FileScope.Provider>
+						</Arrival.Provider>
+					</TranscriptFloor.Provider>
 				)
 			)}
 			{Tasks && view?.tasks && view.summary.parentId && (

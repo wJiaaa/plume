@@ -9,6 +9,7 @@ import { layoutMode, panelWidthFor } from "../layout.ts";
 import { ChatBackdrop } from "../chat-backdrop.tsx";
 import { notify } from "../toast/index.ts";
 import { Transcript } from "../conversation/Transcript.tsx";
+import { TranscriptFloor } from "../conversation/view-state.ts";
 import type { MessageEdits } from "../conversation/message-edits.ts";
 import type { DraftQuote } from "../conversation/quote.ts";
 import { Welcome } from "../composer/Welcome.tsx";
@@ -313,9 +314,10 @@ const LANE_DOCK_WIDTH = LANE_WIDTH + 520;
 /** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）；不在滑时是 undefined。 */
 const ChatSlide = createContext<number | undefined>(undefined);
 
-function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean } {
+/** `floor`：正滑着时这一列在这一路上最窄有多宽（就是定停靠、浮动的那个宽度），转录按它定住正文；不在滑时是 undefined。 */
+function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean; floor: number | undefined } {
 	const slideTarget = useContext(ChatSlide);
-	const [room, setRoom] = useState({ float: false, dock: false });
+	const [room, setRoom] = useState<{ float: boolean; dock: boolean; floor: number | undefined }>({ float: false, dock: false, floor: undefined });
 	useLayoutEffect(() => {
 		if (!column) return;
 		/*
@@ -330,7 +332,8 @@ function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolea
 			const width = end === undefined ? column.clientWidth : Math.min(start, end);
 			const float = width >= CARD_FLOAT_WIDTH;
 			const dock = width >= LANE_DOCK_WIDTH;
-			setRoom((before) => (before.float === float && before.dock === dock ? before : { float, dock }));
+			const floor = end === undefined ? undefined : width;
+			setRoom((before) => (before.float === float && before.dock === dock && before.floor === floor ? before : { float, dock, floor }));
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -420,7 +423,10 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 			<ChatBackdrop empty={!loading && view.messages.length === 0 && !view.draft} headerHeight={headerHeight} />
 			{laneCards}
 			<div className={`relative col-start-1 row-start-1 flex min-h-0 flex-col${docked ? " mr-[324px]" : ""}`}>
-				{loading ? <ChatLoading /> : <Conversation view={view} />}
+				{/* 停靠时转录那一格再让出右边那一列；滑着时停靠不变（见 `useCardRoom`），这一格最窄就是这么宽。 */}
+				<TranscriptFloor.Provider value={room.floor === undefined ? undefined : room.floor - (docked ? LANE_WIDTH : 0)}>
+					{loading ? <ChatLoading /> : <Conversation view={view} />}
+				</TranscriptFloor.Provider>
 				{/* 浮着的卡片自己不挡点击：卡片之间、卡片旁边的空处点下去还是转录。 */}
 				{roomToFloat && !laneOpen && !loading && (
 					<div
