@@ -77,11 +77,6 @@ import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { recentSessions } from "./tray-menu.ts";
 import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
 
-export function smokeOutput(): { file: string; dir: string; workspace: string } | undefined {
-	const file = process.env.PLUME_SMOKE_OUT;
-	return file ? { file, dir: dirname(file), workspace: join(dirname(file), "workspace") } : undefined;
-}
-
 const FINAL_TEXT = "改好了：hello.txt 第一行现在是 hi。";
 const TASK_TITLE = "写说明";
 const CHILD_TEXT = "写好了 child.txt。";
