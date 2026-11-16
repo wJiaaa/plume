@@ -5,14 +5,17 @@
  * 所在的项目里、记着从这张卡开出来（`spawnedFrom`），在这里做是替人对侧边聊天说一句「就在这里做」——它手上有那条指令，
  * 接着做就是。选过以后缩成一行过程行（`FlowRow`）；开新会话的那一行和建议新会话开始以后的那一行一个样：在跑时扫光、没跑完标红，点了过去。
  *
- * 卡片的外框、标题行、说明和按钮排是 `@plume/styles` 的 `proposal`，和主对话里的建议新会话卡同一副骨架；要按的那颗在最后。
+ * 卡片的外框、标题行和说明是 `@plume/styles` 的 `proposal`，和主对话里的建议新会话卡同一副骨架。底下不是一排按钮，是一列去处：
+ * 一行一个、整行点了就交出去；只有开新会话要选模型和思考档位，它们就放在那一行的右端，一眼看得出只管新会话。
+ * 模型和档位从默认的起步，没动过就不交，开出来的会话用默认的。
  *
  * 参数还在写、或者被点名直接派了的，都是普通的工具行（`fallback`）。
  */
 
+import type { ThinkingLevel } from "@plume/contract";
 import type { Remote, ToolCardProps, UiContext } from "@plume/contract/ui";
 import { proposal } from "@plume/styles";
-import { Button, FlowRow, Text, useI18n } from "@plume/ui";
+import { ActionSpinner, FlowRow, Text, useI18n } from "@plume/ui";
 import { ChevronRight, Forward, MessageCircle, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import type { SideChatApi } from "./api.ts";
@@ -49,6 +52,8 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 		const choice = useSyncExternalStore(subscribe, () => chosen.get(call.id));
 		const [started, setStarted] = useState<string | undefined>(undefined);
 		const [busy, setBusy] = useState<Choice | "new" | null>(null);
+		const [model, setModel] = useState("");
+		const [thinking, setThinking] = useState<ThinkingLevel>();
 		const ready = isDispatchSuggestion(details) && sessionId !== undefined && handToParent !== undefined;
 
 		// 开新会话那一行要认得出这张卡开过的会话：重开面板、换窗口回来也一样。
@@ -85,7 +90,7 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 			setBusy(next);
 			try {
 				if (next === "new") {
-					setStarted(await api.launch(sessionId, call.id));
+					setStarted(await api.launch(sessionId, call.id, { ...(model ? { model } : {}), ...(thinking ? { thinking } : {}) }));
 					return;
 				}
 				// 先记下，卡片当场收起；没成再退回去。
@@ -112,44 +117,86 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 				<Text as="p" size="caption" tone="muted" className={proposal.summary} data-plume-tip={details.instruction}>
 					{details.instruction}
 				</Text>
-				<div className={proposal.actions}>
-					<Button
-						size="sm"
-						variant="soft"
-						loading={busy === "here"}
-						disabled={busy !== null}
-						label={text.dispatchHereTip}
-						onClick={() => void act("here")}
-						data-side-dispatch-action="here"
+				<div className="plume-side-dests">
+					<Destination
+						action="main"
+						icon={<Forward size={15} strokeWidth={1.8} />}
+						label={text.dispatchToMain}
+						tip={text.dispatchToMainTip}
+						busy={busy}
+						onPick={() => void act("main")}
+					/>
+					<Destination
+						action="new"
+						icon={<SquarePen size={15} strokeWidth={1.8} />}
+						label={text.dispatchNew}
+						tip={text.dispatchNewTip}
+						busy={busy}
+						onPick={() => void act("new")}
 					>
-						{text.dispatchHere}
-					</Button>
-					<Button
-						size="sm"
-						variant="soft"
-						loading={busy === "new"}
-						disabled={busy !== null}
-						label={text.dispatchNewTip}
-						onClick={() => void act("new")}
-						data-side-dispatch-action="new"
-					>
-						{text.dispatchNew}
-					</Button>
-					<Button
-						size="sm"
-						variant="primary"
-						loading={busy === "main"}
-						disabled={busy !== null}
-						label={text.dispatchToMainTip}
-						onClick={() => void act("main")}
-						data-side-dispatch-action="main"
-					>
-						{text.dispatchToMain}
-					</Button>
+						<div className="plume-side-dest-model">
+							<ui.ModelControls
+								model={model}
+								{...(thinking ? { thinking } : {})}
+								onModelChange={setModel}
+								onThinkingChange={setThinking}
+								disabled={busy !== null}
+							/>
+						</div>
+					</Destination>
+					<Destination
+						action="here"
+						icon={<MessageCircle size={15} strokeWidth={1.8} />}
+						label={text.dispatchHere}
+						tip={text.dispatchHereTip}
+						busy={busy}
+						onPick={() => void act("here")}
+					/>
 				</div>
 			</section>
 		);
 	};
+}
+
+/**
+ * 一个去处：整行是一颗按钮（点击区经 `::after` 铺满整行），行尾悬停时出一个 ›。给了 `children`（开新会话那行的模型和档位）就放在行尾，
+ * 浮在点击区上面，点它们是选，不是交出去。正在交的那行图标换成转圈，交的时候几行都按不动。
+ */
+function Destination({
+	action,
+	icon,
+	label,
+	tip,
+	busy,
+	onPick,
+	children,
+}: {
+	action: Choice | "new";
+	icon: ReactNode;
+	label: string;
+	tip: string;
+	busy: Choice | "new" | null;
+	onPick(): void;
+	children?: ReactNode;
+}) {
+	const mine = busy === action;
+	return (
+		<div className="plume-side-dest" data-busy={mine || undefined}>
+			<button
+				type="button"
+				className="plume-side-dest-pick"
+				disabled={busy !== null}
+				aria-busy={mine || undefined}
+				data-plume-tip={tip}
+				onClick={onPick}
+				data-side-dispatch-action={action}
+			>
+				{mine ? <ActionSpinner size={15} /> : icon}
+				<Text size="label">{label}</Text>
+			</button>
+			{children ?? <ChevronRight size={14} strokeWidth={2} aria-hidden className="plume-side-dest-go" />}
+		</div>
+	);
 }
 
 /**

@@ -548,7 +548,7 @@ ui.queueAction({
 
 - `ui.Markdown`：`{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走。
 - `ui.ModelSelect`：产品的模型下拉，`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说。设置页里的用法见「设置分区」的 `session-models`。
-- `ui.ModelControls`：输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片），选的再交给 `ctx.sessions.launch`。
+- `ui.ModelControls`：输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片、要不要另开的卡、侧边聊天交出去的卡），选的再交给 `ctx.sessions.launch`。
 
 ## `@` 菜单、`/` 命令列表
 

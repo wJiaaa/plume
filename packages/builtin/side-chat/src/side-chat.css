@@ -1,7 +1,94 @@
 /*
- * 侧边聊天里交出去的那张卡片：外框、标题行、说明和按钮排是 `@plume/styles` 的 `proposal`（和主对话里建议新会话那张同一副骨架）。
- * 选过以后缩成一行过程行：后面跟着的是交出去的那件事，标题不加粗；开出来的会话没跑完时行尾标红。
+ * 侧边聊天里交出去的那张卡片：外框、标题行和说明是 `@plume/styles` 的 `proposal`（和主对话里建议新会话那张同一副骨架），
+ * 底下是一列去处（`.plume-side-dests`）。选过以后缩成一行过程行：后面跟着的是交出去的那件事，标题不加粗；开出来的会话没跑完时行尾标红。
  */
+
+/* 一列去处：一行一个，样子照提问卡的选项行（card 底、field 圆角），整行点得到。 */
+.plume-side-dests {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 10px;
+}
+
+.plume-side-dest {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	height: 34px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px 0 10px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	transition: background-color var(--plume-t-quick);
+}
+
+.plume-side-dest:has(> .plume-side-dest-pick:enabled:hover) {
+	background: var(--plume-card-hover);
+}
+
+.plume-side-dest:has(> .plume-side-dest-pick:enabled:active) {
+	background: var(--plume-elevated);
+}
+
+/* 交的时候几行都按不动；正在交的那一行不淡。 */
+.plume-side-dest:has(> .plume-side-dest-pick:disabled):not([data-busy]) {
+	opacity: 0.45;
+}
+
+.plume-side-dest-pick {
+	display: flex;
+	flex: 1 0 auto;
+	height: 100%;
+	align-items: center;
+	gap: 8px;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	color: var(--plume-ink);
+	text-align: start;
+	cursor: pointer;
+}
+
+.plume-side-dest-pick:disabled {
+	cursor: default;
+}
+
+.plume-side-dest-pick > svg {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+/* 点击区铺满整行；行里的模型、档位浮在它上面（`.plume-side-dest-model`）。 */
+.plume-side-dest-pick::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+
+.plume-side-dest-model {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+
+/* 悬停时行尾出一个 ›，说「点这一行就交出去」。 */
+.plume-side-dest-go {
+	flex-shrink: 0;
+	margin-right: 6px;
+	color: var(--plume-ink-faint);
+	opacity: 0;
+	transition: opacity var(--plume-t-quick);
+}
+
+.plume-side-dest:has(> .plume-side-dest-pick:enabled:hover) > .plume-side-dest-go,
+.plume-side-dest:has(> .plume-side-dest-pick:focus-visible) > .plume-side-dest-go {
+	opacity: 1;
+}
 .plume-side-plain {
 	font-weight: normal;
 }
