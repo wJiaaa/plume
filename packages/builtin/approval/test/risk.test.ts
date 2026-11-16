@@ -177,7 +177,16 @@ it("工作区里的通配删除是日常工作", () => {
 
 it("指向外面的通配删除照样问", () => {
 	const cwd = "/Users/me/project";
-	for (const command of ["rm -f /tmp/*", "rm -f ~/Downloads/*", "cd /etc && rm -f *", "cd ../.. && rm -f *", "cd $HOME && rm -f *"]) {
+	for (const command of [
+		"rm -f /tmp/*",
+		"rm -f ~/Downloads/*",
+		"cd /etc && rm -f *",
+		"cd ../.. && rm -f *",
+		"cd $HOME && rm -f *",
+		"cd -P /etc && rm -f *",
+		"cd && rm -f *",
+		"pushd /etc && rm -f *",
+	]) {
 		expect(assessCommand(command, cwd).risky, command).toBe(true);
 	}
 	// 没有工作区可对照时，通配删除不算显然在里面。
