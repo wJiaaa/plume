@@ -27,7 +27,9 @@ export default {
 | `ctx.hook(name, layer, { order })` | 往钩子里加一层，停用时自动移除 |
 | `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
 | `ctx.serve(api)` | 把一个对象开给自己的界面入口（见「serve」）；一个插件只能开一个，停用时收回 |
-| `ctx.log` | `info` / `warn` / `error`，自动带插件名 |
+| `ctx.settings(defaults, normalize?)` | 插件自己的设置：存盘、界面经 `ui.useSettings()` 读改、两边改了都通知，见「设置和运行状态」 |
+| `ctx.store(key, initial)`、`ctx.sessionStore(key, initial, load?)` | 给界面看的运行状态（按会话的会话删掉时丢掉），`set` 了界面跟着重画，见「设置和运行状态」 |
+| `ctx.log` | `info` / `warn` / `error`，自动带插件名，记进数据目录的 `logs/plume.log` |
 | `ctx.locale()` | 当前界面语言 `"zh-CN"` 或 `"en"`，给人看的文字按它选 |
 | `ctx.notice(sessionId, text, level?)` | 在界面上弹一条提示条，`level` 是 `"info"`（默认）、`"warn"`、`"error"`；不管那个会话是不是正开着 |
 | `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
@@ -144,7 +146,8 @@ ctx.tools.register({
 	// kind: "view",                            // 对本机文件和命令做的是哪种活："view"、"list"、"find"、"search"、"create"、"modify"、"command"、"watch"、"job"，见「按类别找工具」
 	// category: "mcp",                         // 这是哪一类工具："mcp"、"checklist"、"question"、"web"、"delegate"，见「按类别找工具」
 	async execute(args, run) {
-		// args 是模型给的，没校验过：先自己校验，不对就返回 isError（写了 aliases 的，别名已换成规范名）
+		// args 已按 parameters 整理、检查过顶层属性的 type、enum（"10" 写成数字、null 当没给，对不上的不会进来），可以直接按声明的类型用；
+		// 缺了 required 的不拦（缺不缺得起由你定），anyOf / oneOf / 嵌套对象里面不查，要的自己校验（写了 aliases 的，别名已换成规范名）
 		// run：这次调用的会话、目录和本体给的能力，见下面「run」
 		return { output: "交给模型的结果", details: { /* 给卡片用 */ } };
 	},
@@ -750,9 +753,39 @@ Plume 自带的服务：
 检查不共享浏览器登录，禁用设备权限、下载、弹窗、页面导航，最长 12 秒后销毁。加载、测量或截图失败时抛错，插件不能将未完成检查当成通过。页面内容、文件服务、主题和状态归插件，宿主只负责 Electron 加载与截图。`plugins/preview` 是检查后发布及沙箱 iframe 工具卡片的示例。
 
 
+## 设置和运行状态
+
+插件的设置、给界面看的状态不用自己存文件、写推送循环：本体替你存、替你推，界面入口用 React hook 读。
+
+- **设置** `const settings = await ctx.settings(defaults, normalize?)`：一份对象，存在 `dataDir` 的 `settings.json`。读到的和 `defaults` 浅合并，再过 `normalize`（给了的话：校验、补齐，抛错就不改）；没给 `normalize` 只收 `defaults` 里有的键。`settings.get()` 现读，`settings.set(patch)` 合并、写盘（排队、整份替换）、通知；`settings.onChange(listener)` 收两边的改动（作废缓存用）。界面入口 `const [value, set] = ui.useSettings<T>()`，`set(patch)` 走同一条路，交回 `normalize` 过的值。一个插件只能调一次 `ctx.settings`。界面看得到全部内容：密钥不放这里，经 `ctx.secrets` 封好放进自己的文件。
+- **运行状态** `const state = ctx.store(key, initial)`：只在内存里，`get` / `set` / `update`，界面 `ui.useStore<T>(key)` 订阅，`set` 了跟着重画；停用、重启回到 `initial`。只推最新的那份，中间值可能跳过：画的是当前状态，不是一串事件。
+- **按会话的运行状态** `ctx.sessionStore(key, initial, load?)`：同上，每个会话一份（`get(id)` / `set(id, v)` / `update` / `delete`），界面 `ui.useSessionStore<T>(key, sessionId)`；会话删掉时本体丢掉那一份，不用自己 `onDeleted`。值有一部分在盘上（上次生成的摘要）时给 `load(sessionId)`：界面订阅一个这次还没设过的会话时先读它，读到之前界面拿到 undefined。
+- 值要能结构化克隆、不宜太大（每次改整份发给界面）。界面第一次拿到之前（逻辑入口还没登记、停用着）是 undefined，画成加载中。界面对 store 只读，要改走 `ui.remote()` 调逻辑入口的方法，规则留在逻辑入口一处。
+- 一连串事件（终端输出）、要中途取消的长调用、要传大块内容的，仍用下面的 `serve`。
+
+```ts
+// src/api.ts（两个入口共用）
+export interface MySettings { model: string | undefined; enabled: boolean }
+export const normalize = (saved: Record<string, unknown>): MySettings => ({
+	model: typeof saved.model === "string" && saved.model ? saved.model : undefined,
+	enabled: saved.enabled !== false,
+});
+
+// src/index.ts
+const settings = await ctx.settings<MySettings>({ model: undefined, enabled: true }, normalize);
+const progress = ctx.sessionStore("progress", { done: 0 });
+progress.set(sessionId, { done: 3 });
+
+// src/ui.tsx
+const [settings, set] = ui.useSettings<MySettings>();
+const progress = ui.useSessionStore<{ done: number }>("progress", sessionId);
+```
+
+例子：plume.title、plume.side-chat、plume.spawn-session（设置），插件仓库的 plume.summary（设置加带 `load` 的 `sessionStore`）、plume.memory（设置加 `onChange` 作废快照）。
+
 ## serve：给自己的界面开接口
 
-界面入口拿不到 agent 进程里的东西。不随会话保存的实时数据和操作（终端的 shell、插件自己存的数据），由逻辑入口用 `ctx.serve(api)` 开出来，界面入口用 `ui.remote()` 调（见 ui.md）。
+界面入口拿不到 agent 进程里的东西。不随会话保存的实时数据和操作（终端的 shell、插件自己存的数据），由逻辑入口用 `ctx.serve(api)` 开出来，界面入口用 `ui.remote()` 调（见 ui.md）。设置和要推给界面的状态先看上面「设置和运行状态」。
 
 - 接口类型写在 `src/api.ts`，两个入口共用。
 - 参数和返回值要能结构化克隆（不能传函数、类实例）。

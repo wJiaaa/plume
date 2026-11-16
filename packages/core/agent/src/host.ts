@@ -12,6 +12,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { activeLocale, text } from "./i18n.ts";
+import { jsonFiles } from "./json-files.ts";
+import { PluginValues } from "./plugin-values.ts";
 import { Workspace } from "./run-files.ts";
 import type {
 	CallContext,
@@ -323,6 +325,8 @@ export class PluginHost {
 	private queue: Promise<unknown> = Promise.resolve();
 	/** 插件的 `ctx.resources`、`ctx.workspace` 和工具调用的 `ToolRun.files` 背后的那一份，见 `run-files.ts`。 */
 	readonly workspace: Workspace;
+	/** 插件的 `ctx.settings`、`ctx.store`、`ctx.sessionStore`，界面经 `AgentService.watchPluginValue` 订阅。 */
+	readonly values = new PluginValues(jsonFiles());
 
 	constructor(
 		private readonly options: {
@@ -332,6 +336,8 @@ export class PluginHost {
 			appDataDir: string;
 			/** 配置里关掉的插件，按 `PluginEntry.key`（目录名）记：导入前就要知道它停用着，插件名得导入以后才有。 */
 			disabled?: ReadonlySet<string>;
+			/** 宿主带的插件 SDK 版本，插件加载失败时和 `PluginEntry.sdk` 对一下，见 `sdkHint`。只测宿主时可以不给。 */
+			sdkVersion?: string;
 			log: Log;
 			/** 插件的 `ctx.model`：模型设置在 agent 那边，宿主只转交。 */
 			model: ModelAccess;
@@ -380,6 +386,7 @@ export class PluginHost {
 
 	/** 会话删掉了：告诉登记过 `ctx.sessions.onDeleted` 的插件。某个插件出错只记日志，不拦着别的。 */
 	sessionDeleted(sessionId: string): void {
+		this.values.forgetSession(sessionId);
 		void this.workspace
 			.forget(sessionId)
 			.catch((error: unknown) => this.options.log("agent", "error", `删掉会话 ${sessionId} 的改动快照失败：${errorText(error)}`));
@@ -761,7 +768,7 @@ export class PluginHost {
 		const status = record.status;
 		const fail = (error: unknown) => {
 			status.state = "failed";
-			status.error = errorText(error);
+			status.error = errorText(error) + this.sdkHint(record);
 			this.options.log(status.name, "error", `加载失败：${status.error}`);
 			return undefined;
 		};
@@ -781,6 +788,18 @@ export class PluginHost {
 		}
 		record.plugin = plugin;
 		return plugin;
+	}
+
+	/**
+	 * 加载失败时补在报错后面的一句：插件不是用宿主带的这一版 SDK 构建的，多半就是失败的原因（接口改了、删了）。
+	 * 内置插件和宿主一起构建，不说；版本一样也不说。
+	 */
+	private sdkHint(record: PluginRecord): string {
+		const host = this.options.sdkVersion;
+		if (record.builtin || !host || record.entry.sdk === host) return "";
+		const built = record.entry.sdk;
+		if (built === undefined) return text("plugin.sdkUnknown", { host });
+		return text(newerVersion(built, host) ? "plugin.sdkNewer" : "plugin.sdkOlder", { built, host });
 	}
 
 	/** 调 apply；要用的服务还缺就记为等待，出错时撤销已经注册的部分，状态记为 failed。 */
@@ -805,7 +824,7 @@ export class PluginHost {
 		} catch (error) {
 			await this.unwind(record);
 			status.state = "failed";
-			status.error = errorText(error);
+			status.error = errorText(error) + this.sdkHint(record);
 			this.options.log(status.name, "error", `加载失败：${status.error}`);
 		}
 	}
@@ -1091,6 +1110,18 @@ export class PluginHost {
 				if (typeof dispose !== "function") throw new Error(text("plugin.effectNotFunction"));
 				own(dispose);
 			},
+			settings: async (defaults, normalize) => {
+				live();
+				return this.values.createSettings(name, join(dataDir, "settings.json"), defaults, normalize, own, (message) => log.warn(message));
+			},
+			store: (key, initial) => {
+				live();
+				return this.values.createStore(name, key, initial, own);
+			},
+			sessionStore: (key, initial, load) => {
+				live();
+				return this.values.createSessionStore(name, key, initial, load, own, (message) => log.warn(message));
+			},
 			serve: (api) => {
 				if (typeof api !== "object" || api === null) throw new Error(text("plugin.serveNotObject"));
 				if (this.served.has(name)) throw new Error(text("plugin.servedTwice", { name }));
@@ -1246,4 +1277,15 @@ function validAliases(aliases: unknown, parameters: Record<string, unknown>): bo
 
 export function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+/** `a` 比 `b` 新（x.y.z 逐段按数字比，认不出的段当 0）。 */
+function newerVersion(a: string, b: string): boolean {
+	const parts = (version: string) => version.split(".").map((part) => Number.parseInt(part, 10) || 0);
+	const [x, y] = [parts(a), parts(b)];
+	for (let index = 0; index < Math.max(x.length, y.length); index++) {
+		const delta = (x[index] ?? 0) - (y[index] ?? 0);
+		if (delta !== 0) return delta > 0;
+	}
+	return false;
 }

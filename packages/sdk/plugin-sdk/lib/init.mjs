@@ -11,7 +11,7 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { linkSdk } from "./link.mjs";
+import { linkSdk, workspaceOf } from "./link.mjs";
 import { DIR_NAME } from "./manifest.mjs";
 
 const sdk = resolve(import.meta.dirname, "..");
@@ -22,14 +22,6 @@ export const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/;
 
 /** 只给独立项目的文件。 */
 const STANDALONE_ONLY = new Set(["AGENTS.md", "CLAUDE.md", "gitignore"]);
-
-/** `start` 所在的 pnpm workspace 根目录（往上找 pnpm-workspace.yaml）。 */
-function workspaceOf(start) {
-	for (let dir = start; dir !== dirname(dir); dir = dirname(dir)) {
-		if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
-	}
-	return undefined;
-}
 
 /** 这份 SDK 是从 npm 装进某个项目的（在 node_modules 里）。 */
 const installed = sdk.split(sep).includes("node_modules");

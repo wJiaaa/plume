@@ -1,9 +1,12 @@
-/** 逻辑入口经 `ctx.serve` 开给设置分区的接口。 */
-export interface TitleApi {
+/** 设置（`ctx.settings`），设置分区经 `ui.useSettings` 读、改。 */
+export interface TitleSettings {
 	/** 起标题用的模型（`SessionModel.id`）；没选时是 undefined，用这个会话自己的模型。 */
-	model(): Promise<string | undefined>;
-	setModel(model: string | undefined): Promise<void>;
+	model: string | undefined;
 	/** 智能标题总结开着没有；缺省开着。 */
-	enabled(): Promise<boolean>;
-	setEnabled(enabled: boolean): Promise<void>;
+	enabled: boolean;
+}
+
+/** 存下的、界面改的都过一遍：模型只认非空字符串，开关只有明确写了 false 才算关。 */
+export function normalizeSettings(saved: Record<string, unknown>): TitleSettings {
+	return { model: typeof saved.model === "string" && saved.model ? saved.model : undefined, enabled: saved.enabled !== false };
 }

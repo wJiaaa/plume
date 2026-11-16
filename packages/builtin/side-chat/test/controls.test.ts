@@ -118,6 +118,7 @@ async function fixture(t: TestContext) {
 		},
 		commands: { provide() {} },
 		serve: (value: SideChatApi) => void (api = value),
+		settings: async (defaults: object) => ({ get: () => defaults, set: async (patch: object) => ({ ...defaults, ...patch }), onChange: () => () => {} }),
 		sessions: {
 			list: async () => structuredClone(summaries),
 			get: async (id: string) => structuredClone(summaries.find((summary) => summary.id === id)),

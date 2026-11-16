@@ -4,10 +4,11 @@
  * 插件的网页（ctx.pages）反过来经 parentPort 调主进程。
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createAgent, SessionDbUnavailable } from "@plume/agent";
+import { BUILD_INFO } from "@plumeai/plugin-sdk/manifest";
 import type { PluginEntry } from "@plume/contract";
 import { type Port, RpcChannel, remote, serve } from "@plume/rpc";
 import { primeCommandPath, useSandboxRunner } from "@plume/sandbox";
@@ -22,6 +23,7 @@ import {
 	PLUGINS_ENV,
 	type PluginDir,
 	SETTINGS_FILE_ENV,
+	VERSION_ENV,
 } from "../shared/protocol.ts";
 import { redirectNativeLoads } from "./native-cache.ts";
 
@@ -72,18 +74,31 @@ void primeCommandPath({ always: true });
  */
 function entryOf({ key, dir, builtin }: PluginDir): PluginEntry {
 	const stamp = Date.now();
+	const sdk = builtWith(dir);
 	return {
 		key,
 		dir,
 		...(builtin ? { builtin } : {}),
+		...(sdk ? { sdk } : {}),
 		load: async () => ((await import(/* @vite-ignore */ `${pathToFileURL(join(dir, "dist/index.mjs")).href}?v=${stamp}`)) as { default?: unknown }).default,
 		...(existsSync(join(dir, "dist/ui.mjs")) ? { ui: `plume-plugin://${key}/dist/ui.mjs?v=${stamp}` } : {}),
 	};
 }
 
+/** 构建它的插件 SDK 版本（`dist/build.json`）；没有这个文件、读不出来是 undefined。 */
+function builtWith(dir: string): string | undefined {
+	try {
+		const sdk: unknown = (JSON.parse(readFileSync(join(dir, BUILD_INFO), "utf8")) as { sdk?: unknown }).sdk;
+		return typeof sdk === "string" ? sdk : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 const ready = createAgent({
 	dataDir,
 	settingsFile,
+	...(process.env[VERSION_ENV] ? { sdkVersion: process.env[VERSION_ENV] } : {}),
 	trash: async (path) => await main.trash(path),
 	...(process.env[CATALOG_FILE_ENV] ? { catalogFile: process.env[CATALOG_FILE_ENV] } : {}),
 	plugins: dirs.map(entryOf),

@@ -3,6 +3,7 @@ import type { PluginManifest } from "../dist/contract/src/index.d.ts";
 
 export declare const DIR_NAME: RegExp;
 export declare const PLUGIN_ENTRY: string;
+export declare const BUILD_INFO: string;
 export declare const SHIPPED: readonly string[];
 export declare function readManifest(raw: unknown): PluginManifest;
 export declare function readCatalogInfo(raw: unknown): (PluginManifest & { name: string }) | null;

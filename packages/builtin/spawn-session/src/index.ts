@@ -16,10 +16,8 @@
  * 随应用发：一个 coding agent 该有。
  */
 
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { Message, Plugin, SessionLaunch, SessionSummary, ThinkingLevel, ToolOutput, ToolRun } from "@plume/contract";
-import type { SpawnSessionApi, StartedSuggestion } from "./api.ts";
+import { normalizeSettings, type SpawnSessionApi, type StartedSuggestion } from "./api.ts";
 import { checkArchive, checkHandOff, checkSpawn, nameOf } from "./check.ts";
 import { MESSAGES } from "./messages.ts";
 import {
@@ -79,7 +77,7 @@ export default {
 	inject: ["session.worktree"],
 	// 开出来的会话每一轮都要交回：认它们的收场要看全部会话。
 	observe: "all",
-	apply(ctx) {
+	async apply(ctx) {
 		const worktrees = ctx.use("session.worktree");
 		const reports = new Reports({
 			get: (id) => ctx.sessions.get(id),
@@ -90,18 +88,8 @@ export default {
 		ctx.sessions.observe((observation) => reports.observe(observation));
 		ctx.sessions.onDeleted((sessionId) => reports.deleted(sessionId));
 
-		/** 要不要先弹卡问（offer 卡上的「以后不再问」、设置 › 常规里的开关）：存在插件的数据目录里，只这一项。 */
-		const settingsFile = join(ctx.dataDir, "settings.json");
-		let offersOn: Promise<boolean> | undefined;
-		const offers = () =>
-			(offersOn ??= readFile(settingsFile, "utf8")
-				// 文件不在、写了一半或内容是 null 都按缺省：解析错也得接住，不然缓存下一个 rejected 的 promise，开关就再也打不开。
-				.then((raw) => (JSON.parse(raw) as { offers?: boolean } | null)?.offers !== false)
-				.catch(() => true));
-		const setOffers = async (on: boolean) => {
-			offersOn = Promise.resolve(on);
-			await writeFile(settingsFile, JSON.stringify({ offers: on }));
-		};
+		/** 要不要先弹卡问（offer 卡上的「以后不再问」、设置 › 常规里的开关）。 */
+		const settings = await ctx.settings({ offers: true }, normalizeSettings);
 
 		ctx.hook("model.context", async (input, next) => {
 			// 子会话和插件的独立会话（比如 SSH 的运维助手）都不是侧栏里那段对话（`session.kind` 不是 `top`）：不开会话，也不归档自己。
@@ -241,7 +229,7 @@ export default {
 				if (request.kind === "now") return startNow(run, run.toolCallId, request.briefing);
 				if (request.kind === "offer") {
 					const title = request.title;
-					if (!(await offers())) return { output: results.offerSkipped(title), details: { kind: "session_offer", title, choice: "here" } };
+					if (!settings.get().offers) return { output: results.offerSkipped(title), details: { kind: "session_offer", title, choice: "here" } };
 					const text = MESSAGES[ctx.locale()];
 					const reply = await run.request<OfferChoice>({ kind: SESSION_OFFER, title: text.offerTitle, payload: { title }, waiting: text.offerWaiting });
 					// 人没选（点了不答、到时没人答）不是选了「就在这里做」：照提问卡的样子标成没人答，转录画「已取消」「没人回答」，不画成出错。
@@ -253,7 +241,7 @@ export default {
 							...(reply.reason === "stopped" ? {} : { details: { unanswered: reply.reason } }),
 						};
 					const answer = reply.value;
-					if (answer.choice === "never") await setOffers(false);
+					if (answer.choice === "never") await settings.set({ offers: false });
 					if (answer.choice === "new") {
 						// 卡上选的模型、档位记在这次 offer 的结果里，模型带 proposal_id 补简报时从记录里取（`proposal`）。
 						const details: SessionOffer = {
@@ -341,10 +329,6 @@ export default {
 			async offersWorktree(parentId) {
 				const parent = await ctx.sessions.get(String(parentId));
 				return parent ? offersWorktree(parent) : false;
-			},
-			offers,
-			async setOffers(on) {
-				await setOffers(on === true);
 			},
 			async start(parentId, callId, choice) {
 				const found = await proposal(String(parentId), String(callId));

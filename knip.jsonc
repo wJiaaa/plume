@@ -79,7 +79,8 @@
 
   // 插件界面入口的 react 运行时由宿主的 import map 给，类型经插件 SDK，不必写进插件的依赖。放在顶层而不是插件那一组：
   // 没有界面入口的插件不 import react，写在那一组会对它们逐个提示「用不着这条」。
-  "ignoreDependencies": ["react"],
+  // @types/react：界面入口只写 JSX、不 import react 时（状态都经 ui.useSettings 这类 hook 拿），knip 看不出 react/jsx-runtime 要它的类型。
+  "ignoreDependencies": ["react", "@types/react"],
 
   // mkfifo 是测试里造命名管道用的系统命令。
   "ignoreBinaries": ["mkfifo"],

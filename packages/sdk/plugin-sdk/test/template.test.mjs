@@ -14,6 +14,7 @@ import { buildPlugin } from "../lib/build.mjs";
 import { checkPlugin } from "../lib/check.mjs";
 import { initPlugin } from "../lib/init.mjs";
 import { installPlugin } from "../lib/install.mjs";
+import { packPlugin } from "../lib/pack.mjs";
 
 const sdk = resolve(import.meta.dirname, "..");
 const work = mkdtempSync(join(tmpdir(), "plume-plugin-sdk-"));
@@ -89,4 +90,27 @@ test("install 复制说明和产物，不带源码", () => {
 	assert.ok(existsSync(join(target, "dist/index.mjs")));
 	assert.ok(existsSync(join(target, "package.json")));
 	assert.ok(!existsSync(join(target, "src")));
+});
+
+test("构建写下用哪一版 SDK：dist/build.json", () => {
+	const version = JSON.parse(readFileSync(join(sdk, "package.json"), "utf8")).version;
+	assert.deepEqual(JSON.parse(readFileSync(join(dir, "dist/build.json"), "utf8")), { sdk: version });
+});
+
+test("SDK 的链接被删了（npm 装包会这样）：check 自己链回来再查", async () => {
+	rmSync(join(dir, "node_modules/@plumeai"), { recursive: true, force: true });
+	assert.ok(await checkPlugin(dir));
+	assert.equal(realpathSync(join(dir, "node_modules/@plumeai/plugin-sdk")), realpathSync(sdk));
+});
+
+test("pack 打出只含发给插件的文件的文件夹，说出发市场前还缺什么；不许打进 dist/", async () => {
+	const out = join(work, "packed");
+	const packed = await packPlugin(dir, out);
+	assert.equal(packed.dir, join(out, "hello-world"));
+	assert.ok(existsSync(join(packed.dir, "dist/index.mjs")));
+	assert.ok(existsSync(join(packed.dir, "package.json")));
+	assert.ok(!existsSync(join(packed.dir, "src")));
+	assert.ok(!existsSync(join(packed.dir, "node_modules")));
+	assert.ok(packed.problems.some((problem) => problem.includes("description")));
+	await assert.rejects(packPlugin(dir, join(dir, "dist")));
 });

@@ -1273,6 +1273,15 @@ export interface UiContext {
 	 * T 写逻辑入口那边的接口，末尾的 CallContext 参数这边不传。
 	 */
 	remote<T extends object>(): Remote<T>;
+	/**
+	 * 自己逻辑入口 `ctx.settings` 的设置和改它的函数（React hook）：两边谁改了都跟着重画。第一次拿到之前（逻辑入口还没登记、
+	 * 停用着）是 undefined。改的函数交回逻辑入口 `normalize` 过的值，校验不过时以错误结束（话是逻辑入口抛的）。T 写逻辑入口那边的类型。
+	 */
+	useSettings<T extends object>(): [T | undefined, (patch: Partial<T>) => Promise<T>];
+	/** 自己逻辑入口 `ctx.store(key, …)` 的当前值（React hook），`set` 了跟着重画；第一次拿到之前是 undefined。 */
+	useStore<T>(key: string): T | undefined;
+	/** 自己逻辑入口 `ctx.sessionStore(key, …)` 在 `sessionId` 这个会话里的值（React hook），同 `useStore`。 */
+	useSessionStore<T>(key: string, sessionId: string): T | undefined;
 }
 
 /**

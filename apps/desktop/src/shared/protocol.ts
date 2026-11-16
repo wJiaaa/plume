@@ -10,6 +10,8 @@ export const DATA_DIR_ENV = "PLUME_DATA_DIR";
 export const SETTINGS_FILE_ENV = "PLUME_SETTINGS_FILE";
 export const PLUGINS_ENV = "PLUME_PLUGINS";
 export const LOCALE_ENV = "PLUME_LOCALE";
+/** 应用版本，也是随应用带的插件 SDK 的版本（发版时一起改齐）。 */
+export const VERSION_ENV = "PLUME_VERSION";
 /** 模型目录的缓存文件；不传（冒烟验证）就不访问 pi.dev，只用打包的快照。 */
 export const CATALOG_FILE_ENV = "PLUME_CATALOG_FILE";
 /** 用户的插件放在哪些目录（JSON 数组）：Windows 上这些目录里的原生模块复制一份再加载（main/native-cache.ts）。 */
