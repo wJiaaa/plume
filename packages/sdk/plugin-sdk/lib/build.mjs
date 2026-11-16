@@ -12,13 +12,15 @@
  *   引入的 .css 是一段文字，插件自己挂到页面上（宿主不加载插件的样式表）。
  *   宿主启动时就加载每个插件的 dist/ui.mjs；`import()` 进来的模块拆到 dist/chunks/，用到时才取，大的预览库不拖慢启动。
  *   拆出来的文件名带内容哈希，和 ui.mjs 一起经 `plume-plugin://` 读取。
+ * - dist/build.json：用哪一版 SDK 构建的（manifest.mjs 的 BUILD_INFO）。
  */
 
 import { existsSync } from "node:fs";
-import { cp, open, readdir, readFile, realpath, rm } from "node:fs/promises";
+import { cp, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { build } from "esbuild";
+import { BUILD_INFO } from "./manifest.mjs";
 import { forTarget, TARGETS } from "./targets.mjs";
 
 const UI_SHARED = ["react", "react/jsx-runtime", "@plume/ui", "@plume/styles"];
@@ -34,6 +36,7 @@ const shared = {
 	},
 };
 const HOST = `${process.platform}-${process.arch}`;
+const SDK_VERSION = JSON.parse(await readFile(join(import.meta.dirname, "../package.json"), "utf8")).version;
 
 /** Mach-O（单架构 32、64 位的两种字节序，通用二进制）和 ELF 的文件头。 */
 const NATIVE_MAGIC = new Set(["feedface", "feedfacf", "cefaedfe", "cffaedfe", "cafebabe", "7f454c46"]);
@@ -151,6 +154,7 @@ export async function buildPlugin(target) {
 	const banner = { js: 'import { createRequire as __plumeCreateRequire } from "node:module";\nconst require = __plumeCreateRequire(import.meta.url);' };
 	await build({ ...common, entryPoints: [logic], outfile: join(dir, "dist/index.mjs"), platform: "node", target: "node24", external: native, banner });
 	await copyDependencies(dir, native);
+	await writeFile(join(dir, BUILD_INFO), `${JSON.stringify({ sdk: SDK_VERSION })}\n`);
 	const outputs = [`dist/index.mjs${native.length > 0 ? `（带上 ${native.join("、")}）` : ""}`];
 	await rm(join(dir, "dist/chunks"), { recursive: true, force: true });
 	if (existsSync(ui)) {

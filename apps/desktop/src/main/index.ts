@@ -35,6 +35,7 @@ import {
 	type MainProcessApi,
 	PLUGINS_ENV,
 	SETTINGS_FILE_ENV,
+	VERSION_ENV,
 } from "../shared/protocol.ts";
 import type { Appearance } from "../shared/appearance.ts";
 import { hasVibrancy, MAIN_TOOLBAR_HEIGHT, windowChrome } from "../shared/window-chrome.ts";
@@ -252,6 +253,7 @@ async function boot(): Promise<void> {
 			// 会在 Plume 开着时被换掉的插件目录；内置插件不在里面。
 			[NATIVE_ROOTS_ENV]: JSON.stringify([installDir, uploadDir]),
 			[LOCALE_ENV]: resolvedLocale(),
+			[VERSION_ENV]: app.getVersion(),
 			// 冒烟验证不访问外网，断言的目录值也不能随上游变。
 			...(smoke ? {} : { [CATALOG_FILE_ENV]: join(plumeHome(), "model-catalog.json") }),
 		},

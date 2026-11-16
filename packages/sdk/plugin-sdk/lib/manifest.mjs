@@ -15,6 +15,12 @@ export const DIR_NAME = /^[a-z0-9][a-z0-9-]*$/;
 export const PLUGIN_ENTRY = "dist/index.mjs";
 
 /**
+ * 构建时写下的构建信息 `{ "sdk": "<插件 SDK 的版本>" }`，随 dist/ 发。宿主在插件加载失败时拿它和自己带的 SDK 版本比，
+ * 说清是插件比 Plume 新、还是按旧版 SDK 构建的。
+ */
+export const BUILD_INFO = "dist/build.json";
+
+/**
  * 发给插件的文件：说明、介绍和它引用的图片、图标、构建产物、随包的技能、MCP 服务的声明、许可证。源码、node_modules 不发。
  * 市场的包、`plume-plugin install`、应用里「从本地上传」都只装这些，应用算文件指纹也只看这些。
  */

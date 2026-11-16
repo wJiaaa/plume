@@ -161,6 +161,8 @@ export interface AgentOptions {
 	settingsFile: string;
 	/** 按顺序加载。工具重名时后登记的生效。 */
 	plugins: PluginEntry[];
+	/** 随应用带的插件 SDK 的版本（和应用版本一致），插件加载失败时用来说明版本对不上，见 `PluginEntry.sdk`。 */
+	sdkVersion?: string;
 	log: Log;
 	/** 启动时的界面语言，插件加载失败的原因用它写；之后界面经 setLocale 再告诉。默认中文。 */
 	locale?: Locale;
@@ -392,6 +394,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		dataDir: join(dataDir, "plugin-data"),
 		appDataDir: dataDir,
 		disabled,
+		...(options.sdkVersion ? { sdkVersion: options.sdkVersion } : {}),
 		log,
 		model: {
 			complete: (request) => completeOnce(request),
