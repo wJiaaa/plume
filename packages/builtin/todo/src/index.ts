@@ -73,9 +73,23 @@ export default {
 		/** 会话最近一次请求里模型拿到了哪些工具：拿不到 todo_write 的（子 Agent、侧边聊天这类收窄了工具的会话）不问它清单。 */
 		const offered = new Map<string, string[]>();
 		const listing = (sessionId: string) => offered.get(sessionId)?.includes("todo_write") === true;
+		/**
+		 * 会话里最新的那份清单。清单只由 `todo_write` 改，记下它交回的那份就够，不必每一步都把整段历史拿来再找一遍；
+		 * 撤回、编辑重发会把历史截回去，那时（`onContextReset`）忘掉，下次照历史重找。
+		 */
+		const latest = new Map<string, TodoItem[]>();
+		const todosOf = async (sessionId: string): Promise<TodoItem[]> => {
+			const known = latest.get(sessionId);
+			if (known) return known;
+			const found = latestTodos(await ctx.sessions.messages(sessionId));
+			latest.set(sessionId, found);
+			return found;
+		};
+		ctx.sessions.onContextReset((sessionId) => latest.delete(sessionId));
 		ctx.sessions.onDeleted((sessionId) => {
 			watches.delete(sessionId);
 			offered.delete(sessionId);
+			latest.delete(sessionId);
 		});
 
 		ctx.tools.register({
@@ -115,6 +129,7 @@ export default {
 				if (inProgress > 1) return { output: `Only one task may be in_progress; ${inProgress} were marked. Pick one.`, isError: true };
 				const done = todos.filter((todo) => todo.status === "completed").length;
 				const summary = todos.map((todo) => `${MARKS[todo.status]} ${todo.content}`).join("\n");
+				latest.set(run.sessionId, structuredClone(todos));
 				// 回答收尾的追问时只动了清单：这一轮到此为止，不再要一段新正文。顺手干了别的活的照常接着做。
 				const settled = watches.get(run.sessionId)?.check === "asked" && run.calls.every((call) => call.name === "todo_write");
 				// 这一步只更新了清单，别的什么都没做：在结果末尾说一句，模型下一步读的就是这里。只有它一个工具时不说。
@@ -154,7 +169,7 @@ export default {
 				if (answering && calls.length === 0 && input.reply.content.every((part) => part.type !== "text" || !part.text.trim())) return { continue: false };
 
 				if (calls.length > 0) {
-					const todos = listing(input.sessionId) ? latestTodos(await ctx.sessions.messages(input.sessionId)) : [];
+					const todos = listing(input.sessionId) ? await todosOf(input.sessionId) : [];
 					const reported = calls.some((call) => call.name === "todo_write");
 					// 有未完清单时只认更新清单；正文汇报和计数仍由本体处理，避免两边重复提醒。
 					return next(
@@ -172,7 +187,7 @@ export default {
 				 * 没问不算问过，回来以后那一轮收尾照样问。
 				 */
 				if (watch.check !== "unasked" || !watch.worked || input.stepsLeft <= 0 || input.awaiting || !listing(input.sessionId)) return verdict;
-				const open = latestTodos(await ctx.sessions.messages(input.sessionId)).filter((todo) => todo.status !== "completed");
+				const open = (await todosOf(input.sessionId)).filter((todo) => todo.status !== "completed");
 				if (!open.some((todo) => todo.status === "in_progress")) return verdict;
 				watch.check = "asked";
 				return { continue: true, say: openPlanNote(open) };

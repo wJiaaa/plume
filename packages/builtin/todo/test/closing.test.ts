@@ -24,7 +24,7 @@ function fakeContext() {
 		name: "plume.todo",
 		tools: { register: (tool: ToolDefinition) => void tools.set(tool.name, tool) },
 		hook: (name: string, layer: unknown) => void layers.set(name, layer),
-		sessions: { messages: async () => messages, onDeleted: () => undefined },
+		sessions: { messages: async () => messages, onDeleted: () => undefined, onContextReset: () => () => undefined },
 	} as unknown as PluginContext;
 	plugin.apply(ctx);
 

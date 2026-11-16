@@ -46,6 +46,11 @@ export interface CompactDeps {
  * 自动压缩的摘要请求失败退回本地整理，不抛。
  */
 export async function compact(input: ContextCompact, deps: CompactDeps): Promise<CompactSummary> {
+	/*
+	 * 没到线就不往下做：下面的 `freshView` 要把大结果存成产物（哈希、写盘），每次请求前都问一次的话，绝大多数时候白做。
+	 * 触发线只看窗口，和 `compactIfNeeded` 里那一次是同一条。
+	 */
+	if (!input.force && input.usage.tokens < compactionBudget(input.model, 0).trigger) return undefined;
 	const { history } = input;
 	/*
 	 * 一轮收尾后问的：只有能热分叉时才值得提前压——前缀几秒前刚写进缓存，摘要请求基本只付输出的钱。缓存凉了、换了模型的，

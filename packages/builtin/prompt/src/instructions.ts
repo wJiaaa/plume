@@ -1,5 +1,6 @@
 /**
- * 项目指令（`AGENTS.md` 这类文件）和工作目录是什么样的仓库：组系统提示词时每一轮按磁盘现状读一次，改了文件下一轮就生效。
+ * 项目指令（`AGENTS.md` 这类文件）和工作目录是什么样的仓库：每次组系统提示词（每次请求）按磁盘现状读一次。
+ * 一轮中途读到的变化由本体按会话冻结的提示词收着，下一轮才送达。
  */
 
 import { access, lstat, readFile } from "node:fs/promises";
@@ -20,9 +21,10 @@ export const INSTRUCTION_BYTE_LIMIT = 100 * 1024;
 /**
  * 从工作目录一路往上收到仓库根，每层一份，从远到近排：根的约定先出现、子包的后出现，后者更具体，冲突时模型按后者办。
  * 不在 git 仓库里时只读工作目录自己：再往上是 `~` 和 `/`，那里的指令属于别的项目。
+ * 仓库根调用方已经找过的传进来（`findRepoRoot`），不再往上走一遍。
  */
-export async function loadProjectInstructions(cwd: string): Promise<ProjectInstructions[]> {
-	const root = await findRepoRoot(cwd);
+export async function loadProjectInstructions(cwd: string, repoRoot: Promise<string | null> = findRepoRoot(cwd)): Promise<ProjectInstructions[]> {
+	const root = await repoRoot;
 	const found: ProjectInstructions[] = [];
 	let dir = cwd;
 	for (let depth = 0; depth < MAX_DEPTH; depth++) {

@@ -35,10 +35,11 @@ export default {
 			"model.context",
 			async (input, next) => {
 				const kinds = new Map(ctx.tools.list().flatMap((tool) => (tool.kind ? [[tool.name, tool.kind] as const] : [])));
+				const repoRoot = findRepoRoot(input.cwd);
 				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions, persona] = await Promise.all([
-					loadProjectInstructions(input.cwd),
+					loadProjectInstructions(input.cwd, repoRoot),
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
-					findRepoRoot(input.cwd).then((root) => root !== null),
+					repoRoot.then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
 					loadMagpieInstructions(ctx.appDataDir, ctx.log),
 					presets.forRequest(input),
