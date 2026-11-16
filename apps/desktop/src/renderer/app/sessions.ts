@@ -14,6 +14,7 @@ import { forgetThreadFolds } from "../sidebar/prefs.ts";
 import { forgetSessionReferences } from "../composer/SessionReferences.tsx";
 import { forgetFileTrees } from "../files/useFileTree.ts";
 import { forgetPanels } from "./panels.ts";
+import { forgetLocatedPaths } from "../markdown/located-path.ts";
 import {
 	agent,
 	type AppState,
@@ -149,7 +150,7 @@ function apply(event: AgentEvent): void {
 
 /**
  * 会话删掉了（`gone` 认它）：界面里按会话记的都清掉——面板（见 `forgetPanels`）、输入框里没发的字、附件、引文、会话引用、
- * 排着的那几条的草稿、侧栏的收起记录、文件树的缓存。agent 那头的数据由它自己删。
+ * 排着的那几条的草稿、侧栏的收起记录、文件树的缓存、回复里路径核对过的结论。agent 那头的数据由它自己删。
  */
 function forgetSessions(gone: (sessionId: string) => boolean): void {
 	forgetPanels(gone);
@@ -167,6 +168,7 @@ function forgetSessions(gone: (sessionId: string) => boolean): void {
 	for (const [id, held] of queuedDrafts) if (gone(held.sessionId)) queuedDrafts.delete(id);
 	forgetThreadFolds(gone);
 	forgetFileTrees(gone);
+	forgetLocatedPaths(gone);
 }
 
 /** 正在重新拉状态（`refresh`）：手上的视图都错过了断流期间的事件，不借给订阅会话的插件，见 `heldView`。 */
@@ -184,10 +186,11 @@ async function refresh(): Promise<void> {
 		const [sessions, projects, tools] = await Promise.all([agent.listSessions(), agent.listProjects(), agent.listTools(), refreshModels()]);
 		toolTableChanged(tools);
 		update({ sessions, projects });
-		// 整份列表：存下来的面板标签、开合和侧栏的收起记录里，不在其中的会话（断流期间、上次运行时删掉的）都清掉。
+		// 整份列表：存下来的面板标签、开合、侧栏的收起记录和路径结论里，不在其中的会话（断流期间、上次运行时删掉的）都清掉。
 		const live = new Set(sessions.map((session) => session.id));
 		forgetPanels((id) => !live.has(id));
 		forgetThreadFolds((id) => !live.has(id));
+		forgetLocatedPaths((id) => !live.has(id));
 		if (state.currentId) await select(state.currentId, true);
 	} finally {
 		resyncing = false;
