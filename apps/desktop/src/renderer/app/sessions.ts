@@ -10,6 +10,11 @@ import { publishSessionChanges } from "../plugin-session-changes.ts";
 import { record, sameEntry, step } from "../nav-history.ts";
 import { pluginsChanged } from "../market/store.ts";
 import { approvalChanged, outcome, sessionRead, sessionsChanged } from "../sidebar/activity.ts";
+import { forgetThreadFolds } from "../sidebar/prefs.ts";
+import { forgetSessionReferences } from "../composer/SessionReferences.tsx";
+import { forgetFileTrees } from "../files/useFileTree.ts";
+import { forgetPanels } from "./panels.ts";
+import { forgetLocatedPaths } from "../markdown/located-path.ts";
 import {
 	agent,
 	type AppState,
@@ -67,7 +72,8 @@ function apply(event: AgentEvent): void {
 		case "fileMoved":
 			moveFiles(event.from, event.to);
 			return;
-		case "sessions":
+		case "sessions": {
+			const before = state.sessions;
 			announceFinished(state.sessions, event.sessions);
 			sessionsChanged(state.sessions, event.sessions, state.currentId);
 			for (const [id, view] of parked) {
@@ -95,7 +101,11 @@ function apply(event: AgentEvent): void {
 					...(current.pendingId && !event.sessions.some((session) => session.id === current.pendingId) ? { pendingId: undefined } : {}),
 				};
 			});
+			// 上一份列表里有、这一份没有的是删掉了。不拿「不在这一份里」认：刚建好的会话可能先于列表事件到，它的草稿、标签不能被清。
+			const gone = new Set(before.filter((session) => !event.sessions.some((next) => next.id === session.id)).map((session) => session.id));
+			if (gone.size) forgetSessions((id) => gone.has(id));
 			return;
+		}
 		case "projects":
 			update((current) => ({
 				projects: event.projects,
@@ -138,6 +148,29 @@ function apply(event: AgentEvent): void {
 	}
 }
 
+/**
+ * 会话删掉了（`gone` 认它）：界面里按会话记的都清掉——面板（见 `forgetPanels`）、输入框里没发的字、附件、引文、会话引用、
+ * 排着的那几条的草稿、侧栏的收起记录、文件树的缓存、回复里路径核对过的结论。agent 那头的数据由它自己删。
+ */
+function forgetSessions(gone: (sessionId: string) => boolean): void {
+	forgetPanels(gone);
+	update((current) => {
+		const keep = <T>(record: Record<string, T>) => Object.fromEntries(Object.entries(record).filter(([scope]) => !gone(scope)));
+		return {
+			drafts: keep(current.drafts),
+			draftAttachments: keep(current.draftAttachments),
+			quotes: keep(current.quotes),
+			restored: keep(current.restored),
+			appended: keep(current.appended),
+		};
+	});
+	forgetSessionReferences(gone);
+	for (const [id, held] of queuedDrafts) if (gone(held.sessionId)) queuedDrafts.delete(id);
+	forgetThreadFolds(gone);
+	forgetFileTrees(gone);
+	forgetLocatedPaths(gone);
+}
+
 /** 正在重新拉状态（`refresh`）：手上的视图都错过了断流期间的事件，不借给订阅会话的插件，见 `heldView`。 */
 let resyncing = false;
 
@@ -153,6 +186,11 @@ async function refresh(): Promise<void> {
 		const [sessions, projects, tools] = await Promise.all([agent.listSessions(), agent.listProjects(), agent.listTools(), refreshModels()]);
 		toolTableChanged(tools);
 		update({ sessions, projects });
+		// 整份列表：存下来的面板标签、开合、侧栏的收起记录和路径结论里，不在其中的会话（断流期间、上次运行时删掉的）都清掉。
+		const live = new Set(sessions.map((session) => session.id));
+		forgetPanels((id) => !live.has(id));
+		forgetThreadFolds((id) => !live.has(id));
+		forgetLocatedPaths((id) => !live.has(id));
 		if (state.currentId) await select(state.currentId, true);
 	} finally {
 		resyncing = false;
@@ -322,7 +360,16 @@ export function openNew(target: SessionTarget = state.target): void {
 	selection++;
 	setComposerArrival(undefined);
 	park();
-	update({ target: { ...target }, currentId: undefined, view: undefined, loading: false, pendingId: undefined, screen: "chat", drawerOpen: false });
+	update({
+		target: { ...target },
+		currentId: undefined,
+		view: undefined,
+		blankModel: undefined,
+		loading: false,
+		pendingId: undefined,
+		screen: "chat",
+		drawerOpen: false,
+	});
 	focusComposer();
 }
 

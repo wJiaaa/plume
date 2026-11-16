@@ -81,6 +81,8 @@ function globEquivalent(line: string): boolean {
 const REROUTES: { pattern: RegExp; only?: (line: string) => boolean; tool: string; message: string }[] = [
 	{
 		pattern: /^\s*(?:cat|head|tail)\s+[^|<>;&\x60$]+$/,
+		// `tail -f` 是跟着文件看，read 做不到；后台跑它、交给 monitor 是正路。
+		only: (line) => !/^\s*tail\b.*\s(?:-[a-zA-Z0-9]*[fF]|--follow)/.test(line),
 		tool: "read",
 		message: "用 `read` 读文件——它带行号、有结构视图、大文件会给摘要，而且下一次 `edit` 会认得这份快照。`cat` 只在管道里用。",
 	},

@@ -19,7 +19,12 @@ export interface TerminalTab {
 	cwd: string;
 	/** 前台跑着的程序，是 shell 自己时为空。 */
 	process: string | null;
+	/** 这个 shell 认哪种引号：拖文件进来时按它给路径加引号（见 `drop.ts`）。 */
+	dialect: ShellDialect;
 }
+
+/** shell 的引号规矩：POSIX（含 Windows 上的 Git Bash）、PowerShell、cmd 各不一样。 */
+export type ShellDialect = "posix" | "powershell" | "cmd";
 
 /** 历史带原始尺寸重放，ready 后按当前窗口接收新输出；shell 退出时最后一条是 exit。 */
 export type TerminalOutput = { type: "data"; data: string; cols: number; rows: number } | { type: "ready" } | { type: "exit"; code: number };

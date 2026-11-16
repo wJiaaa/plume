@@ -221,6 +221,8 @@ async function readHead(path: string, limit: number): Promise<Buffer | null> {
 export async function locateSessionFiles(cwd: string, written: string, dataDir: string): Promise<string[]> {
 	if (typeof written !== "string") return [];
 	if (isAbsolute(written)) {
+		// 网络共享在 `stat` 之前按字面拦（见 `remotePathAllowed`）：这个入口是回复一画出来就自动调的。
+		if (!remotePathAllowed(written, cwd)) return [];
 		const info = await stat(written).catch(() => null);
 		if (info?.isFile()) return [written];
 		return info?.isDirectory() ? [`${written.replace(/[/\\]+$/, "")}${sep}`] : [];

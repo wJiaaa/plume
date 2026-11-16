@@ -661,6 +661,53 @@ export async function checkDesktopCompat(options: {
 			await settle();
 			assert.equal(await page<string | null>(laneOf), phase === "收起" ? "docked" : "floating", `侧栏${phase}：落定后环境卡片的放法`);
 		}
+
+		// ── 8. 面板区顶着上限时开合侧栏，面板里的内容不跟着逐帧改尺寸 ──────
+		// 侧栏收着时把面板区拉到最宽：侧栏一展开，工作区变窄，面板区就被上限夹着一路变窄，收起时再一路变宽回来。
+		await press(NAV_TOGGLE);
+		await settle();
+		const panelEdge = `document.querySelector('[role=separator][aria-label="调整面板宽度"]')`;
+		await page(`${panelEdge}.focus()`);
+		for (let i = 0; i < 80; i++) {
+			for (const type of ["keyDown", "keyUp"])
+				await cdp("Input.dispatchKeyEvent", { type, key: "ArrowLeft", code: "ArrowLeft", windowsVirtualKeyCode: 37, modifiers: 8 });
+		}
+		await settle();
+		assert.ok(await page<boolean>(`${panelEdge}.getAttribute('aria-valuenow') === ${panelEdge}.getAttribute('aria-valuemax')`), "面板区拉到最宽");
+		const paneSample = `(() => { const area = document.querySelector('[data-panel-area]').getBoundingClientRect(), pane = document.querySelector('[data-panel-layer]:not(.invisible) .plume-dock-pane').getBoundingClientRect();
+			return { area: Math.round(area.width * 10) / 10, pane: Math.round(pane.width), fits: pane.left >= area.left - 0.5 && pane.right <= area.right + 0.5 }; })()`;
+		type PaneFrame = { area: number; pane: number; fits: boolean };
+		for (const phase of ["展开", "收起"] as const) {
+			const start = await page<PaneFrame>(paneSample);
+			await page(`(() => { window.__smokeHold = (async () => {
+				const out = []; let moved = false, still = 0;
+				for (let i = 0; i < 400 && still < 12; i++) {
+					await new Promise(requestAnimationFrame);
+					const sample = ${paneSample};
+					const last = out.at(-1);
+					if (last && last.area !== sample.area) { moved = true; still = 0; } else if (moved) still++;
+					out.push(sample);
+				}
+				return out;
+			})(); })()`);
+			await press(NAV_TOGGLE);
+			const held = [start, ...(await page<PaneFrame[]>("window.__smokeHold"))];
+			const panes = [...new Set(held.map((sample) => sample.pane))];
+			console.log("PLUME_DESKTOP_COMPAT_PANE " + JSON.stringify({ phase, area: new Set(held.map((sample) => sample.area)).size, panes }));
+			assert.ok(new Set(held.map((sample) => sample.area)).size >= 3, `侧栏${phase}：面板区真的被夹着一路变宽窄：${JSON.stringify(held)}`);
+			assert.ok(panes.length <= 3, `侧栏${phase}：面板内容滑着时不跟着改尺寸：${JSON.stringify(held.map((sample) => sample.pane))}`);
+			assert.ok(
+				held.every((sample) => sample.fits),
+				`侧栏${phase}：面板内容不伸出面板区：${JSON.stringify(held)}`,
+			);
+			await settle();
+			assert.ok(
+				await page<boolean>(
+					`(() => { const area = document.querySelector('[data-panel-area]').getBoundingClientRect(), pane = document.querySelector('[data-panel-layer]:not(.invisible) .plume-dock-pane').getBoundingClientRect(); return Math.abs(area.right - 1 - pane.right) < 1; })()`,
+				),
+				`侧栏${phase}：滑完面板内容铺满面板区`,
+			);
+		}
 	} finally {
 		await cdp("Emulation.clearDeviceMetricsOverride");
 		window.setContentSize(...initialSize);

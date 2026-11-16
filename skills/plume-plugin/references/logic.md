@@ -42,6 +42,7 @@ export default {
 | `ctx.sessions.observe(listener, { drafts? })` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；给 `drafts: true` 另收正在写的回复，见「只读运行观察和后台任务」「正在写的回复（草稿）」 |
 | `ctx.sessions.approval(sessionId)` | 这个会话此刻弹着的那张卡（审批或等人给数据），没有是 undefined；`observe` 只推变化，晚到时用它补上，见「管理会话」 |
 | `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 列出、读输出、停掉工具登记的后台任务，列出、取消定时唤醒，见「只读运行观察和后台任务」 |
+| `ctx.sessions.scratchDir(sessionId)` | 这个会话的临时目录（同 `run.scratchDir`），按 `details` 里的路径读回截掉的全文、完整输出时用它确认路径在里面，不自己拼 |
 | `ctx.pages` | 驱动界面入口画的网页（`<webview>`）、在临时沙箱里检查一页，见「网页」 |
 | `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见「`/` 命令」），停用时撤下 |
 | `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
@@ -83,7 +84,7 @@ export default {
 - `findImageModel` 按名字（模型名、模型 id、`供应商/模型`）在模型设置里标成生图的模型里找一个，不给名字用设置 › 智能体里选的默认生图模型；替某个会话找时传 `sessionId`（工具里是 `run.sessionId`），默认生图模型按那个会话所在项目的 `.plume/config.json` 取，没有这个会话时抛错；找不到时说明是一个都没有、不认识还是对不上好几个。
 - `image` 用它出图（有输入图就是改图），key 不出宿主。服务商报错不抛，交回 `{ ok: false, failure }`（`hint` 说是额度、密钥还是内容被拒）；`signal` 取消时抛错。
 
-`ctx.media` 是会话媒体目录：`save({ data, mimeType })` 存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径；`read(name)` 按名字读回 base64；`nameOf(path)` 在一个路径是这个目录里的图时交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示。
+`ctx.media` 是会话媒体目录：`save({ data, mimeType, sessionId })` 存一张图（png、jpeg、webp、gif、bmp，按内容命名，同一张只存一份）交回名字和路径，`sessionId` 写它属于哪个会话（工具里是 `run.sessionId`），那个会话删掉、别的会话也不用它时图一起删，不写的一直留着；`read(name)` 按名字读回 base64；`nameOf(path)` 在一个路径是这个目录里的图时交回它的名字。工具结果里的图宿主会自己挪进这里，名字记在 `ImageContent.media` 上；界面入口经 `ui.mediaUrl(name)` 显示。
 
 ### 读会话、改会话
 
@@ -840,5 +841,6 @@ ctx.sessions.observe(
 
 - `jobs(sessionId)` 只返回该会话的任务元数据（`BackgroundJobInfo`），包括已结束的任务；表跟随当前进程，历史命令仍在会话消息里。
 - `jobOutput(sessionId, jobId)` 读取登记它的工具给的输出（plume.tools 的后台命令是日志末尾至多 256 KiB），返回 `text`、`done`、`truncated` 和可选 `error`，不消耗模型未读输出、不抑制送达；这个会话里没有这个任务时抛错。
+- `scratchDir(sessionId)` 给出会话的临时目录（目录可能还没建，没有这个会话时抛错）：工具结果 `details` 里记着的全文、完整输出路径都在它下面，读回前先 `realpath` 两边、确认在里面。
 - `stopJob(sessionId, jobId, force)` 只停该会话里还在跑的任务，交给登记它的工具去停，不能传 pid；强制结束前界面应显示命令并确认。
 - `wakeups(sessionId)` 按下一次触发排好返回 `SessionWakeup[]`（`id`、`kind`、`prompt`、`reason?`、`cron?`、`recurring`、`nextAt`、`expiresAt?`、`fired`），`cancelWakeup(sessionId, id)` 取消一个、没有时答 false。唤醒只活在内存里，到点经约它的那次调用的送达渠道进会话，人按停、删会话、约它的插件停用或退出应用时一起取消；撤回、编辑重发只取消截掉的那段里约的。

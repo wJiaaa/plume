@@ -8,7 +8,8 @@
  * 两条路都要覆盖：装了 ripgrep 时的 `--fixed-strings` 重试，没装时内置扫描器的转义。
  */
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
@@ -137,5 +138,30 @@ for (const fallback of [false, true]) {
 		expect(res.isError).toBe(true);
 		expect(textOf(res)).toMatch(/^Path not found: Sample\.tsx\./);
 		expect(textOf(res)).not.toMatch(/No matches/);
+	});
+}
+
+for (const fallback of [false, true]) {
+	it(`密钥文件里的命中按文件问，不批准就不给那几行，并说出来 (fallback=${fallback})`, async () => {
+		const dir = await workspace();
+		// 仓库里隐藏的文件也搜（见 `project-files.ts`）：不在仓库里的话，`.ssh` 根本不会被搜到。
+		execFileSync("git", ["init", "-q", dir]);
+		await mkdir(join(dir, ".ssh"));
+		await writeFile(join(dir, ".ssh", "id_ed25519"), "onEvent PRIVATE KEY\n");
+		if (fallback) withoutRipgrep();
+		const asked: string[] = [];
+		const run = withFiles({
+			cwd: dir,
+			state: new Map<string, unknown>(),
+			requestApproval: async (request) => {
+				asked.push(request.kind);
+				return "reject";
+			},
+		});
+		const text = textOf(await grepTool.execute({ pattern: "onEvent" }, run));
+		expect(asked).toEqual(["view"]);
+		expect(text).toMatch(/sample\.ts:1:/);
+		expect(text).not.toMatch(/PRIVATE KEY/);
+		expect(text).toMatch(/\.ssh\/id_ed25519 are not shown/);
 	});
 }

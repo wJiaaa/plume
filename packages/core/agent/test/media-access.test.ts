@@ -61,6 +61,8 @@ it("普通文件面板可读托管图片和会话目录外的文件，缺失会�
 	await writeFile(outside, "outside");
 	const agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "settings.json"), plugins: [], log: () => undefined });
 	try {
+		// 启动时会清掉没有会话用着的图（`sweepImages`）：这张是启动以后才存进来的。
+		await saveImage(mediaDir, PNG, "image/png");
 		const session = await agent.service.createSession({ cwd });
 		expect(await agent.service.readFile(session.id, path)).toMatchObject({ binary: true, bytes: Buffer.from(PNG, "base64").length });
 		expect(await agent.filePath(session.id, path)).toBe(await realpath(path));

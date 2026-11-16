@@ -9,7 +9,7 @@ import { projectSessions } from "../sidebar/grouping.ts";
 import type { SidebarActions } from "../sidebar/actions.ts";
 import { agent, draftScope, errorText, focusComposer, panelWindow, sessionWindow, setDraft, state, update } from "./state.ts";
 import { openNew, select } from "./sessions.ts";
-import { panelScope, scopeOf, showPanel, tabsOf } from "./panels.ts";
+import { panelOpenIn, panelScope, scopeOf, showPanel, tabsOf } from "./panels.ts";
 
 /**
  * 提示条上「新开一个对话来排查」：在当前项目里开一个空白对话，把错误写成一段草稿，不发出去——问不问由人定。
@@ -175,7 +175,8 @@ export function quoteInPanel(key: string, sessionId: string, quote: DraftQuote):
 	if (!state.sessions.some((session) => session.id === sessionId)) return;
 	const scope = panelScope(sessionId);
 	const layout = tabsOf(state, scope);
-	const current = state.screen === "chat" && state.panelOpen && scopeOf(state) === scope ? layout.tabs.find((tab) => tab.id === layout.active) : undefined;
+	const current =
+		state.screen === "chat" && scopeOf(state) === scope && panelOpenIn(state, scope) ? layout.tabs.find((tab) => tab.id === layout.active) : undefined;
 	const reuse = current?.panel === key && !state.panelWindows.some((entry) => entry.tab === current.id);
 	const tab = reuse ? current.id : crypto.randomUUID();
 	seedChildQuote(tab, quote);

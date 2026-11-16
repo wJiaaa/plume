@@ -57,6 +57,8 @@ const EXEMPT = [
 	// 插话渲染冒烟：按中文界面找排队条和气泡，断言是写给开发者的。
 	"apps/desktop/src/main/smoke-steer.ts",
 	"apps/desktop/src/main/smoke-navigation.ts",
+	// 默认模型回归冒烟按中文界面找菜单项，假模型回复和断言不属于产品文案。
+	"apps/desktop/src/main/smoke-model-defaults.ts",
 	"apps/desktop/src/main/smoke-document-plugins.ts",
 	// 面板与拖拽冒烟同样按中文界面查找，断言不属于产品文案。
 	"apps/desktop/src/main/smoke-sidebar-resize.ts",

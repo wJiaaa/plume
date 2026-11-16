@@ -350,3 +350,16 @@ it("程序名换个大小写还是同一个程序", () => {
 	risky("/usr/bin/SUDO ls");
 	safe("LS -la");
 });
+
+it("PowerShell 的 Set-Location、sl 换到外面也算离开了工作区", () => {
+	const cwd = "/Users/me/project";
+	for (const command of [
+		"Set-Location /etc; Remove-Item -Recurse conf",
+		"sl .. ; rm -rf build",
+		"Set-Location -LiteralPath '/etc' ; rm -rf conf",
+		"CD /etc && rm -rf conf",
+	]) {
+		expect(assessCommand(command, cwd, 0, ["powershell"]).risky, command).toBe(true);
+	}
+	expect(assessCommand("Set-Location -Path server; rm -rf build", cwd, 0, ["powershell"]).risky).toBe(false);
+});

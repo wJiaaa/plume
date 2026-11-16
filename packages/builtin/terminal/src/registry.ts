@@ -18,8 +18,8 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import type { IPty } from "node-pty";
-import type { TerminalTab } from "./api.ts";
-import { findExecutable, pickShell, shellArgs, shellEnv, watchForeground } from "./shell.ts";
+import type { ShellDialect, TerminalTab } from "./api.ts";
+import { findExecutable, pickShell, shellArgs, shellDialect, shellEnv, watchForeground } from "./shell.ts";
 
 /** 注册表用到的那几样；测试里的假 pty 实现这些就够。 */
 export type Pty = Pick<IPty, "pid" | "process" | "onData" | "onExit" | "write" | "resize" | "kill">;
@@ -44,6 +44,7 @@ interface Live {
 	sinks: Set<TerminalSink>;
 	/** 起不来的标签没有。 */
 	foreground?: ReturnType<typeof watchForeground>;
+	dialect: ShellDialect;
 }
 
 export interface RegistryDeps {
@@ -87,7 +88,13 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	const changed = () => {
 		for (const watcher of watchers) watcher();
 	};
-	const tabOf = (id: string, live: Live): TerminalTab => ({ id, number: live.number, cwd: live.cwd, process: live.foreground?.current ?? null });
+	const tabOf = (id: string, live: Live): TerminalTab => ({
+		id,
+		number: live.number,
+		cwd: live.cwd,
+		process: live.foreground?.current ?? null,
+		dialect: live.dialect,
+	});
 	/** shell 实际起在哪：会话的目录还在就是它，否则（没有会话、目录被删了）是主目录，和别处开一个终端一样。 */
 	const resolve = (cwd: string): string => (cwd && directory(cwd) ? cwd : home);
 
@@ -104,6 +111,7 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 		const dir = resolve(cwd);
 		const id = randomUUID();
 		const shell = pickShell(platform, env, (command) => findExecutable(command, platform, env));
+		const dialect = shellDialect(platform, shell);
 		let pty: Pty;
 		try {
 			pty = deps.spawnPty(shell, shellArgs(platform, shell), {
@@ -114,10 +122,20 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 				env: shellEnv(platform, deps.currentEnv?.() ?? env),
 			});
 		} catch (error) {
-			return openUnavailable(id, dir, error, Math.max(2, cols), Math.max(2, rows));
+			return openUnavailable(id, dir, dialect, error, Math.max(2, cols), Math.max(2, rows));
 		}
 
-		const live: Live = { pty, cwd: dir, number: nextNumber(), cols: Math.max(2, cols), rows: Math.max(2, rows), scrollback: [], bytes: 0, sinks: new Set() };
+		const live: Live = {
+			pty,
+			cwd: dir,
+			number: nextNumber(),
+			cols: Math.max(2, cols),
+			rows: Math.max(2, rows),
+			scrollback: [],
+			bytes: 0,
+			sinks: new Set(),
+			dialect,
+		};
 		live.foreground = watchForeground(pty, shell, changed);
 		pty.onData((chunk) => {
 			live.foreground?.poke();
@@ -142,7 +160,7 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	 * 最可能的原因是 node-pty 没能加载，而面板正是找终端的人会看的地方；报成调用失败的话，面板上什么都
 	 * 没有，也不说为什么。它从不报退出（退出的标签会被拿掉，原因也就跟着没了），和别的标签一样关掉。
 	 */
-	const openUnavailable = (id: string, dir: string, error: unknown, cols: number, rows: number): TerminalTab => {
+	const openUnavailable = (id: string, dir: string, dialect: ShellDialect, error: unknown, cols: number, rows: number): TerminalTab => {
 		const message = error instanceof Error ? error.message : String(error);
 		const text = `\x1b[31m${message.replace(/\r?\n/g, "\r\n")}\x1b[0m\r\n`;
 		const live: Live = {
@@ -154,6 +172,7 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 			scrollback: [{ data: text, cols, rows }],
 			bytes: text.length,
 			sinks: new Set(),
+			dialect,
 		};
 		terminals.set(id, live);
 		changed();

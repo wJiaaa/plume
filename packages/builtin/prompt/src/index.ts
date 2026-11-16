@@ -24,6 +24,11 @@ export default {
 	apply(ctx) {
 		const presets = createPresets(ctx);
 		ctx.sessions.onDeleted((sessionId) => presets.forget(sessionId));
+		// 删会话时插件没在跑（停用着、删到一半退出）留下的身份与准则，对着现有的会话清掉。
+		void ctx.sessions
+			.list()
+			.then((all) => presets.keepOnly(all.map((session) => session.id)))
+			.catch((error: unknown) => ctx.log.warn(`清理已删会话的身份与准则失败：${error instanceof Error ? error.message : String(error)}`));
 		ctx.serve({
 			view: () => presets.view(),
 			save: (id, draft) => presets.save(id, draft),
@@ -35,10 +40,11 @@ export default {
 			"model.context",
 			async (input, next) => {
 				const kinds = new Map(ctx.tools.list().flatMap((tool) => (tool.kind ? [[tool.name, tool.kind] as const] : [])));
+				const repoRoot = findRepoRoot(input.cwd);
 				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions, persona] = await Promise.all([
-					loadProjectInstructions(input.cwd),
+					loadProjectInstructions(input.cwd, repoRoot),
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
-					findRepoRoot(input.cwd).then((root) => root !== null),
+					repoRoot.then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
 					loadMagpieInstructions(ctx.appDataDir, ctx.log),
 					presets.forRequest(input),

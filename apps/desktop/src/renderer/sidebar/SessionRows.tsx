@@ -3,6 +3,7 @@ import { Collapse } from "@plume/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { SidebarActions } from "./actions.ts";
 import { withSpawned } from "./grouping.ts";
+import { threadFoldKey } from "./prefs.ts";
 import { SessionRow } from "./SessionRow.tsx";
 
 interface Props {
@@ -21,7 +22,7 @@ export function SessionRows(props: Props) {
 }
 
 function Thread({ session, spawned, busyParents, lit, compact, projects, actions }: Props & { session: SessionSummary }) {
-	const key = `plume.sidebar.thread.${session.id}`;
+	const key = threadFoldKey(session.id);
 	const [folded, setFolded] = useState(() => {
 		try {
 			return localStorage.getItem(key) === "true";

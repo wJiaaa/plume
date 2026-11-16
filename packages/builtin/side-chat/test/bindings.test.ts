@@ -50,7 +50,10 @@ test("跨 renderer 并发认领不抢同一段，反序恢复仍按 tab 接回�
 	assert.equal(await restored.bind("tab-b", "main"), "older");
 	assert.equal(await restored.open("tab-a", "main"), "newer");
 	assert.equal(f.created(), 0);
-	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), { "tab-a": "newer", "tab-b": "older" });
+	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), {
+		"tab-a": { side: "newer", parent: "main" },
+		"tab-b": { side: "older", parent: "main" },
+	});
 });
 
 test("空标签也持久保留空白，恢复时不抢后来 /btw 开出的会话", async (t) => {
@@ -109,12 +112,12 @@ test("绑定不能串到另一主会话，原来的子会话缺失时也不能�
 	assert.equal(f.created(), 0);
 	await restored.forget("original");
 	assert.equal(await restored.bind("tab", "main"), undefined);
-	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), { tab: null });
+	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), { tab: { side: null, parent: "main" } });
 });
 
 test("绑定文件损坏时明确失败，不把已有记录当成无绑定重建", async (t) => {
 	const f = await fixture(t);
-	await writeFile(f.deps.file, JSON.stringify({ tab: 42 }));
+	await writeFile(f.deps.file, JSON.stringify({ tab: "side-without-parent" }));
 	await assert.rejects(createSideChatBindings(f.deps), /missing/);
 	assert.equal(f.created(), 0);
 });
@@ -133,4 +136,18 @@ test("最早那段所在的标签：没接上标签的、别的会话的、关�
 	assert.equal(await bindings.first("main"), "tab-old");
 	await bindings.close("tab-old");
 	assert.equal(await bindings.first("main"), "tab-new");
+});
+
+test("主会话删了：开在它旁边的标签记录一起删；加载时也清掉主会话已经不在的", async (t) => {
+	const f = await fixture(t);
+	f.add("mine");
+	f.add("theirs", "other");
+	const bindings = await createSideChatBindings(f.deps);
+	assert.equal(await bindings.bind("tab-main", "main"), "mine");
+	assert.equal(await bindings.bind("tab-other", "other"), "theirs");
+	await bindings.forget("main");
+	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), { "tab-other": { side: "theirs", parent: "other" } });
+	const restored = await createSideChatBindings(f.deps);
+	await restored.keepOnly(["main"]);
+	assert.deepEqual(JSON.parse(await readFile(f.deps.file, "utf8")), {});
 });

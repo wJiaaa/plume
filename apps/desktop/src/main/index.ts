@@ -6,7 +6,7 @@
 
 import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { RpcChannel, remote, serve } from "@plume/rpc";
 import {
 	app,
@@ -55,7 +55,6 @@ import { nativeText } from "./i18n.ts";
 import { handleProtocols, registerSchemes, sharedExports } from "./protocols.ts";
 import { useBundledRipgrep } from "./ripgrep.ts";
 import { registerScreenshot } from "./screenshot/index.ts";
-import { runSmoke, smokeOutput } from "./smoke.ts";
 import { chromeLogins, startChromeLogins } from "./chrome-logins.ts";
 import { callPage, guardWebviews, registerWebPages, webSession } from "./web-pages.ts";
 import { createNotifications } from "./notifications.ts";
@@ -72,7 +71,12 @@ registerSchemes();
 // 跟着它叫，开发时程序坞写着 Electron。它也决定 userData 的默认目录，所以要在下面改 userData 之前设。
 app.setName("Plume");
 
-const smoke = smokeOutput();
+/**
+ * 冒烟只认没打包的应用（scripts/smoke.mjs 跑的是 out/ 下的产物）：装好的应用设了 PLUME_SMOKE_OUT 也不进冒烟，
+ * 换不了数据目录和市场地址；冒烟的代码和假模型服务也只在这时才加载（`runSmoke` 是动态 import）。
+ */
+const smokeFile = app.isPackaged ? undefined : process.env.PLUME_SMOKE_OUT;
+const smoke = smokeFile ? { file: smokeFile, dir: dirname(smokeFile), workspace: join(dirname(smokeFile), "workspace") } : undefined;
 if (smoke) process.env.PLUME_HOME = join(smoke.dir, "home");
 // 换了数据目录时，Chromium 自己的目录（缓存、localStorage、单实例锁）也跟过去，两份数据才不会互相串。
 // 没换时留在系统默认的位置。
@@ -398,7 +402,8 @@ async function boot(): Promise<void> {
 		void shutdown().finally(() => app.quit());
 	});
 
-	if (smoke)
+	if (smoke) {
+		const { runSmoke } = await import("./smoke.ts");
 		await runSmoke({
 			window,
 			agent,
@@ -417,6 +422,7 @@ async function boot(): Promise<void> {
 				uploadDir,
 			},
 		});
+	}
 }
 
 /** parentPort 上的 RPC：agent 进程提供插件状态和关闭，主进程给它网页。 */

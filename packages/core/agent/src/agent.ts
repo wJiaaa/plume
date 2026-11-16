@@ -7,15 +7,13 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { extractDocumentText } from "@plume/document-text";
 import { streamAssistant } from "@plume/llm";
 import { isImageModel } from "@plume/llm/image-models";
-import { activeModelCatalog } from "@plume/llm/model-catalog";
 import { comparePrefix, payloadSegments } from "@plume/llm/prefix-fingerprint";
-import { normalizeRetryPolicy } from "@plume/llm/retry-policy";
 import { resolveModelThinkingOptions, THINKING_LEVELS } from "@plume/llm/thinking-options";
 import type { ModelConfig, ProviderConfig, RequestOptions } from "@plume/llm/types";
 import type {
@@ -46,7 +44,6 @@ import type {
 	SessionSummary,
 	SessionTarget,
 	SessionView,
-	SettingsView,
 	Locale,
 	Log,
 	OutgoingMessage,
@@ -56,7 +53,6 @@ import type {
 	PluginEntry,
 	PromptVerdict,
 	PluginStatus,
-	ProjectEntry,
 	QueuedMessage,
 	ChildTask,
 	RevertPlan,
@@ -65,8 +61,11 @@ import type {
 	UserContent,
 	UserMessage,
 } from "@plume/contract";
-import { renameWithRetry, writeFileAtomic } from "./atomic-write.ts";
-import { type ContextRecord, emptyRecord, historyFor, keptRecord } from "./compaction.ts";
+import { renameWithRetry } from "./atomic-write.ts";
+import { jsonFiles } from "./json-files.ts";
+import { openProjects } from "./projects.ts";
+import { createModelSettings } from "./model-settings.ts";
+import { type ContextRecord, emptyRecord, historyFor, keptRecord, rewrittenAt } from "./compaction.ts";
 import { createCompactor, type CompactMode, marks, runsOf, type SentRequest, settleStaleRuns } from "./session-compaction.ts";
 import { projectRootsFor } from "./project-roots.ts";
 import { layerProjectSettings, projectLayerView, withProjectLayer } from "./project-config.ts";
@@ -89,8 +88,8 @@ import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
 import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
-import { isMagpie } from "./magpie.ts";
-import { imageNameOf, MEDIA_NAME, parkImages, readImage, restoreImages, saveImage } from "./media.ts";
+import { imageNameOf, MEDIA_NAME, parkImages, readImage, removeImages, restoreImages, saveImage, sweepImages } from "./media.ts";
+import { ChangeStore } from "@plume/workspace";
 import { drawImages, findImageModel } from "./images.ts";
 import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
 import { withEnvironment } from "./prompt/date.ts";
@@ -99,23 +98,7 @@ import { settlePrompt, validSections } from "./prompt/sections.ts";
 import { withSteeringNote } from "./prompt/steering.ts";
 import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
-import {
-	checkProvider,
-	DEFAULT_THINKING,
-	fileSettings,
-	lookup,
-	normalizeSettings,
-	personalizationOf,
-	resolveModel,
-	sameGrant,
-	type StoredSettings,
-	settingsView,
-	stripForeignHandles,
-	thinkingFor,
-	TONES,
-} from "./models.ts";
-import { applyImport, parseBundle, planImport, serializeBundle } from "./provider-transfer.ts";
-import { fetchModels, testProvider } from "./providers.ts";
+import { DEFAULT_THINKING, lookup, personalizationOf, resolveModel, sameGrant, type StoredSettings, stripForeignHandles, thinkingFor } from "./models.ts";
 import { streamTurn } from "./stream-turn.ts";
 import { estimateParts, type InputParts, tailActivity } from "./usage-record.ts";
 
@@ -123,10 +106,6 @@ import { estimateParts, type InputParts, tailActivity } from "./usage-record.ts"
 const DOCUMENT_LIMIT = 32 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-/**
- * 界面送来的消息，收成会话里的一条用户消息。界面是自己人，但这是进程边界：形状不对的块丢掉，不让一个坏块弄坏整份会话。
- * 附件的 `path` 只认绝对路径，它以后会被拿去打开、在访达里显示。
- */
 /** 界面传来的命令环境只留认得的两项，插件拿到的是干净的对象。 */
 function commandContext(input: CommandContext | undefined): CommandContext {
 	return {
@@ -135,6 +114,10 @@ function commandContext(input: CommandContext | undefined): CommandContext {
 	};
 }
 
+/**
+ * 界面送来的消息，收成会话里的一条用户消息。界面是自己人，但这是进程边界：形状不对的块丢掉，不让一个坏块弄坏整份会话。
+ * 附件的 `path` 只认绝对路径，它以后会被拿去打开、在访达里显示。
+ */
 function userMessage(input: OutgoingMessage): UserMessage {
 	const content: UserContent[] = [];
 	for (const block of Array.isArray(input?.content) ? input.content : []) {
@@ -243,6 +226,12 @@ interface Session {
 	projectNotices?: string;
 	/** 上一次主请求之后历史被有意改写过（压缩、剪枝、撤回）：下一条回复记账时归因缓存未命中用，见 `diagnoseCache`。 */
 	cacheBoundary?: "compaction" | "rewind";
+	/**
+	 * 占着这个会话的那件事：一轮（`runTurn`）、`/compact`、一轮收尾后的压缩（`compactIdle`）。`controller` 停它，`turn` 是它收场的结果，
+	 * 两个一起设、一起清（`release`），所以「会话在不在忙」只看 `held`，不另看 `turn`、`summary.running`。
+	 * 在忙时分几段，各由一个字段认出：循环在跑、还来取插话（`looping`，见 `looping()`），收尾后的压缩（`idleHold`），
+	 * 其余是 `/compact` 或被打断、停下后正在收尾（`begin` 开的下一轮等的就是这时的 `turn`）。
+	 */
 	controller?: AbortController;
 	turn?: Promise<TurnStop>;
 	/**
@@ -314,14 +303,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 	const files = jsonFiles();
 	const vault = createVault(dataDir);
-	const keys = providerKeys(vault);
+	const modelSettings = createModelSettings({ files, keys: providerKeys(vault), settingsFile, catalogFile });
 	// 会话、消息、压缩记录都在这个库里，见 `session-db.ts`；打不开就启动失败，日志里有路径和原因。
 	const store = openSessionDb(join(dataDir, "sessions", "sessions.db"), (message) => log("agent", "warn", message));
 	const mediaDir = join(dataDir, "session-media");
 	/** 会话的临时目录，见 `ModelContext.scratchDir`。按会话 id 分开：两个会话（包括父子）的草稿不会互相踩。 */
 	const scratchDir = (sessionId: string) => join(dataDir, "scratch", sessionId);
 
-	const projectsFile = join(dataDir, "projects.json");
 	/** 不属于任何项目的聊天都开在这里：会话总得有个工作目录，又不该拿哪个项目的目录凑数。 */
 	const chatsDir = join(dataDir, "workspaces", "general");
 
@@ -349,7 +337,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const { owner, steward, parentId } = session.summary;
 		const parentSteward = parentId ? sessions.get(parentId)?.summary.steward : undefined;
 		const top = parentId ? sessions.get(parentId)?.summary : session.summary;
-		const manager = liveSessionManager && top && governs(liveSessionManager, top) ? liveSessionManager : undefined;
+		const managing = modelSettings.sessionManager();
+		const manager = managing && top && governs(managing, top) ? managing : undefined;
 		return new Set([owner, steward, parentSteward, manager, session.launchedBy].filter((name): name is string => name !== undefined));
 	}
 	let quitting = false;
@@ -408,19 +397,21 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		model: {
 			complete: (request) => completeOnce(request),
 			findImageModel: async (name, sessionId) =>
-				findImageModel(sessionId === undefined ? await readSettings() : await readSessionSettings(find(String(sessionId))), name),
-			image: async (request) => drawImages(await readSettings(), request),
+				findImageModel(sessionId === undefined ? await modelSettings.read() : await readSessionSettings(find(String(sessionId))), name),
+			image: async (request) => drawImages(await modelSettings.read(), request),
 			usage: async () => ({
 				requests: store.usage().map((bucket) => ({ ...bucket, sessions: [...new Set(bucket.sessions.flatMap((id) => rootSession(id) ?? []))] })),
-				providerNames: Object.fromEntries((await readSettings()).providers.map((provider) => [provider.id, provider.name])),
+				providerNames: Object.fromEntries((await modelSettings.read()).providers.map((provider) => [provider.id, provider.name])),
 				archived: summaries().flatMap((summary) => (!summary.parentId && summary.archived ? [summary.id] : [])),
 			}),
 		},
 		notice: (sessionId, text, level) => emit({ type: "notice", sessionId, text, level }),
 		media: {
-			save: async ({ data, mimeType }) => {
+			save: async ({ data, mimeType, sessionId }) => {
 				const name = await saveImage(mediaDir, String(data), String(mimeType));
 				if (!name) throw new Error(text("media.badType"));
+				// 记在说的那个会话名下，随它删；没说会话的算插件的，一直留着（见 `media_refs`）。
+				store.holdMedia(typeof sessionId === "string" && sessionId ? sessionId : null, name);
 				return { name, path: join(mediaDir, name) };
 			},
 			read: (name) => readImage(mediaDir, String(name)),
@@ -457,6 +448,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			jobs: (sessionId) => jobs.list(String(sessionId)),
 			stopJob: (sessionId, jobId, force) => jobs.stop(String(sessionId), String(jobId), force === true),
 			jobOutput: (sessionId, jobId) => jobs.output(String(sessionId), String(jobId)),
+			scratchDir: async (sessionId) => scratchDir(find(String(sessionId)).summary.id),
 			wakeups: (sessionId) => wakeups.list(String(sessionId)),
 			cancelWakeup: (sessionId, id) => wakeups.cancel(String(sessionId), String(id)),
 			compact: (sessionId, options) => compactNow(String(sessionId), typeof options?.instructions === "string" ? options.instructions.trim() : ""),
@@ -482,7 +474,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			respond: async (owner, sessionId, toolCallId, decision) => settleAsSteward(owner, sessionId, toolCallId, { decision }),
 			answer: async (owner, sessionId, toolCallId, value) => settleAsSteward(owner, sessionId, toolCallId, { value }),
 			models: async () => {
-				const settings = await readSettings();
+				const settings = await modelSettings.read();
 				return settings.providers
 					.filter((provider) => provider.enabled)
 					.flatMap((provider) =>
@@ -497,12 +489,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 							})),
 					);
 			},
-			projects: async () => projects.map(({ id, name, path }) => ({ id, name, path })),
+			projects: async () => projects.list().map(({ id, name, path }) => ({ id, name, path })),
 			send: async (owner, sessionId, message, options) => sendChild(owned(owner, sessionId), message, options?.signal),
 			start: async (owner, sessionId, message) => {
 				const session = owned(owner, sessionId);
 				const parent = runnableParent(session);
-				if (session.controller) throw new Error(text("session.running"));
+				if (held(session)) throw new Error(text("session.running"));
 				const prompt = childMessage(message);
 				const controller = new AbortController();
 				const run = background.start(
@@ -564,7 +556,19 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		});
 	}
 
-	let projects = (await files.read<ProjectEntry[]>(projectsFile)) ?? [];
+	/*
+	 * 删会话删到一半退出（或删的时候删不掉）留下的：没有会话用着的图、不在了的会话的临时目录和改动快照。
+	 * 在任何会话开跑、插件加载之前清：这时刚存下还没写进会话的图、刚记下的快照都还不会有。
+	 */
+	await sweepImages(mediaDir, store.mediaInUse()).catch((error: unknown) => log("agent", "warn", `清理没人用的图失败：${errorText(error)}`));
+	await Promise.all(
+		(await readdir(join(dataDir, "scratch")).catch(() => [] as string[]))
+			.filter((id) => !sessions.has(id))
+			.map((id) => rm(scratchDir(id), { recursive: true, force: true }).catch(() => undefined)),
+	);
+	await ChangeStore.prune(dataDir, sessions.keys()).catch((error: unknown) => log("agent", "warn", `清理改动快照失败：${errorText(error)}`));
+
+	const projects = await openProjects(files, join(dataDir, "projects.json"), (list) => emit({ type: "projects", projects: list }));
 
 	/**
 	 * 和这个会话同一脉的会话，含它自己：沿子会话（`parentId`）、分叉（`forkedFrom`）、建议开出的新会话（`spawnedFrom`）的来处
@@ -597,7 +601,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 这是访问边界，不是搜索范围：`@` 补全和 `locateFiles` 仍只在工作目录和项目目录里找，不然 `tool-output/` 里的日志
 	 * 会混进补全和同名候选。
 	 */
-	const sessionRoots = ({ id, cwd, project }: SessionSummary) => [...projectRootsFor(projects, cwd, project), ...lineageScratchDirs(id)];
+	const sessionRoots = ({ id, cwd, project }: SessionSummary) => [...projectRootsFor(projects.list(), cwd, project), ...lineageScratchDirs(id)];
 
 	/** 子会话交给父会话的那几件事走到了哪，见 `ChildTask`。 */
 	const handed = new ChildTasks((childId) => emitHanded(childId));
@@ -638,29 +642,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		store.saveSummary(session.summary);
 	};
 
-	/**
-	 * 删掉这几条会话，正在跑的跳过：删一条正在执行工具的会话，省下的那点空间远不如它正在做的事值钱。
-	 * 判断和删除在同一步里，中间没有 `await`，一轮不会恰好在这时开始、随后连同会话一起被删掉。返回删掉的那些。
-	 */
-	function removeIdle(sessionIds: string[]): string[] {
-		// 子会话（侧边聊天、子 Agent）在跑也算这个会话在忙。
-		const idle = sessionIds.filter((id) => sessions.has(id) && withChildren(id).every((each) => !sessions.get(each)?.turn));
-		if (idle.length > 0) deleteTree(idle);
-		return idle;
-	}
-
-	async function saveProjects(next: ProjectEntry[]): Promise<void> {
-		projects = next;
-		emit({ type: "projects", projects });
-		await files.write(projectsFile, projects);
-	}
-
-	function findProject(projectId: string): ProjectEntry {
-		const project = projects.find((entry) => entry.id === projectId);
-		if (!project) throw new Error(text("project.notFound", { id: projectId }));
-		return project;
-	}
-
 	function find(sessionId: string): Session {
 		const session = sessions.get(sessionId);
 		if (!session) throw new Error(text("session.notFound", { id: sessionId }));
@@ -690,7 +671,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		extra: Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner" | "steward">> = {},
 		history?: { messages: Message[]; record: ContextRecord },
 	): Promise<SessionSummary> {
-		const project = target.project ? findProject(target.project) : undefined;
+		const project = target.project ? projects.find(target.project) : undefined;
 		let cwd = project?.path ?? target.cwd?.trim();
 		if (cwd === "") throw new Error(text("session.emptyCwd"));
 		if (cwd === undefined) {
@@ -699,7 +680,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		}
 		const now = Date.now();
 		// 新会话记下此刻的默认档位：之后改设置里的默认，已有的会话不跟着变。
-		const configured = await layerProjectSettings(await readSettings(), cwd);
+		const configured = await layerProjectSettings(await modelSettings.read(), cwd);
 		const thinking = configured.settings.thinking ?? DEFAULT_THINKING;
 		const summary: SessionSummary = {
 			id: randomUUID(),
@@ -748,7 +729,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 插件按会话记的东西（读过的文件之类）跟着清掉。
 			host.sessionDeleted(id);
 		}
-		store.delete(ids);
+		// 没有会话再用的图连文件、缩略图一起删；删不掉的下次启动再清。
+		const released = store.delete(ids);
+		void removeImages(mediaDir, released).catch((error: unknown) => log("agent", "warn", `删不掉没人用的图：${errorText(error)}`));
 		queues.forget(ids);
 		handed.forget(ids);
 		// 等它闲下来的人不用再等了：它不在了。
@@ -860,17 +843,30 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 	});
 
-	/** 一轮之外的压缩（`/compact`、一轮收尾以后）收场：放开会话；没被停下的算作干净收尾，界面上排着的话接着发。 */
-	function releaseHold(session: Session, controller: AbortController, settled: boolean): void {
-		if (session.controller !== controller) return;
+	/** 会话在忙：有一轮、`/compact` 或收尾的压缩占着它，见 `Session.controller`。 */
+	function held(session: Session): boolean {
+		return session.controller !== undefined;
+	}
+
+	/**
+	 * 放开会话（`controller`、`turn` 一起清），告诉观察者不在跑了，再让等它的接着走：开出它的会话（`nudgeOrigin`），
+	 * 循环的唤醒下次到点照常送（`SessionWakeups.turnEnded`）。没送进来的插话作废。
+	 */
+	function release(session: Session): void {
 		session.controller = undefined;
 		session.turn = undefined;
 		session.steering = [];
-		if (settled) session.summary.stop = { reason: "done" };
 		session.summary.running = false;
 		observe(session.summary.id, { type: "running", running: false });
 		nudgeOrigin(session);
 		wakeups.turnEnded(session.summary.id);
+	}
+
+	/** 一轮之外的压缩（`/compact`、一轮收尾以后）收场：放开会话；没被停下的算作干净收尾，界面上排着的话接着发。 */
+	function releaseHold(session: Session, controller: AbortController, settled: boolean): void {
+		if (session.controller !== controller) return;
+		if (settled) session.summary.stop = { reason: "done" };
+		release(session);
 		syncBackground(session);
 		saveSummary(session);
 		// 压缩占着会话时排进来的，压完接着发；人按停的不发，和一轮被停下一样留着等人。
@@ -885,12 +881,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	async function compactNow(sessionId: string, instructions: string): Promise<{ done: Promise<CompactionOutcome> }> {
 		const session = find(sessionId);
-		if (quitting || session.controller) throw new Error(text("compaction.busy"));
-		// 压缩改写的是会话的历史，承载不可写时和发消息一样拦下。
-
+		if (quitting || held(session)) throw new Error(text("compaction.busy"));
 		// 没有可用的模型就当场说，不画一行注定失败的压缩。
 		resolveModel(await readSessionSettings(session), modelOf(session));
-		if (session.controller) throw new Error(text("compaction.busy"));
+		if (held(session)) throw new Error(text("compaction.busy"));
 		const controller = new AbortController();
 		session.controller = controller;
 		active.add(session);
@@ -999,18 +993,18 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		emit({ type: "sessions", sessions: summaries() });
 	}
 
-	/** 编辑、撤回的对象：人发的第 `index` 条，不能是界面替人说的那句。界面里插件的子会话没有这两样。 */
 	/**
-	 * 截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
+	 * 编辑、撤回的对象：人发的第 `index` 条（不能是界面替人说的那句）在会话里实际是第几条。
+	 *
+	 * 先做截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
 	 * 插件在界面上开了 `ConversationProps.reask`（侧边聊天）就是同意宿主替它重跑这一问；撤回、退文件仍然不行。
-	 */
-	/**
-	 * 第 `index` 条人发的消息在会话里实际是第几条。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
+	 *
+	 * 再认位置。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
 	 * 按时间戳认回那一条，同 `forkSession`；认不出就报错，不截错地方。
 	 */
 	async function sentAt(session: Session, index: number, options: { reask?: boolean; timestamp?: unknown } = {}): Promise<number> {
 		if (session.summary.owner && !options.reask) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
-		if (session.controller) throw new Error(text("session.running"));
+		if (held(session)) throw new Error(text("session.running"));
 		const messages = await messagesOf(session);
 		const { timestamp } = options;
 		const at =
@@ -1068,23 +1062,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		emit({ type: "sessions", sessions: summaries() });
 	}
 
-	/**
-	 * 最近一次读到的重试策略。重试预算在每次等待前同步取它（`RetryPolicySource` 是函数），
-	 * 设置页改了，正在重试的请求从下一次等待起就用新值；每次读设置都会跟上。
-	 */
-	let liveRetryPolicy: StoredSettings["retryPolicy"];
+	/** 重试预算在每次等待前同步取它（`RetryPolicySource` 是函数）：设置页改了，正在重试的请求从下一次等待起就用新值。 */
 	function retryPolicyFor(session?: Session): RequestOptions["retryPolicy"] {
-		return options.retryPolicy ?? (() => withProjectLayer({ providers: [], retryPolicy: liveRetryPolicy }, session?.projectLayer ?? {}).retryPolicy);
-	}
-
-	/** 人把会话交给哪个插件管理（`StoredSettings.sessionManager`），同 `liveRetryPolicy` 每次读设置都跟上；`stewarded` 同步要用。 */
-	let liveSessionManager: string | undefined;
-
-	async function readSettings(): Promise<StoredSettings> {
-		const settings = await keys.withKeys(normalizeSettings(await files.read<unknown>(settingsFile)));
-		liveRetryPolicy = settings.retryPolicy;
-		liveSessionManager = settings.sessionManager;
-		return settings;
+		return (
+			options.retryPolicy ?? (() => withProjectLayer({ providers: [], retryPolicy: modelSettings.retryPolicy() }, session?.projectLayer ?? {}).retryPolicy)
+		);
 	}
 
 	/**
@@ -1092,7 +1074,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 停用、卸下、更新后不再声明时就不能，设置里那一项留着，装回来接着生效。
 	 */
 	function manages(plugin: string): boolean {
-		return liveSessionManager === plugin && host.status().some((status) => status.name === plugin && status.state === "active" && status.manage === "sessions");
+		return (
+			modelSettings.sessionManager() === plugin &&
+			host.status().some((status) => status.name === plugin && status.state === "active" && status.manage === "sessions")
+		);
 	}
 
 	/** 插件能不能像代管一样动这个顶层会话：代管着它，或它没有别的插件代管、而这个插件拿着管理授权。 */
@@ -1122,7 +1107,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function readSessionSettings(session: Session): Promise<StoredSettings> {
 		const cwd = session.summary.cwd;
-		const reading: Promise<StoredSettings> = readSettings().then(async (global) => {
+		const reading: Promise<StoredSettings> = modelSettings.read().then(async (global) => {
 			const configured = await layerProjectSettings(global, cwd);
 			// 较慢的旧读取等待最新读取，不能把新的项目层盖回去或短暂退回全局权限。
 			if (cwd !== session.summary.cwd) return readSessionSettings(session);
@@ -1142,20 +1127,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		void readSessionSettings(session).catch(() => undefined);
 	}
 
-	/** 改设置是读、改、写三步，排成一队，两次保存挨得近时后一次不会覆盖掉前一次。 */
-	let settingsQueue: Promise<unknown> = Promise.resolve();
-	function changeSettings<T>(change: (settings: StoredSettings) => T | Promise<T>): Promise<T> {
-		const run = settingsQueue.then(async () => {
-			const settings = await readSettings();
-			const result = await change(settings);
-			// 0600：key 已经不在里面了，剩下的照样写着这台机器上的每个项目和连的每个服务。
-			await files.write(settingsFile, await keys.takeKeys(fileSettings(settings)), 0o600);
-			return result;
-		});
-		settingsQueue = run.catch(() => undefined);
-		return run;
-	}
-
 	/**
 	 * 经 model.context 组出这一次请求的上下文。消息是副本，插件怎么改都不影响会话里存的。
 	 * 本体只给历史和工具表，系统提示词是空的：各段由内置插件 plume.prompt 在最外层补上。
@@ -1169,7 +1140,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			...(session.summary.parentId === undefined ? {} : { parentId: session.summary.parentId }),
 			...(session.summary.owner === undefined ? {} : { owner: session.summary.owner }),
 			cwd: session.summary.cwd,
-			projectRoots: projectRootsFor(projects, session.summary.cwd, session.summary.project),
+			projectRoots: projectRootsFor(projects.list(), session.summary.cwd, session.summary.project),
 			scratchDir: scratchDir(session.summary.id),
 			model: { id: model.id, name: model.name },
 			permissionMode: settings.permissionMode ?? "auto",
@@ -1217,7 +1188,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	async function completeOnce(request: ModelCompletion): Promise<string> {
 		const { systemPrompt, prompt, messages = [], sessionId, model: chosen, maxTokens, signal, onRetry } = request;
 		const session = sessionId === undefined ? undefined : find(sessionId);
-		const settings = session ? await readSessionSettings(session) : await readSettings();
+		const settings = session ? await readSessionSettings(session) : await modelSettings.read();
 		// 插件点名的模型不在了就报错：悄悄换成默认模型，人在设置里选的那个就白选了，花销也记错了地方。
 		if (chosen !== undefined && !lookup(settings, chosen)) throw new Error(text("model.unavailable", { model: chosen }));
 		const { provider, model } = resolveModel(settings, chosen ?? (session && modelOf(session)));
@@ -1412,10 +1383,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		relayedBy(session, request.toolCallId, outcome);
 		const decision = "decision" in outcome ? outcome.decision : "reject";
 		if (decision === "always" && grant) {
-			await changeSettings((settings) => {
-				const granted = settings.alwaysAllow ?? [];
-				if (!granted.some((one) => sameGrant(one, grant))) settings.alwaysAllow = [...granted, grant];
-			}).catch((error: unknown) => log("agent", "error", `「以后不再问」没存上：${errorText(error)}`));
+			await modelSettings
+				.change((settings) => {
+					const granted = settings.alwaysAllow ?? [];
+					if (!granted.some((one) => sameGrant(one, grant))) settings.alwaysAllow = [...granted, grant];
+				})
+				.catch((error: unknown) => log("agent", "error", `「以后不再问」没存上：${errorText(error)}`));
 		}
 		return decision;
 	}
@@ -1653,7 +1626,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/** 插件建子会话、独立会话时给的模型和思考档位：不认识就当场抛错。 */
 	async function checkChoice(options: { model?: string; thinking?: SessionSummary["thinking"] } | undefined): Promise<void> {
-		if (options?.model !== undefined && !lookup(await readSettings(), options.model)) throw new Error(text("model.unavailable", { model: options.model }));
+		if (options?.model !== undefined && !lookup(await modelSettings.read(), options.model))
+			throw new Error(text("model.unavailable", { model: options.model }));
 		if (options?.thinking !== undefined && !THINKING_LEVELS.includes(options.thinking))
 			throw new Error(text("thinking.unknown", { level: String(options.thinking) }));
 	}
@@ -1664,7 +1638,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	function moveSession(session: Session, project: { id: string } | undefined, cwd: string): void {
 		const family = withChildren(session.summary.id).map(find);
-		if (family.some((each) => each.controller || each.turn)) throw new Error(text("session.running"));
+		if (family.some(held)) throw new Error(text("session.running"));
 		for (const each of family) {
 			// 目录换了，在旧目录里的这一段就结束了；下一轮在新目录里重新开始。
 			if (cwd !== each.summary.cwd) void host.sessionEnded(each.summary.id, "moved");
@@ -1689,7 +1663,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const session = owned(owner, sessionId);
 		const model = change?.model;
 		if (typeof model === "string") {
-			const found = lookup(await readSettings(), model);
+			const found = lookup(await modelSettings.read(), model);
 			if (!found) throw new Error(text("model.unavailable", { model }));
 			if (isImageModel(found.model)) throw new Error(text("model.imageNotChat", { model: found.model.name }));
 		}
@@ -1697,7 +1671,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const moving = change?.project !== undefined || change?.cwd !== undefined;
 		if (moving) {
 			if (session.summary.kind !== "standalone") throw new Error(text("session.childCwd"));
-			const project = change.project ? findProject(String(change.project)) : undefined;
+			const project = change.project ? projects.find(String(change.project)) : undefined;
 			let cwd = project?.path;
 			if (!cwd && change.cwd === null) {
 				await mkdir(chatsDir, { recursive: true });
@@ -1773,7 +1747,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	/** 插件在自己的子会话里跑一轮，等它结束；signal 只停止这一次运行。 */
 	async function sendChild(session: Session, message: string | SessionMessage, signal: AbortSignal | undefined): Promise<TurnStop> {
 		if (quitting) throw new Error(text("session.parentStopped"));
-		if (session.controller) throw new Error(text("session.running"));
+		if (held(session)) throw new Error(text("session.running"));
 		const prompt = childMessage(message);
 		if (signal?.aborted) return { reason: "aborted" };
 		const controller = new AbortController();
@@ -1788,7 +1762,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		}
 	}
 
-	/** 没有运行时同步占住循环，随后只跑这一轮；忙时由现有循环消费。 */
 	/**
 	 * 攒好的送达叫醒闲着的会话。别的会话的信、开出来的会话的交回（`ReadyKind` 不是 `other`）另有规矩，防几个会话原地互相叫醒，
 	 * 见 `LetterReceipt`、`ReportBackOptions.wake`：
@@ -1797,7 +1770,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 */
 	function wakeReports(session: Session): void {
 		const id = session.summary.id;
-		if (quitting || session.controller || !sessions.has(id) || !background.hasReady(id)) return;
+		if (quitting || held(session) || !sessions.has(id) || !background.hasReady(id)) return;
 		const kind = background.readyKind(id);
 		// 整批在攒着的时候都作废了（撤回）：清掉，不为它白开一轮、也不让会话一直显得在等后台。
 		if (kind === undefined) return background.holdReady(id);
@@ -1847,8 +1820,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	/** 从 `parentId` 开出来、没归档的会话还有在跑的。 */
 	function spawnedRunning(parentId: string): boolean {
-		for (const other of sessions.values())
-			if (other.summary.spawnedFrom?.sessionId === parentId && !other.summary.archived && other.summary.running) return true;
+		for (const other of sessions.values()) if (other.summary.spawnedFrom?.sessionId === parentId && !other.summary.archived && held(other)) return true;
 		return false;
 	}
 
@@ -1875,7 +1847,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	 * 闲着就发队首，忙着、停着的不动：队伍只在这一轮以完成收场和有人排进来时往前走。
 	 */
 	function drainQueue(session: Session): void {
-		if (quitting || session.controller || !sessions.has(session.summary.id)) return;
+		if (quitting || held(session) || !sessions.has(session.summary.id)) return;
 		const next = queues.take(session.summary.id);
 		if (next) begin(session, queuedPrompt(next, false));
 	}
@@ -1988,7 +1960,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 
 	function parentStatus(session: Session): ParentStatus {
 		const sessionId = session.summary.id;
-		const state = session.controller ? "running" : waiting(sessionId) ? "background" : "idle";
+		const state = held(session) ? "running" : waiting(sessionId) ? "background" : "idle";
 		return { state, queued: queues.list(sessionId).length };
 	}
 
@@ -2082,7 +2054,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					queues.remove(parentId, (entry) => entry.origin === "child");
 					handed.discard(parentId);
 					// 停稳以后才写：一轮还占着历史时插一句进去，会夹在调用和它的结果中间。
-					if (!parent.controller && sessions.has(parentId)) {
+					if (!held(parent) && sessions.has(parentId)) {
 						// i18n-exempt：给模型的话。
 						const words = "用户已取消旧任务清单。不要继续旧清单；等待新的指令。";
 						await commit(parent, { role: "user", content: [{ type: "text", text: words }], timestamp: Date.now(), synthetic: true });
@@ -2202,7 +2174,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
 		const peer: PeerLetter = { id: randomUUID(), sessionId: from.summary.id, from: address, text: words, cwd: from.summary.cwd };
-		const queued = to.summary.running;
+		// 「会话在不在忙」只看 `held`（见 `Session.controller`），不另看 `summary.running`。
+		const queued = held(to);
 		const read = background.letter(to.summary.id, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
 		to.stopped = false;
 		return { id: peer.id!, queued, read };
@@ -2236,7 +2209,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 					sessionId,
 					session: sessionScope(session.summary),
 					cwd: session.summary.cwd,
-					projectRoots: projectRootsFor(projects, session.summary.cwd, session.summary.project),
+					projectRoots: projectRootsFor(projects.list(), session.summary.cwd, session.summary.project),
 					allowedPaths: () => attachedPaths(session),
 					scratchDir: scratchDir(sessionId),
 					scratchDirs: () => lineageScratchDirs(sessionId),
@@ -2365,16 +2338,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			session.sent !== undefined &&
 			session.summary.kind === "top";
 		// 被一条打断的消息接替了：新的一轮紧接着开始，这里不说「停了」，免得界面闪一下「已暂停」。
-		if (session.controller === controller && !idle) {
-			session.controller = undefined;
-			session.turn = undefined;
-			session.steering = [];
-			session.summary.running = false;
-			observe(sessionId, { type: "running", running: false });
-			nudgeOrigin(session);
-			// 唤醒送进去开的那一轮收场了：循环的下次到点照常送（见 `SessionWakeups.turnEnded`）。
-			wakeups.turnEnded(sessionId);
-		}
+		if (session.controller === controller && !idle) release(session);
 		syncBackground(session);
 		try {
 			// 这一轮里没变成消息的草稿（流到一半抛错、拒收后没写进会话的回复）不留给下次打开时恢复。
@@ -2399,7 +2363,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			 * 排队条上还有没读到的插话（被停下、出错、撞了上限收的场）：后面没有接着开的一轮来读它们，就去掉标记、留在队首，
 			 * 和排着的话一样等人；被打断换了一轮的留给那一轮读。
 			 */
-			if (!session.controller && !quitting) queues.unsteer(sessionId);
+			if (!held(session) && !quitting) queues.unsteer(sessionId);
 			// 这一轮做完了就发下一条排着的；停了、出错了就留着等人，按停说的是现在别再接着做。
 			if (stop.reason === "done") drainQueue(session);
 			// 聚合计时器可能恰好在收尾的 await 期间到期，释放循环后再看一眼。
@@ -2410,113 +2374,31 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 
 	// 会话、设置和写入函数就绪后再加载：插件在 apply 里也可以发起子会话。
-	// 插件一加载就可能动会话：管理授权（`liveSessionManager`）先从设置里读上来。
-	await readSettings();
+	// 插件一加载就可能动会话：管理授权（`ModelSettings.sessionManager`）先从设置里读上来。
+	await modelSettings.read();
 	await host.load(options.plugins);
 
 	const service: AgentService = {
-		async getSettings(): Promise<SettingsView> {
-			return settingsView(await readSettings());
-		},
+		...modelSettings.service,
 		async projectLayer(cwd) {
 			// 人在设置页看这份项目配置时，同一目录里读过它的会话也重读一次：文件改过以后，输入框的权限签和这张卡说的是同一份。
 			for (const session of sessions.values()) if (session.projectLayer && session.summary.cwd === cwd) refreshProject(session);
-			return projectLayerView(await readSettings(), cwd);
-		},
-		saveProvider({ apiKey, ...provider }) {
-			return changeSettings((settings) => {
-				// Magpie 的供应商每次读设置都按 magpie 块重建，在这里改了也存不下，所以直接拒绝。
-				if (isMagpie(provider.id)) throw new Error(text("provider.magpieManaged"));
-				const id = provider.id || `p-${randomUUID().slice(0, 8)}`;
-				const index = settings.providers.findIndex((candidate) => candidate.id === id);
-				if (provider.id && index < 0) throw new Error(text("provider.notFound", { id: provider.id }));
-				const saved = checkProvider({ ...provider, id, apiKey: apiKey?.trim() || settings.providers[index]?.apiKey });
-				if (index < 0) settings.providers.push(saved);
-				else settings.providers[index] = saved;
-				return id;
-			});
-		},
-		async deleteProvider(providerId) {
-			await changeSettings((settings) => {
-				if (isMagpie(providerId)) throw new Error(text("provider.magpieManaged"));
-				settings.providers = settings.providers.filter((provider) => provider.id !== providerId);
-			});
-		},
-		async setDefaultModel(model) {
-			await changeSettings((settings) => {
-				const found = lookup(settings, model);
-				if (!found) throw new Error(text("model.unavailable", { model }));
-				if (isImageModel(found.model)) throw new Error(text("model.imageNotChat", { model: found.model.name }));
-				settings.defaultModel = model;
-			});
-		},
-		async setImageModel(model) {
-			await changeSettings((settings) => {
-				if (model === null) {
-					delete settings.imageModel;
-					return;
-				}
-				const found = lookup(settings, model);
-				if (!found) throw new Error(text("model.unavailable", { model }));
-				if (!isImageModel(found.model)) throw new Error(text("model.notImage", { model: found.model.name }));
-				settings.imageModel = model;
-			});
-		},
-		async setFavoriteModels(models) {
-			await changeSettings((settings) => {
-				settings.favoriteModels = [...new Set(models.filter((ref) => typeof ref === "string"))];
-			});
+			return projectLayerView(await modelSettings.read(), cwd);
 		},
 		async setPermissionMode(mode) {
 			if (mode !== "ask" && mode !== "auto" && mode !== "full") throw new Error(text("permission.unknown", { mode: String(mode) }));
-			await changeSettings((settings) => {
+			await modelSettings.change((settings) => {
 				settings.permissionMode = mode;
 			});
 			// 项目配置里哪一档算收紧是和本机比的（`withoutLoosening`）：本机换了档，读过项目配置的会话重新比一次。
 			for (const session of sessions.values()) if (session.projectLayer) refreshProject(session);
-		},
-		async revokeAlwaysAllow(grant) {
-			if (!grant || typeof grant.subject !== "string") throw new Error(text("alwaysAllow.invalid"));
-			const target: AlwaysAllow = grant.plugin === undefined ? { subject: grant.subject } : { subject: grant.subject, plugin: grant.plugin };
-			await changeSettings((settings) => {
-				settings.alwaysAllow = (settings.alwaysAllow ?? []).filter((one) => !sameGrant(one, target));
-			});
-		},
-		async clearAlwaysAllow() {
-			await changeSettings((settings) => {
-				settings.alwaysAllow = [];
-			});
-		},
-		async setDefaultThinking(thinking) {
-			if (!THINKING_LEVELS.includes(thinking)) throw new Error(text("thinking.unknown", { level: String(thinking) }));
-			await changeSettings((settings) => {
-				settings.thinking = thinking;
-			});
-		},
-		async setRetryPolicy(policy) {
-			await changeSettings((settings) => {
-				settings.retryPolicy = normalizeRetryPolicy(policy);
-				liveRetryPolicy = settings.retryPolicy;
-			});
-		},
-		async setPersonalization(change) {
-			const { customInstructions, tone } = change ?? {};
-			if (customInstructions !== undefined && typeof customInstructions !== "string") throw new Error(text("personalization.invalid"));
-			if (tone !== undefined && !TONES.includes(tone)) throw new Error(text("personalization.invalid"));
-			await changeSettings((settings) => {
-				settings.personalization = {
-					...settings.personalization,
-					...(customInstructions !== undefined ? { customInstructions } : {}),
-					...(tone !== undefined ? { tone } : {}),
-				};
-			});
 		},
 		async setSessionModel(sessionId, model) {
 			const session = find(sessionId);
 			const previous = session.summary.model;
 			if (model === undefined) delete session.summary.model;
 			else {
-				const found = lookup(await readSettings(), model);
+				const found = lookup(await modelSettings.read(), model);
 				if (!found) throw new Error(text("model.unavailable", { model }));
 				if (isImageModel(found.model)) throw new Error(text("model.imageNotChat", { model: found.model.name }));
 				session.summary.model = model;
@@ -2541,93 +2423,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			}
 			saveSummary(session);
 		},
-		async testProvider(providerId, modelId) {
-			const provider = (await readSettings()).providers.find((candidate) => candidate.id === providerId);
-			if (!provider) return { ok: false, latencyMs: 0, message: text("provider.notFound", { id: providerId }) };
-			return testProvider(provider, modelId || undefined);
-		},
-		async fetchModels(providerId) {
-			const provider = (await readSettings()).providers.find((candidate) => candidate.id === providerId);
-			if (!provider) return { ok: false, models: [], error: text("provider.notFound", { id: providerId }) };
-			return fetchModels(provider);
-		},
-		// 版本相同就不传整份目录：界面每次打开设置页都会来问一句。
-		async modelCatalog(knownRevision) {
-			return activeModelCatalog().source.revision === knownRevision ? null : activeModelCatalog();
-		},
-		async updateModelCatalog() {
-			if (!catalogFile) return { status: "unchanged", source: activeModelCatalog().source };
-			return syncModelCatalog(catalogFile);
-		},
-		async exportProviders(file) {
-			const own = fileSettings(await readSettings()).providers;
-			const { text: body, containsSecrets } = serializeBundle(own);
-			await mkdir(dirname(file), { recursive: true });
-			await writeFile(file, body, { mode: 0o600 });
-			return { providers: own.length, containsSecrets };
-		},
-		async previewProviderImport(file) {
-			const parsed = parseBundle(await readFile(file, "utf8").catch(() => ""));
-			if (!parsed.ok) return parsed;
-			return { ok: true, entries: planImport(parsed.providers, fileSettings(await readSettings()).providers), dropped: parsed.dropped };
-		},
-		async importProviders(file, providerIds) {
-			// 预览之后文件可能被改过，所以按 id 从文件里重新读一遍，而不是信任界面传回来的内容。
-			const parsed = parseBundle(await readFile(file, "utf8").catch(() => ""));
-			if (!parsed.ok) return 0;
-			const wanted = new Set(providerIds);
-			const chosen = parsed.providers.filter((provider) => wanted.has(provider.id));
-			if (chosen.length === 0) return 0;
-			await changeSettings((settings) => {
-				const own = fileSettings(settings).providers;
-				const magpie = settings.providers.filter((provider) => isMagpie(provider.id));
-				settings.providers = [...applyImport(own, chosen), ...magpie];
-			});
-			return chosen.length;
-		},
-		listProjects: () => projects,
-		async createProject(name, path, folders) {
-			if (!path.trim()) throw new Error(text("project.emptyPath"));
-			const project: ProjectEntry = {
-				id: randomUUID(),
-				name: name.trim() || basename(path.trim()),
-				path: path.trim(),
-				...(folders ? { folders: [...new Set([path.trim(), ...folders.map((folder) => folder.trim()).filter(Boolean)])] } : {}),
-			};
-			await saveProjects([project, ...projects]);
-			return project;
-		},
-		async updateProject(projectId, name, path, folders) {
-			findProject(projectId);
-			if (!path.trim()) throw new Error(text("project.emptyPath"));
-			await saveProjects(
-				projects.map((entry) =>
-					entry.id === projectId
-						? {
-								...entry,
-								name: name.trim() || basename(path.trim()),
-								path: path.trim(),
-								...(folders ? { folders: [...new Set([path.trim(), ...folders.map((folder) => folder.trim()).filter(Boolean)])] } : {}),
-							}
-						: entry,
-				),
-			);
-		},
-		async removeProject(projectId) {
-			findProject(projectId);
-			await saveProjects(projects.filter((entry) => entry.id !== projectId));
-		},
-		async reorderProjects(sourceId, targetId, placement) {
-			const source = findProject(sourceId);
-			findProject(targetId);
-			if (sourceId === targetId) return;
-			if (placement !== "before" && placement !== "after") throw new Error("Invalid placement");
-			const next = projects.filter((entry) => entry.id !== sourceId);
-			next.splice(next.findIndex((entry) => entry.id === targetId) + (placement === "after" ? 1 : 0), 0, source);
-			await saveProjects(next);
-		},
+		...projects.service,
 		async reorderProjectSessions(projectId, sessionIds) {
-			findProject(projectId);
+			projects.find(projectId);
 			if (
 				!Array.isArray(sessionIds) ||
 				new Set(sessionIds).size !== sessionIds.length ||
@@ -2641,14 +2439,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			 * 置顶、归档的会话不在拖动的那份名单里，名次照旧留着：插回旧顺序里它前面那一个之后。不留的话取消置顶、取消归档后
 			 * 它没有名次，跳到最前面。已经不在这个项目里的（删了、挪走了）顺手丢掉。
 			 */
-			const previous = projects.find((entry) => entry.id === projectId)?.sessionOrder ?? [];
+			const previous = projects.list().find((entry) => entry.id === projectId)?.sessionOrder ?? [];
 			const order = [...sessionIds];
 			previous.forEach((id, index) => {
 				if (order.includes(id) || sessions.get(id)?.summary.project !== projectId) return;
 				const before = previous.slice(0, index).findLast((other) => order.includes(other));
 				order.splice(before === undefined ? 0 : order.indexOf(before) + 1, 0, id);
 			});
-			await saveProjects(projects.map((entry) => (entry.id === projectId ? { ...entry, sessionOrder: order } : entry)));
+			await projects.save(projects.list().map((entry) => (entry.id === projectId ? { ...entry, sessionOrder: order } : entry)));
 		},
 		async sessionStats(sessionId) {
 			find(sessionId);
@@ -2709,11 +2507,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const next = plugin === null ? undefined : String(plugin);
 			if (next !== undefined && !host.status().some((status) => status.name === next && status.manage === "sessions"))
 				throw new Error(text("session.cannotManage", { plugin: next }));
-			const previous = await changeSettings((settings) => {
+			const previous = await modelSettings.change((settings) => {
 				const before = settings.sessionManager;
 				if (next === undefined) delete settings.sessionManager;
 				else settings.sessionManager = next;
-				liveSessionManager = next;
 				return before;
 			});
 			if (previous === next) return;
@@ -2738,22 +2535,24 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async moveSessionProject(sessionId, projectId) {
 			const session = find(sessionId);
-			const project = projectId === undefined ? undefined : findProject(projectId);
+			const project = projectId === undefined ? undefined : projects.find(projectId);
 			moveSession(session, project, project?.path ?? session.summary.cwd);
 		},
+		/** 归档的全删，正在跑的（自己或子会话）一样：`deleteTree` 先停下再删。 */
 		async deleteArchivedSessions() {
-			return removeIdle(
-				summaries()
-					.filter((summary) => summary.archived)
-					.map((summary) => summary.id),
-			).length;
+			const archived = summaries()
+				.filter((summary) => summary.archived)
+				.map((summary) => summary.id);
+			deleteTree(archived);
+			return archived.length;
 		},
 		async contextBreakdown(sessionId) {
 			const session = find(sessionId);
-			const { estimate } = await recordOf(session);
-			if (!estimate) return null;
+			const record = await recordOf(session);
+			if (!record.estimate) return null;
 			const { model } = resolveModel(await readSessionSettings(session), modelOf(session));
-			return contextBreakdown(estimate, await messagesOf(session), model.contextWindow);
+			const messages = await messagesOf(session);
+			return contextBreakdown(record.estimate, historyFor(messages, record), model.contextWindow, rewrittenAt(record, messages));
 		},
 		async storageUse() {
 			return storageUse(summaries(), store.sizes());
@@ -2763,8 +2562,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 只挑顶层会话，子会话跟着它删（`deleteTree`），释放量也连着它们算。
 			const matched = sessionTrees(summaries(), store.sizes()).filter(({ summary }) => withinRange(summary, range));
 			const bytes = new Map(matched.map(({ summary, bytes: size }) => [summary.id, size]));
-			const removed = removeIdle([...bytes.keys()]);
-			return { removed: removed.length, freed: removed.reduce((sum, id) => sum + (bytes.get(id) ?? 0), 0), skipped: matched.length - removed.length };
+			// 正在跑的也删：`deleteTree` 先停下它和它的子会话。
+			deleteTree([...bytes.keys()]);
+			return { removed: bytes.size, freed: [...bytes.values()].reduce((sum, size) => sum + size, 0) };
 		},
 		async exportSessions(file) {
 			if (!isAbsolute(file)) throw new Error(text("storage.exportPath"));
@@ -2782,7 +2582,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			if (format !== "markdown") throw new Error(text("storage.exportFormat"));
 			// 和原始记录共用保护：Markdown 也不能经目录别名或大小写差异盖掉源库。
 			protectSource(join(dataDir, "sessions", "sessions.db"), file);
-			const settings = await readSettings();
+			const settings = await modelSettings.read();
 			await recordOf(session);
 			/** 导出时问注册这个工具的插件要它的说法；插件的函数出错时当没给，照本体的写法导出。 */
 			const askTool = <T>(name: string, what: string, read: (definition: ToolDefinition) => T): T | undefined => {
@@ -2859,7 +2659,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
 			const entry = queues.list(session.summary.id).find((each) => each.id === String(id));
 			// 子会话交过来的、代管插件转来的是一件要单独开一轮、单独落定的事，不插进别的轮里。
-			if (!entry || !session.controller) return;
+			if (!entry || !held(session)) return;
 			queues.promote(session.summary.id, entry.id, looping(session) && !entry.origin);
 		},
 		async removeQueued(sessionId, id) {
@@ -2897,7 +2697,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				await rewindFiles(session, at, true);
 			}
 			// 中间等过读库：再看一眼，这期间开始的一轮不能被截掉一半。
-			if (session.controller) throw new Error(text("session.running"));
+			if (held(session)) throw new Error(text("session.running"));
 			await rewind(session, at);
 			begin(session, prompt);
 		},
@@ -2906,7 +2706,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			const at = await sentAt(session, index, { timestamp: options?.timestamp });
 			// 先文件后对话：文件退不回去，对话也不截，人看到的还是撤回之前的样子。
 			if (options?.files === true) await rewindFiles(session, at, true);
-			if (session.controller) throw new Error(text("session.running"));
+			if (held(session)) throw new Error(text("session.running"));
 			await rewind(session, at);
 		},
 		async revertPlan(sessionId, index, options) {
@@ -2955,10 +2755,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async mentionFiles(target, sessionId) {
 			const session = sessionId ? find(sessionId).summary : undefined;
-			const project = projects.find((entry) => entry.id === (session?.project ?? target.project));
+			const project = projects.list().find((entry) => entry.id === (session?.project ?? target.project));
 			const cwd = session?.cwd ?? project?.path;
 			if (!cwd) return [];
-			const roots = [...new Set([cwd, ...projectRootsFor(projects, cwd, project?.id)])];
+			const roots = [...new Set([cwd, ...projectRootsFor(projects.list(), cwd, project?.id)])];
 			return (
 				await Promise.all(
 					roots.map(async (root) =>
@@ -2994,7 +2794,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async locateFiles(sessionId, written) {
 			const session = sessions.get(sessionId);
 			if (!session) return [];
-			const roots = [...new Set([session.summary.cwd, ...projectRootsFor(projects, session.summary.cwd, session.summary.project)])];
+			const roots = [...new Set([session.summary.cwd, ...projectRootsFor(projects.list(), session.summary.cwd, session.summary.project)])];
 			return [...new Set((await Promise.all(roots.map((root) => locateSessionFiles(root, written, dataDir)))).flat())].sort();
 		},
 		stop(sessionId) {
@@ -3068,7 +2868,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		busy() {
 			// 列表里删掉了、还没收尾的也算（`active`）。后台看 `waiting`：没跑完的派发、交回了没送达的、刚跑完还在聚合窗口里的，
 			// 没结束的一次性后台任务；挂着的监视、服务、唤醒不算。
-			const running = [...sessions.values(), ...active].some((session) => session.turn !== undefined);
+			const running = [...sessions.values(), ...active].some(held);
 			return running || [...sessions.keys()].some((id) => waiting(id));
 		},
 		async filePath(sessionId, path) {
@@ -3098,43 +2898,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			await host.dispose();
 			await files.idle();
 			store.close();
-		},
-	};
-}
-
-/**
- * JSON 文件读写：同一个文件的写入排队执行，先写临时文件再改名（`writeFileAtomic`），崩溃时不会留下半个文件。
- *
- * 读时去掉开头的 BOM：记事本存的「UTF-8 带 BOM」和 PowerShell 5.1 的 `Set-Content -Encoding UTF8` 都在文件头写 U+FEFF，
- * `JSON.parse` 会在第一个字符上失败，而这份文件在哪个编辑器里看都好好的。
- */
-function jsonFiles() {
-	const queues = new Map<string, Promise<unknown>>();
-	const exclusive = (file: string, work: () => Promise<void>): Promise<void> => {
-		const next = (queues.get(file) ?? Promise.resolve()).then(work, work);
-		queues.set(
-			file,
-			next.catch(() => undefined),
-		);
-		return next;
-	};
-	return {
-		async read<T>(file: string): Promise<T | undefined> {
-			await queues.get(file);
-			try {
-				return JSON.parse((await readFile(file, "utf8")).replace(/^\uFEFF/, "")) as T;
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-				throw error;
-			}
-		},
-		write: (file: string, value: unknown, mode?: number) =>
-			exclusive(file, async () => {
-				await mkdir(dirname(file), { recursive: true });
-				await writeFileAtomic(file, JSON.stringify(value, null, 2), mode === undefined ? {} : { mode });
-			}),
-		async idle() {
-			await Promise.all(queues.values());
 		},
 	};
 }

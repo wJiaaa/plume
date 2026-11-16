@@ -28,13 +28,12 @@ import { Forms } from "./elicitation.ts";
 import { formFields, UnsupportedFormError } from "./form.ts";
 import { MESSAGES } from "./messages.ts";
 import { BackgroundOAuthProvider, login, type LoginReason, McpNeedsLogin, OAuthStore, usesOAuth } from "./oauth.ts";
-import { missingFor, resolveServer } from "./placeholders.ts";
+import { missingFor, resolveServer, secretValues } from "./placeholders.ts";
 import { listPrompts, type PromptEntry, promptText } from "./prompts.ts";
 import { listResources, type McpResources, type ResourceListing, resourceText } from "./resources.ts";
 import { stdioEnv, TreeKillingStdioTransport } from "./stdio.ts";
 import type { McpTool } from "./search.ts";
 import { mcpResult, normalizeInputSchema, qualifiedToolName, sanitize } from "./tools.ts";
-import { looksSecret } from "./vars.ts";
 import type { Documents } from "./documents.ts";
 
 /** 第一次跑 `npx`、`uvx` 要先下载，冷启动常常要一两分钟。 */
@@ -424,7 +423,7 @@ export class Connections implements McpResources {
 				return;
 			}
 			const server = resolveServer(declared, env);
-			const transport = await this.transportFor(server, slot);
+			const transport = await this.transportFor(server, slot, secretValues(declared, env));
 			if (stale()) {
 				await transport.close().catch(() => {});
 				return;
@@ -516,7 +515,7 @@ export class Connections implements McpResources {
 		}
 	}
 
-	private async transportFor(server: ServerConfig, slot: Slot): Promise<Transport> {
+	private async transportFor(server: ServerConfig, slot: Slot, secrets: readonly string[]): Promise<Transport> {
 		if (server.transport === "stdio") {
 			const stdio = new TreeKillingStdioTransport({
 				command: server.command,
@@ -524,10 +523,7 @@ export class Connections implements McpResources {
 				env: stdioEnv(await commandEnv(), server.env),
 				stderr: "pipe",
 			});
-			// 服务器把自己的配置连同密钥一起打到 stderr 上并不少见；这段文字要进设置页。
-			const secrets = Object.entries(server.env ?? {})
-				.filter(([name, value]) => looksSecret(name) && value.length >= 6)
-				.map(([, value]) => value);
+			// 服务器把自己的配置连同密钥一起打到 stderr 上并不少见；这段文字要进设置页。遮哪些见 `secretValues`。
 			let partial = "";
 			stdio.stderr?.on("data", (chunk: Buffer | string) => {
 				let text = partial + String(chunk);
@@ -595,7 +591,7 @@ export class Connections implements McpResources {
 			asks: true,
 			category: "mcp",
 			// i18n-exempt：导出会话成 Markdown 时的一行，导出是英文的。
-			describe: () => `${name.split("__")[1]}: ${name.split("__")[2]}`,
+			describe: () => `${shared.server.name}: ${raw.name}`,
 			execute: (args, run) => this.call(shared, raw, name, readOnly, args, run),
 		};
 	}

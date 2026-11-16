@@ -5,6 +5,7 @@
 import { accessSync, constants, lstatSync, statSync } from "node:fs";
 import { basename, posix, win32 } from "node:path";
 import type { IWindowsPty } from "@xterm/xterm";
+import type { ShellDialect } from "./api.ts";
 
 /** Windows 的环境变量名不分大小写，`Path` 和 `PATH` 是同一个。 */
 function envValue(env: NodeJS.ProcessEnv, name: string, platform: string): string | undefined {
@@ -94,13 +95,21 @@ export function shellArgs(platform: string, shell = ""): string[] {
  * 其余（包括 Windows 上的 Git Bash）用 POSIX 的单引号写法。
  */
 export function cdCommand(platform: string, shell: string, directory: string): string {
+	const dialect = shellDialect(platform, shell);
+	if (dialect === "powershell") return `Set-Location -LiteralPath '${directory.replace(/[\u0027\u2018-\u201b]/g, "$&$&")}'`;
+	if (dialect === "cmd") return `cd /d "${directory}"`;
+	return `cd '${directory.replaceAll("'", "'\\''")}'`;
+}
+
+/** 按程序名认 shell 的引号规矩。 */
+export function shellDialect(platform: string, shell: string): ShellDialect {
 	const name = (platform === "win32" ? win32 : posix)
 		.basename(shell)
 		.toLowerCase()
 		.replace(/\.exe$/, "");
-	if (name === "pwsh" || name === "powershell") return `Set-Location -LiteralPath '${directory.replace(/[\u0027\u2018-\u201b]/g, "$&$&")}'`;
-	if (platform === "win32" && name === "cmd") return `cd /d "${directory}"`;
-	return `cd '${directory.replaceAll("'", "'\\''")}'`;
+	if (name === "pwsh" || name === "powershell") return "powershell";
+	if (platform === "win32" && name === "cmd") return "cmd";
+	return "posix";
 }
 
 /**

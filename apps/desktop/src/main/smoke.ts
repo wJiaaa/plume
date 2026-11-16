@@ -67,6 +67,7 @@ import { checkPlan } from "./smoke-plan.ts";
 import { checkHooks } from "./smoke-hooks.ts";
 import { checkBrowser, type ModelOverride } from "./smoke-browser.ts";
 import { checkNavigation } from "./smoke-navigation.ts";
+import { checkModelDefaults } from "./smoke-model-defaults.ts";
 import { checkCompact } from "./smoke-compact.ts";
 import { checkPanelsFramework, checkSideChatWindow } from "./smoke-panels.ts";
 import { checkFileTerminal } from "./smoke-file-terminal.ts";
@@ -75,11 +76,6 @@ import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { recentSessions } from "./tray-menu.ts";
 import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
-
-export function smokeOutput(): { file: string; dir: string; workspace: string } | undefined {
-	const file = process.env.PLUME_SMOKE_OUT;
-	return file ? { file, dir: dirname(file), workspace: join(dirname(file), "workspace") } : undefined;
-}
 
 const FINAL_TEXT = "改好了：hello.txt 第一行现在是 hi。";
 const TASK_TITLE = "写说明";
@@ -714,6 +710,54 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`!document.querySelector('[data-plume-toaster]')`, "提示条关闭后退场");
 		const exported = JSON.parse(await readFile(join(outDir, "providers.json"), "utf8")) as { kind?: string; providers?: unknown[] };
 		if (exported.kind !== "plume.providers" || exported.providers?.length !== 1) throw new Error("导出的供应商文件不对");
+
+		// 模拟 Magpie 从外部下发配置，所有修改仍真点界面；只读写这次冒烟的数据目录。
+		const modelSettingsFile = join(plumeHome(), "settings.json");
+		const modelSettings = JSON.parse(await readFile(modelSettingsFile, "utf8"));
+		modelSettings.magpie = {
+			baseUrl: model.url,
+			apiKey: "magpie-smoke-key",
+			models: [{ id: "magpie-smoke", context: 200_000, output: 32_000, efforts: ["low", "high"] }],
+		};
+		await writeFile(modelSettingsFile, JSON.stringify(modelSettings));
+		const reopenModels = async () => {
+			window.webContents.reload();
+			await until(`document.querySelector('[data-screen=empty]') !== null`, "重新载入模型设置");
+			window.webContents.send("plume:command", "settings");
+			await click('[aria-label="设置章节"] button', "模型设置");
+			await click('[data-provider-item="magpie"]');
+			await until(`document.querySelector('[data-provider-editor="magpie"]') !== null`, "打开 Magpie 供应商");
+		};
+		await reopenModels();
+		await until(
+			`document.querySelector('[data-provider-url]')?.disabled === false && document.querySelector('[data-add-model]') !== null`,
+			"Magpie 编辑入口已解锁",
+		);
+		await type("[data-provider-url]", `${model.url}/v1`);
+		await waitFor(async () => JSON.parse(await readFile(modelSettingsFile, "utf8")).magpie.baseUrl === `${model.url}/v1`, "Magpie 地址修改已写盘");
+		await click("[data-provider-connection] [data-segmented] button", "Messages");
+		await waitFor(async () => JSON.parse(await readFile(modelSettingsFile, "utf8")).magpie.api === "anthropic-messages", "Magpie 协议修改已写盘");
+		await click('[data-model-row="magpie-smoke"]');
+		await type("[data-model-editor-id]", "magpie-edited");
+		await type('[data-model-editor] input[inputmode="numeric"]', "500000");
+		await click("[data-model-editor-save]");
+		await until(`document.querySelector('[data-model-row="magpie-edited"]') !== null`, "Magpie 模型修改已保存");
+		await waitFor(async () => {
+			const saved = JSON.parse(await readFile(modelSettingsFile, "utf8"));
+			return saved.magpie.baseUrl === `${model.url}/v1` && saved.magpie.api === "anthropic-messages" && saved.magpie.models[0].context === 500_000;
+		}, "Magpie 连接和模型修改写回原配置");
+		await reopenModels();
+		await until(`document.querySelector('[data-model-row="magpie-edited"]') !== null`, "重新载入后 Magpie 修改仍保留");
+		await capture(window, join(outDir, "smoke-magpie-models.png"));
+		const providerSwitch = '[data-provider-editor="magpie"] [role=switch]';
+		await click(providerSwitch);
+		await until(`document.querySelector('${providerSwitch}')?.getAttribute('aria-checked') === 'false'`, "停用 Magpie 供应商");
+		await click(providerSwitch);
+		await until(`document.querySelector('${providerSwitch}')?.getAttribute('aria-checked') === 'true'`, "重新启用 Magpie 供应商");
+		await click("[data-provider-delete]");
+		await click("button", "删除");
+		await until(`!document.querySelector('[data-provider-item="magpie"]')`, "删除 Magpie 供应商");
+		if (JSON.parse(await readFile(modelSettingsFile, "utf8")).magpie !== undefined) throw new Error("删除 Magpie 后配置仍有残留");
 		// 智能标题是内置插件，经 `page: "general"` 在常规页画一行开关。冒烟里关掉它：每段第一句较长的话都会让它在后台
 		// 另发一次模型请求，各段按次数核对的假模型就对不上了。
 		const titleSwitch = '[role=switch][aria-label="智能标题总结"]';
@@ -784,6 +828,14 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"PLUME_TOAST_SMOKE " +
 				JSON.stringify({ providerTransfer: true, commandWarning: true, draftPreserved: true, attachmentLimit: true, themes: ["dark", "light"], dismiss: true }),
 		);
+
+		if (process.env.PLUME_SMOKE_ONLY === "model-defaults") {
+			await checkModelDefaults({ window, agent, outDir, page, until, click, type, capture, setModel: (value) => (override = value) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "model-defaults" }));
+			await shutdown();
+			app.quit();
+			return;
+		}
 
 		if (process.env.PLUME_SMOKE_ONLY === "navigation") {
 			override = () => ({ text: "导航准备好了。" });

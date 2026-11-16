@@ -42,7 +42,10 @@ export default {
 	async apply(ctx) {
 		/** 侧边聊天 → 它挂在哪个会话旁边。 */
 		const sides = new Map<string, string>();
-		for (const summary of await ctx.sessions.list()) if (summary.owner === ctx.name && summary.parentId) sides.set(summary.id, summary.parentId);
+		const all = await ctx.sessions.list();
+		for (const summary of all) if (summary.owner === ctx.name && summary.parentId) sides.set(summary.id, summary.parentId);
+		/** 现有的会话：删会话时插件没在跑（停用着、删到一半退出）留下的记录，加载时对着它清掉。 */
+		const live = new Set(all.map((summary) => summary.id));
 		/**
 		 * 每段侧边聊天已经告诉过主会话到哪里：几条消息、最后一条的时刻。读过的那段还原样在就从条数接着读；
 		 * 编辑重问截掉过一段（那一条的时刻对不上了）就只认之后写的，截掉后接着写的消息落在旧的条数里面，按条数会漏掉。
@@ -71,6 +74,9 @@ export default {
 				})
 				.catch((error: unknown) => ctx.log.warn(`读到哪里没存上：${String(error)}`));
 		};
+		const stale = [...marks.keys()].filter((id) => !live.has(id));
+		for (const id of stale) marks.delete(id);
+		if (stale.length > 0) saveMarks();
 		// 新的侧边聊天用哪个模型；没选就跟随主会话。只管新开的，已经开着的沿用它开时的模型。
 		const settingsFile = join(ctx.dataDir, "settings.json");
 		const saved = await readFile(settingsFile, "utf8").then(
@@ -125,6 +131,7 @@ export default {
 			close: (sideId) => ctx.sessions.delete(sideId),
 			missing: () => new Error(MESSAGES[ctx.locale()].missing),
 		});
+		await bindings.keepOnly(live);
 		ctx.sessions.onDeleted((sessionId) => {
 			sides.delete(sessionId);
 			noted.delete(sessionId);

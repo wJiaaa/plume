@@ -75,16 +75,16 @@ export function latestTodos(messages: readonly Message[]): Todo[] {
 
 /**
  * 到了检查点怎么走：`continue` 接着跑，`plan` 让它把剩下的列成清单再跑（只给一次），`stop` 停下讨交接。
- * `planless` 是有没有清单可写：工具表里没有记清单的工具时让它列清单是一句做不到的话。
+ * `canPlan` 是有没有清单可写：工具表里没有记清单的工具时让它列清单是一句做不到的话。
  *
  * 清单是空的和清单做完了是两件事：做完了还撞上检查点，说明它在清单之外还在忙，该停；一份都没写，只说明它没记账。
  * 打勾数变少（重写了整张清单）按没推进算：推翻自己计划的那一段，正是最不该无条件再给它一段的。
  */
-export function atCheckpoint(segment: Segment, todos: readonly Todo[], planless: boolean): "continue" | "plan" | "stop" {
+export function atCheckpoint(segment: Segment, todos: readonly Todo[], canPlan: boolean): "continue" | "plan" | "stop" {
 	if (segment.extra >= MAX_CONTINUATIONS) return "stop";
 	const unfinished = todos.length - completed(todos);
 	if (unfinished === 0) {
-		if (todos.length > 0 || !planless || segment.graced) return "stop";
+		if (todos.length > 0 || !canPlan || segment.graced) return "stop";
 		segment.graced = true;
 		segment.extra++;
 		return "plan";

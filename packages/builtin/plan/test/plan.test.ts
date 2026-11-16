@@ -27,6 +27,14 @@ import plugin from "../src/index.ts";
 import { approvedPlans, currentPlan, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
 import { planSection, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "../src/prompt.ts";
 
+const SESSIONS = [
+	{ id: "a1b2c3d4-0000-4000-8000-000000000000", title: "改登录 [草稿]", cwd: "/w", project: "p1" },
+	{ id: "main", title: "", cwd: "/w/app" },
+	{ id: "fresh" },
+	{ id: "child", parentId: "main" },
+	{ id: "spawned", spawnedFrom: { sessionId: "main", toolCallId: "p" } },
+];
+
 /**
  * 只有这个插件用到的那几样 ctx。`child` 的父会话是 `main`，`spawned` 是从 `main` 的调用 `p` 开出来的。`launch` 记下开过的新会话，
  * `fail` 给了就让它抛这个错。会话的记录取 `records` 里那一份，没有的都是 `stored`。
@@ -67,14 +75,8 @@ async function fakeContext(stored: Message[] = [], options: { fail?: string; rec
 		serve: (served: PlanApi) => void (api = served),
 		provide: (name: string, service: SessionPlanService) => void (name === "session.plan" && (plans = service)),
 		sessions: {
-			get: async (id: string) =>
-				[
-					{ id: "a1b2c3d4-0000-4000-8000-000000000000", title: "改登录 [草稿]", cwd: "/w", project: "p1" },
-					{ id: "main", title: "", cwd: "/w/app" },
-					{ id: "fresh" },
-					{ id: "child", parentId: "main" },
-					{ id: "spawned", spawnedFrom: { sessionId: "main", toolCallId: "p" } },
-				].find((session) => session.id === id),
+			get: async (id: string) => SESSIONS.find((session) => session.id === id),
+			list: async () => SESSIONS,
 			messages: async (id: string) => options.records?.[id] ?? stored,
 			onDeleted: () => undefined,
 			models: async () => [{ id: "m1", name: "Model One", contextWindow: 1 }],

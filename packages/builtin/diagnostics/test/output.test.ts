@@ -29,7 +29,13 @@ it("完整输出只读本会话结果登记的日志，拒绝跨会话和软链�
 			serve: (value: DiagnosticsApi) => {
 				api = value;
 			},
-			sessions: { observe() {}, onDeleted() {}, list: async () => [{ id: "a" }, { id: "b" }], messages: async (id: string) => (id === "a" ? messages : []) },
+			sessions: {
+				observe() {},
+				onDeleted() {},
+				list: async () => [{ id: "a" }, { id: "b" }],
+				messages: async (id: string) => (id === "a" ? messages : []),
+				scratchDir: async (id: string) => join(dir, "scratch", id),
+			},
 		} as unknown as PluginContext);
 		const result = (outputPath: string): Message => ({
 			role: "toolResult",

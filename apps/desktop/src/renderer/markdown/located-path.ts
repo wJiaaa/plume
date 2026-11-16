@@ -82,6 +82,21 @@ function save(): void {
 	}
 }
 
+/** 会话删掉了：它的结论在这个窗口里、在存下的那份里都清掉（别的窗口下次写时读回的就是清过的）。 */
+export function forgetLocatedPaths(gone: (sessionId: string) => boolean): void {
+	const mine = (key: string) => gone(key.slice(0, key.indexOf("\0")));
+	for (const map of [known, checked, asking]) for (const key of map.keys()) if (mine(key)) map.delete(key);
+	for (const key of unsaved) if (mine(key)) unsaved.delete(key);
+	const stored = load();
+	const kept = [...stored].filter(([key]) => !mine(key));
+	if (kept.length === stored.size) return;
+	try {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(kept));
+	} catch {
+		/* 写不了：留着的只是几条用不上的结论，满了按 `LIMIT` 丢。 */
+	}
+}
+
 function changed(): void {
 	version++;
 	for (const listener of listeners) listener();

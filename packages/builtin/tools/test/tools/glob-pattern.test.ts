@@ -49,3 +49,11 @@ it("glob 经字符类找到文件", async () => {
 	const text = res.content.map((part) => part.text).join("");
 	expect(text).toBe("src/files/PreviewCard.tsx");
 });
+
+it("不存在的目录说不存在，不是搜了但为空", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-glob-missing-"));
+	onTestFinished(() => rm(dir, { recursive: true, force: true }));
+	const res = await globTool.execute({ pattern: "**/*.ts", path: "nope" }, withFiles({ cwd: dir, state: new Map() }));
+	expect(res.isError).toBe(true);
+	expect(res.content.map((part) => part.text).join("")).toMatch(/^Path not found: nope\./);
+});

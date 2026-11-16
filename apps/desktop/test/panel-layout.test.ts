@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { panelArrangement, panelHeightFor, panelWidthFor, readPanelPrefs, readPanelTabs, writePanelTabs } from "../src/renderer/layout.ts";
+import { panelArrangement, panelHeightFor, panelWidthFor, readPanelPrefs, readPanelTabs, writePanelPrefs, writePanelTabs } from "../src/renderer/layout.ts";
 import { panelGeometry } from "../src/renderer/panel-layout.ts";
 
 const options = { width: 1200, height: 800, preferred: 450, share: 0.4, compact: false, maximized: false, shown: true };
@@ -73,6 +73,30 @@ test("标签按会话恢复，空白会话不落盘，损坏数据不进入界�
 		entries.set(key, JSON.stringify({ a: { tabs: [{ id: 42 }], active: "bad" }, b: { tabs: [{ id: "ok" }], active: "missing" } }));
 		assert.deepEqual(readPanelTabs(), {});
 		assert.equal(readPanelPrefs().width, 0);
+	} finally {
+		if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+		else Reflect.deleteProperty(globalThis, "localStorage");
+	}
+});
+
+test("面板区开合按会话记：只存开着的，空白会话不落盘，宽度另存一份", () => {
+	const entries = new Map<string, string>();
+	const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+	Object.defineProperty(globalThis, "localStorage", {
+		configurable: true,
+		value: {
+			getItem: (key: string) => entries.get(key) ?? null,
+			setItem: (key: string, value: string) => entries.set(key, value),
+		},
+	});
+	try {
+		writePanelPrefs({ open: { "": true, a: true, b: false }, width: 500 });
+		assert.deepEqual(readPanelPrefs(), { open: { a: true }, width: 500 });
+		const key = [...entries.keys()][0]!;
+		entries.set(key, JSON.stringify({ open: true, width: 500 }));
+		assert.deepEqual(readPanelPrefs().open, {});
+		entries.set(key, JSON.stringify({ open: { a: "yes", b: true }, width: 500 }));
+		assert.deepEqual(readPanelPrefs().open, { b: true });
 	} finally {
 		if (previous) Object.defineProperty(globalThis, "localStorage", previous);
 		else Reflect.deleteProperty(globalThis, "localStorage");

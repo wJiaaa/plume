@@ -374,9 +374,9 @@ const worktreeZhCN = {
 
 	// 侧栏行首的记号和删除确认框。
 	inWorktree: (branch: string) => `在自己的工作树里：${branch}`,
-	deleteWorktree: "它的工作树会一起移除。",
-	deleteUncommitted: (n: number, path: string) => `工作树里还有 ${n} 个文件没提交，会留在 ${path}。`,
-	deleteUnmerged: (n: number, branch: string) => `分支 ${branch} 上有 ${n} 个提交没合并，分支会留着。`,
+	deleteWorktree: "它的工作树和分支会一起删掉。",
+	deleteUncommitted: (n: number, path: string) => `工作树 ${path} 里还有 ${n} 个文件没提交，会一起删掉。`,
+	deleteUnmerged: (n: number, branch: string) => `分支 ${branch} 上有 ${n} 个提交没合并，会一起删掉。`,
 
 	// 签后面的菜单。
 	menuTitle: "工作树",
@@ -453,11 +453,15 @@ const worktreeEn: typeof worktreeZhCN = {
 	failedDetail: "This chat works in the project folder itself, so its changes land in your own checkout.",
 
 	inWorktree: (branch) => `In a worktree of its own: ${branch}`,
-	deleteWorktree: "Its worktree is removed too.",
+	deleteWorktree: "Its worktree and branch are deleted too.",
 	deleteUncommitted: (n, path) =>
-		worktreePlural(n, `{n} uncommitted file in its worktree stays at ${path}.`, `{n} uncommitted files in its worktree stay at ${path}.`),
+		worktreePlural(n, `{n} uncommitted file in its worktree at ${path} is deleted too.`, `{n} uncommitted files in its worktree at ${path} are deleted too.`),
 	deleteUnmerged: (n, branch) =>
-		worktreePlural(n, `The branch ${branch} stays: {n} commit on it is not merged yet.`, `The branch ${branch} stays: {n} commits on it are not merged yet.`),
+		worktreePlural(
+			n,
+			`The branch ${branch} is deleted too, with {n} commit not merged yet.`,
+			`The branch ${branch} is deleted too, with {n} commits not merged yet.`,
+		),
 
 	menuTitle: "Worktree",
 	cutFrom: (base) => `Cut from ${base}`,

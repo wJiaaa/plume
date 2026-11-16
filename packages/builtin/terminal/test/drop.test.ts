@@ -10,19 +10,24 @@ vi.mock("@plume/ui", () => ({}));
 const { dropText, shellWord } = await import("../src/drop.ts");
 
 it("普通路径原样，别的加上里面什么都不解释的单引号", () => {
-	expect(shellWord("/Users/me/src/app.ts", "MacIntel")).toBe("/Users/me/src/app.ts");
-	expect(shellWord("/Users/me/My Files/a.txt", "MacIntel")).toBe("'/Users/me/My Files/a.txt'");
-	expect(shellWord("/tmp/$HOME`x`", "Linux x86_64")).toBe("'/tmp/$HOME`x`'");
-	expect(shellWord("/tmp/it's", "MacIntel")).toBe("'/tmp/it'\\''s'");
-	expect(shellWord("/Users/me/中文.txt", "MacIntel")).toBe("'/Users/me/中文.txt'");
+	expect(shellWord("/Users/me/src/app.ts", "posix")).toBe("/Users/me/src/app.ts");
+	expect(shellWord("/Users/me/My Files/a.txt", "posix")).toBe("'/Users/me/My Files/a.txt'");
+	expect(shellWord("/tmp/$HOME`x`", "posix")).toBe("'/tmp/$HOME`x`'");
+	expect(shellWord("/tmp/it's", "posix")).toBe("'/tmp/it'\\''s'");
+	expect(shellWord("/Users/me/中文.txt", "posix")).toBe("'/Users/me/中文.txt'");
 });
 
-it("Windows 上带空格的路径加双引号，cmd 和 PowerShell 都读成一个词", () => {
-	expect(shellWord("C:\\Users\\me\\a.txt", "Win32")).toBe("C:\\Users\\me\\a.txt");
-	expect(shellWord("C:\\Program Files\\Git", "Win32")).toBe('"C:\\Program Files\\Git"');
+it("PowerShell 用单引号，里面的 `$`、反引号不展开；cmd 用双引号", () => {
+	expect(shellWord("C:\\Users\\me\\a.txt", "powershell")).toBe("C:\\Users\\me\\a.txt");
+	expect(shellWord("C:\\Program Files\\Git", "powershell")).toBe("'C:\\Program Files\\Git'");
+	expect(shellWord("C:\\$Recycle.Bin", "powershell")).toBe("'C:\\$Recycle.Bin'");
+	expect(shellWord("C:\\it's `x`", "powershell")).toBe("'C:\\it''s `x`'");
+	expect(shellWord("C:\\Program Files\\Git", "cmd")).toBe('"C:\\Program Files\\Git"');
+	// Git Bash 按 POSIX：单引号里反斜杠原样。
+	expect(shellWord("C:\\a b", "posix")).toBe("'C:\\a b'");
 });
 
 it("几条路径用空格隔开，末尾留一个空格好接着打", () => {
-	expect(dropText(["/a", "/b c"], "MacIntel")).toBe("/a '/b c' ");
-	expect(dropText([], "MacIntel")).toBe("");
+	expect(dropText(["/a", "/b c"], "posix")).toBe("/a '/b c' ");
+	expect(dropText([], "posix")).toBe("");
 });

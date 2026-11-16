@@ -58,8 +58,8 @@ export interface AppState {
 	sidebarWidth: number;
 	/** 窄窗口下抽屉开着没有。和 sidebarOpen 分开：抽屉是临时的，关掉它不等于想收起侧栏。 */
 	drawerOpen: boolean;
-	/** 面板区开着没有、宽度偏好（见 layout.ts）。 */
-	panelOpen: boolean;
+	/** 面板区开着没有，按会话（面板的 scope，同 panelTabs）记，没记的是收着；宽度偏好是全局一份（见 layout.ts）。 */
+	panelOpen: Record<string, boolean>;
 	panelWidth: number;
 	/** 标签按会话保存；只有声明可恢复的面板落盘，空白会话首次发送时交给新会话。 */
 	panelTabs: Record<string, PanelTabs>;
@@ -127,7 +127,7 @@ export let state: AppState = {
 	sidebarOpen: sidebarPrefs.open,
 	sidebarWidth: sidebarPrefs.width,
 	drawerOpen: false,
-	panelOpen: panelWindow ? true : panelPrefs.open,
+	panelOpen: panelWindow ? { [panelWindow.scope]: true } : panelPrefs.open,
 	panelWidth: panelPrefs.width,
 	panelTabs: panelWindow
 		? {

@@ -9,6 +9,7 @@
  */
 
 import type { ServerConfig } from "./config.ts";
+import { looksSecret } from "./vars.ts";
 
 const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;
 
@@ -75,4 +76,31 @@ export function resolveServer(server: ServerConfig, environment: Readonly<Record
 	const headers = entries(server.headers);
 	const { env: _values, ...rest } = server;
 	return { ...rest, url: fill(server.url), headers };
+}
+
+/** 短于这个的值不遮：遮掉 `1`、`true` 只会把输出弄得看不懂。 */
+const MIN_SECRET_CHARS = 6;
+
+/**
+ * 服务的输出里要遮掉的值（它会进设置页）：填进空位的每个值（配置文件里不写、留到连接时填的，通常就是密钥），
+ * 名字像密钥的环境变量，以及跟在像密钥的参数名后面的参数（`--token=xxx`、`--api-key xxx`）。
+ */
+export function secretValues(server: ServerConfig, environment: Readonly<Record<string, string | undefined>>): string[] {
+	const found = new Set<string>();
+	for (const { name } of placeholdersOf(server)) {
+		const value = valueFor(server, name, environment);
+		if (value) found.add(value);
+	}
+	if (server.transport === "stdio") {
+		for (const [name, value] of Object.entries(server.env ?? {})) if (looksSecret(name) && !hasPlaceholder(value)) found.add(value);
+		const args = server.args ?? [];
+		args.forEach((arg, index) => {
+			const flag = /^--?([A-Za-z0-9_-]+)(?:=(.*))?$/.exec(arg);
+			if (!flag || !looksSecret(flag[1] as string)) return;
+			const value = flag[2] ?? args[index + 1];
+			if (value && !hasPlaceholder(value)) found.add(value);
+		});
+	}
+	// 长的先换：一个值是另一个的一部分时，先换短的会留下长的那截。
+	return [...found].filter((value) => value.length >= MIN_SECRET_CHARS).sort((a, b) => b.length - a.length);
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import { DOCUMENT_EXTENSION, DOCUMENT_ID, MAX_DOCUMENT_BYTES, type DocumentRef } from "./document-types.ts";
@@ -43,6 +43,8 @@ function documentName(uri: string, mime: string | undefined): string | null {
 /** 只存服务已经返回的数据；界面只能按内容 id 读本会话快照，不能提交磁盘路径或下载地址。 */
 export class Documents {
 	private readonly root: string;
+	/** 这次加载以后存过文档的会话目录：清扫时一定留着，不管 `keepOnly` 拿到的列表是不是早了一步。 */
+	private readonly touched = new Set<string>();
 	constructor(root: string) {
 		this.root = root;
 	}
@@ -60,6 +62,7 @@ export class Documents {
 		const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 		const id = `${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
 		const directory = this.directory(session);
+		this.touched.add(directory);
 		mkdirSync(directory, { recursive: true, mode: 0o700 });
 		try {
 			writeFileSync(join(directory, id), bytes, { flag: "wx", mode: 0o600 });
@@ -97,6 +100,20 @@ export class Documents {
 	}
 
 	remove(session: string): void {
-		rmSync(this.directory(session), { recursive: true, force: true });
+		const directory = this.directory(session);
+		this.touched.delete(directory);
+		rmSync(directory, { recursive: true, force: true });
+	}
+
+	/** 只留这些会话的：删会话时插件没在跑（停用着、删到一半退出）留下的，加载时清掉。 */
+	keepOnly(live: Iterable<string>): void {
+		const kept = new Set([...this.touched, ...[...live].map((session) => this.directory(session))]);
+		let entries: string[] = [];
+		try {
+			entries = readdirSync(this.root);
+		} catch {
+			return;
+		}
+		for (const entry of entries) if (!kept.has(join(this.root, entry))) rmSync(join(this.root, entry), { recursive: true, force: true });
 	}
 }

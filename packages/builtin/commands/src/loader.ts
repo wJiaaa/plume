@@ -5,7 +5,7 @@
  * （给 Plume 写的命令可以有意盖住别处的同名命令）。不缓存：每次打开菜单、每次发送都现读，改完文件马上生效。
  */
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 
@@ -45,7 +45,7 @@ const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?::[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 const MAX_DESCRIPTION = 200;
 /** frontmatter `deliver` 认的值。`prompt` 是默认，写不写都一样。 */
 const DELIVERIES = new Set(["prompt", "steer", "followUp"]);
-/** 往下最多找三层子目录。 */
+/** 找几层：命令目录本身，加往下两层子目录。 */
 const MAX_DEPTH = 3;
 
 function claudeHome(): string {
@@ -168,7 +168,10 @@ function firstLine(body: string): string {
 	return "";
 }
 
-/** 目录下的全部 `.md`，按路径排；目录不在就是空的。点开头的是编辑器留下的，不算。 */
+/**
+ * 目录下的全部 `.md`，按路径排；目录不在就是空的。点开头的是编辑器留下的，不算。
+ * 符号链接按它指向的东西算（拿 dotfiles 链进来的命令很常见）；层数有上限，链成环也走不远。
+ */
 async function walk(dir: string, depth: number): Promise<string[]> {
 	if (depth <= 0) return [];
 	const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
@@ -177,8 +180,10 @@ async function walk(dir: string, depth: number): Promise<string[]> {
 	for (const entry of entries) {
 		if (entry.name.startsWith(".")) continue;
 		const path = join(dir, entry.name);
-		if (entry.isDirectory()) files.push(...(await walk(path, depth - 1)));
-		else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) files.push(path);
+		const target = entry.isSymbolicLink() ? await stat(path).catch(() => null) : entry;
+		if (!target) continue;
+		if (target.isDirectory()) files.push(...(await walk(path, depth - 1)));
+		else if (target.isFile() && entry.name.toLowerCase().endsWith(".md")) files.push(path);
 	}
 	return files.sort();
 }

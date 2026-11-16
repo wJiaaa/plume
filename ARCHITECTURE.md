@@ -28,7 +28,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 | --- | --- | --- |
 | `apps/desktop`（`@plume/desktop`） | 主进程、agent 进程入口、渲染进程 | Electron 外壳、产品界面、冒烟验证 |
 | `packages/contract`（`@plume/contract`） | 只有类型 | 所有共享类型：插件 API（`@plume/contract` 逻辑入口、`@plume/contract/ui` 界面入口）、AgentService 及事件和视图、agent 与应用之间的约定 |
-| `packages/core/agent`（`@plume/agent`） | agent 进程 | `agent.ts` 会话、AgentService；`loop.ts` 循环的一轮；`stream-turn.ts` 一次请求（草稿、重试）；`tool-run.ts` 一步里的工具和审批；`commands.ts` 权限模式对应哪一档沙箱、提权、只读（工具经 `run.exec`、`run.escalate`、`run.shell` 用，系统提示词经 `ModelContext.shell`）；`run-files.ts` 把 `@plume/workspace` 接到过闸、调用结果和会话上：工具的 `run.files`（读边界、读卡片、拒绝的说法，写边界和改动快照）、带 `recordChanges` 的 `run.exec` 的命令观测，这次调用改了哪些文件（`ToolOutput.changes`），插件的 `ctx.resources`、`ctx.workspace`、`ctx.changes`，撤回、编辑重发时连文件一起退（`revert`）；`background.ts` 后台结果的送达（子会话交回、工具的渠道、会话间的信）；`jobs.ts` 工具登记的后台任务（`run.track`）、`wakeups.ts` 和 `cron.ts` 约好的唤醒（`run.schedule`），会话闲没闲算上派出去的后台运行和一次性的后台任务，监视、标成服务的任务和唤醒是挂着的、不算；`recovery.ts` 截断续写和空回复催促；`repetition.ts` 重复调用检测；`hiccups.ts` 连接岔子的记录；`compaction.ts` 压缩的账（摘要、头和边界怎么拼回历史，剪枝视图，拒收后剪成一行的结果）；`session-compaction.ts` 一次压缩（问钩子、记账、转录里的压缩行，`/compact`、一轮收尾后的 idle 压缩）；`host.ts` 插件宿主；`testing.ts` 假模型服务 |
+| `packages/core/agent`（`@plume/agent`） | agent 进程 | `agent.ts` 会话、一轮的占用和放开（`Session.controller`、`held`、`release`）、子会话和代管，并把 AgentService 组起来；`model-settings.ts` 模型设置的读写（排队写回、key 经 vault 进出）和设置页那组只动设置的方法；`projects.ts` 项目登记；`loop.ts` 循环的一轮；`stream-turn.ts` 一次请求（草稿、重试）；`tool-run.ts` 一步里的工具和审批；`commands.ts` 权限模式对应哪一档沙箱、提权、只读（工具经 `run.exec`、`run.escalate`、`run.shell` 用，系统提示词经 `ModelContext.shell`）；`run-files.ts` 把 `@plume/workspace` 接到过闸、调用结果和会话上：工具的 `run.files`（读边界、读卡片、拒绝的说法，写边界和改动快照）、带 `recordChanges` 的 `run.exec` 的命令观测，这次调用改了哪些文件（`ToolOutput.changes`），插件的 `ctx.resources`、`ctx.workspace`、`ctx.changes`，撤回、编辑重发时连文件一起退（`revert`）；`background.ts` 后台结果的送达（子会话交回、工具的渠道、会话间的信）；`jobs.ts` 工具登记的后台任务（`run.track`）、`wakeups.ts` 和 `cron.ts` 约好的唤醒（`run.schedule`），会话闲没闲算上派出去的后台运行和一次性的后台任务，监视、标成服务的任务和唤醒是挂着的、不算；`recovery.ts` 截断续写和空回复催促；`repetition.ts` 重复调用检测；`hiccups.ts` 连接岔子的记录；`compaction.ts` 压缩的账（摘要、头和边界怎么拼回历史，剪枝视图，拒收后剪成一行的结果）；`session-compaction.ts` 一次压缩（问钩子、记账、转录里的压缩行，`/compact`、一轮收尾后的 idle 压缩）；`host.ts` 插件宿主；`testing.ts` 假模型服务 |
 | `packages/core/llm`（`@plume/llm`） | agent 进程 | 模型调用，自成一体的包 |
 | `packages/core/workspace`（`@plume/workspace`） | agent 进程 | 替模型读写这台机器时守的线：读边界（`read-access.ts`：哪里不问、哪里要问、批准覆盖多大、一行命令写明要读哪些路径），写边界（`paths.ts`：Plume 自己的目录不写、链接写不出工作区），改动快照和撤销（`change-store.ts`、`text-file.ts` 写文件的队列和写前复核、`command-changes.ts` 命令前后对比工作区、`change-lock.ts` 撤销和改动之间的门闩），资源地址的路由和本体自己的 `scratch://`、`artifact://`、`session://`、`plugin://`（`resources/`），在隔离视图里问 git（`host-git.ts`，不执行仓库配置的程序）和项目文件清单（`project-files.ts`）；只认路径、目录、数据目录，不认会话和循环 |
 | `packages/core/sandbox`（`@plume/sandbox`） | agent 进程（Windows runner 是应用经 `ELECTRON_RUN_AS_NODE` 起的单独进程） | 在这台机器给得了的约束里跑 shell 命令：macOS seatbelt，Windows 受限令牌（runner 打成主进程旁边的入口 `out/main/sandbox-runner.js`，agent 进程经 `useSandboxRunner` 告诉它，koffi 是应用的生产依赖），登录 shell 的环境（`login-path.ts`）；只认命令、目录、档位，不认会话和循环 |
@@ -38,11 +38,38 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 | `packages/client/styles`（`@plume/styles`） | 渲染进程 | 设计 token `theme.css`（`--plume-*` 变量：颜色由种子推出、字号七档、圆角、动效，以及 Tailwind 映射）；共用的 Tailwind 类名组合（按钮、卡片、输入框、代码、文字） |
 | `packages/client/ui`（`@plume/ui`） | 渲染进程 | 基础组件 Button、IconButton、Input、Textarea、Card、CodeBlock、DiffView，类名来自 `@plume/styles`；产品和插件卡片共用 |
 | `packages/sdk/plugin-sdk`（`@plumeai/plugin-sdk`） | 插件作者的机器上 | 插件 SDK：从 `contract`、`ui`、`styles` 的源码生成类型声明（`@plume/ui` 只开放 `plugin-api.json` 里的名字）、`plume-plugin` 命令（init / check / build / install / dev / link）、插件模板，以及插件包的格式（`@plumeai/plugin-sdk/manifest`：什么目录算插件、发哪些文件、`package.json` 的说明怎么读，主进程和插件仓库发市场都引它）。随应用发（资源目录里整理好的一份，自带 esbuild、TypeScript，见 `scripts/stage.mjs`），主进程生成 `~/.plume/bin/plume-plugin` 用应用的二进制跑它，不经 npm。仓库里的插件也只经它拿类型、经它构建 |
-| `packages/builtin/*` | agent 进程、渲染进程 | 内置插件 tools（read、write、edit、ls、glob、grep、bash、bash_output、monitor，读写经本体的 `run.files`，可能改文件的命令带 `recordChanges` 交给本体观测）、delivery（最新轮交付卡、审核面板，经本体的 `ctx.changes` 汇总、撤销）、approval（钩子 `tool.approve` 上按帮我批准的风险规则放行）、ask-user（`ask_user` 工具和提问卡）、prompt（系统提示词、日期、打断说明）、compaction（上下文压缩、`recall`、`/compact`）、todo（`todo_write` 和跟着会话的清单卡片）、skills（技能目录、`skill` 工具，随包带 `plume-plugin` 技能）、commands（`/` 命令，读 `.plume/commands`、`.claude/commands` 里的 Markdown）、web（`web_search`、`web_fetch`）、title（智能标题，开关在设置 › 常规）、spawn-session（`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话每结束一轮经 `ctx.sessions.reportBack` 交回汇报；环境卡片里「建议的新会话」、卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话）、git（分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`）、mcp（连 MCP 服务、把工具交给 agent，设置页「MCP」，也读 Magpie 资源库分发的服务和插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存）、documents（文件面板和插件经 `ui.DocumentPreview` 共用的只读表格、SQLite 和 Word 预览）、diagnostics（运行诊断：后台任务、运行记录、调用轨迹，往环境卡片里放后台任务（含检查、定时任务和轮询）、压缩记录两节）、environment（会话环境：标题栏的「环境」开关和环境卡片这个容器，自己画打开方式、子会话、引用三节，别的插件经 `ui.environmentSection` 往里放节）、browser（「浏览器」面板和 `browser_*` 工具，设置里从 Chrome 同步登录状态；面板一个标签一页 `<webview>`，挂上后交给逻辑入口，人点的和 `browser_*` 工具都经 `ctx.pages` 驱动同一页；面板 `keepAlive`，最近看过的几个会话的页面挂着；能弹到独立窗口；本地 `.html` 由逻辑入口的本机小服务给）、terminal（shell 用 node-pty 跑在 agent 进程，比面板活得长；「终端」面板用 xterm 经 `ui.remote()` 连上；登记 `ui.terminalOpener`、`ui.terminalRunner` 接本体的「在终端中打开」「在终端运行」）、side-chat（「侧边聊天」面板和 `/btw`，侧边聊天是挂在会话下的子会话；`dispatch_task`、`control_main` 经 `ToolRun.parent` 把活排进主会话、停下或接着做）、subagents（`task` 工具把活交给子会话里的子 Agent，「子 Agent」面板看过程；种类全关掉时对模型藏起 `task`）、plan（计划模式：按会话的开关和 `/plan`，开着时不改文件、命令进只读沙箱，`submit_plan` 交计划给人批准，「在新会话里执行」经 `launch` 开新会话）：随应用发（打包时放进资源目录的 `builtin/`）、不能停用，能经服务或外层钩子换掉；和 `plugins/` 下的一样只用公开接口 |
+| `packages/builtin/*` | agent 进程、渲染进程 | 内置插件：随应用发（打包时放进资源目录的 `builtin/`）、不能停用，能经服务或外层钩子换掉；和 `plugins/` 下的一样只用公开接口；各自做什么、代码从哪进见下面的「内置插件」 |
 | 插件仓库的 `plugins/*` | agent 进程、渲染进程 | 市场插件 scheduled（定时任务的列表存在插件数据目录的 `tasks.json`，「定时任务」页面经 `ui.remote()` 读写；逻辑入口每分钟看一次，到点的经 `ctx.sessions.launch` 开新会话发提示词，失败在输入框上方和活动栏的数目上告诉人）、hooks（按 Claude Code 的约定跑用户配的钩子命令）、index（`symbol` 工具查定义位置，设置页「索引库」）、sessions（`list_sessions`、`read_session` 读别的会话，`send_message` 经 `ToolRun.letter` 给别的顶层会话寄一封单向的信，工具那一行标回执；互相开出来的一组会话的系统提示词里有名册；限速、去重的账在插件里，连着叫醒的上限在本体） |
 | `integrations/magpie` | Magpie 里 | 给 Magpie 用的 Agent 插件：在 Magpie 里给 Plume 选模型，写进 Plume 的设置文件；资源库的技能写进 `~/.plume/skills`，全局指令写进 `~/.plume/magpie/AGENTS.md`（plume.prompt 每轮读），MCP 写进 `~/.plume/magpie/mcp.json`（plume.mcp 和自己的服务一起读，只读） |
 
 依赖方向：`desktop → agent、ui、styles、rpc、plugin-sdk`（只引 `manifest`，打进主进程）；`ui → styles`；`agent → llm`；所有包的共享类型都来自 `contract`；`agent` 不依赖任何具体插件；`packages/` 不依赖 `apps/`。插件只 `import type` `@plume/contract`，界面入口运行时用共享的 `react`、`@plume/ui`、`@plume/styles`；这个仓库里的内置插件和测试插件（`packages/builtin/`、`packages/testing/`）另外可以引用 `packages/infra/` 下的通用库（不懂 agent 业务，在 package.json 里声明，构建时打进插件；`scripts/check-plugins.mjs`）；插件仓库里 `plugins/*` 的这些类型来自 `plugin-sdk`（tsconfig 继承 `@plumeai/plugin-sdk/tsconfig.json`），不直接依赖 `contract`、`ui`。
+
+### 内置插件
+
+`packages/builtin/<目录>`，插件名是 `plume.<目录>`；产品上的行为见 [docs/features](docs/features/README.md)。
+
+- `tools`：read、write、edit、ls、glob、grep、bash、bash_output、monitor，读写经本体的 `run.files`，可能改文件的命令带 `recordChanges` 交给本体观测
+- `delivery`：最新轮交付卡、审核面板，经本体的 `ctx.changes` 汇总、撤销
+- `approval`：钩子 `tool.approve` 上按帮我批准的风险规则放行
+- `ask-user`：`ask_user` 工具和提问卡
+- `prompt`：系统提示词、日期、打断说明
+- `compaction`：上下文压缩、`recall`、`/compact`
+- `todo`：`todo_write` 和跟着会话的清单卡片
+- `skills`：技能目录、`skill` 工具，随包带 `plume-plugin` 技能
+- `commands`：`/` 命令，读 `.plume/commands`、`.claude/commands` 里的 Markdown
+- `web`：`web_search`、`web_fetch`
+- `title`：智能标题，开关在设置 › 常规
+- `spawn-session`：`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话每结束一轮经 `ctx.sessions.reportBack` 交回汇报；环境卡片里「建议的新会话」、卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话
+- `git`：分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`
+- `mcp`：连 MCP 服务、把工具交给 agent，设置页「MCP」，也读 Magpie 资源库分发的服务和插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存
+- `documents`：文件面板和插件经 `ui.DocumentPreview` 共用的只读表格、SQLite 和 Word 预览
+- `diagnostics`：运行诊断：后台任务、运行记录、调用轨迹，往环境卡片里放后台任务（含检查、定时任务和轮询）、压缩记录两节
+- `environment`：会话环境：标题栏的「环境」开关和环境卡片这个容器，自己画打开方式、子会话、引用三节，别的插件经 `ui.environmentSection` 往里放节
+- `browser`：「浏览器」面板和 `browser_*` 工具，设置里从 Chrome 同步登录状态；面板一个标签一页 `<webview>`，挂上后交给逻辑入口，人点的和 `browser_*` 工具都经 `ctx.pages` 驱动同一页；面板 `keepAlive`，最近看过的几个会话的页面挂着；能弹到独立窗口；本地 `.html` 由逻辑入口的本机小服务给
+- `terminal`：shell 用 node-pty 跑在 agent 进程，比面板活得长；「终端」面板用 xterm 经 `ui.remote()` 连上；登记 `ui.terminalOpener`、`ui.terminalRunner` 接本体的「在终端中打开」「在终端运行」
+- `side-chat`：「侧边聊天」面板和 `/btw`，侧边聊天是挂在会话下的子会话；`dispatch_task`、`control_main` 经 `ToolRun.parent` 把活排进主会话、停下或接着做
+- `subagents`：`task` 工具把活交给子会话里的子 Agent，「子 Agent」面板看过程；种类全关掉时对模型藏起 `task`
+- `plan`：计划模式：按会话的开关和 `/plan`，开着时不改文件、命令进只读沙箱，`submit_plan` 交计划给人批准，「在新会话里执行」经 `launch` 开新会话
 
 ## agent 的一轮
 
@@ -78,9 +105,9 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 
 项目登记和项目顺序保存在 `projects.json`：`path` 是新会话的主目录，`folders` 是全部源文件夹，`sessionOrder` 是该项目的手动会话顺序。会话保留创建时的工作目录；宿主只在目录仍属于记录的项目时授予额外源目录读取权限，独立工作树不会读回原项目。侧栏按 `spawnedFrom` / `forkedFrom` 在同组中嵌套后续会话；置顶、归档和项目移动仍各自按会话处理。悬停统计从会话库的消息和花销账本按需读取，不加载完整历史。
 
-模型设置存在 `~/.plume/settings.json`（0600），只有 agent 进程读写，每次用到都重新读；供应商的 API key 不写进它，加密（AES-256-GCM）存在数据目录的 `credentials.json`，钥匙是同目录的 `vault.key`，两个都是 0600（`packages/core/agent/src/vault.ts`）；插件的 `ctx.secrets` 也用这把钥匙，按插件名派生子钥（HKDF），各插件的密文互相解不开，密文由插件写回自己的配置；读设置时填回供应商上，手写进 `settings.json` 的 key 照样能用、下次保存时挪走；Magpie 写的网关 key 仍在 `settings.json` 的 `magpie` 块里。冒烟验证用 `.smoke/` 里的一份。格式是若干供应商（协议、地址、key、模型列表）加一个默认模型，读写和挑模型的规则在 `packages/core/agent/src/models.ts`：会话选了模型且还可用就用它，否则用默认模型，默认模型失效时落到第一个可用的。会话设置分全局和项目两层：当前工作目录的 `cwd/.plume/config.json` 覆盖全局，只读这一处、不向上找；对象深合并，数组和标量整体替换，再经过同一套校验。项目层不接受 `providers`、`apiKey`、`credentials`、`githubToken`、`mcpServers` 或 `magpie`，`hooks` 不合入，也不自动启用钩子；配置无效时使用全局设置并提示位置，不回显文件原文。
+模型设置存在 `~/.plume/settings.json`（0600），只有 agent 进程读写，每次用到都重新读；供应商的 API key 不写进它，加密（AES-256-GCM）存在数据目录的 `credentials.json`，钥匙是同目录的 `vault.key`，两个都是 0600（`packages/core/agent/src/vault.ts`）；插件的 `ctx.secrets` 也用这把钥匙，按插件名派生子钥（HKDF），经接口拿不到别的插件的密文，密文由插件写回自己的配置（这不是插件之间的安全边界：插件和 agent 同进程，读得到 `vault.key`，见 [agent-extension.md](agent-extension.md) 第 4 节「信任」）；读设置时填回供应商上，手写进 `settings.json` 的 key 照样能用、下次保存时挪走；Magpie 写的网关 key 仍在 `settings.json` 的 `magpie` 块里。冒烟验证用 `.smoke/` 里的一份。格式是若干供应商（协议、地址、key、模型列表）加一个默认模型，读写和挑模型的规则在 `packages/core/agent/src/models.ts`：会话选了模型且还可用就用它，否则用默认模型，默认模型失效时落到第一个可用的。会话设置分全局和项目两层：当前工作目录的 `cwd/.plume/config.json` 覆盖全局，只读这一处、不向上找；对象深合并，数组和标量整体替换，再经过同一套校验。项目层不接受 `providers`、`apiKey`、`credentials`、`githubToken`、`mcpServers` 或 `magpie`，`hooks` 不合入，也不自动启用钩子；配置无效时使用全局设置并提示位置，不回显文件原文。
 
-路径固定是为了 Magpie：它的 Agent 插件（`integrations/magpie`）往这个文件写顶层的 `magpie` 块和 `defaultModel`，读入时合成一个「Magpie」供应商排在最后，写盘时拿掉，在 Plume 里改不了（`packages/core/agent/src/magpie.ts`）。
+路径固定是为了 Magpie：它的 Agent 插件（`integrations/magpie`）往这个文件写顶层的 `magpie` 块和 `defaultModel`，读入时合成一个「Magpie」供应商排在最后，写盘时从 `providers` 拿掉；Plume 里的编辑写回 `magpie` 块，删除时移除该块（`packages/core/agent/src/magpie.ts`）。
 
 模型目录（上下文、能力、价格的参考值，见 `@plume/llm/model-catalog`）缓存在 `~/.plume/model-catalog.json`：agent 进程启动时先读缓存，再每小时同步一次（`packages/core/agent/src/model-catalog-sync.ts`），界面经 `modelCatalog(版本)` 取，版本没变不传整份；冒烟验证不同步。导出、导入供应商的文件由主进程弹系统对话框选路径（`plume:providers:save-path` / `open-path`），读写文件的是 agent 进程；导出的文件带 key，权限只给本人。
 

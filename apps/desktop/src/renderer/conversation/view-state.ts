@@ -260,6 +260,8 @@ export function useTranscriptWindow(id: string, step: number, total: number) {
 		end,
 		earlier: () => update(current.size + step, current.end),
 		later: () => update(current.size + step, end + step >= total ? undefined : end + step),
+		/** 窗口挂到末尾、只留最后 `size` 块（不少于 `step`）：读者停在底部时收回往上翻时多挂出来的，见 Transcript 的 `trimBehind`。 */
+		keepLast: (size: number) => update(Math.max(step, size), undefined),
 		// 回到末尾时不扔掉已经挂上的轮：缩回 `step` 会在发消息时卸掉长转录的上半截，视口先掉几百像素再滑回来。
 		latest: () => update(Math.max(step, current.size), undefined),
 		/** 让第 `index` 块挂上：问题导航跳到一问旧的。只挂它附近的一窗，不把它到末尾之间的每一轮都挂上。 */

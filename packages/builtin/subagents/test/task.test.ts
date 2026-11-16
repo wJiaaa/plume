@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { setImmediate } from "node:timers/promises";
 import { test, type TestContext } from "node:test";
 import type {
@@ -27,10 +28,23 @@ import type {
 import type { SubagentsApi } from "../src/api.ts";
 import { BUILTIN_AGENTS } from "../src/agents.ts";
 import plugin from "../src/index.ts";
-import { lastProse, wayBack } from "../src/types.ts";
+import { lastProse, wayBack, type TaskRecord } from "../src/types.ts";
 
 const MODELS: SessionModel[] = [{ id: "provider/model", name: "Model", contextWindow: 100_000, thinking: [{ id: "high", label: "High", detail: "" }] }];
 const assistant = (text: string, timestamp = Date.now()): Message => ({ role: "assistant", content: [{ type: "text", text }], timestamp }) as Message;
+
+/** 登记簿落在盘上的样子：插件卸下后也读得到。 */
+function stored(directory: string): TaskRecord[] {
+	const db = new DatabaseSync(join(directory, "subagents.db"), { readOnly: true });
+	try {
+		return db
+			.prepare("SELECT body FROM tasks ORDER BY rowid")
+			.all()
+			.map((row) => JSON.parse(String(row.body)) as TaskRecord);
+	} finally {
+		db.close();
+	}
+}
 
 async function until(predicate: () => boolean) {
 	for (let n = 0; n < 100 && !predicate(); n++) await setImmediate();
@@ -97,6 +111,7 @@ async function fixture(t: TestContext) {
 		},
 		sessions: {
 			list: async () => [...sessions.values()],
+			get: async (id: string) => sessions.get(id),
 			models: async () => MODELS,
 			onStopped: (listener: (id: string) => void) => stopListeners.push(listener),
 			onDeleted: (listener: (id: string) => void) => deleteListeners.push(listener),
@@ -131,8 +146,7 @@ async function fixture(t: TestContext) {
 			wait: async (runId: string) => waits.get(runId)!,
 			// 一份单独送达时宿主拼成的样子：开头、正文、送出那一刻的结尾。
 			report: async (runId: string, text: string, { frame, delivery }: ReportOptions = {}) => {
-				const data = JSON.parse(readFileSync(join(directory, "subagents.json"), "utf8"));
-				assert.ok(data.tasks.some((task: { runId: string; endedAt?: number }) => task.runId === runId && task.endedAt));
+				assert.ok(stored(directory).some((task) => task.runId === runId && task.endedAt));
 				reports.push({ runId, text: [frame?.head, text, frame?.tail?.()].filter(Boolean).join("\n\n"), delivery });
 				return true;
 			},
@@ -193,9 +207,15 @@ async function fixture(t: TestContext) {
 		unload,
 		api: () => api,
 		stopParent: () => stopListeners.forEach((listener) => listener("main")),
+		/** 和宿主删会话一样：连同子会话一起删，先停下各自正在跑的那一轮，再一个个告诉插件。归档的也一样。 */
 		deleteSession: (id: string) => {
-			sessions.delete(id);
-			deleteListeners.forEach((listener) => listener(id));
+			const ids = [id, ...[...sessions.values()].filter((session) => session.parentId === id).map((session) => session.id)];
+			for (const each of ids) {
+				sessions.delete(each);
+				const start = starts.findLast((entry) => entry.sessionId === each);
+				if (start) pending.get(start.runId)?.({ reason: "aborted" });
+				deleteListeners.forEach((listener) => listener(each));
+			}
 		},
 		beforeCreate: (callback: () => Promise<void>) => {
 			beforeCreate = callback;
@@ -350,12 +370,52 @@ test("delete and unload cancel pending work and never deliver results", async (t
 	assert.equal(f.reports.length, 0);
 	assert.equal(f.starts.length, 4);
 	assert.equal(
-		f
-			.api()
-			.list("main")
-			.every((task) => !["queued", "running"].includes(task.state)),
+		stored(f.directory).every((task) => !["queued", "running"].includes(task.state)),
 		true,
 	);
+});
+
+test("the registry keeps one row per task; deleting the parent drops its tasks, and so does a reload that no longer finds it", async (t) => {
+	const f = await fixture(t);
+	await f.run({ description: "One", prompt: "work" });
+	await f.run({ description: "Two", prompt: "work" });
+	await until(() => f.starts.length === 2);
+	f.finish(0, "done", "first");
+	await until(() => f.reports.length === 1);
+	assert.deepEqual(
+		stored(f.directory).map((task) => [task.description, task.state]),
+		[
+			["One", "done"],
+			["Two", "running"],
+		],
+	);
+	f.deleteSession("main");
+	await setImmediate();
+	assert.deepEqual(stored(f.directory), []);
+	assert.deepEqual(f.api().list("main"), []);
+
+	f.sessions.set("other", { id: "other", title: "Other", cwd: "/work", running: false, createdAt: 0, updatedAt: 0 });
+	await f.run({ description: "Three", prompt: "work" }, "other");
+	await f.unload();
+	f.sessions.delete("other");
+	await f.load();
+	assert.deepEqual(stored(f.directory), []);
+});
+
+test("deleting the parent stops its running sub-agents and drops them, archived or not, even while one is still being created", async (t) => {
+	const f = await fixture(t);
+	f.sessions.set("main", { ...f.sessions.get("main")!, archived: true });
+	await f.run({ description: "Running", prompt: "work" });
+	await until(() => f.starts.length === 1);
+	f.beforeCreate(async () => f.deleteSession("main"));
+	const late = await f.run({ description: "Late", prompt: "work" });
+	assert.equal(late.isError, true);
+	await setImmediate();
+	assert.deepEqual(stored(f.directory), []);
+	assert.equal(f.reports.length, 0);
+	// 停下的子智能体不再挂着：卸载不用等它。
+	await f.unload();
+	assert.deepEqual(stored(f.directory), []);
 });
 
 test("model choices persist and invalid explicit choices fail instead of fallback", async (t) => {
@@ -458,7 +518,6 @@ test("deleting the parent drops its roster and cannot admit queued work", async 
 	await Promise.all(Array.from({ length: 5 }, () => f.run({ description: "Task", prompt: "work" })));
 	await until(() => f.starts.length === 4);
 	f.deleteSession("main");
-	for (let index = 0; index < 4; index++) f.finish(index, "aborted");
 	await setImmediate();
 	assert.deepEqual(f.api().list("main"), []);
 	assert.equal(f.starts.length, 4);

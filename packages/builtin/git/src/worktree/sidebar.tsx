@@ -59,8 +59,8 @@ export function WorktreeMark({ session, fallback }: SessionMarkProps) {
 }
 
 /**
- * 删除确认框里的那句：删掉对话会收走工作树的目录，合进基分支的分支一起删。活得比对话长的那部分点出来，
- * 它是这份活里唯一不跟着删的：没提交的文件留在原地，没合并的提交留在分支上。
+ * 删除确认框里的那句：删掉对话连同它的工作树和分支一起删。会丢掉的点出来，让人删之前知道：
+ * 没提交的文件在哪、没合并的提交在哪个分支上。
  */
 export async function deleteNote(sessionId: string, text: Messages): Promise<string | undefined> {
 	const [record, state] = await Promise.all([worktree().worktreeRecord(sessionId), worktree().worktreeState(sessionId)]);

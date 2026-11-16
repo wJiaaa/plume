@@ -25,11 +25,11 @@ magpie plugin add ./integrations/magpie
 ```
 
 Plume 读设置时把 `magpie` 块合成一个名为「Magpie」的供应商，排在你自己的供应商后面
-（`packages/core/agent/src/magpie.ts`）。它不写进 `providers`，开关全由 Magpie 管：
+（`packages/core/agent/src/magpie.ts`）。它不写进 `providers`，在 Plume 里的修改也写回 `magpie` 块：
 
 - 在 Magpie 里选回 Plume 原来的模型，或关掉开关，这几个键恢复原值，原本没有的删掉
   （删空的 `magpie` 会留成 `{}`，Plume 当它不存在）。
-- 在 Plume 的模型设置里改或删这个供应商会被拒绝，提示去 Magpie 里操作。
+- 在 Plume 的模型设置里可以重命名、启停、修改连接和密钥、拉取或增删改模型，也可以删除这个供应商（移除 `magpie` 块）。修改会保存，下一轮生效；Magpie 再次同步时会覆盖连接、密钥和模型列表。修改密钥会改变 Magpie 对接管状态的判断。
 - 档位：Magpie 的 `none` 对应 Plume 的「关闭」，其余同名；Magpie 不知道档位时用默认几档。
   不知道上下文和输出上限时，按新建模型的默认值（200000、32000）。
 

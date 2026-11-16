@@ -27,8 +27,21 @@ export default {
 			async (jobId, sessionId) => (await ctx.sessions.jobOutput(sessionId, jobId)).text,
 			() => words().invalidListeners,
 		);
-		ctx.sessions.observe((value) => store.append(value));
-		ctx.sessions.onDeleted((id) => store.delete(id));
+		/** 加载以后才记下的会话：清扫时一定还在，不等 `list()` 回来才算它。 */
+		const recorded = new Set<string>();
+		ctx.sessions.observe((value) => {
+			recorded.add(value.sessionId);
+			store.append(value);
+		});
+		ctx.sessions.onDeleted((id) => {
+			recorded.delete(id);
+			store.delete(id);
+		});
+		// 删会话时没在跑（停用着、删到一半退出）留下的轨迹，加载时对着现有的会话清掉。
+		void ctx.sessions
+			.list()
+			.then((all) => store.keepOnly(new Set([...all.map((session) => session.id), ...recorded])))
+			.catch((error: unknown) => ctx.log.warn(`清理已删会话的轨迹失败：${error instanceof Error ? error.message : String(error)}`));
 		const session = async (id: string) => {
 			if (typeof id !== "string" || !id) throw new Error(words().missingSession);
 			const all = await ctx.sessions.list();
@@ -70,7 +83,7 @@ export default {
 				// 截过的结果带 `spill`（全文在会话的 `spill/`），命令的完整输出带 `outputPath`（`tool-output/`）。都在这一个临时目录里。
 				const path = detailsPath(details);
 				if (typeof path !== "string") throw new Error(words().outputGone);
-				const root = await realpath(join(ctx.appDataDir, "scratch", id));
+				const root = await realpath(await ctx.sessions.scratchDir(id));
 				const actual = await realpath(path);
 				const part = relative(root, actual);
 				if (!part || part.startsWith("..") || isAbsolute(part)) throw new Error(words().outputGone);

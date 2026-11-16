@@ -170,7 +170,6 @@ export function StorageSettings() {
 							{done && !("error" in done) && (
 								<span key={`${done.removed}:${done.freed}`} className="ml-1 animate-[plume-fade-up_var(--plume-t-base)_ease-out] text-ink-muted">
 									{done.removed > 0 ? t("cleanup.doneRemoved", { n: done.removed, size: formatBytes(done.freed) }) : t("cleanup.nothing")}
-									{done.skipped > 0 && ` · ${t("cleanup.doneSkipped", { n: done.skipped })}`}
 								</span>
 							)}
 						</>

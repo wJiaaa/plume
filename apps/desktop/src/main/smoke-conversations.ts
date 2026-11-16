@@ -318,6 +318,19 @@ export async function checkConversations(options: {
 		await click(extraFile);
 		await until(`document.querySelector('[data-panel]:not([inert])')?.textContent.includes('来自第二个源目录')`, "第二源目录文件可预览");
 
+		// 五、删掉会话后界面里按会话记的都清掉：存下的面板标签、开合，侧栏的收起记录……localStorage 里不再有它的 id。
+		const mentioned = `Object.keys(localStorage).some((key) => key.includes(${JSON.stringify(sessionId)}) || localStorage.getItem(key)?.includes(${JSON.stringify(sessionId)}))`;
+		if (!(await page<boolean>(mentioned))) throw new Error("开着面板的会话没在 localStorage 里留下面板记录，删除后的清理验不到");
+		await click(`[data-plume-row="${sessionId}"] button[aria-label^="归档会话"]`);
+		await until(`document.querySelector('[data-plume-row="${sessionId}"]') === null`, "归档要删的会话");
+		await click("[data-nav=settings]");
+		await click("[aria-label=设置章节] button", "已归档的聊天");
+		await click("[data-plume-delete-all-archived]");
+		await clickVisible(page, "[role=dialog] button", /^删除 \d+ 个$/);
+		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId), "会话已删除");
+		await until(`!${mentioned}`, "删除后 localStorage 里不再留这个会话的记录");
+		await click("button", "返回工作区");
+
 		console.log(
 			"PLUME_CONVERSATIONS_SMOKE",
 			JSON.stringify({
@@ -332,6 +345,7 @@ export async function checkConversations(options: {
 				nested: true,
 				reorder: true,
 				stickyHeads: true,
+				deletedForgotten: true,
 			}),
 		);
 	} finally {

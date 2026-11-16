@@ -234,6 +234,20 @@ export function createPresets(ctx: Pick<PluginContext, "dataDir" | "log" | "loca
 			return chosen;
 		},
 
+		/**
+		 * 只留这些会话记下的：删会话时插件没在跑（停用着、删到一半退出）留下的，加载时清掉。
+		 * 这次加载以后才记下的（`held` 里的）一定留着，不管 `live` 是不是早了一步拿的。
+		 */
+		async keepOnly(live: Iterable<string>): Promise<void> {
+			const kept = new Set([...live, ...held.keys()]);
+			const files = await readdir(personasDir).catch(() => [] as string[]);
+			await Promise.all(
+				files
+					.filter((file) => file.endsWith(".json") && !kept.has(file.slice(0, -".json".length)))
+					.map((file) => rm(join(personasDir, file), { force: true }).catch(() => undefined)),
+			);
+		},
+
 		/** 会话删掉了：它记下的那份不要了。 */
 		forget(sessionId: string): void {
 			held.delete(sessionId);

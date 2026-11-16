@@ -271,16 +271,18 @@ function assessIn(command: string, cwd: string | undefined, depth: number, diale
 /**
  * 这条命令 `cd` 进的每个目录是不是都在工作区里。
  *
- * 生来就保守：目的地没法照字面读出来的 `cd`（变量、替换、`-`）算作离开，因为它会落到哪里在这里不可知。
+ * 生来就保守：目的地没法照字面读出来的 `cd`（变量、替换、`-`、带选项的 `cd -P /etc`、不带参数回家目录）算作离开，
+ * 因为它会落到哪里在这里不可知。`pushd`、`chdir`，PowerShell 的 `Set-Location`、`sl`、`Push-Location`（带 `-Path`、`-LiteralPath` 也认）
+ * 和 `cd` 一样换目录；命令名不分大小写，cmd 和 PowerShell 都不分。
  */
 function staysInside(command: string, cwd: string): boolean {
 	const root = cwd.replace(/\/+$/, "");
 	for (const piece of splitCommands(command)) {
-		const match = /^\s*cd\s+(\S+)/.exec(piece);
+		const match = /^\s*(?:cd|pushd|chdir|set-location|sl|push-location)(?=\s|$)\s*(?:-(?:literal)?path\s+)?(\S*)/i.exec(piece);
 		if (!match) continue;
 		// 引号写成 \x27\x22、反引号写成 \x60：直接写的话，文案检查会把正则里的它们当成字符串的开头。
 		const target = match[1]!.replace(/^[\x27\x22]|[\x27\x22]$/g, "");
-		if (target.startsWith("~") || target === "-" || /[$\x60]/.test(target)) return false;
+		if (!target || target.startsWith("~") || target.startsWith("-") || /[$\x60]/.test(target)) return false;
 		if (isAbsolute(target)) {
 			if (withinOrIs(root, target)) continue;
 			/*

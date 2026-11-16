@@ -30,7 +30,7 @@ export interface StoredSettings {
 	permissionMode?: PermissionMode;
 	/** 人答过「以后不再问」的东西，按发起审批的一方分开记，见 `AlwaysAllow`。 */
 	alwaysAllow?: AlwaysAllow[];
-	/** Magpie 写的网关，原样留着，写盘时原样写回。 */
+	/** Magpie 写的网关；在 Plume 里的编辑也写回这一块。 */
 	magpie?: unknown;
 	/** 没设过的项用 `DEFAULT_PERSONALIZATION`。 */
 	personalization?: Partial<Personalization>;
@@ -99,7 +99,10 @@ export function normalizeSettings(raw: unknown): StoredSettings {
 			sessionManager?: unknown;
 		};
 	const tuned = normalizePersonalization(personalization);
-	const own = Array.isArray(providers) ? (providers as StoredProvider[]).filter((provider) => !isMagpie(provider.id)) : [];
+	// 手改坏的一项（`null`、没有 id）跳过，不让它在 `provider.id` 上抛错、连带所有读设置的地方都失败。
+	const own = Array.isArray(providers)
+		? (providers as (StoredProvider | null)[]).filter((provider): provider is StoredProvider => typeof provider?.id === "string" && !isMagpie(provider.id))
+		: [];
 	const gateway = magpieProvider(magpie);
 	return {
 		providers: gateway ? [...own, gateway] : own,

@@ -12,7 +12,12 @@ import { finalDemand, HANDOFF_SCHEMA, incompleteNote, judgeYield, renderYield } 
 export const MAX_RUNNING = 4;
 
 export class Registry implements SubagentsApi {
-	readonly store: Store;
+	private readonly store: Store;
+	/**
+	 * 正在派、正在跑、还没交完回报的任务：它们的对象在几处异步步骤之间共用，按停、删会话改的是同一个。
+	 * 结束了的只在库里，要用时现读。
+	 */
+	private readonly live = new Map<string, TaskRecord>();
 	private active = true;
 	private readonly occupied = new Set<string>();
 	private readonly cancelled = new Set<string>();
@@ -33,37 +38,45 @@ export class Registry implements SubagentsApi {
 		this.store = new Store(ctx.dataDir);
 		ctx.sessions.onStopped((id) => {
 			this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1);
-			for (const task of this.store.tasks.values()) if (task.parent === id || task.session === id) this.cancel(task);
-			this.changed();
+			const touched = [...this.live.values()].filter((task) => task.parent === id || task.session === id);
+			for (const task of touched) this.cancel(task);
+			this.changed(...touched);
 		});
 		ctx.sessions.onDeleted((id) => {
 			this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1);
-			for (const task of this.store.tasks.values()) {
+			for (const task of this.live.values()) {
 				if (task.parent !== id && task.session !== id) continue;
 				this.cancel(task, false);
-				if (task.parent === id) this.store.tasks.delete(task.id);
-				else task.resumable = false;
+				if (task.parent === id) this.live.delete(task.id);
 			}
-			this.changed();
+			this.store.deleteByParent(id);
+			// 子会话没了：不能再续跑，回报和展示照留。
+			const orphans = this.store.bySession(id).map((stored) => this.live.get(stored.id) ?? stored);
+			for (const task of orphans) task.resumable = false;
+			this.changed(...orphans);
 			this.pump();
 		});
 		ctx.effect(async () => {
 			this.active = false;
-			for (const task of this.store.tasks.values()) this.cancel(task);
-			this.changed();
+			const touched = [...this.live.values()];
+			for (const task of touched) this.cancel(task);
+			this.changed(...touched);
 			await Promise.allSettled(this.jobs);
+			this.store.close();
 		});
 	}
 
 	async restore(): Promise<void> {
-		const sessions = new Map((await this.ctx.sessions.list()).map((session) => [session.id, session]));
-		for (const task of this.store.tasks.values()) {
-			if (!sessions.has(task.parent)) {
-				this.store.tasks.delete(task.id);
-				continue;
-			}
-			const child = sessions.get(task.session);
-			task.resumable = child?.owner === this.ctx.name && child.parentId === task.parent;
+		const sessions = await this.ctx.sessions.list();
+		const children = new Set(
+			sessions.flatMap((session) => (session.owner === this.ctx.name && session.parentId ? [`${session.id}\n${session.parentId}`] : [])),
+		);
+		const touched = this.store.reconcile(
+			sessions.map((session) => session.id),
+			[...children],
+		);
+		for (const task of touched) {
+			task.resumable &&= children.has(`${task.session}\n${task.parent}`);
 			if (isActive(task)) {
 				task.state = "stopped";
 				task.stop = { reason: "interrupted" };
@@ -71,11 +84,12 @@ export class Registry implements SubagentsApi {
 				delete task.pending;
 			}
 		}
-		this.changed();
+		this.changed(...touched);
 	}
 
+	/** 库里的就是最新的：在跑的任务每改一次都写回去。 */
 	list(parentId: string): TaskRecord[] {
-		return structuredClone([...this.store.tasks.values()].filter((task) => task.parent === parentId));
+		return this.store.byParent(parentId);
 	}
 
 	async *watch(parentId: string, call: CallContext): AsyncGenerator<TaskRecord[], void> {
@@ -105,7 +119,8 @@ export class Registry implements SubagentsApi {
 	}
 
 	identity(sessionId: string): TaskRecord | undefined {
-		return [...this.store.tasks.values()].find((task) => task.session === sessionId && task.resumable);
+		for (const task of this.live.values()) if (task.session === sessionId && task.resumable) return task;
+		return this.store.bySession(sessionId).find((task) => task.resumable && !this.live.has(task.id));
 	}
 
 	/** 这个目录下能派的种类：生效的那份定义，关掉的不算。 */
@@ -148,8 +163,7 @@ export class Registry implements SubagentsApi {
 
 	setEnabled(agent: string, enabled: boolean): void {
 		if (typeof agent !== "string" || !agent) throw new Error(MESSAGES[this.ctx.locale()].unavailable);
-		if (enabled) this.store.disabled.delete(agent);
-		else this.store.disabled.add(agent);
+		this.store.setDisabled(agent, !enabled);
 		this.changed();
 	}
 
@@ -163,11 +177,12 @@ export class Registry implements SubagentsApi {
 		const epoch = this.epochs.get(parentId) ?? 0;
 		let task: TaskRecord;
 		if (resume) {
-			const earlier = this.store.tasks.get(resume);
+			const earlier = this.live.get(resume) ?? this.store.get(resume);
 			if (!earlier || earlier.parent !== parentId || !earlier.resumable) throw new Error("This sub-agent cannot be resumed. Dispatch a new one instead.");
 			if (isActive(earlier) || this.occupied.has(earlier.id))
 				throw new Error("This sub-agent is still running or settling its report; do not resume or dispatch it again.");
 			task = earlier;
+			this.live.set(task.id, task);
 			task.attempt++;
 		} else {
 			const agents = await this.enabled(cwd);
@@ -205,7 +220,12 @@ export class Registry implements SubagentsApi {
 				resumable: true,
 				thinking: child.thinking,
 			};
-			this.store.tasks.set(task.id, task);
+			this.live.set(task.id, task);
+			// 建子会话的那一会儿父会话被删了：这条任务不留。放进 `live` 以后再删的，删会话时会把它拿走，同样不留。
+			if (epoch !== (this.epochs.get(parentId) ?? 0) && (!(await this.ctx.sessions.get(parentId)) || this.live.get(task.id) !== task)) {
+				if (this.live.get(task.id) === task) this.live.delete(task.id);
+				throw new Error("The parent conversation was deleted.");
+			}
 		}
 		this.cancelled.delete(task.id);
 		task.state = "queued";
@@ -225,7 +245,7 @@ export class Registry implements SubagentsApi {
 		delete task.startedAt;
 		delete task.endedAt;
 		if (!this.active || epoch !== (this.epochs.get(parentId) ?? 0)) this.cancel(task);
-		this.changed();
+		this.changed(task);
 		this.pump();
 		return { id: task.id, session: task.session, parent: task.parent, agent: task.agent };
 	}
@@ -234,7 +254,7 @@ export class Registry implements SubagentsApi {
 		const task = this.identity(sessionId);
 		if (!task) throw new Error(MESSAGES[this.ctx.locale()].unavailable);
 		this.cancel(task);
-		this.changed();
+		this.changed(task);
 		this.pump();
 	}
 
@@ -248,7 +268,7 @@ export class Registry implements SubagentsApi {
 	async setModel(agent: string, choice: ModelChoice): Promise<void> {
 		if (typeof agent !== "string" || !agent) throw new Error(MESSAGES[this.ctx.locale()].unavailable);
 		await this.validateChoice(choice);
-		this.store.choices[agent] = { model: choice.model || undefined, thinking: choice.thinking };
+		this.store.setChoice(agent, { model: choice.model || undefined, thinking: choice.thinking });
 		this.changed();
 	}
 
@@ -263,7 +283,7 @@ export class Registry implements SubagentsApi {
 		if (verdict.accepted) {
 			task.output = verdict.accepted.value;
 			task.warnings = verdict.accepted.warnings;
-			this.changed();
+			this.changed(task);
 		}
 		return { output: verdict.output, ...(verdict.isError ? { isError: true } : {}), ...(verdict.terminate ? { terminate: "done" as const } : {}) };
 	}
@@ -310,7 +330,7 @@ export class Registry implements SubagentsApi {
 		const task = this.identity(sessionId);
 		if (!task || (task.model?.id === model.id && task.model.name === model.name)) return;
 		task.model = { id: model.id, name: model.name };
-		this.changed();
+		this.changed(task);
 	}
 
 	private async validateChoice(choice: ModelChoice): Promise<void> {
@@ -336,27 +356,30 @@ export class Registry implements SubagentsApi {
 		if (stopProcess && !already && this.occupied.has(task.id)) this.ctx.sessions.stop(task.session);
 	}
 
-	private changed(): void {
-		this.store.save();
+	/** 把改过的任务写回库里，再告诉看着的人；不在跑、也不在交回报的不再留在内存里。 */
+	private changed(...tasks: TaskRecord[]): void {
+		this.store.put(tasks);
+		for (const task of tasks) if (!isActive(task) && !this.occupied.has(task.id) && this.live.get(task.id) === task) this.live.delete(task.id);
 		for (const listener of this.listeners) listener();
 	}
 
 	private pump(): void {
 		if (!this.active) return;
-		for (const task of this.store.tasks.values()) {
+		for (const task of this.live.values()) {
 			if (task.state !== "queued") continue;
-			const running = [...this.occupied].filter((id) => this.store.tasks.get(id)?.parent === task.parent).length;
+			const running = [...this.occupied].filter((id) => this.live.get(id)?.parent === task.parent).length;
 			if (running >= MAX_RUNNING) continue;
 			this.occupied.add(task.id);
 			task.state = "running";
 			task.startedAt = Date.now();
-			this.changed();
+			this.changed(task);
 			const job = this.run(task)
 				.catch((error: unknown) => {
 					this.ctx.log.error(`Sub-agent ${task.id}: ${error instanceof Error ? error.message : String(error)}`);
 				})
 				.finally(() => {
 					this.occupied.delete(task.id);
+					if (!isActive(task) && this.live.get(task.id) === task) this.live.delete(task.id);
 					this.jobs.delete(job);
 					this.pump();
 				});
@@ -366,6 +389,8 @@ export class Registry implements SubagentsApi {
 
 	private async run(task: TaskRecord): Promise<void> {
 		const message = task.pending!;
+		// 跑着的时候父会话可能被删：删掉的任务不再写回库里。
+		const kept = () => this.live.get(task.id) === task;
 		let stop: TurnStop;
 		// 开跑、等待这几步自己抛了错（不是模型服务在一轮里报的错）：这次什么都没交出来，只说它没能跑完和原因。
 		let threw = false;
@@ -382,13 +407,13 @@ export class Registry implements SubagentsApi {
 			task.runId = run.id;
 			delete task.pending;
 			if (!this.active || this.cancelled.has(task.id)) this.ctx.sessions.stop(task.session);
-			this.changed();
+			if (kept()) this.changed(task);
 			stop = await this.ctx.sessions.wait(run.id);
 		} catch (error) {
 			stop = { reason: "error", error: error instanceof Error ? error.message : String(error) };
 			threw = true;
 		}
-		if (!this.store.tasks.has(task.id)) return;
+		if (!kept()) return;
 		const reply = lastProse(await this.ctx.sessions.messages(task.session).catch(() => []), since);
 		const yielded = task.output ? { value: task.output, warnings: task.warnings ?? [] } : undefined;
 		// `yield` 交的对象是答案，它最后说的话垫底：校验只问字段在不在，`{ summary: "", files: [] }` 也能过，写出来是空的。
@@ -408,11 +433,12 @@ export class Registry implements SubagentsApi {
 		delete task.pending;
 		task.endedAt = Date.now();
 		this.segments.delete(task.id);
+		if (!kept()) return;
 		// 完整报告先落盘；停止与卸载不允许唤醒父会话。
-		this.changed();
+		this.changed(task);
 		if (!this.active || this.cancelled.has(task.id) || !task.runId || task.state === "stopped") return;
 		// 结尾到送出那一刻才写：同一刻回来的几份合成一条送达，那时还在等谁才是准的。
-		const pending = () => [...this.store.tasks.values()].filter((other) => other.parent === task.parent && other.id !== task.id && isActive(other));
+		const pending = () => [...this.live.values()].filter((other) => other.parent === task.parent && other.id !== task.id && isActive(other));
 		task.reported = await this.ctx.sessions.report(task.runId, deliveryBlock(task), {
 			frame: { head: DELIVERY_HEAD, tail: () => deliveryTail(pending()) },
 			// 对话里那一行「消息来自 @谁」：点了翻到面板里它那一页，所以 id 是任务的 id。
@@ -424,6 +450,6 @@ export class Registry implements SubagentsApi {
 				details: { agent: task.agent } satisfies DeliveryDetails,
 			},
 		});
-		this.changed();
+		if (kept()) this.changed(task);
 	}
 }

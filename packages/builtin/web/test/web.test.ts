@@ -13,7 +13,7 @@ import { defaultSearchProviders } from "../src/search/defaults.ts";
 import { parseResults } from "../src/search/duckduckgo.ts";
 import { createSearchRegistry, SearchError } from "../src/search/index.ts";
 import { settingsFile, viewOf } from "../src/settings.ts";
-import { webFetchTool } from "../src/web-fetch.ts";
+import { decoderFor, sameSite, webFetchTool } from "../src/web-fetch.ts";
 import { webSearchTool } from "../src/web-search.ts";
 
 const noFetch = (async () => {
@@ -67,6 +67,27 @@ test("DuckDuckGo：拆掉跳转外壳、解实体，丢掉打不开的链接但�
 		{ url: "https://example.com/a?x=1", title: "Example & A", snippet: "First <snippet>" },
 		{ url: "https://example.org/b", title: "B", snippet: "Second snippet" },
 	]);
+});
+
+test("DuckDuckGo：有一条没有摘要时，后面的摘要不往前错位", () => {
+	const html = `
+		<a class="result__a" href="https://a.example/">A</a>
+		<a class="result__a" href="https://b.example/">B</a>
+		<a class="result__snippet" href="#">about B</a>`;
+	assert.deepEqual(parseResults(html), [
+		{ url: "https://a.example/", title: "A" },
+		{ url: "https://b.example/", title: "B", snippet: "about B" },
+	]);
+});
+
+test("响应头没写 charset 的网页按 <meta charset> 解", () => {
+	const gbk = Buffer.from([0xc4, 0xe3, 0xba, 0xc3]); // 「你好」的 GBK
+	const page = Buffer.concat([Buffer.from('<html><head><meta charset="gbk"></head><body>'), gbk]);
+	assert.match(decoderFor("text/html", page).decode(page), /你好$/);
+	const equiv = Buffer.from('<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">');
+	assert.equal(decoderFor("text/html", equiv).encoding, "shift_jis");
+	// 响应头说了的照响应头。
+	assert.equal(decoderFor("text/html; charset=utf-8", page).encoding, "utf-8");
 });
 
 test("htmlToText：表格成行、列表留层次、代码留换行、脚本丢掉、正文里的 < 不当标签", () => {
@@ -155,7 +176,7 @@ const run: ToolRun = {
 	calls: [],
 };
 
-test("web_fetch：同源跳转跟过去并把网页转成文字，跨源跳转拒绝", async () => {
+test("web_fetch：同站跳转跟过去并把网页转成文字，跨站跳转拒绝", async () => {
 	await withServer(
 		(req, res) => {
 			if (req.url === "/same") res.writeHead(302, { location: "/page" }).end();
@@ -171,7 +192,7 @@ test("web_fetch：同源跳转跟过去并把网页转成文字，跨源跳转�
 
 			const away = await tool.execute({ url: `${base}/away` }, run);
 			assert.equal(away.isError, true);
-			assert.match(away.output, /^Refused a redirect that leaves the original origin \(http:\/\/127\.0\.0\.1:\d+ → http:\/\/localhost:1\)/);
+			assert.match(away.output, /^Refused a redirect that leaves the original site \(http:\/\/127\.0\.0\.1:\d+ → http:\/\/localhost:1\)/);
 		},
 	);
 });
@@ -296,4 +317,15 @@ test("模型把查询词写在 pattern、search 上：工具声明成 query 的�
 	const search = webSearchTool(registryWith({}), async () => null);
 	assert.deepEqual(search.aliases, { query: ["pattern", "search"] });
 	assert.deepEqual(await search.execute({ pattern: "plume" }, run), { output: "`query` is required.", isError: true });
+});
+
+test("同站跳转：升 https、加减 www 跟，降 http、换主机、换端口不跟", () => {
+	const site = (from: string, to: string) => sameSite(new URL(from), new URL(to));
+	assert.equal(site("http://x.com/a", "https://x.com/a"), true);
+	assert.equal(site("https://x.com/a", "https://www.x.com/a"), true);
+	assert.equal(site("http://www.x.com/", "https://x.com/"), true);
+	assert.equal(site("https://x.com/", "http://x.com/"), false);
+	assert.equal(site("https://x.com/", "https://y.com/"), false);
+	assert.equal(site("https://x.com/", "https://evil.x.com/"), false);
+	assert.equal(site("http://x.com:8080/", "http://x.com/"), false);
 });

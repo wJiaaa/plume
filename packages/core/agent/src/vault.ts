@@ -33,6 +33,8 @@ const PLUGIN_SEALED = /^plume-sealed:v1:[A-Za-z0-9+/]+={0,2}$/;
 export interface Vault {
 	/** `id` 下存的密钥；没有，或者这把钥匙打不开时是 null。钥匙文件读不出来时抛错（见 `unseal`）。 */
 	secret(id: string): Promise<string | null>;
+	/** 同 `secret`，一次取好几条：密文文件只读一次。 */
+	secrets(ids: readonly string[]): Promise<Record<string, string | null>>;
 	/** 一次写进几条；值是空串的那条删掉，不存一个没有意义的东西。 */
 	putSecrets(entries: Record<string, string>): Promise<void>;
 	/** 不满足 `keep` 的都删掉：删掉的供应商，它的 key 一起忘掉。 */
@@ -187,9 +189,15 @@ export function createVault(dir: string): Vault {
 		return secrets;
 	}
 
-	/** `{ secrets: { [id]: 密文 } }`；读不到或读不懂都当作空的。 */
+	/**
+	 * `{ secrets: { [id]: 密文 } }`；还没有这个文件、或者读不懂，都当作空的。别的读错误（被占用、没权限）抛出去，
+	 * 和钥匙文件一样（见 `unseal`）：当成空的话，下次保存设置会把存着的 key 全写成空、删掉。
+	 */
 	async function read(): Promise<Record<string, string>> {
-		const raw = await readFile(file, "utf8").catch(() => null);
+		const raw = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+			if (error.code === "ENOENT") return null;
+			throw error;
+		});
 		if (!raw) return {};
 		try {
 			const parsed = JSON.parse(raw) as { secrets?: unknown };
@@ -219,11 +227,17 @@ export function createVault(dir: string): Vault {
 		return run;
 	}
 
+	async function secrets(ids: readonly string[]): Promise<Record<string, string | null>> {
+		const stored = await read();
+		const entries = await Promise.all(ids.map(async (id) => [id, stored[id] === undefined ? null : await unseal(stored[id])] as const));
+		return Object.fromEntries(entries);
+	}
+
 	return {
 		pluginSecrets,
+		secrets,
 		async secret(id) {
-			const stored = (await read())[id];
-			return stored === undefined ? null : unseal(stored);
+			return (await secrets([id]))[id] ?? null;
 		},
 		putSecrets: (entries) =>
 			serially(async () => {
@@ -258,15 +272,16 @@ export function providerKeys(vault: Vault) {
 	 */
 	const unreadable = new Set<string>();
 
-	async function stored(id: string): Promise<string | null> {
+	/** 一次取齐：每读一次设置都要填一遍 key，按供应商逐个取就是每个供应商读一次、解析一次整份密文文件。 */
+	async function stored(ids: readonly string[]): Promise<Record<string, string | null>> {
 		try {
-			const value = await vault.secret(id);
-			unreadable.delete(id);
-			return value;
+			const values = await vault.secrets(ids);
+			for (const id of ids) unreadable.delete(id);
+			return values;
 		} catch {
-			// 设置照样读出来：少一个供应商的 key，好过应用起不来。
-			unreadable.add(id);
-			return null;
+			// 设置照样读出来：少了 key，好过应用起不来。
+			for (const id of ids) unreadable.add(id);
+			return {};
 		}
 	}
 
@@ -277,12 +292,11 @@ export function providerKeys(vault: Vault) {
 		 */
 		async withKeys(settings: StoredSettings): Promise<StoredSettings> {
 			if (settings.providers.length === 0) return settings;
-			const providers = await Promise.all(
-				settings.providers.map(async (provider) => {
-					const key = await stored(providerSecretId(provider.id));
-					return key === null ? provider : { ...provider, apiKey: key };
-				}),
-			);
+			const keys = await stored(settings.providers.map((provider) => providerSecretId(provider.id)));
+			const providers = settings.providers.map((provider) => {
+				const key = keys[providerSecretId(provider.id)];
+				return key === null || key === undefined ? provider : { ...provider, apiKey: key };
+			});
 			return { ...settings, providers };
 		},
 		/**

@@ -729,7 +729,7 @@ export interface AgentService {
 	setSessionUnread(sessionId: string, unread: boolean): Promise<void>;
 	/** 移入项目时切换工作目录；移出时保留目录。会话或子会话运行时不允许移动。 */
 	moveSessionProject(sessionId: string, projectId: string | undefined): Promise<void>;
-	/** 删掉全部归档的会话，正在跑的不动。返回删了几条。 */
+	/** 删掉全部归档的会话，正在跑的先停下再删（连同子会话）。返回删了几条。 */
 	deleteArchivedSessions(): Promise<number>;
 	/**
 	 * 这个会话的上下文窗口用到哪儿了，见 `ContextBreakdown`。各段按这个会话最近一次发出的请求量（只在内存里），
@@ -738,7 +738,7 @@ export interface AgentService {
 	contextBreakdown(sessionId: string): Promise<ContextBreakdown | null>;
 	/** 会话记录占了多少，按最后活动日摊开。 */
 	storageUse(): Promise<StorageUse>;
-	/** 删掉最后活动日落在这一段里的会话，正在跑的跳过。花销表不动。 */
+	/** 删掉最后活动日落在这一段里的会话，正在跑的先停下再删（连同子会话）。花销表不动。 */
 	clearSessions(range: ClearRange): Promise<ClearResult>;
 	/** 把整个会话库另存为一个 SQLite 文件。路径由界面经主进程的保存对话框拿到。 */
 	exportSessions(file: string): Promise<void>;

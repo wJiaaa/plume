@@ -185,6 +185,23 @@ export async function reclaimWorktree(tree: SessionWorktree, options: { dropMerg
 	return { removed, branchDropped };
 }
 
+/**
+ * 对话删掉了，它的工作树和分支一起删：没提交的改动、没合并的提交都不留（删除确认框事先写明了会丢掉什么）。
+ * 目录按 `--force` 收走；分支只删插件自己开的（`plume/session-`），基分支、人自己的分支不碰。
+ */
+export async function discardWorktree(tree: SessionWorktree): Promise<void> {
+	const repo = await repoRoot(tree.project);
+	if (!repo) return;
+	if (existsSync(tree.root)) {
+		const removed = await removeLinkedWorktree(repo, tree.root, true);
+		if (!removed.ok) throw new Error(removed.error);
+	} else await run(repo, ["worktree", "prune"]);
+	if (tree.branch.startsWith(SESSION_BRANCH_PREFIX) && (await branchExists(repo, tree.branch))) {
+		const dropped = await run(repo, ["branch", "-D", END_OF_OPTIONS, tree.branch]);
+		if (!dropped.ok) throw new Error(dropped.error ?? "git branch -D");
+	}
+}
+
 export type Restored = { ok: true; fresh: boolean } | { ok: false; error: string };
 
 /**

@@ -53,6 +53,8 @@ export const globTool: Tool<GlobArgs> = {
 			const authorized = await ctx.files.read(ctx.files.resolve(path));
 			if (!authorized.ok) return errorResult(authorized.message);
 			if (authorized.path) root = authorized.path;
+			// 同 grep：目录不存在时读不出东西，答「没有匹配」会让模型以为搜过了。
+			if (!(await stat(root).catch(() => null))) return errorResult(`Path not found: ${path}. Nothing was searched.`);
 		}
 		if (!pattern)
 			return errorResult(

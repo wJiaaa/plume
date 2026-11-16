@@ -10,14 +10,13 @@ import { capHunks, classify } from "./diff.ts";
 import { END_OF_OPTIONS, git, MAX_FILES, run, runRemote } from "./exec.ts";
 import { computeDiff } from "@plume/platform";
 import { parseNumstat } from "./parse.ts";
-import { gitBranch, isGitRepo } from "./probe.ts";
+import { gitBranch } from "./probe.ts";
 import { defaultRemote } from "./remote-state.ts";
 import { say } from "./say.ts";
 import { EMPTY_TREE, LOG_FORMAT } from "./status.ts";
 import { fetchInView, withView, type RepoView } from "./view.ts";
 
 export async function gitLog(cwd: string, limit = 60, ref?: string): Promise<GitCommit[]> {
-	if (!(await isGitRepo(cwd))) return [];
 	const out =
 		(await withView(cwd, (view) =>
 			view.git(["log", "--topo-order", `--max-count=${Math.min(limit, 300)}`, `--format=${LOG_FORMAT}`, ...(ref ? [END_OF_OPTIONS, ref] : [])]),
@@ -97,7 +96,6 @@ async function parentOf(view: RepoView, sha: string): Promise<string> {
 
 /** 一个提交的文件列表，不带内容。和 `commitDiff` 配对。 */
 export async function commitDiffSummary(cwd: string, sha: string): Promise<{ files: DiffFile[] }> {
-	if (!(await isGitRepo(cwd))) return { files: [] };
 	return (await withView(cwd, async (view) => diffSummary(view, await parentOf(view, sha), sha)).catch(() => null)) ?? { files: [] };
 }
 
@@ -107,11 +105,17 @@ export async function commitDiffSummary(cwd: string, sha: string): Promise<{ fil
  */
 export async function diffRefs(cwd: string, base: string, head: string | null): Promise<RefDiff> {
 	const empty: RefDiff = { files: [], added: 0, removed: 0 };
-	if (!(await isGitRepo(cwd))) return empty;
 	return (await withView(cwd, (view) => diffRefsIn(view, base, head)).catch(() => null)) ?? empty;
 }
 
-async function diffRefsIn(view: RepoView, base: string, head: string | null): Promise<RefDiff> {
+async function diffRefsIn(view: RepoView, requested: string, head: string | null): Promise<RefDiff> {
+	// 暂存区对着的起点在第一个提交之前还解析不了（`HEAD` 不存在），这时对着空树比：暂存的都是新加的。
+	const base = head
+		? requested
+		: await view
+				.git(["rev-parse", "--verify", "--quiet", `${requested}^{tree}`])
+				.then(() => requested)
+				.catch(() => EMPTY_TREE);
 	const range = head ? [END_OF_OPTIONS, base, head] : ["--cached", END_OF_OPTIONS, base];
 	const names = await view.git(["diff", "--name-status", "-z", ...range]).catch(() => "");
 	const wanted = parseNameStatus(names);
@@ -119,7 +123,7 @@ async function diffRefsIn(view: RepoView, base: string, head: string | null): Pr
 	// 两边各一批：「之前」是比较的起点（改了名的读来处），「之后」是另一个引用，没有就是暂存区（`:path`）。空串表示没有这一边。
 	const befores = await readBlobs(
 		view,
-		wanted.map(({ path, source, status }) => (status === "added" && source === path ? "" : `${head ? base : "HEAD"}:${source}`)),
+		wanted.map(({ path, source, status }) => (status === "added" && source === path ? "" : `${base}:${source}`)),
 	);
 	const afters = await readBlobs(
 		view,
@@ -162,7 +166,6 @@ function sideOf(read: BlobRead | null, absent: boolean): { text: string; binary:
 /** 一个提交自己的 diff：对父提交，第一个提交对空树。 */
 export async function commitDiff(cwd: string, sha: string): Promise<RefDiff> {
 	const empty: RefDiff = { files: [], added: 0, removed: 0 };
-	if (!(await isGitRepo(cwd))) return empty;
 	return (await withView(cwd, async (view) => diffRefsIn(view, await parentOf(view, sha), sha)).catch(() => null)) ?? empty;
 }
 

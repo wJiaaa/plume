@@ -25,7 +25,7 @@ const fakeContext = () => ({
 	locale: () => "zh-CN",
 	serve() {},
 	trash: (path: string) => rm(path),
-	sessions: { onDeleted() {}, get: async () => undefined },
+	sessions: { onDeleted() {}, get: async () => undefined, list: async () => [] },
 	tools: { list: () => [{ name: "bash", plugin: "test.files", kind: "command" }] },
 });
 

@@ -86,6 +86,7 @@ export interface HostSessions extends Pick<
 	| "jobs"
 	| "stopJob"
 	| "jobOutput"
+	| "scratchDir"
 	| "wakeups"
 	| "cancelWakeup"
 > {
@@ -265,6 +266,7 @@ const NO_SESSIONS: HostSessions = {
 	jobs: () => [],
 	stopJob: () => false,
 	jobOutput: async (sessionId) => missing(sessionId),
+	scratchDir: missing,
 	wakeups: () => [],
 	cancelWakeup: () => false,
 	start: async (_owner, sessionId) => missing(sessionId),
@@ -462,7 +464,7 @@ export class PluginHost {
 	}
 
 	/**
-	 * 依次加载。名字要先导入模块才知道，所以关掉的插件也会被导入（顶层代码会执行），只是不调 apply。
+	 * 依次加载。停用着的插件不导入（见 `loadOne`），名字先用 key 顶着。
 	 */
 	async load(entries: PluginEntry[]): Promise<void> {
 		for (const entry of entries) await this.loadOne(entry);
@@ -937,6 +939,7 @@ export class PluginHost {
 				jobs: (sessionId) => sessions.jobs(sessionId),
 				stopJob: (sessionId, jobId, force) => sessions.stopJob(sessionId, jobId, force),
 				jobOutput: (sessionId, jobId) => sessions.jobOutput(sessionId, jobId),
+				scratchDir: (sessionId) => sessions.scratchDir(sessionId),
 				wakeups: (sessionId) => sessions.wakeups(sessionId),
 				cancelWakeup: (sessionId, id) => sessions.cancelWakeup(sessionId, id),
 				send: async (sessionId, message, options) => {

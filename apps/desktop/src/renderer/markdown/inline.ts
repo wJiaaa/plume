@@ -11,20 +11,10 @@
  * 写成纯 `.ts` 好让测试能直接引用——这是会出错的那一半。
  */
 
-import { type InlineTag, matchHtml } from "./html.ts";
+import { matchHtml } from "./html.ts";
+import type { Inline } from "./inline-token.ts";
 
-export type Inline =
-	| { kind: "text"; text: string }
-	| { kind: "code"; text: string }
-	| { kind: "math"; tex: string; display: boolean }
-	| { kind: "break" }
-	| { kind: "strong"; children: Inline[] }
-	| { kind: "em"; children: Inline[] }
-	| { kind: "del"; children: Inline[] }
-	| { kind: "link"; href: string; children: Inline[] }
-	/** `width`/`height` 只来自 HTML 的 `<img>`；`![](…)` 没地方写它们。 */
-	| { kind: "image"; src: string; alt: string; width?: number; height?: number }
-	| { kind: "tag"; name: InlineTag; children: Inline[] };
+export type { Inline } from "./inline-token.ts";
 
 export function parseInline(source: string): Inline[] {
 	const out: Inline[] = [];

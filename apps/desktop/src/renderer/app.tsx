@@ -21,7 +21,7 @@ import { MarketScreen } from "./market/market.tsx";
 import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
 import { DRAG, HEADER_BAR, NO_DRAG, SLIDE_MOTION } from "./app/shell-classes.ts";
-import { finishPanelLeave, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
+import { finishPanelLeave, panelOpenIn, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
 import { canStep, go, openNoticeSession } from "./app/sessions.ts";
 import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
 import { investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
@@ -166,7 +166,7 @@ function Shell() {
 			event.preventDefault();
 			event.stopPropagation();
 			const { tabs, active } = tabsOf(state);
-			if (state.panelOpen && tabs.find((tab) => tab.id === active)?.panel === panel.key) togglePanel(false);
+			if (panelOpenIn(state) && tabs.find((tab) => tab.id === active)?.panel === panel.key) togglePanel(false);
 			else showPanel(panel.key);
 		};
 		window.addEventListener("keydown", onKey, true);

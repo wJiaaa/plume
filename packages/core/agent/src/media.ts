@@ -7,9 +7,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ImageContent, Message } from "@plume/contract";
+import { writeFileAtomic } from "./atomic-write.ts";
 
 /** 这么短的 base64（约 6KB 的图）留在消息里，挪出去反而多一次读文件。 */
 const INLINE_IMAGE_CHARS = 8000;
@@ -32,14 +33,61 @@ function images(message: Message): ImageContent[] {
 	return [...message.content.filter(isImage), ...shown.filter(isImage)];
 }
 
+/** 这条消息用到的 `session-media` 里的图：挪出去的（`media`），和标注过的那张的原图（`from`）。 */
+export function mediaNames(message: Message): string[] {
+	const names = images(message).flatMap((image) => [image.media, image.from]);
+	return [...new Set(names.filter((name): name is string => typeof name === "string" && MEDIA_NAME.test(name)))];
+}
+
+/**
+ * 删掉没人再用的图，连同它的缩略图（`thumbs/<名字去掉扩展名>.<边长>.png`，主进程画的，见 `media-thumbs.ts`）。
+ * 名字不对的不碰；删不掉的不抛：留着的只是一个用不上的文件，下次启动的清扫再删。
+ */
+export async function removeImages(dir: string, names: Iterable<string>): Promise<void> {
+	const wanted = new Set([...names].filter((name) => MEDIA_NAME.test(name)));
+	if (wanted.size === 0) return;
+	const stems = new Set([...wanted].map((name) => name.replace(/\.[^.]+$/, "")));
+	const thumbs = await readdir(join(dir, "thumbs")).catch(() => [] as string[]);
+	await Promise.all([
+		...[...wanted].map((name) => rm(join(dir, name), { force: true }).catch(() => undefined)),
+		...thumbs.filter((thumb) => stems.has(thumb.split(".")[0]!)).map((thumb) => rm(join(dir, "thumbs", thumb), { force: true }).catch(() => undefined)),
+	]);
+}
+
+/**
+ * 启动时清一遍：没有会话用着的图（删会话删到一半退出留下的），和原图已经不在的缩略图。`inUse` 是会话库记着的（`mediaInUse`）。
+ * 要在任何会话开始存图之前跑：刚存下、还没写进会话的图这时也是「没人用」。
+ */
+export async function sweepImages(dir: string, inUse: ReadonlySet<string>): Promise<void> {
+	const stored = (await readdir(dir).catch(() => [] as string[])).filter((name) => MEDIA_NAME.test(name));
+	await removeImages(
+		dir,
+		stored.filter((name) => !inUse.has(name)),
+	);
+	const kept = new Set(stored.filter((name) => inUse.has(name)).map((name) => name.replace(/\.[^.]+$/, "")));
+	const thumbs = await readdir(join(dir, "thumbs")).catch(() => [] as string[]);
+	await Promise.all(
+		thumbs.filter((thumb) => !kept.has(thumb.split(".")[0]!)).map((thumb) => rm(join(dir, "thumbs", thumb), { force: true }).catch(() => undefined)),
+	);
+}
+
 /** 存一张图进 dir，交回按内容起的名字；不是那几种图片时是 null。插件的 `ctx.media.save` 也走这里，名字和挪出消息的图对得上。 */
 export async function saveImage(dir: string, data: string, mimeType: string): Promise<string | null> {
 	const extension = EXTENSIONS[mimeType];
 	if (!extension) return null;
 	const bytes = Buffer.from(data, "base64");
 	const name = `${createHash("sha1").update(bytes).digest("hex")}.${extension}`;
+	const path = join(dir, name);
+	// 按内容起的名字：在了就是同一张图，不再写。写的话先写在旁边再改名，`plume-media://` 正好来读时读不到半张。
+	if (
+		await access(path).then(
+			() => true,
+			() => false,
+		)
+	)
+		return name;
 	await mkdir(dir, { recursive: true });
-	await writeFile(join(dir, name), bytes);
+	await writeFileAtomic(path, bytes);
 	return name;
 }
 

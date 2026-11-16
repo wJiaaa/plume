@@ -18,7 +18,7 @@ import { flushChildDrafts } from "../conversation/child-drafts.ts";
 import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.tsx";
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
-import { closeTab, handlesOf, launch, openStartTab, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
+import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { parked } from "./sessions.ts";
 
@@ -32,7 +32,7 @@ function panelGroup(app: Chrome, scope: string): PanelTabs {
 export function panelLayout(app: Chrome, size: { width: number; height: number }, share: number) {
 	const scope = scopeOf(app);
 	const group = panelGroup(app, scope);
-	const shown = listPanels().length > 0 && group.tabs.length > 0 && app.panelOpen;
+	const shown = listPanels().length > 0 && group.tabs.length > 0 && panelOpenIn(app, scope);
 	return {
 		shown,
 		...panelGeometry({
@@ -123,7 +123,7 @@ export function PanelResizer({ width, windowWidth, max }: { width: number; windo
 }
 
 /** 内容按首次挂载的顺序追加，切换会话不能让 React 移动 webview 的 DOM。 */
-export function PanelLayer({ layout }: { layout: ReturnType<typeof panelLayout> }) {
+export function PanelLayer({ layout, floor }: { layout: ReturnType<typeof panelLayout>; floor?: number | undefined }) {
 	const app = useChrome();
 	usePluginUis();
 	const found: { tab: PanelTab; scope: string; panel: PanelEntry }[] = [];
@@ -141,13 +141,26 @@ export function PanelLayer({ layout }: { layout: ReturnType<typeof panelLayout> 
 	return (
 		<div className="contents" data-panel-kept="">
 			{found.map(({ tab, scope, panel }) => (
-				<PanelLayerTab key={tab.id} tab={tab} scope={scope} panel={panel} layout={layout} />
+				<PanelLayerTab key={tab.id} tab={tab} scope={scope} panel={panel} layout={layout} floor={floor} />
 			))}
 		</div>
 	);
 }
 
-function PanelLayerTab({ tab, scope, panel, layout }: { tab: PanelTab; scope: string; panel: PanelEntry; layout: ReturnType<typeof panelLayout> }) {
+function PanelLayerTab({
+	tab,
+	scope,
+	panel,
+	layout,
+	floor,
+}: {
+	tab: PanelTab;
+	scope: string;
+	panel: PanelEntry;
+	layout: ReturnType<typeof panelLayout>;
+	/** 侧栏开合、面板区正滑着时内容定住的宽度（面板外框），见 Chat.tsx 的 `panelFloor`；不在滑时是 undefined。 */
+	floor: number | undefined;
+}) {
 	const app = useChrome();
 	const current = scopeOf(app) === scope;
 	// 后台标签保留最后的尺寸，切换会话不改变其内部布局。
@@ -170,7 +183,8 @@ function PanelLayerTab({ tab, scope, panel, layout }: { tab: PanelTab; scope: st
 						data-panel={panel.key}
 						inert={!shown}
 						className="plume-dock-pane pointer-events-auto absolute overflow-auto origin-top-left"
-						style={{ top: 1, left: 1, right: 1, bottom: 1 }}
+						// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
+						style={current && floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
 					>
 						<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
 					</div>

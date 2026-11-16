@@ -94,7 +94,8 @@ export function writeSidebarPrefs(prefs: SidebarPrefs): void {
 }
 
 export interface PanelPrefs {
-	open: boolean;
+	/** 按会话（面板的 scope）记的开合，只记开着的；空白会话和标签一样不落盘。 */
+	open: Record<string, boolean>;
 	width: number;
 }
 
@@ -102,18 +103,19 @@ const PANEL_PREFS_KEY = "plume.panel";
 
 export function readPanelPrefs(): PanelPrefs {
 	try {
-		const raw = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) ?? "{}") as Partial<PanelPrefs>;
+		const raw = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) ?? "{}") as { open?: unknown; width?: unknown };
 		return {
-			open: raw.open === true,
+			open: raw.open && typeof raw.open === "object" ? Object.fromEntries(Object.entries(raw.open).filter(([scope, open]) => scope && open === true)) : {},
 			width: typeof raw.width === "number" && Number.isFinite(raw.width) && raw.width > 0 ? Math.max(PANEL_MIN, raw.width) : PANEL_DEFAULT,
 		};
 	} catch {
-		return { open: false, width: PANEL_DEFAULT };
+		return { open: {}, width: PANEL_DEFAULT };
 	}
 }
 
 export function writePanelPrefs(prefs: PanelPrefs): void {
-	localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify(prefs));
+	const open = Object.fromEntries(Object.entries(prefs.open).filter(([scope, value]) => scope && value));
+	localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify({ open, width: prefs.width }));
 }
 
 interface PanelTabPrefs {
