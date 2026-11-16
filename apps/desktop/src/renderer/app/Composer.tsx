@@ -347,6 +347,8 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 				}
 				if (blankModel) await agent.setSessionModel(id, blankModel);
 				if (blankThinking) await agent.setSessionThinking(id, blankThinking);
+				// 临时模型只给这次创建用；创建期间另开的空白页不能被这次清理覆盖。
+				if (state.currentId === id && state.blankModel === blankModel) update({ blankModel: undefined });
 			}
 			if (centered && state.currentId === id && state.screen === "chat") setComposerArrival({ sessionId: id, at: performance.now() });
 			// 空闲时带着它也只是开新的一轮；一直带上，界面晚一拍才知道会话又跑起来了的时候也插得进去。

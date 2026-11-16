@@ -67,6 +67,7 @@ import { checkPlan } from "./smoke-plan.ts";
 import { checkHooks } from "./smoke-hooks.ts";
 import { checkBrowser, type ModelOverride } from "./smoke-browser.ts";
 import { checkNavigation } from "./smoke-navigation.ts";
+import { checkModelDefaults } from "./smoke-model-defaults.ts";
 import { checkCompact } from "./smoke-compact.ts";
 import { checkPanelsFramework, checkSideChatWindow } from "./smoke-panels.ts";
 import { checkFileTerminal } from "./smoke-file-terminal.ts";
@@ -784,6 +785,14 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"PLUME_TOAST_SMOKE " +
 				JSON.stringify({ providerTransfer: true, commandWarning: true, draftPreserved: true, attachmentLimit: true, themes: ["dark", "light"], dismiss: true }),
 		);
+
+		if (process.env.PLUME_SMOKE_ONLY === "model-defaults") {
+			await checkModelDefaults({ window, agent, outDir, page, until, click, type, capture, setModel: (value) => (override = value) });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "model-defaults" }));
+			await shutdown();
+			app.quit();
+			return;
+		}
 
 		if (process.env.PLUME_SMOKE_ONLY === "navigation") {
 			override = () => ({ text: "导航准备好了。" });

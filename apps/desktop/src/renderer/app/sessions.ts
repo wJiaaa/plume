@@ -322,7 +322,16 @@ export function openNew(target: SessionTarget = state.target): void {
 	selection++;
 	setComposerArrival(undefined);
 	park();
-	update({ target: { ...target }, currentId: undefined, view: undefined, loading: false, pendingId: undefined, screen: "chat", drawerOpen: false });
+	update({
+		target: { ...target },
+		currentId: undefined,
+		view: undefined,
+		blankModel: undefined,
+		loading: false,
+		pendingId: undefined,
+		screen: "chat",
+		drawerOpen: false,
+	});
 	focusComposer();
 }
 
