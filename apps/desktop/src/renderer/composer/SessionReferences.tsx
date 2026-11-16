@@ -13,6 +13,13 @@ const subscribe = (listener: () => void) => {
 	};
 };
 export const sessionReferences = (scope: string): SessionReference[] => drafts.get(scope) ?? empty;
+/** 删掉的会话（`gone` 认它）输入框里挂着的会话引用一起清掉。 */
+export function forgetSessionReferences(gone: (scope: string) => boolean): void {
+	const stale = [...drafts.keys()].filter(gone);
+	if (!stale.length) return;
+	for (const scope of stale) drafts.delete(scope);
+	for (const listener of listeners) listener();
+}
 export function setSessionReferences(scope: string, refs: SessionReference[]): void {
 	if (refs.length) drafts.set(scope, [...new Map(refs.map((ref) => [ref.id, ref])).values()]);
 	else drafts.delete(scope);

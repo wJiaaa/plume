@@ -19,6 +19,10 @@ function storeFor(sessionId: string) {
 	}
 	return store;
 }
+/** 删掉的会话（`gone` 认它）不再留目录缓存。 */
+export function forgetFileTrees(gone: (sessionId: string) => boolean): void {
+	for (const id of [...sessions.keys()]) if (gone(id)) sessions.delete(id);
+}
 const complain = (error: unknown) => notify(error instanceof Error ? error.message : String(error), "error");
 
 export function treeRows({ roots, scope, children, expanded, filter }: TreeState & { roots: string[]; scope: string | null; filter: string }) {

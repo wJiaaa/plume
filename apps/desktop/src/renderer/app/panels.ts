@@ -291,6 +291,43 @@ export function handOverBlankTabs(id: string): void {
 	setTabs(id, draftTabs);
 }
 
+/**
+ * 会话删掉了（`gone` 认它）：它的标签、开合、全屏，连同标签上挂的关闭确认、文件、侧边聊天的草稿一起清掉；别的会话里
+ * 属于它的标签（子会话的辅助面板、看它文件的标签）也关掉，那个会话因此一个标签不剩时收起。会话已经不在了，不问面板的关闭确认。
+ * 空白页（`""`）不归任何会话。面板窗口里那个标签没了就关掉这个窗口。
+ */
+export function forgetPanels(gone: (sessionId: string) => boolean): void {
+	const goneId = (id: string | undefined) => id !== undefined && id !== "" && gone(id);
+	const dropped: string[] = [];
+	const emptied: string[] = [];
+	const panelTabs: Record<string, PanelTabs> = {};
+	for (const [scope, group] of Object.entries(state.panelTabs)) {
+		const tabs = goneId(scope) ? [] : group.tabs.filter((tab) => !goneId(tab.sessionId) && !goneId(tab.file?.sessionId));
+		for (const tab of group.tabs) if (!tabs.includes(tab)) dropped.push(tab.id);
+		if (tabs.length) panelTabs[scope] = { tabs, active: tabs.some((tab) => tab.id === group.active) ? group.active : tabs.at(-1)!.id };
+		else if (!goneId(scope) && group.tabs.length) emptied.push(scope);
+	}
+	const keep = <T>(record: Record<string, T>) => Object.fromEntries(Object.entries(record).filter(([scope]) => !goneId(scope) && !emptied.includes(scope)));
+	const panelOpen = keep(state.panelOpen);
+	const panelMaximized = keep(state.panelMaximized);
+	if (
+		!dropped.length &&
+		Object.keys(panelOpen).length === Object.keys(state.panelOpen).length &&
+		Object.keys(panelMaximized).length === Object.keys(state.panelMaximized).length
+	)
+		return;
+	for (const id of dropped) {
+		closeGuards.delete(id);
+		tabHandles.delete(id);
+		dropFile(id);
+		dropChildDraft(id);
+	}
+	update({ panelTabs, panelOpen, panelMaximized });
+	persistTabs(panelTabs);
+	persistPanelPrefs();
+	if (panelWindow && dropped.includes(panelWindow.tab)) void window.plume.panelWindows.close();
+}
+
 export function handlesOf(id: string): Pick<PanelProps, "setTitle" | "onClose"> {
 	let handles = tabHandles.get(id);
 	if (!handles) {
