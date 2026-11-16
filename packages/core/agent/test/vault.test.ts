@@ -70,6 +70,20 @@ it.skipIf(!chmodBlocks)("钥匙文件读不出来时报错，不换一把新的"
 	expect(await vault.secret("provider:p1")).toBe("sk-kept");
 });
 
+it.skipIf(!chmodBlocks)("密文文件读不出来时报错，不当成空的、把存着的 key 删掉", async () => {
+	await createVault(dir).putSecrets({ "provider:p1": "sk-kept" });
+	const file = join(dir, "credentials.json");
+	const vault = createVault(dir);
+	await chmod(file, 0o000);
+	try {
+		await expect(vault.secret("provider:p1")).rejects.toThrow(file);
+		await expect(vault.putSecrets({ "provider:p2": "sk-new" })).rejects.toThrow(file);
+	} finally {
+		await chmod(file, 0o600);
+	}
+	expect(await vault.secret("provider:p1")).toBe("sk-kept");
+});
+
 it("长度不对的钥匙挪到旁边，不覆盖", async () => {
 	await mkdir(dir, { recursive: true });
 	await writeFile(join(dir, "vault.key"), "short");
