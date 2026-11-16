@@ -336,7 +336,7 @@ it("停止父任务不终止独立 send 的侧边聊天，也不阻止下一次�
 	expect(await owner.send(side.id, "再问一句")).toEqual({ reason: "done" });
 });
 
-it("单个子会话停止不影响兄弟，父删除撤销全部待送达", async () => {
+it("单个子会话停止不影响兄弟，父删除（归档了的也一样）停下子会话、撤销全部待送达", async () => {
 	const { owner, parent, service } = await open([{ text: "不会用到" }], (ctx) => {
 		ctx.hook("prompt.submit", async (input, next) => {
 			if (input.text === "HOLD") await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
@@ -350,6 +350,7 @@ it("单个子会话停止不影响兄弟，父删除撤销全部待送达", asyn
 	owner.stop(one.id);
 	expect(await owner.wait(first.id)).toEqual({ reason: "aborted" });
 	expect((await service.getSession(two.id)).summary.running).toBe(true);
+	await service.setSessionArchived(parent.id, true);
 	await service.deleteSession(parent.id);
 	expect(await owner.wait(second.id)).toEqual({ reason: "aborted" });
 	expect(await owner.report(second.id, "父已删除")).toBe(false);
