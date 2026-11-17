@@ -373,9 +373,16 @@
 	/*
 	 * 侧栏开合时，标题栏给窗口按钮让的宽度（这几行的 `padding-left`，见 window-controls.tsx 的 `ToolbarOverlap`）和侧栏宽度
 	 * 同一时长、同一缓动地滑：标题的位置是卡片左边缘加内边距，两者走同一条曲线，标题就一路朝一个方向走，不先跳开、不压到按钮上。
+	 * 展开、收起的时长和曲线不一样，取值和 shell-classes.ts 的 `slideMotion` 对应。
 	 */
+	[data-sidebar-sliding="open"] {
+		--sidebar-slide: var(--plume-t-slow) var(--plume-e-out);
+	}
+	[data-sidebar-sliding="close"] {
+		--sidebar-slide: var(--plume-t-base) var(--plume-e-soft);
+	}
 	[data-sidebar-sliding] [data-toolbar-inset] {
-		transition: padding-left var(--plume-t-slow) var(--plume-e-out);
+		transition: padding-left var(--sidebar-slide);
 	}
 	/*
 	 * 面板区开合时，对话顶行右端给面板开关让的位置（`PANEL_TOGGLE_ROOM`，见 PanelArea.tsx）在点下去那一下就换了：
@@ -384,7 +391,7 @@
 	 */
 	[data-panel-sliding] [data-toolbar-inset] {
 		transition:
-			padding-left var(--plume-t-slow) var(--plume-e-out),
+			padding-left var(--sidebar-slide, var(--plume-t-slow) var(--plume-e-out)),
 			padding-right var(--plume-t-slow) var(--plume-e-out);
 	}
 	/* 侧栏一栏：对话底色兑四成侧栏色，在 oklab 里混，深浅按人眼的明度走。 */

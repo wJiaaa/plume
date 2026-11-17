@@ -20,7 +20,7 @@ import { checkPanels, listPages, listPanels, matchesShortcut, PageSlot, pageTool
 import { MarketScreen } from "./market/market.tsx";
 import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
-import { DRAG, HEADER_BAR, NO_DRAG, SLIDE_MOTION } from "./app/shell-classes.ts";
+import { DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./app/shell-classes.ts";
 import { finishPanelLeave, panelOpenIn, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
 import { canStep, go, openNoticeSession } from "./app/sessions.ts";
 import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
@@ -83,8 +83,9 @@ function Shell() {
 		const timer = setTimeout(finishPanelLeave, Number.isFinite(duration) ? duration + 50 : 0);
 		return () => clearTimeout(timer);
 	}, [app.panelLeaving]);
-	// 只在点开关的那一下加动画，动画结束就撤掉，见 SLIDE_MOTION。
+	// 只在点开关的那一下加动画，动画结束就撤掉，见 slideMotion。
 	const [moving, setMoving] = useState(false);
+	const motion = moving ? slideMotion(navOpen) : "";
 
 	const toggle = () => {
 		if (!sided) return;
@@ -241,7 +242,7 @@ function Shell() {
 					data-plume-drawer={compact || undefined}
 					// 只认侧栏自己的：里面的行悬停也有 transition，结束事件会冒泡上来。
 					onTransitionEnd={(event) => event.target === event.currentTarget && setMoving(false)}
-					className={`${moving ? `${SLIDE_MOTION} duration-[var(--plume-t-slow)]` : ""} ${
+					className={`${moving ? `transition-[width,translate] ${motion}` : ""} ${
 						compact
 							? `sidebar-surface pointer-events-auto absolute inset-y-0 left-0 border-r border-line ${navOpen ? "" : "-translate-x-full"}`
 							: "relative shrink-0 overflow-hidden"
@@ -259,7 +260,16 @@ function Shell() {
 							className={`flex min-h-0 flex-1 flex-col ${compact ? "" : "sidebar-surface overflow-hidden rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"}`}
 							style={compact ? undefined : { marginBottom: CARD_INSET }}
 						>
-							<SidebarContent />
+							{/*
+							 * 停靠的侧栏开合时，底色跟着宽度露出来、边一直是实的，里面的字和侧栏一起淡入淡出、横着挪 12px，
+							 * 和宽度同一时长、同一曲线。只动透明度和 translate，合成器上就能走完，不碰排版。
+							 * 收着时停在淡出的那一头；开着时不留 translate，免得给里面 fixed 定位的东西换了参照。抽屉整块滑，不淡。
+							 */}
+							<div
+								className={`flex min-h-0 flex-1 flex-col ${moving && !compact ? `transition-[opacity,translate] ${motion}` : ""} ${compact || pushed ? "" : "-translate-x-3 opacity-0"}`}
+							>
+								<SidebarContent />
+							</div>
 						</div>
 					</div>
 				</aside>
@@ -321,7 +331,7 @@ function Shell() {
 	return (
 		<div
 			className={`relative flex h-full overflow-hidden ${fill}`}
-			data-sidebar-sliding={(moving && !compact) || undefined}
+			data-sidebar-sliding={moving && !compact ? (navOpen ? "open" : "close") : undefined}
 			// 停靠的侧栏透明，吸顶的标题要铺和这一层一样的底（styles.css 的 `[data-plume-head]`）。
 			data-plume-head-fill={managedSkin ? "root" : "window"}
 		>

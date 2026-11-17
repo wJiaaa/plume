@@ -43,7 +43,7 @@ export function SettingsScreen() {
 		const sidebar = sidebarWidthFor(sidebarWidth, windowWidth);
 		element.style.setProperty("--plume-settings-hold", `${inner + (sidebarOpen ? -sidebar : sidebar)}px`);
 		const release = () => element.style.removeProperty("--plume-settings-hold");
-		// 侧栏滑动用的是 `--plume-t-slow`（见 SLIDE_MOTION 的用处），多留一点余量再放开。
+		// 侧栏滑动最长是展开的 `--plume-t-slow`（见 shell-classes.ts 的 `slideMotion`），多留一点余量再放开。
 		const timer = window.setTimeout(release, DURATION.slow + 60);
 		return () => {
 			window.clearTimeout(timer);
