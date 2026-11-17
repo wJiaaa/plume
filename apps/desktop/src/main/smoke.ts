@@ -1241,9 +1241,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await until(`document.querySelector('[data-plugin-detail="scheduled"] [data-readme] h1') !== null`, "详情页画出 README");
 			await delay(300);
 			await capture(window, join(outDir, "smoke-plugin-detail.png"));
-			// 回到网格：面包屑里的「插件市场」，不是侧栏那一行（同名，点了不关详情）。
-			const marketCrumb = 'nav[aria-label="插件市场"] button';
-			await click(marketCrumb);
+			// 回到网格：顶行面包屑里「插件市场 › 插件 › 名字」中间那一节，回到点进来的那一类。
+			await click('[data-market-crumb="plugins"]');
 			// 筛选条最前面是「已安装」：市场装的两个；内置插件都加载好了，一个都不列。
 			await click("[data-screen=market] button[aria-pressed]", "已安装");
 			await until(`document.querySelectorAll('[data-shelf="installed"] [data-card]').length === 2`, "「已安装」只列出市场装的两个插件");
@@ -1277,7 +1276,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			// 从技能这一类点开一张合集的详情，经面包屑返回时还在技能这一类。
 			await click(`[data-market-tab="skills"] [data-card="${skillKey}"] > button`);
 			await until(`document.querySelector('[data-plugin-detail]') !== null`, "技能合集的详情页");
-			await click(marketCrumb);
+			await until(`document.querySelector('[data-market-crumbs]')?.textContent.startsWith("插件市场技能")`, "详情页的面包屑写着从技能这一类点进来");
+			await click('[data-market-crumb="skills"]');
 			await until(`document.querySelector('[data-market-tab="skills"]') !== null`, "从详情返回时回到技能这一类");
 			// 「已安装」是技能插件的那一节；看哪个项目、刷新由市场画在页头「添加技能」左边。
 			await click('[data-market-tab="skills"] button[aria-pressed]', "已安装");
@@ -1294,7 +1294,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			// 点合集卡片打开那个插件的详情，返回时还在「已安装」。
 			await click(`[data-skill-pack="${skillPack}"] .skl-bundle-hit`);
 			await until(`document.querySelector('[data-plugin-detail]') !== null`, "点合集卡片打开插件详情");
-			await click(marketCrumb);
+			await click('[data-market-crumb="skills"]');
 			await until(`document.querySelector('[data-market-tab="skills"] [data-skills-settings]') !== null`, "从详情返回时回到技能 › 已安装");
 			// 连接器一类和技能一样：默认列市场里的连接器，「已安装」才是 MCP 插件的那一节。
 			await click('[data-market-kind="connectors"]');
@@ -1327,8 +1327,13 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click(scheduledSwitch);
 			await until(`document.querySelector('${scheduledSwitch}')?.getAttribute('aria-checked') === 'true'`, "再启用 plume.scheduled");
 			if ((await agent.plugins()).find((plugin) => plugin.name === "plume.scheduled")?.state !== "active") throw new Error("plume.scheduled 没有重新启用");
-			await click(marketCrumb);
-			// 右上角「创建插件」：菜单两条都带第二行说明，按开头的字点。冒烟里选文件夹给的是工作目录，不是插件，要说清楚。
+			// 面包屑的第一节「插件市场」回到插件那一类，网格页的面包屑是「插件市场 › 插件」。
+			await click('[data-market-crumb="market"]');
+			await until(
+				`document.querySelector('[data-market-crumbs]')?.textContent === "插件市场插件" && document.querySelector('[data-plugin-detail]') === null`,
+				"回到插件那一类，面包屑是「插件市场 › 插件」",
+			);
+			// 页头右端「创建插件」：菜单两条都带第二行说明，按开头的字点。冒烟里选文件夹给的是工作目录，不是插件，要说清楚。
 			const createItem = (label: string) => click('[role=menu][aria-label="创建插件"] [role=menuitem]', new RegExp(`^${label}`));
 			await click("[data-market-create]");
 			await until(`document.querySelector('[role=menu][aria-label="创建插件"]') !== null`, "打开创建插件菜单");
