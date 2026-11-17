@@ -24,7 +24,7 @@ import { DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./app/shell-classes.ts";
 import { finishPanelLeave, panelOpenIn, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
 import { canStep, go, openNoticeSession } from "./app/sessions.ts";
 import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
-import { investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
+import { createPlugin, investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
 import { SidebarContent, SidebarResizer, SidebarTopRow } from "./app/Sidebar.tsx";
 import { hasSidebar, Rail } from "./app/Rail.tsx";
 import { ChatScreen, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
@@ -439,7 +439,7 @@ function Main() {
 		if (pageGone) update({ screen: "chat" });
 	}, [pageGone]);
 	if (screen === "settings") return <SettingsScreen />;
-	if (screen === "market") return <MarketScreen onOpenSettings={openSettingsSection} onTry={tryPrompt} projects={projects} />;
+	if (screen === "market") return <MarketScreen onOpenSettings={openSettingsSection} onTry={tryPrompt} onCreate={createPlugin} projects={projects} />;
 	if (page) return <PageSlot key={page.key} page={page} props={pageProps(view, target)} />;
 	return null;
 }

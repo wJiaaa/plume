@@ -38,7 +38,7 @@ import {
 import { finishPanelLeave, panelOpenIn, scopeOf, tabsOf, togglePanel } from "./panels.ts";
 import { PANEL_MOTION, PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, PanelResizer, PanelToggle } from "./PanelArea.tsx";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
-import { createPlugin, sidebarActions } from "./actions.ts";
+import { sidebarActions } from "./actions.ts";
 import { Composer } from "./Composer.tsx";
 import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
 
@@ -252,7 +252,7 @@ export function TitleBar() {
 			)}
 			{screen === "market" && (
 				<div className="flex min-w-0 flex-1 items-center">
-					<MarketToolbar onCreate={createPlugin} />
+					<MarketToolbar />
 				</div>
 			)}
 		</header>

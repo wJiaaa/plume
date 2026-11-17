@@ -15,7 +15,7 @@
  *   - 有新版时一行一颗按钮；自动更新开着时它们自己就换上了（见主进程的 market.ts）。
  *   - 开着的时候每 10 分钟、回到窗口时再读一次目录。
  *
- * 页头的按钮放在窗口顶行里（见 `MarketToolbar`），和侧栏的控件在一条线上。
+ * 三类各自的按钮都在页头右端，和三类的切换在一行；窗口顶行里是面包屑（见 `MarketToolbar`）。
  */
 
 import {
@@ -23,6 +23,7 @@ import {
 	Button,
 	ErrorBoundary,
 	IconButton,
+	type MessageKey,
 	MENU_MAX_HEIGHT,
 	MenuBody,
 	MenuItem,
@@ -107,10 +108,12 @@ const REVALIDATE_MS = 10 * 60 * 1000;
 export function MarketScreen({
 	onOpenSettings,
 	onTry,
+	onCreate,
 	projects,
 }: {
 	/** 去设置里的某一节：插件详情里「设置」一节的入口。 */ onOpenSettings: (section: SettingsSection) => void;
 	/** 详情里「试试这样问」、技能的「让 agent 写一个」：开新对话，输入框里放好这句话。 */ onTry: (prompt: string) => void;
+	/** 「创建插件 › 新建插件」：开新对话，草稿是点名 plume-plugin 技能的命令。 */ onCreate: () => void;
 	/** 侧栏登记的项目：「技能 › 已安装」看哪个项目的技能。 */ projects: readonly ProjectInfo[];
 }) {
 	const { t } = useI18n();
@@ -179,7 +182,7 @@ export function MarketScreen({
 						<KindTabs
 							value={tab}
 							onChange={setMarketTab}
-							trailing={tab === "plugins" ? undefined : <ExtensionActions tab={tab} projects={projects} onTry={onTry} />}
+							trailing={tab === "plugins" ? <PluginActions onCreate={onCreate} /> : <ExtensionActions tab={tab} projects={projects} onTry={onTry} />}
 						/>
 
 						{tab !== "plugins" ? (
@@ -273,8 +276,11 @@ export function MarketScreen({
 }
 
 /**
- * 三类的切换，就是页头：三个大字，选中的是正文色，别的淡下去，像几个并排的标题而不是一条控件。
+ * 三类的切换，就是页头：三个标题字，选中的是正文色，别的淡下去，像几个并排的标题而不是一条控件。
  * 页上不再另写「插件市场」几个字——侧栏那一行和顶行已经说了这是哪儿。
+ *
+ * 字号取 heading 不取 display：三个并排的 display 一样粗、一样大，压过下面的筛选条和货架，整页最响的成了导航。
+ * 页面装在带描边的面板里，上边距和左右的 24px 一样，标题不顶着面板的上沿。
  */
 function KindTabs({
 	value,
@@ -286,27 +292,22 @@ function KindTabs({
 	/** 这一类自己的按钮，靠右。 */ trailing?: ReactNode;
 }) {
 	const { t } = useI18n();
-	const tabs: { id: MarketTab; label: string }[] = [
-		{ id: "plugins", label: t("common.plugins") },
-		{ id: "skills", label: t("market.skills") },
-		{ id: "connectors", label: t("market.connectors") },
-	];
 	return (
-		<div className="flex items-center gap-4 pt-2 pb-5">
-			<div className="flex items-baseline gap-8" role="tablist" aria-label={t("market.title")}>
-				{tabs.map((entry) => (
+		<div className="flex items-center gap-4 pt-6 pb-5">
+			<div className="flex items-baseline gap-6" role="tablist" aria-label={t("market.title")}>
+				{MARKET_TABS.map((id) => (
 					<button
-						key={entry.id}
+						key={id}
 						type="button"
 						role="tab"
-						aria-selected={entry.id === value}
-						data-market-kind={entry.id}
-						onClick={() => onChange(entry.id)}
-						className={`text-display font-semibold transition-colors duration-[var(--plume-t-quick)] ${
-							entry.id === value ? "text-ink" : "text-ink-faint hover:text-ink-muted"
+						aria-selected={id === value}
+						data-market-kind={id}
+						onClick={() => onChange(id)}
+						className={`text-heading font-semibold transition-colors duration-[var(--plume-t-quick)] ${
+							id === value ? "text-ink" : "text-ink-faint hover:text-ink-muted"
 						}`}
 					>
-						{entry.label}
+						{t(TAB_LABELS[id])}
 					</button>
 				))}
 			</div>
@@ -314,6 +315,10 @@ function KindTabs({
 		</div>
 	);
 }
+
+/** 三类的名字：页头的切换和顶行的面包屑用同一份。 */
+const MARKET_TABS = ["plugins", "skills", "connectors"] as const satisfies readonly MarketTab[];
+const TAB_LABELS: Record<MarketTab, MessageKey> = { plugins: "common.plugins", skills: "market.skills", connectors: "market.connectors" };
 
 /** 两类各自的：市场里的条目是哪一种、管它们的插件画在哪一页、页头「添加」叫什么。 */
 const EXTENSION_KINDS = {
@@ -543,57 +548,76 @@ function ProjectScope({
 }
 
 /**
- * 市场在窗口顶行里的那一截：详情页是「插件市场 › 名字」的面包屑，插件的网格页是右端的「创建插件」、重读和 ⋯。
- * 顶行本身可以拖窗口，只有能点的那一组标 no-drag，空着的地方照样能拖。
+ * 市场在窗口顶行里的那一截：面包屑。网格页是「插件市场 › 这一类」，详情页是「插件市场 › 这一类 › 名字」；最后一节是
+ * 正在看的、不能点，前面的点了回去：「插件市场」回到插件那一类，中间那节回到这一类（筛选照旧）。详情页写的「这一类」是
+ * 从哪一类点进去的（同 `focusPlugin`），不按条目自己的种类：返回时回到原处。网格页的按钮在页头右端（`KindTabs` 的 `trailing`）。
+ */
+export function MarketToolbar() {
+	const { t } = useI18n();
+	const items = useCatalog();
+	const { tab, focus } = useMarketStore();
+	const open = focus ? items.find((item) => item.key === focus) : undefined;
+	const crumb = (id: string, label: string, onClick: () => void) => (
+		<>
+			<Button variant="subtle" size="sm" onClick={onClick} data-market-crumb={id}>
+				{label}
+			</Button>
+			<ChevronRight size={13} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
+		</>
+	);
+	return (
+		<nav className="flex min-w-0 items-center gap-1 text-label [app-region:no-drag]" aria-label={t("market.title")} data-market-crumbs="">
+			{crumb("market", t("market.title"), () => setMarketTab("plugins"))}
+			{open && crumb(tab, t(TAB_LABELS[tab]), () => focusPlugin(null))}
+			<span aria-current="page" className="max-w-[320px] truncate px-1 text-ink">
+				{open ? open.name : t(TAB_LABELS[tab])}
+			</span>
+		</nav>
+	);
+}
+
+/**
+ * 「插件」一类的页头右端：重读目录、⋯（自动更新），最后是「创建插件」。和技能、连接器两类一样排：主按钮在最右，同一种样子。
  *
  * 「创建插件」两条路：新建是开一个新对话、输入框里放好写插件的技能，让 agent 照人说的写；从文件夹安装是把本机
  * 一个构建好的插件装上，和市场装的放在一处。
  */
-export function MarketToolbar({ onCreate }: { /** 新建插件：开新对话，草稿是点名 plume-plugin 技能的命令。 */ onCreate: () => void }) {
+function PluginActions({ onCreate }: { onCreate: () => void }) {
 	const { t } = useI18n();
-	const items = useCatalog();
-	const { tab, focus, loading, updates } = useMarketStore();
+	const { loading, updates } = useMarketStore();
 	const more = usePopover();
 	const create = usePopover();
-	const open = focus ? items.find((item) => item.key === focus) : undefined;
-
-	if (open) {
-		return (
-			<nav className="flex min-w-0 items-center gap-1 text-label [app-region:no-drag]" aria-label={t("market.title")}>
-				<Button variant="subtle" size="sm" onClick={() => focusPlugin(null)}>
-					{t("market.title")}
-				</Button>
-				<ChevronRight size={13} strokeWidth={1.8} className="shrink-0 text-ink-faint" />
-				<span className="max-w-[320px] truncate px-1 text-ink">{open.name}</span>
-			</nav>
-		);
-	}
-
-	// 创建、重读目录、自动更新说的都是插件；技能、连接器那两类的按钮在它们自己的那一节里。
-	if (tab !== "plugins") return null;
-
-	const createNew = () => {
-		create.close();
-		onCreate();
-	};
-
 	return (
-		<div className="ml-auto flex items-center gap-0.5 [app-region:no-drag]">
-			<Button
-				variant="soft"
-				size="sm"
-				menu={create.open}
-				onClick={create.toggle}
-				icon={<Plus size={14} strokeWidth={1.9} />}
-				data-market-create=""
-				className="mr-1.5"
-			>
+		<>
+			<IconButton
+				label={t("market.reload")}
+				onClick={() => void reloadMarket()}
+				icon={loading ? <ActionSpinner size={14} /> : <RefreshCw size={14} strokeWidth={1.8} />}
+			/>
+			<IconButton label={t("common.more")} onClick={more.toggle} menu={more.open} icon={<MoreHorizontal size={15} strokeWidth={1.9} />} />
+			{more.open && (
+				<Popover anchor={more.anchor} onClose={more.close} placement="bottom" align="end" width="default" role="menu" label={t("common.more")}>
+					<MenuBody>
+						<MenuItem checked={updates?.auto !== false} onClick={() => void setAutoUpdate(updates?.auto === false)}>
+							{t("market.autoUpdate")}
+						</MenuItem>
+					</MenuBody>
+				</Popover>
+			)}
+			<Button variant="primary" menu={create.open} onClick={create.toggle} icon={<Plus size={14} strokeWidth={2} />} data-market-create="">
 				{t("market.create")}
 			</Button>
 			{create.open && (
 				<Popover anchor={create.anchor} onClose={create.close} placement="bottom" align="end" width="default" role="menu" label={t("market.create")}>
 					<MenuBody>
-						<MenuItem icon={<Sparkles size={14} strokeWidth={1.8} />} detail={t("market.createNewDetail")} onClick={createNew}>
+						<MenuItem
+							icon={<Sparkles size={14} strokeWidth={1.8} />}
+							detail={t("market.createNewDetail")}
+							onClick={() => {
+								create.close();
+								onCreate();
+							}}
+						>
 							{t("market.createNew")}
 						</MenuItem>
 						<MenuItem
@@ -609,26 +633,7 @@ export function MarketToolbar({ onCreate }: { /** 新建插件：开新对话，
 					</MenuBody>
 				</Popover>
 			)}
-			<IconButton
-				label={t("market.reload")}
-				onClick={() => void reloadMarket()}
-				icon={loading ? <ActionSpinner size={13.5} /> : <RefreshCw size={13.5} strokeWidth={1.8} />}
-			/>
-			<IconButton label={t("common.more")} onClick={more.toggle} menu={more.open} icon={<MoreHorizontal size={15} strokeWidth={1.9} />} />
-			{more.open && (
-				<Popover anchor={more.anchor} onClose={more.close} placement="bottom" align="end" width="default" role="menu" label={t("common.more")}>
-					<MenuBody>
-						<MenuItem
-							icon={<ArrowUp size={14} strokeWidth={1.9} />}
-							checked={updates?.auto !== false}
-							onClick={() => void setAutoUpdate(updates?.auto === false)}
-						>
-							{t("market.autoUpdate")}
-						</MenuItem>
-					</MenuBody>
-				</Popover>
-			)}
-		</div>
+		</>
 	);
 }
 
@@ -712,7 +717,8 @@ function Filters({ value, onChange, shelves: names }: { value: string | null; on
 	);
 
 	return (
-		<div className="relative flex min-w-0 flex-1">
+		// 往左挪一颗签的内边距（Chip 的 px-3.5）：图标和上面的页头、下面的货架对在同一条边上，选中的底色伸进页边距里。
+		<div className="relative -ml-3.5 flex min-w-0 flex-1">
 			<div ref={row} className="flex min-w-0 flex-1 gap-1 overflow-hidden" role="group" aria-label={t("pluginDetail.category")}>
 				{lead}
 				{visible.map(shelfChip)}
