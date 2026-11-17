@@ -16,5 +16,12 @@ export const NO_DRAG = "[app-region:no-drag]";
 export const HEADER_BAR = hasHeaderBar(window.plume.platform);
 /** 卡片里的标题栏：有那条带子时不拖窗口。 */
 export const CARD_DRAG = HEADER_BAR ? "" : DRAG;
-/** 侧栏、面板区收起和展开时的动画。拖宽度和窗口缩放时不加，否则每一帧都在追上一帧。 */
-export const SLIDE_MOTION = "transition-[width,translate] ease-out";
+/**
+ * 侧栏开合的时长和曲线，两个方向不一样（对着参考录屏逐帧量过）：展开 slow + out，一下冲出去、慢慢落定；
+ * 收起 base + soft，起步缓、中段快、收尾再缓。收起不用 in：in 在最快的时候撞上终点，对话那一栏收尾会顿一下。
+ * 侧栏的宽度、里面内容的淡入淡出、标题栏给窗口按钮让的宽度（styles.css 的 `[data-sidebar-sliding]`）都走这一组。
+ * 只在点开关的那一下加，拖宽度和窗口缩放时不加，否则每一帧都在追上一帧。
+ */
+export function slideMotion(opening: boolean): string {
+	return opening ? "duration-[var(--plume-t-slow)] ease-out" : "duration-[var(--plume-t-base)] ease-soft";
+}

@@ -1299,7 +1299,6 @@ export const zhCN = {
 	"palette.sessions": "会话",
 	"palette.chat": "对话",
 	"palette.goTo": "前往",
-	"palette.toggleSidebar": "显示/隐藏侧边栏",
 	"palette.pinCurrent": "置顶当前会话",
 	"palette.unpinCurrent": "取消置顶当前会话",
 	"palette.archiveCurrent": "归档当前会话",

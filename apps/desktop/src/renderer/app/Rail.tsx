@@ -1,14 +1,14 @@
 import { useI18n } from "@plume/ui";
 import { AppWindow, MessagesSquare, Settings } from "@plume/ui/icons";
 import { MAIN_TOOLBAR_HEIGHT } from "../../shared/window-chrome.ts";
-import { layoutMode, RAIL_WIDTH } from "../layout.ts";
+import { RAIL_WIDTH } from "../layout.ts";
 import { listPages, localized, pageBadge, usePluginUis } from "../plugins.tsx";
 import { MarketNavItem } from "../market/market.tsx";
 import { RailItem } from "../nav-item.tsx";
 import type { Screen } from "../nav-history.ts";
 import { UpdateBadge } from "../update/UpdateBadge.tsx";
 import { SidebarTools } from "../sidebar/SidebarTools.tsx";
-import { setSidebar, showPanel } from "./panels.ts";
+import { showPanel } from "./panels.ts";
 import { nextTurnCwd, state, update, useAppPick, useChrome } from "./state.ts";
 import { DRAG, HEADER_BAR } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
@@ -26,11 +26,10 @@ export function hasSidebar(screen: Screen): boolean {
  */
 export function Rail() {
 	const { t, resolvedLocale } = useI18n();
-	const { screen, sessions, projects, currentId, windowWidth } = useChrome();
+	const { screen, sessions, projects, currentId } = useChrome();
 	const currentSummary = useAppPick((current) => current.view?.summary);
 	usePluginUis();
 	const go = (next: Screen) => update({ screen: next, drawerOpen: false });
-	const compact = layoutMode(windowWidth) === "compact";
 	return (
 		<nav aria-label={t("app.rail")} className="relative z-30 flex shrink-0 flex-col items-center" style={{ width: RAIL_WIDTH }}>
 			{/* 窗口顶上那一条在这一列的一段：红绿灯在这里，和侧栏身子上面那一截一样高，第一格和身子的顶边对齐。 */}
@@ -76,7 +75,6 @@ export function Rail() {
 						go("chat");
 						showPanel(key, true);
 					}}
-					toggleSidebar={() => (compact ? update({ drawerOpen: !state.drawerOpen }) : setSidebar({ open: !state.sidebarOpen }))}
 				/>
 				<UpdateBadge />
 				<RailItem

@@ -1348,7 +1348,6 @@ export const en = {
 	"palette.sessions": "Chats",
 	"palette.chat": "Chat",
 	"palette.goTo": "Go to",
-	"palette.toggleSidebar": "Show/hide sidebar",
 	"palette.pinCurrent": "Pin this chat",
 	"palette.unpinCurrent": "Unpin this chat",
 	"palette.archiveCurrent": "Archive this chat",
