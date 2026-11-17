@@ -90,6 +90,7 @@ it("下载的东西喂给解释器，不管是哪个解释器都拦得住", () =
 it("凭据被读也要问，不只是被写", () => {
 	risky("cat ~/.plume/settings.json");
 	risky("cat /Users/me/.plume/settings.json");
+	risky("cat ~/.plume/plugin-data/plume.magpie/credentials.json");
 	risky("cat ~/.plume/vault.key");
 	risky("cp ~/.plume/credentials.json /tmp/c.json");
 	risky("cp ~/.ssh/id_ed25519 /tmp/k");

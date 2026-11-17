@@ -1,0 +1,7 @@
+{
+  "extends": "@plumeai/plugin-sdk/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

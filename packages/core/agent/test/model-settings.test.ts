@@ -163,8 +163,8 @@ describe("导入导出", () => {
 		models: [entry("m1")],
 	};
 
-	it("导出带 key、不带 Magpie，文件只有本人可读；导回来按 id 替换、没 key 的保留本机的", async () => {
-		const service = await start({ providers: [own], magpie: { baseUrl: "http://127.0.0.1:1", apiKey: "mg", models: [] } });
+	it("导出带 key，文件只有本人可读；导回来按 id 替换、没 key 的保留本机的", async () => {
+		const service = await start({ providers: [own] });
 		const file = join(dir, "out", "providers.json");
 		expect(await service.exportProviders(file)).toEqual({ providers: 1, containsSecrets: true });
 		expect((await stat(file)).mode & 0o777).toBe(0o600);
@@ -198,14 +198,14 @@ describe("导入导出", () => {
 			["p-own", "sk-own"],
 			["p-new", "sk-new"],
 		]);
-		expect((await service.getSettings()).providers.map((provider) => provider.id)).toEqual(["p-own", "p-new", "magpie"]);
+		expect((await service.getSettings()).providers.map((provider) => provider.id)).toEqual(["p-own", "p-new"]);
 	});
 
 	it("读不懂的文件说明是哪一种；不认的字段丢掉", async () => {
 		expect(parseBundle("{")).toEqual({ ok: false, problem: "not-json" });
 		expect(parseBundle(JSON.stringify({ kind: "other", providers: [] }))).toEqual({ ok: false, problem: "not-a-bundle" });
 		expect(parseBundle(JSON.stringify({ kind: "plume.providers", version: 2, providers: [] }))).toEqual({ ok: false, problem: "too-new" });
-		expect(parseBundle(JSON.stringify({ kind: "plume.providers", providers: [{ id: "magpie", baseUrl: "http://x" }] }))).toEqual({
+		expect(parseBundle(JSON.stringify({ kind: "plume.providers", providers: [{ id: "Bad Id", baseUrl: "http://x" }] }))).toEqual({
 			ok: false,
 			problem: "no-providers",
 		});

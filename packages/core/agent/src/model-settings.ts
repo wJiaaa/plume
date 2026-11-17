@@ -1,7 +1,7 @@
 /**
  * 模型设置（`settingsFile`）：读、排队改写，和设置页那一组只动设置、不碰会话的 AgentService 方法。
  *
- * 供应商的 key 不落在这个文件里，读写时经 vault 进出（`providerKeys`）；Magpie 写的那一块的读写规则在 models.ts、magpie.ts。
+ * 供应商的 key 不落在这个文件里，读写时经 vault 进出（`providerKeys`）；插件提供的供应商读时接上，改和删交回插件（plugin-providers.ts）。
  * 要连带会话的（权限模式、项目层、会话自己的模型）由 agent.ts 用这里的 `read`、`change` 组。
  */
 
@@ -16,9 +16,9 @@ import { THINKING_LEVELS } from "@plume/llm/thinking-options";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { text } from "./i18n.ts";
 import type { JsonFiles } from "./json-files.ts";
-import { isMagpie, magpieGateway } from "./magpie.ts";
 import { syncModelCatalog } from "./model-catalog-sync.ts";
 import { checkProvider, fileSettings, lookup, normalizeSettings, sameGrant, type StoredSettings, settingsView, TONES } from "./models.ts";
+import type { PluginProviderSources } from "./plugin-providers.ts";
 import { applyImport, parseBundle, planImport, serializeBundle } from "./provider-transfer.ts";
 import { fetchModels, testProvider } from "./providers.ts";
 import type { providerKeys } from "./vault.ts";
@@ -63,8 +63,10 @@ export function createModelSettings(options: {
 	settingsFile: string;
 	/** 模型目录的缓存文件，见 `AgentOptions.catalogFile`；没有时「更新目录」什么都不做。 */
 	catalogFile: string | undefined;
+	/** 插件经 `ctx.providers` 提供的供应商。 */
+	pluginProviders: PluginProviderSources;
 }): ModelSettings {
-	const { files, keys, settingsFile, catalogFile } = options;
+	const { files, keys, settingsFile, catalogFile, pluginProviders } = options;
 	let liveRetryPolicy: StoredSettings["retryPolicy"];
 	let liveSessionManager: string | undefined;
 
@@ -78,6 +80,7 @@ export function createModelSettings(options: {
 
 	async function read(): Promise<StoredSettings> {
 		const settings = await keys.withKeys(normalizeSettings(await files.read<unknown>(settingsFile)));
+		settings.providers = pluginProviders.merge(settings.providers);
 		if (changing === 0) follow(settings);
 		return settings;
 	}
@@ -106,7 +109,13 @@ export function createModelSettings(options: {
 		async getSettings(): Promise<SettingsView> {
 			return settingsView(await read());
 		},
-		saveProvider({ apiKey, ...provider }) {
+		async saveProvider({ apiKey, ...provider }) {
+			const managed = provider.id ? (await read()).providers.find((candidate) => candidate.id === provider.id && candidate.managedBy) : undefined;
+			if (managed?.managedBy) {
+				const saved = checkProvider({ ...provider, apiKey: apiKey?.trim() || managed.apiKey });
+				await pluginProviders.save(managed.managedBy, { ...saved, apiKey: saved.apiKey ?? "" });
+				return managed.id;
+			}
 			return changeSettings((settings) => {
 				const id = provider.id || `p-${randomUUID().slice(0, 8)}`;
 				const index = settings.providers.findIndex((candidate) => candidate.id === id);
@@ -114,13 +123,13 @@ export function createModelSettings(options: {
 				const saved = checkProvider({ ...provider, id, apiKey: apiKey?.trim() || settings.providers[index]?.apiKey });
 				if (index < 0) settings.providers.push(saved);
 				else settings.providers[index] = saved;
-				if (isMagpie(id)) settings.magpie = magpieGateway(saved);
 				return id;
 			});
 		},
 		async deleteProvider(providerId) {
+			const managed = (await read()).providers.find((candidate) => candidate.id === providerId && candidate.managedBy);
+			if (managed?.managedBy) return pluginProviders.remove(managed.managedBy, providerId);
 			await changeSettings((settings) => {
-				if (isMagpie(providerId)) delete settings.magpie;
 				settings.providers = settings.providers.filter((provider) => provider.id !== providerId);
 			});
 		},
@@ -223,9 +232,7 @@ export function createModelSettings(options: {
 			const chosen = parsed.providers.filter((provider) => wanted.has(provider.id));
 			if (chosen.length === 0) return 0;
 			await changeSettings((settings) => {
-				const own = fileSettings(settings).providers;
-				const magpie = settings.providers.filter((provider) => isMagpie(provider.id));
-				settings.providers = [...applyImport(own, chosen), ...magpie];
+				settings.providers = applyImport(fileSettings(settings).providers, chosen);
 			});
 			return chosen.length;
 		},

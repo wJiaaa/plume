@@ -16,7 +16,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** packages/testing/ 下的测试插件只有这几段装：目录名 → 段名。 */
-const TESTING = { "steward-probe": "steward" };
+const TESTING = { "steward-probe": "steward", "provider-probe": "providers" };
 
 const SKIP = [/\.md$/, /^spec\//, /^docs\//, /(^|\/)test\//, /\.test\.[cm]?[jt]sx?$/, /^scripts\/check-[^/]+\.mjs$/, /^\.github\//];
 

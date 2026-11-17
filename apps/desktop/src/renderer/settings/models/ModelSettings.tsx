@@ -9,6 +9,7 @@
 import { DialogAction, IconButton, MenuBody, MenuItem, Popover, Scroller, ScrollText, useConfirmer, useI18n, usePopover } from "@plume/ui";
 import { Download, MoreHorizontal, Plus, Upload } from "@plume/ui/icons";
 import { useState } from "react";
+import { usePluginDisplayName } from "../../market/store.ts";
 import type { ModelConfig } from "../../models/store.ts";
 import { Card, PageHeader } from "../layout.tsx";
 import { FetchModelsModal } from "./FetchModelsModal.tsx";
@@ -20,14 +21,12 @@ import { ProviderImportModal } from "./ProviderImportModal.tsx";
 import { useProviders } from "./useProviders.ts";
 import { useProviderTransfer } from "./useProviderTransfer.ts";
 
-/** Magpie 接管时合成的供应商，见 packages/core/agent/src/magpie.ts。 */
-const MAGPIE_PROVIDER_ID = "magpie";
-
 export function ModelSettings() {
 	const { t, formatDate } = useI18n();
 	const p = useProviders();
 	const transfer = useProviderTransfer();
 	const confirm = useConfirmer();
+	const pluginName = usePluginDisplayName();
 	const transferMenu = usePopover();
 	const [editingModel, setEditingModel] = useState<{ providerId: string; model: ModelConfig | null } | null>(null);
 	const [adding, setAdding] = useState(false);
@@ -169,7 +168,7 @@ export function ModelSettings() {
 							<ProviderEditor
 								key={`${selected.id}:${transfer.imports}`}
 								provider={selected}
-								managed={selected.id === MAGPIE_PROVIDER_ID}
+								managedBy={selected.managedBy && (pluginName(selected.managedBy) ?? selected.managedBy)}
 								defaultModelId={p.defaultModelId}
 								testResult={p.testResult}
 								testing={p.testing}

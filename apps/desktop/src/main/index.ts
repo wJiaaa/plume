@@ -169,9 +169,7 @@ app.whenReady().then(boot, (error: unknown) => {
 
 /**
  * 模型设置放在数据目录的 settings.json（缺省 ~/.plume/settings.json），只有 agent 进程读写；供应商的 API key 由 agent 进程
- * 加密存进同目录的 credentials.json（钥匙是 vault.key），不在 settings.json 里。
- * Magpie 的 Agent 插件（integrations/magpie）按缺省路径找这个文件；~/.plume 这个目录也是 Magpie 判断 Plume
- * 装没装的依据，所以启动时就建好。
+ * 加密存进同目录的 credentials.json（钥匙是 vault.key），不在 settings.json 里。目录在启动时就建好。
  */
 async function userSettingsFile(): Promise<string> {
 	const dir = plumeHome();

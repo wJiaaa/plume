@@ -561,7 +561,8 @@ export const en = {
 	"modelSettings.addProvider": "Add a provider",
 	"modelSettings.noProviders": "No providers set up yet",
 	"modelSettings.addFirst": "Add the first one",
-	"modelSettings.magpieManaged": "Connected through Magpie. You can edit it here. When Magpie syncs its model list again, it replaces your model edits.",
+	"modelSettings.pluginManaged":
+		"Provided by the “{plugin}” plugin. You can edit it here, and the plugin saves your changes. When the app behind it syncs again, it may replace your edits.",
 	"providerTransfer.importTip": "Import providers from a JSON file",
 	"providerTransfer.exportTip": "Export providers to a JSON file",
 	"providerTransfer.exportConfirm": "Export your providers?",

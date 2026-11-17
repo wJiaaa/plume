@@ -157,7 +157,7 @@ async function main(): Promise<void> {
 	const tasks = TASKS.filter((task) => !one || task.id === one);
 	if (tasks.length === 0) throw new Error(`没有任务 ${one}；有：${TASKS.map((task) => task.id).join(", ")}`);
 	const resolved = await Promise.all(models.map((id) => loadModel(id)));
-	// plume.mcp 还会读 `PLUME_HOME` 下 Magpie 分发的服务：指到一个空目录，评测里只有那 30 台。
+	// `PLUME_HOME` 指到一个空目录：本机数据目录里的东西不混进评测，只有那 30 台。
 	process.env.PLUME_HOME = await mkdtemp(join(tmpdir(), "plume-mcp-eval-home-"));
 	for (const [index, modelId] of models.entries()) {
 		say(`\nMCP 延迟 vs 全部常驻 · ${modelId} · 每个任务 ${runs} 次\n`);

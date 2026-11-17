@@ -1,9 +1,8 @@
 /**
  * 模型设置：供应商、模型、默认模型怎么存，一轮用哪个模型。
  *
- * 存在 settingsFile（JSON）：{ providers: [...], defaultModel, magpie }。供应商的 API key 不在里面，读写时经 vault.ts 进出；
- * magpie 块里 Magpie 写的 key 原样留在文件里。
- * magpie 块由 Magpie 写，读入时合成一个供应商排在最后，写盘时再拿掉（见 magpie.ts）。
+ * 存在 settingsFile（JSON）：{ providers: [...], defaultModel, … }。供应商的 API key 不在里面，读写时经 vault.ts 进出。
+ * 插件提供的供应商读入时接在后面、标上 `managedBy`，写盘时再拿掉（见 plugin-providers.ts）。
  */
 
 import type { AlwaysAllow, Message, ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
@@ -12,15 +11,16 @@ import { normalizeRetryPolicy, type RetryPolicy } from "@plume/llm/retry-policy"
 import { resolveModelThinkingOptions, resolveThinkingOption, THINKING_LEVELS } from "@plume/llm/thinking-options";
 import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
 import { text } from "./i18n.ts";
-import { isMagpie, magpieProvider } from "./magpie.ts";
 
 export interface StoredProvider extends ProviderSettings {
 	apiKey?: string;
+	/** 由插件提供时是那个插件的名字，见 `PluginProviderSources`；这样的不写盘。 */
+	managedBy?: string;
 }
 
 export interface StoredSettings {
 	providers: StoredProvider[];
-	/** 用户设的默认模型；可能已经失效，用 defaultModelOf 取实际生效的那个。Magpie 接管时它也改这一键。 */
+	/** 用户设的默认模型；可能已经失效，用 defaultModelOf 取实际生效的那个。 */
 	defaultModel?: ModelRef;
 	/** 模型菜单里星标的模型。 */
 	favoriteModels?: ModelRef[];
@@ -30,8 +30,6 @@ export interface StoredSettings {
 	permissionMode?: PermissionMode;
 	/** 人答过「以后不再问」的东西，按发起审批的一方分开记，见 `AlwaysAllow`。 */
 	alwaysAllow?: AlwaysAllow[];
-	/** Magpie 写的网关；在 Plume 里的编辑也写回这一块。 */
-	magpie?: unknown;
 	/** 没设过的项用 `DEFAULT_PERSONALIZATION`。 */
 	personalization?: Partial<Personalization>;
 	/** 新会话的思考档位，建会话时记到会话上；没设过是 `DEFAULT_THINKING`。 */
@@ -80,38 +78,33 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * 把文件里读到的东西整理成 StoredSettings；读不到、或者不是这个格式，都当作还没有供应商。
- * 只有 Magpie 写过的文件没有 providers，也照样读出它的那一个。
  */
 export function normalizeSettings(raw: unknown): StoredSettings {
 	if (!raw || typeof raw !== "object") return { providers: [] };
-	const { providers, defaultModel, favoriteModels, imageModel, permissionMode, alwaysAllow, magpie, personalization, thinking, retryPolicy, sessionManager } =
-		raw as {
-			providers?: unknown;
-			defaultModel?: unknown;
-			favoriteModels?: unknown;
-			imageModel?: unknown;
-			permissionMode?: unknown;
-			alwaysAllow?: unknown;
-			magpie?: unknown;
-			personalization?: unknown;
-			thinking?: unknown;
-			retryPolicy?: unknown;
-			sessionManager?: unknown;
-		};
+	const { providers, defaultModel, favoriteModels, imageModel, permissionMode, alwaysAllow, personalization, thinking, retryPolicy, sessionManager } = raw as {
+		providers?: unknown;
+		defaultModel?: unknown;
+		favoriteModels?: unknown;
+		imageModel?: unknown;
+		permissionMode?: unknown;
+		alwaysAllow?: unknown;
+		personalization?: unknown;
+		thinking?: unknown;
+		retryPolicy?: unknown;
+		sessionManager?: unknown;
+	};
 	const tuned = normalizePersonalization(personalization);
 	// 手改坏的一项（`null`、没有 id）跳过，不让它在 `provider.id` 上抛错、连带所有读设置的地方都失败。
 	const own = Array.isArray(providers)
-		? (providers as (StoredProvider | null)[]).filter((provider): provider is StoredProvider => typeof provider?.id === "string" && !isMagpie(provider.id))
+		? (providers as (StoredProvider | null)[]).filter((provider): provider is StoredProvider => typeof provider?.id === "string")
 		: [];
-	const gateway = magpieProvider(magpie);
 	return {
-		providers: gateway ? [...own, gateway] : own,
+		providers: own,
 		...(typeof defaultModel === "string" ? { defaultModel } : {}),
 		...(Array.isArray(favoriteModels) ? { favoriteModels: favoriteModels.filter((ref): ref is string => typeof ref === "string") } : {}),
 		...(typeof imageModel === "string" ? { imageModel } : {}),
 		...(permissionMode === "ask" || permissionMode === "auto" || permissionMode === "full" ? { permissionMode } : {}),
 		...(Array.isArray(alwaysAllow) ? { alwaysAllow: alwaysAllow.map(normalizeGrant).filter((grant): grant is AlwaysAllow => grant !== undefined) } : {}),
-		...(magpie === undefined ? {} : { magpie }),
 		...(tuned ? { personalization: tuned } : {}),
 		...(THINKING_LEVELS.includes(thinking as ThinkingLevel) ? { thinking: thinking as ThinkingLevel } : {}),
 		...(retryPolicy === undefined ? {} : { retryPolicy: normalizeRetryPolicy(retryPolicy) }),
@@ -119,9 +112,9 @@ export function normalizeSettings(raw: unknown): StoredSettings {
 	};
 }
 
-/** 写盘时的样子：合成的 Magpie 供应商不进 providers，magpie 块和它的 key 原样留在文件里。 */
+/** 写盘时的样子：插件提供的供应商不进 providers，由插件自己存。 */
 export function fileSettings(settings: StoredSettings): StoredSettings {
-	return { ...settings, providers: settings.providers.filter((provider) => !isMagpie(provider.id)) };
+	return { ...settings, providers: settings.providers.filter((provider) => !provider.managedBy) };
 }
 
 function splitRef(ref: ModelRef): { providerId: string; modelId: string } | undefined {

@@ -1,0 +1,19 @@
+{
+  "name": "@plume/provider-probe",
+  "version": "0.1.0",
+  "description": "测试用插件：经 ctx.providers 把存在自己数据目录里的供应商交给模型设置，设置页的改和删写回这份文件。只给冒烟和开发者手动验证插件供应商接口，不随应用发、不进插件市场。",
+  "author": "Plume",
+  "plume": {
+    "displayName": "供应商探针",
+    "category": "Testing"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0"
+  }
+}

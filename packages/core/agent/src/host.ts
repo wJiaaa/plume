@@ -33,6 +33,7 @@ import type {
 	Logger,
 	MediaAccess,
 	ModelAccess,
+	ModelRef,
 	NoticeLevel,
 	Plugin,
 	PluginContext,
@@ -40,6 +41,7 @@ import type {
 	PluginSecrets,
 	PluginStatus,
 	ProvidedService,
+	ProviderSource,
 	SessionAccess,
 	SessionEndReason,
 	SessionObservation,
@@ -355,6 +357,12 @@ export class PluginHost {
 			fetch?: PluginContext["fetch"];
 			/** 插件的 `ctx.trash`：移到系统废纸篓，桌面应用经主进程做。不给时插件调它就抛错。 */
 			trash?: (path: string) => Promise<void>;
+			/** 插件的 `ctx.providers`：模型设置在 agent 那边，宿主只按插件名转交、停用时撤下。只测宿主本身时不给，插件调它就抛错。 */
+			providers?: {
+				add(plugin: string, source: ProviderSource): () => void;
+				defaultModel(): Promise<ModelRef | undefined>;
+				setDefaultModel(model: ModelRef): Promise<void>;
+			};
 			/** 非内置插件的 `apply` 最多等多久，缺省 15 秒。只为测试能传短的。 */
 			applyTimeoutMs?: number;
 			/** 工具表变了（登记、撤下了一件工具）：agent 据此告诉界面，见 `AgentService.listTools`。 */
@@ -1140,6 +1148,15 @@ export class PluginHost {
 					this.providers = [...this.providers, entry];
 				},
 			},
+			providers: {
+				provide: (source) => {
+					if (typeof source?.list !== "function" || typeof source.save !== "function" || typeof source.remove !== "function")
+						throw new Error(text("plugin.providerSourceNotObject"));
+					own(this.modelProviders().add(name, source));
+				},
+				defaultModel: () => this.modelProviders().defaultModel(),
+				setDefaultModel: (model) => this.modelProviders().setDefaultModel(String(model)),
+			},
 			provide: (service, implementation) => {
 				if (typeof service !== "string" || !SERVICE_NAME.test(service)) throw new Error(text("plugin.badService", { service: String(service) }));
 				if (typeof implementation !== "object" || implementation === null) throw new Error(text("plugin.serviceNotObject", { service }));
@@ -1161,6 +1178,11 @@ export class PluginHost {
 				return offer.facade as never;
 			},
 		};
+	}
+
+	private modelProviders(): NonNullable<typeof this.options.providers> {
+		if (!this.options.providers) throw new Error(text("plugin.providersUnavailable"));
+		return this.options.providers;
 	}
 
 	/**

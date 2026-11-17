@@ -257,7 +257,11 @@ it("默认生图模型按会话所在项目取，不给会话时用全局", asyn
 });
 
 it("拒绝配置里的凭据且只提醒一次，坏 JSON 回落全局，修好后新的问题仍提醒", async () => {
-	const cwd = await project("notice", { defaultModel: "p/cheap", providers: [{ apiKey: "private-project-key" }], magpie: { apiKey: "private-gateway-key" } });
+	const cwd = await project("notice", {
+		defaultModel: "p/cheap",
+		providers: [{ apiKey: "private-project-key" }],
+		credentials: { token: "private-gateway-key" },
+	});
 	const service = await start();
 	const launched = await ctx.sessions.launch({ cwd, message: "first" });
 	await launched.idle;
@@ -265,7 +269,7 @@ it("拒绝配置里的凭据且只提醒一次，坏 JSON 回落全局，修好�
 	const notices = () =>
 		events.filter((event): event is Extract<AgentEvent, { type: "notice" }> => event.type === "notice" && event.sessionId === launched.session.id);
 	expect(notices()).toHaveLength(1);
-	expect(notices()[0]?.text).toContain("providers, magpie");
+	expect(notices()[0]?.text).toContain("providers, credentials");
 	expect(JSON.stringify(await service.projectLayer(cwd))).not.toMatch(/private-project-key|private-gateway-key|private-global-key/);
 	await writeFile(projectConfigPath(cwd), "private-malformed-key");
 	await ctx.model.complete({ sessionId: launched.session.id, systemPrompt: "", prompt: "broken" });

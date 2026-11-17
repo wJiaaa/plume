@@ -99,6 +99,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-peers.ts",
 	// 代管会话的冒烟按中文界面找会话菜单项、读气泡上的标注，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-steward.ts",
+	// 插件供应商的冒烟按中文界面找设置章节、读「由插件提供」的提示，断言是写给开发者的。
+	"apps/desktop/src/main/smoke-providers.ts",
 	"apps/desktop/src/main/smoke-spawn-session.ts",
 	"apps/desktop/src/main/smoke-plan.ts",
 	// 「以后不再问」的冒烟按中文界面找审批卡和设置里的按钮，假模型的回复和断言是写给开发者的。

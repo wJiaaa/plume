@@ -51,8 +51,8 @@ it("只报告确实替换的叶子，忽略新增值和相同值", () => {
 	]);
 });
 
-it("供应商、MCP、凭据和 Magpie 均拒绝，钩子不混入配置", () => {
-	const forbidden = ["providers", "apiKey", "credentials", "githubToken", "mcpServers", "magpie"];
+it("供应商、MCP 和凭据均拒绝，钩子不混入配置", () => {
+	const forbidden = ["providers", "apiKey", "credentials", "githubToken", "mcpServers"];
 	const { config, refused } = sanitizeProjectConfig({ ...Object.fromEntries(forbidden.map((key) => [key, "secret"])), hooks: [], permissionMode: "ask" });
 	expect(config).toEqual({ permissionMode: "ask" });
 	expect(refused).toEqual(forbidden);
@@ -126,12 +126,12 @@ it("坏 JSON 和非对象回落全局并报告，错误不带文件原文", asyn
 });
 
 it("设置页报告生效默认值的覆盖和拒绝键，不传密钥", async () => {
-	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "ask", apiKey: "private-key", magpie: { apiKey: "gateway-key" } }));
+	await writeFile(projectConfigPath(dir), JSON.stringify({ permissionMode: "ask", apiKey: "private-key", credentials: { token: "gateway-key" } }));
 	const view = await projectLayerView({ providers: [] }, dir);
 	expect(view).toEqual({
 		path: projectConfigPath(dir),
 		exists: true,
-		refused: ["apiKey", "magpie"],
+		refused: ["apiKey", "credentials"],
 		loosened: [],
 		overrides: [{ key: "permissionMode", kind: "scalar", global: "auto", project: "ask" }],
 	});
