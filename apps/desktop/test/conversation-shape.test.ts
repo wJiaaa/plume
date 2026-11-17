@@ -44,6 +44,8 @@ function withPluginLines(body: () => void): void {
 	toolTable({}, [{ name: "todo_write", plugin: "example.todo", category: "checklist" }]);
 	addToolLine("example.todo", "todo_write", { verb: "更新清单" });
 	addToolLine("example.mcp", "mcp__", { group: "mcp", apart: true }, "prefix");
+	addToolLine("example.mcp", "mcp_search", { group: "mcp", apart: true });
+	addToolLine("example.mcp", "mcp_call", { group: "mcp", apart: true });
 	try {
 		body();
 	} finally {
@@ -468,7 +470,7 @@ test("一轮正常收尾、最新那份清单（结果里声明的 checklist）�
 	assert.equal(carryOnPrompt("interrupt", 2), CARRY_ON_PROMPTS[1]);
 });
 
-test("插件说自成一类的工具（MCP 的不分服务器）合成一段，不和别的接；mcp_call 只和自己接", () => {
+test("插件说自成一类的工具（MCP 的不分服务器，连同按需搜索的 mcp_search、mcp_call）合成一段，不和别的接", () => {
 	withPluginLines(mcpSteps);
 });
 
@@ -480,18 +482,22 @@ function mcpSteps() {
 		result("b", "mcp__linear__list_issues"),
 		reply([call("c", "mcp__github__get")]),
 		result("c", "mcp__github__get"),
-		reply([call("d", "mcp_call")]),
-		result("d", "mcp_call"),
-		reply([call("e", "read")]),
-		result("e", "read"),
-		reply([call("f", "mcp__github__get")]),
-		result("f", "mcp__github__get"),
+		reply([call("d", "mcp_search")]),
+		result("d", "mcp_search"),
+		reply([call("e", "mcp_call")]),
+		result("e", "mcp_call"),
+		reply([call("f", "mcp_search")]),
+		result("f", "mcp_search"),
+		reply([call("g", "read")]),
+		result("g", "read"),
+		reply([call("h", "mcp_call")]),
+		result("h", "mcp_call"),
 		reply([text("好了")], "stop"),
 	];
 	const items = turnBlocks(runs(messages))[1]!.items;
 	assert.deepEqual(
 		items.map((item) => (item.kind === "step" ? `step:${item.step.calls.map((one) => one.block.id).join("")}` : item.run.kind)),
-		["step:abc", "step:d", "step:e", "step:f", "message"],
+		["step:abcdef", "step:g", "step:h", "message"],
 	);
 }
 
