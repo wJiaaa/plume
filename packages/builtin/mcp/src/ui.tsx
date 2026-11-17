@@ -1054,6 +1054,9 @@ export default {
 		ui.toolCard("mcp__", Documents, { match: "prefix", inline: true });
 		// 不管哪台服务的工具都是一类：连着调时合成一段，不和读、跑命令、改文件接；说法照没登记的工具（工具名、「使用工具」）。
 		ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" });
+		// 工具多时按需搜索的两个也是 MCP 的活：搜一次、调一次交替着做，不归同一类就一次切成一段。
+		ui.toolLine("mcp_search", { group: "mcp", apart: true });
+		ui.toolLine("mcp_call", { group: "mcp", apart: true });
 		ui.toolCard("mcp_call", Documents, { inline: true });
 		const notify = ui.notify.bind(ui);
 		const openExternal = ui.openExternal.bind(ui);

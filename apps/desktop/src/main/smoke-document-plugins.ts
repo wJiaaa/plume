@@ -195,8 +195,10 @@ export async function checkDocumentPlugins({
 	await page("document.querySelector('.cm-content').focus()");
 	await window.webContents.insertText("获取 MCP 文档预览");
 	await click("[data-composer-send=send]");
-	await until("document.querySelectorAll('[data-mcp-document]').length === 6", "直接与延迟调用均显示三份文档");
 	await until("document.querySelector('[data-screen=chat]')?.textContent.includes('MCP 文档已返回。')", "MCP 回复完成");
+	// 直接调用和 mcp_call 都是 MCP 的活，合成一组；文档卡在组里，先点开。
+	await click(`[data-plume-step="apart:mcp"] > .tool-group-head[aria-expanded="false"]`);
+	await until("document.querySelectorAll('[data-mcp-document]').length === 6", "直接与延迟调用均显示三份文档");
 	const direct = '[data-tool-call="document_direct"]';
 	const deferred = '[data-tool-call="document_deferred"]';
 	await click(`${direct} [data-mcp-document="sample.xlsx"]`);
