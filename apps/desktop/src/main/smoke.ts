@@ -1291,6 +1291,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			if (await page(`document.querySelector('[data-skill-pack="技能"]') !== null`)) throw new Error("「来自插件」列出了内置插件带的技能");
 			await delay(300);
 			await capture(window, join(outDir, "smoke-market-skills.png"));
+			// 页头的搜索经 `query` 交给技能插件那一节：搜不到时写「没有匹配的技能」，Escape 清空后合集卡片回来。
+			await page(`document.querySelector('[data-market-search="skills"] input').focus()`);
+			await window.webContents.insertText("zzz-no-such-skill");
+			await until(
+				`document.querySelector(${pack}) === null && document.querySelector('[data-skills-settings]')?.textContent.includes("没有匹配的技能")`,
+				"技能「已安装」按搜索筛",
+			);
+			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+			await until(`document.querySelector(${pack}) !== null`, "Escape 清空搜索，合集卡片回来");
 			// 点合集卡片打开那个插件的详情，返回时还在「已安装」。
 			await click(`[data-skill-pack="${skillPack}"] .skl-bundle-hit`);
 			await until(`document.querySelector('[data-plugin-detail]') !== null`, "点合集卡片打开插件详情");
@@ -1333,6 +1343,18 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				`document.querySelector('[data-market-crumbs]')?.textContent === "插件市场插件" && document.querySelector('[data-plugin-detail]') === null`,
 				"回到插件那一类，面包屑是「插件市场 › 插件」",
 			);
+			// 页头的搜索框：在当前筛选（已安装）里按名字筛，Escape 清空回到原样。
+			await page(`document.querySelector('[data-market-search="plugins"] input').focus()`);
+			await window.webContents.insertText("定时");
+			await until(
+				`document.querySelector('[data-card="scheduled"]') !== null && document.querySelector('[data-card="usage"]') === null`,
+				"搜「定时」只剩定时任务",
+			);
+			await delay(300);
+			await capture(window, join(outDir, "smoke-market-search.png"));
+			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+			window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+			await until(`document.querySelector('[data-card="usage"]') !== null`, "Escape 清空搜索，卡片回来");
 			// 页头右端「创建插件」：菜单两条都带第二行说明，按开头的字点。冒烟里选文件夹给的是工作目录，不是插件，要说清楚。
 			const createItem = (label: string) => click('[role=menu][aria-label="创建插件"] [role=menuitem]', new RegExp(`^${label}`));
 			await click("[data-market-create]");

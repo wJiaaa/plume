@@ -72,6 +72,7 @@ function McpSettings({
 	notify,
 	openExternal,
 	refreshKey = 0,
+	query = "",
 }: { api: Remote<McpApi>; notify: Notify; openExternal: UiContext["openExternal"] } & ExtensionsSectionProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const [view, setView] = useState<McpView | null>(null);
@@ -173,6 +174,11 @@ function McpSettings({
 	};
 
 	const servers = view?.servers ?? [];
+	// 页头的搜索：按名字、命令、地址筛。重名检查（`taken`）照旧对着全部。
+	const needle = query.trim().toLowerCase();
+	const shown = needle
+		? servers.filter((server) => [server.name, server.command ?? "", server.url ?? ""].some((value) => value.toLowerCase().includes(needle)))
+		: servers;
 
 	const remove = (server: ServerView) =>
 		confirmer.ask({
@@ -205,9 +211,15 @@ function McpSettings({
 						{text.emptyHint}
 					</Text>
 				</div>
+			) : view && shown.length === 0 ? (
+				<div className="mcp-empty">
+					<Text as="p" size="detail" tone="muted">
+						{text.noMatch}
+					</Text>
+				</div>
 			) : (
 				<div className="mcp-grid">
-					{servers.map((server) => (
+					{shown.map((server) => (
 						<ServerCard
 							key={server.id}
 							server={server}

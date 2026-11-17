@@ -31,6 +31,7 @@ import {
 	MenuSeparator,
 	Popover,
 	Scroller,
+	SearchField,
 	SkeletonGrid,
 	useI18n,
 	usePopover,
@@ -120,6 +121,10 @@ export function MarketScreen({
 	const items = useCatalog();
 	const { market, loading, tab, focus, updates, notice, plugins } = useMarketStore();
 	const [category, setCategory] = useState<string | null>(null);
+	// 搜索框每一类各记各的：换到技能再回来，插件那一类搜的字还在。
+	const [queries, setQueries] = useState<Record<MarketTab, string>>({ plugins: "", skills: "", connectors: "" });
+	const query = queries[tab];
+	const setQuery = (next: string) => setQueries((current) => ({ ...current, [tab]: next }));
 	const [updatingAll, setUpdatingAll] = useState(false);
 
 	// 打开时读一次，开着时隔一阵、回到窗口时再读。
@@ -145,13 +150,15 @@ export function MarketScreen({
 			published: listed.filter((item) => item.entry !== null),
 		};
 	}, [items]);
-	const localOnly = listed.filter((item) => item.entry === null);
+	// 货架签按没搜索时的目录排：搜着的时候筛选条不跟着字一颗颗消失、挪位。
 	const categories = useMemo(() => shelves(published).map((shelf) => shelf.category), [published]);
+	// 搜索在当前筛选（已安装、全部、某一架）里再筛一道：名字、说明、关键词、作者、目录名、货架。
+	const needle = queries.plugins.trim().toLowerCase();
+	const hit = (item: CatalogItem) => matches(item, needle);
+	const found = published.filter(hit);
+	const localOnly = listed.filter((item) => item.entry === null && hit(item));
 	const narrowed = category !== null;
-	const flat = useMemo(
-		() => (narrowed ? (category === INSTALLED ? [...installed] : listed.filter((item) => item.category === category)).sort(byName) : []),
-		[narrowed, listed, installed, category],
-	);
+	const flat = (narrowed ? (category === INSTALLED ? installed : listed.filter((item) => item.category === category)) : []).filter(hit).sort(byName);
 	const outdated = items.filter((item) => item.outdated && item.entry);
 	const slow = useSlowLoad(loading && !market);
 	// 没加载起来的插件：「已安装」里那张卡片写着，详情页里有原因。
@@ -182,11 +189,17 @@ export function MarketScreen({
 						<KindTabs
 							value={tab}
 							onChange={setMarketTab}
-							trailing={tab === "plugins" ? <PluginActions onCreate={onCreate} /> : <ExtensionActions tab={tab} projects={projects} onTry={onTry} />}
+							trailing={
+								tab === "plugins" ? (
+									<PluginActions query={query} onQuery={setQuery} onCreate={onCreate} />
+								) : (
+									<ExtensionActions tab={tab} query={query} onQuery={setQuery} projects={projects} onTry={onTry} />
+								)
+							}
 						/>
 
 						{tab !== "plugins" ? (
-							<ExtensionsTab key={tab} tab={tab} items={items} projects={projects} />
+							<ExtensionsTab key={tab} tab={tab} query={query} items={items} projects={projects} />
 						) : (
 							<>
 								<Filters value={category} onChange={setCategory} shelves={categories} />
@@ -225,10 +238,14 @@ export function MarketScreen({
 										) : null
 									) : narrowed ? (
 										flat.length === 0 ? (
-											<Empty
-												text={category === INSTALLED ? t("market.noneInstalled") : t("market.emptyCategory")}
-												action={category === INSTALLED ? { label: t("market.browseAll"), onClick: () => setCategory(null) } : undefined}
-											/>
+											needle ? (
+												<Empty text={t("market.noMatch")} />
+											) : (
+												<Empty
+													text={category === INSTALLED ? t("market.noneInstalled") : t("market.emptyCategory")}
+													action={category === INSTALLED ? { label: t("market.browseAll"), onClick: () => setCategory(null) } : undefined}
+												/>
+											)
 										) : (
 											<Shelf
 												id={category === INSTALLED ? "installed" : undefined}
@@ -238,11 +255,11 @@ export function MarketScreen({
 												{flat.map(card)}
 											</Shelf>
 										)
-									) : published.length === 0 && localOnly.length === 0 ? (
-										<Empty text={t("market.empty")} />
+									) : found.length === 0 && localOnly.length === 0 ? (
+										<Empty text={needle ? t("market.noMatch") : t("market.empty")} />
 									) : (
 										<>
-											{shelves(published).map((shelf) => (
+											{shelves(found).map((shelf) => (
 												<Shelf
 													key={shelf.category}
 													id={shelf.category}
@@ -320,6 +337,26 @@ function KindTabs({
 const MARKET_TABS = ["plugins", "skills", "connectors"] as const satisfies readonly MarketTab[];
 const TAB_LABELS: Record<MarketTab, MessageKey> = { plugins: "common.plugins", skills: "market.skills", connectors: "market.connectors" };
 
+/** 搜索框里的字命中这一条没有：名字、说明、关键词、作者、目录名、货架。`needle` 已经去了首尾空格、转成小写，空串全算命中。 */
+function matches(item: CatalogItem, needle: string): boolean {
+	return (
+		!needle ||
+		[item.name, item.description, item.key, item.category, item.author ?? "", ...(item.keywords ?? [])].some((value) => value.toLowerCase().includes(needle))
+	);
+}
+
+const SEARCH_LABELS: Record<MarketTab, MessageKey> = { plugins: "market.searchPlugins", skills: "market.searchSkills", connectors: "market.searchConnectors" };
+
+/** 页头右端最前面的搜索框，三类同一个样子、同一个宽度。 */
+function MarketSearch({ tab, value, onChange }: { tab: MarketTab; value: string; onChange: (next: string) => void }) {
+	const { t } = useI18n();
+	return (
+		<div className="mr-1 w-[220px]" data-market-search={tab}>
+			<SearchField size="comfortable" value={value} onChange={onChange} placeholder={t(SEARCH_LABELS[tab])} />
+		</div>
+	);
+}
+
 /** 两类各自的：市场里的条目是哪一种、管它们的插件画在哪一页、页头「添加」叫什么。 */
 const EXTENSION_KINDS = {
 	skills: { kind: "skill", page: "extensions-skills", add: "market.addSkill" },
@@ -333,7 +370,7 @@ const EXTENSION_KINDS = {
  *     在页头「添加」左边（`ExtensionActions`），由这里画，选的值经组件参数交给它（`ExtensionsSectionProps`）。
  *   - 全部、各个货架是市场里的技能合集、连接器，一张网格不分架，卡片和详情页同插件那一类；装上的照样留在这里，卡片上写着已安装。
  */
-function ExtensionsTab({ tab, items, projects }: { tab: ExtensionTab; items: CatalogItem[]; projects: readonly ProjectInfo[] }) {
+function ExtensionsTab({ tab, query, items, projects }: { tab: ExtensionTab; query: string; items: CatalogItem[]; projects: readonly ProjectInfo[] }) {
 	const { t } = useI18n();
 	const { market, loading, notice, filters, refreshKey } = useMarketStore();
 	const filter = filters[tab];
@@ -341,7 +378,10 @@ function ExtensionsTab({ tab, items, projects }: { tab: ExtensionTab; items: Cat
 	usePluginUis();
 	const sections = listPageSettingsSections(page);
 	const offered = shelves(items.filter((item) => item.kind === kind && !isBuiltin(item)));
-	const shown = (filter === null ? offered : offered.filter((shelf) => shelf.category === filter)).flatMap((shelf) => shelf.items);
+	const needle = query.trim().toLowerCase();
+	const shown = (filter === null ? offered : offered.filter((shelf) => shelf.category === filter))
+		.flatMap((shelf) => shelf.items)
+		.filter((item) => matches(item, needle));
 	const { project } = useSkillsProject(projects);
 	const slow = useSlowLoad(loading && !market);
 	const installed = filter === INSTALLED;
@@ -355,7 +395,12 @@ function ExtensionsTab({ tab, items, projects }: { tab: ExtensionTab; items: Cat
 					<div className="pt-5">
 						{sections.map((entry) => (
 							<ErrorBoundary key={entry.key}>
-								<entry.component {...(tab === "skills" ? { project: project?.path ?? null } : {})} refreshKey={refreshKey} openPlugin={focusPlugin} />
+								<entry.component
+									{...(tab === "skills" ? { project: project?.path ?? null } : {})}
+									refreshKey={refreshKey}
+									openPlugin={focusPlugin}
+									query={query}
+								/>
 							</ErrorBoundary>
 						))}
 					</div>
@@ -366,7 +411,7 @@ function ExtensionsTab({ tab, items, projects }: { tab: ExtensionTab; items: Cat
 						</div>
 					) : null
 				) : shown.length === 0 ? (
-					<Empty text={filter === null ? t("market.empty") : t("market.emptyCategory")} />
+					<Empty text={needle ? t("market.noMatch") : filter === null ? t("market.empty") : t("market.emptyCategory")} />
 				) : (
 					<div className="grid grid-cols-1 gap-3 pt-5 @2xl:grid-cols-2 @5xl:grid-cols-3">
 						{shown.map((item, index) => (
@@ -387,14 +432,27 @@ function useSkillsProject(projects: readonly ProjectInfo[]) {
 }
 
 /**
- * 「技能」「连接器」两类的页头右端：看「已安装」时先是刷新（技能还有看哪个项目，放这里不占筛选条的地方），再是「添加」。
+ * 「技能」「连接器」两类的页头右端：最前是搜索（市场里的条目由这里筛，「已安装」那一节经 `query` 交给管它的插件筛）；看「已安装」时接着是刷新（技能还有看哪个项目，放这里不占筛选条的地方），再是「添加」。
  */
-function ExtensionActions({ tab, projects, onTry }: { tab: ExtensionTab; projects: readonly ProjectInfo[]; onTry: (prompt: string) => void }) {
+function ExtensionActions({
+	tab,
+	query,
+	onQuery,
+	projects,
+	onTry,
+}: {
+	tab: ExtensionTab;
+	query: string;
+	onQuery: (next: string) => void;
+	projects: readonly ProjectInfo[];
+	onTry: (prompt: string) => void;
+}) {
 	const { t } = useI18n();
 	const { filters } = useMarketStore();
 	const { choices, project } = useSkillsProject(projects);
 	return (
 		<>
+			<MarketSearch tab={tab} value={query} onChange={onQuery} />
 			{filters[tab] === INSTALLED && (
 				<>
 					{tab === "skills" && <ProjectScope value={project} choices={choices} onChange={setSkillsProject} />}
@@ -577,18 +635,19 @@ export function MarketToolbar() {
 }
 
 /**
- * 「插件」一类的页头右端：重读目录、⋯（自动更新），最后是「创建插件」。和技能、连接器两类一样排：主按钮在最右，同一种样子。
+ * 「插件」一类的页头右端：搜索、重读目录、⋯（自动更新），最后是「创建插件」。和技能、连接器两类一样排：主按钮在最右，同一种样子。
  *
  * 「创建插件」两条路：新建是开一个新对话、输入框里放好写插件的技能，让 agent 照人说的写；从文件夹安装是把本机
  * 一个构建好的插件装上，和市场装的放在一处。
  */
-function PluginActions({ onCreate }: { onCreate: () => void }) {
+function PluginActions({ query, onQuery, onCreate }: { query: string; onQuery: (next: string) => void; onCreate: () => void }) {
 	const { t } = useI18n();
 	const { loading, updates } = useMarketStore();
 	const more = usePopover();
 	const create = usePopover();
 	return (
 		<>
+			<MarketSearch tab="plugins" value={query} onChange={onQuery} />
 			<IconButton
 				label={t("market.reload")}
 				onClick={() => void reloadMarket()}
