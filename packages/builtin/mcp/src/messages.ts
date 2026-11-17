@@ -53,7 +53,8 @@ const zhCN = {
 	fileBrokenTitle: "配置文件读不懂",
 	fileBroken: "配置文件读不懂，先修好或删掉它再改",
 	notFound: "没有这台 MCP 服务了",
-	magpieManaged: "由 Magpie 管理。请在 Magpie 资源库修改、启停或移除，重启 Plume 后生效；缺少的密钥也在 Magpie 中填写。",
+	externalManaged: (app: string) => `由 ${app} 管理。请在 ${app} 里修改、启停或移除，缺少的密钥也在 ${app} 中填写。`,
+	offerInvalid: "登记的 MCP 服务格式不对",
 	pluginManaged: (plugin: string) => `由插件「${plugin}」提供。可以开关，在「启动方式与环境变量」里填写或更换空位的值；启动方式不能改，要移除请卸载这个插件。`,
 	draftProblem: {
 		invalid: "表单里有认不出的内容",
@@ -174,8 +175,8 @@ export const MESSAGES: Record<Locale, Messages> = {
 		fileBrokenTitle: "The configuration file can't be read",
 		fileBroken: "The configuration file can't be read; fix or delete it before making changes",
 		notFound: "That MCP server is gone",
-		magpieManaged:
-			"Managed by Magpie. Edit, enable or remove this server in Magpie’s Library, then restart Plume to apply the change. Fill missing credentials in Magpie.",
+		externalManaged: (app) => `Managed by ${app}. Edit, enable or remove this server in ${app}, and fill missing credentials there.`,
+		offerInvalid: "The registered MCP servers are malformed",
 		pluginManaged: (plugin) =>
 			`Provided by the “${plugin}” plugin. You can turn it on or off, and fill in or change its values under “How it starts, and its environment”; its launch settings can’t be changed — uninstall the plugin to remove it.`,
 		draftProblem: {

@@ -31,8 +31,8 @@ export interface ServerView {
 	trustReadOnly: boolean;
 	pinned: boolean;
 	perSession: boolean;
-	/** Magpie 资源库分发的：名字、开关、启动方式、变量和删除都在 Magpie 里改，这里只看状态、重连、登录。 */
-	managed: boolean;
+	/** 别的插件替外部应用登记的：管着它的应用的名字。名字、开关、启动方式、变量和删除都在那个应用里改，这里只看状态、重连、登录。 */
+	managed?: string;
 	/** 插件带来的：带来它的插件的显示名。能开关、填空位的值，启动方式改不了、删不掉，卸载插件就没了。 */
 	plugin?: string;
 	/**

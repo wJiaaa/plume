@@ -310,7 +310,7 @@ function ServerCard({
 	 * 平时是网格里的一格；有事要人做（缺值、登录、连不上）或人点开了工具、编辑时占满一行：
 	 * 表单、stderr、工具列表在三分之一宽里摆不下。
 	 */
-	const missing = !server.managed && server.enabled && status.state === "missing" && Boolean(status.missing);
+	const missing = server.managed === undefined && server.enabled && status.state === "missing" && Boolean(status.missing);
 	const login = server.enabled && status.state === "needs-login";
 	const wide = editing || (toolsOpen && canListTools) || missing || login || troubled;
 
@@ -353,7 +353,7 @@ function ServerCard({
 							onClick={() => setEditing((open) => !open)}
 						/>
 					</span>
-					<Toggle checked={server.enabled} disabled={busy || server.managed} onChange={onToggle} ariaLabel={text.enableNamed(server.name)} />
+					<Toggle checked={server.enabled} disabled={busy || server.managed !== undefined} onChange={onToggle} ariaLabel={text.enableNamed(server.name)} />
 					<IconButton
 						label={text.more}
 						ariaLabel={text.moreFor(server.name)}
@@ -364,15 +364,15 @@ function ServerCard({
 				</span>
 			</div>
 
-			{(server.managed || server.plugin !== undefined) && (
+			{(server.managed !== undefined || server.plugin !== undefined) && (
 				<div className="mcp-section" data-mcp-managed="">
 					<Text as="p" size="detail" tone="muted">
-						{server.managed ? text.magpieManaged : text.pluginManaged(server.plugin ?? "")}
+						{server.managed !== undefined ? text.externalManaged(server.managed) : text.pluginManaged(server.plugin ?? "")}
 					</Text>
 				</div>
 			)}
 
-			{!server.managed && server.enabled && status.state === "missing" && status.missing && (
+			{server.managed === undefined && server.enabled && status.state === "missing" && status.missing && (
 				<div className="mcp-section" data-mcp-missing="">
 					<Text as="p" size="detail" tone="danger">
 						{text.missingTitle(status.missing.length)}
@@ -472,8 +472,8 @@ function ServerCard({
 								{text.logout}
 							</MenuItem>
 						)}
-						{server.enabled && !server.managed && server.plugin === undefined && <MenuSeparator />}
-						{!server.managed && server.plugin === undefined && (
+						{server.enabled && server.managed === undefined && server.plugin === undefined && <MenuSeparator />}
+						{server.managed === undefined && server.plugin === undefined && (
 							<MenuItem
 								danger
 								icon={<Trash2 size={13} strokeWidth={1.8} />}
@@ -517,7 +517,7 @@ function draftOf(fields: EditorFields, stdio: boolean): ServerDraft {
  * 卡片里就地改一台服务：名字、启动方式、变量、三个开关。焦点离开这一块时存一次（开关拨了就存），不弹窗、不点保存：
  * 改一个参数不该换一个界面。没填完的（名字空、命令空、地址不对）不存，标出来等人改好。
  * 像密钥的变量只写不读：框里是空的，填了、存了又变回空的，旁边写着「已填写」。
- * Magpie 分发的整块禁用：能看启动方式，改要去 Magpie。
+ * 外部应用的整块禁用：能看启动方式，改要去那个应用。
  */
 function ServerEditor({
 	server,
@@ -578,8 +578,8 @@ function ServerEditor({
 	};
 	const flip = (flag: keyof EditorFields["flags"]) => (value: boolean) => change("flags", { ...fields.flags, [flag]: value });
 
-	// Magpie 分发的整块锁住；插件带来的只有空位的值能填（下面那一节在锁外）。
-	const locked = server.managed || server.plugin !== undefined;
+	// 外部应用的整块锁住；插件带来的只有空位的值能填（下面那一节在锁外）。
+	const locked = server.managed !== undefined || server.plugin !== undefined;
 	return (
 		<div
 			className="mcp-editor"
