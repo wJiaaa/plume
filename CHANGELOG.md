@@ -2,6 +2,34 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.1] - 2026-11-17
+
+<!-- plume:notes en -->
+### Changes
+
+- **The Marketplace has search.** Plugins, Skills and Connectors each have a search box at the right of the page header, matching names, descriptions, keywords and authors; each tab keeps its own search, and Esc clears it. Installed skills and connectors are filtered too.
+- **The Marketplace header is tidier.** "Create plugin" and the other plugin buttons moved from the window's top bar to the page header, the same place as the Skills and Connectors buttons. The top bar now always shows where you are, such as "Marketplace › Skills › name"; clicking the middle part takes you back to the tab you came from, with your filter kept.
+- **The sidebar and panel area open and close more smoothly.** Closing is now quicker than opening and eases in and out, so the chat column no longer stops with a jolt at the end. Their contents fade in and out with them instead of being cut off at the edge.
+- **"Toggle sidebar" is no longer in the command palette.** Use ⌘B (Ctrl+B on Windows) or the sidebar button in the top bar.
+- **The Magpie agent plugin comes with the Magpie plugin.** Magpie plugin 0.1.2 puts it in `~/.plume/plugin-data/plume.magpie/magpie-agent`; add that folder under Settings → Plugins in Magpie. You no longer need to copy it from `integrations/magpie`.
+
+### For plugin authors
+
+- **Marketplace sections receive the search text.** `ExtensionsSectionProps` has a new optional `query`: when your plugin draws an "Installed" list under Skills or Connectors, filter it by this text. Without it, the section works as before.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **插件市场能搜索了。** 插件、技能、连接器三类的页头右端各有一个搜索框，按名字、说明、关键词、作者匹配；三类各记各的搜索词，按 Esc 清空。已安装的技能和连接器也一样能筛。
+- **插件市场的页头更整齐。** 「创建插件」等插件那一类的按钮，从窗口顶行挪到了页头右端，和技能、连接器的按钮在同一个位置。顶行一直显示你在哪，比如「插件市场 › 技能 › 名字」；点中间那一节回到你点进来的那一类，筛选照旧。
+- **侧栏和面板区开合更顺。** 收起比展开快，起步和收尾都放缓，对话那一栏收尾不再顿一下；里面的内容跟着淡入淡出，不再是被边缘直接切掉。
+- **命令面板里不再有「开合侧栏」。** 用 ⌘B（Windows 上是 Ctrl+B）或顶行的侧栏开关。
+- **Magpie 用的 Agent 插件由「Magpie」插件带来。** Magpie 插件 0.1.2 会把它放在 `~/.plume/plugin-data/plume.magpie/magpie-agent`，在 Magpie 的「设置 → 插件」里添加这个文件夹就行，不用再从 `integrations/magpie` 拷。
+
+### 给插件作者
+
+- **插件市场的分区能拿到搜索词。** `ExtensionsSectionProps` 新增可选的 `query`：你的插件在技能或连接器下画「已安装」列表时，按它筛选。不读它的话，分区和原来一样。
+
 ## [0.7.0] - 2026-11-17
 
 <!-- plume:notes en -->
