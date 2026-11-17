@@ -2,6 +2,34 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.0] - 2026-11-17
+
+<!-- plume:notes en -->
+### Changes
+
+- **Chats on a Magpie model can be sent again.** In 0.6.0, sending in a chat on a Magpie model could fail with "NOT NULL constraint failed: spend.cost", because Magpie's prices aren't in the format Plume uses. Plume now ignores those prices and uses reference prices from its own model catalog to record costs; models not in the catalog are recorded without a cost.
+- **Magpie now connects through the "Magpie" plugin.** Install "Magpie" from the Marketplace; only then does Magpie list Plume as an agent. Update the Plume agent plugin in Magpie (`integrations/magpie`), then choose a model for Plume again. The old `magpie` entry in `settings.json` is no longer read. The Magpie provider still appears in Settings › Models and can be edited, tested, disabled or removed, and your changes are saved by the plugin. When Magpie picks a model it becomes your default; when you disconnect in Magpie, your previous default comes back unless you've chosen another one in Plume since.
+- **Magpie's global instructions and MCP servers come through the same plugin.** Instructions are added as their own section before project instructions. MCP servers show up under Marketplace › Connectors marked "Managed by Magpie", and reconnect as soon as Magpie changes them, without restarting Plume. Disabling the plugin removes them.
+- **The model list updates without a restart.** When a plugin adds, changes or removes a provider, or switches your default model, Settings › Models and the model picker update right away.
+
+### For plugin authors
+
+- **Plugins can provide model providers.** SDK 0.7.0 adds `ctx.providers`: `provide({ list, save, remove })` adds the providers your plugin stores to Settings › Models (edits and deletions are handed back to you), `changed()` tells the UI to refresh, and `defaultModel()` / `setDefaultModel()` read and set the default model. Plume validates them, fills in catalog prices, and never writes them to its own settings or exports.
+- **Plugins can register MCP servers for an external app.** The built-in MCP plugin offers the `mcp.servers` service: `offer(owner, label, servers)` registers a group of Claude-format `mcpServers`, shown as "Managed by <label>" and reconnected when you offer them again.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **用 Magpie 的模型又能发消息了。** 0.6.0 里用 Magpie 的模型发消息，可能报「NOT NULL constraint failed: spend.cost」：Magpie 带的价格不是 Plume 认的格式。现在不用它的价格，花销按 Plume 自己模型目录里的参考价记，目录里没有的模型不记金额。
+- **Magpie 改由插件「Magpie」接入。** 先在插件市场装上「Magpie」，Magpie 才会把 Plume 列成可接的 Agent；再在 Magpie 里更新 Plume 的 Agent 插件（`integrations/magpie`），重新给 Plume 选一次模型。`settings.json` 里旧的 `magpie` 那一块不再读。「模型设置」里照样有 Magpie 供应商，能改、测试、停用或删除，改动由插件保存。Magpie 选了模型就设成你的默认模型；在 Magpie 里断开时换回原来的默认模型，你之后在 Plume 里另选过就不动。
+- **Magpie 的全局指令和 MCP 服务也经这个插件。** 全局指令作为单独一段，排在项目指令前面；MCP 服务出现在「插件市场 › 连接器」里，标着「由 Magpie 管理」，Magpie 改了当场重连，不用重启 Plume。停用插件，它们就都撤下。
+- **模型列表不用重启就会更新。** 插件加上、改动或撤下供应商，或替你换了默认模型时，「模型设置」和模型菜单当场跟着变。
+
+### 给插件作者
+
+- **插件能提供模型供应商。** SDK 0.7.0 新增 `ctx.providers`：`provide({ list, save, remove })` 把你插件存着的供应商放进「模型设置」（人在设置页的改和删交回给你），`changed()` 让界面重新取，`defaultModel()` / `setDefaultModel()` 读、设默认模型。Plume 照常校验、按模型目录补价格，不写进自己的设置，也不导出。
+- **插件能替外部应用登记 MCP 服务。** 内置的 MCP 插件开放服务 `mcp.servers`：`offer(owner, label, servers)` 登记一组 Claude 格式的 `mcpServers`，连接器页标「由 <label> 管理」，再登记一次就当场重连。
+
 ## [0.6.0] - 2026-11-17
 
 <!-- plume:notes en -->
