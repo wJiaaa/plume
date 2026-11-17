@@ -10,8 +10,6 @@
       "entry": [
         // 都是人手动跑或钩子替人跑的命令，没人 import 它们，本来就该这样。
         "scripts/**/*.{mjs,ts}",
-        // Magpie 按 package.json 的 `magpie.agent` 加载它，不是 pnpm workspace 的包。
-        "integrations/magpie/plume.agent.js",
         // 工具评测：人手动跑的命令和它们起的子进程（MCP 假服务）。
         "test/tool-eval/{run,smoke,demo,wiring-scan,*-eval,formats.test,mcp-fixture-server}.{ts,mjs}",
       ],
