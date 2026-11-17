@@ -1,7 +1,7 @@
 /** 活动栏底部的搜索和通知：共用会话和插件的现成清单，不另存搜索目录或通知记录。 */
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
 import { useI18n, usePopover } from "@plume/ui";
-import { Archive, AtSign, Bell, FolderOpen, FolderPlus, PanelLeft, Pin, PinOff, Search, Settings, SquarePen } from "@plume/ui/icons";
+import { Archive, AtSign, Bell, FolderOpen, FolderPlus, Pin, PinOff, Search, Settings, SquarePen } from "@plume/ui/icons";
 import { createElement, useState } from "react";
 import { updateAppearance, useAppearance, useManagedSkin } from "../appearance-settings.ts";
 import { listPages, listPanels, listSettingsSections, localized, pageBadge, usePluginUis } from "../plugins.tsx";
@@ -23,7 +23,6 @@ export function SidebarTools({
 	openPage,
 	openSettings,
 	openPanel,
-	toggleSidebar,
 }: {
 	sessions: readonly SessionSummary[];
 	projects: readonly ProjectEntry[];
@@ -33,7 +32,6 @@ export function SidebarTools({
 	openPage: (key: string) => void;
 	openSettings: (section: SettingsSection) => void;
 	openPanel: (key: string) => void;
-	toggleSidebar: () => void;
 }) {
 	const { t, resolvedLocale } = useI18n();
 	const [searching, setSearching] = useState(false);
@@ -94,7 +92,6 @@ export function SidebarTools({
 				})),
 				{ id: "go-plugins", icon: icon(AtSign), label: t("market.title"), run: () => openPage("market") },
 				{ id: "go-settings", label: t("sidebar.settings"), icon: icon(Settings), run: () => openSettings("general") },
-				{ id: "toggle-sidebar", label: t("palette.toggleSidebar"), icon: icon(PanelLeft), shortcut: "CmdOrCtrl+B", run: toggleSidebar },
 			],
 		},
 		{
