@@ -192,7 +192,7 @@ async function main(): Promise<void> {
 	if (models.length === 0) throw new Error("给一个或几个模型 id（设置里的 `<供应商 id>/<模型 id>`）");
 	const modes = (["deferred", "inline"] as const).filter((mode) => !only || mode === only);
 	const resolved = await Promise.all(models.map((id) => loadModel(id)));
-	// plume.mcp 还会读 `PLUME_HOME` 下 Magpie 分发的服务：指到一个空目录，评测里只有剧本里的那些。
+	// `PLUME_HOME` 指到一个空目录：本机数据目录里的东西不混进评测，只有剧本里的那些服务。
 	process.env.PLUME_HOME = await mkdtemp(join(tmpdir(), "plume-mcp-eval-home-"));
 	const out: Record<string, unknown> = {};
 	for (const [index, modelId] of models.entries()) {

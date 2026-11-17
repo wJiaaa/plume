@@ -288,7 +288,7 @@ export function providerKeys(vault: Vault) {
 	return {
 		/**
 		 * 把 key 填回供应商。vault 里有的为准（两边都有时它是新的那份）；手写进 `settings.json` 的 key 照样能用，
-		 * 下次保存设置时挪进 vault。Magpie 的 key 在它自己的块里，写盘时不进 vault（`fileSettings` 先拿掉了它），这里也就取不到。
+		 * 下次保存设置时挪进 vault。插件提供的供应商在这之后才接上，key 由插件自己存，不进 vault。
 		 */
 		async withKeys(settings: StoredSettings): Promise<StoredSettings> {
 			if (settings.providers.length === 0) return settings;
@@ -301,7 +301,7 @@ export function providerKeys(vault: Vault) {
 		},
 		/**
 		 * 把 key 存进 vault，返回不带 key 的设置（要写进文件的那份）。删掉的供应商、清空了的 key 同一次忘掉。
-		 * `settings` 是写盘的样子（`fileSettings`），Magpie 的供应商已经不在里面。
+		 * `settings` 是写盘的样子（`fileSettings`），插件提供的供应商已经不在里面。
 		 */
 		async takeKeys(settings: StoredSettings): Promise<StoredSettings> {
 			const keys: Record<string, string> = {};

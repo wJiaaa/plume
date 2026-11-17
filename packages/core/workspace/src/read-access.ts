@@ -21,9 +21,9 @@ import type { ShellInfo } from "@plume/contract";
 import { displayPath, toAbsolute } from "./paths.ts";
 import { commandDialects, commandShell, dialectsOf, withinOrIs, splitCommands, splitWords, type Dialect } from "@plume/platform";
 
-/** 本机的密钥文件（引号写成 `\x27\x22\x60`：直接写的话文案检查会把它当成字符串的开头）：Plume 的模型设置（Magpie 网关的 key 明文在里面）、加密存放供应商 key 的 `credentials.json` 和它的钥匙 `vault.key`（插件的 `ctx.secrets` 也用它）、ssh 私钥、云服务的凭据、gpg、netrc、gh 的登录。观测命令改了什么时也不碰它们（`command-changes.ts`）。 */
+/** 本机的密钥文件（引号写成 `\x27\x22\x60`：直接写的话文案检查会把它当成字符串的开头）：Plume 的模型设置、加密存放供应商 key 的 `credentials.json` 和它的钥匙 `vault.key`（插件的 `ctx.secrets` 也用它）、插件数据目录里约定放明文凭据的 `plugin-data/<插件>/credentials.json`（外部应用写给插件、插件加密不了的 key，如 Magpie 网关的）、ssh 私钥、云服务的凭据、gpg、netrc、gh 的登录。观测命令改了什么时也不碰它们（`command-changes.ts`）。 */
 export const SECRET_PATH =
-	/(?:^|[/\\\s\x27\x22\x60=@:<>(|;&])(?:\.(?:plume[/\\](?:settings\.json|credentials\.json|vault\.key)|ssh[/\\]id_[A-Za-z0-9_]+|aws[/\\]credentials|gnupg\b|netrc|config[/\\]gh[/\\]hosts\.yml))(?=$|[/\\\s\x27\x22\x60;&|<>)])/i;
+	/(?:^|[/\\\s\x27\x22\x60=@:<>(|;&])(?:\.(?:plume[/\\](?:settings\.json|credentials\.json|vault\.key|plugin-data[/\\][^/\\\s\x27\x22\x60]+[/\\]credentials\.json)|ssh[/\\]id_[A-Za-z0-9_]+|aws[/\\]credentials|gnupg\b|netrc|config[/\\]gh[/\\]hosts\.yml))(?=$|[/\\\s\x27\x22\x60;&|<>)])/i;
 
 export type ReadVerdict =
 	| { decision: "allow" }

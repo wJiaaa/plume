@@ -12,11 +12,13 @@ import type {
 	ApprovalRequest,
 	CompactionCode,
 	HumanRequest,
+	ModelRef,
 	NoticeLevel,
 	PermissionMode,
 	Personalization,
 	OutgoingMessage,
 	PendingRequest,
+	ProviderSettings,
 	SessionKind,
 	SessionSummary,
 	ThinkingLevel,
@@ -1769,6 +1771,8 @@ export interface PluginContext {
 	notice(sessionId: string, text: string, level?: NoticeLevel): void;
 	/** 给输入框的 `/` 菜单供命令，见 `CommandProvider`。一个插件可以供几份，停用时一起撤下。 */
 	readonly commands: { provide(provider: CommandProvider): void };
+	/** 给模型设置添上插件自己保存的供应商，读、设默认模型，见 `PluginProviders`。 */
+	readonly providers: PluginProviders;
 	/** 装着的插件，见 `InstalledPlugin`。 */
 	readonly plugins: {
 		/**
@@ -1792,6 +1796,34 @@ export interface PluginContext {
 	 * 在这次加载里一直有效：提供方换了，插件会先停用再重新加载，到时重新拿。
 	 */
 	use<K extends keyof Services>(name: K): Services[K];
+}
+
+/**
+ * 插件提供的模型供应商：连接、模型和 key 都由插件自己保存（外部应用写给它的网关就是这样）。本体把它接在人自己的供应商后面，
+ * 和它们一样能选、能设默认、能在设置页改和删，花销照算；不写进模型设置文件和加密的 key 库，也不随供应商导出。
+ * id 和人自己的供应商撞了时保留人自己的。模型没带价格、或价格不是本体认的形状时，本体按模型目录补参考价。
+ */
+export interface PluginProvider extends ProviderSettings {
+	apiKey: string;
+}
+
+/** 一个插件的供应商来源。插件停用时撤下，它的供应商随之从模型设置里消失。 */
+export interface ProviderSource {
+	/** 本体每次读模型设置都调一次：同步返回，不做 I/O，由插件自己缓存、自己盯着变化。抛错或给出不合格的供应商时，本体跳过并记日志。 */
+	list(): PluginProvider[];
+	/** 人在设置页改了这个供应商（改名、启停、改连接和 key、增删改模型）；`provider` 是改完、核对过的整份，key 没改时是原来的。 */
+	save(provider: PluginProvider): Promise<void>;
+	/** 人在设置页删除了这个供应商。 */
+	remove(providerId: string): Promise<void>;
+}
+
+export interface PluginProviders {
+	/** 登记一个供应商来源，见 `ProviderSource`。 */
+	provide(source: ProviderSource): void;
+	/** 人设的默认模型（`供应商 id/模型 id`），可能已经失效；没设过是 undefined。 */
+	defaultModel(): Promise<ModelRef | undefined>;
+	/** 设默认模型，和设置页设的一样：要是启用着的供应商下的对话模型，否则抛错。 */
+	setDefaultModel(model: ModelRef): Promise<void>;
 }
 
 /**

@@ -50,6 +50,8 @@ export interface ProviderSettings {
 export interface ProviderView extends ProviderSettings {
 	/** 已经存了 API key。key 本身不出 agent 进程。 */
 	hasKey: boolean;
+	/** 由插件提供（`PluginContext.providers`）时是那个插件的名字：改动交给它保存，不参与导出。 */
+	managedBy?: string;
 }
 
 /**
@@ -688,7 +690,7 @@ export interface AgentService {
 	modelCatalog(knownRevision: string | undefined): Promise<ModelCatalogDocument | null>;
 	/** 立即从 pi.dev 拉一次模型目录。 */
 	updateModelCatalog(): Promise<CatalogSyncResult>;
-	/** 把全部供应商（连同 key，Magpie 的除外）写进 file，返回写了几个、带没带 key。路径由界面经主进程的保存对话框拿到。 */
+	/** 把人自己的供应商（连同 key；插件提供的不算）写进 file，返回写了几个、带没带 key。路径由界面经主进程的保存对话框拿到。 */
 	exportProviders(file: string): Promise<{ providers: number; containsSecrets: boolean }>;
 	/** 读 file，说明导入会做什么，不写任何东西。 */
 	previewProviderImport(file: string): Promise<ProviderImportPreview>;

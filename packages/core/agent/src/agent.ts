@@ -65,6 +65,7 @@ import { renameWithRetry } from "./atomic-write.ts";
 import { jsonFiles } from "./json-files.ts";
 import { openProjects } from "./projects.ts";
 import { createModelSettings } from "./model-settings.ts";
+import { PluginProviderSources } from "./plugin-providers.ts";
 import { type ContextRecord, emptyRecord, historyFor, keptRecord, rewrittenAt } from "./compaction.ts";
 import { createCompactor, type CompactMode, marks, runsOf, type SentRequest, settleStaleRuns } from "./session-compaction.ts";
 import { projectRootsFor } from "./project-roots.ts";
@@ -305,7 +306,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 	const files = jsonFiles();
 	const vault = createVault(dataDir);
-	const modelSettings = createModelSettings({ files, keys: providerKeys(vault), settingsFile, catalogFile });
+	const pluginProviders = new PluginProviderSources((message) => log("agent", "warn", message));
+	const modelSettings = createModelSettings({ files, keys: providerKeys(vault), settingsFile, catalogFile, pluginProviders });
 	// 会话、消息、压缩记录都在这个库里，见 `session-db.ts`；打不开就启动失败，日志里有路径和原因。
 	const store = openSessionDb(join(dataDir, "sessions", "sessions.db"), (message) => log("agent", "warn", message));
 	const mediaDir = join(dataDir, "session-media");
@@ -409,6 +411,11 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			}),
 		},
 		notice: (sessionId, text, level) => emit({ type: "notice", sessionId, text, level }),
+		providers: {
+			add: (plugin, source) => pluginProviders.add(plugin, source),
+			defaultModel: async () => (await modelSettings.read()).defaultModel,
+			setDefaultModel: (model) => modelSettings.service.setDefaultModel(model),
+		},
 		media: {
 			save: async ({ data, mimeType, sessionId }) => {
 				const name = await saveImage(mediaDir, String(data), String(mimeType));

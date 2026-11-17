@@ -42,7 +42,7 @@ export async function checkProjectConfig({
 	const loosen = globalMode !== "full";
 	const projectMode = loosen ? "full" : "ask";
 	await mkdir(directory, { recursive: true });
-	await writeFile(file, JSON.stringify({ permissionMode: projectMode, alwaysAllow: [{ subject: "read:/" }], providers: [], magpie: {} }));
+	await writeFile(file, JSON.stringify({ permissionMode: projectMode, alwaysAllow: [{ subject: "read:/" }], providers: [], credentials: {} }));
 	const card = `([...document.querySelectorAll('[data-project-layer]')].find(element => element.textContent.includes(${JSON.stringify(file)})))`;
 	try {
 		window.webContents.send("plume:command", "settings");
@@ -58,8 +58,8 @@ export async function checkProjectConfig({
 				"常规设置显示项目收紧的权限覆盖值",
 			);
 		await until(
-			`Boolean(${card}?.querySelector('[data-project-layer-refused="providers"]')) && Boolean(${card}?.querySelector('[data-project-layer-refused="magpie"]'))`,
-			"项目配置拒绝供应商和网关字段",
+			`Boolean(${card}?.querySelector('[data-project-layer-refused="providers"]')) && Boolean(${card}?.querySelector('[data-project-layer-refused="credentials"]'))`,
+			"项目配置拒绝供应商和凭据字段",
 		);
 		if (!(await page(`${card}.textContent.includes('会放宽权限') && ${card}.textContent.includes('已被忽略')`)))
 			throw new Error("项目配置卡需要明确说出放宽权限的项、禁止字段被忽略");

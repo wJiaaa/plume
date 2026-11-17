@@ -41,8 +41,8 @@ export function useProviderTransfer() {
 	 * 编辑器的输入框只在挂载时取初值。数一下导入次数，页面就有一样会变的东西。用法见 ModelSettings。
 	 */
 	const [imports, setImports] = useState(0);
-	// Magpie 的供应商不导出：它由 Magpie 管，带到别的机器上也连不上那边的网关。
-	const own = (settings?.providers ?? []).filter((provider) => provider.id !== "magpie");
+	// 插件提供的供应商不导出：它由插件和它背后的应用管，带到别的机器上也连不上那边的网关。
+	const own = (settings?.providers ?? []).filter((provider) => !provider.managedBy);
 
 	/** 写文件。只在调用方问过之后调：警告要放在点击的地方，那里还能回答「不」。 */
 	async function exportAll() {

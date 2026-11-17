@@ -90,12 +90,13 @@ it("工作区外的其他地方要问，批准按目录", () => {
 });
 
 it("密钥在哪里都要问，批准只管它自己", () => {
-	// Plume 的密钥名单里是 `~/.plume` 的 settings.json（Magpie 的 key）、credentials.json 和 vault.key。
+	// Plume 的密钥名单里是 `~/.plume` 的 settings.json、credentials.json、vault.key 和插件数据目录里约定的 credentials.json。
 	for (const path of [
 		join(HOME, ".ssh/id_ed25519"),
 		join(HOME, ".plume/settings.json"),
 		join(HOME, ".plume/credentials.json"),
 		join(HOME, ".plume/vault.key"),
+		join(HOME, ".plume/plugin-data/plume.magpie/credentials.json"),
 		join(HOME, ".aws/credentials"),
 		join(HOME, ".netrc"),
 	]) {

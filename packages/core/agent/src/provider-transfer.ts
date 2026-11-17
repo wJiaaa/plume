@@ -12,7 +12,6 @@
 
 import type { ApiFormat, ModelEntry, ProviderImportEntry, ProviderImportPreview } from "@plume/contract";
 import type { ModelPricing, ModelPricingTier } from "@plume/llm/types";
-import { isMagpie } from "./magpie.ts";
 import { checkProvider, type StoredProvider } from "./models.ts";
 
 /** 先认出是不是供应商文件，再读里面的东西。 */
@@ -125,12 +124,12 @@ export function applyImport(existing: StoredProvider[], chosen: StoredProvider[]
 	return [...existing.map((provider) => byId.get(provider.id) ?? provider), ...appended];
 }
 
-/** 一个供应商：逐字段读出来，再过一遍保存时的校验（id 格式、地址、模型 id 不重复）。Magpie 的那一项不导入，它由 Magpie 管。 */
+/** 一个供应商：逐字段读出来，再过一遍保存时的校验（id 格式、地址、模型 id 不重复）。 */
 function readProvider(raw: unknown): StoredProvider | null {
 	if (!isRecord(raw)) return null;
 	const id = str(raw.id);
 	const baseUrl = str(raw.baseUrl);
-	if (!id || !baseUrl || isMagpie(id)) return null;
+	if (!id || !baseUrl) return null;
 	const api = typeof raw.api === "string" && API_FORMATS.has(raw.api) ? (raw.api as ApiFormat) : "openai-responses";
 	const models = Array.isArray(raw.models) ? raw.models.map(readModel).filter((model): model is ModelEntry => model !== null) : [];
 	const apiKey = typeof raw.apiKey === "string" ? raw.apiKey : "";

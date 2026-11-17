@@ -549,7 +549,7 @@ export const zhCN = {
 	"modelSettings.addProvider": "添加供应商",
 	"modelSettings.noProviders": "还没有配置任何供应商",
 	"modelSettings.addFirst": "添加第一个供应商",
-	"modelSettings.magpieManaged": "通过 Magpie 接入，可在这里修改。Magpie 再次同步模型列表时，会覆盖这里的模型修改。",
+	"modelSettings.pluginManaged": "由插件「{plugin}」提供，可在这里修改，改动由它保存。它背后的应用再次同步时，可能覆盖这里的修改。",
 	"providerTransfer.importTip": "从 JSON 文件导入供应商",
 	"providerTransfer.exportTip": "把供应商导出为 JSON 文件",
 	"providerTransfer.exportConfirm": "导出供应商配置？",

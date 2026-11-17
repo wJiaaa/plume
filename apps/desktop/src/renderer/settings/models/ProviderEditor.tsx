@@ -6,7 +6,7 @@
  *
  * 文本框每敲一个字就存，不等失焦：等失焦的话，敲完地址直接点「测试」测的是上一个地址，而那正是最不愿意相信答案的时候。
  * key 不下发到界面：输入框一开始是空的，已经存过 key 时提示「已保存」，填了新的才替换。
- * Magpie 的供应商使用同一套编辑操作，agent 进程把修改写回 magpie 块。
+ * 插件提供的供应商（外部应用写给插件的网关）使用同一套编辑操作，agent 进程把修改交回那个插件保存。
  */
 
 import type { ApiFormat, ProviderTestResult } from "@plume/contract";
@@ -29,7 +29,7 @@ export const API_OPTIONS: { value: ApiFormat; label: string }[] = [
 
 export function ProviderEditor({
 	provider,
-	managed,
+	managedBy,
 	defaultModelId,
 	testResult,
 	testing,
@@ -49,8 +49,8 @@ export function ProviderEditor({
 	onSetDefault,
 }: {
 	provider: ProviderEntry;
-	/** 通过 Magpie 接入，提示同步模型列表会覆盖本地模型修改。 */
-	managed: boolean;
+	/** 由插件提供时是那个插件的显示名：提示改动由它保存，它的来源再同步时可能覆盖。 */
+	managedBy: string | undefined;
 	defaultModelId: string | null;
 	testResult: ProviderTestResult | null;
 	testing: boolean;
@@ -83,9 +83,9 @@ export function ProviderEditor({
 		<div className="@container flex flex-1 flex-col" data-provider-editor={provider.id}>
 			<ProviderHeading provider={provider} onChange={onChange} onRemove={onRemove} />
 
-			{managed && (
+			{managedBy && (
 				<Notice tone="accent" className="mt-5" data-provider-managed="">
-					{t("modelSettings.magpieManaged")}
+					{t("modelSettings.pluginManaged", { plugin: managedBy })}
 				</Notice>
 			)}
 			{saveError && (
