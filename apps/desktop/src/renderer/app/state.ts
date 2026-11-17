@@ -63,7 +63,7 @@ export interface AppState {
 	panelWidth: number;
 	/** 标签按会话保存；只有声明可恢复的面板落盘，空白会话首次发送时交给新会话。 */
 	panelTabs: Record<string, PanelTabs>;
-	/** 人刚点了开关，面板区正滑进滑出：只在这一下加动画，滑完撤掉，见 PanelArea.tsx 的 PANEL_MOTION。 */
+	/** 人刚点了开关，面板区正滑进滑出：只在这一下加动画，滑完撤掉，见 PanelArea.tsx 的 panelMotion。 */
 	panelMoving: boolean;
 	panelLeaving?: { id: string; scope: string };
 	/** 后退、前进的记录，见 nav-history.ts。 */

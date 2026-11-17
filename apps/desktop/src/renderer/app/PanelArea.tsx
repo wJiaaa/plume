@@ -19,7 +19,7 @@ import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
 import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
-import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
+import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./shell-classes.ts";
 import { parked } from "./sessions.ts";
 
 /** 弹出去的标签不占这一屏的位置，当前标签移交给仍留在屏内的一个。 */
@@ -46,8 +46,13 @@ export function panelLayout(app: Chrome, size: { width: number; height: number }
 	};
 }
 
-/** 面板区开合时对话和面板一起滑，和侧栏展开（`slideMotion`）同一时长、同一曲线。 */
-export const PANEL_MOTION = "transition-[right,bottom,width,height] duration-[var(--plume-t-slow)] ease-out";
+/**
+ * 面板区开合时对话和面板一起滑，和侧栏开合（`slideMotion`）同一组时长、曲线：展开 slow + out，收起 base + soft。
+ * 里面的内容跟着淡入淡出，见 styles.css 的 `[data-panel-sliding]`。
+ */
+export function panelMotion(opening: boolean): string {
+	return `transition-[right,bottom,width,height] ${slideMotion(opening)}`;
+}
 
 /** 独立窗口浮在别的应用上面：查资料、对着别的窗口干活时，这段对话或这块面板一直在手边。 */
 export function KeepOnTopButton({ keepOnTop }: { keepOnTop: (enabled?: boolean) => Promise<boolean> }) {
@@ -167,7 +172,7 @@ function PanelLayerTab({
 	const last = useRef(layout);
 	if (current) last.current = layout;
 	const shown = current && layout.shown && app.screen === "chat" && panelGroup(app, scope).active === tab.id;
-	const motion = app.panelMoving && current ? PANEL_MOTION : "";
+	const motion = app.panelMoving && current ? panelMotion(layout.shown) : "";
 	return (
 		<div
 			data-panel-layer={scope}
