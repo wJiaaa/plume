@@ -123,6 +123,7 @@ function SkillsSettings({
 	project = null,
 	refreshKey = 0,
 	openPlugin,
+	query = "",
 }: { api: Remote<SkillsApi>; notify: Notify; openPath: UiContext["openPath"]; FileDiff: ComponentType<FileDiffProps> } & ExtensionsSectionProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const cwd = project;
@@ -147,7 +148,12 @@ function SkillsSettings({
 		return () => window.removeEventListener("focus", refresh);
 	}, [refresh]);
 
-	const skills = view?.skills ?? [];
+	const all = view?.skills ?? [];
+	// 页头的搜索：按名字、说明、带来它的插件筛（合集卡片的名字就是插件名）。「全部关闭」这类按钮只动筛出来的那些。
+	const needle = query.trim().toLowerCase();
+	const skills = needle
+		? all.filter((skill) => [skill.name, skill.description, skill.plugin ?? ""].some((value) => value.toLowerCase().includes(needle)))
+		: all;
 	// 没加载的和加载了、值得看一眼的分开数，都按文件数：一个技能可能同时有两条。同名被盖住的另列，那是该有的样子，不算出错。
 	const shadowed = (view?.diagnostics ?? []).filter((item) => item.problem === "shadowed");
 	const failed = (view?.diagnostics ?? []).filter((item) => !item.warning && item.problem !== "shadowed");
@@ -232,7 +238,7 @@ function SkillsSettings({
 			<Notice tone="danger" title={text.failedToLoad(new Set(failed.map((item) => item.path)).size)} items={failed} text={text} />
 			<Notice tone="warning" title={text.warnings(new Set(warned.map((item) => item.path)).size)} items={warned} text={text} />
 
-			{view && skills.length === 0 ? (
+			{view && all.length === 0 ? (
 				<div className="skl-empty">
 					<Text size="label" weight="medium">
 						{text.emptyTitle}
@@ -245,6 +251,12 @@ function SkillsSettings({
 					</Text>
 					<Text as="p" size="detail" tone="faint" mono>
 						{view.dir}
+					</Text>
+				</div>
+			) : view && skills.length === 0 ? (
+				<div className="skl-empty">
+					<Text as="p" size="detail" tone="muted">
+						{text.noMatch}
 					</Text>
 				</div>
 			) : (

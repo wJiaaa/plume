@@ -608,6 +608,8 @@ export interface ExtensionsSectionProps {
 	refreshKey?: number;
 	/** 打开一个插件的详情（「插件市场」里点开它看到的那一页）。`key` 是插件的目录名（`InstalledPlugin.dir` 的最后一段）。 */
 	openPlugin?(key: string): void;
+	/** 页头搜索框里的字，原样交过来：组件按它筛自己的列表（怎么算命中由组件定），去掉首尾空格后是空串就不筛。 */
+	query?: string;
 }
 
 /** 「插件市场」那一类页顶「添加」菜单里的一项，见 `SettingsSectionOptions.actions`。 */

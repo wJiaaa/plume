@@ -623,7 +623,7 @@ ui.settingsSection("memory", MemorySettings, { title: (locale) => MESSAGES[local
 
 管技能、MCP 连接器的插件给 `page: "extensions-skills"`、`"extensions-connectors"`：画进「插件市场」页「技能」「连接器」两类筛选条的「已安装」里（「全部」和各个货架是市场里的技能合集、连接器，由宿主画），宽度和设置页一样；插件详情里是「去 插件市场 › 技能」这样的入口，落在「已安装」。内置的 `plume.skills`、`plume.mcp` 就是这样放的。
 
-- 刷新（技能还有看哪个项目）由宿主画在页头，组件经参数（`ExtensionsSectionProps`）拿到 `refreshKey`（人点了刷新就变）、`openPlugin(key)`（打开一个插件的详情，`key` 是插件目录名），技能的组件还拿到 `project`（选中的项目目录，null 是只看个人的），照着读、照着画列表。组件只画列表，不画自己的工具条。
+- 刷新（技能还有看哪个项目）由宿主画在页头，组件经参数（`ExtensionsSectionProps`）拿到 `refreshKey`（人点了刷新就变）、`openPlugin(key)`（打开一个插件的详情，`key` 是插件目录名）、`query`（页头搜索框里的字，组件按它筛自己的列表，去掉首尾空格是空串就不筛），技能的组件还拿到 `project`（选中的项目目录，null 是只看个人的），照着读、照着画列表。组件只画列表，不画自己的工具条。
 - 只有这个插件做得到的添加方式经 `actions`（`SectionAction`：`label`、`detail`、`icon`、`run`）放进页顶「添加技能」「添加连接器」：技能的排在宿主自己那一项（让 agent 写一个）后面；只有一项时按钮直接做它。`run` 跑完宿主换到「已安装」，要弹对话框的，在 `run` 里记下、等那一节画出来再开（`plume.mcp` 的「手动添加」就是这样）。
 
 ```tsx
