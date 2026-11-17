@@ -626,7 +626,12 @@ export type AgentEvent =
 	/** 插件装上、卸下、启用或停用了：全部插件的最新状态。 */
 	| { type: "plugins"; plugins: PluginStatus[] }
 	/** 工具表变了（插件装卸、启停，插件运行中登记、撤下工具）：全部生效的工具，同 `listTools`。 */
-	| { type: "tools"; tools: RegisteredToolInfo[] };
+	| { type: "tools"; tools: RegisteredToolInfo[] }
+	/**
+	 * 模型设置在界面以外变了（插件的供应商出现、消失、改了，插件设了默认模型）：界面重新 `getSettings`。只是个信号，
+	 * 不带设置，key 不经事件出去；界面自己改的不发，它改完会自己重取。
+	 */
+	| { type: "models" };
 
 /**
  * 上下文窗口按来源拆开：对话消息、工具表（`ToolDefinition.category` 是 `mcp` 的工具 `mcpTools` 单独一段，其余是 `tools`）、系统提示词，

@@ -47,7 +47,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 换掉压缩的做法 | 钩子 `context.compact` |
 | 给输入框的 `/` 菜单供命令 | `ctx.commands.provide` |
 | 用默认模型做一次性的小调用、读花销、用生图模型出图 | `ctx.model`（`complete`、`usage`、`image`），图存进 `ctx.media` |
-| 把外部应用管着的网关接进模型设置、读设默认模型 | `ctx.providers`（`provide`、`defaultModel`、`setDefaultModel`） |
+| 把外部应用管着的网关接进模型设置、读设默认模型 | `ctx.providers`（`provide`、`changed`、`defaultModel`、`setDefaultModel`） |
 | 读会话、改标题、归档 | `ctx.sessions`（`list`、`messages`、`setTitle`、`setArchived`…） |
 | 自己的子会话（侧边聊天、子 Agent），或页面上一直在的独立会话 | `ctx.sessions.create`，`send` / `start` / `wait` / `report` |
 | 开一个新的顶层会话并发出第一句话；把会话接到 Plume 之外 | `ctx.sessions.launch`；带 `steward: true` 由你代管；开在哪个项目里，项目 id 从 `ctx.sessions.projects()` 查 |

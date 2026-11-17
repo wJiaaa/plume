@@ -6,9 +6,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ModelEntry, Plugin, PluginContext, PluginProvider } from "@plume/contract";
+import type { AgentEvent, ModelEntry, Plugin, PluginContext, PluginProvider } from "@plume/contract";
 import { catalogModelFor, catalogPricing } from "@plume/llm/model-catalog";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
 import { fakeAnthropic } from "../src/testing.ts";
 
@@ -138,6 +138,32 @@ describe("插件提供的供应商", () => {
 			expect(usage.requests.reduce((sum, bucket) => sum + bucket.requests, 0)).toBe(1);
 		} finally {
 			await fake.close();
+		}
+	});
+
+	it("插件说供应商变了、设了默认模型、停用时，告诉界面重取模型设置；一个插件加载时的几次只说一次", async () => {
+		const service = await start([gateway()], { providers: [own], defaultModel: "p-own/m1" });
+		const events: AgentEvent[] = [];
+		const watching = new AbortController();
+		void (async () => {
+			for await (const event of service.watch({ signal: watching.signal }) as AsyncIterable<AgentEvent>) events.push(event);
+		})().catch(() => {});
+		const models = () => events.filter((event) => event.type === "models").length;
+		try {
+			// 等 watch 接上：先触发一次，收到了再开始数。
+			ctx.providers.changed();
+			await vi.waitFor(() => expect(models()).toBe(1));
+			listed = [gateway({ name: "改名" })];
+			ctx.providers.changed();
+			ctx.providers.changed();
+			await vi.waitFor(() => expect(models()).toBe(2));
+			expect((await service.getSettings()).providers.at(-1)?.name).toBe("改名");
+			await ctx.providers.setDefaultModel("gw/g1");
+			await vi.waitFor(() => expect(models()).toBe(3));
+			await service.setPluginEnabled("test.gateway", false);
+			await vi.waitFor(() => expect(models()).toBe(4));
+		} finally {
+			watching.abort();
 		}
 	});
 

@@ -22,7 +22,7 @@ export const agent = {
 		mcpFormat: "claude",
 		skills: "~/.plume/skills",
 	},
-	notice: "Plume uses the new model from its next turn. Restart Plume to see it in the model picker.",
+	notice: "Plume uses the new model from its next turn.",
 };
 
 export function connect({ gateway, models }) {
