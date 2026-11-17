@@ -57,7 +57,7 @@ Plume 的设置页：常规、外观、个性化、模型、智能体、存储�
 
 ### Magpie
 
-Magpie 可以接管 Plume 的模型和资源，都经市场插件「Magpie」（`plume.magpie`）：先在插件市场装上它，Magpie 才列出 Plume（Magpie 那边的 Agent 插件见仓库的 `integrations/magpie`）。
+Magpie 可以接管 Plume 的模型和资源，都经市场插件「Magpie」（`plume.magpie`）：先在插件市场装上它，Magpie 才列出 Plume（Magpie 那边还要手动加上配套的 Agent 插件，源码在插件仓库的 `plugins/magpie/magpie-agent/`）。
 
 - **模型**：Magpie 把网关和选中的模型写进插件数据目录的 `credentials.json`（0600）。网关作为「Magpie」供应商排在最后，标着由插件「Magpie」提供，和普通供应商一样可重命名、启停、修改连接和密钥、拉取或增删改模型、测试、设默认，也可以删除；修改写回那份文件，不写进 `settings.json`、不参与导入导出，保存后界面立即刷新、下一轮生效；Magpie 那边改了网关、模型或默认模型，设置页和模型列表也当场跟着变。Magpie 再次同步会覆盖连接、密钥和模型列表；修改密钥会改变 Magpie 对接管状态的判断。Magpie 选了模型就设成默认模型；在 Magpie 里断开时，默认模型还是它设的那个就换回原来的。花销按模型目录里同名模型的参考价算，不用 Magpie 带的价格。停用插件后这个供应商消失。
 - **资源**：Magpie 资源库分发的技能写进 `~/.plume/skills`。全局指令和 MCP 写进插件的数据目录：全局指令每轮作为单独一段放在项目指令前面，MCP 服务登记给连接器页、标「由 Magpie 管理」：名称、开关、启动方式、变量和删除都锁住，连接状态、工具列表、重连和 OAuth 登录照常；和自己的服务重名时保留自己的；改了当场重连，停用插件即移除。

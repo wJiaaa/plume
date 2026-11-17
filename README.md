@@ -40,7 +40,6 @@ pnpm package  # 打安装包到 apps/desktop/release/
 | `packages/client` | 设计 token（`styles`）和基础组件（`ui`），产品和插件界面共用 |
 | `packages/builtin` | 内置插件 |
 | `packages/sdk/plugin-sdk` | 插件 SDK 和 `plume-plugin` 命令 |
-| `integrations/magpie` | 给 Magpie 用的 Agent 插件 |
 
 ## 文档
 
