@@ -67,6 +67,7 @@ const MARKET_PLUGINS = [
 	"plume.image",
 	"plume.index",
 	"plume.lsp",
+	"plume.magpie",
 	"plume.memory",
 	"plume.native-ui",
 	"plume.preview",

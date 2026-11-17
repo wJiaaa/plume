@@ -43,27 +43,6 @@ export async function loadProjectInstructions(cwd: string, repoRoot: Promise<str
 	return found.reverse();
 }
 
-/** Magpie 共享指令最多放进提示词多少个字符。 */
-const MAGPIE_CHAR_LIMIT = 100 * 1024;
-
-/**
- * Magpie 资源库分发的全局指令：`<Plume 数据目录>/magpie/AGENTS.md`，由 Magpie 写、撤回时删。每轮现读，和人自己的全局指令
- * 一起放进提示词，不抄进设置，撤回后不留副本。没有就是没分发过；读不了只留一句诊断，不拖垮这一轮。
- * shortcut：最多放 102400 个字符，超过的只放开头；需要更长时改成截断后告诉模型去读全文。
- */
-export async function loadMagpieInstructions(appDataDir: string, log: { warn(message: string): void }): Promise<string> {
-	const path = join(appDataDir, "magpie", "AGENTS.md");
-	const text = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
-		if (error.code !== "ENOENT") log.warn(`无法读取 ${path}`);
-		return "";
-	});
-	if (text.length > MAGPIE_CHAR_LIMIT) log.warn(`${path} 超过 ${MAGPIE_CHAR_LIMIT} 个字符，只放开头部分`);
-	return text
-		.replace(/^\uFEFF/, "")
-		.slice(0, MAGPIE_CHAR_LIMIT)
-		.trim();
-}
-
 /** 按 UTF-8 的字边界截断，并写明完整文件在哪。 */
 function budgetInstructions(content: string, path: string): string {
 	if (Buffer.byteLength(content, "utf8") <= INSTRUCTION_BYTE_LIMIT) return content;

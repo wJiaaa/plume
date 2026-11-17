@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { HookLayer, ModelContext, PluginContext } from "@plume/contract";
 import plugin from "../src/index.ts";
-import { INSTRUCTION_BYTE_LIMIT, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "../src/instructions.ts";
+import { INSTRUCTION_BYTE_LIMIT, isIsolatedWorktree, loadProjectInstructions } from "../src/instructions.ts";
 import { BUILTIN_PERSONAS, buildPromptSections, type SystemPromptInput } from "../src/system.ts";
 
 /** 宿主把段拼成整段系统提示词的方式：段与段之间空一行。 */
@@ -248,49 +248,6 @@ describe("项目指令", () => {
 		expect(await isIsolatedWorktree(dir)).toBe(false);
 		await writeFile(join(dir, ".git"), "gitdir: /repo/.git/worktrees/fix\n");
 		expect(await isIsolatedWorktree(dir)).toBe(true);
-	});
-});
-
-describe("Magpie 共享指令", () => {
-	it("每轮现读、去掉 BOM，和人自己的全局指令合成一段；删掉后只剩自己的；过长的只放开头", async () => {
-		let layer: HookLayer<"model.context"> | undefined;
-		const warnings: string[] = [];
-		plugin.apply({
-			...fakeContext(),
-			hook: (_name: string, fn: HookLayer<"model.context">) => void (layer = fn),
-			log: { warn: (message: string) => warnings.push(message) },
-		} as unknown as PluginContext);
-		const instructions = async () => {
-			const context = await layer!(
-				{
-					sessionId: "s",
-					session: { id: "s", kind: "top" },
-					cwd: dir,
-					model: { id: "m", name: "M" },
-					permissionMode: "full",
-					personalization: { tone: "professional", customInstructions: "个人规则" },
-					systemPrompt: "",
-					sections: [],
-					messages: [],
-					tools: [],
-				} as unknown as ModelContext,
-				async (next) => next,
-			);
-			return context.sections.find((section) => section.id === "userInstructions")?.text ?? "";
-		};
-		const path = join(dir, "magpie", "AGENTS.md");
-		await mkdir(join(dir, "magpie"));
-		await writeFile(path, "\uFEFF共享规则第一版");
-		expect(await instructions()).toContain("共享规则第一版\n\n个人规则");
-		await writeFile(path, "共享规则第二版");
-		expect(await instructions()).toContain("共享规则第二版");
-		await rm(path);
-		const own = await instructions();
-		expect(own).not.toContain("共享规则");
-		expect(own).toContain("个人规则");
-		await writeFile(path, "x".repeat(110 * 1024));
-		expect((await loadMagpieInstructions(dir, { warn: (message) => void warnings.push(message) })).length).toBe(100 * 1024);
-		expect(warnings).toHaveLength(1);
 	});
 });
 

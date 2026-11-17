@@ -105,6 +105,7 @@ async function served(t: { after: (fn: () => Promise<void>) => void }): Promise<
 		hook: () => {},
 		commands: { provide: () => {} },
 		plugins: { list: () => [], onChange: () => {} },
+		provide: () => {},
 		serve: (value: McpApi) => {
 			api = value;
 		},

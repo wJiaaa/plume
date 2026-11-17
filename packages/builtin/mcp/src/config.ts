@@ -1,7 +1,7 @@
 /**
  * MCP 服务的配置：存在插件数据目录的 `servers.json`，设置页经逻辑入口改它。另有两处来源只读进来、不抄进这个文件：
- * Magpie 分发的（`readMagpieServers`）和插件随包带的 `.mcp.json`（`readPluginServers`）；后者人能开关、填空位的值，
- * 改的这两样记在 `servers.json` 的 `plugins` 里。
+ * 别的插件经服务 `mcp.servers` 替外部应用登记的（`offeredServers`）和插件随包带的 `.mcp.json`（`readPluginServers`）；
+ * 后者人能开关、填空位的值，改的这两样记在 `servers.json` 的 `plugins` 里。
  *
  * 环境变量和请求头里常有密钥，所以界面只拿得到不像密钥的值；像密钥的只告诉它「填了」，改的时候不填就是留着原来的
  * （`VarDraft.value` 为 undefined）。密钥只在 agent 进程里用，写进文件时经 `ctx.secrets` 加密，
@@ -24,11 +24,11 @@ interface ServerBase {
 	/** 每个会话各起一份，不和别的会话共用连接：给把状态存在进程里的服务（浏览器、数据库会话）。 */
 	perSession?: boolean;
 	/**
-	 * 不是人在这里加的，不写进 `servers.json` 的 `servers`：magpie 是 Magpie 资源库分发的（`magpie/mcp.json`），在 Plume 里
+	 * 不是人在这里加的，不写进 `servers.json` 的 `servers`：external 是别的插件替外部应用登记的（服务 `mcp.servers`），在 Plume 里
 	 * 只能看状态、重连、登录；plugin 是插件随包带的（插件目录的 `.mcp.json`），另外能开关、填空位的值，卸载插件就没了。
 	 */
-	managedBy?: "magpie" | "plugin";
-	/** 带来它的插件的显示名（managedBy 为 plugin 时）。 */
+	managedBy?: "external" | "plugin";
+	/** managedBy 为 plugin 时是带来它的插件的显示名，为 external 时是管着它的应用的名字。 */
 	plugin?: string;
 }
 
@@ -82,7 +82,7 @@ function flagsOf(raw: Record<string, unknown>): Pick<ServerBase, (typeof FLAGS)[
 	return Object.fromEntries(FLAGS.filter((flag) => raw[flag] === true).map((flag) => [flag, true]));
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 function strings(value: unknown): Record<string, string> | undefined {
 	if (!isRecord(value)) return undefined;
@@ -129,53 +129,42 @@ export async function readServers(file: string): Promise<{ servers: ServerConfig
 	}
 }
 
+/** 别的插件经服务 `mcp.servers` 替外部应用登记的一组：`servers` 是 Claude 格式的 `mcpServers` 对象。 */
+export interface ServerOffer {
+	owner: string;
+	label: string;
+	servers: Record<string, unknown>;
+}
+
 /**
- * Magpie 资源库分发的服务：`<Plume 数据目录>/magpie/mcp.json`，Claude 格式的 `mcpServers` 对象，由 Magpie 写、撤回时删。
- * 每次和 `servers.json` 一起现读，不抄进 `servers.json`，所以撤回后不留副本。id 是 `magpie__<名字>`；
- * 名字在工具名里，和已有的服务重名（不分大小写）的跳过，保留人自己加的那台。坏条目跳过、留一句诊断，
- * 不把认不出的传输方式猜成 HTTP；整份读不懂时只说文件坏了，不转述解析器的话：原文里可能有令牌。
- * 文件在却读不了、读不懂时返回 null（没有文件是 []）：调用方据此不把这时缺席的服务当成已撤回。
+ * 外部应用的服务（见 `McpServersService`）：不抄进 `servers.json`，所以撤回后不留副本。id 是 `external__<登记方>__<名字>`；
+ * 名字在工具名里，和已有的服务重名（不分大小写）的跳过，保留人自己加的那台。坏条目跳过、留一句诊断，不把认不出的传输方式猜成 HTTP。
  */
-export async function readMagpieServers(file: string, own: readonly ServerConfig[], log: { warn(message: string): void }): Promise<ServerConfig[] | null> {
-	let unreadable = false;
-	const raw = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
-		if (error.code !== "ENOENT") {
-			unreadable = true;
-			log.warn(`无法读取 ${file}`);
-		}
-		return null;
-	});
-	if (raw === null) return unreadable ? null : [];
-	let entries: [string, unknown][];
-	try {
-		const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ""));
-		if (!isRecord(parsed) || (parsed.mcpServers !== undefined && !isRecord(parsed.mcpServers))) throw new Error("invalid");
-		entries = Object.entries(parsed.mcpServers ?? {});
-	} catch {
-		log.warn(`${file} 不是有效的 MCP 配置，只用 Plume 自己的服务`);
-		return null;
-	}
+export function offeredServers(offers: readonly ServerOffer[], own: readonly ServerConfig[], log: { warn(message: string): void }): ServerConfig[] {
 	const out: ServerConfig[] = [];
-	for (const [name, config] of entries) {
-		const server = isRecord(config) && name.trim() ? declaredServer(name, config, { id: `magpie__${name}`, managedBy: "magpie" }) : null;
-		if (!server) {
-			log.warn(`Magpie 的 MCP 条目 ${name} 格式无效，已跳过`);
-			continue;
+	for (const { owner, label, servers } of offers) {
+		for (const [name, config] of Object.entries(servers)) {
+			const server =
+				isRecord(config) && name.trim() ? declaredServer(name, config, { id: `external__${owner}__${name}`, managedBy: "external", plugin: label }) : null;
+			if (!server) {
+				log.warn(`${label} 的 MCP 条目 ${name} 格式无效，已跳过`);
+				continue;
+			}
+			const taken = [...own, ...out].some((other) => other.id === server.id || other.name.trim().toLowerCase() === name.trim().toLowerCase());
+			if (taken) {
+				log.warn(`${label} 的 MCP 条目 ${name} 和已有的服务重名，保留已有的`);
+				continue;
+			}
+			out.push(server);
 		}
-		const taken = [...own, ...out].some((other) => other.id === server.id || other.name.trim().toLowerCase() === name.trim().toLowerCase());
-		if (taken) {
-			log.warn(`Magpie 的 MCP 条目 ${name} 和已有的服务重名，保留已有的`);
-			continue;
-		}
-		out.push(server);
 	}
 	return out;
 }
 
 /**
- * 插件带来的服务：每个开着的插件目录里的 `.mcp.json`，和 Magpie 的同一种 Claude 格式；插件仓库的连接器（`plume.kind` 为
+ * 插件带来的服务：每个开着的插件目录里的 `.mcp.json`，和外部应用登记的同一种 Claude 格式；插件仓库的连接器（`plume.kind` 为
  * connector）就是只带这个文件的插件。id 是 `plugin__<插件名>__<名字>`，人改过的开关和填的值（`states`）盖在上面。
- * 和已有的服务重名的跳过、留一句诊断，保留先来的（自己加的、Magpie 的、先加载的插件的）。没有这个文件的插件不算，
+ * 和已有的服务重名的跳过、留一句诊断，保留先来的（自己加的、外部应用的、先加载的插件的）。没有这个文件的插件不算，
  * 读不懂的整份跳过；每次现读，插件卸了它带来的服务也就没了。
  */
 export async function readPluginServers(

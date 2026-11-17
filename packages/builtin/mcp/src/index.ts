@@ -2,19 +2,20 @@
  * plume.mcp 的逻辑入口，跑在 agent 进程：按插件数据目录里的 `servers.json` 连上每台开着的 MCP 服务，把它们的工具以
  * `mcp__<服务>__<工具>` 登记进工具表，每次调用前经审批问人；工具多了改成按需搜索（`mcp_search`、`mcp_call`），
  * 服务的 prompt 进 `/` 菜单，服务声明的资源经资源地址 `mcp://` 给 read 读（`resources.ts`），服务中途要人填的表经那次调用的 `run.request` 问人（`elicitation.ts`）。设置页经 `ctx.serve` 列服务和状态、
- * 添加、编辑、开关、重连、填值、登录；表单卡经它交回填的值。Magpie 资源库分发的服务从数据目录的 `magpie/mcp.json`
- * 一起读进来，只读：状态、重连、登录照常，改动在 Magpie 里做。插件随包带的 `.mcp.json`（插件市场的连接器）也一起读进来：
+ * 添加、编辑、开关、重连、填值、登录；表单卡经它交回填的值。别的插件经服务 `mcp.servers` 替外部应用登记的服务
+ * 一起列进来，只读：状态、重连、登录照常，改动在那个应用里做。插件随包带的 `.mcp.json`（插件市场的连接器）也一起读进来：
  * 能开关、填值，启动方式不能改、不能删（卸载插件就没了）；插件装上、卸下、启停时当场重读、重连。
  */
 
 import { join } from "node:path";
-import type { Plugin, SlashCommand } from "@plume/contract";
+import type { McpServersService, Plugin, SlashCommand } from "@plume/contract";
 import type { McpApi, McpView, ServerView, VarView } from "./api.ts";
 import {
 	applyDraft,
 	checkDraft,
+	isRecord,
+	offeredServers,
 	type PluginServerState,
-	readMagpieServers,
 	readPluginServers,
 	readServers,
 	type ServerConfig,
@@ -142,17 +143,28 @@ export default {
 		});
 
 		/**
+		 * 别的插件经服务 `mcp.servers` 替外部应用登记的，按登记方的插件名。`known` 为 false 是登记方最近一次读不到、读不懂：
+		 * 留着上一份，也不拿这时的缺席当撤回（见 `change` 里清登录）。
+		 */
+		const offers = new Map<string, { label: string; servers: Record<string, unknown>; known: boolean }>();
+
+		/**
 		 * 配置每次现读：人也可以直接改 `servers.json`，设置页刷新一下就照新的连。`servers` 是全部（自己的在前，
-		 * 然后是 Magpie 分发的、插件带来的），`own` 是 `servers.json` 里的，`states` 是插件带来的那些上人改过的；改配置只写这两样。
+		 * 然后是外部应用的、插件带来的），`own` 是 `servers.json` 里的，`states` 是插件带来的那些上人改过的；改配置只写这两样。
 		 */
 		const read = async () => {
 			const result = await readServers(file);
 			if (result.error) ctx.log.warn(`${file} 读不懂：${result.error}`);
 			const own = await openServers(result.servers, secrets);
 			const states = await openStates(result.plugins, secrets);
-			const magpie = await readMagpieServers(join(ctx.appDataDir, "magpie", "mcp.json"), own, ctx.log);
-			const fromPlugins = await readPluginServers(ctx.plugins.list(), [...own, ...(magpie ?? [])], states, ctx.log);
-			return { ...result, own, states, servers: [...own, ...(magpie ?? []), ...fromPlugins], magpieRead: magpie !== null };
+			const external = offeredServers(
+				[...offers].map(([owner, { label, servers }]) => ({ owner, label, servers })),
+				own,
+				ctx.log,
+			);
+			const fromPlugins = await readPluginServers(ctx.plugins.list(), [...own, ...external], states, ctx.log);
+			const offersKnown = [...offers.values()].every((offer) => offer.known);
+			return { ...result, own, states, servers: [...own, ...external, ...fromPlugins], offersKnown };
 		};
 		/** `retry`：上次没连上的也重来。只在改了配置时给：设置页连着问状态时每问一次就重启一遍，连不上的会一直在重连。 */
 		const view = async (retry = false): Promise<McpView> => {
@@ -171,7 +183,7 @@ export default {
 						trustReadOnly: server.trustReadOnly === true,
 						pinned: server.pinned === true,
 						perSession: server.perSession === true,
-						managed: server.managedBy === "magpie",
+						...(server.managedBy === "external" && server.plugin ? { managed: server.plugin } : {}),
 						...(server.managedBy === "plugin" && server.plugin ? { plugin: server.plugin } : {}),
 						oauth: usesOAuth(server),
 						signedIn: await connections.signedIn(server).catch(() => false),
@@ -193,15 +205,15 @@ export default {
 			editState: (states: Record<string, PluginServerState>) => Record<string, PluginServerState> = (states) => states,
 		): Promise<McpView> => {
 			const done = writing.then(async () => {
-				const { own, states, servers, error, magpieRead } = await read();
+				const { own, states, servers, error, offersKnown } = await read();
 				if (error) throw new Error(text().fileBroken);
 				const next = edit(own, servers);
 				const nextStates = editState(states);
 				await writeServers(file, await sealServers(next, secrets), await sealStates(nextStates, secrets));
-				// 存设置时顺带清一遍：已经不在的服务（删掉的、Magpie 撤回的），登录一起忘掉。登录不经过这里写，
-				// 所以按服务在不在判断。Magpie 的文件这次读不懂时不清：它分发的服务只是暂时看不见，不是撤回了。
+				// 存设置时顺带清一遍：已经不在的服务（删掉的、外部应用撤回的），登录一起忘掉。登录不经过这里写，
+				// 所以按服务在不在判断。登记方这次读不懂时不清：它登记的服务只是暂时看不见，不是撤回了。
 				// 插件带来的、人改过的留着：插件停用、卸了再装，登录还在。
-				if (magpieRead) {
+				if (offersKnown) {
 					const kept = [...next, ...servers.filter((server) => server.managedBy !== undefined), ...Object.keys(nextStates).map((id) => ({ id }))];
 					await connections.oauth.keepOnly(kept).catch((error: unknown) => ctx.log.warn(`清理已删除服务的登录失败：${String(error)}`));
 				}
@@ -221,10 +233,10 @@ export default {
 			if (!server) throw new Error(text().notFound);
 			return server;
 		};
-		/** 要改配置的那台：Magpie 分发的在 Magpie 里改，插件带来的启动方式改不了、删不掉，这里拒绝。 */
+		/** 要改配置的那台：外部应用的在那个应用里改，插件带来的启动方式改不了、删不掉，这里拒绝。 */
 		const editable = (servers: readonly ServerConfig[], all: readonly ServerConfig[], id: unknown) => {
 			const other = typeof id === "string" ? all.find((server) => server.id === id && server.managedBy !== undefined) : undefined;
-			if (other) throw new Error(other.managedBy === "magpie" ? text().magpieManaged : text().pluginManaged(other.plugin ?? ""));
+			if (other) throw new Error(other.managedBy === "external" ? text().externalManaged(other.plugin ?? "") : text().pluginManaged(other.plugin ?? ""));
 			return known(servers, id);
 		};
 		/** 插件带来的那一台；别处来的是 undefined。 */
@@ -241,7 +253,25 @@ export default {
 				(error: unknown) => ctx.log.warn(`读 MCP 配置失败，先不连：${String(error)}`),
 			);
 		connect();
-		ctx.plugins.onChange(connect);
+		ctx.plugins.onChange(() => {
+			// 登记方停用、卸下了，它替外部应用登记的一并撤下。
+			const live = new Set(ctx.plugins.list().map((plugin) => plugin.name));
+			for (const owner of offers.keys()) if (!live.has(owner)) offers.delete(owner);
+			connect();
+		});
+
+		ctx.provide("mcp.servers", {
+			offer(owner, label, servers) {
+				if (typeof owner !== "string" || !owner || typeof label !== "string" || !label.trim()) throw new Error(text().offerInvalid);
+				if (servers !== null && !isRecord(servers)) throw new Error(text().offerInvalid);
+				const previous = offers.get(owner);
+				if (servers === null) {
+					if (previous) offers.set(owner, { ...previous, label: label.trim(), known: false });
+					else offers.set(owner, { label: label.trim(), servers: {}, known: false });
+				} else offers.set(owner, { label: label.trim(), servers, known: true });
+				connect();
+			},
+		} satisfies McpServersService);
 
 		ctx.serve({
 			async *readDocument(session, id, call) {

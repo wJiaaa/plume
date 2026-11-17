@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import type { HumanAnswer, HumanRequestInput, PluginContext, PluginSecrets, ToolDefinition, ToolRun } from "@plume/contract";
+import type { HumanAnswer, HumanRequestInput, McpServersService, PluginContext, PluginSecrets, ToolDefinition, ToolRun } from "@plume/contract";
 import type { McpApi } from "../src/api.ts";
-import { applyDraft, checkDraft, readMagpieServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
+import { applyDraft, checkDraft, offeredServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";
 import { Connections, type ConnectionsOptions } from "../src/connections.ts";
 import { checkFormValues, FORM_KIND, formFields, readFormRequest, UnsupportedFormError } from "../src/form.ts";
 import { missingFor, placeholdersOf, resolveServer, secretValues } from "../src/placeholders.ts";
@@ -173,44 +173,83 @@ test("插件服务上人改过的存进 servers.json 的 plugins，密钥加密�
 	}
 });
 
-test("Magpie 分发的服务：三种传输照 Claude 格式转换，坏条目和重名跳过，读不懂的文件不转述原文", async () => {
-	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-magpie-"));
+test("外部应用登记的服务：三种传输照 Claude 格式转换，坏条目和重名跳过", () => {
+	const warnings: string[] = [];
+	const log = { warn: (message: string) => void warnings.push(message) };
+	const own: ServerConfig = { id: "mcp-own", name: "GitHub", transport: "stdio", command: "gh-mcp", enabled: true };
+	const servers = offeredServers(
+		[
+			{
+				owner: "x.app",
+				label: "App",
+				servers: {
+					local: { command: "node", args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } },
+					remote: { type: "http", url: "https://example.invalid/mcp", headers: { Authorization: "Bearer ${TOKEN}" } },
+					events: { type: "sse", url: "https://example.invalid/sse", disabled: true },
+					github: { command: "node" },
+					bad: { type: "websocket", url: "wss://example.invalid" },
+					badArgs: { command: "node", args: [42] },
+				},
+			},
+		],
+		[own],
+		log,
+	);
+	assert.deepEqual(
+		servers.map((server) => [server.id, server.transport, server.enabled, server.managedBy, server.plugin]),
+		[
+			["external__x.app__local", "stdio", true, "external", "App"],
+			["external__x.app__remote", "http", true, "external", "App"],
+			["external__x.app__events", "sse", false, "external", "App"],
+		],
+	);
+	assert.deepEqual(servers[0], { ...servers[0], args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } });
+	assert.equal(servers[1]?.transport !== "stdio" && servers[1]?.headers?.Authorization, "Bearer ${TOKEN}");
+	assert.equal(warnings.length, 3);
+});
+
+test("服务 mcp.servers：登记的列进设置页并锁住，整组换掉，读不懂时留着上一份，登记方停用后撤下", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-offer-"));
+	let api: McpApi | undefined;
+	let service: McpServersService | undefined;
+	let plugins = [{ name: "x.app", dir: join(dir, "no-such-plugin") }];
+	const listeners: (() => void)[] = [];
+	const ctx = {
+		dataDir: dir,
+		appDataDir: dir,
+		locale: () => "zh-CN",
+		secrets: fakeSecrets,
+		resources: { register: () => () => {} },
+		log: { warn: () => {}, info: () => {}, error: () => {} },
+		effect: () => {},
+		sessions: { onDeleted: () => {}, list: async () => [] },
+		tools: { register: () => () => {} },
+		hook: () => {},
+		commands: { provide: () => {} },
+		plugins: { list: () => plugins, onChange: (listener: () => void) => void listeners.push(listener) },
+		provide: (name: string, provided: McpServersService) => void (name === "mcp.servers" && (service = provided)),
+		serve: (served: McpApi) => {
+			api = served;
+		},
+	} as unknown as PluginContext;
+	const off = (url: string) => ({ type: "http", url, disabled: true });
+	const listed = async () => (await api!.list()).servers.map((server) => [server.id, server.managed]);
 	try {
-		const file = join(dir, "mcp.json");
-		const warnings: string[] = [];
-		const log = { warn: (message: string) => void warnings.push(message) };
-		const own: ServerConfig = { id: "mcp-own", name: "GitHub", transport: "stdio", command: "gh-mcp", enabled: true };
-		assert.deepEqual(await readMagpieServers(file, [own], log), []);
-		assert.equal(warnings.length, 0);
-		await writeFile(
-			file,
-			"\uFEFF" +
-				JSON.stringify({
-					mcpServers: {
-						local: { command: "node", args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } },
-						remote: { type: "http", url: "https://example.invalid/mcp", headers: { Authorization: "Bearer ${TOKEN}" } },
-						events: { type: "sse", url: "https://example.invalid/sse", disabled: true },
-						github: { command: "node" },
-						bad: { type: "websocket", url: "wss://example.invalid" },
-						badArgs: { command: "node", args: [42] },
-					},
-				}),
-		);
-		const servers = (await readMagpieServers(file, [own], log)) ?? [];
-		assert.deepEqual(
-			servers.map((server) => [server.id, server.transport, server.enabled, server.managedBy]),
-			[
-				["magpie__local", "stdio", true, "magpie"],
-				["magpie__remote", "http", true, "magpie"],
-				["magpie__events", "sse", false, "magpie"],
-			],
-		);
-		assert.deepEqual(servers[0], { ...servers[0], args: ["server.js", "${TOKEN}"], env: { TOKEN: "${TOKEN}" } });
-		assert.equal(servers[1]?.transport !== "stdio" && servers[1]?.headers?.Authorization, "Bearer ${TOKEN}");
-		assert.equal(warnings.length, 3);
-		await writeFile(file, '{"secret":"do-not-log",broken');
-		assert.equal(await readMagpieServers(file, [own], log), null);
-		assert.ok(warnings.every((message) => !message.includes("do-not-log")));
+		await mcpPlugin.apply(ctx);
+		service!.offer("x.app", "App", { a: off("https://example.invalid/a"), b: off("https://example.invalid/b") });
+		assert.deepEqual(await listed(), [
+			["external__x.app__a", "App"],
+			["external__x.app__b", "App"],
+		]);
+		await assert.rejects(api!.setEnabled("external__x.app__a", true), /由 App 管理/);
+		service!.offer("x.app", "App", { b: off("https://example.invalid/b") });
+		assert.deepEqual(await listed(), [["external__x.app__b", "App"]]);
+		service!.offer("x.app", "App", null);
+		assert.deepEqual(await listed(), [["external__x.app__b", "App"]], "读不懂时留着上一份");
+		assert.throws(() => service!.offer("x.app", "", {}));
+		plugins = [];
+		for (const listener of listeners) listener();
+		assert.deepEqual(await listed(), []);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -739,7 +778,6 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 	let api: McpApi | undefined;
 	const ctx = {
 		dataDir: dir,
-		// Magpie 的文件在 Plume 数据目录下找，指到空目录，不读跑测试那个人的。
 		appDataDir: dir,
 		locale: () => "zh-CN",
 		secrets: fakeSecrets,
@@ -751,6 +789,7 @@ test("设置页同时存两张卡片：一个接一个写，两处改动都留�
 		hook: () => {},
 		commands: { provide: () => {} },
 		plugins: { list: () => [], onChange: () => {} },
+		provide: () => {},
 		serve: (served: McpApi) => {
 			api = served;
 		},
@@ -784,7 +823,7 @@ test("存配置时只留还在的服务的登录：删掉的、撤回的令牌�
 	try {
 		const store = new OAuthStore(dir, fakeSecrets);
 		const server = (id: string): ServerConfig => ({ id, name: id, transport: "http", url: `https://example.invalid/${id}`, enabled: true });
-		for (const id of ["mcp-kept", "mcp-gone", "magpie__withdrawn"])
+		for (const id of ["mcp-kept", "mcp-gone", "external__x.app__withdrawn"])
 			await store.update(server(id) as never, (record) => ({ ...record, tokens: { access_token: id, token_type: "Bearer" } }));
 		const files = await readdir(join(dir, "oauth"));
 		assert.equal(files.length, 3);

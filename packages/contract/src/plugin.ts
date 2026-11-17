@@ -1840,6 +1840,21 @@ export interface InstalledPlugin {
 export interface Services {
 	"session.worktree": SessionWorktreeService;
 	"session.plan": SessionPlanService;
+	"mcp.servers": McpServersService;
+}
+
+/**
+ * 服务 `mcp.servers`：替 Plume 之外管着它们的应用登记一组 MCP 服务。内置插件 plume.mcp 提供。
+ * 登记的服务在连接器页标「由 <应用> 管理」：名称、开关、启动方式、变量和删除都锁住，要去那个应用里改；连接状态、工具列表、
+ * 重连和登录照常。它们不抄进 MCP 自己的配置：登记方撤回或停用，服务就没了。和已有的服务重名的不接，保留已有的。
+ */
+export interface McpServersService {
+	/**
+	 * 整组换掉 `owner`（登记方插件的名字，`ctx.name`）登记的服务，当场照新的连。`label` 是管着它们的应用的名字，卡片上给人看。
+	 * `servers` 是 Claude 格式的 `mcpServers` 对象；这次读不到、读不懂时给 null：先前登记的照留，也不当成撤回（登录不清）。
+	 * 登记方停用后，它登记的一并撤下。
+	 */
+	offer(owner: string, label: string, servers: Record<string, unknown> | null): void;
 }
 
 /**
