@@ -387,12 +387,31 @@
 	/*
 	 * 面板区开合时，对话顶行右端给面板开关让的位置（`PANEL_TOGGLE_ROOM`，见 PanelArea.tsx）在点下去那一下就换了：
 	 * 当场换的话顶行右端那几颗按钮（环境开关）先横着跳 20px 再跟着卡片滑。这里让它和卡片同一时长、同一缓动地变。
-	 * 左边也列上：侧栏和面板区同时在滑时，上面那条不被这条盖掉。
+	 * 左边也列上：侧栏和面板区同时在滑时，上面那条不被这条盖掉。展开、收起的时长和曲线和侧栏一样分开，对应 PanelArea.tsx 的 `panelMotion`。
 	 */
+	[data-panel-sliding="open"] {
+		--panel-slide: var(--plume-t-slow) var(--plume-e-out);
+	}
+	[data-panel-sliding="close"] {
+		--panel-slide: var(--plume-t-base) var(--plume-e-soft);
+	}
 	[data-panel-sliding] [data-toolbar-inset] {
 		transition:
 			padding-left var(--sidebar-slide, var(--plume-t-slow) var(--plume-e-out)),
-			padding-right var(--plume-t-slow) var(--plume-e-out);
+			padding-right var(--panel-slide);
+	}
+	/*
+	 * 横排、上下排的面板区开合时，标签、开始页和面板内容跟着淡入淡出，和卡片同一时长、同一曲线；收着时停在淡出的那一头。
+	 * 外框和描边一直是实的。只动透明度、不加横移：网页面板（浏览器、终端）挪位置要和它的进程同步，透明度只在合成时多画一遍。
+	 * 只在点开关的那一下有过渡，平时不占开销。面板区独占工作区时整块出现、不淡，和窄窗口的侧栏抽屉一样。
+	 */
+	:is([data-panel-layout="row"], [data-panel-layout="column"])[data-panel-sliding]
+		:is([data-panel-heading], [data-panel-area] [data-panel-content], .plume-dock-pane) {
+		transition: opacity var(--panel-slide);
+	}
+	:is([data-panel-layout="row"], [data-panel-layout="column"]):not([data-panel-shown])
+		:is([data-panel-heading], [data-panel-area] [data-panel-content], .plume-dock-pane) {
+		opacity: 0;
 	}
 	/* 侧栏一栏：对话底色兑四成侧栏色，在 oklab 里混，深浅按人眼的明度走。 */
 	.sidebar-surface,

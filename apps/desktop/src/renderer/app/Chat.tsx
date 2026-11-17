@@ -36,7 +36,7 @@ import {
 	useChrome,
 } from "./state.ts";
 import { finishPanelLeave, panelOpenIn, scopeOf, tabsOf, togglePanel } from "./panels.ts";
-import { PANEL_MOTION, PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, PanelResizer, PanelToggle } from "./PanelArea.tsx";
+import { PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, panelMotion, PanelResizer, PanelToggle } from "./PanelArea.tsx";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
 import { Composer } from "./Composer.tsx";
@@ -72,7 +72,7 @@ export function ChatScreen({
 		return () => observer.disconnect();
 	}, []);
 	const layout = panelLayout(app, size, share);
-	const motion = app.panelMoving ? PANEL_MOTION : "";
+	const motion = app.panelMoving ? panelMotion(layout.shown) : "";
 	// 侧栏、面板区开合时对话那一栏滑完有多宽，见 ChatSlide。侧栏滑完时面板区可能换了宽度、换了排法，按滑完的工作区重算一遍。
 	const landed = slideWidth === undefined ? layout : panelLayout(app, { width: slideWidth, height: size.height }, share);
 	const slideTarget =
@@ -119,7 +119,8 @@ export function ChatScreen({
 		<div
 			ref={root}
 			data-panel-layout={layout.arrangement}
-			data-panel-sliding={app.panelMoving || undefined}
+			data-panel-sliding={app.panelMoving ? (layout.shown ? "open" : "close") : undefined}
+			data-panel-shown={layout.shown || undefined}
 			// 横排时对话和面板区并成一块；收起滑走的那一路也算，滑完对话右边才圆回来，不在半路豁开一个角。
 			data-frame-right={(layout.arrangement === "row" && (layout.shown || app.panelMoving)) || undefined}
 			className="relative min-h-0 flex-1 overflow-hidden rounded-panel"
