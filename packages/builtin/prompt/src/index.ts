@@ -13,7 +13,7 @@
 import type { Plugin } from "@plume/contract";
 import type { PromptApi } from "./api.ts";
 import { createPresets } from "./presets.ts";
-import { findRepoRoot, isIsolatedWorktree, loadMagpieInstructions, loadProjectInstructions } from "./instructions.ts";
+import { findRepoRoot, isIsolatedWorktree, loadProjectInstructions } from "./instructions.ts";
 import { buildPromptSections } from "./system.ts";
 
 /** 比插件常用的 order 都小：先于它们补上默认的内容。 */
@@ -41,12 +41,11 @@ export default {
 			async (input, next) => {
 				const kinds = new Map(ctx.tools.list().flatMap((tool) => (tool.kind ? [[tool.name, tool.kind] as const] : [])));
 				const repoRoot = findRepoRoot(input.cwd);
-				const [projectInstructions, gitRepo, isolatedWorktree, magpieInstructions, persona] = await Promise.all([
+				const [projectInstructions, gitRepo, isolatedWorktree, persona] = await Promise.all([
 					loadProjectInstructions(input.cwd, repoRoot),
 					// 在仓库的子目录里（单仓多包里打开 `packages/x`）也是在仓库里。
 					repoRoot.then((root) => root !== null),
 					isIsolatedWorktree(input.cwd),
-					loadMagpieInstructions(ctx.appDataDir, ctx.log),
 					presets.forRequest(input),
 				]);
 				const sections = buildPromptSections({
@@ -64,8 +63,7 @@ export default {
 					isolatedWorktree,
 					projectInstructions,
 					tone: input.personalization.tone,
-					// Magpie 分发的共享指令和人自己的全局指令放进同一段。
-					customInstructions: [magpieInstructions, input.personalization.customInstructions.trim()].filter(Boolean).join("\n\n"),
+					customInstructions: input.personalization.customInstructions,
 					scratchDir: input.scratchDir,
 					persona,
 				});

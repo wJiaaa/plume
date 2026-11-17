@@ -40,18 +40,18 @@ Plume 每次用到模型设置都重新读这个文件，所以 Magpie 改完，
 
 ## 资源库：技能、全局指令和 MCP
 
-插件声明了三种资源的接收位置，模型是否走 Magpie 不影响资源库：
+插件声明了三种资源的接收位置，模型是否走 Magpie 不影响资源库。全局指令和 MCP 由 Plume 插件市场里的「Magpie」插件（`plume.magpie`）交给 Plume，要先在 Plume 的插件市场装上它：
 
 | 资源 | Magpie 写到哪里 | Plume 何时读取 |
 | --- | --- | --- |
 | 技能 | `~/.plume/skills/` | 和自己放在那里的技能一样，由内置的技能插件发现 |
-| 全局指令 | `~/.plume/magpie/AGENTS.md` | 每轮读取，和设置 › 个性化里的全局指令一起生效 |
-| MCP | `~/.plume/magpie/mcp.json` | MCP 插件启动时读取，修改后重启 Plume |
+| 全局指令 | `~/.plume/plugin-data/plume.magpie/AGENTS.md` | `plume.magpie` 每轮读取，作为单独一段放在项目指令前面 |
+| MCP | `~/.plume/plugin-data/plume.magpie/mcp.json` | `plume.magpie` 读取后登记给内置的 MCP 插件，文件改了当场重连 |
 
 在 Magpie 资源库中选择 Plume，即可分发这些资源。需要支持 `agent.library` 的 Magpie 版本；旧版本请先更新。
 
-MCP 文件使用 Claude 格式的 `mcpServers` 对象，支持 stdio、HTTP 和 SSE，以及命令、参数、环境变量、地址和请求头里的 `${NAME}` 空位（从登录 shell 的环境变量里取）。Plume 给这些服务的 id 加 `magpie__` 前缀，「插件市场 › 连接器」里标明「由 Magpie 管理」：名称、开关、启动方式、变量和删除都锁住，在 Magpie 中修改，缺少的密钥也在 Magpie 中填写；连接状态、工具列表、重连和 OAuth 登录仍可在 Plume 中查看或操作。
+MCP 文件使用 Claude 格式的 `mcpServers` 对象，支持 stdio、HTTP 和 SSE，以及命令、参数、环境变量、地址和请求头里的 `${NAME}` 空位（从登录 shell 的环境变量里取）。「插件市场 › 连接器」里标明「由 Magpie 管理」：名称、开关、启动方式、变量和删除都锁住，在 Magpie 中修改，缺少的密钥也在 Magpie 中填写；连接状态、工具列表、重连和 OAuth 登录仍可在 Plume 中查看或操作。
 
-Plume 不把分发的指令和 MCP 配置另存进自己的设置，所以在 Magpie 中撤回后不会留下副本。已有手动配置保留；名称和已有服务重名（不分大小写）时保留自己的服务并记录警告，因为名称就是工具名里的那一段。格式损坏或无效的 MCP 条目会记录警告并跳过，原文件不被改写。
+Plume 不把分发的指令和 MCP 配置另存进自己的设置，所以在 Magpie 中撤回、或停用 `plume.magpie` 后不会留下副本。已有手动配置保留；名称和已有服务重名（不分大小写）时保留自己的服务并记录警告，因为名称就是工具名里的那一段。格式损坏或无效的 MCP 条目会记录警告并跳过，原文件不被改写。
 
 这些位置基于默认的 `~/.plume`。使用自定义 `PLUME_HOME` 时，需把插件的 `dir`、`config` 和 `library` 路径一起改为对应的绝对路径。

@@ -14,10 +14,10 @@ export const agent = {
 	config: "~/.plume/settings.json",
 	model: "defaultModel",
 	prefix: "magpie/",
-	// 资源库：技能放进个人技能目录，全局指令每轮读，MCP 和 Plume 自己的服务一起读（见 README）
+	// 资源库：技能放进个人技能目录；全局指令和 MCP 放进市场插件 plume.magpie 的数据目录，由它交给 Plume（见 README）
 	library: {
-		instructions: "~/.plume/magpie/AGENTS.md",
-		mcp: "~/.plume/magpie/mcp.json",
+		instructions: "~/.plume/plugin-data/plume.magpie/AGENTS.md",
+		mcp: "~/.plume/plugin-data/plume.magpie/mcp.json",
 		mcpFormat: "claude",
 		skills: "~/.plume/skills",
 	},

@@ -40,7 +40,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 | `packages/sdk/plugin-sdk`（`@plumeai/plugin-sdk`） | 插件作者的机器上 | 插件 SDK：从 `contract`、`ui`、`styles` 的源码生成类型声明（`@plume/ui` 只开放 `plugin-api.json` 里的名字）、`plume-plugin` 命令（init / check / build / install / dev / link）、插件模板，以及插件包的格式（`@plumeai/plugin-sdk/manifest`：什么目录算插件、发哪些文件、`package.json` 的说明怎么读，主进程和插件仓库发市场都引它）。随应用发（资源目录里整理好的一份，自带 esbuild、TypeScript，见 `scripts/stage.mjs`），主进程生成 `~/.plume/bin/plume-plugin` 用应用的二进制跑它，不经 npm。仓库里的插件也只经它拿类型、经它构建 |
 | `packages/builtin/*` | agent 进程、渲染进程 | 内置插件：随应用发（打包时放进资源目录的 `builtin/`）、不能停用，能经服务或外层钩子换掉；和 `plugins/` 下的一样只用公开接口；各自做什么、代码从哪进见下面的「内置插件」 |
 | 插件仓库的 `plugins/*` | agent 进程、渲染进程 | 市场插件 scheduled（定时任务的列表存在插件数据目录的 `tasks.json`，「定时任务」页面经 `ui.remote()` 读写；逻辑入口每分钟看一次，到点的经 `ctx.sessions.launch` 开新会话发提示词，失败在输入框上方和活动栏的数目上告诉人）、hooks（按 Claude Code 的约定跑用户配的钩子命令）、index（`symbol` 工具查定义位置，设置页「索引库」）、sessions（`list_sessions`、`read_session` 读别的会话，`send_message` 经 `ToolRun.letter` 给别的顶层会话寄一封单向的信，工具那一行标回执；互相开出来的一组会话的系统提示词里有名册；限速、去重的账在插件里，连着叫醒的上限在本体） |
-| `integrations/magpie` | Magpie 里 | 给 Magpie 用的 Agent 插件：在 Magpie 里给 Plume 选模型，写进 Plume 的设置文件；资源库的技能写进 `~/.plume/skills`，全局指令写进 `~/.plume/magpie/AGENTS.md`（plume.prompt 每轮读），MCP 写进 `~/.plume/magpie/mcp.json`（plume.mcp 和自己的服务一起读，只读） |
+| `integrations/magpie` | Magpie 里 | 给 Magpie 用的 Agent 插件：在 Magpie 里给 Plume 选模型，写进 Plume 的设置文件；资源库的技能写进 `~/.plume/skills`，全局指令和 MCP 写进市场插件 plume.magpie 的数据目录（`~/.plume/plugin-data/plume.magpie/`），由它每轮放进提示词、经服务 `mcp.servers` 登记给 plume.mcp |
 
 依赖方向：`desktop → agent、ui、styles、rpc、plugin-sdk`（只引 `manifest`，打进主进程）；`ui → styles`；`agent → llm`；所有包的共享类型都来自 `contract`；`agent` 不依赖任何具体插件；`packages/` 不依赖 `apps/`。插件只 `import type` `@plume/contract`，界面入口运行时用共享的 `react`、`@plume/ui`、`@plume/styles`；这个仓库里的内置插件和测试插件（`packages/builtin/`、`packages/testing/`）另外可以引用 `packages/infra/` 下的通用库（不懂 agent 业务，在 package.json 里声明，构建时打进插件；`scripts/check-plugins.mjs`）；插件仓库里 `plugins/*` 的这些类型来自 `plugin-sdk`（tsconfig 继承 `@plumeai/plugin-sdk/tsconfig.json`），不直接依赖 `contract`、`ui`。
 
@@ -61,7 +61,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 - `title`：智能标题，开关在设置 › 常规
 - `spawn-session`：`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话每结束一轮经 `ctx.sessions.reportBack` 交回汇报；环境卡片里「建议的新会话」、卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话
 - `git`：分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`
-- `mcp`：连 MCP 服务、把工具交给 agent，设置页「MCP」，也读 Magpie 资源库分发的服务和插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存
+- `mcp`：连 MCP 服务、把工具交给 agent，设置页「MCP」，也接别的插件经服务 `mcp.servers` 替外部应用登记的服务，读插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存
 - `documents`：文件面板和插件经 `ui.DocumentPreview` 共用的只读表格、SQLite 和 Word 预览
 - `diagnostics`：运行诊断：后台任务、运行记录、调用轨迹，往环境卡片里放后台任务（含检查、定时任务和轮询）、压缩记录两节
 - `environment`：会话环境：标题栏的「环境」开关和环境卡片这个容器，自己画打开方式、子会话、引用三节，别的插件经 `ui.environmentSection` 往里放节
