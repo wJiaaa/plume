@@ -306,7 +306,17 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	}
 	const files = jsonFiles();
 	const vault = createVault(dataDir);
-	const pluginProviders = new PluginProviderSources((message) => log("agent", "warn", message));
+	/** 模型设置在界面以外变了，已经排着告诉界面了：一个插件加载时登记来源、设默认模型接连发生，攒到这一刻结束只说一次。 */
+	let modelsPending = false;
+	const modelsChanged = () => {
+		if (modelsPending) return;
+		modelsPending = true;
+		queueMicrotask(() => {
+			modelsPending = false;
+			emit({ type: "models" });
+		});
+	};
+	const pluginProviders = new PluginProviderSources((message) => log("agent", "warn", message), modelsChanged);
 	const modelSettings = createModelSettings({ files, keys: providerKeys(vault), settingsFile, catalogFile, pluginProviders });
 	// 会话、消息、压缩记录都在这个库里，见 `session-db.ts`；打不开就启动失败，日志里有路径和原因。
 	const store = openSessionDb(join(dataDir, "sessions", "sessions.db"), (message) => log("agent", "warn", message));
@@ -413,8 +423,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		notice: (sessionId, text, level) => emit({ type: "notice", sessionId, text, level }),
 		providers: {
 			add: (plugin, source) => pluginProviders.add(plugin, source),
+			changed: modelsChanged,
 			defaultModel: async () => (await modelSettings.read()).defaultModel,
-			setDefaultModel: (model) => modelSettings.service.setDefaultModel(model),
+			setDefaultModel: async (model) => {
+				await modelSettings.service.setDefaultModel(model);
+				modelsChanged();
+			},
 		},
 		media: {
 			save: async ({ data, mimeType, sessionId }) => {

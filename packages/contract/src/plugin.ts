@@ -1820,6 +1820,11 @@ export interface ProviderSource {
 export interface PluginProviders {
 	/** 登记一个供应商来源，见 `ProviderSource`。 */
 	provide(source: ProviderSource): void;
+	/**
+	 * 自己的供应商变了（外部应用改了网关、模型列表）：调一下，界面跟着重新取模型设置。本体不会自己去问 `list()`，不调的话设置页、
+	 * 模型菜单要等人下次在界面上改了什么才看到。登记、撤下来源和 `setDefaultModel` 不用调，本体自己会通知。
+	 */
+	changed(): void;
 	/** 人设的默认模型（`供应商 id/模型 id`），可能已经失效；没设过是 undefined。 */
 	defaultModel(): Promise<ModelRef | undefined>;
 	/** 设默认模型，和设置页设的一样：要是启用着的供应商下的对话模型，否则抛错。 */

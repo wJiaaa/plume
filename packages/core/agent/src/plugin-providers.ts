@@ -14,14 +14,20 @@ export class PluginProviderSources {
 	/** 说过的诊断：每次读设置都合并一遍，同一句不每次都记。 */
 	private readonly warned = new Set<string>();
 
-	constructor(private readonly warn: (message: string) => void) {}
+	/** `changed`：供应商多了、少了，告诉界面重取模型设置。 */
+	constructor(
+		private readonly warn: (message: string) => void,
+		private readonly changed: () => void,
+	) {}
 
 	/** 登记一个插件的来源；返回撤下它的函数，插件停用时调。 */
 	add(plugin: string, source: ProviderSource): () => void {
 		const entry = { plugin, source };
 		this.sources = [...this.sources, entry];
+		this.changed();
 		return () => {
 			this.sources = this.sources.filter((item) => item !== entry);
+			this.changed();
 		};
 	}
 

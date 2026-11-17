@@ -360,6 +360,8 @@ export class PluginHost {
 			/** 插件的 `ctx.providers`：模型设置在 agent 那边，宿主只按插件名转交、停用时撤下。只测宿主本身时不给，插件调它就抛错。 */
 			providers?: {
 				add(plugin: string, source: ProviderSource): () => void;
+				/** 插件说它的供应商变了：告诉界面重取模型设置。 */
+				changed(): void;
 				defaultModel(): Promise<ModelRef | undefined>;
 				setDefaultModel(model: ModelRef): Promise<void>;
 			};
@@ -1154,6 +1156,7 @@ export class PluginHost {
 						throw new Error(text("plugin.providerSourceNotObject"));
 					own(this.modelProviders().add(name, source));
 				},
+				changed: () => this.modelProviders().changed(),
 				defaultModel: () => this.modelProviders().defaultModel(),
 				setDefaultModel: (model) => this.modelProviders().setDefaultModel(String(model)),
 			},

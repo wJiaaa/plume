@@ -33,7 +33,7 @@ export default {
 | `ctx.locale()` | 当前界面语言 `"zh-CN"` 或 `"en"`，给人看的文字按它选 |
 | `ctx.notice(sessionId, text, level?)` | 在界面上弹一条提示条，`level` 是 `"info"`（默认）、`"warn"`、`"error"`；不管那个会话是不是正开着 |
 | `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
-| `ctx.providers.provide(source)`、`defaultModel()`、`setDefaultModel(model)` | 把自己存着的模型供应商接进模型设置、读设默认模型，见下面「模型供应商」 |
+| `ctx.providers.provide(source)`、`changed()`、`defaultModel()`、`setDefaultModel(model)` | 把自己存着的模型供应商接进模型设置、读设默认模型，见下面「模型供应商」 |
 | `ctx.sessions.list()` / `get` / `messages`、`compact`、`setTitle`、`setArchived`、`onDeleted` / `onArchived` / `onEnded` / `onContextReset` | 读会话的摘要和消息，现在就压缩（`/compact`）、改标题（侧栏和标题栏上那行字）、归档，会话删掉、归档、在这次运行里不再活着、上下文被重置时收通知，见下面「读会话、改会话」 |
 | `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
 | `ctx.sessions.projects()` | 登记过的项目 `{ id, name, path }[]`，按侧栏的顺序；`launch`、`create`、`configure` 的 `project` 填这里的 `id`。界面入口里用 `ui.useProjects()` |
@@ -95,6 +95,7 @@ export default {
 
 - `list()` 同步交回当前的供应商（`PluginProvider`：模型设置里供应商的字段加明文 `apiKey`），每次读模型设置都调，所以读文件、盯文件变化放在别处，这里只交缓存的那份。不合格的、和已有供应商重名的跳过（保留已有的），记一句诊断。
 - 它们接在人自己的供应商后面，设置页上标着由你的插件提供；和人自己的一样能选、能测、能设默认，花销照记。价格（`pricing`）不是本体认的形状（按百万 token 的美元数）时不用，按模型目录补参考价；本体不把它们写进 `settings.json`、不加密存 key、不导出，所以 key 由你存（文件给 0600）。
+- 本体不会自己去问 `list()` 变没变：你的供应商在 Plume 之外变了（外部应用改了网关、模型列表），交新的那份之前调一下 `ctx.providers.changed()`，设置页和模型菜单当场重取；没变就别调。登记、撤下来源和 `setDefaultModel` 本体自己会通知界面。
 - 人在设置页改、删时调 `save(provider)`（key 没改时是原来的）、`remove(providerId)`，你写回自己的数据，下次 `list()` 交新的。抛错时设置页显示原因。
 - 停用插件时它们跟着消失；默认模型指着它们的话按本体的规则落到第一个可用的。
 - `defaultModel()` 读默认模型（`供应商/模型`，没设是 `undefined`），`setDefaultModel(model)` 设它，校验和设置页一样，没有这个模型时抛错。外部应用替人选了模型时用；要在它撤回时换回原来的，自己记下原来的那个，并且只在外部应用改了选择时才设，别在每次启动时盖掉人后来在 Plume 里选的。

@@ -145,6 +145,9 @@ function apply(event: AgentEvent): void {
 			return;
 		case "tools":
 			toolTableChanged(event.tools);
+			return;
+		case "models":
+			void refreshModels().catch(() => undefined);
 	}
 }
 
