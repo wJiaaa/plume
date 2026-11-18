@@ -25,8 +25,6 @@ const COMPACT_MAX = 760;
 const CONTENT_MIN = 420;
 
 export const PANEL_MIN = 300;
-/** 尚未量过工作区时为 0，首次显示按工作区的四成定宽。 */
-const PANEL_DEFAULT = 0;
 
 export type LayoutMode = "compact" | "regular";
 
@@ -96,7 +94,8 @@ export function writeSidebarPrefs(prefs: SidebarPrefs): void {
 export interface PanelPrefs {
 	/** 按会话（面板的 scope）记的开合，只记开着的；空白会话和标签一样不落盘。 */
 	open: Record<string, boolean>;
-	width: number;
+	/** 按会话记的宽度偏好，第一次显示时按工作区的四成定下，拖动时改写。空白会话不落盘。 */
+	width: Record<string, number>;
 }
 
 const PANEL_PREFS_KEY = "plume.panel";
@@ -106,16 +105,24 @@ export function readPanelPrefs(): PanelPrefs {
 		const raw = JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) ?? "{}") as { open?: unknown; width?: unknown };
 		return {
 			open: raw.open && typeof raw.open === "object" ? Object.fromEntries(Object.entries(raw.open).filter(([scope, open]) => scope && open === true)) : {},
-			width: typeof raw.width === "number" && Number.isFinite(raw.width) && raw.width > 0 ? Math.max(PANEL_MIN, raw.width) : PANEL_DEFAULT,
+			width:
+				raw.width && typeof raw.width === "object"
+					? Object.fromEntries(
+							Object.entries(raw.width).flatMap(([scope, width]): [string, number][] =>
+								scope && typeof width === "number" && Number.isFinite(width) && width > 0 ? [[scope, Math.max(PANEL_MIN, width)]] : [],
+							),
+						)
+					: {},
 		};
 	} catch {
-		return { open: {}, width: PANEL_DEFAULT };
+		return { open: {}, width: {} };
 	}
 }
 
 export function writePanelPrefs(prefs: PanelPrefs): void {
 	const open = Object.fromEntries(Object.entries(prefs.open).filter(([scope, value]) => scope && value));
-	localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify({ open, width: prefs.width }));
+	const width = Object.fromEntries(Object.entries(prefs.width).filter(([scope]) => scope));
+	localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify({ open, width }));
 }
 
 interface PanelTabPrefs {

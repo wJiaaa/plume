@@ -58,9 +58,9 @@ export interface AppState {
 	sidebarWidth: number;
 	/** 窄窗口下抽屉开着没有。和 sidebarOpen 分开：抽屉是临时的，关掉它不等于想收起侧栏。 */
 	drawerOpen: boolean;
-	/** 面板区开着没有，按会话（面板的 scope，同 panelTabs）记，没记的是收着；宽度偏好是全局一份（见 layout.ts）。 */
+	/** 面板区开着没有、宽度偏好，都按会话（面板的 scope，同 panelTabs）记；没记开合的是收着，宽度第一次显示时按工作区的四成定下（见 layout.ts、panels.ts 的 pinPanelWidth）。 */
 	panelOpen: Record<string, boolean>;
-	panelWidth: number;
+	panelWidth: Record<string, number>;
 	/** 标签按会话保存；只有声明可恢复的面板落盘，空白会话首次发送时交给新会话。 */
 	panelTabs: Record<string, PanelTabs>;
 	/** 人刚点了开关，面板区正滑进滑出：只在这一下加动画，滑完撤掉，见 PanelArea.tsx 的 panelMotion。 */

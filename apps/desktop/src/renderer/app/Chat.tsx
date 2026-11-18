@@ -151,7 +151,7 @@ export function ChatScreen({
 			)}
 			<PanelLayer layout={layout} floor={panelFloor} />
 			{layout.shown && !layout.single && !layout.stacked && (
-				<PanelResizer width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width, 0)} />
+				<PanelResizer scope={scope} width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width, 0)} />
 			)}
 			{layout.shown && layout.stacked && (
 				<Splitter

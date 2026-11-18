@@ -21,7 +21,7 @@ import { MarketScreen } from "./market/market.tsx";
 import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
 import { DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./app/shell-classes.ts";
-import { finishPanelLeave, panelOpenIn, scopeOf, setPanel, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
+import { finishPanelLeave, panelOpenIn, pinPanelWidth, scopeOf, setSidebar, showPanel, tabsOf, togglePanel } from "./app/panels.ts";
 import { canStep, go, openNoticeSession } from "./app/sessions.ts";
 import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
 import { createPlugin, investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
@@ -44,7 +44,7 @@ function Shell() {
 	const { t } = useI18n();
 	const managedSkin = useManagedSkin();
 	const app = useChrome();
-	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen, panelWidth } = app;
+	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen } = app;
 	const [verticalShares, setVerticalShares] = useState<Record<string, number>>({});
 	const compact = layoutMode(windowWidth) === "compact";
 	// 窗口回到前台重问已知目录：终端里可能刚执行过 git init。当前会话的目录与轮次变化由 PanelArea 处理。
@@ -72,9 +72,10 @@ function Shell() {
 	 */
 	const overlap = pushed || HEADER_BAR ? 0 : Math.max(0, toolbarReserved(titlebar.start, (sided ? 1 : 0) + (pageTools?.buttons.length ?? 0)) - RAIL_WIDTH - 1);
 	const available = windowWidth - RAIL_WIDTH - (pushed ? width : 0);
+	const scope = scopeOf(app);
 	useLayoutEffect(() => {
-		if (!panelWindow && panelWidth === 0) setPanel({ width: available * 0.4 });
-	}, [available, panelWidth]);
+		if (!panelWindow && screen === "chat") pinPanelWidth(scope, available * 0.4);
+	}, [available, scope, screen]);
 	useEffect(() => {
 		if (!app.panelLeaving) return;
 		// 减少动态效果、切页或窗口缩放可能取消 transitionend，资源仍必须收掉。

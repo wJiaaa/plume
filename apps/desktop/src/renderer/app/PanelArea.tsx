@@ -18,7 +18,7 @@ import { flushChildDrafts } from "../conversation/child-drafts.ts";
 import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.tsx";
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
-import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanel, tabsOf, togglePanel } from "./panels.ts";
+import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanelWidth, tabsOf, togglePanel } from "./panels.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./shell-classes.ts";
 import { parked } from "./sessions.ts";
 
@@ -37,7 +37,7 @@ export function panelLayout(app: Chrome, size: { width: number; height: number }
 		shown,
 		...panelGeometry({
 			...size,
-			preferred: app.panelWidth,
+			preferred: app.panelWidth[scope] ?? 0,
 			share,
 			compact: layoutMode(app.windowWidth) === "compact",
 			maximized: app.panelMaximized[scope] === true,
@@ -117,9 +117,9 @@ export function PanelToggle({ open, scope }: { open: boolean; scope: string }) {
 }
 
 /** 把手骑在对话和面板区之间那 1px 分隔线上，独立于面板的溢出裁切。 */
-export function PanelResizer({ width, windowWidth, max }: { width: number; windowWidth: number; max: number }) {
+export function PanelResizer({ scope, width, windowWidth, max }: { scope: string; width: number; windowWidth: number; max: number }) {
 	const { t } = useI18n();
-	const resize = (next: number) => setPanel({ width: clamp(Math.round(next), PANEL_MIN, max) });
+	const resize = (next: number) => setPanelWidth(scope, clamp(Math.round(next), PANEL_MIN, max));
 	return (
 		<div className="absolute inset-y-0 w-0" style={{ left: windowWidth - width }}>
 			<ResizeHandle edge="start" width={width} min={PANEL_MIN} max={max} onResize={resize} onReset={() => resize(windowWidth / 2)} label={t("panel.resize")} />
