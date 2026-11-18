@@ -170,6 +170,11 @@
 	--plume-t-base: 220ms;
 	--plume-t-reveal: 260ms;
 	--plume-t-slow: 340ms;
+	/* 启动页沿用原版的节奏，不跟控件的过渡时长走。 */
+	--plume-t-boot-quiet: 120ms;
+	--plume-t-boot-fade: 520ms;
+	--plume-t-boot-drift: 3.6s;
+	--plume-t-boot-sweep: 1.5s;
 	--plume-e-out: cubic-bezier(0.22, 1, 0.36, 1);
 	--plume-e-in: cubic-bezier(0.55, 0, 1, 0.45);
 	--plume-e-soft: cubic-bezier(0.4, 0, 0.2, 1);

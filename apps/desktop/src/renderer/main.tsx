@@ -10,10 +10,13 @@ import type { OpenTarget } from "../shared/open-targets.ts";
 import { type Remote, RpcChannel, remote } from "@plume/rpc";
 import * as plumeStyles from "@plume/styles";
 import * as plumeUi from "@plume/ui";
-import { ErrorBoundary, I18nProvider, installTooltips, setWindowMinimized, type UiLocale, useI18n } from "@plume/ui";
+import { ErrorBoundary, I18nProvider, installTooltips, setWindowMinimized, translate, type UiLocale, useI18n } from "@plume/ui";
 import * as React from "react";
 import { useEffect } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { BootScreen, MIN_BOOT_MS } from "./app/BootScreen.tsx";
+import { panelWindow, sessionWindow, update } from "./app/state.ts";
 import * as jsxRuntime from "react/jsx-runtime";
 import { App } from "./app.tsx";
 import { start } from "./app/start.ts";
@@ -168,7 +171,7 @@ function connect(): Promise<MessagePort> {
 	});
 }
 
-async function boot(): Promise<void> {
+async function loadAgent(): Promise<Remote<AgentService>> {
 	globalThis.__PLUME_SHARED__ = shared;
 	await window.plume.registerShared(Object.fromEntries(Object.entries(shared).map(([name, module]) => [name, Object.keys(module)])));
 	const port = await connect();
@@ -185,15 +188,36 @@ async function boot(): Promise<void> {
 	// 先装好插件卡片、拿到工具的种类再画，免得已有会话先画成通用卡片、不分组的调用，再跳成插件卡片、合好的段。
 	await loadPluginUis(await agent.listPlugins(), agent);
 	toolTableChanged(await agent.listTools());
+	return agent;
+}
+
+async function boot(): Promise<void> {
 	const root = createRoot(document.getElementById("root") as HTMLElement);
-	// 截屏浮层和钉图窗口也是这一页，只画插件注册的那一个组件。
 	const kind = screenWindow();
+	const mainWindow = !kind && !panelWindow && !sessionWindow;
+	if (!kind) window.plume.onAgentExit((code) => update({ fatal: translate("app.agentExited", { code }) }));
+	let minimum: Promise<void> | undefined;
+	if (mainWindow) {
+		flushSync(() => root.render(<BootScreen />));
+		minimum = new Promise((resolve) => setTimeout(resolve, MIN_BOOT_MS));
+	}
+	let agent: Remote<AgentService>;
+	try {
+		agent = await loadAgent();
+	} catch (error) {
+		if (!mainWindow) throw error;
+		console.error("启动失败：", error);
+		update({ fatal: translate("app.startFailed") });
+		return;
+	}
+	// 截屏浮层和钉图窗口也是这一页，只画插件注册的那一个组件。
 	if (kind) {
 		void followScreenPluginUis(agent);
 		root.render(<ScreenRoot kind={kind} />);
 		return;
 	}
 	start(agent);
+	if (minimum) await minimum;
 	root.render(<Root agent={agent} />);
 }
 

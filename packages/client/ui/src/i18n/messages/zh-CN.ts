@@ -685,6 +685,8 @@ export const zhCN = {
 	"sessionMenu.sessionIdCopied": "已复制会话 ID",
 	"panel.failed": "这个面板出错了，详情见开发者工具的日志。",
 	"page.failed": "这个页面出错了，详情见开发者工具的日志。",
+	"app.starting": "Plume 正在启动…",
+	"app.startFailed": "Plume 没能启动，请重启应用。",
 	"app.agentExited": "agent 进程已退出（退出码 {code}），请重启 Plume。",
 	"shell.hideSidebar": "隐藏侧边栏 ⌘B",
 	"shell.showSidebar": "显示侧边栏 ⌘B",

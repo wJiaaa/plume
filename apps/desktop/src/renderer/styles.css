@@ -166,6 +166,50 @@
 	}
 }
 
+@layer components {
+	.plume-boot-content {
+		animation: plume-boot-appear var(--plume-t-boot-fade) ease-out var(--plume-t-boot-quiet) backwards;
+	}
+	@keyframes plume-boot-appear {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	.plume-boot-mark {
+		animation: plume-boot-drift var(--plume-t-boot-drift) ease-in-out infinite;
+	}
+	@keyframes plume-boot-drift {
+		50% {
+			transform: translateY(-4px);
+		}
+	}
+	.plume-boot-rail::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in srgb, var(--plume-accent) 40%, transparent) 30%,
+			var(--plume-accent),
+			color-mix(in srgb, var(--plume-accent) 40%, transparent) 70%,
+			transparent
+		);
+		animation: plume-boot-sweep var(--plume-t-boot-sweep) linear infinite;
+	}
+	@keyframes plume-boot-sweep {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(100%);
+		}
+	}
+}
+
 /*
  * 会话背景图（见 chat-backdrop.tsx）。伪元素、遮罩、@starting-style 这些工具类写不清，所以写成组件层的 CSS；
  * 取值仍只用 token。遮罩只看透明度，颜色写 black。
