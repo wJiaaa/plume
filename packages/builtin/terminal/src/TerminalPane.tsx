@@ -22,7 +22,7 @@ import { terminalKey } from "./keys.ts";
 import { type LinkActions, linkify } from "./links.ts";
 import { paletteFromTheme, typography } from "./look.ts";
 import { MESSAGES } from "./messages.ts";
-import type { DirectoryRequest } from "./open-directory.ts";
+import { type DirectoryRequest, typedCommand } from "./open-directory.ts";
 import { TerminalMenu } from "./TerminalMenu.tsx";
 import { TerminalSearch } from "./TerminalSearch.tsx";
 
@@ -335,7 +335,7 @@ export function TerminalPane({
 		void takeDirectory(directoryRequest.id)
 			.then(async (taken) => {
 				if (!taken) return;
-				await api.write(active, directoryRequest.command);
+				await api.write(active, typedCommand(directoryRequest.command, term.current?.modes.bracketedPasteMode ?? false));
 				term.current?.focus();
 			})
 			.catch(onDirectoryError);
