@@ -15,9 +15,20 @@ export function setSidebar(patch: { open?: boolean; width?: number }): void {
 	writeSidebarPrefs({ open: state.sidebarOpen, width: state.sidebarWidth });
 }
 
-export function setPanel(patch: { width: number }): void {
+/**
+ * 会话 `scope` 还没有宽度时，第一次显示就按工作区的四成定下来，之后不再跟着侧栏、窗口变：不然侧栏开合、拖宽时
+ * 面板区一路变宽变窄，对话顶行的图标也跟着挪。不碰 `panelMoving`，可能正赶上开合动画。
+ */
+export function pinPanelWidth(scope: string, width: number): void {
+	if (state.panelWidth[scope] !== undefined) return;
+	update({ panelWidth: { ...state.panelWidth, [scope]: width } });
+	persistPanelPrefs();
+}
+
+/** 拖会话 `scope` 的面板区宽度，只改这个会话的。 */
+export function setPanelWidth(scope: string, width: number): void {
 	// 手动调宽立即接管，不能沿用尚未结束的开合动画。
-	update({ panelWidth: patch.width, panelMoving: false });
+	update({ panelWidth: { ...state.panelWidth, [scope]: width }, panelMoving: false });
 	persistPanelPrefs();
 }
 
@@ -279,10 +290,15 @@ const tabHandles = new Map<string, Pick<PanelProps, "setTitle" | "onClose">>();
 
 /** 空白页第一次发出去、成了会话 `id`：空白页上开着的标签交给它。 */
 export function handOverBlankTabs(id: string): void {
-	// 开合也交过去：空白页上开着（哪怕只有开始页），成了会话也开着；下一个空白页从收着开始。
+	// 开合也交过去：空白页上开着（哪怕只有开始页），成了会话也开着；下一个空白页从收着开始。宽度同样交过去。
 	if (panelOpenIn(state, "")) {
 		setPanelOpen(id, true);
 		setPanelOpen("", false);
+	}
+	const { "": width, ...widths } = state.panelWidth;
+	if (width !== undefined) {
+		update({ panelWidth: { ...widths, [id]: width } });
+		persistPanelPrefs();
 	}
 	const draftTabs = state.panelTabs[""];
 	if (!draftTabs) return;
@@ -310,10 +326,13 @@ export function forgetPanels(gone: (sessionId: string) => boolean): void {
 	const keep = <T>(record: Record<string, T>) => Object.fromEntries(Object.entries(record).filter(([scope]) => !goneId(scope) && !emptied.includes(scope)));
 	const panelOpen = keep(state.panelOpen);
 	const panelMaximized = keep(state.panelMaximized);
+	// 宽度只跟会话走：会话删了才清，标签关光了还留着，下次打开照旧。
+	const panelWidth = Object.fromEntries(Object.entries(state.panelWidth).filter(([scope]) => !goneId(scope)));
 	if (
 		!dropped.length &&
 		Object.keys(panelOpen).length === Object.keys(state.panelOpen).length &&
-		Object.keys(panelMaximized).length === Object.keys(state.panelMaximized).length
+		Object.keys(panelMaximized).length === Object.keys(state.panelMaximized).length &&
+		Object.keys(panelWidth).length === Object.keys(state.panelWidth).length
 	)
 		return;
 	for (const id of dropped) {
@@ -322,7 +341,7 @@ export function forgetPanels(gone: (sessionId: string) => boolean): void {
 		dropFile(id);
 		dropChildDraft(id);
 	}
-	update({ panelTabs, panelOpen, panelMaximized });
+	update({ panelTabs, panelOpen, panelMaximized, panelWidth });
 	persistTabs(panelTabs);
 	persistPanelPrefs();
 	if (panelWindow && dropped.includes(panelWindow.tab)) void window.plume.panelWindows.close();

@@ -72,14 +72,14 @@ test("标签按会话恢复，空白会话不落盘，损坏数据不进入界�
 		assert.deepEqual(readPanelTabs(), {});
 		entries.set(key, JSON.stringify({ a: { tabs: [{ id: 42 }], active: "bad" }, b: { tabs: [{ id: "ok" }], active: "missing" } }));
 		assert.deepEqual(readPanelTabs(), {});
-		assert.equal(readPanelPrefs().width, 0);
+		assert.deepEqual(readPanelPrefs().width, {});
 	} finally {
 		if (previous) Object.defineProperty(globalThis, "localStorage", previous);
 		else Reflect.deleteProperty(globalThis, "localStorage");
 	}
 });
 
-test("面板区开合按会话记：只存开着的，空白会话不落盘，宽度另存一份", () => {
+test("面板区开合、宽度按会话记：只存开着的，空白会话不落盘", () => {
 	const entries = new Map<string, string>();
 	const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 	Object.defineProperty(globalThis, "localStorage", {
@@ -90,13 +90,13 @@ test("面板区开合按会话记：只存开着的，空白会话不落盘，�
 		},
 	});
 	try {
-		writePanelPrefs({ open: { "": true, a: true, b: false }, width: 500 });
-		assert.deepEqual(readPanelPrefs(), { open: { a: true }, width: 500 });
+		writePanelPrefs({ open: { "": true, a: true, b: false }, width: { "": 400, a: 500, b: 640 } });
+		assert.deepEqual(readPanelPrefs(), { open: { a: true }, width: { a: 500, b: 640 } });
 		const key = [...entries.keys()][0]!;
 		entries.set(key, JSON.stringify({ open: true, width: 500 }));
-		assert.deepEqual(readPanelPrefs().open, {});
-		entries.set(key, JSON.stringify({ open: { a: "yes", b: true }, width: 500 }));
-		assert.deepEqual(readPanelPrefs().open, { b: true });
+		assert.deepEqual(readPanelPrefs(), { open: {}, width: {} });
+		entries.set(key, JSON.stringify({ open: { a: "yes", b: true }, width: { a: "wide", b: 120, c: -1 } }));
+		assert.deepEqual(readPanelPrefs(), { open: { b: true }, width: { b: 300 } });
 	} finally {
 		if (previous) Object.defineProperty(globalThis, "localStorage", previous);
 		else Reflect.deleteProperty(globalThis, "localStorage");
