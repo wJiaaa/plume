@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { CallContext, PluginContext } from "@plume/contract";
 import type { TerminalApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
-import { createDirectoryRequests } from "../src/open-directory.ts";
+import { createDirectoryRequests, typedCommand } from "../src/open-directory.ts";
 import { cdCommand } from "../src/shell.ts";
 
 const zsh = (directory: string) => cdCommand("darwin", "/bin/zsh", directory);
@@ -19,13 +19,13 @@ it("目录按会话等待，最新一次点击替换旧目录，两个窗口也�
 	expect(requests.take("a", current.id)).toBe(true);
 	expect(requests.take("a", current.id)).toBe(false);
 	expect(requests.get("a")).toBeNull();
-	expect(requests.get("b")?.command).toBe("cd '/other'\r");
+	expect(requests.get("b")?.command).toBe("cd '/other'");
 });
 
 it("路径里的空格、单引号和 shell 字符都留在单引号字面量内", () => {
 	const requests = createDirectoryRequests(zsh);
 	requests.open("a", "/work/it's $(echo no); [folder]");
-	expect(requests.get("a")?.command).toBe("cd '/work/it'\\''s $(echo no); [folder]'\r");
+	expect(requests.get("a")?.command).toBe("cd '/work/it'\\''s $(echo no); [folder]'");
 });
 
 it("Windows 上按新终端的 shell 写切目录：PowerShell 用字面路径，cmd 带 /d，Git Bash 仍是 POSIX 写法", () => {
@@ -57,7 +57,7 @@ it("终端逻辑入口跨窗口推送目录请求，领取和删会话后推送�
 		expect((await stream.next()).value).toBeNull();
 		api.openDirectory("a", "/work");
 		const request = (await stream.next()).value!;
-		expect(request.command).toBe("cd '/work'\r");
+		expect(request.command).toBe("cd '/work'");
 		expect(api.takeDirectory("a", request.id)).toBe(true);
 		expect(api.takeDirectory("a", request.id)).toBe(false);
 		expect((await stream.next()).value).toBeNull();
@@ -72,12 +72,18 @@ it("终端逻辑入口跨窗口推送目录请求，领取和删会话后推送�
 	}
 });
 
-it("代码块的命令和目录请求排在同一处：带回车，后点的替换先点的，只领取一次", () => {
+it("代码块的命令和目录请求排在同一处：后点的替换先点的，只领取一次", () => {
 	const requests = createDirectoryRequests(zsh);
 	requests.open("a", "/work");
 	requests.run("a", "pnpm install\npnpm dev");
 	const request = requests.get("a")!;
-	expect(request.command).toBe("pnpm install\npnpm dev\r");
+	expect(request.command).toBe("pnpm install\npnpm dev");
 	expect(requests.take("a", request.id)).toBe(true);
 	expect(requests.take("a", request.id)).toBe(false);
+});
+
+it("写进 shell 时带回车：shell 开着括号粘贴就把多行命令包成一段粘贴，没开时照旧逐字打进去", () => {
+	expect(typedCommand("for n in a b; do\n  echo $n\ndone", true)).toBe("\x1b[200~for n in a b; do\r  echo $n\rdone\x1b[201~\r");
+	expect(typedCommand("pnpm install\r\npnpm dev", false)).toBe("pnpm install\rpnpm dev\r");
+	expect(typedCommand("cd '/work'", true)).toBe("\x1b[200~cd '/work'\x1b[201~\r");
 });

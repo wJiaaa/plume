@@ -22,7 +22,7 @@ import { terminalKey } from "./keys.ts";
 import { type LinkActions, linkify } from "./links.ts";
 import { paletteFromTheme, typography } from "./look.ts";
 import { MESSAGES } from "./messages.ts";
-import type { DirectoryRequest } from "./open-directory.ts";
+import { type DirectoryRequest, typedCommand } from "./open-directory.ts";
 import { TerminalMenu } from "./TerminalMenu.tsx";
 import { TerminalSearch } from "./TerminalSearch.tsx";
 
@@ -284,9 +284,17 @@ export function TerminalPane({
 				for await (const output of call) {
 					if (stopped) break;
 					if (output.type === "data") {
-						if (replaying.current) terminal.resize(output.cols, output.rows);
-						// write 异步解析；必须写完再改尺寸，否则后面的 resize 会改变前一段的折行。
-						await new Promise<void>((resolve) => terminal.write(output.data, resolve));
+						if (replaying.current) {
+							terminal.resize(output.cols, output.rows);
+							// write 异步解析；必须写完再改尺寸，否则后面的 resize 会改变前一段的折行。
+							await new Promise<void>((resolve) => terminal.write(output.data, resolve));
+						} else {
+							/*
+							 * 接着收的不用等：一块一等时 xterm 每块排一次 setTimeout，嵌套的被钳到 4ms，shell 逐字回显的
+							 * 两千块就要画好几秒，画面远远落在 shell 后面。不等时 xterm 自己把排着的合成一次解析。
+							 */
+							terminal.write(output.data);
+						}
 					} else if (output.type === "ready") {
 						replaying.current = false;
 						terminal.resize(size.current.cols, size.current.rows);
@@ -310,6 +318,8 @@ export function TerminalPane({
 
 	/** shell 不在了，又不是看着它退出的（比如重开过 agent 进程）：说一声，给一个新开的出路。 */
 	const gone = tabs !== null && active !== "" && !mine && exited === null;
+	/** 正在回放记下的输出：xterm 分片解析、片间就画，露着的话看到的是整段历史从头往下刷。 */
+	const restoring = active !== "" && ready !== active && exited === null;
 
 	useEffect(() => {
 		if (!shown || !directoryRequest) return;
@@ -325,7 +335,7 @@ export function TerminalPane({
 		void takeDirectory(directoryRequest.id)
 			.then(async (taken) => {
 				if (!taken) return;
-				await api.write(active, directoryRequest.command);
+				await api.write(active, typedCommand(directoryRequest.command, term.current?.modes.bracketedPasteMode ?? false));
 				term.current?.focus();
 			})
 			.catch(onDirectoryError);
@@ -343,6 +353,7 @@ export function TerminalPane({
 					ref={host}
 					data-terminal-id={active}
 					data-terminal-ready={active !== "" && ready === active ? "true" : undefined}
+					data-terminal-replaying={restoring ? "" : undefined}
 					className="terminal-host"
 					style={gone ? { visibility: "hidden" } : undefined}
 					onContextMenu={(event) => {

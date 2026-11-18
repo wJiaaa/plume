@@ -26,6 +26,14 @@
 	padding: 6px 8px 0;
 }
 
+/*
+ * 回放历史时先不露出格子，回放完一次画出离开前那一屏（见 TerminalPane.tsx）。藏的是里面的 xterm 而不是宿主：宿主穿着终端的
+ * 底色；用透明而不是 visibility，输入框藏起来也还接得住焦点。
+ */
+.terminal-host[data-terminal-replaying] .xterm {
+	opacity: 0;
+}
+
 .terminal-gone {
 	position: absolute;
 	inset: 0;
