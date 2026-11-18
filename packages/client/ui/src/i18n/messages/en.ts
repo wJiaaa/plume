@@ -708,6 +708,8 @@ export const en = {
 	"sessionMenu.sessionIdCopied": "Session ID copied",
 	"panel.failed": "This panel ran into an error. See the developer tools log for details.",
 	"page.failed": "This page ran into an error. See the developer tools log for details.",
+	"app.starting": "Starting Plume…",
+	"app.startFailed": "Plume couldn’t start. Restart the app to try again.",
 	"app.agentExited": "The agent process exited (code {code}). Restart Plume.",
 	"shell.hideSidebar": "Hide the sidebar (⌘B)",
 	"shell.showSidebar": "Show the sidebar (⌘B)",

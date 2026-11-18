@@ -111,7 +111,6 @@ export function start(service: Remote<AgentService>): void {
 	startMarket(service);
 	// 模型设置由 models/store.ts 管：哪里改了都经它重新取一次，这里跟着换。
 	subscribeModels(() => update({ settings: settingsView() }));
-	window.plume.onAgentExit((code) => update({ fatal: translate("app.agentExited", { code }) }));
 	window.plume.onFullScreenChange((fullScreen) => update({ fullScreen }));
 	window.addEventListener("resize", () => {
 		update({ windowWidth: window.innerWidth, windowHeight: window.innerHeight, panelMoving: false });

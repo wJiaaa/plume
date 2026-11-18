@@ -76,6 +76,7 @@ import { checkFileTerminal } from "./smoke-file-terminal.ts";
 import { checkSessionWindow } from "./smoke-session-window.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
+import { checkBootScreen } from "./smoke-boot-screen.ts";
 import { recentSessions } from "./tray-menu.ts";
 import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
 
@@ -210,6 +211,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, ${JSON.stringify(value)});
 				input.dispatchEvent(new Event('input', { bubbles: true }));
 			})()`);
+
+		if (process.env.PLUME_SMOKE_ONLY === "boot-screen") {
+			await checkBootScreen({ window, outDir, capture });
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "boot-screen" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
 
 		const checkSessionMenu = async () => {
 			// 右键操作走真实页面、预加载和 IPC；只替换系统出口，不改用户剪贴板、不弹访达窗口。
