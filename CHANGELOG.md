@@ -2,6 +2,26 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.2] - 2026-11-18
+
+<!-- plume:notes en -->
+### Changes
+
+- **Plume shows a start screen while it loads.** The main window used to stay blank until the background process was connected and plugins were ready. Now it shows the Plume logo and a loading bar right away, then switches to the main window. If startup fails, the start screen tells you to restart the app instead of staying empty.
+- **Each chat keeps its own panel width.** Dragging the panel area wider in one chat no longer changes the width in your other chats. A chat you haven't resized opens its panel at four tenths of the workspace, and widths are remembered after a restart.
+- **Multi-line commands run in the terminal in one go.** "Run in terminal" with a `for` loop or heredoc used to show a continuation prompt for every line and echo the command letter by letter. In shells that support bracketed paste (zsh, recent bash) the whole command now goes in at once and runs as a single command.
+- **The terminal keeps up with the shell.** The screen no longer types out output character by character seconds after the shell has moved on. When you reopen a terminal, its last screen appears at once instead of the history scrolling past from the top.
+- **On-demand MCP calls are grouped.** When there are many MCP tools and the agent alternates between searching for and calling them, those calls now collapse into one group in the transcript instead of one line each.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **启动时先显示启动页。** 原来主窗口要等连上后台、装好插件才有画面，这段时间一片空白。现在一打开就显示 Plume 的标志和加载条，准备好后再进主界面；启动失败时启动页会提示重启应用，不再一直空着。
+- **每个对话记自己的面板宽度。** 在一个对话里把面板区拖宽，别的对话不再跟着变。没拖过的对话，面板区第一次打开时占工作区的四成；宽度重启后照旧。
+- **多行命令在终端里一次执行。** 「在终端运行」带 `for` 循环或 heredoc 的命令时，原来每行出一个续行提示、一个字一个字地回显。现在在支持括号粘贴的 shell（zsh、新版 bash）里整段一次进去，作为一条命令执行。
+- **终端画面跟得上 shell。** 不再出现 shell 早已往下走了、屏幕上还在一个字一个字补输出的情况。重新打开终端时直接看到离开前那一屏，不再看着历史从头往下刷。
+- **按需调用的 MCP 工具会合成一组。** MCP 工具多时，Agent 搜一次、调一次交替着用，转录里原来一次一行；现在连着的这些调用合成一组。
+
 ## [0.7.1] - 2026-11-17
 
 <!-- plume:notes en -->
