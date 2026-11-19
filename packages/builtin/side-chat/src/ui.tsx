@@ -11,7 +11,7 @@
 import type { PanelProps, Remote, SessionChoice, UiContext, UiPlugin } from "@plume/contract/ui";
 import type { OutgoingMessage } from "@plume/contract";
 import { ChoiceMark, Confirm, PanelEmpty, Text, useI18n } from "@plume/ui";
-import { MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
+import { Activity, History, MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type { SideChatApi, SideChatSettings } from "./api.ts";
 import { dispatchCard } from "./DispatchCard.tsx";
@@ -21,6 +21,8 @@ import sideChatCss from "./side-chat.css";
 
 const PANEL = "chat";
 const NAME = "plume.side-chat";
+/** 转录一行里搜的词只露个开头。 */
+const SUBJECT_CHARS = 40;
 
 /** 卡片的布局类：宿主不加载插件的样式表，自己挂一份；按插件名认那个元素，重新加载时换内容不叠加。 */
 function mountStyles(): void {
@@ -205,6 +207,23 @@ export default {
 		api = context.remote<SideChatApi>();
 		mountStyles();
 		context.toolCard("dispatch_task", dispatchCard(context, api));
+		// 转录里那一行：「翻看主会话 关键词」「暂停主会话」，不露工具名。
+		context.toolLine("read_main_chat", {
+			verb: (locale) => MESSAGES[locale].readMainChat,
+			subject: (args) => (typeof args.query === "string" && args.query.trim() ? args.query.trim().slice(0, SUBJECT_CHARS) : undefined),
+			icon: History,
+		});
+		context.toolLine("control_main", {
+			verb: (locale) => MESSAGES[locale].controlMain,
+			verbFor({ args }, locale) {
+				const text = MESSAGES[locale];
+				if (args.action === "pause") return args.discardPlan === true ? text.controlMainPauseDiscard : text.controlMainPause;
+				if (args.action === "resume") return text.controlMainResume;
+				if (args.action === "status") return text.controlMainStatus;
+				return undefined;
+			},
+			icon: Activity,
+		});
 		context.panel(PANEL, SideChatPanel, {
 			title: (locale) => MESSAGES[locale].title,
 			description: (locale) => MESSAGES[locale].description,

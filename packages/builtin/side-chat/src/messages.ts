@@ -50,6 +50,12 @@ const zhCN = {
 	taskResumeOne: "继续这个任务",
 	taskRemove: "从列表移除",
 	taskRemoveOne: "把这条从列表移除",
+	readMainChat: "翻看主会话",
+	controlMain: "控制主会话",
+	controlMainPause: "暂停主会话",
+	controlMainPauseDiscard: "暂停主会话并取消清单",
+	controlMainResume: "让主会话继续",
+	controlMainStatus: "查看主会话状态",
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = {
@@ -102,5 +108,11 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		taskResumeOne: "Carry this task on",
 		taskRemove: "Off the list",
 		taskRemoveOne: "Take this one off the list",
+		readMainChat: "Read the main chat",
+		controlMain: "Control the main session",
+		controlMainPause: "Pause the main session",
+		controlMainPauseDiscard: "Pause the main session and drop its plan",
+		controlMainResume: "Resume the main session",
+		controlMainStatus: "Check the main session",
 	},
 };
