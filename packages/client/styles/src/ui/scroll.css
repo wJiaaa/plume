@@ -212,8 +212,7 @@ div.plume-composer:focus-within {
  * 敏感得多，于是渐隐看上去先撑住、然后戛然而止，止住的地方读起来像有人画了一道淡淡的线。输入框上方的
  * 「虚线」从来不是边框，而是一段两档渐变的终点。
  *
- * 两个深度默认都是零，所有档都塌到两端之一，遮罩整个不透明——所以「没有渐隐」是同一条声明换了数字，
- * 而不是第二层叠在第一层上淡入。
+ * 两个深度都是零时不挂遮罩，省去覆盖整个视口的合成缓冲；保留遮罩原有的层叠顺序。
  *
  * 深度由 `Scroller` 按那一头藏了多少、和内容在同一帧写进来，这里不走过渡：定时过渡会让换会话、内容整块
  * 换掉时，内容先不带遮罩亮一帧，再在两百多毫秒里暗下去，看着就是闪一下。从顶上往下推时深度跟着距离
@@ -233,6 +232,10 @@ div.plume-composer:focus-within {
 }
 
 .plume-fade-y {
+	isolation: isolate;
+}
+
+.plume-fade-y:where([data-plume-fading]) {
 	mask-image: linear-gradient(
 		to bottom,
 		transparent 0,

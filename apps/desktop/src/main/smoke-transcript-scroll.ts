@@ -115,6 +115,28 @@ export async function checkTranscriptScroll(options: {
 	try {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "新建对话");
+		const fade = await page<{ empty: boolean; top: boolean; middle: boolean; bottom: boolean; cleared: boolean }>(`(async () => {
+			const view = document.querySelector('[data-screen=empty] .plume-scroll-view');
+			const masked = () => getComputedStyle(view).maskImage !== 'none';
+			const depth = (edge) => parseFloat(getComputedStyle(view).getPropertyValue('--plume-fade-' + edge));
+			const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			const empty = view.scrollHeight === view.clientHeight && !masked();
+			const filler = document.createElement('div');
+			filler.style.flex = '0 0 ' + view.clientHeight * 2 + 'px';
+			view.append(filler);
+			await settle();
+			const top = masked() && depth('top') === 0 && depth('bottom') > 0;
+			view.scrollTop = 8;
+			await settle();
+			const middle = masked() && depth('top') === 8 && depth('bottom') > 0;
+			view.scrollTop = view.scrollHeight;
+			await settle();
+			const bottom = masked() && depth('top') > 0 && depth('bottom') === 0;
+			filler.remove();
+			await settle();
+			return { empty, top, middle, bottom, cleared: view.scrollTop === 0 && !masked() };
+		})()`);
+		assert.deepEqual(fade, { empty: true, top: true, middle: true, bottom: true, cleared: true }, "滚动遮罩应只在有渐隐深度时启用");
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText(PROMPT);
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
