@@ -103,16 +103,22 @@ function ToolGroup({
 	const removed = useCalls((all) => calls.reduce((sum, { block }) => sum + diffOf(all.results.get(block.id), "removed"), 0));
 	const answeredBy = useCalls((all) => calls.flatMap(({ block }) => all.results.get(block.id)?.answeredBy ?? []), sameItems);
 	const jobs = useCalls((all) => calls.map(({ block }) => jobDescription(all, block)), sameItems);
-	const single = members.length === 1 && members[0]!.kind === "call";
+	// 连着查同一个后台任务的几次合成一行（`foldPolls`）后只剩这一行，也是单独一行：不然标题说「查看输出」，点开里面只有一行。
+	const folded = foldPolls(members);
+	const polls = folded.length === 1 && folded[0]!.kind === "polls" ? folded[0]!.calls : undefined;
+	const single = (members.length === 1 && members[0]!.kind === "call") || polls !== undefined;
 	const only = single ? calls[0]! : undefined;
-	const { startedAt } = useCallLive(only?.block.id ?? "");
+	// 几次查看的状态跟最后一次走：前几次早答完了，还在等的只会是最后那一次。
+	const latest = polls ? polls[polls.length - 1]! : only;
+	const last = latest ? calls.indexOf(latest) : 0;
+	const { startedAt } = useCallLive(latest?.block.id ?? "");
 	// 挂上时就在跑的一组（这一轮新做的）淡入；翻回来看历史时原样出现。
-	const arrival = useArrival(live || liveStatus(statuses[0]));
+	const arrival = useArrival(live || liveStatus(statuses[last]));
 
 	/*
 	 * 只有一次调用时说它；跑着的这一段前面挂着推理（显示推理时）也还是说它。几次调用说总的，跑着也一样，见文件头。
 	 */
-	const one = calls.length === 1 ? calls[0]! : undefined;
+	const one = calls.length === 1 ? calls[0]! : polls ? latest : undefined;
 	const want = one && (single || live) ? one.block.id : SUMMARY;
 	const held = useHeldKey(want);
 	const current = held === SUMMARY ? undefined : (calls.find(({ block }) => block.id === held) ?? calls[calls.length - 1]);
@@ -134,7 +140,7 @@ function ToolGroup({
 		const callLive = liveStatus(status);
 		const draft = writeDraft(current.block, status);
 		lines = draft.lines;
-		const label = callLabel(draft.block, callLive, cwd, jobs[at], details, status === "pending");
+		const label = polls ? { verb: describePolls(jobs[at], polls.length) } : callLabel(draft.block, callLive, cwd, jobs[at], details, status === "pending");
 		const failed = status === "error" && !stops[at] && !unanswered[at];
 		const marks = callLive ? null : (
 			<Marks
@@ -182,10 +188,10 @@ function ToolGroup({
 	const tail = members[members.length - 1];
 	const writing = live && tail?.kind === "thinking" && thinkingLive(tail.run) ? tail.run : null;
 	// 只有一次调用、还没开跑（参数在写、排在后面）的没有可看的：不能点开。答完了、起的任务还在后台跑的有结果可看。
-	const answered = useCalls((all) => (only ? all.results.has(only.block.id) : false));
-	const expandable = !single || startedAt !== undefined || answered || !liveStatus(statuses[0]);
+	const answered = useCalls((all) => (latest ? all.results.has(latest.block.id) : false));
+	const expandable = !single || startedAt !== undefined || answered || !liveStatus(statuses[last]);
 	const attrs = only
-		? { "data-tool": only.block.name, "data-tool-call": only.block.id, "data-status": SLOT_STATUS[statuses[0] ?? "pending"] }
+		? { "data-tool": only.block.name, "data-tool-call": only.block.id, "data-status": SLOT_STATUS[statuses[last] ?? "pending"] }
 		: { "data-plume-run": live ? "running" : "done" };
 
 	return (
@@ -197,7 +203,7 @@ function ToolGroup({
 				data-open={open && expandable ? "" : undefined}
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
-				{only && <RowIcon name={only.block.name} failed={(statuses[0] === "error" && !stops[0] && !unanswered[0]) || failedLater} />}
+				{only && <RowIcon name={only.block.name} failed={(statuses[last] === "error" && !stops[last] && !unanswered[last]) || failedLater} />}
 				<SwapText swapKey={swapKey} glide={glide}>
 					{words}
 				</SwapText>
@@ -215,7 +221,7 @@ function ToolGroup({
 					{only ? (
 						<div className="tool-group-card">
 							<div className="p-2">
-								<ToolBody call={only} label={text} />
+								<ToolBody call={only} polls={polls} label={text} />
 							</div>
 						</div>
 					) : (

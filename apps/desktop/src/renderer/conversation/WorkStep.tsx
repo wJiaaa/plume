@@ -57,7 +57,10 @@ function WorkStepRow({
 	 * 在换的那一次渲染里读，读的是屏幕上还挂着的旧那一行。
 	 */
 	const box = useRef<HTMLDivElement>(null);
-	const single = step.members.length === 1;
+	// 连着查同一个后台任务的几次合成一行（`foldPolls`）后只剩这一行，也是单独一行。
+	const folded = foldPolls(step.members);
+	const polls = folded.length === 1 && folded[0]!.kind === "polls" ? folded[0]!.calls : undefined;
+	const single = step.members.length === 1 || polls !== undefined;
 	const wasSingle = useRef(single);
 	const from = useRef<{ words: number; trail: number } | null>(null);
 	if (wasSingle.current && !single) {
@@ -71,7 +74,7 @@ function WorkStepRow({
 	if (single) {
 		return (
 			<div ref={box} data-plume-step={step.category}>
-				<StepCall call={step.calls[0]!} {...(thinking ? { thinking } : {})} />
+				<StepCall call={step.calls[0]!} {...(thinking ? { thinking } : {})} {...(polls ? { polls } : {})} />
 			</div>
 		);
 	}
