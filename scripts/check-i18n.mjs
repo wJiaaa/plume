@@ -81,6 +81,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-message-edits.ts",
 	// 独立窗口的冒烟按中文界面找菜单项，断言是写给开发者的。
 	"apps/desktop/src/main/smoke-session-window.ts",
+	// 分屏的冒烟按中文界面找菜单项，断言是写给开发者的。
+	"apps/desktop/src/main/smoke-split.ts",
 	// 桌面兼容的冒烟按中文界面找面板开关和「添加面板」，断言是写给开发者的。
 	"apps/desktop/src/main/smoke-desktop-compat.ts",
 	// 输入历史、列表设置菜单、排队条菜单的冒烟按中文界面找按钮，断言是写给开发者的。

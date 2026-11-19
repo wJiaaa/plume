@@ -26,6 +26,9 @@ const CONTENT_MIN = 420;
 
 export const PANEL_MIN = 300;
 
+/** 分屏时每一屏至少这么宽（一列读得下去的正文）；工作区放不下两屏时只显示焦点那一屏，拉宽后两屏回来。 */
+export const SCREEN_MIN = CONTENT_MIN;
+
 export type LayoutMode = "compact" | "regular";
 
 export function layoutMode(windowWidth: number): LayoutMode {

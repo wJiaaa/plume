@@ -517,6 +517,22 @@
 		border-left-width: 1px;
 		border-left-color: var(--plume-line-float);
 	}
+	/*
+	 * 分屏：两屏之间只有一道 1px 的线（Chat.tsx 的 `data-split-divider`），挨着它的那一边不圆、不描边，和别的栏之间一样拼成一整块。
+	 * 面板身子左边那道分隔线（上一条）选择器更具体，不受影响。
+	 */
+	[data-split-pane="left"] :is([data-frame-body], [data-frame-clip]),
+	[data-split-pane="left"][data-panel-layout] {
+		border-right-width: 0;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+	}
+	[data-split-pane="right"] :is([data-frame-body], [data-frame-clip]),
+	[data-split-pane="right"][data-panel-layout] {
+		border-left-width: 0;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
+	}
 	/* 上下排时面板区的标签行夹在两栏中间，同铺在底下那一块上：在两栏之间那 4px 的正中横一道线隔开。不画在面板区身上，免得把它往下顶 1px、和常驻面板的内容错开。 */
 	[data-panel-layout="column"] > [data-panel-area]::before {
 		content: "";

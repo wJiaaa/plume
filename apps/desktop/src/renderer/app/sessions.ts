@@ -8,6 +8,7 @@ import { removeFiles, moveFiles } from "../files/open-file.ts";
 import { applyLive, peekLiveSession, readSessionView, reloadLive, viewChange } from "../session-live.ts";
 import { publishSessionChanges } from "../plugin-session-changes.ts";
 import { record, sameEntry, step } from "../nav-history.ts";
+import { layoutMode } from "../layout.ts";
 import { pluginsChanged } from "../market/store.ts";
 import { approvalChanged, outcome, sessionRead, sessionsChanged } from "../sidebar/activity.ts";
 import { forgetThreadFolds } from "../sidebar/prefs.ts";
@@ -75,7 +76,7 @@ function apply(event: AgentEvent): void {
 		case "sessions": {
 			const before = state.sessions;
 			announceFinished(state.sessions, event.sessions);
-			sessionsChanged(state.sessions, event.sessions, state.currentId);
+			sessionsChanged(state.sessions, event.sessions, onScreen);
 			for (const [id, view] of parked) {
 				const summary = event.sessions.find((session) => session.id === id);
 				if (summary) parked.set(id, { ...view, summary });
@@ -87,8 +88,13 @@ function apply(event: AgentEvent): void {
 				const next = current.currentId === undefined ? undefined : event.sessions.find((session) => session.id === current.currentId);
 				const justArchived = next?.archived === true && current.sessions.some((session) => session.id === next.id && !session.archived);
 				const gone = current.currentId !== undefined && (!next || justArchived);
+				// 另一屏的会话删掉了、刚归档了，那一屏同样收掉。
+				const other = current.split && event.sessions.find((session) => session.id === current.split?.sessionId);
+				const splitGone =
+					current.split !== undefined && (!other || (other.archived && current.sessions.some((session) => session.id === other.id && !session.archived)));
 				return {
 					sessions: event.sessions,
+					...(splitGone ? { split: undefined } : {}),
 					...(gone
 						? { currentId: undefined, view: undefined, loading: false }
 						: summary && current.view
@@ -138,7 +144,7 @@ function apply(event: AgentEvent): void {
 		case "notice":
 			// 带 level 的（插件说的、循环在恢复）不分是不是当前会话：后台那个会话停下了，人也该知道。
 			if (event.level) notify(event.text, event.level);
-			else if (state.currentId === event.sessionId) notify(event.text, "error");
+			else if (onScreen(event.sessionId)) notify(event.text, "error");
 			return;
 		case "plugins":
 			pluginsChanged(event.plugins);
@@ -285,12 +291,17 @@ function park(): void {
 	}
 }
 
-/** 把一个会话换上屏；`loading` 时 view 只是摘要，读完再由 `select` 换成整份。 */
+/**
+ * 把一个会话换上屏（焦点那一屏）；`loading` 时 view 只是摘要，读完再由 `select` 换成整份。
+ * 它正在另一屏上：两屏对调焦点，离开的会话留在原来那一屏，和换上来的同一次更新里换手，不会有一帧两屏是同一个会话。
+ * 离开的是空白页时另一屏不放空白页，分屏收成一屏（空白页的草稿按项目留着）。
+ */
 function show(view: SessionView, loading: boolean): void {
 	const sessionId = view.summary.id;
 	if (state.currentId !== sessionId) park();
 	parked.delete(sessionId);
 	const project = view.summary.project;
+	const split = state.split;
 	update({
 		currentId: sessionId,
 		view,
@@ -299,7 +310,53 @@ function show(view: SessionView, loading: boolean): void {
 		screen: "chat",
 		drawerOpen: false,
 		target: project && state.projects.some((entry) => entry.id === project) ? { project } : {},
+		...(split?.sessionId === sessionId
+			? { split: state.currentId ? { ...split, sessionId: state.currentId, side: split.side === "left" ? "right" : "left" } : undefined }
+			: {}),
 	});
+}
+
+/**
+ * 会话菜单「打开方式 › 分屏」：在右边另开一屏放它，焦点跟过去。已经分屏时换掉另一屏的会话；它已经在屏上就只把焦点给它。
+ * 焦点那一屏是空白页时焦点留在空白页：焦点挪走空白页就收掉了，见 `show`。
+ */
+export function openSplit(sessionId: string): void {
+	if (!state.sessions.some((session) => session.id === sessionId)) return;
+	if (state.currentId === sessionId || state.split?.sessionId === sessionId) {
+		void select(sessionId);
+		return;
+	}
+	if (layoutMode(state.windowWidth) === "compact") {
+		notify(translate("split.tooNarrow"), "warn");
+		return;
+	}
+	update({ screen: "chat", split: { sessionId, side: state.split?.side ?? "right", share: state.split?.share ?? 0.5 } });
+	if (state.currentId) void select(sessionId);
+	else sessionRead(sessionId);
+}
+
+/** 关掉一屏：关的是另一屏就回到一屏；关的是焦点那一屏，焦点交给另一屏。 */
+export function closeScreen(sessionId: string | undefined): void {
+	const split = state.split;
+	if (!split) return;
+	if (sessionId === split.sessionId) {
+		update({ split: undefined });
+		focusComposer();
+		return;
+	}
+	update({ split: undefined });
+	void select(split.sessionId);
+}
+
+/** 拖两屏之间的分隔线。 */
+export function setSplitShare(share: number): void {
+	const split = state.split;
+	if (split && split.share !== share) update({ split: { ...split, share } });
+}
+
+/** 会话在不在屏上：焦点那一屏的，分屏时另一屏的也算。 */
+function onScreen(sessionId: string): boolean {
+	return sessionId === state.currentId || sessionId === state.split?.sessionId;
 }
 
 /**
@@ -310,7 +367,7 @@ function announceFinished(previous: readonly SessionSummary[], next: readonly Se
 	if (panelWindow || sessionWindow) return;
 	const before = new Map(previous.map((session) => [session.id, session]));
 	for (const session of next) {
-		if (session.running || !before.get(session.id)?.running || session.kind !== "top" || session.id === state.currentId) continue;
+		if (session.running || !before.get(session.id)?.running || session.kind !== "top" || onScreen(session.id)) continue;
 		const result = outcome(session.stop?.reason);
 		if (!result) continue;
 		const title = session.title || translate("sessionOps.newSession");
