@@ -310,88 +310,62 @@
 }
 
 /*
- * 扫过一行字的那道光。
+ * 扫过一行字的那道光（照 Claude 桌面版逐帧量的）。
  *
- * 字始终是它自己的颜色，光带经过时只让一段字**更深**。没有任何东西淡出；这一行每一刻都读得清，动的是强调，
- * 不是存在。反过来让光带把字往背景色提亮的话，字只在光带扫过的那一瞬看得见——一行一直在闪、永远读不了的字。
- */
-@keyframes plume-glide {
-	from {
-		background-position: 200% 0;
-	}
-	to {
-		background-position: -100% 0;
-	}
-}
-
-.plume-glide {
-	background-image: linear-gradient(
-		100deg,
-		var(--plume-ink-faint) 0%,
-		var(--plume-ink-faint) 42%,
-		var(--plume-ink) 50%,
-		var(--plume-ink-faint) 58%,
-		var(--plume-ink-faint) 100%
-	);
-	background-size: 300% 100%;
-	-webkit-background-clip: text;
-	background-clip: text;
-	color: transparent;
-	animation: plume-glide 2.6s linear infinite;
-}
-
-/* 没有动效时，它就是这一行平常的颜色。 */
-@media (prefers-reduced-motion: reduce) {
-	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-glide {
-		background: none;
-		color: var(--plume-ink-faint);
-		-webkit-background-clip: border-box;
-		background-clip: border-box;
-	}
-}
-
-:root[data-reduce-motion="on"] .plume-glide {
-	background: none;
-	color: var(--plume-ink-faint);
-	-webkit-background-clip: border-box;
-	background-clip: border-box;
-}
-
-/*
- * 同一道光，走在运行行行尾的那几段状态上：灰字走灰光，警示色的字走黄光。
+ * 字是它平常的颜色，一道约三个字宽的**浅**光带从左往右扫过去（一圈的前 30%，约 0.9s，两头缓），然后停着，3s 一圈。
+ * 停着的那大半圈里字是实的、读得清；扫过的那一下只让三个字淡一下，读的人知道它还在跑，又不至于一行一直在闪。
+ *
+ * 光带按 px 定宽（`background-size` 是两倍字宽再加两道光带宽、不平铺）：长句短句扫过去的样子一样，起止都在字外，
+ * 停着时整句没有一点光。
  *
  * 底色只能写成变量，不能写 `currentColor`：字色要让出来（`color: transparent`）才看得见渐变，而 `currentColor` 此刻正是
- * 那个透明色，整段会消失。所以底色和亮处各一个变量，警示那一档只换这两个变量。
- *
- * 亮处是底色和正文色之间的一截——整档走到正文色的话，黄字会被洗成灰白，警示就没了。和 `.plume-glide` 一样，
- * 这一行每一刻都读得清：动的是强调，不是存在。
+ * 那个透明色，整段会消失。所以底色和亮处各一个变量，别的几档只换这两个变量。
  */
+@keyframes plume-glide {
+	0% {
+		background-position: 100% 0;
+		animation-timing-function: var(--plume-e-soft);
+	}
+	30%,
+	100% {
+		background-position: 0% 0;
+	}
+}
+
+.plume-glide,
 .plume-glide-status {
-	--plume-glide-base: var(--plume-ink-faint);
-	--plume-glide-lit: var(--plume-ink-muted);
+	--plume-glide-base: var(--plume-ink-muted);
+	--plume-glide-lit: color-mix(in srgb, var(--plume-ink-faint) 45%, var(--plume-bg));
 	background-image: linear-gradient(
-		100deg,
-		var(--plume-glide-base) 0%,
-		var(--plume-glide-base) 42%,
+		90deg,
+		var(--plume-glide-base) 0,
+		var(--plume-glide-base) calc(50% - 36px),
 		var(--plume-glide-lit) 50%,
-		var(--plume-glide-base) 58%,
+		var(--plume-glide-base) calc(50% + 36px),
 		var(--plume-glide-base) 100%
 	);
-	background-size: 300% 100%;
+	background-size: calc(200% + 144px) 100%;
+	background-repeat: no-repeat;
 	-webkit-background-clip: text;
 	background-clip: text;
 	color: transparent;
-	animation: plume-glide 2.6s linear infinite;
+	animation: plume-glide 3s infinite;
+}
+
+/* 运行行行尾的那几段状态：灰字走更浅的光，警示色的字走它自己更浅的那一档。 */
+.plume-glide-status {
+	--plume-glide-base: var(--plume-ink-faint);
+	--plume-glide-lit: color-mix(in srgb, var(--plume-ink-faint) 40%, var(--plume-bg));
 }
 
 .plume-glide-status.plume-glide-warn {
 	--plume-glide-base: var(--plume-warning);
-	--plume-glide-lit: color-mix(in srgb, var(--plume-warning) 55%, var(--plume-ink));
+	--plume-glide-lit: color-mix(in srgb, var(--plume-warning) 45%, var(--plume-bg));
 }
 
 /* 没有动效时，它就是这一行平常的颜色。 */
 @media (prefers-reduced-motion: reduce) {
-	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) .plume-glide-status {
+	:root:not([data-reduce-motion="on"], [data-reduce-motion="off"]) :is(.plume-glide, .plume-glide-status) {
 		background: none;
 		color: var(--plume-glide-base);
 		-webkit-background-clip: border-box;
@@ -399,7 +373,7 @@
 	}
 }
 
-:root[data-reduce-motion="on"] .plume-glide-status {
+:root[data-reduce-motion="on"] :is(.plume-glide, .plume-glide-status) {
 	background: none;
 	color: var(--plume-glide-base);
 	-webkit-background-clip: border-box;

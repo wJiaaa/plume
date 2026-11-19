@@ -1,5 +1,8 @@
 /**
- * 工具组标题、工具行上那句话换掉时：原地交叉淡入淡出，不滚动。宽度从旧句缓到新句，后面的箭头跟着滑过去，不在换的那一帧跳。
+ * 工具组标题、工具行、运行行上那句话换掉时：原地交叉淡入淡出，不滚动。宽度从旧句缓到新句，后面的箭头跟着滑过去，不在换的那一帧跳。
+ *
+ * 照 Claude 桌面版逐帧量的样子：缓宽度的那一阵框的右沿是一截渐隐（`data-moving`），字被它裁着、不打省略号——变宽时新句
+ * 从左往右一个个露出来，变窄时从右往左收回去；停下来以后才按框宽打省略号。
  *
  * 新旧两句叠在同一格里（`inline-grid`），新的淡入、旧的淡出，旧的淡完才拿掉。框宽在换的那一下钉成像素：量出旧句和新句各自
  * 的宽，钉回旧宽、再设新宽，过渡走完放回 auto——一直钉着的话，字体晚到、改了字号之后框还是旧宽。框是 `overflow: hidden`：
@@ -94,7 +97,9 @@ export function SwapText({ swapKey, glide = false, children }: { swapKey: string
 			ref={box}
 			className="tool-swap"
 			onTransitionEnd={(event) => {
-				if (event.target === event.currentTarget && event.propertyName === "width") event.currentTarget.style.width = "";
+				if (event.target !== event.currentTarget || event.propertyName !== "width") return;
+				event.currentTarget.style.width = "";
+				delete event.currentTarget.dataset.moving;
 			}}
 		>
 			{/*
@@ -137,7 +142,12 @@ function easeWidth(element: HTMLElement, layer: HTMLElement, from: number): numb
 	const start = moving ? element.getBoundingClientRect().width : from;
 	if (moving) element.style.width = "";
 	const to = layer.getBoundingClientRect().width;
-	if (Math.abs(start - to) < 0.5) return to;
+	// 不用缓：缓到一半被放回 auto 的那次过渡已经取消、不会再有 `transitionend`，右沿的渐隐要在这里摘掉，不然一直挂着。
+	if (Math.abs(start - to) < 0.5) {
+		delete element.dataset.moving;
+		return to;
+	}
+	element.dataset.moving = "";
 	element.style.width = `${start}px`;
 	void element.offsetWidth;
 	element.style.width = `${to}px`;

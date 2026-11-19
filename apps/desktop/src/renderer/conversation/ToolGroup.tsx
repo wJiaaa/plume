@@ -8,6 +8,7 @@
  *   每句淡入淡出一次、箭头被推来推去；每一次在做什么，点开看卡片里的行。从一次长成几次时换一句，每一句至少挂 650ms（`useHeldKey`）。
  * - **换字**：原地交叉淡入淡出，宽度缓过去（`SwapText`），后面的箭头不跳。
  * - **一行**：跑着「正在修改 retry.ts」，跑完「修改 retry.ts +2 −1」；模型写了说明的命令说它的说明，失败的在后面标红「失败」。
+ *   开跑了的那一行深一档、行首换成转圈、行尾数着跑了几秒；跑完的行淡一档：点开一组，一眼看出在跑的是哪几行。
  *   一组跑着时新来的行从卡片下沿露出来、同时淡入（`useRevealRows`、`useArrival`）。
  * - **末尾的推理还在写**：标题后面接一句「正在思考 · 5s」，句子本身不动。推理和回来的后台命令结果在卡片里各占一行。
  *
@@ -17,7 +18,7 @@
  */
 
 import type { UnansweredDetails } from "@plume/contract";
-import { Collapse, translate, useHeldKey, useI18n, useRevealRows } from "@plume/ui";
+import { Collapse, StatusSpinner, translate, useHeldKey, useI18n, useNow, useRevealRows } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
 import { type AnimationEvent, memo, type ReactNode, useRef, useState } from "react";
 import { hasToolCard, usePluginRegistrations } from "../plugins.tsx";
@@ -25,6 +26,7 @@ import { AnsweredBy } from "./AnsweredBy.tsx";
 import { type CallLabel, callLabel, describePolls, diffOf, jobName, labelText, summarizeCalls } from "./call-words.ts";
 import { type Call, type Run, runKey } from "./grouping.ts";
 import { LiveThought } from "./LiveThought.tsx";
+import { formatElapsed } from "./running-line.ts";
 import { lineNote } from "./tool-lines.ts";
 import { SwapText } from "./SwapText.tsx";
 import { ToolBody } from "./ToolBody.tsx";
@@ -286,6 +288,8 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 	const [open, setOpen] = useTranscriptDisclosure(`tool-${call.block.id}`);
 	const { startedAt } = useCallLive(latest.block.id);
 	const live = liveStatus(status);
+	// 开跑了、还没结果的才算在跑：参数还在写、排着、等批准的照它自己的图标画，不转圈也不计秒。
+	const running = live && startedAt !== undefined;
 	const draft = writeDraft(call.block, status);
 	const stopped = useCalls((calls) => status === "error" && callStopped(calls, latest.block.id));
 	const unanswered = useCalls((calls) => callUnanswered(calls, latest.block.id));
@@ -308,15 +312,23 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 				className="tool-row-head text-label"
 				aria-expanded={expandable ? open : undefined}
 				data-open={open && expandable ? "" : undefined}
+				data-live={running ? "" : undefined}
 				onClick={expandable ? () => setOpen((value) => !value) : undefined}
 			>
-				<RowIcon name={call.block.name} failed={failed} />
+				{running ? (
+					<span className="tool-icon">
+						<StatusSpinner size={13} />
+					</span>
+				) : (
+					<RowIcon name={call.block.name} failed={failed} />
+				)}
 				<SwapText swapKey={`${live ? "now" : "done"}:${lineNote(draft.block.name, draft.block.arguments) ? "note" : ""}`} glide={live}>
 					<LabelWords label={label} />
 					{!live && <Marks failed={failed} stopped={stopped} unanswered={unanswered} added={added} removed={removed} />}
 				</SwapText>
 				{draft.lines && <span className="shrink-0 text-caption tabular-nums">{draft.lines}</span>}
 				<Chevron shown={expandable} />
+				{running && startedAt !== undefined && <RowElapsed startedAt={startedAt} />}
 			</button>
 			{result?.answeredBy && <AnsweredBy plugins={[result.answeredBy]} />}
 			{expandable && (
@@ -326,6 +338,12 @@ function ToolRow({ call, polls, enter }: { call: Call; polls?: Call[] | undefine
 			)}
 		</div>
 	);
+}
+
+/** 跑着的那一行行尾的秒数。自己走钟：每秒只重画这几个字，不带着整行和展开的详情一起重画。 */
+function RowElapsed({ startedAt }: { startedAt: number }) {
+	const now = useNow(true, 1000);
+	return <span className="tool-row-elapsed text-caption tabular-nums">{formatElapsed(now - startedAt)}</span>;
 }
 
 /** 卡片里的推理、回来的后台命令结果。 */

@@ -36,7 +36,10 @@
 		border-top: 1px solid var(--plume-line-soft);
 	}
 
-	/* 卡片里的一行：整行能点，悬停铺一层薄纱；点开的那一行字深一档。 */
+	/*
+	 * 卡片里的一行：整行能点，悬停铺一层薄纱；点开的那一行字深一档。跑完的行淡一档、点名的对象也跟着淡一档，开跑了的那一行
+	 * （`data-live`）是正文色：点开一组，一眼看出在跑的是哪几行。
+	 */
 	.tool-row-head {
 		display: flex;
 		align-items: center;
@@ -44,7 +47,7 @@
 		width: 100%;
 		min-height: 32px;
 		padding: 5px 10px;
-		color: var(--plume-ink-muted);
+		color: var(--plume-ink-faint);
 		text-align: left;
 		transition:
 			color var(--plume-t-quick) var(--plume-e-soft),
@@ -62,6 +65,29 @@
 
 	.tool-row-head:not([aria-expanded]) {
 		cursor: default;
+	}
+
+	.tool-row-head:not([data-live], [data-open], [aria-expanded]:hover) .tool-label-subject {
+		color: var(--plume-ink-muted);
+	}
+
+	.tool-row-head[data-live] {
+		color: var(--plume-ink);
+	}
+
+	.tool-row-head[data-live] .plume-glide {
+		--plume-glide-base: var(--plume-ink);
+	}
+
+	[data-live] > .tool-icon {
+		color: inherit;
+	}
+
+	/* 跑着的那一行行尾数着跑了几秒，靠右。 */
+	.tool-row-elapsed {
+		margin-left: auto;
+		padding-left: 8px;
+		color: var(--plume-ink-faint);
 	}
 
 	/* 卡片里的推理、回来的后台命令结果：和调用行一样的边距。 */
@@ -157,6 +183,17 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* 缓宽度的那一阵：右沿渐隐、字不打省略号，新句从左往右露出来、旧句从右往左收回（见 `SwapText`）。 */
+	/* 遮罩只看 alpha，black 只是「不透明」的意思。 */
+	.tool-swap[data-moving] {
+		mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
+		-webkit-mask-image: linear-gradient(to right, black calc(100% - 18px), transparent);
+	}
+
+	.tool-swap[data-moving] > span {
+		text-overflow: clip;
 	}
 
 	.tool-swap-in {

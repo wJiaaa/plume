@@ -213,14 +213,42 @@ export interface CallLabel {
 
 type TensedKind = Exclude<ToolKind, "watch" | "job">;
 
-const TENSED: Record<TensedKind, { now: MessageKey; done: MessageKey; nowBare: MessageKey; doneBare: MessageKey; sum: MessageKey }> = {
-	view: { now: "toolNow.view", done: "toolDone.view", nowBare: "toolNowBare.view", doneBare: "toolDoneBare.view", sum: "toolSum.view" },
-	list: { now: "toolNow.list", done: "toolDone.list", nowBare: "toolNowBare.list", doneBare: "toolDoneBare.list", sum: "toolSum.list" },
-	find: { now: "toolNow.find", done: "toolDone.find", nowBare: "toolNowBare.find", doneBare: "toolDoneBare.find", sum: "toolSum.find" },
-	search: { now: "toolNow.search", done: "toolDone.search", nowBare: "toolNowBare.search", doneBare: "toolDoneBare.search", sum: "toolSum.search" },
-	create: { now: "toolNow.create", done: "toolDone.create", nowBare: "toolNowBare.create", doneBare: "toolDoneBare.create", sum: "toolSum.create" },
-	modify: { now: "toolNow.modify", done: "toolDone.modify", nowBare: "toolNowBare.modify", doneBare: "toolDoneBare.modify", sum: "toolSum.modify" },
-	command: { now: "toolNow.command", done: "toolDone.command", nowBare: "toolNowBare.command", doneBare: "toolDoneBare.command", sum: "toolSum.command" },
+const TENSED: Record<TensedKind, { now: MessageKey; done: MessageKey; nowBare: MessageKey; doneBare: MessageKey; sum: MessageKey; live: MessageKey }> = {
+	view: { now: "toolNow.view", done: "toolDone.view", nowBare: "toolNowBare.view", doneBare: "toolDoneBare.view", sum: "toolSum.view", live: "toolLive.view" },
+	list: { now: "toolNow.list", done: "toolDone.list", nowBare: "toolNowBare.list", doneBare: "toolDoneBare.list", sum: "toolSum.list", live: "toolLive.list" },
+	find: { now: "toolNow.find", done: "toolDone.find", nowBare: "toolNowBare.find", doneBare: "toolDoneBare.find", sum: "toolSum.find", live: "toolLive.find" },
+	search: {
+		now: "toolNow.search",
+		done: "toolDone.search",
+		nowBare: "toolNowBare.search",
+		doneBare: "toolDoneBare.search",
+		sum: "toolSum.search",
+		live: "toolLive.search",
+	},
+	create: {
+		now: "toolNow.create",
+		done: "toolDone.create",
+		nowBare: "toolNowBare.create",
+		doneBare: "toolDoneBare.create",
+		sum: "toolSum.create",
+		live: "toolLive.create",
+	},
+	modify: {
+		now: "toolNow.modify",
+		done: "toolDone.modify",
+		nowBare: "toolNowBare.modify",
+		doneBare: "toolDoneBare.modify",
+		sum: "toolSum.modify",
+		live: "toolLive.modify",
+	},
+	command: {
+		now: "toolNow.command",
+		done: "toolDone.command",
+		nowBare: "toolNowBare.command",
+		doneBare: "toolDoneBare.command",
+		sum: "toolSum.command",
+		live: "toolLive.command",
+	},
 };
 
 /** 分时态说的那几种；长跑的命令（`watch`）和一次跑完的说法一样。查后台任务（`job`）另有说法。 */
@@ -312,4 +340,24 @@ export function summarizeCalls(
 		);
 	if (thought > 0) parts[thoughtFirst ? "unshift" : "push"](translate("step.thinking", { n: thought }));
 	return parts.join(translate("toolSum.separator"));
+}
+
+/**
+ * 运行行上同时在跑的几次调用：按种类数次数，「正在查看 3 个文件，运行 1 个命令」。种类按固定顺序说（`TENSED` 的顺序）：
+ * 并行的几个哪个先跑完，前后半句都不换位置，只有数在变。插件登记了说法的、不认得的工具合成「另外 N 个调用」。
+ */
+export function describeRunning(blocks: readonly ToolCallBlock[]): string {
+	const kinds = new Map<TensedKind, number>();
+	let others = 0;
+	for (const block of blocks) {
+		const kind = spokenLine(block.name) ? undefined : tensedKind(block.name);
+		if (kind) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+		else others += 1;
+	}
+	const parts = (Object.keys(TENSED) as TensedKind[]).flatMap((kind) => {
+		const n = kinds.get(kind);
+		return n ? [translate(TENSED[kind].live, { n })] : [];
+	});
+	if (others > 0) parts.push(translate("toolLive.other", { n: others }));
+	return translate("toolLive.lead", { what: parts.join(translate("toolSum.separator")) });
 }

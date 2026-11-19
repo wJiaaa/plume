@@ -1,13 +1,17 @@
 import type { Message } from "@plume/contract";
 import type { ToolCallContent } from "@plume/llm/types";
-import { GLIDE, RollWords, StatusSpinner, translate, useCountUp, useI18n, useNow, useTickedAnimations } from "@plume/ui";
+import { GLIDE, RollWords, StatusSpinner, translate, useCountUp, useHeldKey, useI18n, useNow, useTickedAnimations } from "@plume/ui";
 import { memo, type ReactNode, useEffect, useReducer, useRef, useState } from "react";
+import { callLabel, describeRunning, labelText } from "./call-words.ts";
+import type { ToolCallBlock } from "./grouping.ts";
 import { estimateTokens, pushSample, type RateSample, rateFrom, trustworthy } from "./live-rate.ts";
 import { formatElapsed, formatTokens } from "./running-line.ts";
 import { StreamTrace } from "./StreamTrace.tsx";
+import { SwapText } from "./SwapText.tsx";
 import { moodFor, phraseFor } from "./thinking-words.ts";
 import { ThinkingOrb } from "./ThinkingOrb.tsx";
 import { liveTurnMeter } from "./turns.ts";
+import { useTranscript } from "./view-state.ts";
 
 /** 换一句的间隔：按这一轮已经跑了多久算，不另开一只钟。 */
 const PHRASE_MS = 4200;
@@ -40,6 +44,8 @@ type Stage = "retrying" | "tool" | "awaiting" | "streaming" | "stalled";
  * 跑着的这一轮在花什么：一句在做什么、跑了多久、这一轮写出了多少 token、此刻写得多快，和最近几秒字到达的样子（`StreamTrace`）。
  *
  * 长的一轮大半是安静的：工具卡片一张张滚过去，看不出是跑了十秒还是十分钟、花了多少。三个点只说「有事在发生」，这一行说是什么。
+ * 有调用在跑时开头直接说在跑的那一次（几个并行就说它们一共在做什么，`useRunningFact`）：工具组收着时标题只说总数，
+ * 此刻在跑哪个，这一行是唯一说出来的地方。没有调用在跑时说一句随意的闲话（`thinking-words.ts`）。
  *
  * 推理默认不画，模型想的那几十秒这一行就是唯一的动静，而思考球、换词、秒数都按钟点走，模型一个字不回也照样转。所以把
  * 「还没开口」「在写」「停住了」分开说（`Stage`），读数和心电图跟着字走：卡住时 tok/s 收起、心电图是平线、行尾直说几秒没有新输出。开头那句话不变。
@@ -69,6 +75,7 @@ export const RunningIndicator = memo(function RunningIndicator({
 	// 四分之一秒一拍，秒数看上去不会跳过一个。
 	const now = useNow(startedAt !== null, 250);
 	const doing = latestCall(messages, callStarts);
+	const fact = useRunningFact(messages, callStarts, useTranscript().cwd);
 	const writing = writingText(messages);
 	const rate = useLiveRate(producedChars(messages), now, startedAt);
 	const output = draftOutput(messages);
@@ -104,8 +111,9 @@ export const RunningIndicator = memo(function RunningIndicator({
 					? "stalled"
 					: "streaming";
 	const mood = moodFor(fresh ? doing.name : undefined, fresh ? doing.summary : undefined, retrying, writing);
-	// 重连时不说话：下面那条连接记录已经在数秒了，这里再说一句是同一件事说两遍。
-	const phrase = retrying ? null : phraseFor(mood, Math.floor(elapsed / PHRASE_MS), elapsed);
+	// 重连时不说话：下面那条连接记录已经在数秒了，这里再说一句是同一件事说两遍。有调用在跑时说它，没有时说闲话。
+	const idle = phraseFor(mood, Math.floor(elapsed / PHRASE_MS), elapsed);
+	const phrase: Phrase | null = retrying ? null : (fact ?? { key: `mood:${idle}`, text: `${idle}…`, glide: false });
 	const status = statusFor(stage, quiet);
 	// 这一轮模型写出的 token：收尾的按服务商报的数，在写的那条按字数估。
 	const written = (meter?.output ?? 0) + estimateTokens(output);
@@ -119,10 +127,12 @@ export const RunningIndicator = memo(function RunningIndicator({
 		>
 			{/* 装饰，旁边那句话已经说了这是什么。用 20 而不是缩小的 64：两种尺寸是各自的设计，这一颗是画来放进一行字里的。 */}
 			<ThinkingOrb state={mood} size={20} className="shrink-0" />
-			{/* 按字记 key：一句淡入、一句走开，不原地换字。 */}
+			{/* 换一句：两句叠着交叉淡入淡出，宽度缓过去，新句从左往右露出来、后面的读数被推着走（`SwapText`）。 */}
 			{phrase && (
-				<span key={phrase} className="plume-fade-in ml-2 min-w-0 truncate">
-					{phrase}…
+				<span className="ml-2 flex min-w-0">
+					<SwapText swapKey={phrase.key} glide={phrase.glide}>
+						{phrase.text}
+					</SwapText>
 				</span>
 			)}
 			{startedAt !== null && (
@@ -165,8 +175,8 @@ function statusFor(stage: Stage, quiet: number): Status | null {
 /**
  * 状态那段字上的扫光：等第一个字、没有新输出，那道光照样一直走——行上别的东西（思考球）也在动，字不动的话像没在等。
  *
- * 颜色分两档（`.plume-glide-status`；`warn` 是同一个类加 `.plume-glide-warn`，只换底色和亮处）：灰字走灰光，警示色的字走黄光。
- * 不用现成的 `.plume-glide`：那道光的亮处固定走到正文色，灰字会被提亮一档、黄字会被洗成灰白。扫光按拍推，不交给浏览器
+ * 颜色分两档（`.plume-glide-status`；`warn` 是同一个类加 `.plume-glide-warn`，只换底色和亮处）：灰字走更浅的灰光，警示色的字走
+ * 浅一档的黄光。不用现成的 `.plume-glide`：它的底色是工具行那一档灰，这里的字比它淡、黄字更不是它。扫光按拍推，不交给浏览器
  * 每帧重绘（和思考球、工具标题同一拍）。
  */
 function GlideText({ warn, children }: { warn: boolean; children: ReactNode }) {
@@ -325,6 +335,56 @@ function writingText(messages: readonly Message[]): boolean {
 	if (last?.role !== "assistant" || last.stopReason !== "pending") return false;
 	const block = last.content[last.content.length - 1];
 	return block?.type === "text" && block.text.length > 0;
+}
+
+/** 运行行开头那句话：`key` 换了才算换了一句。 */
+interface Phrase {
+	key: string;
+	text: string;
+	glide: boolean;
+}
+
+/** 闲话那一句挂着时 `useHeldKey` 记的 key；调用的 id 不会是它。 */
+const IDLE = "idle";
+/** 几次调用并行时那一句的 key：一起在跑的数在变，句子还是同一句，只缓宽度。 */
+const PARALLEL = "parallel";
+
+/**
+ * 有调用在跑时，运行行开头说的那件事：一个在跑说它自己（和卡片里那一行同一个说法），几个并行说它们一共在做什么
+ * （`describeRunning`）。没有在跑的返回 `undefined`，开头照旧说闲话。
+ *
+ * 每一句至少挂 650ms（`useHeldKey`）：几十毫秒就跑完的 read 不一闪而过；跑完了还没待满的照旧说它（按 key 记下的那句字），
+ * 待满了才换下一句或换回闲话。
+ */
+function useRunningFact(messages: readonly Message[], callStarts: Readonly<Record<string, number>>, cwd: string | undefined): Phrase | undefined {
+	const running = runningCalls(messages, callStarts);
+	const first = running[0];
+	const now = !first
+		? undefined
+		: running.length === 1
+			? { key: first.id, text: labelText(callLabel(first, true, cwd)) }
+			: { key: PARALLEL, text: describeRunning(running) };
+	const held = useHeldKey(now?.key ?? IDLE);
+	// 挂着的那句是哪些字：调用跑完了就不在 `running` 里，还没待满时要照它原来的说法说完。
+	const said = useRef(new Map<string, string>());
+	if (now) said.current.set(now.key, now.text);
+	for (const key of said.current.keys()) if (key !== held && key !== now?.key) said.current.delete(key);
+	const text = said.current.get(held);
+	return held === IDLE || text === undefined ? undefined : { key: held, text, glide: true };
+}
+
+/** 这一轮此刻在跑的调用（开跑了、还没结果），按开跑的先后。排着还没轮到的、等批准的不算。 */
+function runningCalls(messages: readonly Message[], startedAt: Readonly<Record<string, number>>): ToolCallBlock[] {
+	const finished = new Set<string>();
+	const running: ToolCallBlock[] = [];
+	for (let at = messages.length - 1; at >= 0; at--) {
+		const message = messages[at]!;
+		if (message.role === "user" && !message.synthetic && !message.steered) break;
+		if (message.role === "toolResult") finished.add(message.toolCallId);
+		if (message.role !== "assistant") continue;
+		for (const block of message.content) if (block.type === "toolCall" && startedAt[block.id] !== undefined && !finished.has(block.id)) running.push(block);
+	}
+	return running.sort((a, b) => startedAt[a.id]! - startedAt[b.id]!);
 }
 
 /**
