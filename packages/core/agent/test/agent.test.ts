@@ -370,7 +370,7 @@ it("上下文分段：发请求前没有，发过以后按那次请求分段、�
 	expect(breakdown?.memoryFiles).toEqual([]);
 });
 
-it("上下文分段跟着会话存下：重开应用后还没发请求也照样分段", async () => {
+it("重开应用后能读历史和上下文分段，但不把只读历史留在会话里", async () => {
 	const { service, session, idle } = await start([{ text: "好" }]);
 	const done = idle();
 	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
@@ -380,7 +380,12 @@ it("上下文分段跟着会话存下：重开应用后还没发请求也照样�
 
 	await agent!.shutdown();
 	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "model.json"), plugins: BUILTINS, log: () => undefined });
+	const opened = await agent.service.getSession(session.id);
+	expect(opened.messages).toHaveLength(2);
 	expect(await agent.service.contextBreakdown(session.id)).toEqual(before);
+	const reopened = await agent.service.getSession(session.id);
+	expect(reopened.messages).toEqual(opened.messages);
+	expect(reopened.messages).not.toBe(opened.messages);
 });
 
 it("上下文分段：项目指令和记忆按插件标的文件列出来源", async () => {

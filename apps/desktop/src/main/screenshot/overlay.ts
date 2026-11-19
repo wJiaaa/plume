@@ -2,10 +2,10 @@
  * 截屏浮层：拍下指针所在的那块屏幕，用一个无边框、透明、盖住整块屏幕的窗口把快照铺上去，里面画插件经
  * `ui.screenOverlay` 注册的组件（选区、标注、工具栏都是插件的）。这里只管窗口、快照、焦点和剪贴板。
  *
- * 浮层只有一个窗口，建一次，之后整个进程里只藏起、亮出：
+ * 浮层只有一个窗口，有全局快捷键时预热并复用：
  *   - 每次截屏新建窗口、加载页面要一百多毫秒，快照是在这之前拍的，这段时间里屏幕上动了的东西，浮层一盖上就跳回去。
  *   - 收起时销毁窗口，macOS 上 `app.hide()` 不是同步的，窗口没了而应用还没藏好的那一两帧，主窗口会闪出来。
- * 一直留着的窗口两样都没有：亮出来是一次调用，藏起来可以等应用先藏好。
+ * 没有快捷键时等截屏和焦点交接结束再销毁，不留一个空闲的渲染进程。
  */
 
 import {
@@ -42,6 +42,9 @@ let overlayLoading: Promise<BrowserWindow> | null = null;
 let markListening: { resolve: () => void; reject: (error: Error) => void } | null = null;
 /** 每开始一轮截屏加一。上一轮收起时排下的延时动作，看到它变了就不再碰窗口（窗口已经归新的一轮）。 */
 let generation = 0;
+let keepWarm = false;
+let starting = 0;
+let hiding = false;
 
 /**
  * 这一次截屏的全部状态，收在一个对象里：一轮结束该清掉哪些只在 `endCapture` 一处，加字段也有一处明确该改的地方。
@@ -250,7 +253,7 @@ async function captureDisplay(display: Display): Promise<Snapshot | null> {
 }
 
 /**
- * 浮层窗口和它的页面，第一次用时建好，一直留着。
+ * 浮层窗口和它的页面，预热或第一次用时建好。
  *
  * 等到页面订阅上 session 才算好，而不是 did-finish-load：页面要先连上 agent、装好插件的界面入口，才开始听，
  * 在这之前发过去的 session 没人接，直接丢掉。
@@ -293,6 +296,7 @@ function ensureOverlay(): Promise<BrowserWindow> {
 		if (overlay === window) {
 			overlay = null;
 			overlayLoading = null;
+			hiding = false;
 			if (capture.active) endCapture();
 		}
 	});
@@ -334,9 +338,11 @@ export function overlayListening(sender: WebContents): void {
 export function warmOverlay(): void {
 	ensureOverlay()
 		.then((window) => {
-			if (!opacityUnsupported) warmFirstPresentation(window);
+			if (!opacityUnsupported && keepWarm && !starting && !capture.active && !hiding) warmFirstPresentation(window);
 		})
-		.catch((error: unknown) => console.error("[screen] 预热截屏浮层失败：", error));
+		.catch((error: unknown) => {
+			if (keepWarm) console.error("[screen] 预热截屏浮层失败：", error);
+		});
 	if (process.platform !== "linux") void warmCapturePipeline();
 }
 
@@ -396,12 +402,23 @@ async function warmCapturePipeline(): Promise<void> {
  * 开始一次截屏：指针所在的那块屏幕。拿不到快照（没有屏幕录制权限、拍失败）时返回 false，不开浮层。
  */
 export async function startCapture(): Promise<boolean> {
+	starting++;
+	try {
+		return await takeCapture();
+	} finally {
+		starting--;
+		releaseIdleOverlay();
+	}
+}
+
+async function takeCapture(): Promise<boolean> {
 	// 在任何东西显示之前问：过一会儿浮层自己就是有焦点的窗口，答案永远是「是」。
 	const windows = BrowserWindow.getAllWindows();
 	capture.cameFromApp = windows.some((window) => !window.isDestroyed() && window.isFocused());
 	capture.focusedBefore = windows.find((window) => window !== overlay && !window.isDestroyed() && window.isFocused()) ?? null;
 
 	generation++;
+	hiding = false;
 	endWarmPresentation();
 	// 上一轮还开着（连按两次快捷键）：收掉但不交还前台，这一轮马上要接手。
 	closeOverlay({ restoreFocus: false });
@@ -584,6 +601,7 @@ function dropClearedOverlay(): void {
 	window.hide();
 	window.setOpacity(1);
 	if (!window.webContents.isDestroyed()) window.webContents.send("plume:screen:hidden");
+	releaseIdleOverlay();
 }
 
 /**
@@ -601,9 +619,12 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	// 在任何提前返回之前：每条出路都结束这一轮，哪条漏了都会让 `dismissStrayOverlay` 永远不碰这个窗口。
 	endCapture();
 	const steppedAside = releaseSteppedAside();
+	if (options?.restoreFocus === false) return;
 	if (!cover) {
+		releaseIdleOverlay();
 		return;
 	}
+	hiding = true;
 
 	const foreground = options?.foreground ?? capture.cameFromApp;
 	/*
@@ -611,14 +632,10 @@ export function closeOverlay(options?: { restoreFocus?: boolean; foreground?: bo
 	 * `app.hide()` 不是同步的：先撤浮层，应用还没藏好的那十几毫秒里主窗口会露出来，就是那一下闪。浮层留在屏上跟着
 	 * 一起下去，等藏好了再标成隐藏（`settleOverlayHidden`）。
 	 */
-	const stepBack = process.platform === "darwin" && options?.restoreFocus !== false && options?.stepAside !== false && !foreground && !capture.cameFromApp;
+	const stepBack = process.platform === "darwin" && options?.stepAside !== false && !foreground && !capture.cameFromApp;
 	if (stepBack) {
 		app.hide();
 		settleOverlayHidden();
-		return;
-	}
-
-	if (options?.restoreFocus === false) {
 		return;
 	}
 
@@ -715,13 +732,15 @@ function hideOnceRefocused(cover: BrowserWindow, back: BrowserWindow): void {
  */
 function settleOverlayHidden(): void {
 	const owner = generation;
+	const window = overlay;
 	setTimeout(() => {
-		const window = overlay;
 		// 这期间开始了下一轮：窗口和页面上的 session 都是它的了。
-		if (!window || window.isDestroyed() || generation !== owner) return;
+		if (!window || window.isDestroyed() || generation !== owner || overlay !== window) return;
 		window.hide();
 		window.setIgnoreMouseEvents(true);
 		if (!window.webContents.isDestroyed()) window.webContents.send("plume:screen:hidden");
+		hiding = false;
+		releaseIdleOverlay();
 	}, 250);
 }
 
@@ -787,13 +806,26 @@ export function showWindowsPutAside(): void {
 	putAside.clear();
 }
 
+export function keepOverlayWarm(keep: boolean): void {
+	keepWarm = keep;
+	if (!keep) releaseIdleOverlay();
+}
+
+function releaseIdleOverlay(): void {
+	if (keepWarm || starting || capture.active || hiding || !overlay || overlay.isDestroyed()) return;
+	endWarmPresentation();
+	overlay.destroy();
+}
+
 /** 放掉浮层：最后一个主窗口关了、或者应用要退出了。 */
 export function destroyOverlay(): void {
+	endWarmPresentation();
 	endCapture();
 	releaseSteppedAside();
 	putAside.clear();
 	const window = overlay;
 	overlay = null;
 	overlayLoading = null;
+	hiding = false;
 	if (window && !window.isDestroyed()) window.destroy();
 }
