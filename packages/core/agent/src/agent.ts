@@ -454,17 +454,14 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				emit({ type: "tools", tools: host.toolOwners() });
 			});
 		},
-		// 给副本：插件改了它手上的那份，不影响会话。没打开过的会话直接从库里读、不留在内存里：插件可能一次读几十个旧会话。
+		// 给副本：插件改了它手上的那份，不影响会话。
 		sessions: {
 			list: async () => structuredClone(summaries()),
 			get: async (sessionId) => {
 				const session = sessions.get(String(sessionId));
 				return session ? structuredClone(session.summary) : undefined;
 			},
-			messages: async (sessionId) => {
-				const session = find(String(sessionId));
-				return structuredClone(session.messages ?? store.messages(session.summary.id));
-			},
+			messages: async (sessionId) => structuredClone(readMessages(find(String(sessionId)))),
 			approval: (sessionId) => {
 				const pending = sessions.get(String(sessionId))?.approvals?.[0];
 				return pending ? structuredClone(pending.request) : undefined;
@@ -823,9 +820,13 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		return session;
 	}
 
+	function readMessages(session: Session): Message[] {
+		return session.messages ?? store.messages(session.summary.id);
+	}
+
 	async function messagesOf(session: Session): Promise<Message[]> {
 		if (!session.messages) {
-			session.messages = store.messages(session.summary.id);
+			session.messages = readMessages(session);
 			host.sessionContextReset(session.summary.id);
 		}
 		return session.messages;
@@ -847,9 +848,12 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		return [...paths];
 	}
 
+	function readRecord(session: Session): ContextRecord {
+		return session.record ?? settleStaleRuns(store.context(session.summary.id) ?? emptyRecord());
+	}
+
 	async function recordOf(session: Session): Promise<ContextRecord> {
-		session.record ??= settleStaleRuns(store.context(session.summary.id) ?? emptyRecord());
-		return session.record;
+		return (session.record ??= readRecord(session));
 	}
 
 	// 压缩的问和记，见 `session-compaction.ts`。
@@ -2486,20 +2490,21 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		async getSession(sessionId): Promise<SessionView> {
 			const session = find(sessionId);
 			// 打开会话时读一次它的项目配置，权限签一打开就是这个会话实际按的那一档（重开应用后还没跑过一轮的会话也是）。
-			await Promise.all([recordOf(session), readSessionSettings(session).catch(() => undefined)]);
+			await readSessionSettings(session).catch(() => undefined);
+			const record = readRecord(session);
 			return {
 				summary: session.summary,
-				messages: await messagesOf(session),
+				messages: readMessages(session),
 				draft: session.draft,
 				approval: session.approvals?.[0]?.request,
 				...((session.approvals?.length ?? 0) > 1 ? { queuedApprovals: session.approvals!.length - 1 } : {}),
 				progress: Object.fromEntries(session.progress),
 				startedAt: Object.fromEntries(session.startedAt),
 				hiccups: session.hiccups,
-				compactions: marks(session.record),
+				compactions: marks(record),
 				compacting: session.compacting === true,
 				queue: queues.list(session.summary.id),
-				compactionRuns: runsOf(session.record),
+				compactionRuns: runsOf(record),
 				...(session.summary.parentId ? { tasks: handedOf(session.summary.id) } : {}),
 				...backgroundCallsField(session.summary.id),
 			};
@@ -2572,10 +2577,10 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		async contextBreakdown(sessionId) {
 			const session = find(sessionId);
-			const record = await recordOf(session);
+			const record = readRecord(session);
 			if (!record.estimate) return null;
 			const { model } = resolveModel(await readSessionSettings(session), modelOf(session));
-			const messages = await messagesOf(session);
+			const messages = readMessages(session);
 			return contextBreakdown(record.estimate, historyFor(messages, record), model.contextWindow, rewrittenAt(record, messages));
 		},
 		async storageUse() {
@@ -2607,7 +2612,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			// 和原始记录共用保护：Markdown 也不能经目录别名或大小写差异盖掉源库。
 			protectSource(join(dataDir, "sessions", "sessions.db"), file);
 			const settings = await modelSettings.read();
-			await recordOf(session);
 			/** 导出时问注册这个工具的插件要它的说法；插件的函数出错时当没给，照本体的写法导出。 */
 			const askTool = <T>(name: string, what: string, read: (definition: ToolDefinition) => T): T | undefined => {
 				const definition = host.tool(name)?.definition;
@@ -2623,7 +2627,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 				{
 					summary: session.summary,
 					messages: store.messages(sessionId),
-					compactions: marks(session.record),
+					compactions: marks(readRecord(session)),
 					exportedAt: new Date(),
 					modelLabel: (providerId, modelId) => {
 						const provider = settings.providers.find((entry) => entry.id === providerId);

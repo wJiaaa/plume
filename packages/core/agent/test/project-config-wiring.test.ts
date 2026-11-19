@@ -333,8 +333,11 @@ it("成功撤回、编辑重发、换模型和从库重载刷新快照，普通�
 		log: () => {},
 	});
 	await agent.service.getSession(id);
-	expect(resets).toEqual([id, id, id, id]);
 	await agent.service.getSession(id);
+	expect(resets).toEqual([id, id, id]);
+	agent.service.send(id, { content: [{ type: "text", text: "continue" }] });
+	await expect.poll(() => model!.requests.length).toBe(3);
+	await expect.poll(() => agent!.service.listSessions().find((session) => session.id === id)?.running).toBe(false);
 	expect(resets).toEqual([id, id, id, id]);
 });
 
