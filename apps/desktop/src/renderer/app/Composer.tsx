@@ -334,9 +334,16 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 		let id = view?.summary.id;
 		try {
 			if (!id) {
-				const summary = await agent.createSession(target);
-				id = summary.id;
+				const created = await agent.createSession(target);
+				id = created.id;
 				setDraft(id, value);
+				/*
+				 * 空白页选的模型、档位先记到会话上再换过去：先换过去的话，输入框旁的按钮先按默认模型画，记上后又换回来，
+				 * 发送那一下模型名平白翻一下。
+				 */
+				if (blankModel) await agent.setSessionModel(id, blankModel);
+				if (blankThinking) await agent.setSessionThinking(id, blankThinking);
+				const summary = { ...created, ...(blankModel ? { model: blankModel } : {}), ...(blankThinking ? { thinking: blankThinking } : {}) };
 				// 创建期间可以离开；迟到的结果不能把人从另一个会话拉回来。
 				if (!state.currentId && state.target === target && state.screen === "chat") {
 					handOverBlankTabs(id);
@@ -345,8 +352,6 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 						view: { summary, messages: [], progress: {}, startedAt: {}, hiccups: [], compactions: [], compactionRuns: [], compacting: false, queue: [] },
 					});
 				}
-				if (blankModel) await agent.setSessionModel(id, blankModel);
-				if (blankThinking) await agent.setSessionThinking(id, blankThinking);
 				// 临时模型只给这次创建用；创建期间另开的空白页不能被这次清理覆盖。
 				if (state.currentId === id && state.blankModel === blankModel) update({ blankModel: undefined });
 			}
