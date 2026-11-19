@@ -2,6 +2,22 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.4] - 2026-11-19
+
+<!-- plume:notes en -->
+### Changes
+
+- **Split view for two chats.** The main window used to show one chat at a time. Choose "Open with › Split view" from a chat's menu to open it on the right, next to the current one. Each side has its own title bar, input box and panels. Drag the divider to resize, double-click it to split evenly, and close a side from its title bar. If the window is too narrow, Plume tells you instead of squeezing both in. Split view isn't kept after a restart.
+- **The shimmer on running tools is back to how it was.** In the last version, the text of a running tool group stayed still most of the time, then briefly dimmed in a short band. It is a steady highlight sweeping across the text again, so you can tell at a glance what's still running.
+- **Sending your first message no longer flickers.** When you sent the first message from a new chat, the input box and the model button blinked for a moment. Now the cursor stays put and the model button keeps showing the model you picked.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **主窗口能左右分屏看两段对话。** 原来主窗口一次只能看一段对话。现在在对话菜单里选「打开方式 › 分屏」，它就开在右边，和当前这段并排。每一屏有自己的标题栏、输入框和面板区；中间的分隔条可以拖动调宽度，双击两边各占一半，在标题栏上可以关掉一屏。窗口太窄时会提示放不下，不硬挤成两屏。分屏不跨重启保留。
+- **工具在跑时的扫光恢复成原来的样子。** 上个版本里，跑着的工具组标题大半时间不动，只偶尔有一小段字暗一下。现在又是一道亮光一直从字上扫过，一眼就能看出哪些还在跑。
+- **在空白页发第一句时不再闪一下。** 原来按回车发出第一句时，输入框和模型按钮会闪一下。现在光标留在原处，模型按钮一直显示你选的那个模型。
+
 ## [0.7.3] - 2026-11-19
 
 <!-- plume:notes en -->
