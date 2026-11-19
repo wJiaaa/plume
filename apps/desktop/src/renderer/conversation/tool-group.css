@@ -75,10 +75,6 @@
 		color: var(--plume-ink);
 	}
 
-	.tool-row-head[data-live] .plume-glide {
-		--plume-glide-base: var(--plume-ink);
-	}
-
 	[data-live] > .tool-icon {
 		color: inherit;
 	}

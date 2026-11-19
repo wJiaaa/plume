@@ -175,8 +175,8 @@ function statusFor(stage: Stage, quiet: number): Status | null {
 /**
  * 状态那段字上的扫光：等第一个字、没有新输出，那道光照样一直走——行上别的东西（思考球）也在动，字不动的话像没在等。
  *
- * 颜色分两档（`.plume-glide-status`；`warn` 是同一个类加 `.plume-glide-warn`，只换底色和亮处）：灰字走更浅的灰光，警示色的字走
- * 浅一档的黄光。不用现成的 `.plume-glide`：它的底色是工具行那一档灰，这里的字比它淡、黄字更不是它。扫光按拍推，不交给浏览器
+ * 颜色分两档（`.plume-glide-status`；`warn` 是同一个类加 `.plume-glide-warn`，只换底色和亮处）：灰字走灰光，警示色的字走黄光。
+ * 不用现成的 `.plume-glide`：那道光的亮处固定走到正文色，灰字会被提亮一档、黄字会被洗成灰白。扫光按拍推，不交给浏览器
  * 每帧重绘（和思考球、工具标题同一拍）。
  */
 function GlideText({ warn, children }: { warn: boolean; children: ReactNode }) {

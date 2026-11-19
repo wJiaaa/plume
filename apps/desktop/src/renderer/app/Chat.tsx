@@ -571,7 +571,12 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 						focusComposer();
 					}}
 				>
-					<Composer key={scope} view={view} centered />
+					{/*
+					 * 不按草稿作用域换 key：空白页发出第一句时会话先建好、转录还没来，这一屏还是欢迎页，作用域却从 `blank:…`
+					 * 换成了新会话。重挂的话那一帧编辑器是新的（光标回到行首、焦点下一拍才回来），整块输入框闪一下；
+					 * 输入框本身跟着 `scope` 换草稿、附件、历史和焦点，原地换就够了。
+					 */}
+					<Composer view={view} centered />
 				</Welcome>
 			</section>
 		);
