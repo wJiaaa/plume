@@ -18,7 +18,7 @@ import { BlockScan, FadeIn, FadeScope, FadeText } from "./FadeText.tsx";
 import { type Inline, parseInline } from "./inline.ts";
 import { filePathInCode } from "./file-link.ts";
 import { MarkdownCode } from "./MarkdownCode.tsx";
-import { ImageDocument, MarkdownImage } from "./MarkdownImage.tsx";
+import { ImageDocument, ImageInLink, MarkdownImage } from "./MarkdownImage.tsx";
 import { ReplyCode, ReplyCodeScope } from "./ReplyCode.tsx";
 import { awaitingLink, Link } from "./MarkdownLink.tsx";
 import { MarkdownTable } from "./MarkdownTable.tsx";
@@ -376,7 +376,11 @@ function renderToken(token: Inline, fade: boolean): ReactNode {
 		case "math":
 			return <InlineMath tex={token.tex} fade={fade} />;
 		case "link":
-			return <Link href={token.href}>{renderTokens(token.children, fade)}</Link>;
+			return (
+				<Link href={token.href}>
+					<ImageInLink.Provider value>{renderTokens(token.children, fade)}</ImageInLink.Provider>
+				</Link>
+			);
 		case "image":
 			return (
 				<MarkdownImage

@@ -90,6 +90,15 @@ export async function checkMarkdownImages(options: {
 			await page(`document.querySelector(${JSON.stringify(image)}).scrollIntoView({ block: 'center' })`);
 			await capture(`smoke-markdown-images-${theme}.png`);
 		}
+		// 点正文图片打开看图器，同一条回复里显示出来的图连成一组；失败退成链接的不在组里。
+		await clickVisible(page, `[data-screen=chat] .md-image-open > img[alt="本地图"]`);
+		await until(`document.querySelector('[role=dialog] img[alt="本地图"]') !== null`, "点正文图片打开看图器");
+		await clickVisible(page, `[role=dialog] button[aria-label="下一张 →"]`);
+		await until(`document.querySelector('[role=dialog] img[alt="目录外图"]') !== null`, "看图器翻到同一条回复的下一张");
+		await clickVisible(page, `[role=dialog] button[aria-label="下一张 →"]`);
+		await until(`document.querySelector('[role=dialog] img[alt="本地图"]') !== null`, "同一条回复只有两张图，翻回第一张");
+		await clickVisible(page, `button[aria-label="关闭 Esc"]`);
+		await until(`document.querySelector('[role=dialog][aria-label="图片预览"]') === null`, "看图器关闭");
 		const documentLink = `[data-file-link] a[href=${JSON.stringify(join(docs, "readme.md"))}]`;
 		await until(`document.querySelector(${JSON.stringify(documentLink)}) !== null`, "平滑出字到文档链接");
 		await clickVisible(page, documentLink);
@@ -130,14 +139,15 @@ export async function checkMarkdownImages(options: {
 		await until(`innerWidth === 600`, "窄窗口");
 		assert.ok(
 			await page(
-				`Array.from(document.querySelectorAll('img.md-image')).every(img => img.getBoundingClientRect().width <= img.parentElement.getBoundingClientRect().width)`,
+				// 点开看图的按钮是 `display: contents`，没有盒子，量它外面那一层。
+				`Array.from(document.querySelectorAll('img.md-image')).every(img => img.getBoundingClientRect().width <= img.parentElement.closest(':not(.md-image-open)').getBoundingClientRect().width)`,
 			),
 		);
 		await capture("smoke-markdown-images-narrow.png");
 		window.setSize(size[0]!, size[1]!);
 		console.log(
 			"PLUME_MARKDOWN_IMAGES_SMOKE",
-			JSON.stringify({ ok: true, local: true, document: true, remote: true, boundary: true, refreshed: true, builtin: true, pending: true }),
+			JSON.stringify({ ok: true, local: true, viewer: true, document: true, remote: true, boundary: true, refreshed: true, builtin: true, pending: true }),
 		);
 	} finally {
 		protocol.unhandle("https");
