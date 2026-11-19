@@ -53,11 +53,26 @@ export function foldTaskContext(context: CompactionContext, message: Message): C
 		let from = 0;
 		while (stored > REQUEST_STORE_CHARS && from < requests.length - 1) stored -= (requests[from++] as (typeof requests)[number]).text.length;
 		context.requests = from > 0 ? requests.slice(from) : requests;
-	} else if (message.role === "toolResult" && !message.isError && Array.isArray((message.details as Partial<ChecklistDetails> | undefined)?.checklist)) {
-		// 清单按结果里的通用声明认（`ChecklistDetails`），不认是哪个工具交的。
+	} else if (message.role === "toolResult" && updatesPlan(message)) {
 		context.todos = (message.details as ChecklistDetails).checklist.map(({ content, status }) => ({ content, status }));
 	}
 	return context;
+}
+
+/** 这条消息换掉了任务清单：交来一份新清单的工具结果（按通用声明 `ChecklistDetails` 认，不认是哪个工具），或清空清单的那条人话。 */
+export function updatesPlan(message: Message): boolean {
+	if (message.role === "user") return message.clearsTaskPlan === true;
+	return message.role === "toolResult" && !message.isError && Array.isArray((message.details as Partial<ChecklistDetails> | undefined)?.checklist);
+}
+
+/**
+ * 留下的原文里还有更新的清单时，头里不带边界前那份：那份已经过时，却标着「转录事实」，和紧跟着的原文、和看过整段的摘要都对不上。
+ * 存进头里的也一并去掉——下一次压缩从这份往后读，读到尾部那份新的，不会丢。
+ */
+export function withoutStalePlan(context: CompactionContext, newerPlanKept: boolean): CompactionContext {
+	if (!newerPlanKept || context.todos === undefined) return context;
+	const { todos: _, ...rest } = context;
+	return rest;
 }
 
 /** 读到一半时取走的那份：`requests` 会被后面的读原地追加，要自己的一份。其余字段只会被整体换掉。 */

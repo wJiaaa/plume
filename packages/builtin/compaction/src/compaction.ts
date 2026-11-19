@@ -20,6 +20,7 @@ import type { ManualWords, Models, Observer } from "./models.ts";
 import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, pruneToolResults } from "./prune.ts";
 import { dropStaleResults } from "./stale-results.ts";
 import { fallbackSummary, summarize } from "./summary.ts";
+import { updatesPlan, withoutStalePlan } from "./task-context.ts";
 
 type Via = "fork" | "independent" | "fallback" | "dropped";
 
@@ -246,6 +247,8 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	const target = budget.settled;
 	const scaled = (list: Message[]) => estimate.messages(list) * scale;
 	const costs = messages.map((message) => estimate.messages([message]));
+	// 最后一次换清单在哪：落在留下的尾部里时，头里不带边界前那份旧的（`withoutStalePlan`）。
+	const lastPlan = messages.findLastIndex(updatesPlan);
 	/*
 	 * `from` 总是 `messages` 的一段后缀。折进头里的那段和尾部的估算都逐条增减（`RetiredHistory`），不是每删一条就对整段重算——
 	 * 估算不取整、能逐条相加，算出来的和每次 `scaled([...头, ...尾])` 是同一个数。
@@ -259,7 +262,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			if (at < start) retired.add(messages[at] as Message);
 			else tailCost += costs[at] as number;
 		}
-		const withHead = () => summaryMessages(text, origin, model, estimate, retired.files(), retired.taskContext());
+		const withHead = () => summaryMessages(text, origin, model, estimate, retired.files(), withoutStalePlan(retired.taskContext(), lastPlan >= start));
 		const weight = (head: Message[]) => (estimate.messages(head) + tailCost) * scale;
 		let head = withHead();
 		while (weight(head) > target && messages.length - start > 1) {
@@ -389,6 +392,7 @@ function dropOldest(
 	// 预算的是交出去的整份：前面那条说明带着最新请求和任务上下文，中文下能有好几千 token。丢掉的那段和留下的估算逐条增减，同 `fit`。
 	const costs = messages.map((message) => estimate.messages([message]));
 	const older = new RetiredHistory(kindOf, cwd);
+	const lastPlan = messages.findLastIndex(updatesPlan);
 	let rest = costs.reduce((sum, value) => sum + value, 0);
 	let head: Message | undefined;
 	let start = 0;
@@ -402,7 +406,7 @@ function dropOldest(
 			rest -= costs[at] as number;
 		}
 		if (start >= messages.length) return null;
-		head = droppedMessage(older.taskContext(), model, older.files());
+		head = droppedMessage(withoutStalePlan(older.taskContext(), lastPlan >= start), model, older.files());
 		if (start > floor && (estimate.messages([head]) + rest) * scale <= target) break;
 	}
 	if (!head || start <= floor) return null;

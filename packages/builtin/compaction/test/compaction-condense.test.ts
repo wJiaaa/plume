@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import type { Message } from "@plume/contract";
+import type { ChecklistDetails, Message, UserMessage } from "@plume/contract";
 import { compactIfNeeded } from "../src/compaction.ts";
-import { estimate, recorder, reply, request, say, user } from "./helpers.ts";
+import { estimate, recorder, reply, request, say, textOf, toolResult, user } from "./helpers.ts";
 
 it("截短的工具调用参数两份同源：只读参数对象的协议也看得到剪短的路径和命令", async () => {
 	const command = `npm test -- ${"--flag ".repeat(2000)}`;
@@ -49,4 +49,30 @@ it("摘要请求的预算按实测比例校正", async () => {
 	const result = await compactIfNeeded(request(history, models, { contextWindow: 200_000 }));
 	expect(result?.kept).toBeDefined();
 	for (const sent of requests) expect(estimate.messages(sent.messages) * scale).toBeLessThanOrEqual(200_000 * 0.42);
+});
+
+/** 交一份任务清单的那次调用和它的结果。 */
+const plan = (id: string, ...statuses: Array<"pending" | "in_progress" | "completed">): Message[] => [
+	reply([{ type: "toolCall", id, name: "todo_write", arguments: {} }]),
+	{
+		...toolResult(id, "Task list updated", "todo_write"),
+		details: { checklist: statuses.map((status, i) => ({ content: `任务${i}`, status })) } satisfies ChecklistDetails,
+	},
+];
+
+it("留下的尾部里有更新的清单时，头里不带边界前那份旧的；尾部没有时照带", async () => {
+	const turns = (n: number) => Array.from({ length: n }, (_, i) => [say(`第 ${i} 步 ${"s".repeat(1500)}`), user(`继续 ${i}`)]).flat();
+	const head = async (history: Message[]) => {
+		const result = await compactIfNeeded(request(history, recorder().models));
+		expect(result?.kept).toBeDefined();
+		return result!.messages[0] as UserMessage;
+	};
+
+	const fresh = await head([user("目标"), ...plan("p1", "in_progress", "pending"), ...turns(30), ...plan("p2", "completed", "completed"), say("做完了")]);
+	expect(textOf(fresh)).not.toMatch(/Latest recorded task list/);
+	// 存进头里的也不带，下一次压缩从尾部读到新的那份。
+	expect(fresh.compactionContext?.todos).toBeUndefined();
+
+	const stale = await head([user("目标"), ...plan("p1", "in_progress", "pending"), ...turns(30)]);
+	expect(textOf(stale)).toMatch(/Latest recorded task list:\n\[in_progress\] 任务0\n\[pending\] 任务1/);
 });
