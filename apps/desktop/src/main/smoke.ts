@@ -77,6 +77,7 @@ import { checkSessionWindow } from "./smoke-session-window.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { checkBootScreen } from "./smoke-boot-screen.ts";
+import { checkScreenshotLifetime } from "./smoke-screenshot-lifetime.ts";
 import { recentSessions } from "./tray-menu.ts";
 import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
 
@@ -1070,6 +1071,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (process.env.PLUME_SMOKE_ONLY === "open-file") {
 			await checkOpenFile({ window, agent, outDir, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "open-file" }));
+			window.webContents.debugger.detach();
+			await shutdown();
+			await model.close();
+			app.exit(0);
+			return;
+		}
+
+		if (process.env.PLUME_SMOKE_ONLY === "screenshot-lifetime") {
+			await checkScreenshotLifetime(window);
+			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "screenshot-lifetime" }));
 			window.webContents.debugger.detach();
 			await shutdown();
 			await model.close();

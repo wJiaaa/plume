@@ -5,7 +5,7 @@
  * 页面照常连 agent、装插件的界面入口（插件的组件可能要经 `ui.remote()` 调自己的逻辑入口），然后只画插件经
  * `ui.screenOverlay` / `ui.pinnedShot` 注册的那一个组件；宿主在这里做的只是把主进程的消息接成组件的 props。
  *
- * 浮层窗口建一次、一直留着（每次截屏都新建窗口太慢，见 main/screenshot/），每次截屏主进程推来一个新 session，
+ * 有全局快捷键时复用浮层窗口（见 main/screenshot/），每次截屏主进程推来一个新 session，
  * 组件按 session id 重新挂上；浮层收起后主进程说一声 hidden，这里丢掉快照，那是几十 MB 的像素。
  */
 

@@ -18,6 +18,7 @@ import {
 	finishCapture,
 	isOverlay,
 	isOverlayPage,
+	keepOverlayWarm,
 	overlayListening,
 	overlayReady,
 	passThrough,
@@ -44,16 +45,10 @@ function isRect(value: unknown): value is ScreenRect {
 
 export function registerScreenshot(): void {
 	const launchedAt = Date.now();
-	let warmScheduled = false;
 	/**
-	 * 预热要另开一个渲染进程、加载整页和所有插件的界面入口，没有插件用截屏时不值得。插件设了全局快捷键，就是它要截屏的信号；
-	 * 只用按钮截屏的插件第一次截屏慢一些。
+	 * 预热要另开一个渲染进程、加载整页和所有插件的界面入口。只有注册着全局快捷键时才值得一直留着。
 	 */
-	const scheduleWarm = () => {
-		if (warmScheduled) return;
-		warmScheduled = true;
-		setTimeout(warmOverlay, Math.max(0, launchedAt + WARM_AFTER_LAUNCH_MS - Date.now()));
-	};
+	let warmTimer: NodeJS.Timeout | undefined;
 
 	ipcMain.handle("plume:screen:start", () => startCapture());
 
@@ -69,29 +64,36 @@ export function registerScreenshot(): void {
 		const shortcut = accelerator === null ? "" : normalizeShortcut(accelerator);
 		const current = shortcuts.get(plugin);
 		if ((current ?? "") === shortcut) return "ok";
+		const wasWarm = shortcuts.size > 0;
 		if (current !== undefined) {
 			globalShortcut.unregister(current);
 			shortcuts.delete(plugin);
 		}
-		if (!shortcut) return "ok";
-		// 同一个组合 Electron 只认一个回调，被另一个插件占着就和被别的程序占着一样。
-		if ([...shortcuts.values()].includes(shortcut)) {
-			console.warn(`[screen] ${plugin} 的快捷键 ${shortcut} 已经给了另一个插件`);
-			return "taken";
-		}
 		try {
+			if (!shortcut) return "ok";
+			// 同一个组合 Electron 只认一个回调，被另一个插件占着就和被别的程序占着一样。
+			if ([...shortcuts.values()].includes(shortcut)) {
+				console.warn(`[screen] ${plugin} 的快捷键 ${shortcut} 已经给了另一个插件`);
+				return "taken";
+			}
 			// Windows 上 Alt+A 常被微信截图占着；注册失败只是返回 false，记一笔，用户说按了没反应时有据可查。
 			if (!globalShortcut.register(shortcut, startFromShortcut)) {
 				console.warn(`[screen] ${plugin} 的快捷键注册失败（多半被别的程序占着）：${shortcut}`);
 				return "taken";
 			}
+			shortcuts.set(plugin, shortcut);
+			return "ok";
 		} catch (error) {
 			console.warn(`[screen] ${plugin} 的快捷键写法不认识：${shortcut}`, error);
 			return "invalid";
+		} finally {
+			const keep = shortcuts.size > 0;
+			if (keep !== wasWarm) {
+				keepOverlayWarm(keep);
+				if (keep) warmTimer = setTimeout(warmOverlay, Math.max(0, launchedAt + WARM_AFTER_LAUNCH_MS - Date.now()));
+				else clearTimeout(warmTimer);
+			}
 		}
-		shortcuts.set(plugin, shortcut);
-		scheduleWarm();
-		return "ok";
 	});
 
 	ipcMain.handle("plume:screen:desktop", () => app.getPath("desktop"));
@@ -144,6 +146,7 @@ export function registerScreenshot(): void {
 		created.once("closed", () => {
 			const left = BrowserWindow.getAllWindows().filter((window) => window !== created && !window.isDestroyed() && !isOverlay(window) && !isPinWindow(window));
 			if (left.length > 0) return;
+			clearTimeout(warmTimer);
 			destroyOverlay();
 			destroyPins();
 		});

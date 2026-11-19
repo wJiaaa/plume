@@ -34,6 +34,8 @@ PLUME_SMOKE_ONLY=panel-transcript PLUME_SMOKE_OUT="$PWD/.smoke/panel-fixed/smoke
 
 ## 其余各段
 
+`screenshot-lifetime` 在真实 Electron 里经主窗口注册截屏快捷键：还有一个能用的组合时保留原浮层，撤销最后一个时销毁，重新注册可再次预热。只验证预热和回收，不触发真实截屏交互，也不要求授予屏幕录制权限。
+
 `markdown-images` 验证无需图片插件即可显示本机图片（包括指向会话目录外文件的软链）、损坏和缺失图片保留链接、回复里的远程引用不自动请求、点正文图片打开看图器并在同一条回复的图之间翻页；同时覆盖 Markdown 文档的相对图片与 HTTPS 图片、行内徽章尺寸、同名文件刷新、历史图片恢复、流式占位及窄窗口。
 
 `pnpm smoke` 怎么跑、输出在哪见 [AGENTS.md](../AGENTS.md) 的命令表和 `scripts/smoke.mjs` 的文件头；段名就是 `apps/desktop/src/main/smoke.ts` 里 `PLUME_SMOKE_ONLY === "…"` 的那些分支，`PLUME_SMOKE_ONLY=<段名>` 只跑一段。这里记各段覆盖了什么，加段、改了一段的覆盖面时同步。
