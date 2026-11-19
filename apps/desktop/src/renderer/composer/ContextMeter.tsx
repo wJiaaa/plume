@@ -3,7 +3,8 @@
  *
  * 圆环只回答「快满了吗」；点开回答「为什么」：对话消息、工具表、系统提示词各占多少，真要动手时看的是这个。
  * 项目指令和记忆收在「记忆文件」一行里，展开按文件列出：该去删哪份没人再读的 AGENTS.md，看的是这里。
- * 圆环和总数从会话的消息里算（context-usage.ts），分段在点开时向 agent 进程要（`contextBreakdown`）。
+ * 圆环和总数从会话的消息里算（context-usage.ts），分段在点开时向 agent 进程要（`contextBreakdown`）。压完、还没发下一次请求时，
+ * 服务商报的那个数量的是压缩前的历史，总数也改向 agent 进程要按压缩后的历史估的那个，和分段是同一份。
  */
 
 import type { ContextBreakdown, ContextSegmentKey, SessionView } from "@plume/contract";
@@ -14,7 +15,7 @@ import { formatTokens } from "../conversation/running-line.ts";
 import { openFile } from "../files/open-file.ts";
 import { modelsAgent } from "../models/store.ts";
 import { notify } from "../toast/index.ts";
-import { type ContextReading, contextReading } from "./context-usage.ts";
+import { type ContextReading, contextReading, readingOf, rewrittenFrom } from "./context-usage.ts";
 
 /**
  * 和转圈的那个同一种画法——24 的视框里半径 9、线宽 3.4——两个记号读起来是一家。转四分之一圈，从十二点起：
@@ -212,7 +213,14 @@ export function ContextMeter({ view, contextWindow }: { view?: SessionView | und
 	const popover = usePopover();
 	// 按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再数一遍。
 	const messages = view?.messages;
-	const reading = useMemo(() => (messages && contextWindow !== undefined ? contextReading(messages, contextWindow) : null), [messages, contextWindow]);
+	const runs = view?.compactionRuns;
+	const from = useMemo(() => rewrittenFrom(runs ?? []), [runs]);
+	const measured = useMemo(
+		() => (messages && contextWindow !== undefined ? contextReading(messages, contextWindow, from) : null),
+		[messages, contextWindow, from],
+	);
+	const estimated = useRewrittenEstimate(measured === null && from > 0 ? view?.summary.id : undefined, from);
+	const reading = measured ?? (estimated !== undefined && contextWindow !== undefined ? readingOf(estimated, contextWindow) : null);
 	// 还没有一条写完的回复时没什么可报的：空转录旁边的「已用 1%」是一段还没开始的路的读数。
 	if (!view || !reading) return null;
 	const sessionId = view.summary.id;
@@ -258,4 +266,26 @@ export function ContextMeter({ view, contextWindow }: { view?: SessionView | und
 			)}
 		</>
 	);
+}
+
+/**
+ * 压完（`from` 是那次压缩落在转录的第几条）、还没量过的会话，向 agent 进程要按压缩后的历史估的总数（`ContextBreakdown.used`）。
+ * 每次压缩只要一次；下一次请求回来就有量过的数，`sessionId` 交 undefined，不再要。要不到时没有读数，不拿压缩前的数顶上。
+ */
+function useRewrittenEstimate(sessionId: string | undefined, from: number): number | undefined {
+	const [estimate, setEstimate] = useState<{ sessionId: string; from: number; used: number } | undefined>(undefined);
+	useEffect(() => {
+		if (sessionId === undefined) return;
+		let live = true;
+		void modelsAgent()
+			.contextBreakdown(sessionId)
+			.then(
+				(breakdown) => live && breakdown && setEstimate({ sessionId, from, used: breakdown.used }),
+				() => undefined,
+			);
+		return () => {
+			live = false;
+		};
+	}, [sessionId, from]);
+	return estimate && estimate.sessionId === sessionId && estimate.from === from ? estimate.used : undefined;
 }

@@ -73,11 +73,15 @@ function filesOf(key: MemoryKey, section: PromptSection): ContextEstimate["memor
  * 和压缩判断有多满时给 `contextUsage` 的是同一对，刚压完、还没发下一次请求时不再拿压缩前的用量充数。
  */
 export function contextBreakdown(estimate: ContextEstimate, messages: readonly Message[], limit: number, staleAt?: number): ContextBreakdown {
-	const guesses = estimate.segments;
-	const keys = Object.keys(guesses) as ContextSegmentKey[];
-	const guessed = keys.reduce((sum, key) => sum + guesses[key], 0);
 	// 服务商量的数（加上最近一条回复之后的消息），和压缩判断有多满用的是同一个（`ContextCompact.usage`）。
 	const usage = contextUsage(messages, staleAt === undefined ? {} : { staleAt });
+	/*
+	 * 改写过、之后还没量过：记下的估算是上一次发出去的那份请求，对话消息那段还是改写前的历史。这一段按眼下这份历史重估，
+	 * 别的段（提示词、工具表）改写不动它们，照用。
+	 */
+	const guesses = staleAt !== undefined && !usage.measured ? { ...estimate.segments, messages: Math.ceil(messageTokens(messages)) } : estimate.segments;
+	const keys = Object.keys(guesses) as ContextSegmentKey[];
+	const guessed = keys.reduce((sum, key) => sum + guesses[key], 0);
 	const total = usage.measured ? usage.tokens : null;
 	const scale = scaler(total !== null && guessed > 0 ? total / guessed : 1);
 	const sized = Object.fromEntries(keys.map((key) => [key, scale(guesses[key])])) as Record<ContextSegmentKey, number>;

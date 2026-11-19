@@ -1,7 +1,7 @@
-import type { AssistantMessage, Message, UserMessage } from "@plume/contract";
+import type { AssistantMessage, CompactionRun, Message, UserMessage } from "@plume/contract";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contextReading, contextUsed } from "../src/renderer/composer/context-usage.ts";
+import { contextReading, contextUsed, readingOf, rewrittenFrom } from "../src/renderer/composer/context-usage.ts";
 
 type Usage = AssistantMessage["usage"];
 
@@ -68,4 +68,26 @@ test("超过窗口也只写到 100%", () => {
 test("没有窗口或没有回复时是 null", () => {
 	assert.equal(contextReading([reply(usage(10, 0))], 0), null);
 	assert.equal(contextReading([ask(1)], 1000), null);
+});
+
+function run(at: number, extra: Partial<CompactionRun> = {}): CompactionRun {
+	return { id: `r${at}`, at, startedAt: 0, status: "done", phase: "summarizing", retries: 0, code: "done", ...extra };
+}
+
+test("压缩落在转录第几条：只认真改写了历史的（换成摘要、只剪了工具结果），取最后那次", () => {
+	assert.equal(rewrittenFrom([]), 0);
+	assert.equal(rewrittenFrom([run(4), run(9, { code: "prune-only", status: "skipped" })]), 9);
+	assert.equal(rewrittenFrom([run(4), run(9, { status: "failed", code: "failed" }), run(12, { status: "running", code: undefined })]), 4);
+});
+
+test("压缩之前的回复报的用量不算：压完、还没发下一次请求时没有量过的读数", () => {
+	const messages: Message[] = [ask(1), reply(usage(150_000, 1000)), ask(2)];
+	assert.equal(contextUsed(messages, 2), null);
+	assert.equal(contextReading(messages, 400_000, 2), null);
+	// 压缩以后回来的回复照常算。
+	assert.equal(contextUsed([...messages, reply(usage(30_000, 500))], 2), 30_500);
+});
+
+test("按估算的总数读数，和量过的同一套百分比", () => {
+	assert.deepEqual(readingOf(28_800, 400_000), { used: 28_800, limit: 400_000, percent: 7, tight: false });
 });

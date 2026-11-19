@@ -106,11 +106,16 @@ it("最近一条量过的回复之后进来的消息按估算加上：和压缩�
 	expect(contextBreakdown({ segments, memoryFiles: [] }, [reply(900, 100), result], 200_000)).toMatchObject({ used: 1100, measured: true });
 });
 
-it("历史改写（压缩、剪枝）之前的回复报的用量不算数，和压缩判断一样退回估算", () => {
-	const segments = { messages: 7, tools: 3, mcpTools: 0, skills: 0, systemPrompt: 0, conventions: 0, memory: 0 };
+it("历史改写（压缩、剪枝）之前的回复报的用量不算数，和压缩判断一样退回估算；对话消息按改写后的历史重估，不用上一次请求记下的", () => {
+	// 上一次请求时对话消息还有 5000：压缩以后历史只剩一份短摘要和那条回复。
+	const segments = { messages: 5000, tools: 3, mcpTools: 0, skills: 0, systemPrompt: 0, conventions: 0, memory: 0 };
 	const old = reply(900, 100, { timestamp: 5 });
+	const summary: Message = { role: "user", content: [{ type: "text", text: "s".repeat(35) }], timestamp: 11, synthetic: true };
 	expect(contextBreakdown({ segments, memoryFiles: [] }, [old], 200_000)).toMatchObject({ measured: true });
-	expect(contextBreakdown({ segments, memoryFiles: [] }, [old], 200_000, 10)).toMatchObject({ used: 10, measured: false });
+	const rewritten = contextBreakdown({ segments, memoryFiles: [] }, [summary, old], 200_000, 10);
+	expect(rewritten).toMatchObject({ measured: false });
+	expect(rewritten.segments.find((segment) => segment.key === "messages")?.tokens).toBeLessThan(100);
+	expect(rewritten.segments.find((segment) => segment.key === "tools")?.tokens).toBe(3);
 });
 
 it("还没有写完的回复时用估算，measured 为假", () => {
