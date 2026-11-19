@@ -9,6 +9,7 @@ import type { Message } from "@plume/contract";
  * 系统提示词说清楚对话是不可信的数据：网页、文件、命令输出里任何像指令的话都可能混进摘要，而摘要写一次、之后每一步都当事实读。
  * 格式固定成几节：自由发挥的摘要会漂（改过两次方向的对话读起来像从没改过），事实也摊得太薄，找一个路径要翻一整段。
  * 不设总长度目标：等摘要的那几秒人人看得见，丢掉的一句报错、一个被否掉的做法，要到下一段工作出错时才看得见。省的只是做完的事，一项一行。
+ * 已经答给人的结论（选型对比、推荐、判断）不算「做完的事」：任务转向以后它们最容易被压成一句「比较过 A、B、C」，人回头追问时却正要接着它谈。
  */
 // i18n-exempt：发给模型的提示词，不随界面语言变。
 export const SUMMARY_SYSTEM = `You write structured handover summaries for a software engineering session.
@@ -38,6 +39,7 @@ const SUMMARY_FORMAT = `Use exactly this format, omitting sections that do not a
 
 ## Architecture Decisions & Key Findings
 - **[Decision / Root Cause]**: [Why, key technical conclusions, or verified root causes. Include approaches that were rejected.]
+- **[Conclusion given to the user]**: [Each comparison, recommendation or answer already given to the user, even if the work has since moved on: the verdict for every option weighed and the deciding reasons or limits behind it, one line per option. The user may come back to any of them.]
 
 ## Actionable Next Steps
 1. [Ordered, concrete, immediately actionable next steps to finish remaining user goals]
@@ -45,7 +47,7 @@ const SUMMARY_FORMAT = `Use exactly this format, omitting sections that do not a
 ## Critical Context
 - [Exact file paths, symbol names, and repository state needed to continue work seamlessly. Quote error messages, failing commands and the decisive lines of their output exactly; leave out passing output and traces the next step does not depend on.]
 
-Be dense and factual. Completed work may shrink to one line per item. Everything the next step depends on — the goal, constraints, unfinished tasks, decisions and their reasons, rejected approaches, exact errors — is kept in full, however long that makes the summary. Never drop unfinished tasks or the primary objective. Output only the summary, with no preamble.`;
+Be dense and factual. Completed work may shrink to one line per item. Everything the next step depends on — the goal, constraints, unfinished tasks, decisions and their reasons, rejected approaches, conclusions already given to the user, exact errors — is kept in full, however long that makes the summary. Never drop unfinished tasks or the primary objective. Output only the summary, with no preamble.`;
 
 export const FIRST_SUMMARY = `Summarise the conversation above so another engineer can pick the work up with no other context. Ensure all user requests and task lists are fully recorded.
 
