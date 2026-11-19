@@ -143,8 +143,10 @@ export function Scroller({
 		const depthTop = top === "fade" && hidden > 1 ? Math.round(Math.min(scrollFade(clientHeight, "top", fadeTop), Math.max(0, scrollTop))) : 0;
 		const depthBottom = bottom === "fade" && hidden > 1 ? Math.round(Math.min(scrollFade(clientHeight, "bottom"), Math.max(0, hidden - scrollTop))) : 0;
 		return () => {
+			if (fade.current.top === depthTop && fade.current.bottom === depthBottom) return;
 			if (fade.current.top !== depthTop) el.style.setProperty("--plume-fade-top", `${depthTop}px`);
 			if (fade.current.bottom !== depthBottom) el.style.setProperty("--plume-fade-bottom", `${depthBottom}px`);
+			el.toggleAttribute("data-plume-fading", depthTop > 0 || depthBottom > 0);
 			fade.current = { top: depthTop, bottom: depthBottom };
 		};
 	}, []);
@@ -338,9 +340,8 @@ export function Scroller({
 				 * 里和弹层里都能用。
 				 */
 				/*
-				 * 渐隐是这个元素上的遮罩，两个深度就是它全部的状态——零就是没有渐隐，所以同一条声明管两头、
-				 * 两个方向，深度跟着滚过的距离变（见上面 `fade`）。只在可能有渐隐的地方挂上这个类：遮罩会把滚动面
-				 * 提升成单独的合成层，永远不会柔化的滚动面没理由付这个代价。
+				 * 渐隐跟着滚过的距离变，两个深度都为零时不挂遮罩。遮罩会把整个滚动面提到单独的合成层，
+				 * 即使它完全不透明也要付这笔代价。类名保留层叠顺序，`data-plume-fading` 才控制遮罩。
 				 */
 				/*
 				 * 只竖着滚，而且 `overflow-x` 明写出来，不交给浏览器。
@@ -353,18 +354,7 @@ export function Scroller({
 				 * 这才是真正的修法：`pre` 本来就自己滚，在这里裁掉正是让它自己滚的前提。阅读列往右边没有
 				 * 意义——真比窗口还宽的东西，宽在它**自己的**盒子里。
 				 */
-				className={`plume-scroll-view min-h-0 flex-auto overflow-x-hidden overflow-y-auto ${
-					chain
-					/*
-					 * 类名必须正好是 `plume-fade-y`。
-					 *
-					 * `fade` 只往视口上写 `--plume-fade-top` 和 `--plume-fade-bottom` 两个变量，遮罩是
-					 * `.plume-fade-y`（`ui/scroll.css`）画的。类名一改，变量照样写得出去，遮罩规则却不再命中，
-					 * 于是每一个带渐隐的滚动面——转录、侧栏、设置页、浮层——上下边缘都是硬切。
-					 *
-					 * 没有任何检查拦得住这个：类名是字符串，类型检查和 lint 都不看它。
-					 */
-				} ${fades ? "plume-fade-y" : ""} ${contentClassName}`}
+				className={`plume-scroll-view min-h-0 flex-auto overflow-x-hidden overflow-y-auto ${chain} ${fades ? "plume-fade-y" : ""} ${contentClassName}`}
 				tabIndex={-1}
 			>
 				{children}
