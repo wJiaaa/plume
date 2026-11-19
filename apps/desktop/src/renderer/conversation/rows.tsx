@@ -105,8 +105,8 @@ function AssistantRow({
 	const copied = texts.filter(Boolean).join("\n\n");
 	return (
 		// `group/msg` 让下面那行跟着悬停整条回复显出来。`empty:hidden`：只剩一块空正文的回复什么也画不出，不该占一份行距。
-		// `data-plume-quote`：一条回复里选中的字可以引用，见 `QuoteMenu`。
-		<div data-plume-quote="assistant" className="group/msg flex flex-col gap-2.5 empty:hidden">
+		// `data-plume-quote`：一条回复里选中的字可以引用，见 `QuoteMenu`。`data-reply-images`：正文里的图点开后在这一条里翻，见 `MarkdownImage`。
+		<div data-plume-quote="assistant" data-reply-images className="group/msg flex flex-col gap-2.5 empty:hidden">
 			{/* 页脚那一行：话已经在上面画过了，这里只要它的字给复制用。 */}
 			{!trailer &&
 				segments(own).map((segment, position) => {

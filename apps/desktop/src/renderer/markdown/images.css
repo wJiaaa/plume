@@ -7,6 +7,20 @@
 		border-radius: var(--plume-radius-field);
 	}
 
+	/* 点开看图的按钮只包一层，不占版面；焦点环画在图上。 */
+	.markdown .md-image-open {
+		display: contents;
+	}
+
+	.markdown .md-image-open > .md-image {
+		cursor: zoom-in;
+	}
+
+	.markdown .md-image-open:focus-visible > .md-image {
+		outline: 2px solid var(--plume-accent);
+		outline-offset: 2px;
+	}
+
 	.markdown .md-image[data-block],
 	.markdown .md-image-pending {
 		display: block;
