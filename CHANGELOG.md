@@ -2,6 +2,30 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.3] - 2026-11-19
+
+<!-- plume:notes en -->
+### Changes
+
+- **Wider conversations on large screens.** Settings › Appearance has a new "Conversation width" option. The Wide setting lets the conversation and input box grow past 864px, up to 1200px depending on the window width, so tables, code blocks and long commands wrap less.
+- **Images in replies open in the image viewer.** Clicking an image in a reply's text used to do nothing. It now opens the viewer, and you can page through the other images in the same reply.
+- **The running line says what is running.** While a tool group is collapsed, the line under it names the call in progress. Inside the card, running rows show a spinner and timer, and finished rows are dimmed.
+- **Context usage drops right after compaction.** The usage ring and breakdown used to keep showing the pre-compaction numbers until the next reply. They now update as soon as compaction finishes.
+- **Compaction keeps what matters.** Summaries keep the conclusions and reasons you were already given (comparisons, recommendations), even after the task changes direction. The summary header no longer carries an outdated task list when a newer one was kept.
+- **Plume uses less memory when idle.** Chats you only open to read are no longer kept in memory. The screenshot overlay is only kept ready while a plugin has a global screenshot shortcut. Without one, it closes after each capture, so a capture started from a button takes a moment longer.
+- **Smaller fixes.** Checking the same background task's output a few times in a row now shows as one line, not a group. The side chat describes reading or controlling the main chat in plain words instead of showing tool names. The "no model available yet" banner above the input box is gone; the model menu already links to adding a provider.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **宽屏下对话可以更宽。** 设置 › 外观新增「对话宽度」，选「宽」后对话和输入框不再卡在 864px，随窗口宽度最宽到 1200px，表格、代码块和长命令少折行。
+- **回复里的图片能点开看。** 原来点回复正文里的图片没有反应，现在用看图器打开，同一条回复里的图可以左右翻。
+- **运行行说出正在跑的调用。** 工具组收着时，下面那行说出此刻在跑哪一次调用；卡片里在跑的行转圈、计秒，跑完的行淡一档。
+- **压缩后上下文用量马上降下来。** 原来压缩完、下一条回复回来之前，圆环和分段还显示压缩前的数，现在压完就更新。
+- **压缩留下该留的。** 已经答给你的对比、推荐，摘要里留下结论和依据，任务转向后也不再压成一句；保留的原文里有更新的任务清单时，摘要头不再带那份过时的。
+- **空闲时更省内存。** 只是打开看看的对话不再留在内存里。截屏浮层只在有插件注册了截屏快捷键时提前备好；没有快捷键时每次截完就关掉，所以点按钮截屏会稍慢一点。
+- **一些小修正。** 连着查看同一个后台任务的输出几次，现在显示为一行，不再套一层组；侧边聊天翻看、控制主会话时用中文说明，不再露出工具名；输入框上方去掉了「还没有可用的模型」提示，模型菜单里本来就有添加供应商的入口。
+
 ## [0.7.2] - 2026-11-18
 
 <!-- plume:notes en -->
