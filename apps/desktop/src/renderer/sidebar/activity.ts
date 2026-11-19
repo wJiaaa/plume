@@ -68,9 +68,14 @@ export function settle(
 	return current === "waiting" ? undefined : current;
 }
 
-export function sessionsChanged(previous: readonly SessionSummary[], next: readonly SessionSummary[], currentId: string | undefined): void {
+/** `watching`：人正看着的会话（屏上的，分屏时两屏都算），跑完不记成未读的结果。 */
+export function sessionsChanged(
+	previous: readonly SessionSummary[],
+	next: readonly SessionSummary[],
+	watching: (sessionId: string) => boolean = () => false,
+): void {
 	const before = new Map(previous.map((session) => [session.id, session]));
-	for (const session of next) set(session.id, settle(before.get(session.id), session, marks.get(session.id), session.id === currentId));
+	for (const session of next) set(session.id, settle(before.get(session.id), session, marks.get(session.id), watching(session.id)));
 	for (const id of [...marks.keys()]) if (!next.some((session) => session.id === id)) set(id, undefined);
 	for (const id of [...waits.keys()]) if (!next.some((session) => session.id === id)) waits.delete(id);
 	const linked = next.flatMap((session) => (session.parentId ? [[session.id, session.parentId] as const] : []));

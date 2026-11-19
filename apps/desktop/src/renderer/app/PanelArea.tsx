@@ -29,8 +29,7 @@ function panelGroup(app: Chrome, scope: string): PanelTabs {
 	return { tabs, active: tabs.some((tab) => tab.id === group.active) ? group.active : (tabs.at(-1)?.id ?? "") };
 }
 
-export function panelLayout(app: Chrome, size: { width: number; height: number }, share: number) {
-	const scope = scopeOf(app);
+export function panelLayout(app: Chrome, size: { width: number; height: number }, share: number, scope = scopeOf(app)) {
 	const group = panelGroup(app, scope);
 	const shown = listPanels().length > 0 && group.tabs.length > 0 && panelOpenIn(app, scope);
 	return {
@@ -121,32 +120,52 @@ export function PanelResizer({ scope, width, windowWidth, max }: { scope: string
 	const { t } = useI18n();
 	const resize = (next: number) => setPanelWidth(scope, clamp(Math.round(next), PANEL_MIN, max));
 	return (
-		<div className="absolute inset-y-0 w-0" style={{ left: windowWidth - width }}>
+		// 压在常驻面板的内容层上面（那一层在工作区的最后，见 Chat.tsx 的 `ChatWorkspace`），把手右半截不被它挡住。
+		<div className="absolute inset-y-0 z-10 w-0" style={{ left: windowWidth - width }}>
 			<ResizeHandle edge="start" width={width} min={PANEL_MIN} max={max} onResize={resize} onReset={() => resize(windowWidth / 2)} label={t("panel.resize")} />
 		</div>
 	);
 }
 
-/** 内容按首次挂载的顺序追加，切换会话不能让 React 移动 webview 的 DOM。 */
-export function PanelLayer({ layout, floor }: { layout: ReturnType<typeof panelLayout>; floor?: number | undefined }) {
+/** 一屏的面板几何（见 Chat.tsx 的 `ChatWorkspace`）：常驻面板的内容只有一层，按标签所在的那一屏摆。 */
+export interface PaneLayout {
+	scope: string;
+	focused: boolean;
+	/** 这一屏在工作区里的左边和宽度。 */
+	left: number;
+	width: number;
+	/** 分屏时在哪一边；一屏时是 undefined。 */
+	side?: "left" | "right" | undefined;
+	layout: ReturnType<typeof panelLayout>;
+	/** 侧栏开合、面板区正滑着时内容定住的宽度（面板外框），见 Chat.tsx 的 `screenLayout`；不在滑时是 undefined。 */
+	floor: number | undefined;
+}
+
+/**
+ * 内容按首次挂载的顺序追加，切换会话不能让 React 移动 webview 的 DOM。整个工作区只有这一层：分屏时两屏的标签也在这里，
+ * 按标签所在的那一屏（`panes`）摆，换会话、换焦点时只换位置，不搬 DOM。
+ */
+export function PanelLayer({ panes }: { panes: readonly PaneLayout[] }) {
 	const app = useChrome();
 	usePluginUis();
 	const found: { tab: PanelTab; scope: string; panel: PanelEntry }[] = [];
 	for (const [scope, group] of Object.entries(app.panelTabs)) {
 		for (const tab of group.tabs) {
 			const panel = tab.panel ? panelEntry(tab.panel) : undefined;
-			if (panel && !app.panelWindows.some((entry) => entry.tab === tab.id) && (panel.keepAlive || (app.screen === "chat" && scopeOf(app) === scope)))
-				found.push({ tab, scope, panel });
+			const onScreen = app.screen === "chat" && panes.some((pane) => pane.scope === scope);
+			if (panel && !app.panelWindows.some((entry) => entry.tab === tab.id) && (panel.keepAlive || onScreen)) found.push({ tab, scope, panel });
 		}
 	}
 	const order = useRef<string[]>([]);
 	const ids = new Set(found.map(({ tab }) => tab.id));
 	order.current = [...order.current.filter((id) => ids.has(id)), ...[...ids].filter((id) => !order.current.includes(id))];
 	found.sort((a, b) => order.current.indexOf(a.tab.id) - order.current.indexOf(b.tab.id));
+	const focused = panes.find((pane) => pane.focused);
+	if (!focused) return null;
 	return (
 		<div className="contents" data-panel-kept="">
 			{found.map(({ tab, scope, panel }) => (
-				<PanelLayerTab key={tab.id} tab={tab} scope={scope} panel={panel} layout={layout} floor={floor} />
+				<PanelLayerTab key={tab.id} tab={tab} scope={scope} panel={panel} pane={panes.find((pane) => pane.scope === scope)} fallback={focused} />
 			))}
 		</div>
 	);
@@ -156,42 +175,57 @@ function PanelLayerTab({
 	tab,
 	scope,
 	panel,
-	layout,
-	floor,
+	pane,
+	fallback,
 }: {
 	tab: PanelTab;
 	scope: string;
 	panel: PanelEntry;
-	layout: ReturnType<typeof panelLayout>;
-	/** 侧栏开合、面板区正滑着时内容定住的宽度（面板外框），见 Chat.tsx 的 `panelFloor`；不在滑时是 undefined。 */
-	floor: number | undefined;
+	/** 标签的会话在哪一屏；不在屏上（后台的常驻面板）是 undefined。 */
+	pane: PaneLayout | undefined;
+	/** 还没在屏上摆过的后台标签先按焦点那一屏摆。 */
+	fallback: PaneLayout;
 }) {
 	const app = useChrome();
-	const current = scopeOf(app) === scope;
-	// 后台标签保留最后的尺寸，切换会话不改变其内部布局。
-	const last = useRef(layout);
-	if (current) last.current = layout;
+	const current = pane !== undefined;
+	// 后台标签保留最后的位置和尺寸，切换会话不改变其内部布局。
+	const last = useRef(pane ?? fallback);
+	if (pane) last.current = pane;
+	const { layout, left, width, side } = last.current;
+	const moving = app.panelMoving && pane?.focused === true;
 	const shown = current && layout.shown && app.screen === "chat" && panelGroup(app, scope).active === tab.id;
-	const motion = app.panelMoving && current ? panelMotion(layout.shown) : "";
+	const motion = moving ? panelMotion(layout.shown) : "";
+	const floor = current ? pane.floor : undefined;
 	return (
+		// 外层按这一屏摆，带上这一屏的排法、开合和拼边：styles.css 按它们给内容淡入淡出、去掉挨着别人那一边的圆角。
 		<div
-			data-panel-layer={scope}
-			data-panel-tab-id={tab.id}
-			inert={!shown}
-			className={`pointer-events-none absolute inset-0 overflow-hidden ${!shown && !(app.panelMoving && current && panelGroup(app, scope).active === tab.id) ? "invisible" : ""}`}
+			className="pointer-events-none absolute inset-y-0"
+			style={{ left, width }}
+			data-panel-layout={layout.arrangement}
+			data-panel-sliding={moving ? (layout.shown ? "open" : "close") : undefined}
+			data-panel-shown={layout.shown || undefined}
+			data-frame-right={(layout.arrangement === "row" && (layout.shown || moving)) || undefined}
+			data-split-pane={side}
 		>
-			<div className={`plume-panel plume-freeze absolute ${motion}`} style={last.current.panel}>
-				{/* 和 PanelArea 里面板的身子对齐：标签行在身子上面，身子从它下面开始、带 1px 描边。 */}
-				<div data-frame-clip="" className="absolute inset-x-0 bottom-0 overflow-hidden rounded-panel" style={{ top: MAIN_TOOLBAR_HEIGHT }}>
-					<div
-						id={`panel-content:${tab.id}`}
-						data-panel={panel.key}
-						inert={!shown}
-						className="plume-dock-pane pointer-events-auto absolute overflow-auto origin-top-left"
-						// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
-						style={current && floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
-					>
-						<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
+			<div
+				data-panel-layer={scope}
+				data-panel-tab-id={tab.id}
+				inert={!shown}
+				className={`pointer-events-none absolute inset-0 overflow-hidden ${!shown && !(moving && panelGroup(app, scope).active === tab.id) ? "invisible" : ""}`}
+			>
+				<div className={`plume-panel plume-freeze absolute ${motion}`} style={layout.panel}>
+					{/* 和 PanelArea 里面板的身子对齐：标签行在身子上面，身子从它下面开始、带 1px 描边。 */}
+					<div data-frame-clip="" className="absolute inset-x-0 bottom-0 overflow-hidden rounded-panel" style={{ top: MAIN_TOOLBAR_HEIGHT }}>
+						<div
+							id={`panel-content:${tab.id}`}
+							data-panel={panel.key}
+							inert={!shown}
+							className="plume-dock-pane pointer-events-auto absolute overflow-auto origin-top-left"
+							// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
+							style={floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
+						>
+							<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
+						</div>
 					</div>
 				</div>
 			</div>

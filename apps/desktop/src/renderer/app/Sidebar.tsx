@@ -83,12 +83,14 @@ function SettingsSidebar() {
 /** 对话的侧栏：新对话钉在上面，下面是项目和会话。去处（插件的页面、插件市场、设置）和搜索、通知在活动栏里，见 Rail.tsx。 */
 function Sidebar() {
 	const { t } = useI18n();
-	const { sessions, projects, currentId, pendingId, windowWidth } = useChrome();
+	const { sessions, projects, currentId, pendingId, windowWidth, split } = useChrome();
 	const compact = layoutMode(windowWidth) === "compact";
 	const pad = compact ? "px-3" : "px-2.5";
 	const detached = sessionWindows.use();
 	const selected = pendingId ?? currentId;
-	const lit = useMemo(() => new Set(selected ? [...detached, selected] : detached), [selected, detached]);
+	// 分屏时另一屏的会话也点亮。
+	const other = split?.sessionId;
+	const lit = useMemo(() => new Set([...detached, ...(selected ? [selected] : []), ...(other ? [other] : [])]), [selected, other, detached]);
 	return (
 		<>
 			<div className={`shrink-0 pt-1.5 pb-1 ${pad}`}>

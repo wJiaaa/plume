@@ -74,6 +74,7 @@ import { checkCompact } from "./smoke-compact.ts";
 import { checkPanelsFramework, checkSideChatWindow } from "./smoke-panels.ts";
 import { checkFileTerminal } from "./smoke-file-terminal.ts";
 import { checkSessionWindow } from "./smoke-session-window.ts";
+import { checkSplit } from "./smoke-split.ts";
 import { checkConversations } from "./smoke-conversations.ts";
 import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { checkBootScreen } from "./smoke-boot-screen.ts";
@@ -106,10 +107,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 	const sessionMenuOnly = process.env.PLUME_SMOKE_ONLY === "session-menu";
 	const pullRequestsOnly = process.env.PLUME_SMOKE_ONLY === "pull-requests";
 	const sessionWindowOnly = process.env.PLUME_SMOKE_ONLY === "session-window";
+	const splitOnly = process.env.PLUME_SMOKE_ONLY === "split";
 	let childrenPhase = false;
 	let scripted = 0;
 	const replies: FakeReply[] =
-		sessionMenuOnly || pullRequestsOnly || sessionWindowOnly
+		sessionMenuOnly || pullRequestsOnly || sessionWindowOnly || splitOnly
 			? [{ text: "会话菜单验证完成。" }]
 			: [
 					{
@@ -1162,8 +1164,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			return;
 		}
 
-		// 菜单、拉取请求和会话窗口专项共用最小会话，不依赖工具插件的假模型脚本。
-		if (sessionMenuOnly || pullRequestsOnly || sessionWindowOnly) {
+		// 菜单、拉取请求、会话窗口和分屏专项共用最小会话，不依赖工具插件的假模型脚本。
+		if (sessionMenuOnly || pullRequestsOnly || sessionWindowOnly || splitOnly) {
 			await page(`window.plume.saveAppearance({ theme: "light" })`);
 			await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "菜单切到浅色");
 			await click('[data-plume-section-action] button[aria-label="新建项目"]');
@@ -1190,8 +1192,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				app.exit(0);
 				return;
 			}
-			if (sessionWindowOnly) {
-				// 侧栏里要有另一段会话开到独立窗口；主窗口停在第二段上。
+			if (sessionWindowOnly || splitOnly) {
+				// 侧栏里要有另一段会话开到独立窗口（分屏时开到另一屏）；主窗口停在第二段上。
 				window.webContents.send("plume:command", "new-session");
 				await until(`document.querySelector('[data-screen=empty]') !== null`, "会话窗口专项开新对话");
 				await page(`document.querySelector('.cm-content').focus()`);
@@ -1204,6 +1206,15 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				);
 				const [second] = recentSessions(await agent.sessions());
 				if (!second) throw new Error("agent 进程应该给出第二段会话");
+				if (splitOnly) {
+					await checkSplit({ window, outDir, page, until, click, capture, sessionId: second.id });
+					console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: "split", requests: model.requests.length }));
+					window.webContents.debugger.detach();
+					await shutdown();
+					await model.close();
+					app.exit(0);
+					return;
+				}
 				const file = join(workspace, "session-window.md");
 				await writeFile(file, "# 会话窗口\n\n从独立窗口交给主窗口打开。\n");
 				await checkSessionWindow({ window, outDir, page, until, click, capture, sessionId: second.id, finalText: "会话菜单验证完成。", file });

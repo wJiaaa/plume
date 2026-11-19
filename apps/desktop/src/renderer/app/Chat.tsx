@@ -1,11 +1,12 @@
 import type { SessionSummary, SessionTarget, SessionView } from "@plume/contract";
 import type { ConversationProps, PageProps } from "@plume/contract/ui";
-import { ActionSpinner, composingKey, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
-import { Folder, MoreHorizontal, Plug } from "@plume/ui/icons";
+import { ActionSpinner, composingKey, ResizeHandle, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
+import { Folder, MoreHorizontal, Plug, X } from "@plume/ui/icons";
 import { createContext, type CSSProperties, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
-import { layoutMode, panelWidthFor } from "../layout.ts";
+import { clamp, layoutMode, panelWidthFor, SCREEN_MIN } from "../layout.ts";
+import { useLiveSession } from "../session-live.ts";
 import { ChatBackdrop } from "../chat-backdrop.tsx";
 import { notify } from "../toast/index.ts";
 import { Transcript } from "../conversation/Transcript.tsx";
@@ -36,30 +37,45 @@ import {
 	useChrome,
 } from "./state.ts";
 import { finishPanelLeave, panelOpenIn, scopeOf, tabsOf, togglePanel } from "./panels.ts";
-import { PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, panelMotion, PanelResizer, PanelToggle } from "./PanelArea.tsx";
+import { PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, type PaneLayout, panelMotion, PanelResizer, PanelToggle } from "./PanelArea.tsx";
+import { closeScreen, parked, select, setSplitShare } from "./sessions.ts";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
 import { Composer } from "./Composer.tsx";
 import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
 
-/** 对话和面板共用工作区尺寸；常驻标签不随会话切换搬动 DOM。 */
-export function ChatScreen({
+/** 一屏：哪个会话（`scope`，空白页是 `""`）、焦点在不在它上面、在工作区里的左边和宽度。 */
+interface Pane {
+	key: string;
+	scope: string;
+	focused: boolean;
+	left: number;
+	width: number;
+	/** 分屏时在哪一边；一屏时是 undefined。 */
+	side?: "left" | "right";
+}
+
+/**
+ * 工作区：一屏，或者分屏时左右两屏。每一屏是一个会话的对话和它自己的面板区（标签、开合、宽度、全屏都按会话记），
+ * 焦点那一屏是 `currentId`，另一屏是 `split`。工作区放不下两屏（每屏 `SCREEN_MIN`）时只画焦点那一屏，拉宽后两屏回来。
+ * 常驻面板的内容只有一层（`PanelLayer`），按标签所在的那一屏摆：换会话、换焦点时网页、终端不搬 DOM、不重挂。
+ */
+export function ChatWorkspace({
 	fatal,
 	slideWidth,
-	share,
+	shares,
 	onShare,
 }: {
 	fatal?: string;
 	/** 侧栏正开合时，工作区滑完有多宽；不在滑时是 undefined。 */
 	slideWidth?: number;
-	share: number;
-	onShare(share: number): void;
+	/** 面板区上下排时各会话的面板占几成高度。 */
+	shares: Record<string, number>;
+	onShare(scope: string, share: number): void;
 }) {
 	const app = useChrome();
 	const { t } = useI18n();
 	usePluginUis();
-	const scope = scopeOf(app);
-	const session = useAppPick((current) => current.view?.summary);
 	const root = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({ width: 0, height: 0 });
 	useLayoutEffect(() => {
@@ -71,42 +87,164 @@ export function ChatScreen({
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
-	const layout = panelLayout(app, size, share);
-	const motion = app.panelMoving ? panelMotion(layout.shown) : "";
-	// 侧栏、面板区开合时对话那一栏滑完有多宽，见 ChatSlide。侧栏滑完时面板区可能换了宽度、换了排法，按滑完的工作区重算一遍。
-	const landed = slideWidth === undefined ? layout : panelLayout(app, { width: slideWidth, height: size.height }, share);
-	const slideTarget =
-		slideWidth !== undefined || (app.panelMoving && layout.arrangement === "row") ? (slideWidth ?? size.width) - Number(landed.chat.right) : undefined;
+	const focusedScope = scopeOf(app);
+	const split = app.split && layoutMode(app.windowWidth) !== "compact" && size.width >= SCREEN_MIN * 2 + 1 ? app.split : undefined;
+	// 一屏时焦点那一屏沿用它分屏时的位置当 key：分屏开合时它不重挂。
+	const focusedSide = useRef<"left" | "right">("left");
+	if (split) focusedSide.current = split.side === "left" ? "right" : "left";
+	const leftWidth = split ? clamp(Math.round(size.width * split.share), SCREEN_MIN, size.width - 1 - SCREEN_MIN) : size.width;
+	const panes: Pane[] = split
+		? (["left", "right"] as const).map((side) => {
+				const focused = side !== split.side;
+				return {
+					key: side,
+					side,
+					scope: focused ? focusedScope : split.sessionId,
+					focused,
+					left: side === "left" ? 0 : leftWidth + 1,
+					width: side === "left" ? leftWidth : size.width - leftWidth - 1,
+				};
+			})
+		: [{ key: focusedSide.current, scope: focusedScope, focused: true, left: 0, width: size.width }];
+	/*
+	 * 侧栏开合、拖宽度时每一屏滑完有多宽：按滑完的工作区重新分一遍。起点在开滑那一下量（见 `screenLayout`），按屏记。
+	 */
+	const landedLeft = split && slideWidth !== undefined ? clamp(Math.round(slideWidth * split.share), SCREEN_MIN, slideWidth - 1 - SCREEN_MIN) : slideWidth;
+	const slideFrom = useRef<Record<string, number | undefined>>({});
+	const layouts = panes.map((pane) => {
+		const slide =
+			slideWidth === undefined || landedLeft === undefined ? undefined : !split ? slideWidth : pane.side === "left" ? landedLeft : slideWidth - landedLeft - 1;
+		return {
+			pane,
+			...screenLayout(app, pane, { width: pane.width, height: size.height }, slide, shares[pane.scope] ?? 0.4, slideFrom.current),
+		};
+	});
+	const ordered: PaneLayout[] = layouts.map(({ pane, layout, floor }) => ({ ...pane, layout, floor }));
+	return (
+		<div ref={root} data-split={split ? "" : undefined} className="relative min-h-0 flex-1">
+			{layouts.map(({ pane, layout, slideTarget }) => (
+				<ToolbarOverlapFor key={pane.key} first={pane.left === 0}>
+					<ChatScreen
+						fatal={fatal}
+						pane={pane}
+						split={split !== undefined}
+						layout={layout}
+						height={size.height}
+						slideTarget={slideTarget}
+						onShare={(share) => onShare(pane.scope, share)}
+					/>
+				</ToolbarOverlapFor>
+			))}
+			{split && (
+				<>
+					{/* 两屏之间：顶行里竖一小截线，下面一整条，和侧栏、面板区之间的分隔线一个样子。 */}
+					<span aria-hidden className="absolute top-0 h-5 w-px bg-line-float" style={{ left: leftWidth, marginTop: (MAIN_TOOLBAR_HEIGHT - 20) / 2 }} />
+					<span aria-hidden data-split-divider="" className="absolute bottom-0 w-px bg-line-float" style={{ left: leftWidth, top: MAIN_TOOLBAR_HEIGHT }} />
+					<div className="absolute inset-y-0 z-10 w-0" style={{ left: leftWidth }}>
+						<ResizeHandle
+							edge="end"
+							width={leftWidth}
+							min={SCREEN_MIN}
+							max={size.width - 1 - SCREEN_MIN}
+							onResize={(next) => setSplitShare(next / size.width)}
+							onReset={() => setSplitShare(0.5)}
+							label={t("split.resize")}
+						/>
+					</div>
+				</>
+			)}
+			<PanelLayer panes={ordered} />
+		</div>
+	);
+}
+
+/** 窗口左上角的按钮只压在最左边那一屏的顶行上，右边那屏不用让。 */
+function ToolbarOverlapFor({ first, children }: { first: boolean; children: ReactNode }) {
+	const overlap = useContext(ToolbarOverlap);
+	return <ToolbarOverlap.Provider value={first ? overlap : 0}>{children}</ToolbarOverlap.Provider>;
+}
+
+/**
+ * 一屏的面板几何，和滑着时的两样：对话那一栏滑完有多宽（`slideTarget`，见 ChatSlide）、面板内容定住的宽度（`floor`）。
+ * 面板区开合的动画只在焦点那一屏：开关只开合焦点那一屏的（点另一屏先把焦点给它）。
+ */
+function screenLayout(
+	app: Chrome,
+	pane: Pane,
+	size: { width: number; height: number },
+	slideWidth: number | undefined,
+	share: number,
+	slideFrom: Record<string, number | undefined>,
+) {
+	const layout = panelLayout(app, size, share, pane.scope);
+	const moving = app.panelMoving && pane.focused;
+	// 侧栏开合时对话那一栏滑完有多宽。侧栏滑完时面板区可能换了宽度、换了排法，按滑完的这一屏重算一遍。
+	const landed = slideWidth === undefined ? layout : panelLayout(app, { width: slideWidth, height: size.height }, share, pane.scope);
+	const slideTarget = slideWidth !== undefined || (moving && layout.arrangement === "row") ? (slideWidth ?? size.width) - Number(landed.chat.right) : undefined;
 	/*
 	 * 侧栏开合时面板区的宽度也可能一路在变：横排时面板顶着上限（给正文留够 420px），上下排时它就是整条宽。里面的网页、终端
 	 * 跟着每帧改尺寸的话，每帧都是一次重排（网页是另一个进程，还要和这边同步合成）。滑着时内容定在这一路最窄的宽度上，
 	 * 变窄时点下去当场换好，变宽时滑完再铺开。起点在开滑那一下量：这时 `size` 还是滑之前的。
 	 * 滑着换了排法的不定：两头的宽度不是同一样东西。
 	 */
-	const slideFrom = useRef<number | undefined>(undefined);
-	if (slideWidth === undefined) slideFrom.current = undefined;
-	else slideFrom.current ??= layout.panelWidth;
-	const panelFloor = slideFrom.current !== undefined && landed.arrangement === layout.arrangement ? Math.min(slideFrom.current, landed.panelWidth) : undefined;
+	if (slideWidth === undefined) slideFrom[pane.key] = undefined;
+	else slideFrom[pane.key] ??= layout.panelWidth;
+	const from = slideFrom[pane.key];
+	const floor = from !== undefined && landed.arrangement === layout.arrangement ? Math.min(from, landed.panelWidth) : undefined;
+	return { layout, slideTarget, floor };
+}
+
+/**
+ * 一屏：对话卡片和这个会话的面板区。分屏时在另一屏里按下指针、按键先把焦点给它，再办这一下：
+ * 输入框、面板的快捷键、插件开面板都按焦点那一屏的会话办。不跟着 DOM 焦点换：菜单关掉时把焦点还给原来那屏的输入框、
+ * 插件自己聚焦都会进来，那不是人挪到了那一屏。换焦点是同步的，按下去的那颗按钮还在，点击落下时已经是这一屏的会话。
+ */
+function ChatScreen({
+	fatal,
+	pane,
+	split,
+	layout,
+	height,
+	slideTarget,
+	onShare,
+}: {
+	fatal?: string;
+	pane: Pane;
+	split: boolean;
+	layout: ReturnType<typeof panelLayout>;
+	height: number;
+	slideTarget: number | undefined;
+	onShare(share: number): void;
+}) {
+	const app = useChrome();
+	const { t } = useI18n();
+	const { scope, focused } = pane;
+	const sessionId = scope || undefined;
+	const root = useRef<HTMLDivElement>(null);
+	const focusedSummary = useAppPick((current) => (focused ? current.view?.summary : undefined));
+	const session = focused ? focusedSummary : app.sessions.find((entry) => entry.id === scope);
+	const moving = app.panelMoving && focused;
+	const motion = moving ? panelMotion(layout.shown) : "";
 	/*
-	 * 侧栏开合、拖宽度时，这里每一帧都因 `size` 重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃 `size`：
+	 * 侧栏开合、拖宽度时，这里每一帧都因尺寸重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃尺寸：
 	 * 元素留住，React 就跳过这两棵子树，只改外层的位置和尺寸。
 	 */
 	const compact = layoutMode(app.windowWidth) === "compact";
 	const maximized = app.panelMaximized[scope];
 	const chatCard = useMemo(
 		() => (
-			<ScreenCard header={<TitleBar />} fatal={fatal}>
-				<CurrentChat />
+			<ScreenCard header={<TitleBar pane={{ sessionId, focused, split }} />} fatal={fatal}>
+				<ScreenChat sessionId={sessionId} focused={focused} />
 			</ScreenCard>
 		),
-		[fatal],
+		[fatal, sessionId, focused, split],
 	);
 	const panelArea = useMemo(
 		() => <PanelArea scope={scope} maximized={maximized} compact={compact} arrangement={layout.arrangement} underToolbar={layout.single} />,
 		[scope, maximized, compact, layout.arrangement, layout.single],
 	);
 	useEffect(() => {
-		if (app.screen !== "chat" || !layout.shown || !layout.single) return;
+		if (!focused || app.screen !== "chat" || !layout.shown || !layout.single) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || event.defaultPrevented || composingKey(event)) return;
 			if (app.panelMaximized[scope]) update({ panelMaximized: { ...state.panelMaximized, [scope]: false } });
@@ -114,16 +252,23 @@ export function ChatScreen({
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [app.screen, layout.shown, layout.single, app.panelMaximized, scope]);
+	}, [focused, app.screen, layout.shown, layout.single, app.panelMaximized, scope]);
+	const takeFocus = focused || !sessionId ? undefined : () => void select(sessionId);
 	return (
 		<div
 			ref={root}
 			data-panel-layout={layout.arrangement}
-			data-panel-sliding={app.panelMoving ? (layout.shown ? "open" : "close") : undefined}
+			data-panel-sliding={moving ? (layout.shown ? "open" : "close") : undefined}
 			data-panel-shown={layout.shown || undefined}
+			data-split-pane={pane.side}
+			// 分屏时标出焦点在哪一屏：输入框聚焦（`focusComposer`）找的是它，另一屏的标题淡一档。
+			data-screen-focused={focused || undefined}
 			// 横排时对话和面板区并成一块；收起滑走的那一路也算，滑完对话右边才圆回来，不在半路豁开一个角。
-			data-frame-right={(layout.arrangement === "row" && (layout.shown || app.panelMoving)) || undefined}
-			className="relative min-h-0 flex-1 overflow-hidden rounded-panel"
+			data-frame-right={(layout.arrangement === "row" && (layout.shown || moving)) || undefined}
+			onPointerDownCapture={takeFocus}
+			onKeyDownCapture={takeFocus}
+			className="absolute top-0 bottom-0 overflow-hidden rounded-panel"
+			style={{ left: pane.left, width: pane.width }}
 		>
 			<main
 				inert={layout.single && layout.shown}
@@ -140,7 +285,7 @@ export function ChatScreen({
 					className={`plume-panel plume-freeze absolute flex flex-col ${motion} ${layout.single && !layout.shown ? "invisible" : ""}`}
 					style={layout.panel}
 					onTransitionEnd={(event) => {
-						if (event.target === event.currentTarget) {
+						if (focused && event.target === event.currentTarget) {
 							update({ panelMoving: false });
 							finishPanelLeave();
 						}
@@ -149,9 +294,8 @@ export function ChatScreen({
 					{panelArea}
 				</aside>
 			)}
-			<PanelLayer layout={layout} floor={panelFloor} />
 			{layout.shown && !layout.single && !layout.stacked && (
-				<PanelResizer scope={scope} width={layout.panelWidth} windowWidth={size.width} max={panelWidthFor(Number.POSITIVE_INFINITY, size.width, 0)} />
+				<PanelResizer scope={scope} width={layout.panelWidth} windowWidth={pane.width} max={panelWidthFor(Number.POSITIVE_INFINITY, pane.width, 0)} />
 			)}
 			{layout.shown && layout.stacked && (
 				<Splitter
@@ -161,10 +305,10 @@ export function ChatScreen({
 						path: [],
 						index: 0,
 						left: 0,
-						top: 1 - layout.panelHeight / size.height,
+						top: 1 - layout.panelHeight / height,
 						width: 1,
 						height: 0,
-						share: 1 - layout.panelHeight / size.height,
+						share: 1 - layout.panelHeight / height,
 						pair: 1,
 						split: { left: 0, top: 0, width: 1, height: 1 },
 					}}
@@ -176,7 +320,7 @@ export function ChatScreen({
 			 * 横排、独占时开着是收起，收着是打开；上下排开着时收起按钮在下面那张卡片的顶行。放在最后：拖拽区按文档顺序合成，
 			 * 排在它后面的面板区顶行是 drag，会把它挖的洞重新盖上，鼠标点下去就成了拖窗口（见 shell-classes.ts）。
 			 */}
-			{layout.shown ? !layout.stacked && <PanelToggle open scope={scope} /> : canOpenPanel(app, session) && <PanelToggle open={false} scope={scope} />}
+			{layout.shown ? !layout.stacked && <PanelToggle open scope={scope} /> : canOpenPanel(app, session, scope) && <PanelToggle open={false} scope={scope} />}
 		</div>
 	);
 }
@@ -209,20 +353,28 @@ export function ScreenCard({ header, fatal, children }: { header: ReactNode; fat
 }
 
 /** 面板区收着时能不能从正文顶行右端打开：开始页上有东西可开，或者这个会话已经开着面板标签（本体的文件标签不在开始页上）。 */
-function canOpenPanel(app: Chrome, session: SessionSummary | undefined): boolean {
+function canOpenPanel(app: Chrome, session: SessionSummary | undefined, scope = scopeOf(app)): boolean {
 	return (
 		app.screen === "chat" &&
-		!panelOpenIn(app) &&
-		(listPanels(nextTurnCwd(app, session), app.currentId !== undefined).some((panel) => panel.listed) || tabsOf(app).tabs.some((tab) => tab.panel))
+		!panelOpenIn(app, scope) &&
+		(listPanels(nextTurnCwd(app, session), scope !== "").some((panel) => panel.listed) || tabsOf(app, scope).tabs.some((tab) => tab.panel))
 	);
+}
+
+/** 工作区里的一屏交给标题栏的：哪个会话（空白页是 undefined）、焦点在不在它上面、是不是分屏着。 */
+interface TitlePane {
+	sessionId: string | undefined;
+	focused: boolean;
+	split: boolean;
 }
 
 /**
  * 卡片上面的标题栏：对话是会话标题和操作菜单，插件市场是它的工具栏，设置和插件的页面写名字；这一行同时拖窗口。
- * 面板开关不在这里，是工作区右上角的 PanelToggle，它盖在这一行右端时这里让出位置。
+ * 面板开关不在这里，是每一屏右上角的 PanelToggle，它盖在这一行右端时这里让出位置。
  * 左边给窗口按钮让的宽度是 `ToolbarOverlap`，侧栏开合时和侧栏一起滑（styles.css 的 `[data-sidebar-sliding]`）。
+ * 分屏时每屏一条（`pane`）：写这一屏的会话，空白页写「新对话」，右端多一颗关掉这一屏；焦点不在这一屏时标题淡一档。
  */
-export function TitleBar() {
+export function TitleBar({ pane }: { pane?: TitlePane }) {
 	const app = useChrome();
 	const overlap = useContext(ToolbarOverlap);
 	const { screen } = app;
@@ -230,20 +382,36 @@ export function TitleBar() {
 	usePluginUis();
 	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
 	const name = screen === "settings" ? t("sidebar.settings") : page ? localized(page.title, resolvedLocale) : undefined;
+	const other = pane && !pane.focused;
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
-	const session = useAppPick((current) => current.view?.summary);
+	const current = useAppPick((store) => (other ? undefined : store.view?.summary));
+	const session = other ? app.sessions.find((entry) => entry.id === pane.sessionId) : current;
 	const chat = screen === "chat" && session;
-	const panelToggle = canOpenPanel(app, session);
+	const panelToggle = canOpenPanel(app, session, other ? (pane.sessionId ?? "") : scopeOf(app));
+	const split = screen === "chat" && pane?.split === true;
 	return (
 		<header
 			data-toolbar-inset=""
-			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG}`}
-			style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: Math.max(chat ? 10 : name ? 14 : 24, overlap) }}
+			data-split-title={split ? (other ? "other" : "focused") : undefined}
+			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat || split ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG} ${other ? "opacity-60" : ""}`}
+			style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: Math.max(chat || split ? 10 : name ? 14 : 24, overlap) }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
-			{chat && (
+			{split && !chat && (
+				<span data-plume-screen-title className="min-w-0 shrink-[1000] truncate text-label text-ink select-none">
+					{t("sessionOps.newSession")}
+				</span>
+			)}
+			{(chat || split) && (
 				<div className={`ml-auto flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
-					<CurrentSessionToolbar />
+					{chat && (other ? <OtherSessionToolbar sessionId={session.id} /> : <CurrentSessionToolbar />)}
+					{split && (
+						<ToolbarButton label={t("split.close")} onClick={() => closeScreen(pane.sessionId)}>
+							<span data-split-close="" className="flex items-center justify-center">
+								<X size={13} strokeWidth={1.9} />
+							</span>
+						</ToolbarButton>
+					)}
 				</div>
 			)}
 			{name && (
@@ -259,6 +427,9 @@ export function TitleBar() {
 		</header>
 	);
 }
+
+/** 标题栏上的会话菜单：会话已经在屏上，不列「分屏」。 */
+const { split: _, ...titleActions } = sidebarActions;
 
 /** 按会话挂载，切换时不把上一段会话的菜单或未保存标题带过去。 */
 function SessionTitle({ session }: { session: SessionSummary }) {
@@ -290,7 +461,7 @@ function SessionTitle({ session }: { session: SessionSummary }) {
 					onClose={menu.close}
 					onRequestDelete={() => void deleteSessionQuestion(session, sessions, resolvedLocale, remove).then(confirm.ask)}
 					projects={projects}
-					actions={sidebarActions}
+					actions={titleActions}
 				/>
 			)}
 			{confirm.element}
@@ -461,6 +632,37 @@ export function CurrentChat() {
 export function CurrentSessionToolbar() {
 	const view = useAppPick((current) => current.view);
 	return view ? <SessionToolbar session={view} /> : null;
+}
+
+/** 分屏时另一屏标题栏上插件给会话加的按钮，读那一屏的会话。 */
+function OtherSessionToolbar({ sessionId }: { sessionId: string }) {
+	const view = useLiveSession(sessionId) ?? parked.get(sessionId);
+	return view ? <SessionToolbar session={view} /> : null;
+}
+
+/**
+ * 工作区里一屏的对话。焦点那一屏是屏上的会话（`CurrentChat`），另一屏订阅自己的会话（`useLiveSession`，事件流照样推过来），
+ * 还没读到时先拿停着的那份，都没有就先放摘要、对话区转圈。两种同一个组件、同一棵树：焦点对调时这一屏不重挂，
+ * 按下去的那颗按钮还在，点击照常落下。
+ */
+function ScreenChat({ sessionId, focused }: { sessionId: string | undefined; focused: boolean }) {
+	const current = useAppPick((app) => (focused ? app.view : undefined));
+	const currentLoading = useAppPick((app) => focused && app.loading);
+	const live = useLiveSession(focused ? undefined : sessionId);
+	const summary = useAppPick((app) => (focused || !sessionId ? undefined : app.sessions.find((entry) => entry.id === sessionId)));
+	// 焦点刚从这一屏挪走时订阅还没读回来：接着用它在焦点上时的那份（空会话不停进缓存），不闪一下转圈。
+	const last = useRef<SessionView>(undefined);
+	if (focused) {
+		if (!currentLoading) last.current = current;
+		return <ChatBody view={current} loading={currentLoading} />;
+	}
+	const held = live ?? (sessionId ? (parked.get(sessionId) ?? (last.current?.summary.id === sessionId ? last.current : undefined)) : undefined);
+	if (held) return <ChatBody view={held} loading={false} />;
+	return <ChatBody view={summary && blankView(summary)} loading />;
+}
+
+function blankView(summary: SessionSummary): SessionView {
+	return { summary, messages: [], progress: {}, startedAt: {}, hiccups: [], compactions: [], compactionRuns: [], compacting: false, queue: [] };
 }
 
 /** 只在读得比 select 肯等的久时出现；延迟淡入，刚过那条线就读完的不闪一下转圈。 */

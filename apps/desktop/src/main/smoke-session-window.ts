@@ -60,14 +60,14 @@ export async function checkSessionWindow(options: {
 		assert.equal(
 			await page(`document.querySelector(${JSON.stringify(sessionMenu)})?.textContent.includes('分屏')`),
 			false,
-			"会话菜单不再提供分屏或移动分屏入口",
+			"分屏收在「打开方式」子菜单里，不在一级菜单",
 		);
 		await click(`${sessionMenu} [data-open-in] [role=menuitem]`);
 		await until(`document.querySelector(${JSON.stringify(openInMenu)}) !== null`, "「打开方式」子菜单出现");
 		assert.deepEqual(
 			await page(`[...document.querySelectorAll(${JSON.stringify(`${openInMenu} [role=menuitem]`)})].map(item => item.textContent.trim())`),
-			["新窗口"],
-			"打开方式只保留新窗口，不再提供分屏入口",
+			["新窗口", "分屏"],
+			"打开方式：新窗口、分屏",
 		);
 		await click(`${openInMenu} [role=menuitem]`, "新窗口");
 		await until(`window.plume.sessionWindows.list().then(list => list.includes(${JSON.stringify(other)}))`, "开出会话窗口");

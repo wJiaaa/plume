@@ -5,6 +5,7 @@ import {
 	Archive,
 	ArchiveRestore,
 	Check,
+	Columns2,
 	ChevronRight,
 	Copy,
 	CornerUpRight,
@@ -38,6 +39,8 @@ export interface SessionMenuActions {
 	move(sessionId: string, projectId: string | undefined): Promise<void>;
 	export(sessionId: string, format: "database" | "markdown"): Promise<void>;
 	newWindow(sessionId: string): void;
+	/** 在主窗口里分屏打开（「打开方式 › 分屏」）；不给就不列这一项（标题栏上的菜单：会话已经在屏上）。 */
+	split?: (sessionId: string) => void;
 	/** 停止插件代管这个会话（`AgentService.revokeSteward`）。 */
 	revokeSteward(sessionId: string): Promise<void>;
 }
@@ -284,6 +287,17 @@ export function SessionMenu({
 								>
 									{t("sessionMenu.newWindow")}
 								</MenuItem>
+								{actions.split && (
+									<MenuItem
+										icon={<Columns2 {...ICON} />}
+										onClick={() => {
+											onClose();
+											actions.split?.(session.id);
+										}}
+									>
+										{t("sessionMenu.split")}
+									</MenuItem>
+								)}
 							</MenuBody>
 						</Popover>
 					)}

@@ -8,7 +8,7 @@ import type { SettingsSection } from "../settings/pages.tsx";
 import { projectSessions } from "../sidebar/grouping.ts";
 import type { SidebarActions } from "../sidebar/actions.ts";
 import { agent, draftScope, errorText, focusComposer, panelWindow, sessionWindow, setDraft, state, update } from "./state.ts";
-import { openNew, select } from "./sessions.ts";
+import { openNew, openSplit, select } from "./sessions.ts";
 import { panelOpenIn, panelScope, scopeOf, showPanel, tabsOf } from "./panels.ts";
 
 /**
@@ -101,6 +101,7 @@ export const sidebarActions: SidebarActions = {
 		notify(translate(markdown ? "sessionMenu.markdownExported" : "sessionMenu.recordsExported"), "info", { reveal: file });
 	},
 	newWindow: openInNewWindow,
+	split: openSplit,
 	revokeSteward: async (sessionId) => {
 		await agent.revokeSteward(sessionId);
 	},

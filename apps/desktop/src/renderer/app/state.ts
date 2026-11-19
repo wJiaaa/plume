@@ -66,6 +66,12 @@ export interface AppState {
 	/** 人刚点了开关，面板区正滑进滑出：只在这一下加动画，滑完撤掉，见 PanelArea.tsx 的 panelMotion。 */
 	panelMoving: boolean;
 	panelLeaving?: { id: string; scope: string };
+	/**
+	 * 分屏：另一屏的会话、它在左边还是右边、左边那屏占工作区宽度的几成；没分屏时是 undefined。焦点那一屏就是 `currentId`
+	 * （可以是空白页），另一屏只放已有的会话。人点进另一屏时两边对调焦点，各自留在原来那一边，见 sessions.ts 的 `show`。
+	 * 每一屏带着自己会话的面板区。只在内存里，重启后回到一屏。
+	 */
+	split?: SplitScreens;
 	/** 后退、前进的记录，见 nav-history.ts。 */
 	nav: NavHistory;
 }
@@ -97,6 +103,12 @@ export interface PanelTab {
 export interface PanelTabs {
 	tabs: PanelTab[];
 	active: string;
+}
+
+interface SplitScreens {
+	sessionId: string;
+	side: "left" | "right";
+	share: number;
 }
 
 // ── 状态 ────────────────────────────────────────────────────────────
@@ -227,8 +239,11 @@ export function setQuotes(scope: string, change: (quotes: DraftQuote[]) => Draft
 	update((current) => ({ quotes: { ...current.quotes, [scope]: change(current.quotes[scope] ?? []) } }));
 }
 
+/** 焦点那一屏的输入框：分屏时两屏各有一个，另一屏的不抢。 */
 export function focusComposer(): void {
-	requestAnimationFrame(() => document.querySelector<HTMLElement>("main .cm-content")?.focus());
+	requestAnimationFrame(() =>
+		(document.querySelector<HTMLElement>("[data-screen-focused] main .cm-content") ?? document.querySelector<HTMLElement>("main .cm-content"))?.focus(),
+	);
 }
 
 /** 只给刚从欢迎页发出消息的那个会话播放入场，切换会话不能借用这个标记。 */

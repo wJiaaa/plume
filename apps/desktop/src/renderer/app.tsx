@@ -27,7 +27,7 @@ import { KeepOnTopButton, PanelArea } from "./app/PanelArea.tsx";
 import { createPlugin, investigate, openSettingsSection, tryPrompt } from "./app/actions.ts";
 import { SidebarContent, SidebarResizer, SidebarTopRow } from "./app/Sidebar.tsx";
 import { hasSidebar, Rail } from "./app/Rail.tsx";
-import { ChatScreen, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
+import { ChatWorkspace, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
 import { SettingsScreen } from "./app/SettingsScreen.tsx";
 
 export function App() {
@@ -287,11 +287,11 @@ function Shell() {
 			>
 				{/* 设置页只盖住工作区，常驻网页仍留在同一层、同一节点。 */}
 				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible"}`}>
-					<ChatScreen
+					<ChatWorkspace
 						fatal={fatal}
 						slideWidth={moving && !compact ? available - CARD_INSET : undefined}
-						share={verticalShares[scopeOf(app)] ?? 0.4}
-						onShare={(share) => setVerticalShares((current) => ({ ...current, [scopeOf(app)]: share }))}
+						shares={verticalShares}
+						onShare={(scope, share) => setVerticalShares((current) => ({ ...current, [scope]: share }))}
 					/>
 				</div>
 				{screen !== "chat" && (
@@ -427,7 +427,7 @@ function SessionWindowShell() {
 	);
 }
 
-/** 工作区以外的页面：设置、市场、插件的页面。对话由 `ChatScreen` 画。 */
+/** 工作区以外的页面：设置、市场、插件的页面。对话由 `ChatWorkspace` 画。 */
 function Main() {
 	const { screen, target, projects } = useChrome();
 	usePluginUis();
