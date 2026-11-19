@@ -1,6 +1,6 @@
 import type { CommandExpansion, Message, OutgoingMessage, QueuedMessage, SessionSummary, SessionView, UserMessage } from "@plume/contract";
 import { type EditorView, keymap } from "@codemirror/view";
-import { Button, formatList, shortcutLabel, useI18n } from "@plume/ui";
+import { formatList, shortcutLabel, useI18n } from "@plume/ui";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { layoutMode } from "../layout.ts";
 import { notify } from "../toast/index.ts";
@@ -407,12 +407,6 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 					/>
 				)}
 				{view && <ChildApprovals parentId={view.summary.id} sessions={app.sessions} compact={layoutMode(windowWidth) === "compact"} />}
-				{settings && !settings.defaultModel && (
-					<div data-warning="no-model" className="mb-2 flex flex-wrap items-center gap-2 text-detail text-ink-muted">
-						<span>{t("chat.noModel")}</span>
-						<Button onClick={() => update({ screen: "settings", settingsSection: "models" })}>{t("settings.models")}</Button>
-					</div>
-				)}
 				{view && (
 					<QueuedMessages
 						items={queued}

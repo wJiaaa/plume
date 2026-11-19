@@ -687,7 +687,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		// 1. 模型设置
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "界面就绪");
-		await click("button", "模型设置");
+		await click("[data-nav=settings]");
+		await click("[aria-label=设置章节] button", "模型设置");
 		await until(`document.querySelector('[data-model-catalog]') !== null`, "打开模型设置");
 		await click("[data-add-provider]", "添加供应商");
 		await until(`document.querySelector('[data-provider-form]') !== null`, "打开添加供应商");
@@ -739,7 +740,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			"智能标题的开关存进插件数据目录",
 		);
 		await click("button", "返回工作区");
-		await until(`document.querySelector('[data-screen=empty]') !== null && !document.querySelector('[data-warning=no-model]')`, "回到工作区");
+		await until(`document.querySelector('[data-screen=empty]') !== null`, "回到工作区");
 
 		// 临时提示走全局提示条，不再挤在输入框上方；校验失败不能清掉草稿。
 		await page(`document.querySelector('.cm-content').focus()`);
