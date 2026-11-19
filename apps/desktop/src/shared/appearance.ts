@@ -23,6 +23,8 @@ export interface Appearance {
 	reduceMotion?: "system" | "on" | "off";
 	/** 改动里加的、删的行怎么标：底色，或行首的 +/−（分不清红绿的人用）。 */
 	diffMarkers?: "color" | "symbols";
+	/** 对话那一列的最大宽度：标准是 theme.css 的 `--plume-content`，宽档按窗口宽度放宽，见 appearance-settings.ts。 */
+	contentWidth?: "standard" | "wide";
 	codeLightTheme?: string;
 	codeDarkTheme?: string;
 	codeFont?: string;
@@ -161,6 +163,7 @@ export function cleanAppearance(input: unknown): Appearance {
 	if (typeof raw.vibrancy === "boolean") out.vibrancy = raw.vibrancy;
 	if (raw.reduceMotion === "system" || raw.reduceMotion === "on" || raw.reduceMotion === "off") out.reduceMotion = raw.reduceMotion;
 	if (raw.diffMarkers === "color" || raw.diffMarkers === "symbols") out.diffMarkers = raw.diffMarkers;
+	if (raw.contentWidth === "standard" || raw.contentWidth === "wide") out.contentWidth = raw.contentWidth;
 	if (raw.inlineCode === "app" || raw.inlineCode === "syntax" || raw.inlineCode === "custom") out.inlineCode = raw.inlineCode;
 	if (typeof raw.inlineCodeBorder === "boolean") out.inlineCodeBorder = raw.inlineCodeBorder;
 	if (typeof raw.contrast === "number" && Number.isFinite(raw.contrast)) out.contrast = Math.round(Math.min(100, Math.max(0, raw.contrast)));

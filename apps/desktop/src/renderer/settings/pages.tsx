@@ -493,6 +493,20 @@ export function AppearanceSettings() {
 							/>
 						}
 					/>
+					<Row
+						title={t("appearance.contentWidth")}
+						detail={t("appearance.contentWidthDetail")}
+						control={
+							<Segmented
+								value={appearance.contentWidth ?? "standard"}
+								onChange={(contentWidth) => updateAppearance({ contentWidth })}
+								options={[
+									{ value: "standard", label: t("appearance.contentWidthStandard") },
+									{ value: "wide", label: t("appearance.contentWidthWide") },
+								]}
+							/>
+						}
+					/>
 					{/* 只有 macOS 的文字渲染认 -webkit-font-smoothing，其他平台切了也看不出变化。 */}
 					{mac && (
 						<Row

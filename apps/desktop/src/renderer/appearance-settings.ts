@@ -9,7 +9,18 @@
 import { useSyncExternalStore } from "react";
 import { findCodeTheme, withHanFallback } from "@plume/ui";
 import { codePalette } from "./code-appearance.ts";
+import { RAIL_WIDTH, SIDEBAR_MAX } from "./layout.ts";
 import { type Appearance, type AppearancePatch, cleanAppearance, editableAppearancePatch, effectiveAppearance, patchAppearance } from "../shared/appearance.ts";
+
+/*
+ * 宽档的对话列：只跟窗口宽度走，按侧栏拖到最宽（`SIDEBAR_MAX`）留出位置，不跟侧栏此刻多宽、开没开走。
+ * 这样侧栏开合、拖宽度时这一列的上限不变、正文始终放得下，只平移、不逐帧重新断行，也不用每帧往根上写变量
+ * （根上的变量一变整份文档重算样式，见 @plume/ui 的 motion/freeze.ts）。代价是窗口不够宽时到不了上限。
+ * 864px 同 theme.css 的 `--plume-content`（窗口窄时退回标准宽度）；
+ * CONTENT_CHROME 是对话卡片的外边和转录左右内衬、滚动条，`desktop-compat` 冒烟量着侧栏最宽时正文仍放得下。
+ */
+const CONTENT_CHROME = 100;
+const WIDE_CONTENT = `clamp(864px, calc(100vw - ${RAIL_WIDTH + SIDEBAR_MAX + CONTENT_CHROME}px), 1200px)`;
 
 let current: Appearance = cleanAppearance(window.plume.appearance);
 const listeners = new Set<() => void>();
@@ -74,6 +85,7 @@ export function applyAppearance(): void {
 		accent: appearance.accent,
 		contrast: appearance.contrast === undefined ? undefined : String(appearance.contrast / 100),
 		"font-sans": current.uiFont,
+		content: current.contentWidth === "wide" ? WIDE_CONTENT : undefined,
 		"window-tint": !managedSkin && current.vibrancy === false ? "var(--plume-sidebar)" : undefined,
 		"ui-size": current.uiFontSize === undefined ? undefined : `${current.uiFontSize}px`,
 		"font-mono": current.codeFont ? withHanFallback(current.codeFont) : undefined,

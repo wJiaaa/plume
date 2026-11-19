@@ -17,7 +17,7 @@
 export const RAIL_WIDTH = 48;
 
 export const SIDEBAR_MIN = 240;
-const SIDEBAR_MAX = 420;
+export const SIDEBAR_MAX = 420;
 export const SIDEBAR_DEFAULT = 248;
 /** 窄于这个宽度，侧栏和一列读得下去的正文就摆不下了。 */
 const COMPACT_MAX = 760;

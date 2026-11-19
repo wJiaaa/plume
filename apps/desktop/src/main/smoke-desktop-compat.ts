@@ -31,6 +31,7 @@ const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置
  * 3. 125% 下侧栏边缘落在小数设备像素上时，标题栏和面板区的图标还画在同一列设备像素上；
  * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移；
  * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画；
+ *    宽档对话列（外观设置）：正文和输入框一样宽、侧栏开着就到上限，侧栏拖到最宽也放得下，开合时每一帧都一样宽；
  * 6. 面板区开合时对话和面板区贴着一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
  *    开着的环境卡片不重挂，停靠、浮着只换一次，打开时点下去当场换好、收起时滑完再换，不在半路上闪；滑完撤掉动画；
  * 7. 侧栏开合时环境卡片同样不重挂，对话那一栏变窄时点下去当场换好、变宽时滑完再换。
@@ -528,6 +529,55 @@ export async function checkDesktopCompat(options: {
 				`${phase}：对话卡片里没有可继承的让位变量`,
 			);
 		}
+
+		// ── 5b. 宽档对话列：侧栏开合时正文宽度一帧不变，侧栏拖到最宽也放得下 ──────────
+		await page(`window.plume.saveAppearance({ contentWidth: "wide" })`);
+		const SESSION = "[data-panel-layout] > main [data-plume-session]";
+		const columnSample = `(() => { const session = document.querySelector(${JSON.stringify(SESSION)}), box = session.parentElement, style = getComputedStyle(box);
+			const aside = document.querySelector(${JSON.stringify(SIDEBAR)});
+			return { session: Math.round(session.getBoundingClientRect().width * 10) / 10,
+				composer: Math.round(document.querySelector("main .plume-composer-dock").firstElementChild.getBoundingClientRect().width * 10) / 10,
+				room: box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+				sidebar: aside.inert ? 0 : aside.getBoundingClientRect().width,
+				cap: parseFloat(getComputedStyle(session).maxWidth) }; })()`;
+		for (const [width, height] of [
+			[1500, 800],
+			[1800, 900],
+		] as const) {
+			await setViewport(width, height, 1);
+			await reset();
+			await until(`getComputedStyle(document.querySelector(${JSON.stringify(SESSION)})).maxWidth !== "864px"`, `${width} 宽窗口里宽档生效`);
+			const open = await page<{ session: number; composer: number; room: number; sidebar: number; cap: number }>(columnSample);
+			console.log("PLUME_DESKTOP_COMPAT_WIDE " + JSON.stringify({ width, ...open }));
+			assert.ok(open.cap > 864 && open.cap <= 1200, `${width}：宽档上限在 864 到 1200 之间：${JSON.stringify(open)}`);
+			assert.ok(Math.abs(open.session - open.cap) < 1, `${width}：侧栏开着时正文就到上限：${JSON.stringify(open)}`);
+			assert.ok(Math.abs(open.composer - open.session) < 1, `${width}：输入框和正文一样宽：${JSON.stringify(open)}`);
+			// 侧栏拖到最宽（420）时这一栏少掉的宽度，正文仍放得下：拖侧栏、开合侧栏都不会逐帧重新断行。
+			assert.ok(open.room - (420 - open.sidebar) >= open.cap, `${width}：侧栏拖到最宽时正文仍放得下：${JSON.stringify(open)}`);
+			for (const phase of ["收起", "展开"] as const) {
+				await page(`(() => { window.__smokeHold = (async () => {
+					const out = []; let moved = false, still = 0, last;
+					for (let i = 0; i < 400 && still < 12; i++) {
+						await new Promise(requestAnimationFrame);
+						const sample = ${columnSample}, card = Math.round(document.querySelector(${JSON.stringify(SESSION)}).getBoundingClientRect().x);
+						if (last !== undefined && last !== card) { moved = true; still = 0; } else if (moved) still++;
+						last = card;
+						out.push(sample);
+					}
+					return out;
+				})(); })()`);
+				await clickVisible(page, NAV_TOGGLE);
+				const held = await page<{ session: number; composer: number }[]>("window.__smokeHold");
+				const widths = [...new Set(held.flatMap((sample) => [sample.session, sample.composer]))];
+				assert.deepEqual(widths, [open.session], `${width} ${phase}侧栏：宽档正文和输入框每一帧都一样宽：${JSON.stringify(widths)}`);
+				await settle();
+			}
+		}
+		await page(`window.plume.saveAppearance({ contentWidth: null })`);
+		await until(`getComputedStyle(document.querySelector(${JSON.stringify(SESSION)})).maxWidth === "864px"`, "回到标准宽度");
+		// 下面第 6 段接着第 5 段的窗口往下走。
+		await setViewport(1200, 760, 1);
+		await reset();
 
 		/**
 		 * 开合时环境卡片一直是同一个节点，只换一次地方：对话那一栏变窄时点下去当场按滑完的宽度换好，变宽时滑完才换，
