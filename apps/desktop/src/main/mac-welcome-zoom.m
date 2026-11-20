@@ -23,51 +23,69 @@ typedef struct {
 enum { TileFields = 13 };
 
 @interface PlumeTransitionView : NSView
-- (instancetype)initWithFrame:(NSRect)frame pixels:(CGImageRef)pixels tiles:(NSData *)tiles;
+- (instancetype)initWithFrame:(NSRect)frame pixels:(CGImageRef)pixels tiles:(NSData *)tiles reach:(NSSize)reach;
 @end
 
+/*
+ * 每块是一个裁边的框，里面放一张不动的图，框变小就裁掉右边、下边。会拉开的块不把截图放大，而是沿拉开的方向重复摆到
+ * 终点要的长度：拉开的那一段本来就是纯色或平铺的磨砂，重复出来和真实页面一样，放大的话噪点会糊、单行的噪点会拉成竖纹。
+ */
 @implementation PlumeTransitionView {
-    CGImageRef _pixels;
     CGFloat _scale;
     NSSize _original;
     NSData *_tiles;
     NSArray<CALayer *> *_layers;
-    CGFloat *_cropped;
 }
-- (instancetype)initWithFrame:(NSRect)frame pixels:(CGImageRef)pixels tiles:(NSData *)tiles {
+- (instancetype)initWithFrame:(NSRect)frame pixels:(CGImageRef)pixels tiles:(NSData *)tiles reach:(NSSize)reach {
     self = [super initWithFrame:frame];
     self.wantsLayer = YES;
     _original = frame.size;
-    _pixels = CGImageRetain(pixels);
     _scale = CGImageGetWidth(pixels) / frame.size.width;
     _tiles = tiles;
     NSUInteger count = tiles.length / sizeof(PlumeTile);
-    _cropped = calloc(count ?: 1, sizeof(CGFloat));
+    CGFloat dw = reach.width - frame.size.width, dh = reach.height - frame.size.height;
     const PlumeTile *list = tiles.bytes;
     NSMutableArray *layers = [NSMutableArray arrayWithCapacity:count];
     for (NSUInteger index = 0; index < count; ++index) {
-        CALayer *layer = [CALayer layer];
-        layer.contentsScale = _scale;
-        [self setContents:layer rect:list[index].image];
-        _cropped[index] = list[index].image.size.height;
-        [self.layer addSublayer:layer];
-        [layers addObject:layer];
+        PlumeTile tile = list[index];
+        BOOL wide = tile.sx != 0, tall = tile.sy != 0 && !(tile.flags & TileCrop);
+        CGSize size = CGSizeMake(MAX(tile.image.size.width, wide ? tile.frame.size.width + tile.sx * MAX(0, dw) : 0),
+                                 MAX(tile.image.size.height, tall ? tile.frame.size.height + tile.sy * MAX(0, dh) : 0));
+        CALayer *box = [CALayer layer];
+        box.masksToBounds = YES;
+        CALayer *picture = [CALayer layer];
+        picture.contentsScale = _scale;
+        picture.frame = CGRectMake(0, 0, tile.image.size.width, tile.image.size.height);
+        CGImageRef image = [self image:pixels rect:tile.image];
+        picture.contents = (__bridge id)image;
+        if (image) CGImageRelease(image);
+        // 由合成器照着同一张图重复画，不在主线程上生成大位图。
+        if (wide && size.width > tile.image.size.width && tile.image.size.width > 0)
+            picture = [self repeat:picture count:ceil(size.width / tile.image.size.width) step:CGSizeMake(tile.image.size.width, 0)];
+        if (tall && size.height > tile.image.size.height && tile.image.size.height > 0)
+            picture = [self repeat:picture count:ceil(size.height / tile.image.size.height) step:CGSizeMake(0, tile.image.size.height)];
+        [box addSublayer:picture];
+        [self.layer addSublayer:box];
+        [layers addObject:box];
     }
     _layers = layers;
     [self layoutTiles];
     return self;
 }
-- (void)dealloc {
-    CGImageRelease(_pixels);
-    free(_cropped);
-}
 - (BOOL)isFlipped { return YES; }
 - (NSView *)hitTest:(NSPoint)point { return nil; }
-- (void)setContents:(CALayer *)layer rect:(CGRect)rect {
-    CGRect pixels = CGRectMake(round(rect.origin.x * _scale), round(rect.origin.y * _scale), round(rect.size.width * _scale), round(rect.size.height * _scale));
-    CGImageRef part = pixels.size.width >= 1 && pixels.size.height >= 1 ? CGImageCreateWithImageInRect(_pixels, pixels) : NULL;
-    layer.contents = (__bridge id)part;
-    if (part) CGImageRelease(part);
+- (CGImageRef)image:(CGImageRef)pixels rect:(CGRect)rect CF_RETURNS_RETAINED {
+    CGRect area = CGRectMake(round(rect.origin.x * _scale), round(rect.origin.y * _scale), round(rect.size.width * _scale), round(rect.size.height * _scale));
+    return area.size.width >= 1 && area.size.height >= 1 ? CGImageCreateWithImageInRect(pixels, area) : NULL;
+}
+/** 把 `layer` 沿 `step` 接着摆 `count` 份，从它所在的左上角起。 */
+- (CALayer *)repeat:(CALayer *)layer count:(CGFloat)count step:(CGSize)step {
+    CAReplicatorLayer *row = [CAReplicatorLayer layer];
+    row.frame = CGRectMake(0, 0, layer.bounds.size.width + step.width * (count - 1), layer.bounds.size.height + step.height * (count - 1));
+    row.instanceCount = (NSInteger)count;
+    row.instanceTransform = CATransform3DMakeTranslation(step.width, step.height, 0);
+    [row addSublayer:layer];
+    return row;
 }
 - (void)setFrameSize:(NSSize)size {
     [super setFrameSize:size];
@@ -84,15 +102,8 @@ enum { TileFields = 13 };
         PlumeTile tile = list[index];
         CGFloat left = tile.frame.origin.x + tile.tx * dw, top = tile.frame.origin.y + tile.ty * dh;
         CGFloat right = left + tile.frame.size.width + tile.sx * dw, bottom = top + tile.frame.size.height + tile.sy * dh;
-        if (tile.flags & TileCrop) {
-            // 只裁不拉：变矮时从下面裁掉（像滚动区收短），变高时保持原样，下面让给填充块。
-            bottom = top + MIN(tile.frame.size.height, bottom - top);
-            CGFloat height = MAX(0, bottom - top);
-            if (fabs(height - _cropped[index]) > 0.25) {
-                _cropped[index] = height;
-                [self setContents:_layers[index] rect:CGRectMake(tile.image.origin.x, tile.image.origin.y, tile.image.size.width, height)];
-            }
-        }
+        // 只裁不拉：变矮时从下面裁掉（像滚动区收短），变高时保持原样，下面让给填充块。
+        if (tile.flags & TileCrop) bottom = top + MIN(tile.frame.size.height, bottom - top);
         CGFloat x0 = [self snap:left], x1 = [self snap:right], y0 = [self snap:top], y1 = [self snap:bottom];
         _layers[index].frame = CGRectMake(x0, y0, MAX(0, x1 - x0), MAX(0, y1 - y0));
     }
@@ -291,7 +302,7 @@ static BOOL beginTransition(NSWindow *window, NSSize target, int mode) {
     overlay = prepared ?: makeOverlay(window);
     [overlay setFrame:window.frame display:NO];
     NSView *root = overlay.contentView;
-    PlumeTransitionView *picture = [[PlumeTransitionView alloc] initWithFrame:root.bounds pixels:readyImage tiles:readyTiles];
+    PlumeTransitionView *picture = [[PlumeTransitionView alloc] initWithFrame:root.bounds pixels:readyImage tiles:readyTiles reach:target];
     picture.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [root addSubview:picture];
     placeButtons(overlay);

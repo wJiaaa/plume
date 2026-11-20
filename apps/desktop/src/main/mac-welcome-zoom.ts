@@ -15,7 +15,7 @@ const TILE_FIELDS = 13;
  * - 对话这一侧：欢迎区横向居中（左右两条空白各分一半），纵向按 Welcome.tsx 顶上留白的 40dvh 跟着窗口高度的 0.4 挪；
  *   卡片上沿不动，右边、下边（卡片描边）贴着窗口右下。
  * - 顶行（卡片上沿以上）单独一条：左边的按钮不动，右边的（面板按钮）贴着窗口右边，中间找一段空白拉开。
- * 能拉的只有纯色的空白：字、图标、按钮、圆角、描边都不能落在拉伸的那一条里，找不到这样的空白就不做（返回 null）。
+ * 能拉的只有纯色（或平铺的磨砂）的空白：字、图标、按钮、圆角、描边都不能落在拉伸的那一条里，找不到这样的空白就不做（返回 null）。
  * 同时把每个内容元素预计挪到哪记在页面上，终点画好后由 `transitionSettled` 核对。
  */
 function transitionLayout(): number[] | null {
@@ -36,6 +36,27 @@ function transitionLayout(): number[] | null {
 		if (/auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1) return null;
 	}
 
+	/** 按顶层的逗号拆开几层背景：data URL 里自己也有逗号、括号和引号。 */
+	const splitLayers = (value: string) => {
+		const parts: string[] = [];
+		let depth = 0;
+		let quote = "";
+		let start = 0;
+		for (let index = 0; index < value.length; index++) {
+			const char = value[index];
+			if (quote) {
+				if (char === quote) quote = "";
+			} else if (char === '"' || char === "'") quote = char;
+			else if (char === "(") depth++;
+			else if (char === ")") depth--;
+			else if (char === "," && depth === 0) {
+				parts.push(value.slice(start, index));
+				start = index + 1;
+			}
+		}
+		parts.push(value.slice(start));
+		return parts;
+	};
 	const boxes: Box[] = [];
 	const scrollers: { box: Box; el: Element }[] = [];
 	const media = new Set(["svg", "img", "canvas", "video", "input", "textarea", "iframe", "webview"]);
@@ -46,7 +67,12 @@ function transitionLayout(): number[] | null {
 		const own = { x0: Math.max(r.left, clip.x0), y0: Math.max(r.top, clip.y0), x1: Math.min(r.right, clip.x1), y1: Math.min(r.bottom, clip.y1) };
 		const shown = own.x1 > own.x0 && own.y1 > own.y0;
 		const tag = el.tagName.toLowerCase();
-		if (shown && (media.has(tag) || tag === "button" || style.backgroundImage !== "none")) boxes.push({ ...own, el, blocks: "both" });
+		// 平铺的贴图（磨砂的噪点）挪到哪都一样，和底色一样只看边；别的背景图（一整张图、渐变）当内容，不能拉。
+		const layers = style.backgroundImage === "none" ? [] : splitLayers(style.backgroundImage);
+		const repeats = style.backgroundRepeat.split(",");
+		const textured =
+			layers.length > 0 && layers.every((layer, index) => layer.trim().startsWith("url(") && !/no-repeat/.test(repeats[index % repeats.length] ?? ""));
+		if (shown && (media.has(tag) || tag === "button" || (layers.length > 0 && !textured))) boxes.push({ ...own, el, blocks: "both" });
 		if (media.has(tag)) return;
 		if (shown) {
 			// 算出来的底色透明时是 alpha 为 0 的颜色（以 ", 0)" 结尾）。
@@ -55,12 +81,17 @@ function transitionLayout(): number[] | null {
 				(side) => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== "none",
 			);
 			const shadow = style.boxShadow !== "none" ? 24 : 0;
-			if (painted || bordered || shadow) {
+			if (painted || bordered || shadow || textured) {
 				// 有底色、描边的块：中间一片纯色可以拉，四条边连同圆角不能。左右两条边只挡横向拉伸，上下两条只挡纵向。
-				const radius = Math.max(
-					...(["TopLeft", "TopRight", "BottomLeft", "BottomRight"] as const).map((corner) => parseFloat(style[`border${corner}Radius`]) || 0),
-					parseFloat(style.borderLeftWidth) || 0,
-					parseFloat(style.borderTopWidth) || 0,
+				// 圆角按块的尺寸封顶：`rounded-full` 算出来是 9999px，不封顶的话一个小圆点就把整行挡住了。
+				const radius = Math.min(
+					Math.max(
+						...(["TopLeft", "TopRight", "BottomLeft", "BottomRight"] as const).map((corner) => parseFloat(style[`border${corner}Radius`]) || 0),
+						parseFloat(style.borderLeftWidth) || 0,
+						parseFloat(style.borderTopWidth) || 0,
+					),
+					r.width / 2,
+					r.height / 2,
 				);
 				const reach = radius + 1 + shadow;
 				if (r.left >= clip.x0 - 0.5) boxes.push({ x0: r.left - shadow - 1, x1: r.left + reach, y0: own.y0, y1: own.y1, el, blocks: "x" });
@@ -92,7 +123,9 @@ function transitionLayout(): number[] | null {
 	};
 	walk(document.body, { x0: 0, y0: 0, x1: W, y1: H });
 
-	const welcome = boxes.filter((box) => box.el !== page && page.contains(box.el));
+	// 只算欢迎内容（问候到建议按钮）：同在欢迎页里的磨砂层铺满整个对话区，不算。
+	const last = page.querySelector("[data-welcome-last]");
+	const welcome = boxes.filter((box) => first.contains(box.el) || !!last?.contains(box.el));
 	if (welcome.length === 0) return null;
 	const group = {
 		x0: Math.min(...welcome.map((box) => box.x0)),
@@ -166,10 +199,10 @@ function transitionLayout(): number[] | null {
 			cut = filler ? Math.floor((filler[0] + filler[1]) / 2) : 0;
 		}
 		if (!filler) return null;
-		const row = Math.floor((filler[0] + filler[1]) / 2);
 		const width = x1 - x0;
 		tile([x0, 0, width, cut], [x0, 0, width, cut], 0, 0, 0, 1, 1);
-		tile([x0, row, width, 1], [x0, cut, width, 0], 0, 0, 0, 1, 2);
+		// 填充块取整段空白：原生那边沿拉开的方向平铺它，磨砂的噪点不会被拉成一道道竖纹。
+		tile([x0, filler[0], width, filler[1] - filler[0]], [x0, cut, width, 0], 0, 0, 0, 1, 2);
 		tile([x0, cut, width, H - cut], [x0, cut, width, H - cut], 0, 0, 1, 0, 0);
 		bands.push({ x0, x1, cut });
 	}

@@ -140,7 +140,7 @@ static void checkTiles(void) {
     };
     NSData *tiles = [NSData dataWithBytes:list length:sizeof list];
     CGImageRef pixels = [blankImage(NSMakeSize(800, 600)) CGImageForProposedRect:NULL context:nil hints:nil];
-    PlumeTransitionView *view = [[PlumeTransitionView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) pixels:pixels tiles:tiles];
+    PlumeTransitionView *view = [[PlumeTransitionView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) pixels:pixels tiles:tiles reach:NSMakeSize(1200, 800)];
     assert(view.layer.sublayers.count == 6);
     for (int step = -100; step <= 200; step += 7) {
         CGFloat dw = step * 2, dh = step;
@@ -158,10 +158,42 @@ static void checkTiles(void) {
     }
 }
 
+/** 一块 100 点见方、前半红后半蓝的图拉到三倍：平铺的话 220 处是第三份的前半（红），放大的话是后半（蓝）。 */
+static void checkRepeat(BOOL tall) {
+    NSImage *halves = [NSImage imageWithSize:NSMakeSize(100, 100) flipped:YES drawingHandler:^BOOL(NSRect area) {
+        [NSColor.redColor setFill];
+        NSRectFill(tall ? NSMakeRect(0, 0, 100, 50) : NSMakeRect(0, 0, 50, 100));
+        [NSColor.blueColor setFill];
+        NSRectFill(tall ? NSMakeRect(0, 50, 100, 50) : NSMakeRect(50, 0, 50, 100));
+        return YES;
+    }];
+    PlumeTile tile = {CGRectMake(0, 0, 100, 100), CGRectMake(0, 0, 100, 100), 0, tall ? 0 : 1, 0, tall ? 1 : 0, 0};
+    NSSize end = tall ? NSMakeSize(100, 300) : NSMakeSize(300, 100);
+    PlumeTransitionView *view = [[PlumeTransitionView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)
+                                                                    pixels:[halves CGImageForProposedRect:NULL context:nil hints:nil]
+                                                                     tiles:[NSData dataWithBytes:&tile length:sizeof tile]
+                                                                     reach:end];
+    [view setFrameSize:end];
+    NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+    CGFloat k = rep.pixelsWide / end.width;
+    // 视图是翻转的，位图不是：先翻过来再画，位图的行（从上往下数）才和视图里的 y 对上。
+    CGContextRef context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep].CGContext;
+    CGContextTranslateCTM(context, 0, end.height);
+    CGContextScaleCTM(context, 1, -1);
+    [view.layer renderInContext:context];
+    CGFloat (^red)(int) = ^CGFloat(int along) {
+        NSColor *color = tall ? [rep colorAtX:(NSInteger)(50 * k) y:(NSInteger)(along * k)] : [rep colorAtX:(NSInteger)(along * k) y:(NSInteger)(50 * k)];
+        return [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace].redComponent;
+    };
+    assert(red(20) > 0.5 && red(80) < 0.5 && red(220) > 0.5 && red(280) < 0.5);
+}
+
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
         checkTiles();
+        checkRepeat(NO);
+        checkRepeat(YES);
         checkDelegate();
         checkReady();
         checkTransition();
