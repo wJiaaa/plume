@@ -7,8 +7,8 @@ export interface PlanState {
 }
 
 export interface PlanApi {
-	/** `sessionId` 为 null 时拨的是新对话的开关。 */
-	set(sessionId: string | null, on: boolean): void;
+	/** `sessionId` 为 null 时拨的是新对话的开关。子会话打开时抛错（计划模式只开在顶层会话上）。 */
+	set(sessionId: string | null, on: boolean): Promise<void>;
 	watch(call: CallContext): AsyncGenerator<PlanState, void>;
 	/** 可用的模型，计划卡上「用 X 在新会话里执行」写名字用。 */
 	models(): Promise<{ id: string; name: string }[]>;

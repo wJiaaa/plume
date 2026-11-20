@@ -224,8 +224,17 @@ export default {
 			},
 		});
 
+		/**
+		 * 计划模式只开在顶层会话上：子会话（侧边聊天、子 Agent）交不了计划（见 `submit_plan`），开了只剩只读、走不完一遍。
+		 * 父会话开着时子会话照旧受它管（`planning` 的 `parent`），这里只拦子会话自己开。
+		 */
+		async function ownSwitch(sessionId: string | null): Promise<void> {
+			if (sessionId !== null && (await parentOf(sessionId)) !== null) throw new Error(MESSAGES[ctx.locale()].childOff);
+		}
+
 		ctx.commands.provide({
-			list: () => {
+			list: async ({ sessionId }) => {
+				if (sessionId && (await parentOf(sessionId)) !== null) return [];
 				const text = MESSAGES[ctx.locale()];
 				return [{ name: "plan", description: text.command, argumentHint: text.commandHint }];
 			},
@@ -233,8 +242,9 @@ export default {
 			 * 不带话就是开关；带话就先进计划模式、再把这句话当普通消息发出去。发出去的只是后半句：开关已经拨过了，
 			 * `/plan` 留在气泡里模型会当成一条它不认识的命令。
 			 */
-			expand(_name, rest, context) {
+			async expand(_name, rest, context) {
 				const sessionId = context.sessionId ?? null;
+				await ownSwitch(sessionId);
 				const on = sessionId === null ? store.drafted : store.has(sessionId);
 				if (!rest) {
 					store.set(sessionId, !on);
@@ -246,7 +256,12 @@ export default {
 		});
 
 		ctx.serve({
-			set: (sessionId: string | null, on: boolean) => store.set(sessionId === null ? null : String(sessionId), on === true),
+			async set(sessionId: string | null, on: boolean) {
+				const id = sessionId === null ? null : String(sessionId);
+				// 关总是可以的：只拦打开。
+				if (on === true) await ownSwitch(id);
+				store.set(id, on === true);
+			},
 			models: async () => (await ctx.sessions.models()).map(({ id, name }) => ({ id, name })),
 			watch: (call) => store.watch(call),
 		} satisfies PlanApi);

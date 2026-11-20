@@ -41,7 +41,7 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 }
 
 /**
- * 侧聊输入框的 `/` 菜单：输入框挂上时这段还没接上（面板先挂、再接回那段），菜单照样要有，列插件的命令，不列 `/clear`、`/btw`。
+ * 侧聊输入框的 `/` 菜单：输入框挂上时这段还没接上（面板先挂、再接回那段），菜单照样要有，列插件的命令，不列 `/clear`、`/btw`、`/plan`（计划模式只开在主会话上）。
  * 打完再删干净，后面接着用这个输入框。
  */
 async function checkSideCommands(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
@@ -53,9 +53,9 @@ async function checkSideCommands(options: Parameters<typeof checkQuoteSideChat>[
 	await window.webContents.insertText("/");
 	await until(`document.querySelector('${menu} [data-command="compact"]') !== null`, "侧聊里敲 / 弹出命令菜单");
 	assert.equal(
-		await page(`document.querySelector('${menu} [data-command="clear"], ${menu} [data-command="btw"]') !== null`),
+		await page(`document.querySelector('${menu} [data-command="clear"], ${menu} [data-command="btw"], ${menu} [data-command="plan"]') !== null`),
 		false,
-		"侧聊的 / 菜单不该列 /clear、/btw",
+		"侧聊的 / 菜单不该列 /clear、/btw、/plan",
 	);
 	await capture(window, join(outDir, "smoke-side-chat-commands.png"));
 	for (const keyCode of ["Escape", "Backspace"]) {

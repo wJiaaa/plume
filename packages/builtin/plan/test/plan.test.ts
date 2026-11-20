@@ -182,7 +182,7 @@ test("关着时什么都不管；开着时每次调用都带着 readOnly 和拒�
 	assert.deepEqual((await plan.execute("main", "edit")).output, { output: "ran" });
 	assert.equal((await plan.execute("main", "bash")).reached?.readOnly, undefined);
 
-	plan.api.set("main", true);
+	await plan.api.set("main", true);
 	// 拦哪些归本体（写、改文件的工具不往里交，命令压进只读沙箱、不许提权，见 `packages/core/agent/test/commands.test.ts`），
 	// 这里只交下拒绝时给模型的话。
 	assert.match((await plan.execute("main", "edit")).reached?.readOnly?.refusal ?? "", /^Plan mode: it edits files, so "edit" did not run/);
@@ -200,7 +200,7 @@ test("关着时什么都不管；开着时每次调用都带着 readOnly 和拒�
 test("计划中在 plume.prompt 外面标上 readOnly，系统提示词按只读那档点名 shell；子会话跟着父会话", async () => {
 	const plan = await fakeContext();
 	assert.equal(await plan.readOnly("main"), false);
-	plan.api.set("main", true);
+	await plan.api.set("main", true);
 	assert.equal(await plan.readOnly("main"), true);
 	assert.equal(await plan.readOnly("child"), true);
 	assert.equal(await plan.readOnly("fresh"), false);
@@ -210,7 +210,7 @@ test("交计划：只能人答；批准就地关掉开关，拒绝结束这一�
 	const plan = await fakeContext();
 	assert.equal((await plan.submit("main", "# 计划", { accept: true })).output.isError, true);
 
-	plan.api.set("main", true);
+	await plan.api.set("main", true);
 	assert.equal((await plan.submit("child", "# 计划", { accept: true })).output.isError, true);
 	const declined = await plan.submit("main", "# 改登录\n\n概要");
 	assert.deepEqual(declined.asked, [{ kind: SUBMIT_PLAN, title: "Plume 提出了一个计划", payload: "# 改登录\n\n概要", waiting: "等你批准计划" }]);
@@ -229,6 +229,15 @@ test("交计划：只能人答；批准就地关掉开关，拒绝结束这一�
 	assert.equal(await readFile(file, "utf8"), "# 改登录\n\n概要\n");
 	assert.deepEqual(approved.output.details, { kind: "plan", plan: "# 改登录\n\n概要", approved: true, approvedAt, file });
 	assert.equal((await plan.execute("main", "edit")).reached?.readOnly, undefined);
+});
+
+test("子会话（侧边聊天）里不列 /plan，也开不了计划模式", async () => {
+	const plan = await fakeContext();
+	assert.deepEqual(await plan.commands.list({ sessionId: "child" }), []);
+	assert.equal((await plan.commands.list({ sessionId: "main" })).length, 1);
+	await assert.rejects(async () => plan.commands.expand("plan", "", { sessionId: "child" }), /子会话/);
+	await assert.rejects(async () => plan.api.set("child", true), /子会话/);
+	assert.deepEqual(await plan.sections("child"), []);
 });
 
 test("/plan 不带话是开关，带话先开再发后半句；新对话的开关交给第一句话建出来的会话", async () => {
@@ -261,7 +270,7 @@ test("提示词点名的记清单、问人的工具按声明的类别找，工�
 
 test("查过东西、以正文收尾却没交计划：提醒一次；没调过工具、交过计划、问过人的不提醒", async () => {
 	const plan = await fakeContext();
-	plan.api.set("main", true);
+	await plan.api.set("main", true);
 	assert.deepEqual(await plan.end(1, []), { continue: false });
 
 	await plan.end(1, ["read"], { continue: true });
@@ -309,7 +318,7 @@ test("环境卡片列批准过的每一份，按批准先后，打回的、退�
 
 test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停；接受带评论时评论成为注意事项", async () => {
 	const plan = await fakeContext();
-	plan.api.set("main", true);
+	await plan.api.set("main", true);
 	const revised = await plan.submit("main", "# 改登录", { accept: false, feedback: "  先别动数据库  " });
 	assert.match(revised.output.output, /Feedback: 先别动数据库[\s\S]*Revise the plan/);
 	assert.equal(revised.output.terminate, undefined);
@@ -360,7 +369,7 @@ test("压缩把批准计划的那次结果折进摘要头时，计划接在头�
 test("在新会话里执行：计划存成文件，在原会话的项目里开新会话、记着从这次调用开出来，这一轮停下", async () => {
 	const origin = "a1b2c3d4-0000-4000-8000-000000000000";
 	const plan = await fakeContext();
-	plan.api.set(origin, true);
+	await plan.api.set(origin, true);
 	const text = "# 改登录\n\n## 概要\n把登录改成短信验证码。\n\n## 改动\n- a.ts";
 	const handed = await plan.submit(origin, text, { accept: true, note: "注意兼容", handoff: { model: "m1" } });
 	const details = handed.output.details as { file: string; handoff?: boolean; model?: string; approvedAt: number };
@@ -397,7 +406,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 
 test("在新会话里执行：原会话不在项目里时开在它的目录；开不出来时提示人、这一轮照样停下", async () => {
 	const alone = await fakeContext();
-	alone.api.set("main", true);
+	await alone.api.set("main", true);
 	await alone.submit("main", "改登录", { accept: true, handoff: {} });
 	const [launch] = alone.launched;
 	assert.equal(launch?.cwd, "/w/app");
@@ -405,7 +414,7 @@ test("在新会话里执行：原会话不在项目里时开在它的目录；�
 	assert.equal(launch?.model, undefined);
 
 	const broken = await fakeContext([], { fail: "项目已移除" });
-	broken.api.set("main", true);
+	await broken.api.set("main", true);
 	const failed = await broken.submit("main", "改登录", { accept: true, handoff: {} });
 	const { file } = failed.output.details as { file: string };
 	assert.equal(failed.output.terminate, "done");
