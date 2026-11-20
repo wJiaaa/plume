@@ -4,9 +4,10 @@ name: 安装包
 # 都上传到这次运行的 Artifacts。macOS 有证书（secret MAC_CERTIFICATE_P12）就用证书签，没有就 ad-hoc；Windows 不签。
 # 推 tag 时最后由 publish 把安装包和 SHA256SUMS 发成这个仓库的 Release（应用里检查更新读的就是它，见
 # apps/desktop/src/main/update/updates.ts 的 RELEASE_REPO）；手动运行只打包、不发布。
+# 插件 SDK 不随发版自动发：推 `sdk-v*` tag 才发（只跑 sdk 这一个 job，不打包）。下面「推 tag」不加说明时都指 `v*`。
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "sdk-v*"]
   workflow_dispatch:
     inputs:
       platform:
@@ -19,11 +20,11 @@ on:
 permissions:
   contents: read
 
-# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件。推 tag 时最后由 sdk 把插件 SDK 发到 npm。
+# 市场插件不随应用发（装的时候从插件市场下载），这里只构建内置插件。插件 SDK 只在推 `sdk-v*` tag 时由 sdk 发到 npm。
 
 jobs:
   windows:
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows'
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || inputs.platform == 'all' || inputs.platform == 'windows'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -65,7 +66,7 @@ jobs:
           compression-level: 0
 
   macos:
-    if: github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos'
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || inputs.platform == 'all' || inputs.platform == 'macos'
     # 图标是 Icon Composer 的 icon.icon，要 Xcode 26 的 actool 才能编译；
     # 更早的镜像会静默退回 Electron 默认图标
     runs-on: macos-26
@@ -100,7 +101,7 @@ jobs:
       - name: 准备签名证书
         timeout-minutes: 5
         env:
-          REQUIRE_SIGNING: ${{ github.event_name == 'push' }}
+          REQUIRE_SIGNING: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
           MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
           MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
         run: bash .github/scripts/prepare-signing.sh
@@ -112,7 +113,7 @@ jobs:
       # 证书没导进去时 electron-builder 会悄悄退回 ad-hoc，包照样能装能跑，只是权限每次更新都被重置
       - name: 核验签名身份
         env:
-          REQUIRE_SIGNING: ${{ github.event_name == 'push' }}
+          REQUIRE_SIGNING: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
           HAVE_CERT: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
         run: bash .github/scripts/check-signature.sh
 
@@ -130,8 +131,8 @@ jobs:
   # 应用内更新先按文件名在这里查到校验值，对得上才安装；没有这个文件就不装（apps/desktop/src/main/update/update-checksum.ts）
   checksums:
     needs: [windows, macos]
-    # 只打了一个平台（手动选的）时另一个是 skipped，照样给打出来的那些生成
-    if: ${{ !failure() && !cancelled() }}
+    # 只打了一个平台（手动选的）时另一个是 skipped，照样给打出来的那些生成；推 sdk-v* 时两个都没打，不生成
+    if: ${{ !failure() && !cancelled() && !startsWith(github.ref, 'refs/tags/sdk-v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -159,7 +160,7 @@ jobs:
   # 正文取 CHANGELOG.md 里这一版手写的那一节（scripts/changelog-section.mjs），关于页和更新对话框显示的就是它。
   publish:
     needs: [windows, macos, checksums]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -183,11 +184,12 @@ jobs:
           gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
   # 插件 SDK 发到 npm（插件仓库和别的插件项目按版本依赖它），和本机的 `pnpm publish:sdk` 同一份脚本（packages/sdk/plugin-sdk/scripts/publish.mjs）：
-  # npm 上已有这个版本就跳过，本机先发过也不失败。版本号和应用一样，Release 发出去之后再发：插件不会先用上还没发布的宿主能力。
-  # 用 npm 的 trusted publishing（GitHub OIDC），不存 token：npmjs.com 上 @plumeai/plugin-sdk 的设置里要登记这个仓库的 package.yml。
+  # npm 上已有这个版本就跳过，本机先发过也不失败。不是每一版都要发，所以不随 `v*` tag 发，要发时在那一版的提交上推 `sdk-vX.Y.Z`。
+  # 版本号和应用一样（`pnpm release` 一起改），所以 tag 要和 SDK 的版本号一致，且 `vX.Y.Z` 的 Release 已经发了：SDK 的类型来自宿主，
+  # 先于宿主发布，插件就会用上用户手里的 Plume 没有的接口。
+  # 放在这个文件里而不是单独一个：用 npm 的 trusted publishing（GitHub OIDC），不存 token，npmjs.com 上 @plumeai/plugin-sdk 登记的是 package.yml。
   sdk:
-    needs: [publish]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sdk-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -196,6 +198,21 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: 核对版本号和应用 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p 'require("./packages/sdk/plugin-sdk/package.json").version')
+          if [ "$TAG" != "sdk-v$version" ]; then
+            echo "::error::tag 是 $TAG，SDK 的版本号是 $version，要推 sdk-v$version"
+            exit 1
+          fi
+          if ! gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null; then
+            echo "::error::应用 v$version 的 Release 还没发，等它发了再推 $TAG"
+            exit 1
+          fi
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5

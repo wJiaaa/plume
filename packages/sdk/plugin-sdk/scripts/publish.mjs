@@ -1,9 +1,9 @@
 /**
- * 把 SDK 发到 npm（`pnpm publish:sdk`）。本机和 CI（.github/workflows/package.yml 的 sdk）走这同一份：
+ * 把 SDK 发到 npm（`pnpm publish:sdk`）。本机和 CI（.github/workflows/package.yml 的 sdk，推 `sdk-v*` tag 时）走这同一份：
  *
  *   1. 生成类型声明（`pnpm --filter "@plumeai/plugin-sdk..." typecheck`）；
  *   2. `stage.mjs --npm` 整理出要发的目录（放在临时目录，发完删掉）；
- *   3. npm 上已经有这个版本就跳过：本机先发过，推 tag 后 CI 再跑不会失败；发出去的版本不可变，要发新的先升版本号；
+ *   3. npm 上已经有这个版本就跳过：本机先发过，CI 再跑不会失败；发出去的版本不可变，要发新的先升版本号；
  *   4. `npm publish`。在 GitHub Actions 里加 `--provenance`（经 OIDC 的 trusted publishing，不存 token）；本机用 `npm login`
  *      登录的账号发，没有 provenance。
  *

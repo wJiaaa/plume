@@ -2,7 +2,7 @@
 
 架构说明见 [ARCHITECTURE.md](ARCHITECTURE.md)，插件系统的设计见 [agent-extension.md](agent-extension.md)，已有的产品功能按模块记在 [docs/features](docs/features/README.md)（改了功能同步更新对应那份）。
 
-市场插件不在这个仓库，在插件仓库 plume-plugins 里。两个仓库互不引用（`.dependency-cruiser.cjs` 的 `no-plugin-repo` 拦着）：插件仓库经 npm 上的 `@plumeai/plugin-sdk` 写插件（这里的 `packages/sdk/plugin-sdk`，推 `v*` tag 时由 `.github/workflows/package.yml` 发版），这里的构建、检查、测试不碰插件仓库。应用的插件市场在网上（插件仓库发到 GitHub Pages，`apps/desktop/src/main/market-remote.ts`），开发版和装好的应用只用这一个（要联网），共用 `~/.plume` 里装好的插件；冒烟缺省也用它，改了插件接口、线上那批插件跟不上时，用 `pnpm market:local` 拿这里的 SDK 构建插件仓库、打出本地市场给冒烟用（见下面的命令表）。插件还没发布的改动，和任何插件作者一样用 `plume-plugin dev` / `install` 或插件市场的「从本地上传」装进本机（`~/.plume/local-plugins/`），见 skill [skills/plume-plugin](skills/plume-plugin/SKILL.md)。安装包不带市场插件。`pnpm market:local` 要用插件仓库，设 `PLUME_PLUGINS_DIR=<插件仓库>/plugins` 或直接给插件仓库的路径，`pnpm check` 不碰它。
+市场插件不在这个仓库，在插件仓库 plume-plugins 里。两个仓库互不引用（`.dependency-cruiser.cjs` 的 `no-plugin-repo` 拦着）：插件仓库经 npm 上的 `@plumeai/plugin-sdk` 写插件（这里的 `packages/sdk/plugin-sdk`，推 `sdk-v*` tag 时由 `.github/workflows/package.yml` 发版，不随推 `v*` tag 自动发），这里的构建、检查、测试不碰插件仓库。应用的插件市场在网上（插件仓库发到 GitHub Pages，`apps/desktop/src/main/market-remote.ts`），开发版和装好的应用只用这一个（要联网），共用 `~/.plume` 里装好的插件；冒烟缺省也用它，改了插件接口、线上那批插件跟不上时，用 `pnpm market:local` 拿这里的 SDK 构建插件仓库、打出本地市场给冒烟用（见下面的命令表）。插件还没发布的改动，和任何插件作者一样用 `plume-plugin dev` / `install` 或插件市场的「从本地上传」装进本机（`~/.plume/local-plugins/`），见 skill [skills/plume-plugin](skills/plume-plugin/SKILL.md)。安装包不带市场插件。`pnpm market:local` 要用插件仓库，设 `PLUME_PLUGINS_DIR=<插件仓库>/plugins` 或直接给插件仓库的路径，`pnpm check` 不碰它。
 
 ## 规范
 
@@ -34,6 +34,7 @@
 | `pnpm tool-eval` | 编辑格式评测（`test/tool-eval/run.ts`），同目录的 `*-eval.ts` 是各项工具能力的评测，用法在各自文件头；模型和 key 取 `PLUME_HOME` 的设置，调真实模型、花钱，结果写到 `test/tool-eval/results/`（不进仓库） |
 | `pnpm catalog:update` | 从 pi.dev 拉模型目录，重写随应用发的快照 `packages/core/llm/src/catalog/model-catalog.json`（`scripts/update-model-catalog.ts`）；应用运行时自己拉最新的，快照只在首次启动和离线时用，发版前刷一次；要联网 |
 | `pnpm release <patch\|minor\|major\|x.y.z> [--no-push]` | 发版：把 `apps/desktop/package.json` 和其余非插件包的版本号改齐（`scripts/versions.mjs` 按目录算；插件的版本归插件自己），用 git-cliff（`cliff.toml`）在 `CHANGELOG.md` 里生成这一版的提交列表，提交 `chore(release): vX`，打 tag（说明是 `scripts/changelog-section.mjs` 读出的那一节），推送（这一节还没有手写的中英两段文案时停在推送前，同 `--no-push`；手推 `v*` tag 时 pre-push 钩子也查，`scripts/check-release-notes.mjs`）；要在远端的默认分支上、工作区干净、和远端一致。生成的列表是原料：发出去的文案手写成 `<!-- plume:notes en -->`、`<!-- plume:notes zh-CN -->` 两段，英文在前，两种语言各写一遍、不直译，写给用的人（先说他遇到的现象，再说现在怎样），关于页和更新对话框按界面语言只显示其中一段 |
+| `git tag sdk-vX.Y.Z vX.Y.Z && git push origin sdk-vX.Y.Z` | 发插件 SDK 到 npm：`pnpm release` 不发 SDK，推 `v*` tag 也不发，要发时在已经发了 Release 的那一版上另推 `sdk-v*` tag，由 `.github/workflows/package.yml` 的 `sdk` 只跑这一个 job（不打包），用 npm 的 trusted publishing（登记的是 `package.yml`，所以不拆成单独的文件）。发之前核对 tag 和 `packages/sdk/plugin-sdk/package.json` 的版本号一致、应用 `vX.Y.Z` 的 Release 已经在了，不对就失败：SDK 的类型来自宿主，先于宿主发布，插件就会用上用户手里的 Plume 没有的接口。SDK 版本号随 `pnpm release` 和应用一起改，所以只能发某一版应用对应的 SDK。本机也能发：`pnpm publish:sdk [--dry-run]`（同一份脚本 `packages/sdk/plugin-sdk/scripts/publish.mjs`，用 `npm login` 的账号，npm 上已有这个版本就跳过） |
 
 Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接、约定检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`，推 `v*` tag 时还查发版文案。
 
