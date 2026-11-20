@@ -2,6 +2,24 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.6] - 2026-11-20
+
+<!-- plume:notes en -->
+### Changes
+
+- **The side chat works like the main input box while it's replying.** While the side chat was answering, its input box only had a stop button, and `/` commands didn't work there. Now Return steers the current turn: the model reads your message after the step it's on. ⌘Return queues the message to send after the turn finishes. With the input box empty, the button stops the reply. Messages the model hasn't read yet are listed in the strip above the input box. From there you can send a queued message now, take it back into the input box, or delete it. Queued messages aren't kept after a restart. Typing `/` opens the command menu, and commands apply to that side chat; `/clear` and `/btw` aren't listed.
+- **Unread dot on side chat tabs.** When a side chat finishes replying in a background tab, or while the panel is collapsed, a small dot lights up on its tab icon. It goes away once you switch to that tab.
+- **Split view shows which side has focus.** Before, only the title bar of the other side was dimmed, so the two sides looked almost the same. Now the whole side without focus is dimmed, and clicking it moves focus there as usual.
+- **No more flicker when sending in the side chat.** The send button no longer dims for a moment before turning into the stop button. When you send the first message in a new side chat, the input box no longer fades out, and the model you picked stays shown.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **侧边聊天在回复时，输入框也能像主输入框那样用。** 原来侧边聊天回答时输入框只有停止键，也用不了 `/` 命令。现在按回车是插话：模型做完手上这一步就会读到。按 ⌘回车是排队：等这一轮结束再发。输入框空着时，按钮是停止键。模型还没读到的话会列在输入框上方那一条里，排着的可以现在就发、撤回到输入框，或者删掉。排着的话重开应用后不保留。输入 `/` 会弹出命令菜单，命令作用于这段侧边聊天；菜单里没有 `/clear` 和 `/btw`。
+- **侧边聊天标签亮未读点。** 侧边聊天在后台标签里，或面板收起时回复完，它的标签图标上会亮一个小点，切过去就灭。
+- **分屏时看得出焦点在哪一屏。** 原来只有焦点不在的那一屏标题栏淡一点，两屏看起来差不多。现在焦点不在的那一屏整屏压淡一档，点它照常换过去。
+- **侧边聊天发送时不再闪。** 发送键不会再先暗一下才变成停止键。新开侧边聊天发第一句时，输入框不再整块变淡，选好的模型也不会跳回默认。
+
 ## [0.7.5] - 2026-11-20
 
 <!-- plume:notes en -->
