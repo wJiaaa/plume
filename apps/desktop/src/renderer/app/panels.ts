@@ -5,7 +5,7 @@ import { layoutMode, writePanelPrefs, writePanelTabs, writeSidebarPrefs } from "
 import { notify } from "../toast/index.ts";
 import { listPanels, panelEntry } from "../plugins.tsx";
 import { dropFile, fileOf, isFolder, type LineRange, openFileIn, shownPath } from "../files/open-file.ts";
-import { dropChildDraft, flushChildDrafts } from "../conversation/child-drafts.ts";
+import { dropChildDraft, flushChildDrafts, focusChildDraft } from "../conversation/child-drafts.ts";
 import { type Chrome, errorText, type PanelTab, type PanelTabs, panelWindow, sessionWindow, state, update } from "./state.ts";
 
 export function setSidebar(patch: { open?: boolean; width?: number }): void {
@@ -119,6 +119,7 @@ export function launch(tabId: string, key: string, scope = scopeOf(state), sessi
 	const open = entry.multiple ? undefined : tabs.find((tab) => tab.panel === key && tab.sessionId === sessionId);
 	if (open) return setTabs(scope, { tabs: tabs.filter((tab) => tab.id !== tabId), active: open.id });
 	const id = crypto.randomUUID();
+	focusChildDraft(id);
 	setTabs(scope, { tabs: tabs.map((tab) => (tab.id === tabId ? { id, panel: key, ...(sessionId ? { sessionId } : {}) } : tab)), active: id });
 }
 

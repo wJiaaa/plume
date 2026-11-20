@@ -6,7 +6,7 @@ import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useI18n } from "@plume/ui";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildQuoteFocus, type ChildDraft } from "./child-drafts.ts";
+import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildFocus, type ChildDraft } from "./child-drafts.ts";
 import type { PickedFile } from "../composer/attachments/picked.ts";
 import { ComposerSend, ComposerShell } from "../composer/index.ts";
 import { ContextMeter } from "../composer/ContextMeter.tsx";
@@ -157,7 +157,7 @@ export function ChildComposer({
 		editor.current?.dispatch({ effects: editable.current.reconfigure([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]) });
 	}, [state.readOnly]);
 	useEffect(() => {
-		if (!active || loading || !draftKey || !editor.current || !takeChildQuoteFocus(draftKey)) return;
+		if (!active || loading || !draftKey || !editor.current || !takeChildFocus(draftKey)) return;
 		editor.current.dispatch({ selection: { anchor: editor.current.state.doc.length } });
 		editor.current.contentDOM.focus({ preventScroll: true });
 	}, [active, loading, draftKey, draft.quotes, draft.text]);

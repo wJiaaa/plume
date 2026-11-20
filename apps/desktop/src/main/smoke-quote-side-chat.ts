@@ -36,6 +36,10 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 	await click("[data-screen=chat] [data-composer-send=send]");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert])')?.textContent.includes('划词侧边聊天准备好了。')", "侧聊准备好");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) [data-composer-send=stop]') === null", "侧聊已结束");
+	await until(
+		"document.activeElement === document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) .cm-content')",
+		"新开的侧聊输入框拿到焦点",
+	);
 	await checkSideCommands(options);
 	await checkUnreadDot(options);
 }

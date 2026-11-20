@@ -118,7 +118,12 @@ export function seedChildText(key: string, text: string): void {
 	setChildDraft(key, { ...childDraft(key), text });
 }
 
-export function takeChildQuoteFocus(key: string): boolean {
+/** 新开的面板标签：标签里 `draftKey` 是它的输入框首次显示时拿到焦点，人打开就能打字。 */
+export function focusChildDraft(key: string): void {
+	focus.add(key);
+}
+
+export function takeChildFocus(key: string): boolean {
 	return focus.delete(key);
 }
 

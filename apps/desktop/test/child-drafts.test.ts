@@ -8,7 +8,7 @@ import {
 	seedChildQuote,
 	setChildDraft,
 	subscribeChildDrafts,
-	takeChildQuoteFocus,
+	takeChildFocus,
 	type ChildDraft,
 } from "../src/renderer/conversation/child-drafts.ts";
 
@@ -83,18 +83,18 @@ test("划词追加到原草稿，保存来源、附件和已有引用，跨窗�
 		const expected = { ...before, quotes: [...before.quotes, second] };
 		assert.deepEqual(childDraft("quoted"), expected);
 		assert.equal(before.quotes.length, 1);
-		assert.equal(takeChildQuoteFocus("quoted"), true);
-		assert.equal(takeChildQuoteFocus("quoted"), false);
+		assert.equal(takeChildFocus("quoted"), true);
+		assert.equal(takeChildFocus("quoted"), false);
 		flushChildDrafts();
 		entries.set("plume.child-draft:restored", entries.get("plume.child-draft:quoted")!);
 		assert.deepEqual(childDraft("restored"), expected);
-		assert.equal(takeChildQuoteFocus("restored"), false);
+		assert.equal(takeChildFocus("restored"), false);
 		assert.equal(childDraft("another"), EMPTY_CHILD_DRAFT);
 		setChildDraft("quoted", EMPTY_CHILD_DRAFT);
 		seedChildQuote("quoted", second);
 		assert.deepEqual(childDraft("quoted"), { text: "", attachments: [], quotes: [second] });
 		dropChildDraft("quoted");
-		assert.equal(takeChildQuoteFocus("quoted"), false);
+		assert.equal(takeChildFocus("quoted"), false);
 		assert.equal(entries.has("plume.child-draft:quoted"), false);
 	} finally {
 		for (const key of ["quoted", "restored", "another"]) dropChildDraft(key);
