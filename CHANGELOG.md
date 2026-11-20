@@ -2,6 +2,20 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.5] - 2026-11-20
+
+<!-- plume:notes en -->
+### Changes
+
+- **Smooth zoom and full screen on the welcome page (macOS).** On a new chat, double-clicking the title bar to zoom or restore the window, or using the green button to enter or leave full screen, made the greeting and input box jitter, flicker or show a ghost image while the window resized. They now stay in place relative to the window for the whole animation. This applies when the welcome page fills the window without wrapping. In a narrow window, with a full-image background, or when switching full screen from the keyboard or menu, macOS animates as before.
+- **Lower memory use while scrolling.** Scroll areas that don't need a fade at their edges no longer keep an extra full-size layer, which saved memory and made scrolling lighter.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **欢迎页放大、还原、进出全屏不再抖（macOS）。** 原来在新对话的欢迎页双击顶行放大、还原，或点绿色按钮进出全屏时，问候和输入框会一顿一顿地跳，还会闪一下或出现重影。现在整个动画过程中，它们一直稳稳地待在窗口里该在的位置。欢迎页一屏放得下、不用折行时生效；窗口很窄、背景用了整张图片，或用键盘、菜单切全屏时，仍是系统原来的动画。
+- **滚动时更省内存。** 两端不需要渐隐的滚动区不再多挂一层铺满视口的遮罩，省下一块合成缓冲，滚动也更轻。
+
 ## [0.7.4] - 2026-11-19
 
 <!-- plume:notes en -->
