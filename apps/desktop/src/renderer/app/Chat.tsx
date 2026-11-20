@@ -154,6 +154,25 @@ export function ChatWorkspace({
 				</>
 			)}
 			<PanelLayer panes={ordered} />
+			{/*
+			 * 焦点不在的那一屏盖一层压淡的底色（styles.css 的 `.split-veil`），压在常驻面板那一层上面，终端、网页一起淡下去。
+			 * 不接指针：按下照常落进那一屏、先把焦点换过去。只盖顶行以下那张卡片，顶行的标题另外淡一档。
+			 * `z-30` 压过屏里浮着的会话卡片、问题导航（`z-20`）；工作区是单独的层叠上下文（app.tsx 的 `isolate`），窗口按钮、菜单不受影响。
+			 * 两屏都挂着、只换透明度：换焦点时一层淡出一层淡入，合成器上走完，不碰排版。
+			 */}
+			{split &&
+				panes.map((pane) => (
+					<div
+						key={pane.key}
+						aria-hidden
+						data-split-pane={pane.side}
+						className="pointer-events-none absolute bottom-0 z-30"
+						style={{ left: pane.left, width: pane.width, top: MAIN_TOOLBAR_HEIGHT }}
+					>
+						{/* 圆角跟着这一屏的拼边换：`data-frame-clip` 挨着侧栏、另一屏的那一边不圆（styles.css 的 utilities 层）。 */}
+						<div data-frame-clip="" data-split-veil={pane.focused ? undefined : ""} className="split-veil absolute inset-0 rounded-panel" />
+					</div>
+				))}
 		</div>
 	);
 }
