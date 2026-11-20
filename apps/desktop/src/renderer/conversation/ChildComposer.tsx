@@ -41,11 +41,14 @@ export function ChildComposer({
 	project,
 	view,
 	onOpenSettings,
+	onOpening,
 }: {
 	composer: NonNullable<ConversationProps["composer"]>;
 	/** 输入框发给的那个会话，已经建了才有：右下角的用量、模型和档位量的是它。 */
 	view?: SessionView;
 	onOpenSettings: () => void;
+	/** 发第一句（会话还没建）的开始和结束：这期间会话建好、视图还没读回来，外面不把它当加载。 */
+	onOpening: (on: boolean) => void;
 	sessionId?: string;
 	cwd?: string;
 	project?: string;
@@ -74,8 +77,8 @@ export function ChildComposer({
 	const setText = (change: string | ((current: string) => string)) => {
 		changeDraft((current) => ({ ...current, text: typeof change === "function" ? change(current.text) : change }));
 	};
-	const [sending, setSending] = useState(false);
 	// 会话还没建时人先选的模型、档位：`model` 为 undefined 是没动过（用 `blank.model`），空串是选了「跟随主会话」。
+	// 发出第一句后也不清：会话建好、视图还没读回来那几帧这里仍画着它，清了模型名会先跳回默认再换成会话上的。
 	const [choice, setChoice] = useState<SessionChoice>({});
 	const blank = !view && !loading && composer.model === "choose" ? composer.blank : undefined;
 	const pending = useRef(false);
@@ -104,7 +107,6 @@ export function ChildComposer({
 		active,
 		running,
 		loading,
-		sending,
 		disabled: composer.disabled === true,
 		steer: composer.mode === "steer",
 		hasContent: Boolean(value.trim()) || draft.quotes.length > 0 || Boolean(draft.sessionRefs?.length) || (files && attachments.attachments.length > 0),
@@ -147,10 +149,18 @@ export function ChildComposer({
 		const text = withQuotes(kept.text.trim(), kept.quotes);
 		const message = withSessionReferences(files ? attachments.outgoing(text) : { content: [{ type: "text", text }] }, kept.sessionRefs ?? []);
 		const chosen = blank ? blankChoice(blank, choice) : undefined;
+		/*
+		 * 照主输入框：插话先清空（它一推进队里就上了转录，等回音再清的话那几帧同一句两份），
+		 * 平常的发送等发出去再清。先清的话从按下到会话跑起来那一两帧里输入框是空的，发送键先暗一下再换成停止键。
+		 */
+		const early = running;
+		const opening = !sessionId;
 		pending.current = true;
-		setSending(true);
-		attachments.clear();
-		changeDraft(() => EMPTY_CHILD_DRAFT);
+		if (opening) onOpening(true);
+		if (early) {
+			attachments.clear();
+			changeDraft(() => EMPTY_CHILD_DRAFT);
+		}
 		try {
 			const invocation = parseInvocation(kept.text.trim());
 			if (invocation?.name === "compact") {
@@ -161,8 +171,15 @@ export function ChildComposer({
 				else await composer.send(text, chosen);
 			} else if (composer.sendMessage) await composer.sendMessage(message, chosen);
 			else await composer.send(message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n\n"), chosen);
-			if (chosen) setChoice({});
+			// 发送期间人又改过的，留给下一句。
+			if (!early && readDraft() === kept) {
+				attachments.clear();
+				changeDraft(() => EMPTY_CHILD_DRAFT);
+			}
 		} catch (error) {
+			notify(error instanceof Error ? error.message : String(error), "error");
+			// 没先清的，草稿原样还在。
+			if (!early) return;
 			// 闭包属于这份会话；切换面板以后失败，也只还给原来的草稿。
 			if (files) {
 				attachments.restore(readDraft().attachments);
@@ -173,10 +190,9 @@ export function ChildComposer({
 				quotes: [...kept.quotes, ...current.quotes],
 				sessionRefs: [...(kept.sessionRefs ?? []), ...(current.sessionRefs ?? [])],
 			}));
-			notify(error instanceof Error ? error.message : String(error), "error");
 		} finally {
 			pending.current = false;
-			setSending(false);
+			if (opening) onOpening(false);
 		}
 	};
 	return (

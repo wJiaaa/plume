@@ -83,8 +83,18 @@ export function ChildConversation({
 			for (const name of ["dragenter", "dragover", "dragleave", "drop"] as const) element?.removeEventListener(name, contain);
 		};
 	}, []);
+	/*
+	 * 输入框发第一句时会话才建：同一份输入框正发着第一句、会话从没有变成有，这段会话本来就是空的，视图读回来之前不算加载，
+	 * 接着画 `empty`、输入框照常可用；当加载的话这一下输入框整块压淡、只读，转录换成转圈，发第一句时闪一下。
+	 * 只认正在发第一句的：插件打开已有的会话时也是从没有变成有（侧边聊天挂上时先查这个标签接的哪段），那要照常显示加载。
+	 */
+	const [opening, setOpening] = useState<string | undefined>();
+	const [opened, setOpened] = useState({ scope: currentScope, sessionId, fresh: false });
+	if (opened.scope !== currentScope || opened.sessionId !== sessionId) {
+		setOpened({ scope: currentScope, sessionId, fresh: opened.scope === currentScope && opened.sessionId === undefined && opening === currentScope });
+	}
 	// 还没有会话（侧边聊天的第一句还没发）和会话里还没消息一样，画 `empty`。
-	const loading = sessionId !== undefined && view === undefined;
+	const loading = sessionId !== undefined && view === undefined && !(opened.fresh && opened.sessionId === sessionId);
 	const blank = !loading && (view === undefined || (view.messages.length === 0 && !view.draft));
 	const approval = view && !view.summary.parentId ? view.approval : undefined;
 	// 插件每次渲染都给一份新的 `composer`；转录的 state 依赖 onSend，函数一变所有 `useTranscript()` 都跟着重画，所以经 ref 读最新的、函数本身不变。
@@ -160,6 +170,7 @@ export function ChildConversation({
 							cwd={scope === currentScope ? view?.summary.cwd : undefined}
 							project={scope === currentScope ? view?.summary.project : undefined}
 							active={scope === currentScope}
+							onOpening={(on) => setOpening(on ? scope : undefined)}
 							running={running}
 							loading={loading}
 							documentText={documentText}

@@ -3,7 +3,6 @@ export function childComposerState({
 	active,
 	running,
 	loading,
-	sending,
 	disabled,
 	steer,
 	hasContent,
@@ -11,7 +10,6 @@ export function childComposerState({
 	active: boolean;
 	running: boolean;
 	loading: boolean;
-	sending: boolean;
 	disabled: boolean;
 	steer: boolean;
 	hasContent: boolean;
@@ -21,6 +19,7 @@ export function childComposerState({
 		disabled: blocked,
 		readOnly: blocked,
 		stop: !blocked && running && !steer,
-		canSend: !blocked && !sending && (!running || steer) && hasContent,
+		// 不看「正在发送」：它从按下到发送返回只活一两帧，算进来只会让发送键闪一下暗；防连按由输入框自己的 pending 挡着。
+		canSend: !blocked && (!running || steer) && hasContent,
 	};
 }
