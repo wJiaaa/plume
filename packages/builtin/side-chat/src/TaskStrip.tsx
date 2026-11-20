@@ -4,12 +4,14 @@
  *
  * 面板只有两三百像素宽：不加底色、边框、展开；一行截断，整句和状态在悬停提示里。按钮悬停才出来，只给用得上的那几样。
  * 收了场的只留最近三件值得知道的：做完的、失败的、随主会话停下的；人自己收回的不留，点的时候就知道了。
+ * 底下接着这段侧边聊天里还没被模型读到的话（`WaitingRows`）：插进这一轮的、排在这一轮之后的，主输入框排队条的同一件事。
  */
 
 import type { ChildTask, Locale } from "@plume/contract";
 import type { ChildTasksProps } from "@plume/contract/ui";
 import { IconButton, StatusSpinner, Text, useI18n } from "@plume/ui";
-import { Ban, Check, Clock, OctagonPause, Play, RotateCcw, TriangleAlert, X } from "@plume/ui/icons";
+import { Ban, Check, Clock, CornerDownRight, OctagonPause, Play, RotateCcw, TriangleAlert, X } from "@plume/ui/icons";
+import type { WaitingEntry } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 
 const ICON = { queued: Clock, done: Check, failed: TriangleAlert, cancelled: Ban } as const;
@@ -55,17 +57,76 @@ function tipOf(task: ChildTask, locale: Locale): string {
 	return `${kept === full ? kept : `${kept.trimEnd()}…`}\n\n${statusOf(task, locale)}`;
 }
 
-export function TaskStrip(props: ChildTasksProps) {
+/** 还没被模型读到的话，和能对它们做的几样；状态在逻辑入口（waiting.ts）。 */
+export interface Waiting {
+	entries: WaitingEntry[];
+	/** 这段侧边聊天在跑：排着的等它收场，「现在就发」不给。 */
+	running: boolean;
+	sendNow(id: string): void;
+	/** 拿掉，字放回输入框；没有能放回去的输入框时不给。 */
+	withdraw?(id: string): void;
+	remove(id: string): void;
+}
+
+export function TaskStrip(props: ChildTasksProps & { waiting: Waiting }) {
 	const active = props.tasks.filter((task) => task.status === "queued" || task.status === "running");
 	const shown = [...props.tasks.filter(worthKeeping).slice(-RECENT_KEPT), ...active];
-	if (shown.length === 0) return null;
+	if (shown.length === 0 && props.waiting.entries.length === 0) return null;
 	return (
 		<div className="plume-side-tasks" data-task-strip="">
 			<div className="plume-side-tasks-list">
 				{shown.map((task) => (
 					<TaskRow key={task.id} task={task} {...props} />
 				))}
+				{props.waiting.entries.map((entry) => (
+					<WaitingRow key={`waiting:${entry.id}`} entry={entry} waiting={props.waiting} />
+				))}
 			</div>
+		</div>
+	);
+}
+
+function WaitingRow({ entry, waiting }: { entry: WaitingEntry; waiting: Waiting }) {
+	const text = MESSAGES[useI18n().resolvedLocale];
+	const status = entry.steered ? text.waitingSteered : waiting.running ? text.waitingQueued : text.waitingHeld;
+	const Icon = entry.steered ? CornerDownRight : Clock;
+	return (
+		<div className="plume-side-task" data-waiting={entry.steered ? "steered" : "queued"} data-plume-tip={`${entry.preview}\n\n${status}`}>
+			<Icon size={12} strokeWidth={1.9} aria-hidden className="plume-side-task-icon" />
+			<Text size="detail" tone="muted" className="plume-side-task-text">
+				{entry.preview}
+			</Text>
+			{/* 插进去的已经交给本体，收不回来；排着的能现在就发（闲着时）、撤回、删掉。 */}
+			{!entry.steered && (
+				<div className="plume-side-task-actions">
+					{!waiting.running && (
+						<IconButton
+							size="xs"
+							data-waiting-send-now=""
+							label={text.waitingSendNow}
+							onClick={() => waiting.sendNow(entry.id)}
+							icon={<Play size={11} strokeWidth={2} aria-hidden />}
+						/>
+					)}
+					{waiting.withdraw && !entry.attachments && (
+						<IconButton
+							size="xs"
+							data-waiting-withdraw=""
+							label={text.waitingWithdraw}
+							onClick={() => waiting.withdraw?.(entry.id)}
+							icon={<RotateCcw size={11} strokeWidth={2} aria-hidden />}
+						/>
+					)}
+					<IconButton
+						size="xs"
+						tone="danger"
+						data-waiting-remove=""
+						label={text.waitingRemove}
+						onClick={() => waiting.remove(entry.id)}
+						icon={<X size={11} strokeWidth={2} aria-hidden />}
+					/>
+				</div>
+			)}
 		</div>
 	);
 }

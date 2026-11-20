@@ -7,17 +7,19 @@
  * 人没看着的那一格回复完了，标签上亮一个未读点，切过去就灭。
  *
  * 主输入框排队条的「更多」菜单里加一项「在侧边聊天中打开」：这句话先拿到侧边聊天问，不占用正在跑的这一轮。
+ *
+ * 输入框和主输入框一样：`/` 弹命令菜单；侧边聊天在跑时回车插进这一轮、⌘回车排到这一轮之后，还没读到的画在回执条里。
  */
 
-import type { PanelProps, Remote, SessionChoice, UiContext, UiPlugin } from "@plume/contract/ui";
+import type { ChildTasksProps, PanelProps, Remote, SessionChoice, UiContext, UiPlugin } from "@plume/contract/ui";
 import type { OutgoingMessage } from "@plume/contract";
 import { ChoiceMark, Confirm, PanelEmpty, Text, useI18n } from "@plume/ui";
 import { Activity, History, MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
-import type { SideChatApi, SideChatSettings } from "./api.ts";
+import type { SideChatApi, SideChatSettings, WaitingEntry } from "./api.ts";
 import { dispatchCard } from "./DispatchCard.tsx";
 import { MESSAGES } from "./messages.ts";
-import { TaskStrip } from "./TaskStrip.tsx";
+import { TaskStrip, type Waiting } from "./TaskStrip.tsx";
 import sideChatCss from "./side-chat.css";
 
 const PANEL = "chat";
@@ -38,6 +40,64 @@ function mountStyles(): void {
 
 let ui: UiContext;
 let api: Remote<SideChatApi>;
+
+const fail = (error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error");
+
+/** 排着的话变了（这里排进去、拿掉的）：开着的回执条重新问一遍。逻辑入口那边的变化跟着会话的运行状态、消息条数来。 */
+const waitingChanged = new Set<() => void>();
+const refreshWaiting = () => {
+	for (const refresh of waitingChanged) refresh();
+};
+
+function useWaiting(sideId: string): WaitingEntry[] {
+	const side = ui.useSession(sideId);
+	const [entries, setEntries] = useState<WaitingEntry[]>([]);
+	const [asked, setAsked] = useState(0);
+	useEffect(() => {
+		const refresh = () => setAsked((count) => count + 1);
+		waitingChanged.add(refresh);
+		return () => {
+			waitingChanged.delete(refresh);
+		};
+	}, []);
+	const running = side?.summary.running;
+	const said = side?.messages.length;
+	useEffect(() => {
+		let current = true;
+		void api.waiting(sideId).then((found) => {
+			if (current) setEntries(found);
+		}, fail);
+		return () => {
+			current = false;
+		};
+	}, [sideId, running, said, asked]);
+	return entries;
+}
+
+/** 回执条：交给主会话的那几件，接着这段侧边聊天里还没被读到的话。 */
+function Strip(props: ChildTasksProps) {
+	const entries = useWaiting(props.sessionId);
+	const running = ui.useSession(props.sessionId)?.summary.running === true;
+	const { putBack } = props;
+	const waiting: Waiting = {
+		entries,
+		running,
+		sendNow: (id) => void api.sendNow(props.sessionId, id).catch(fail).finally(refreshWaiting),
+		remove: (id) => void api.unqueue(props.sessionId, id).catch(fail).finally(refreshWaiting),
+		...(putBack
+			? {
+					withdraw: (id: string) =>
+						void api
+							.unqueue(props.sessionId, id)
+							.then((text) => {
+								if (text !== undefined) putBack(text);
+							}, fail)
+							.finally(refreshWaiting),
+				}
+			: {}),
+	};
+	return <TaskStrip {...props} waiting={waiting} />;
+}
 
 function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: PanelProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
@@ -90,7 +150,16 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 		const id = await api.open(tab, parentId, choice);
 		if (closing.current) return;
 		setSideId(id);
-		await api.ask(id, question);
+		// 在跑时打的话插进这一轮；已经停了的由逻辑入口照常发。
+		if (running) await api.steer(id, question);
+		else await api.ask(id, question);
+		refreshWaiting();
+	};
+	const queue = async (question: OutgoingMessage) => {
+		const id = sideIdRef.current;
+		if (!id || closing.current) return;
+		await api.queue(id, question);
+		refreshWaiting();
 	};
 	useEffect(
 		() =>
@@ -125,7 +194,7 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 			<ui.Conversation
 				{...(sideId ? { sessionId: sideId } : {})}
 				reask
-				tasks={TaskStrip}
+				tasks={Strip}
 				empty={
 					<PanelEmpty icon={MessagesSquare} title={text.title}>
 						{text.empty}
@@ -138,6 +207,9 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 					placeholder: (locale) => MESSAGES[locale].placeholder,
 					send,
 					sendMessage: send,
+					mode: "steer",
+					queue,
+					commands: true,
 					stop: () => {
 						const id = sideIdRef.current;
 						if (id) void api.stop(id);
@@ -260,7 +332,7 @@ export default {
 				const tab = (await api.firstTab(sessionId)) ?? crypto.randomUUID();
 				const sideId = await api.open(tab, sessionId, undefined);
 				ui.openPanel(PANEL, sessionId, { tab });
-				void api.ask(sideId, message).catch((error: unknown) => ui.notify(error instanceof Error ? error.message : String(error), "error"));
+				void api.ask(sideId, message).then(refreshWaiting, fail);
 			},
 		});
 		context.quoteAction({

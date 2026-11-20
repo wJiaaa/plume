@@ -67,6 +67,7 @@ async function fixture(t: TestContext) {
 			get: async (id: string) => sessions.get(id),
 			messages: async (id: string) => structuredClone(messages.get(id) ?? []),
 			onDeleted() {},
+			observe() {},
 		},
 	} as unknown as PluginContext;
 	await plugin.apply(ctx);

@@ -124,6 +124,7 @@ async function fixture(t: TestContext) {
 			get: async (id: string) => structuredClone(summaries.find((summary) => summary.id === id)),
 			messages: async (id: string) => (id === "side" ? structuredClone(messages) : []),
 			onDeleted() {},
+			observe() {},
 			async launch(options: SessionLaunch) {
 				launched.push(options);
 				const session = {

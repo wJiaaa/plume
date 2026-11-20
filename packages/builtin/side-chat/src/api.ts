@@ -16,13 +16,37 @@ export interface SideChatEntry {
 	createdAt: number;
 }
 
+/** 侧边聊天里一句还没被模型读到的话，回执条上一行。 */
+export interface WaitingEntry {
+	id: string;
+	/** 气泡上的字，空白压成一个空格。 */
+	preview: string;
+	/** 已经插进这一轮、等模型读到；不是的就是排在这一轮之后。 */
+	steered: boolean;
+	/** 带着附件或会话引用：收回时只放得回字，这样的不给收回。 */
+	attachments: boolean;
+}
+
 export interface SideChatApi {
 	/** 按稳定标签恢复绑定；首次打开只认领未绑定的最新一段，没有则保持空白。 */
 	bind(tab: string, parentId: string): Promise<string | undefined>;
 	/** 接回这个标签的侧边聊天，没有才新建（按人在第一句之前选的 `choice` 建）；绑定落盘后返回，重复调用不会多建。 */
 	open(tab: string, parentId: string, choice: SessionChoice | undefined): Promise<string>;
-	/** 在侧边聊天里问一句，等它答完。排队条上拿过来的那条带着附件，整条照发。 */
+	/**
+	 * 在侧边聊天里问一句，这一轮开跑就返回（不等它答完）。正在跑、或者前面还有排着的，就排到后面（见 waiting.ts）。
+	 * 排队条上拿过来的那条带着附件，整条照发。
+	 */
 	ask(sideId: string, message: string | SessionMessage): Promise<void>;
+	/** 插进正在跑的这一轮，模型做完手上这一步读到；已经不在跑了就同 `ask`。 */
+	steer(sideId: string, message: string | SessionMessage): Promise<void>;
+	/** 排到这一轮之后；没在跑就同 `ask`。 */
+	queue(sideId: string, message: string | SessionMessage): Promise<void>;
+	/** 还没被模型读到的话：插进去的在前，排着的按先后。 */
+	waiting(sideId: string): Promise<WaitingEntry[]>;
+	/** 排着的那条拿掉，返回它的字（收回时放回输入框）；已经发出去、是插进去的时是 undefined。 */
+	unqueue(sideId: string, id: string): Promise<string | undefined>;
+	/** 会话闲着时，排着的那条现在就发。 */
+	sendNow(sideId: string, id: string): Promise<void>;
 	/** 这个会话旁边最早开的那段侧边聊天接在哪个标签上；没有标签接着时是 undefined。 */
 	firstTab(parentId: string): Promise<string | undefined>;
 	stop(sideId: string): void;

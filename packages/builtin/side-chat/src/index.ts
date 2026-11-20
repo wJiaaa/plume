@@ -11,13 +11,15 @@
  *   人没点名交给主会话时只留一张卡片，人在卡上选交给主会话、开新会话（`launch`），还是就在这里做。
  * - `/btw 问题`：开一个新的侧边聊天问这句话，打开面板；主对话里什么都不留。
  * - 排队条上的「在侧边聊天中打开」（界面入口的 `ui.queueAction`）：那条排着的话拿到最早那段侧边聊天去问，附件跟着走。
- * - `ctx.serve`：面板列出、新开、提问、停止、关掉侧边聊天；交出去的卡片上「开新会话」。
+ * - 在跑时说的话（见 waiting.ts）：回车插进这一轮（`ctx.sessions.steer`），⌘回车排到这一轮之后，插件自己排，`observe` 看到这一轮以完成收场、
+ *   闲下来时一句一句发；插进去没读到的转进队头。
+ * - `ctx.serve`：面板列出、新开、提问、插话、排队、停止、关掉侧边聊天；交出去的卡片上「开新会话」。
  * - `ctx.settings`：设置 › 智能体里「侧边聊天默认模型」。
  */
 
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Message, Plugin, PromptSection, SessionMessage } from "@plume/contract";
+import type { Message, Plugin, PromptSection, SessionMessage, StopReason } from "@plume/contract";
 import type { SessionChoice } from "@plume/contract/ui";
 import { type LaunchChoice, normalizeSettings, type SideChatApi } from "./api.ts";
 import { createSideChatBindings } from "./bindings.ts";
@@ -36,6 +38,7 @@ import {
 } from "./main-chat.ts";
 import { MESSAGES } from "./messages.ts";
 import { GUIDELINES_TEXT, IDENTITY, KINDS, READ_MAIN_CHAT_DESCRIPTION, SIDE_ONLY } from "./profile.ts";
+import { createWaiting } from "./waiting.ts";
 
 export default {
 	name: "plume.side-chat",
@@ -130,6 +133,8 @@ export default {
 		ctx.sessions.onDeleted((sessionId) => {
 			sides.delete(sessionId);
 			noted.delete(sessionId);
+			waiting.forget(sessionId);
+			lastStop.delete(sessionId);
 			if (marks.delete(sessionId)) saveMarks();
 			// i18n-exempt：插件数据写入失败的日志。
 			void bindings.forget(sessionId).catch((error: unknown) => ctx.log.warn(`侧边聊天标签没存上：${String(error)}`));
@@ -138,6 +143,95 @@ export default {
 		function sideOf(sideId: string): string {
 			if (!sides.has(sideId)) throw new Error(MESSAGES[ctx.locale()].missing);
 			return sideId;
+		}
+
+		const waiting = createWaiting();
+		/** 每段侧边聊天上一轮为什么收场：以完成收场才往下发排着的，被人停下的留着等人。 */
+		const lastStop = new Map<string, StopReason>();
+		/** 等这段侧边聊天跑起来的：`start` 发出去以后，跑起来就返回，不等它答完。 */
+		const starting = new Map<string, Set<() => void>>();
+		const notify = (sideId: string, error: unknown) => {
+			const parentId = sides.get(sideId);
+			const message = error instanceof Error ? error.message : String(error);
+			if (parentId) ctx.notice(parentId, message, "error");
+			else ctx.log.warn(message);
+		};
+
+		/** 发一句、开一轮，跑起来（或这一句被拦下、当场收场）就返回；开不了时抛错。跑起来以后的错误在这一轮的记录里，这里只记日志。 */
+		async function start(sideId: string, message: string | SessionMessage): Promise<void> {
+			let began!: () => void;
+			const running = new Promise<void>((resolve) => (began = resolve));
+			const waiters = starting.get(sideId) ?? new Set();
+			starting.set(sideId, waiters.add(began));
+			let started = false;
+			const turn = ctx.sessions.send(sideId, message);
+			try {
+				await Promise.race([turn, running]);
+				started = true;
+			} finally {
+				waiters.delete(began);
+				if (waiters.size === 0) starting.delete(sideId);
+			}
+			// i18n-exempt：日志。
+			if (started) turn.catch((error: unknown) => ctx.log.warn(`侧边聊天这一轮出错：${String(error)}`));
+		}
+
+		/** 闲着就发排着的队头；发不出去的放回队头，说一声。 */
+		async function drain(sideId: string): Promise<void> {
+			if (!sides.has(sideId) || (await ctx.sessions.get(sideId))?.running) return;
+			const next = waiting.next(sideId);
+			if (!next) return;
+			try {
+				await start(sideId, next.message);
+			} catch (error) {
+				waiting.requeue(sideId, next);
+				notify(sideId, error);
+			}
+		}
+
+		ctx.sessions.observe((observation) => {
+			const sideId = observation.sessionId;
+			if (!sides.has(sideId)) return;
+			const event = observation.event;
+			if (event.type === "turnEnd") lastStop.set(sideId, event.stop.reason);
+			else if (event.type === "running" && event.running) for (const began of starting.get(sideId) ?? []) began();
+			// 读到的插话会出现在下一次请求里：对着存下的消息认（请求里的经过压缩，位置对不上）。
+			else if (event.type === "request" && waiting.hasSteered(sideId))
+				void ctx.sessions.messages(sideId).then(
+					(messages) => waiting.read(sideId, messages, false),
+					() => undefined,
+				);
+			else if (event.type === "running") {
+				// 收场了：读到的插话拿掉，没读到的转进队头；以完成收场的接着发排着的。
+				void ctx.sessions
+					.messages(sideId)
+					.then((messages) => {
+						waiting.read(sideId, messages, true);
+						if (lastStop.get(sideId) === "done") return drain(sideId);
+					})
+					// i18n-exempt：日志。
+					.catch((error: unknown) => ctx.log.warn(`侧边聊天排着的话没发出去：${String(error)}`));
+			}
+		});
+
+		/** 界面交来的只取正文、气泡上的字和附件：不能借这条路冒充派发方（`origin`）。 */
+		function bodyOf(message: string | SessionMessage): string | SessionMessage {
+			return typeof message === "string"
+				? message
+				: {
+						content: message.content,
+						...(message.displayText !== undefined ? { displayText: message.displayText } : {}),
+						...(message.attachments ? { attachments: message.attachments } : {}),
+						...(message.sessionRefs ? { sessionRefs: message.sessionRefs } : {}),
+					};
+		}
+
+		/** 闲着、前面没有排着的就当场开一轮；否则排到后面（闲着时由这一下推着往前走）。 */
+		async function ask(sideId: string, body: string | SessionMessage): Promise<void> {
+			const running = (await ctx.sessions.get(sideId))?.running === true;
+			if (!running && !waiting.hasQueued(sideId)) return start(sideId, body);
+			waiting.queue(sideId, body);
+			if (!running) await drain(sideId);
 		}
 
 		ctx.hook("prompt.submit", async (input, next) => {
@@ -210,7 +304,9 @@ export default {
 		const launching = new Map<string, Promise<string>>();
 
 		ctx.commands.provide({
-			list: () => {
+			// 侧边聊天里敲 `/btw` 没有意义（它就在侧边聊天里），不列。
+			list: ({ sessionId }) => {
+				if (sessionId && sides.has(sessionId)) return [];
 				const text = MESSAGES[ctx.locale()];
 				return [{ name: "btw", description: text.btw, argumentHint: text.btwHint }];
 			},
@@ -228,18 +324,43 @@ export default {
 		ctx.serve({
 			bind: (tab: string, parentId: string) => bindings.bind(String(tab), String(parentId)),
 			open: (tab: string, parentId: string, choice: SessionChoice | undefined) => bindings.open(String(tab), String(parentId), choice),
-			async ask(sideId: string, message: string | SessionMessage) {
-				// 界面交来的只取正文、气泡上的字和附件：不能借这条路冒充派发方（`origin`）。
-				const body: string | SessionMessage =
-					typeof message === "string"
-						? message
-						: {
-								content: message.content,
-								...(message.displayText !== undefined ? { displayText: message.displayText } : {}),
-								...(message.attachments ? { attachments: message.attachments } : {}),
-								...(message.sessionRefs ? { sessionRefs: message.sessionRefs } : {}),
-							};
-				await ctx.sessions.send(sideOf(String(sideId)), body);
+			ask: (sideId: string, message: string | SessionMessage) => ask(sideOf(String(sideId)), bodyOf(message)),
+			async steer(sideId: string, message: string | SessionMessage) {
+				const side = sideOf(String(sideId));
+				const body = bodyOf(message);
+				if (!(await ctx.sessions.get(side))?.running) return ask(side, body);
+				// 先记下再交：模型读得快的话，读到时这里已经认得它。
+				const id = waiting.steered(side, body, (await ctx.sessions.messages(side)).length);
+				try {
+					await ctx.sessions.steer(side, body);
+				} catch {
+					// 这一轮已经收场或在收尾，插不进去了：排到后面，收场后接着发。
+					waiting.unsteer(side, id);
+					if (!(await ctx.sessions.get(side))?.running) await drain(side);
+				}
+			},
+			async queue(sideId: string, message: string | SessionMessage) {
+				const side = sideOf(String(sideId));
+				const body = bodyOf(message);
+				if (!(await ctx.sessions.get(side))?.running) return ask(side, body);
+				waiting.queue(side, body);
+			},
+			waiting: async (sideId: string) => waiting.list(String(sideId)),
+			unqueue: async (sideId: string, id: string) => waiting.take(String(sideId), String(id))?.words,
+			async sendNow(sideId: string, id: string) {
+				const side = sideOf(String(sideId));
+				const taken = waiting.take(side, String(id));
+				if (!taken) return;
+				if ((await ctx.sessions.get(side))?.running) {
+					waiting.requeue(side, { id: String(id), message: taken.message });
+					return;
+				}
+				try {
+					await start(side, taken.message);
+				} catch (error) {
+					waiting.requeue(side, { id: String(id), message: taken.message });
+					throw error;
+				}
 			},
 			firstTab: (parentId: string) => bindings.first(String(parentId)),
 			stop(sideId: string) {
