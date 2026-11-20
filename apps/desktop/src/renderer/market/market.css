@@ -9,11 +9,11 @@
 	 * 一列在滑、里面的行也在滑，读起来是一顿一顿的。第十二张以后不再往后等：超过一屏，后面的卡片多等只是页面更慢。
 	 */
 	.market-swap-in {
-		animation: market-swap-fade var(--plume-t-quick) var(--plume-e-out) both;
+		animation: market-swap-fade var(--plume-t-quick) var(--plume-e-out) backwards;
 	}
 
 	.market-rise-in {
-		animation: market-rise var(--plume-t-slow) var(--plume-e-out) both;
+		animation: market-rise var(--plume-t-slow) var(--plume-e-out) backwards;
 		animation-delay: calc(min(var(--market-i, 0), 12) * var(--plume-t-quick) * 0.16);
 	}
 

@@ -34,7 +34,7 @@
 	}
 
 	.markdown .md-image[data-reveal] {
-		animation: md-image-reveal var(--plume-t-slow) var(--plume-e-out) both;
+		animation: md-image-reveal var(--plume-t-slow) var(--plume-e-out) backwards;
 	}
 
 	.markdown .md-image-pending {

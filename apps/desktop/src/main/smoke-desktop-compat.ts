@@ -192,10 +192,37 @@ export async function checkDesktopCompat(options: {
 		return geometry;
 	};
 
+	const initialSize = window.getContentSize() as [number, number];
 	setModel(() => ({ text: "桌面兼容准备好了。" }));
 	try {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-screen=empty] .cm-content') !== null`, "新建对话");
+		await setViewport(1100, 720, 1);
+		await reset();
+		for (const [width, height] of [
+			[1400, 850],
+			[1100, 720],
+		] as const) {
+			await page(`(() => {
+				window.smokeWelcomeResize = null;
+				window.addEventListener('resize', () => {
+					const pane = document.querySelector('[data-panel-layout] > main').parentElement;
+					const workspace = pane.parentElement.getBoundingClientRect();
+					const composer = pane.querySelector('[data-screen=empty] .plume-composer').getBoundingClientRect();
+					window.smokeWelcomeResize = { width: innerWidth, paneWidth: pane.getBoundingClientRect().width, workspaceWidth: workspace.width,
+						centerError: (composer.left + composer.right - workspace.left - workspace.right) / 2 };
+				}, { once: true });
+			})()`);
+			window.setContentSize(width, height);
+			await until("window.smokeWelcomeResize !== null", "收到欢迎页窗口尺寸变化");
+			const frame = await page<{ width: number; paneWidth: number; workspaceWidth: number; centerError: number }>("window.smokeWelcomeResize");
+			assert.equal(frame.width, width);
+			assert.ok(
+				Math.abs(frame.paneWidth - frame.workspaceWidth) < 1 && Math.abs(frame.centerError) < 1,
+				`欢迎页在窗口尺寸改变时立即居中：${JSON.stringify(frame)}`,
+			);
+			await settle();
+		}
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("桌面兼容");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "可以发送");
@@ -204,7 +231,6 @@ export async function checkDesktopCompat(options: {
 	} finally {
 		setModel(undefined);
 	}
-	const initialSize = window.getContentSize() as [number, number];
 
 	try {
 		// ── 1. 顶行对中线，面板开关点得到 ──────────────────────────────

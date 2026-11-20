@@ -74,7 +74,7 @@ export function Welcome({
 		<Scroller className="flex-1" contentClassName="flex flex-col items-center px-6 pb-4 after:min-h-4 after:flex-1 after:content-['']">
 			<div aria-hidden className="w-full shrink" style={{ flexBasis: "max(1rem, calc(40dvh - 150px))" }} />
 			{/* 右边让出插图的宽度，长句换行也不压到它。 */}
-			<div className={`w-full max-w-2xl shrink-0 pl-0.5 ${compact ? "pr-32" : "pr-44"}`}>
+			<div data-welcome-first className={`w-full max-w-2xl shrink-0 pl-0.5 ${compact ? "pr-32" : "pr-44"}`}>
 				<h1 className={`font-medium text-balance text-ink ${compact ? "text-display" : "text-hero"}`}>{t(greetingKey(new Date().getHours()))}</h1>
 				{/* 先占好一行：插件的答复可能要等一会儿（比如现让模型写），回来了在原地淡入，不把输入框往下推。 */}
 				<p data-welcome-line className={`mt-2 min-h-[1lh] text-balance text-ink-muted ${compact ? "text-body" : "text-title"}`}>
@@ -93,7 +93,7 @@ export function Welcome({
 				</div>
 				{children}
 			</div>
-			<div className="mt-6 flex w-full max-w-2xl shrink-0 flex-wrap items-center gap-x-4 gap-y-3">
+			<div data-welcome-last className="mt-6 flex w-full max-w-2xl shrink-0 flex-wrap items-center gap-x-4 gap-y-3">
 				{PROMPTS.map(({ icon: Icon, label, prompt }) => (
 					<button
 						key={label}

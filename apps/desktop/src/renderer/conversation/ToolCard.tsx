@@ -39,7 +39,7 @@ import {
 } from "./view-state.ts";
 
 /** 「刚跑完」那一下：记号从半大弹到原样。 */
-const POP = "animate-[plume-settle_var(--plume-t-base)_var(--plume-e-out)_both]";
+const POP = "animate-[plume-settle_var(--plume-t-base)_var(--plume-e-out)_backwards]";
 
 /** 冒烟和插件看的状态：还没开跑的也算执行中。 */
 export const SLOT_STATUS: Record<CallStatus, ToolCardProps["status"]> = {

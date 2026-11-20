@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -41,8 +42,25 @@ function katexWoff2Only(): Plugin {
 	};
 }
 
+function macWelcomeZoom(): Plugin {
+	const source = resolve(import.meta.dirname, "src/main/mac-welcome-zoom.m");
+	const target = ["-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=12.0"];
+	return {
+		name: "mac-welcome-zoom",
+		buildStart() {
+			this.addWatchFile(source);
+		},
+		writeBundle({ dir }) {
+			if (!dir) throw new Error("主进程构建缺少输出目录");
+			const output = resolve(dir, "mac-welcome-zoom.dylib");
+			execFileSync("xcrun", ["clang", "-dynamiclib", "-fobjc-arc", ...target, "-framework", "AppKit", "-framework", "QuartzCore", source, "-o", output]);
+		},
+	};
+}
+
 export default defineConfig({
 	main: {
+		plugins: process.platform === "darwin" ? [macWelcomeZoom()] : [],
 		build: {
 			rolldownOptions: {
 				input: {

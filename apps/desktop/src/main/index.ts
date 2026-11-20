@@ -44,6 +44,7 @@ import { loadAppearance, registerAppearanceIpc } from "./appearance.ts";
 import { sessionFromUrl } from "./deep-link.ts";
 import { registerFilesIpc } from "./files.ts";
 import { registerKeepAwake } from "./keep-awake.ts";
+import { watchWelcomeZoom } from "./mac-welcome-zoom.ts";
 import { openLogFile } from "./log-file.ts";
 import { registerOpenTargetsIpc } from "./open-targets.ts";
 import { registerPanelWindowsIpc } from "./panel-windows.ts";
@@ -511,6 +512,13 @@ function createWindow(hidden: boolean, appearance: Appearance): BrowserWindow {
 		},
 	});
 	guardWebviews(window.webContents);
+	if (process.platform === "darwin") {
+		try {
+			watchWelcomeZoom(window);
+		} catch (error) {
+			console.warn("欢迎页原生缩放未启用：", error);
+		}
+	}
 	// 和会话窗口、面板窗口一样：页面不能把主窗口带去别处，也不能开新窗口（新窗口会继承这里的预加载脚本）。
 	// 链接由界面自己经 openExternal / openLink 交出去。
 	window.webContents.on("will-navigate", (navigation) => navigation.preventDefault());

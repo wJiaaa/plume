@@ -362,7 +362,7 @@
 	 * 不会刚闪一下转圈就被内容顶掉；减少动态效果时延迟由 base 层清掉，当场出现。
 	 */
 	.plume-defer-in {
-		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) 170ms both;
+		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) 170ms backwards;
 	}
 
 	@keyframes plume-defer-in {
@@ -376,7 +376,7 @@
 
 	/* 换一句话时新的那句淡进来（运行行上的说法和读数）。 */
 	.plume-fade-in {
-		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) both;
+		animation: plume-defer-in var(--plume-t-base) var(--plume-e-out) backwards;
 	}
 }
 
