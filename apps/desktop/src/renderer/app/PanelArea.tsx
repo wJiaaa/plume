@@ -200,7 +200,7 @@ function PanelLayerTab({
 		// 外层按这一屏摆，带上这一屏的排法、开合和拼边：styles.css 按它们给内容淡入淡出、去掉挨着别人那一边的圆角。
 		<div
 			className="pointer-events-none absolute inset-y-0"
-			style={{ left, width }}
+			style={{ left, width: current && !side ? "100%" : width }}
 			data-panel-layout={layout.arrangement}
 			data-panel-sliding={moving ? (layout.shown ? "open" : "close") : undefined}
 			data-panel-shown={layout.shown || undefined}

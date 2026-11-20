@@ -268,7 +268,7 @@ function ChatScreen({
 			onPointerDownCapture={takeFocus}
 			onKeyDownCapture={takeFocus}
 			className="absolute top-0 bottom-0 overflow-hidden rounded-panel"
-			style={{ left: pane.left, width: pane.width }}
+			style={{ left: pane.left, width: split ? pane.width : "100%" }}
 		>
 			<main
 				inert={layout.single && layout.shown}

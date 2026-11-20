@@ -17,7 +17,7 @@ Plume 是一个 coding agent 桌面应用（Electron），是 [Lyra](https://git
 
 ## 开发
 
-需要 Node ≥ 24 和 pnpm。
+需要 Node ≥ 24 和 pnpm。macOS 从源码启动或构建桌面版还需要 Xcode Command Line Tools（`xcode-select --install`），用于编译窗口缩放的 AppKit 视图。
 
 ```sh
 pnpm install

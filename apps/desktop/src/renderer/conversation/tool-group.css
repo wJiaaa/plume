@@ -193,7 +193,7 @@
 	}
 
 	.tool-swap-in {
-		animation: tool-fade-in var(--plume-t-base) var(--plume-e-soft) both;
+		animation: tool-fade-in var(--plume-t-base) var(--plume-e-soft) backwards;
 	}
 
 	.tool-swap-out {
@@ -203,7 +203,7 @@
 
 	/* 一组跑着时新出现的组，卡片里新来的一行。 */
 	.tool-fade-in {
-		animation: tool-fade-in var(--plume-t-slow) var(--plume-e-out) both;
+		animation: tool-fade-in var(--plume-t-slow) var(--plume-e-out) backwards;
 	}
 
 	@keyframes tool-fade-in {

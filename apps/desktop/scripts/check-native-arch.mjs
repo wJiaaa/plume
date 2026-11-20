@@ -216,6 +216,10 @@ for (const [name, build] of Object.entries(BUILDS)) {
 	expectArch(name, build, tsc, relative(resources, tsc), true);
 	const koffi = join(resources, "app.asar.unpacked", "node_modules", "@koromix", `koffi-${target}`, target.replace("-", "_"), "koffi.node");
 	expectArch(name, build, koffi, relative(resources, koffi), true);
+	if (build.platform === "darwin") {
+		const zoom = join(resources, "app.asar.unpacked", "out", "main", "mac-welcome-zoom.dylib");
+		expectArch(name, build, zoom, relative(resources, zoom), true);
+	}
 
 	console.log(`[arch] ${name}: 查了 ${checked - before} 个二进制，${build.platform}/${build.arch}`);
 }

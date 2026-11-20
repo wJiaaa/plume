@@ -19,7 +19,7 @@ directories:
 # dependencies 里只放主进程运行时要加载的包，其余的写进 devDependencies，免得 app.asar 里多一份用不上的 node_modules。
 #
 # 按平台、架构分的原生模块每个包只带自己那份。app.asar 里的是 koffi：本体的沙箱在 Windows 上靠它造受限令牌（只在
-# runner 进程 out/main/sandbox-runner.js 里加载），一个平台、架构一个包，supportedArchitectures 让每份都装上了，
+# runner 进程 out/main/sandbox-runner.js 里加载），macOS 的主窗口也用它加载欢迎页缩放视图。一个平台、架构一个包，supportedArchitectures 让每份都装上了，
 # 原生的 .node 由 electron-builder 解到 app.asar.unpacked。node-pty 在插件里，走 extraResources，由下面的 beforePack 裁；
 # 这里那条管的是以后进了 apps/desktop 生产依赖的情况，它一个包里放着各平台的 prebuilds。写成 `!` 规则：
 # node_modules 里的生产依赖默认全带，正向规则不起作用。`${platform}` 是打包这台机器的 process.platform（mac 包在
@@ -51,6 +51,7 @@ extraResources:
 beforePack: ./scripts/before-pack.mjs
 
 mac:
+  asarUnpack: out/main/mac-welcome-zoom.dylib
   category: public.app-category.developer-tools
   # Icon Composer 的文档：头像是透明的抠图，底色（浅色时淡蓝、深色图标风格时亮蓝的渐变）写在 icon.json 里。
   # macOS 26 起，自己不带圆角底的旧式图标会被垫上一块灰底；electron-builder 用 actool（要 Xcode 26 以上）编成

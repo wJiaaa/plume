@@ -22,7 +22,7 @@
 		transition:
 			border-color var(--plume-t-quick),
 			background-color var(--plume-t-quick);
-		animation: plume-draft-chip-in var(--plume-t-reveal) var(--plume-e-out) both;
+		animation: plume-draft-chip-in var(--plume-t-reveal) var(--plume-e-out) backwards;
 	}
 
 	.plume-draft-chip:hover {
@@ -67,7 +67,7 @@
 	}
 
 	.plume-welcome-peek img {
-		animation: plume-welcome-peek var(--plume-t-slow) var(--plume-e-out) both;
+		animation: plume-welcome-peek var(--plume-t-slow) var(--plume-e-out) backwards;
 	}
 
 	/* 问候下面那一行：答复回来时在先占好的那一行里淡入。 */
@@ -84,7 +84,7 @@
 
 	.plume-welcome-line {
 		display: inline-block;
-		animation: plume-welcome-line-in var(--plume-t-slow) var(--plume-e-out) both;
+		animation: plume-welcome-line-in var(--plume-t-slow) var(--plume-e-out) backwards;
 	}
 
 	/*

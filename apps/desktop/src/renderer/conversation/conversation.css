@@ -25,7 +25,7 @@
 	 */
 	.plume-user-arrive {
 		transform-origin: 100% 100%;
-		animation: plume-user-arrive var(--plume-t-slow) var(--plume-e-out) both;
+		animation: plume-user-arrive var(--plume-t-slow) var(--plume-e-out) backwards;
 	}
 
 	@keyframes plume-user-arrive {
