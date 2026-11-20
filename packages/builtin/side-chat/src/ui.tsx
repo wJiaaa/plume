@@ -4,6 +4,7 @@
  * 标签和侧边聊天的对应由逻辑入口持久保存；新开的标签认领这个会话旁边还没有标签认领的、最新的那段，
  * 没有就空着，第一句发出去时再开一段。恢复标签或换窗口时，按同一个 tab 接回原会话。
  * 关标签就是删掉那段侧边聊天，说过话的先问一句；勾了「不再询问」关过一次以后就不问了。
+ * 人没看着的那一格回复完了，标签上亮一个未读点，切过去就灭。
  *
  * 主输入框排队条的「更多」菜单里加一项「在侧边聊天中打开」：这句话先拿到侧边聊天问，不占用正在跑的这一轮。
  */
@@ -38,7 +39,7 @@ function mountStyles(): void {
 let ui: UiContext;
 let api: Remote<SideChatApi>;
 
-function SideChatPanel({ session, tab, setTitle, onClose }: PanelProps) {
+function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: PanelProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const parentId = session?.summary.id;
 	const [sideId, setSideId] = useState<string | undefined>(undefined);
@@ -68,6 +69,17 @@ function SideChatPanel({ session, tab, setTitle, onClose }: PanelProps) {
 
 	const title = side?.summary.title;
 	useEffect(() => setTitle(title || undefined), [title, setTitle]);
+
+	// 人没看着这一格时回复完了（后台标签、面板收起），标签上点个未读点；看到了就清掉。
+	const running = side?.summary.running ?? false;
+	const wasRunning = useRef(running);
+	useEffect(() => {
+		if (wasRunning.current && !running && !shown) setUnread(true);
+		wasRunning.current = running;
+	}, [running, shown, setUnread]);
+	useEffect(() => {
+		if (shown) setUnread(false);
+	}, [shown, setUnread]);
 
 	// 关标签：说过话的先问一句，确认了就删掉这段。人在确认框里点的结果经 `asking` 交回。
 	const said = side ? side.messages.length > 0 : Boolean(sideId);

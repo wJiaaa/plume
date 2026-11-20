@@ -309,7 +309,18 @@ export function PanelArea({
 								closeLabel={t("pane.closeOne", { label })}
 							>
 								<span className="flex items-center gap-1.5">
-									<Icon size={13} className="shrink-0" />
+									{/* 未读点挂在图标左上角：标签名会被截断、标签条会横着溢出，挂在名字后面常被裁掉。 */}
+									<span className="relative flex shrink-0">
+										<Icon size={13} />
+										{tab.unread && (
+											<span
+												data-panel-tab-unread=""
+												role="img"
+												aria-label={t("sessionStatus.unread")}
+												className="absolute -top-0.5 -left-0.5 block size-1.5 rounded-full bg-accent"
+											/>
+										)}
+									</span>
 									<span className="max-w-40 truncate">{label}</span>
 								</span>
 							</ClosableTab>

@@ -36,6 +36,25 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 	await click("[data-screen=chat] [data-composer-send=send]");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert])')?.textContent.includes('划词侧边聊天准备好了。')", "侧聊准备好");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) [data-composer-send=stop]') === null", "侧聊已结束");
+	await checkUnreadDot(options);
+}
+
+/** 看着时回复完不亮点；问了一句就切到别的标签，回复完侧聊标签上亮未读点，切回来灭掉。 */
+async function checkUnreadDot(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
+	const { window, outDir, page, until, click, capture, setModel } = options;
+	const dot = `document.querySelector('[data-panel-tab="plume.side-chat/chat"] [data-panel-tab-unread]') !== null`;
+	assert.equal(await page(dot), false, "看着时回复完不该亮未读点");
+	setModel(() => ({ text: "后台标签里慢慢回完这一句。", stream: { chunkSize: 2, delayMs: 150 } }));
+	await page("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) .cm-content').focus()");
+	await window.webContents.insertText("在后台回一句");
+	await click('[data-panel="plume.side-chat/chat"]:not([inert]) [data-composer-send=send]');
+	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) [data-composer-send=stop]') !== null", "侧聊开始回复");
+	await click('[data-panel-tab="plume.diagnostics/tasks"] [role=tab]');
+	assert.equal(await page(dot), false, "还在回复时不该亮未读点");
+	await until(dot, "后台回复完亮未读点");
+	await capture(window, join(outDir, "smoke-side-chat-unread.png"));
+	await click('[data-panel-tab="plume.side-chat/chat"] [role=tab]');
+	await until(`!(${dot})`, "切回侧聊标签后未读点灭掉");
 }
 
 /** 选区只交给侧聊草稿：复用前台标签，保留附件、来源和旧草稿，搬窗后再由人发送。 */

@@ -285,8 +285,10 @@ export function removeTab(id: string, scope: string): void {
 	setTabs(scope, { tabs: rest, active: active === id ? (rest[index] ?? rest[index - 1])!.id : active });
 }
 
-/** 每个标签给面板的 setTitle、onClose，同一个标签一直是同一对函数：面板拿它们进 effect 的依赖也不会反复重跑。 */
-const tabHandles = new Map<string, Pick<PanelProps, "setTitle" | "onClose">>();
+type TabHandles = Pick<PanelProps, "setTitle" | "setUnread" | "onClose">;
+
+/** 每个标签给面板的 setTitle、setUnread、onClose，同一个标签一直是同一组函数：面板拿它们进 effect 的依赖也不会反复重跑。 */
+const tabHandles = new Map<string, TabHandles>();
 
 /** 空白页第一次发出去、成了会话 `id`：空白页上开着的标签交给它。 */
 export function handOverBlankTabs(id: string): void {
@@ -347,20 +349,26 @@ export function forgetPanels(gone: (sessionId: string) => boolean): void {
 	if (panelWindow && dropped.includes(panelWindow.tab)) void window.plume.panelWindows.close();
 }
 
-export function handlesOf(id: string): Pick<PanelProps, "setTitle" | "onClose"> {
+/** 改这个标签上的一项（字、未读点）；没变时不动状态。 */
+function patchTab<K extends "title" | "unread">(id: string, key: K, value: PanelTab[K]): void {
+	update((current) => {
+		const scope = Object.keys(current.panelTabs).find((name) => current.panelTabs[name]!.tabs.some((tab) => tab.id === id && tab[key] !== value));
+		if (scope === undefined) return {};
+		const entry = current.panelTabs[scope]!;
+		const tabs = entry.tabs.map((tab) => (tab.id === id ? { ...tab, [key]: value } : tab));
+		const panelTabs = { ...current.panelTabs, [scope]: { ...entry, tabs } };
+		persistTabs(panelTabs);
+		return { panelTabs };
+	});
+}
+
+export function handlesOf(id: string): TabHandles {
 	let handles = tabHandles.get(id);
 	if (!handles) {
 		handles = {
-			setTitle: (title) =>
-				update((current) => {
-					const scope = Object.keys(current.panelTabs).find((key) => current.panelTabs[key]!.tabs.some((tab) => tab.id === id && tab.title !== title));
-					if (scope === undefined) return {};
-					const entry = current.panelTabs[scope]!;
-					const tabs = entry.tabs.map((tab) => (tab.id === id ? { ...tab, title } : tab));
-					const panelTabs = { ...current.panelTabs, [scope]: { ...entry, tabs } };
-					persistTabs(panelTabs);
-					return { panelTabs };
-				}),
+			setTitle: (title) => patchTab(id, "title", title),
+			// 没点时不留这个键，存下来的标签和以前一样。
+			setUnread: (unread) => patchTab(id, "unread", unread || undefined),
 			onClose: (handler) => {
 				closeGuards.set(id, handler);
 				return () => {

@@ -95,6 +95,8 @@ export interface PanelTab {
 	id: string;
 	panel?: string;
 	title?: string;
+	/** 面板经 `setUnread` 点亮的未读小点。 */
+	unread?: boolean;
 	/** 子会话打开的辅助面板仍放在父会话旁边，但读取子会话自己的数据。 */
 	sessionId?: string;
 	file?: { path: string; sessionId: string };
