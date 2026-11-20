@@ -45,6 +45,8 @@ export async function checkSplit(options: {
 	await until(`${selected(sessionId)} && ${selected(other)}`, "两屏的会话在侧栏里都点亮");
 	assert.equal(await page(`document.querySelector('${pane("right")} [data-split-title=focused]') !== null`), true, "右屏标题是焦点那一屏");
 	assert.equal(await page(`document.querySelector('${pane("left")} [data-split-title=other]') !== null`), true, "左屏标题淡一档");
+	const veiled = () => page(`[...document.querySelectorAll('[data-split-veil]')].map(veil => veil.closest('[data-split-pane]').dataset.splitPane).join()`);
+	assert.equal(await veiled(), "left", "只有焦点不在的左屏盖着压淡的那一层");
 
 	// 右屏（焦点）开面板区、开一个终端。
 	await clickReal(window, `${pane("right")} [data-panel-toggle] button`, "右屏的面板开关");
@@ -54,6 +56,7 @@ export async function checkSplit(options: {
 	// 左屏不是焦点：真鼠标点它的面板开关，按下时焦点先换到左屏，这一下照常打开左屏的面板区。
 	await clickReal(window, `${pane("left")} [data-panel-toggle] button`, "左屏的面板开关");
 	await until(`document.querySelector('${pane("left")}')?.hasAttribute('data-screen-focused')`, "点左屏后焦点换到左屏");
+	assert.equal(await veiled(), "right", "焦点换到左屏后压淡的换成右屏");
 	await until(`document.querySelector('${pane("left")} [data-panel-area]')?.inert === false`, "左屏面板区打开");
 	await until(`document.querySelector('${pane("right")} [data-panel-area]')?.inert === false`, "右屏面板区仍开着");
 	await clickReal(window, `${pane("left")} [data-panel-area] [data-panel-launch="plume.terminal/terminal"]`, "左屏开终端");

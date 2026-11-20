@@ -260,6 +260,19 @@
 	}
 
 	/*
+	 * 分屏时焦点不在的那一屏（Chat.tsx 的 ChatWorkspace）：盖一层压淡的底色，整屏退到后面一档，内容还认得出。
+	 * 只是一块纯色、只动透明度，不用 blur / backdrop-filter：底下的转录在流式输出、终端在刷，糊的话每一帧都要重新糊整屏。
+	 */
+	.split-veil {
+		background: color-mix(in srgb, var(--plume-shell) 45%, transparent);
+		opacity: 0;
+		transition: opacity var(--plume-t-base) var(--plume-e-out);
+	}
+	.split-veil[data-split-veil] {
+		opacity: 1;
+	}
+
+	/*
 	 * 雾化：同一张图叠三份，往下越来越糊，再盖一层往底色走的渐变和细扫描线。
 	 * 糊只作用在图上，所以是两个子层各自 blur，而不是整层糊——整层糊会把遮罩的边也糊开。
 	 * 只有它往下淡出：淡进底色就是这种效果本身，不是给正文让位。
