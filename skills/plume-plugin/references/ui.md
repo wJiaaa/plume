@@ -579,13 +579,14 @@ function SidePanel({ tab }: PanelProps) {
 }
 ```
 
-- 不给 `composer` 就只读。默认按发送调 `send`，会话跑着时发送键换成停止键、按了调 `stop`，保持侧边聊天行为。`mode: "steer"` 时运行中也能发送，发送键不变停止键；`disabled` 保留但禁用操控区。停止可放在面板头部。
+- 不给 `composer` 就只读。默认按发送调 `send`，会话跑着时发送键换成停止键、按了调 `stop`，保持侧边聊天行为。`mode: "steer"` 时运行中也能发送，照样经 `send`、`sendMessage` 交给你（插件经 `ctx.sessions.steer` 插进这一轮）：框里有东西时是发送键，给了 `stop` 时框里空着是停止键；再给 `queue(message)` 时 ⌘回车（和展开后没声明 `deliver: "steer"` 的命令）在运行中经它交回，要排到这一轮之后，排在哪、什么时候发、怎么画由你定（侧边聊天的见 `packages/builtin/side-chat/src/waiting.ts`）。`disabled` 保留但禁用操控区。停止可放在面板头部。
+- `commands: true` 开 `/` 命令菜单：会话建好以后，命令按这个子会话问、展开（`CommandContext.sessionId` 是子会话），产品自己的动作（`/clear`）不列；插件自己办掉的（`handled`）清空输入框。不开时行首的 `/xxx` 照原文发（`/compact` 除外，照样压缩这个会话）。
 - 输入框右下和主输入框一样：插件经 `ui.composerItem(…, { side: "end" })` 加的格子和宿主的上下文用量会话在就画，量的是子会话；`model: "choose"` 再画能换的模型和思考档位（菜单最前面是「跟随主会话」，选了就清掉子会话自己的），`model: "show"` 画只读的模型和档位、悬停说明末尾接 `modelTip`。量的都是下一轮实际会用的：子会话没选的跟着父会话。会话还没建（第一句没发）时这些都不画；要让人在第一句之前就选，给 `blank: { parentId, model }`（第一句开在哪个会话下面、人没动过时插件要用的模型），`model: "choose"` 的模型和档位照画（没有用量格子），选的经 `send(text, choice)`、`sendMessage(message, choice)` 的 `choice`（`SessionChoice`：`model` 没有是跟随父会话）交回，建会话时照它给 `ctx.sessions.create({ parentId, ...choice })`。`footer` 放插件自己的东西，排在它们前面。
 - 提供 `sendMessage` 时输入框接入附件，交回完整 `OutgoingMessage`；不提供仍是纯文字。草稿与附件按子会话隔离，异步发送失败不会把文字还到另一个子会话。
 - 需要保留草稿、接收划词引用或弹出窗口时设置 `composer.draftKey: tab`（`PanelProps.tab`）。未发送文字、附件和引用按标签保存，支持 `sendMessage`；弹出、收回先确认存储成功，失败阻止交接并保留内存草稿。发送时引用附在消息文字前面，发送失败保留草稿，关闭标签后清理草稿；是否允许关闭仍由面板的 `onClose` 决定。
 - `renderUserMessage(message, fallback)` 只改当前视图用户消息的样子，可按 `origin === "parent"` 画任务卡，其余返回 fallback。`replyText(text, message)` 只过滤当前视图正文与复制，回报卡去重时只拿掉该条最终正文，不动工具和思考，也不改存储。回报卡复用 `ui.turnFooter`。
 - `reask: true`：人说的最后一句底下多一颗「编辑并重新提问」，宿主截掉它和之后的、拿改过的字重跑一轮（照常经 `prompt.submit`，插件按截掉后的记录算），不问要不要退文件；一轮在跑时置灰。没有撤回、分叉。侧边聊天开它，子 Agent 的全过程不开（话是派它的会话写的）。
-- 这个子会话经 `run.parent.enqueue`、卡片的 `handToParent` 交给父会话的事走到了哪（`ChildTask`：排队中、在跑、做完、失败、随父会话停下）由宿主给，要画就给 `tasks={Component}`：组件收到 `{ sessionId, parentId, tasks, runNow, withdraw?, retry, dismiss }`，画在转录和输入框之间，留几件、摆哪些按钮由你定（侧边聊天的回执条见 `packages/builtin/side-chat/src/TaskStrip.tsx`）；不给就不画。`withdraw` 把那件从父会话的队里收回、那句话放回 `composer.draftKey` 那份草稿，没给 `draftKey` 时没有它。操作出错时宿主弹提示条。
+- 这个子会话经 `run.parent.enqueue`、卡片的 `handToParent` 交给父会话的事走到了哪（`ChildTask`：排队中、在跑、做完、失败、随父会话停下）由宿主给，要画就给 `tasks={Component}`：组件收到 `{ sessionId, parentId, tasks, runNow, withdraw?, putBack?, retry, dismiss }`，画在转录和输入框之间，留几件、摆哪些按钮由你定（侧边聊天的回执条见 `packages/builtin/side-chat/src/TaskStrip.tsx`）；不给就不画。`withdraw` 把那件从父会话的队里收回、那句话放回 `composer.draftKey` 那份草稿，没给 `draftKey` 时没有它；`putBack(text)` 同样放回一句话（换掉正写着的字），给你自己排着的话（`composer.queue`）收回时用，也画在这一条里。操作出错时宿主弹提示条。
 - 没有「继续」：子会话的一轮只有插件能发起。等人批准的那一次压在主输入框上方，转录里只标「等待确认」。
 - 画的是独立会话（`create` 不给 `parentId`，见 logic.md「独立会话」）时：等人批准的那一次（和 `run.request` 等人给数据的卡）就压在这个视图的输入框上方（插件的 `ui.requestCard` 照样用），因为它不挂在哪个对话下、没有别处可压；所以只在人看得到的地方画它，页面没开着时用 `ui.useSession` 读 `approval`、经 `ui.pageBadge` 带 `attention: true` 提醒人。`model: "choose"` 的菜单没有「跟随主会话」，没选的用默认模型；没有划词引用。
 - 外面那一层给它高度（面板里 `height: 100%`），它自己撑满、底下贴着输入框。

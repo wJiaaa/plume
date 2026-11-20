@@ -393,8 +393,20 @@ export interface ConversationProps {
 		send(text: string, choice?: SessionChoice): void | Promise<void>;
 		/** 支持附件时接收完整消息；不提供时保持纯文字输入。`choice` 同 `send`。 */
 		sendMessage?(message: OutgoingMessage, choice?: SessionChoice): void | Promise<void>;
-		/** steer 运行时也能发，发送键不变停止键。 */
+		/**
+		 * `steer`：会话在跑时也能发，照样经 `send`、`sendMessage` 交给插件（插件插进这一轮）；框里有东西时是发送键，给了 `stop` 时框里空着是停止键。
+		 */
 		mode?: "turn" | "steer";
+		/**
+		 * `mode: "steer"` 时，会话在跑、要排到这一轮之后的话：⌘回车发的，展开后没声明 `deliver: "steer"` 的命令。不给就一律经 `send`、`sendMessage`。
+		 * 什么时候发、排着的怎么画由插件定（画在 `tasks` 那一条里）。
+		 */
+		queue?(message: OutgoingMessage): void | Promise<void>;
+		/**
+		 * 开 `/` 命令菜单：会话建好以后，命令按这个会话问、展开，和主输入框同一份（见 `CommandProvider`），产品自己的动作（`/clear`）不列。
+		 * 插件自己办掉的（`handled`）清空输入框、什么都不发。不给就不弹菜单，行首的 `/xxx` 照原文发。
+		 */
+		commands?: boolean;
 		disabled?: boolean;
 		/**
 		 * 发送按钮左边的模型和思考档位，量的是这个会话（子会话没选的跟着父会话，独立会话没选的用默认模型）；会话还没建时只有给了 `blank` 才画。
@@ -427,7 +439,7 @@ export interface ConversationProps {
 	empty?: ReactNode;
 	/**
 	 * 这个子会话交给父会话的那几件事（`SessionView.tasks`）画成什么样，画在转录和输入框之间；状态是宿主给的，留几件、
-	 * 摆哪些按钮由插件定。不给就不画。组件出错时只丢这一块。
+	 * 摆哪些按钮由插件定。不给就不画。组件出错时只丢这一块。插件自己排着的话（`composer.queue`）也画在这一条里。
 	 */
 	tasks?: ComponentType<ChildTasksProps>;
 }
@@ -444,6 +456,8 @@ export interface ChildTasksProps {
 	runNow(taskId: string): void;
 	/** 还排着的那件从父会话的队里收回，那句话放回这个视图的输入框。视图没有能放回去的输入框（没给 `composer.draftKey`）时不给。 */
 	withdraw?(taskId: string): void;
+	/** 一句话放回这个视图的输入框，换掉正写着的字（插件自己排着的话收回来时用）。没有能放回去的输入框时不给，同 `withdraw`。 */
+	putBack?(text: string): void;
 	/** 失败的、随父会话停下的那件重新排进父会话队尾，见 `AgentService.retryTask`。 */
 	retry(taskId: string): void;
 	/** 收了场的那件从列表里拿掉，见 `AgentService.dismissTask`。 */

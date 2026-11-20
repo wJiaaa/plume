@@ -21,6 +21,7 @@ export function useCommands({
 	list,
 	onSubmit,
 	onError,
+	product = true,
 }: {
 	editor: { current: EditorView | null };
 	cwd?: string;
@@ -29,12 +30,14 @@ export function useCommands({
 	/** 回车选中的正好是已经打全的那条：直接发出去。 */
 	onSubmit: () => void;
 	onError: (message: string) => void;
+	/** 列不列产品自己的动作（`/clear`）：子会话的输入框不列，它们说的是主对话。 */
+	product?: boolean;
 }): { extension: ReturnType<typeof commandMarks>; menu: ReactNode; combobox: ComboboxState; fresh: () => Promise<MenuCommand[]> } {
 	const { t } = useI18n();
 	const id = useId();
 	const context = useMemo<CommandContext>(() => ({ ...(cwd ? { cwd } : {}), ...(sessionId ? { sessionId } : {}) }), [cwd, sessionId]);
 	const key = `${cwd ?? ""}\n${sessionId ?? ""}`;
-	const builtins = useMemo(() => productCommands(t), [t]);
+	const builtins = useMemo(() => (product ? productCommands(t) : []), [product, t]);
 	const [catalog, setCatalog] = useState<{ key: string; entries: CommandEntry[] } | null>(null);
 	const [completion, setCompletion] = useState<CommandCompletion | null>(null);
 	const [focused, setFocused] = useState(false);

@@ -146,6 +146,7 @@ export function ChildConversation({
 										void taskActions.withdraw(parentIdOf(view), taskId).then((text) => {
 											if (text !== undefined) seedChildText(composer.draftKey!, text);
 										}),
+									putBack: (text: string) => seedChildText(composer.draftKey!, text),
 								}
 							: {})}
 					/>

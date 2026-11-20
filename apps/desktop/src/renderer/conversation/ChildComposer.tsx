@@ -1,6 +1,6 @@
 /** 每个会话保留自己的输入状态；隐藏时由 Activity 卸下编辑器的副作用，不把异步结果交给下一份草稿。 */
 
-import type { DocumentText, Message, SessionView } from "@plume/contract";
+import type { CommandExpansion, DocumentText, Message, OutgoingMessage, SessionView } from "@plume/contract";
 import type { ConversationProps, SessionChoice } from "@plume/contract/ui";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -16,7 +16,8 @@ import { useMentions } from "../composer/useMentions.tsx";
 import { SessionReferences } from "../composer/SessionReferences.tsx";
 import { withSessionReferences } from "../composer/session-references.ts";
 import { modelsAgent } from "../models/store.ts";
-import { parseInvocation } from "../composer/commands.ts";
+import { parseInvocation, resolveCommand } from "../composer/commands.ts";
+import { useCommands } from "../composer/useCommands.tsx";
 import { useInputHistory } from "../composer/useInputHistory.ts";
 import { ModelBadge, ModelTrigger, EffortTrigger } from "../models/index.ts";
 import { effectiveModel, type ComposerSession } from "../models/session.ts";
@@ -109,6 +110,7 @@ export function ChildComposer({
 		loading,
 		disabled: composer.disabled === true,
 		steer: composer.mode === "steer",
+		stoppable: Boolean(composer.stop),
 		hasContent: Boolean(value.trim()) || draft.quotes.length > 0 || Boolean(draft.sessionRefs?.length) || (files && attachments.attachments.length > 0),
 	});
 	const mentions = useMentions({
@@ -123,16 +125,31 @@ export function ChildComposer({
 				sessionRefs: [...new Map([...(current.sessionRefs ?? []), ref].map((item) => [item.id, item])).values()],
 			})),
 	});
+	// 命令说的是这个会话，会话建好（第一句发出去）以后才有菜单。不开菜单的输入框也认 `/compact`：压缩这个会话，不当一句话发出去。
+	const menu = composer.commands === true && sessionId !== undefined;
+	const commands = useCommands({
+		editor,
+		...(cwd ? { cwd } : {}),
+		...(sessionId ? { sessionId } : {}),
+		list: async (context) => {
+			const entries = await modelsAgent().listCommands(context);
+			return menu ? entries : entries.filter((entry) => entry.name === "compact");
+		},
+		onSubmit: () => void send(),
+		onError: (message) => notify(message, "error"),
+		product: false,
+	});
 	const editable = useRef(new Compartment());
 	const extensions = useMemo(
 		() => [
 			editable.current.of([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]),
 			...(files ? [attachments.extension] : []),
+			...(menu ? [commands.extension] : []),
 			history.extension,
 			mentions.extension,
 		],
-		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 只读与否经下面的 effect 重配 compartment；attachments.extension、history.extension 只建一次
-		[files],
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 只读与否经下面的 effect 重配 compartment；attachments.extension、commands.extension、history.extension 只建一次
+		[files, menu],
 	);
 	useEffect(() => {
 		editor.current?.dispatch({ effects: editable.current.reconfigure([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]) });
@@ -143,34 +160,69 @@ export function ChildComposer({
 		editor.current.contentDOM.focus({ preventScroll: true });
 	}, [active, loading, draftKey, draft.quotes, draft.text]);
 
-	const send = async () => {
+	/**
+	 * 行首是一条认得的命令时交给插件展开：自己办掉了的清空输入框、什么都不发（null）；展开成话的照它发。
+	 * 展开期间草稿改了的作废（null），不误发。不是命令就是 undefined，原文照发。
+	 */
+	const runCommand = async (kept: ChildDraft): Promise<CommandExpansion | null | undefined> => {
+		const invocation = parseInvocation(kept.text.trim());
+		if (!invocation) return undefined;
+		const command = resolveCommand(await commands.fresh(), invocation.name);
+		if (!command?.plugin) return undefined;
+		if (command.name === "compact" && (kept.attachments.length || kept.quotes.length || kept.sessionRefs?.length)) throw new Error(t("command.noFiles"));
+		const result = await modelsAgent().expandCommand(command.plugin, command.name, invocation.rest, {
+			...(cwd ? { cwd } : {}),
+			...(sessionId ? { sessionId } : {}),
+		});
+		if (readDraft() !== kept) return null;
+		if ("handled" in result) {
+			attachments.clear();
+			changeDraft(() => EMPTY_CHILD_DRAFT);
+			return null;
+		}
+		return result;
+	};
+	/** `later`：⌘回车。会话在跑时排到这一轮之后（插件给了 `queue` 时），不插进去。 */
+	const send = async (later = false) => {
 		if (!state.canSend || pending.current) return;
+		pending.current = true;
 		const kept = readDraft();
-		const text = withQuotes(kept.text.trim(), kept.quotes);
-		const message = withSessionReferences(files ? attachments.outgoing(text) : { content: [{ type: "text", text }] }, kept.sessionRefs ?? []);
+		let command: CommandExpansion | null | undefined;
+		try {
+			command = await runCommand(kept);
+		} catch (error) {
+			notify(error instanceof Error ? error.message : String(error), "error");
+			pending.current = false;
+			return;
+		}
+		if (command === null) {
+			pending.current = false;
+			return;
+		}
+		// 发给模型的是展开后的话，引文接在它后面；气泡上是人打的原文。
+		const text = withQuotes(command?.text ?? kept.text.trim(), kept.quotes);
+		const body = files ? attachments.outgoing(text) : { content: [{ type: "text" as const, text }] };
+		const message = withSessionReferences(
+			command?.displayText === undefined ? body : { ...body, displayText: withQuotes(command.displayText, kept.quotes) },
+			kept.sessionRefs ?? [],
+		);
 		const chosen = blank ? blankChoice(blank, choice) : undefined;
+		// 照主输入框：在跑时打的话插进这一轮；⌘回车的、命令没声明插话的排到这一轮之后。
+		const queued = running && composer.queue !== undefined && (later || (command !== undefined && command.deliver !== "steer"));
 		/*
-		 * 照主输入框：插话先清空（它一推进队里就上了转录，等回音再清的话那几帧同一句两份），
+		 * 照主输入框：插话、排队先清空（它一推进队里就上了排队条，等回音再清的话那几帧同一句两份），
 		 * 平常的发送等发出去再清。先清的话从按下到会话跑起来那一两帧里输入框是空的，发送键先暗一下再换成停止键。
 		 */
 		const early = running;
 		const opening = !sessionId;
-		pending.current = true;
 		if (opening) onOpening(true);
 		if (early) {
 			attachments.clear();
 			changeDraft(() => EMPTY_CHILD_DRAFT);
 		}
 		try {
-			const invocation = parseInvocation(kept.text.trim());
-			if (invocation?.name === "compact") {
-				if (kept.attachments.length || kept.quotes.length || kept.sessionRefs?.length) throw new Error(t("command.noFiles"));
-				const entries = await modelsAgent().listCommands({ cwd, sessionId });
-				const command = entries.find((entry) => entry.name === "compact");
-				if (command) await modelsAgent().expandCommand(command.plugin, command.name, invocation.rest, { cwd, sessionId });
-				else await composer.send(text, chosen);
-			} else if (composer.sendMessage) await composer.sendMessage(message, chosen);
-			else await composer.send(message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n\n"), chosen);
+			if (queued) await composer.queue!(message);
+			else await deliver(message, chosen);
 			// 发送期间人又改过的，留给下一句。
 			if (!early && readDraft() === kept) {
 				attachments.clear();
@@ -195,9 +247,14 @@ export function ChildComposer({
 			if (opening) onOpening(false);
 		}
 	};
+	const deliver = async (message: OutgoingMessage, chosen: SessionChoice | undefined) => {
+		if (composer.sendMessage) await composer.sendMessage(message, chosen);
+		else await composer.send(message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n\n"), chosen);
+	};
 	return (
 		<div className="plume-composer-dock shrink-0" data-compact="">
 			<div className="plume-composer-tray relative" aria-disabled={state.disabled || undefined}>
+				{menu && commands.menu}
 				{mentions.menu}
 				<div
 					inert={state.disabled}
@@ -216,10 +273,12 @@ export function ChildComposer({
 							if (files) attachments.reconcile(next);
 						}}
 						onSubmit={() => void send()}
+						{...(composer.mode === "steer" && composer.queue ? { onSubmitLater: () => void send(true) } : {})}
 						placeholder={composer.placeholder === undefined ? t("composer.plumePlaceholder") : localized(composer.placeholder, resolvedLocale)}
 						extensions={extensions}
 						editorRef={editor}
-						combobox={mentions.combobox}
+						// 两张菜单不会同时开：`@` 开着就说它，否则说 `/` 那张。
+						combobox={menu && !mentions.combobox.open ? commands.combobox : mentions.combobox}
 						historyPosition={history.position}
 						{...(files && !state.readOnly ? { onFiles: (picked: PickedFile[]) => void attachments.addFiles(picked) } : {})}
 						top={

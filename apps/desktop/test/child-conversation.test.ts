@@ -3,11 +3,26 @@ import { test } from "node:test";
 import { childComposerState } from "../src/renderer/conversation/child-composer-state.ts";
 import { sameRow } from "../src/renderer/conversation/turns.ts";
 
-const ready = { active: true, running: false, loading: false, disabled: false, steer: false, hasContent: true };
+const ready = { active: true, running: false, loading: false, disabled: false, steer: false, stoppable: true, hasContent: true };
 
-test("普通输入框在运行时只能停止，插话输入框在运行中始终不是停止键", () => {
+test("普通输入框在运行时只能停止，插话输入框在运行中有东西时是发送键", () => {
 	assert.deepEqual(childComposerState({ ...ready, running: true }), { disabled: false, readOnly: false, stop: true, canSend: false });
 	assert.deepEqual(childComposerState({ ...ready, running: true, steer: true }), { disabled: false, readOnly: false, stop: false, canSend: true });
+});
+
+test("插话输入框空着时：能停的是停止键，不能停的（子 Agent）还是暗着的发送键", () => {
+	assert.deepEqual(childComposerState({ ...ready, running: true, steer: true, hasContent: false }), {
+		disabled: false,
+		readOnly: false,
+		stop: true,
+		canSend: false,
+	});
+	assert.deepEqual(childComposerState({ ...ready, running: true, steer: true, stoppable: false, hasContent: false }), {
+		disabled: false,
+		readOnly: false,
+		stop: false,
+		canSend: false,
+	});
 });
 
 test("隐藏会话、加载和显式禁用不能发送或停止，空消息不能发送", () => {
