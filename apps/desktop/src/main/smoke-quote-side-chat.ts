@@ -36,7 +36,36 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 	await click("[data-screen=chat] [data-composer-send=send]");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert])')?.textContent.includes('划词侧边聊天准备好了。')", "侧聊准备好");
 	await until("document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) [data-composer-send=stop]') === null", "侧聊已结束");
+	await checkSideCommands(options);
 	await checkUnreadDot(options);
+}
+
+/**
+ * 侧聊输入框的 `/` 菜单：输入框挂上时这段还没接上（面板先挂、再接回那段），菜单照样要有，列插件的命令，不列 `/clear`、`/btw`。
+ * 打完再删干净，后面接着用这个输入框。
+ */
+async function checkSideCommands(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
+	const { window, outDir, page, until, capture } = options;
+	const side = '[data-panel="plume.side-chat/chat"]:not([inert])';
+	const menu = `${side} .plume-command-menu[data-open="true"]`;
+	await page(`document.querySelector('${side} .cm-content').focus()`);
+	window.webContents.sendInputEvent({ type: "mouseMove", x: 0, y: 0 });
+	await window.webContents.insertText("/");
+	await until(`document.querySelector('${menu} [data-command="compact"]') !== null`, "侧聊里敲 / 弹出命令菜单");
+	assert.equal(
+		await page(`document.querySelector('${menu} [data-command="clear"], ${menu} [data-command="btw"]') !== null`),
+		false,
+		"侧聊的 / 菜单不该列 /clear、/btw",
+	);
+	await capture(window, join(outDir, "smoke-side-chat-commands.png"));
+	for (const keyCode of ["Escape", "Backspace"]) {
+		window.webContents.sendInputEvent({ type: "keyDown", keyCode });
+		window.webContents.sendInputEvent({ type: "keyUp", keyCode });
+	}
+	await until(
+		`document.querySelector('${side} [data-composer-send=send]')?.disabled === true && document.querySelector('${menu}') === null`,
+		"删掉 / 后菜单收起",
+	);
 }
 
 /** 看着时回复完不亮点；问了一句就切到别的标签，回复完侧聊标签上亮未读点，切回来灭掉。 */
@@ -163,7 +192,11 @@ export async function checkQuoteSideChat(options: {
 			assert.equal(await page(`${createdDraft}.text === '' && ${createdDraft}.attachments.length === 0`), true, "新标签不带走原草稿");
 			assert.deepEqual(await page(draft), original, `${label}保留原标签整份草稿`);
 			assert.equal(requests.length, 0, `${label}不自动发送`);
-			await until(`document.querySelector('${side} [data-child-conversation]')?.dataset.childConversation === ''`, "只有草稿时不创建子会话");
+			// 标签一打开这段就建好（第一句之前命令、模型都按它来），只是还没说过话：关掉不用确认。
+			await until(
+				`(document.querySelector('${side} [data-child-conversation]')?.dataset.childConversation ?? '') !== '' && document.querySelector('${side} [data-plume-transcript-rows]') === null`,
+				"新标签打开就有自己的空会话",
+			);
 			await click(`[data-panel-tab="plume.side-chat/chat"][data-panel-tab-id="${created}"] button[aria-label^="关闭"]`);
 			await until(`document.querySelector('[data-panel-tab="plume.side-chat/chat"][data-panel-tab-id="${created}"]') === null`, "关闭未发送的临时标签");
 			assert.equal(await page(`localStorage.getItem(${JSON.stringify(`plume.child-draft:${created}`)})`), null, "关闭清掉该标签的引用草稿");

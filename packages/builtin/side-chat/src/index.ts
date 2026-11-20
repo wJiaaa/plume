@@ -20,7 +20,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message, Plugin, PromptSection, SessionMessage, StopReason } from "@plume/contract";
-import type { SessionChoice } from "@plume/contract/ui";
 import { type LaunchChoice, normalizeSettings, type SideChatApi } from "./api.ts";
 import { createSideChatBindings } from "./bindings.ts";
 import { changeIds, sideChangesNote } from "./changes.ts";
@@ -83,15 +82,10 @@ export default {
 		// 新的侧边聊天用哪个模型；没选就跟随主会话。只管新开的，已经开着的沿用它开时的模型。
 		const settings = await ctx.settings({ model: undefined }, normalizeSettings);
 
-		/** `choice`：人在面板里第一句之前选的模型和档位（只取这两样，不对时 `create` 抛错）；`/btw`、排队条新开的没有，用上面的默认。 */
-		async function open(parentId: string, choice?: SessionChoice): Promise<string> {
+		/** 用上面的默认模型建；人在面板里要换，会话已经在了，照常经输入框的模型菜单换。 */
+		async function open(parentId: string): Promise<string> {
 			const model = settings.get().model;
-			const picked = choice
-				? { ...(choice.model ? { model: choice.model } : {}), ...(choice.thinking ? { thinking: choice.thinking } : {}) }
-				: model
-					? { model }
-					: {};
-			const side = await ctx.sessions.create({ parentId, ...picked });
+			const side = await ctx.sessions.create({ parentId, ...(model ? { model } : {}) });
 			sides.set(side.id, parentId);
 			noted.set(side.id, { seen: 0, lastAt: 0 });
 			return side.id;
@@ -323,7 +317,7 @@ export default {
 
 		ctx.serve({
 			bind: (tab: string, parentId: string) => bindings.bind(String(tab), String(parentId)),
-			open: (tab: string, parentId: string, choice: SessionChoice | undefined) => bindings.open(String(tab), String(parentId), choice),
+			open: (tab: string, parentId: string) => bindings.open(String(tab), String(parentId)),
 			ask: (sideId: string, message: string | SessionMessage) => ask(sideOf(String(sideId)), bodyOf(message)),
 			async steer(sideId: string, message: string | SessionMessage) {
 				const side = sideOf(String(sideId));

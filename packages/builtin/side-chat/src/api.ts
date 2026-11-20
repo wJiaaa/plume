@@ -1,7 +1,6 @@
 /** 逻辑入口经 `ctx.serve` 开给界面入口的接口。 */
 
 import type { SessionMessage, ThinkingLevel } from "@plume/contract";
-import type { SessionChoice } from "@plume/contract/ui";
 
 /** 卡片上给新会话选的模型（`SessionModel.id`）、思考档位：没动过的不给，用默认的。 */
 export interface LaunchChoice {
@@ -30,8 +29,11 @@ export interface WaitingEntry {
 export interface SideChatApi {
 	/** 按稳定标签恢复绑定；首次打开只认领未绑定的最新一段，没有则保持空白。 */
 	bind(tab: string, parentId: string): Promise<string | undefined>;
-	/** 接回这个标签的侧边聊天，没有才新建（按人在第一句之前选的 `choice` 建）；绑定落盘后返回，重复调用不会多建。 */
-	open(tab: string, parentId: string, choice: SessionChoice | undefined): Promise<string>;
+	/**
+	 * 接回这个标签的侧边聊天，没有才新建；绑定落盘后返回，重复调用不会多建。面板一打开就调它：侧边聊天和主会话一样，
+	 * 打开时会话就在了，第一句之前的命令（`/plan`）、模型菜单都按这段会话来。
+	 */
+	open(tab: string, parentId: string): Promise<string>;
 	/**
 	 * 在侧边聊天里问一句，这一轮开跑就返回（不等它答完）。正在跑、或者前面还有排着的，就排到后面（见 waiting.ts）。
 	 * 排队条上拿过来的那条带着附件，整条照发。

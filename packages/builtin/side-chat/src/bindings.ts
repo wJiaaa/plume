@@ -1,12 +1,11 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import type { SessionChoice } from "@plume/contract/ui";
 import type { SideChatEntry } from "./api.ts";
 
 interface BindingDeps {
 	file: string;
 	parentOf(sideId: string): string | undefined;
 	list(parentId: string): Promise<SideChatEntry[]>;
-	open(parentId: string, choice?: SessionChoice): Promise<string>;
+	open(parentId: string): Promise<string>;
 	close(sideId: string): Promise<void>;
 	missing(): Error;
 }
@@ -71,9 +70,9 @@ export async function createSideChatBindings(deps: BindingDeps) {
 
 	return {
 		bind: (tab: string, parentId: string) => run(() => resolve(tab, parentId)),
-		open: (tab: string, parentId: string, choice?: SessionChoice) =>
+		open: (tab: string, parentId: string) =>
 			run(async () => {
-				const id = await resolve(tab, parentId, () => deps.open(parentId, choice));
+				const id = await resolve(tab, parentId, () => deps.open(parentId));
 				if (!id) throw deps.missing();
 				return id;
 			}),

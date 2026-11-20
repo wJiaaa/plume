@@ -580,7 +580,7 @@ function SidePanel({ tab }: PanelProps) {
 ```
 
 - 不给 `composer` 就只读。默认按发送调 `send`，会话跑着时发送键换成停止键、按了调 `stop`，保持侧边聊天行为。`mode: "steer"` 时运行中也能发送，照样经 `send`、`sendMessage` 交给你（插件经 `ctx.sessions.steer` 插进这一轮）：框里有东西时是发送键，给了 `stop` 时框里空着是停止键；再给 `queue(message)` 时 ⌘回车（和展开后没声明 `deliver: "steer"` 的命令）在运行中经它交回，要排到这一轮之后，排在哪、什么时候发、怎么画由你定（侧边聊天的见 `packages/builtin/side-chat/src/waiting.ts`）。`disabled` 保留但禁用操控区。停止可放在面板头部。
-- `commands: true` 开 `/` 命令菜单：会话建好以后，命令按这个子会话问、展开（`CommandContext.sessionId` 是子会话），产品自己的动作（`/clear`）不列；插件自己办掉的（`handled`）清空输入框。不开时行首的 `/xxx` 照原文发（`/compact` 除外，照样压缩这个会话）。
+- `commands: true` 开 `/` 命令菜单：命令按这个子会话问、展开（`CommandContext.sessionId` 是子会话；会话还没接上时不带，接上后重新问。要让第一句之前的命令也按这段会话来，打开面板时就建好会话，侧边聊天就是这样），产品自己的动作（`/clear`）不列；插件自己办掉的（`handled`）清空输入框。不开时行首的 `/xxx` 照原文发（`/compact` 除外，照样压缩这个会话）。
 - 输入框右下和主输入框一样：插件经 `ui.composerItem(…, { side: "end" })` 加的格子和宿主的上下文用量会话在就画，量的是子会话；`model: "choose"` 再画能换的模型和思考档位（菜单最前面是「跟随主会话」，选了就清掉子会话自己的），`model: "show"` 画只读的模型和档位、悬停说明末尾接 `modelTip`。量的都是下一轮实际会用的：子会话没选的跟着父会话。会话还没建（第一句没发）时这些都不画；要让人在第一句之前就选，给 `blank: { parentId, model }`（第一句开在哪个会话下面、人没动过时插件要用的模型），`model: "choose"` 的模型和档位照画（没有用量格子），选的经 `send(text, choice)`、`sendMessage(message, choice)` 的 `choice`（`SessionChoice`：`model` 没有是跟随父会话）交回，建会话时照它给 `ctx.sessions.create({ parentId, ...choice })`。`footer` 放插件自己的东西，排在它们前面。
 - 提供 `sendMessage` 时输入框接入附件，交回完整 `OutgoingMessage`；不提供仍是纯文字。草稿与附件按子会话隔离，异步发送失败不会把文字还到另一个子会话。
 - 需要保留草稿、接收划词引用或弹出窗口时设置 `composer.draftKey: tab`（`PanelProps.tab`）。未发送文字、附件和引用按标签保存，支持 `sendMessage`；弹出、收回先确认存储成功，失败阻止交接并保留内存草稿。发送时引用附在消息文字前面，发送失败保留草稿，关闭标签后清理草稿；是否允许关闭仍由面板的 `onClose` 决定。

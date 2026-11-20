@@ -403,7 +403,7 @@ export interface ConversationProps {
 		 */
 		queue?(message: OutgoingMessage): void | Promise<void>;
 		/**
-		 * 开 `/` 命令菜单：会话建好以后，命令按这个会话问、展开，和主输入框同一份（见 `CommandProvider`），产品自己的动作（`/clear`）不列。
+		 * 开 `/` 命令菜单：命令按这个会话问、展开（会话还没接上时不带会话，接上后重新问），和主输入框同一份（见 `CommandProvider`），产品自己的动作（`/clear`）不列。
 		 * 插件自己办掉的（`handled`）清空输入框、什么都不发。不给就不弹菜单，行首的 `/xxx` 照原文发。
 		 */
 		commands?: boolean;

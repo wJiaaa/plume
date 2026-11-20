@@ -125,8 +125,10 @@ export function ChildComposer({
 				sessionRefs: [...new Map([...(current.sessionRefs ?? []), ref].map((item) => [item.id, item])).values()],
 			})),
 	});
-	// 命令说的是这个会话，会话建好（第一句发出去）以后才有菜单。不开菜单的输入框也认 `/compact`：压缩这个会话，不当一句话发出去。
-	const menu = composer.commands === true && sessionId !== undefined;
+	// 开不开菜单只看插件给的 `commands`，不等会话：编辑器只在挂上时建一次，挂上那一刻会话常常还没接上（侧边聊天先挂、再接回那段），
+	// 跟着会话有没有来开关的话扩展就一直装不上。命令说的是哪个会话由 `sessionId` 带去，接上以后重新问。
+	// 不开菜单的输入框也认 `/compact`：压缩这个会话，不当一句话发出去。
+	const menu = composer.commands === true;
 	const commands = useCommands({
 		editor,
 		...(cwd ? { cwd } : {}),

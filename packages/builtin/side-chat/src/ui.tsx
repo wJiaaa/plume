@@ -11,7 +11,7 @@
  * 输入框和主输入框一样：`/` 弹命令菜单；侧边聊天在跑时回车插进这一轮、⌘回车排到这一轮之后，还没读到的画在回执条里。
  */
 
-import type { ChildTasksProps, PanelProps, Remote, SessionChoice, UiContext, UiPlugin } from "@plume/contract/ui";
+import type { ChildTasksProps, PanelProps, Remote, UiContext, UiPlugin } from "@plume/contract/ui";
 import type { OutgoingMessage } from "@plume/contract";
 import { ChoiceMark, Confirm, PanelEmpty, Text, useI18n } from "@plume/ui";
 import { Activity, History, MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
@@ -108,15 +108,13 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 	const closing = useRef(false);
 	const side = ui.useSession(sideId);
 	const [asking, setAsking] = useState<((sure: boolean) => void) | undefined>(undefined);
-	// 还没开的这段要用的模型：第一句之前输入框里先画它，人没动过就照它开。
-	const defaultModel = ui.useSettings<SideChatSettings>()[0]?.model;
 
-	// 只恢复绑定，不在挂载时新建；卸载不能删除绑定或子会话。
+	// 打开就接上这个标签的那段，没有就新建：和主会话一样，第一句之前会话就在，命令、模型菜单都按它来。卸载不能删除绑定或子会话。
 	useEffect(() => {
 		if (!parentId) return;
 		let current = true;
 		closing.current = false;
-		void api.bind(tab, parentId).then(
+		void api.open(tab, parentId).then(
 			(id) => {
 				if (current && !closing.current) setSideId(id);
 			},
@@ -145,9 +143,9 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 	const said = side ? side.messages.length > 0 : Boolean(sideId);
 	const saidRef = useRef(said);
 	saidRef.current = said;
-	const send = async (question: string | OutgoingMessage, choice?: SessionChoice) => {
+	const send = async (question: string | OutgoingMessage) => {
 		if (!parentId || closing.current) return;
-		const id = await api.open(tab, parentId, choice);
+		const id = await api.open(tab, parentId);
 		if (closing.current) return;
 		setSideId(id);
 		// 在跑时打的话插进这一轮；已经停了的由逻辑入口照常发。
@@ -203,7 +201,6 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 				composer={{
 					draftKey: tab,
 					model: "choose",
-					blank: { parentId, ...(defaultModel ? { model: defaultModel } : {}) },
 					placeholder: (locale) => MESSAGES[locale].placeholder,
 					send,
 					sendMessage: send,
@@ -330,7 +327,7 @@ export default {
 			// 问最早那一段（面板开着时人看到的那格）；还没有就新开一格。面板先打开，问的那句好在那边先画上。
 			async run(message, sessionId) {
 				const tab = (await api.firstTab(sessionId)) ?? crypto.randomUUID();
-				const sideId = await api.open(tab, sessionId, undefined);
+				const sideId = await api.open(tab, sessionId);
 				ui.openPanel(PANEL, sessionId, { tab });
 				void api.ask(sideId, message).then(refreshWaiting, fail);
 			},
