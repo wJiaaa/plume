@@ -38,7 +38,7 @@
 
 Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接、约定检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`，推 `v*` tag 时还查发版文案。
 
-改动插件宿主时在 `packages/core/agent/test/` 里补测试（`src/testing.ts` 有假模型服务），改动循环时在 `packages/core/loop/test/` 里补测试；改动进程、协议、界面或插件时跑 `pnpm smoke`。`packages/core/llm` 的类型声明在类型检查时生成到 `dist/`。
+改动插件宿主或循环时补测试：只测 `@plume/loop` 自己的纯函数的放 `packages/core/loop/test/`；要跑一整轮的（用 `PluginHost`、内置插件或 `src/testing.ts` 的假模型服务）放 `packages/core/agent/test/`，循环的 `loop-parity`、`repetition-parity` 都在那里；改动进程、协议、界面或插件时跑 `pnpm smoke`。`packages/core/llm` 的类型声明在类型检查时生成到 `dist/`。
 
 ## 约定
 
