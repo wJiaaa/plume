@@ -16,6 +16,7 @@ import { SessionMarks } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
 import { busy, type SessionActivity, useSessionActivity, waitingWords, waitOf } from "./activity.ts";
 import { SessionMenu, type SessionMenuActions } from "./SessionMenu.tsx";
+import { useAppearance } from "../appearance-settings.ts";
 
 export const SessionRow = memo(function SessionRow({
 	session,
@@ -169,9 +170,11 @@ const ACTIVITY_LABEL = { waiting: "sessionStatus.waiting", done: "sessionStatus.
  * 换状态只换颜色，行不跳。空闲是一个空心圈，描边用 `line-float`，深色侧栏上也看得见。
  * 等批准排最前：那是一个会一直等下去、却没人知道它在等的会话，子会话在等也标在这一行上。手动标的未读只占空闲那一档，
  * 跑完、出错本身就是未读。只有空闲那一档让给插件（`ui.sessionMark`，如工作树的 ⑂），插件不说话时还是空心圈。
+ * 外观设置里的「运行指示」可以把呼吸点换成转圈（`runningMark`），给觉得呼吸点不像「在加载」的人；尺寸同呼吸点，换了行不跳。
  */
 export function SessionStatus({ session, running }: { session: SessionSummary; running: boolean }) {
 	const { t } = useI18n();
+	const spinner = useAppearance().runningMark === "spinner";
 	const activity: SessionActivity | undefined = useSessionActivity(session.id);
 	const unread = session.unread ?? false;
 	const shown = activity === "waiting" ? activity : running ? "running" : activity;
@@ -194,9 +197,7 @@ export function SessionStatus({ session, running }: { session: SessionSummary; r
 			role={label ? "img" : undefined}
 		>
 			{shown === "running" ? (
-				<span data-plume-status-mark="running">
-					<BreatheLoader size={12} />
-				</span>
+				<span data-plume-status-mark="running">{spinner ? <ActionSpinner size={12} className="text-accent" /> : <BreatheLoader size={12} />}</span>
 			) : shown || unread ? (
 				<span
 					data-plume-status-mark={shown ?? "unread"}

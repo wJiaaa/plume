@@ -25,6 +25,8 @@ export interface Appearance {
 	diffMarkers?: "color" | "symbols";
 	/** 对话那一列的最大宽度：标准是 theme.css 的 `--plume-content`，宽档按窗口宽度放宽，见 appearance-settings.ts。 */
 	contentWidth?: "standard" | "wide";
+	/** 会话在跑时行首的记号：呼吸点（默认），或转圈（嫌呼吸点不像「在加载」的人用），见 sidebar/SessionRow.tsx 的 `SessionStatus`。 */
+	runningMark?: "breathe" | "spinner";
 	codeLightTheme?: string;
 	codeDarkTheme?: string;
 	codeFont?: string;
@@ -164,6 +166,7 @@ export function cleanAppearance(input: unknown): Appearance {
 	if (raw.reduceMotion === "system" || raw.reduceMotion === "on" || raw.reduceMotion === "off") out.reduceMotion = raw.reduceMotion;
 	if (raw.diffMarkers === "color" || raw.diffMarkers === "symbols") out.diffMarkers = raw.diffMarkers;
 	if (raw.contentWidth === "standard" || raw.contentWidth === "wide") out.contentWidth = raw.contentWidth;
+	if (raw.runningMark === "breathe" || raw.runningMark === "spinner") out.runningMark = raw.runningMark;
 	if (raw.inlineCode === "app" || raw.inlineCode === "syntax" || raw.inlineCode === "custom") out.inlineCode = raw.inlineCode;
 	if (typeof raw.inlineCodeBorder === "boolean") out.inlineCodeBorder = raw.inlineCodeBorder;
 	if (typeof raw.contrast === "number" && Number.isFinite(raw.contrast)) out.contrast = Math.round(Math.min(100, Math.max(0, raw.contrast)));
