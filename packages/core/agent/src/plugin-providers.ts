@@ -6,6 +6,7 @@
 import type { ModelEntry, PluginProvider, ProviderSource } from "@plume/contract";
 import type { ModelPricing } from "@plume/llm/types";
 import { catalogModelFor, catalogPricing } from "@plume/llm/model-catalog";
+import { errorText } from "@plume/loop";
 import { text } from "./i18n.ts";
 import { checkProvider, type StoredProvider } from "./models.ts";
 
@@ -39,7 +40,7 @@ export class PluginProviderSources {
 			try {
 				listed = source.list();
 			} catch (error) {
-				this.log(`插件 ${plugin} 列供应商失败：${messageOf(error)}`);
+				this.log(`插件 ${plugin} 列供应商失败：${errorText(error)}`);
 				continue;
 			}
 			for (const raw of Array.isArray(listed) ? (listed as PluginProvider[]) : []) {
@@ -47,7 +48,7 @@ export class PluginProviderSources {
 				try {
 					provider = checkProvider({ ...raw, models: raw.models.map((model) => withPricing(model, raw.baseUrl)) });
 				} catch (error) {
-					this.log(`插件 ${plugin} 的供应商 ${String(raw?.id)} 不合格，已跳过：${messageOf(error)}`);
+					this.log(`插件 ${plugin} 的供应商 ${String(raw?.id)} 不合格，已跳过：${errorText(error)}`);
 					continue;
 				}
 				if (out.some((other) => other.id === provider.id)) {
@@ -100,8 +101,4 @@ function usablePricing(pricing: unknown): pricing is ModelPricing {
 	const { input, output, cacheRead, cacheWrite } = pricing as Record<string, unknown>;
 	const rate = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 	return rate(input) && rate(output) && (cacheRead === undefined || rate(cacheRead)) && (cacheWrite === undefined || rate(cacheWrite));
-}
-
-function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

@@ -14,7 +14,7 @@ function commandContext(input: CommandContext | undefined): CommandContext {
 
 export interface PluginsServiceDeps {
 	pluginsFile: string;
-	files: Pick<JsonFiles, "read" | "write">;
+	files: Pick<JsonFiles, "write">;
 	host: Pick<PluginHost, "commands" | "expandCommand" | "status" | "toolOwners" | "setEnabled" | "call" | "values">;
 	events: Pick<Events, "watchers" | "pluginsChanged">;
 }
@@ -48,7 +48,7 @@ export function pluginsService(
 		listTools: () => host.toolOwners(),
 		async setPluginEnabled(key, enabled) {
 			const disabled = await host.setEnabled(String(key), enabled === true);
-			await files.write(pluginsFile, { ...(await files.read<object>(pluginsFile)), disabled });
+			await files.write(pluginsFile, { disabled });
 			return pluginsChanged();
 		},
 		async callPlugin(plugin, method, args, call) {

@@ -32,9 +32,9 @@ interface ProviderBundle {
 type BundleParse = { ok: true; providers: StoredProvider[]; dropped: number } | { ok: false; problem: Exclude<ProviderImportPreview, { ok: true }>["problem"] };
 
 /** 制表符缩进：人很可能会在编辑器里打开它。 */
-export function serializeBundle(providers: StoredProvider[], now = new Date()): { text: string; containsSecrets: boolean } {
+export function serializeBundle(providers: StoredProvider[]): { text: string; containsSecrets: boolean } {
 	const containsSecrets = providers.some((provider) => Boolean(provider.apiKey?.trim()));
-	const bundle: ProviderBundle = { kind: BUNDLE_KIND, version: BUNDLE_VERSION, exportedAt: now.toISOString(), containsSecrets, providers };
+	const bundle: ProviderBundle = { kind: BUNDLE_KIND, version: BUNDLE_VERSION, exportedAt: new Date().toISOString(), containsSecrets, providers };
 	return { text: `${JSON.stringify(bundle, null, "\t")}\n`, containsSecrets };
 }
 
