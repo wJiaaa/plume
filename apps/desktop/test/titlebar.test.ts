@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import {
 	hasHeaderBar,
 	MAIN_TOOLBAR_HEIGHT,

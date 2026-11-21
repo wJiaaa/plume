@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { byteRange, serveRanged } from "../src/main/ranged-file.ts";
 
 const BYTES = Uint8Array.from({ length: 1000 }, (_, i) => i % 251);

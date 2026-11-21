@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import childProcess, { ChildProcess, type ExecFileOptions } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext, vi } from "vitest";
 import { stdioEnv, TreeKillingStdioTransport } from "../src/stdio.ts";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/echo-server.mjs", import.meta.url));
@@ -16,7 +16,9 @@ function asWindows(t: TestContext): void {
 	const platform = Object.getOwnPropertyDescriptor(process, "platform");
 	assert.ok(platform);
 	Object.defineProperty(process, "platform", { ...platform, value: "win32" });
-	t.after(() => Object.defineProperty(process, "platform", platform));
+	t.onTestFinished(() => {
+		Object.defineProperty(process, "platform", platform);
+	});
 }
 
 test("Windows 上服务器自己的 Path 替掉继承来的 PATH，不和它并排", (t) => {
@@ -42,18 +44,19 @@ test("Windows 上关服务器连整棵进程树一起结束，不只是 cmd.exe"
 	const pid = transport.pid;
 	assert.ok(pid);
 	const calls: { file: string; args: readonly string[]; options: ExecFileOptions }[] = [];
-	const exec = t.mock.method(
-		childProcess,
-		"execFile",
-		(file: string, args: readonly string[], options: ExecFileOptions, callback: (error: Error | null, stdout: string, stderr: string) => void) => {
-			calls.push({ file, args, options });
-			callback(null, "", "");
-			return new ChildProcess();
-		},
-	);
+	const exec = vi.spyOn(childProcess, "execFile").mockImplementation(((
+		file: string,
+		args: readonly string[],
+		options: ExecFileOptions,
+		callback: (error: Error | null, stdout: string, stderr: string) => void,
+	) => {
+		calls.push({ file, args, options });
+		callback(null, "", "");
+		return new ChildProcess();
+	}) as typeof childProcess.execFile);
 	syncBuiltinESMExports();
-	t.after(() => {
-		exec.mock.restore();
+	t.onTestFinished(() => {
+		exec.mockRestore();
 		syncBuiltinESMExports();
 	});
 	// 只在关的这一下当 Windows：SDK 在那边经 `cmd.exe /c` 起 `npx`，自己的 close 只 kill 那个 shell。

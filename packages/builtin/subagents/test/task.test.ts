@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setImmediate } from "node:timers/promises";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import type {
 	HookLayer,
 	Message,
@@ -170,7 +170,7 @@ async function fixture(t: TestContext) {
 		deleteListeners = [];
 	};
 	await load();
-	t.after(async () => {
+	t.onTestFinished(async () => {
 		for (const resolve of pending.values()) resolve({ reason: "aborted" });
 		await unload();
 		rmSync(directory, { recursive: true, force: true });

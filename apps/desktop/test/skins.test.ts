@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { test } from "node:test";
+import { test } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { skinValues } from "../src/renderer/skin-values.ts";
@@ -78,7 +78,7 @@ test("皮肤更新不叠样式表，null 和卸载恢复前一套及管理状态
 	})) {
 		const original = Object.getOwnPropertyDescriptor(globalThis, name);
 		Object.defineProperty(globalThis, name, { value, configurable: true });
-		t.after(() => {
+		t.onTestFinished(() => {
 			if (original) Object.defineProperty(globalThis, name, original);
 			else Reflect.deleteProperty(globalThis, name);
 		});

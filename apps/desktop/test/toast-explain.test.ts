@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { translateIn } from "../../../packages/client/ui/src/i18n/translate.ts";
 import { explain } from "../src/renderer/toast/explain.ts";
 import { currentNotices, notify } from "../src/renderer/toast/store.ts";

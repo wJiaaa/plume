@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { Message } from "@plume/contract";
 import { leadsTheTurn } from "../src/renderer/conversation/running-line.ts";
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, vi } from "vitest";
 import { createDocumentImageLoader } from "../src/main/document-image.ts";
 
 const picture = () => new Response("pixels", { headers: { "content-type": "image/png" } });
@@ -68,7 +68,10 @@ test("大小限制同时检查声明和实际流量，超限取消读取", async
 });
 
 test("失败一分钟后重试，下载异常不抛给界面", async (t) => {
-	t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+	vi.useFakeTimers({ toFake: ["Date"], now: 1000 });
+	t.onTestFinished(() => {
+		vi.useRealTimers();
+	});
 	let calls = 0;
 	const api = createDocumentImageLoader(async () => {
 		if (++calls === 1) throw new Error("offline");
@@ -77,7 +80,7 @@ test("失败一分钟后重试，下载异常不抛给界面", async (t) => {
 	assert.equal(await api("https://images.test/retry"), null);
 	assert.equal(await api("https://images.test/retry"), null);
 	assert.equal(calls, 1);
-	t.mock.timers.tick(60_001);
+	vi.advanceTimersByTime(60_001);
 	assert.ok(await api("https://images.test/retry"));
 	assert.equal(calls, 2);
 });

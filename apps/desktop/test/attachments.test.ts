@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { displayName, isPlaceholderName, nameParts } from "../src/renderer/composer/attachments/display.ts";
 import { fileKind, isReadableAsText, looksBinary, sentKind } from "../src/renderer/composer/attachments/file-kind.ts";
 import { attachmentMeta, spellDraft } from "../src/renderer/composer/attachments/outgoing.ts";

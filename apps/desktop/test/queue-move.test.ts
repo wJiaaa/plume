@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { queueMove } from "../src/renderer/composer/queue-move.ts";
 
 test("排队条挪位置只数还排着的那几条，正在收起的那一行不当落点", () => {

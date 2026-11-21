@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, before, test } from "node:test";
+import { afterAll, beforeAll, test } from "vitest";
 import { listBranches, switchBranch } from "../src/git/branches.ts";
 import { collectWorkspaceDiff, readDiffBlob } from "../src/git/diff.ts";
 import { commitDiff, commitStaged, createBranch, gitLog } from "../src/git/history.ts";
@@ -18,12 +18,12 @@ import { usePlainView } from "./plain-view.ts";
 
 let dir = "";
 
-before(async () => {
+beforeAll(async () => {
 	usePlainView();
 	dir = await mkdtemp(join(tmpdir(), "plume-git-"));
 });
 
-after(async () => {
+afterAll(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 

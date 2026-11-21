@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { FADE, Pace, wordCut } from "../src/renderer/markdown/stream-pace.ts";
 
 /** 每 `every` 毫秒来一块 `chunk` 个字，写 3 秒。 */

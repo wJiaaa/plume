@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { type NativeCacheIo, nativeLoadPath, redirectNativeLoads } from "../src/main/native-cache.ts";
 
 const ROOTS = ["C:\\Users\\me\\.plume\\plugins", "D:\\dev\\my-plugins"];

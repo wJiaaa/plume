@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { classifyFailure } from "../src/ai/failure.ts";
 
 const status = (code: number, body: unknown) => classifyFailure({ from: "status", status: code, body: JSON.stringify(body) });

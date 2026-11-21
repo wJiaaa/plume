@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { type DisplayShape, pickDisplaySource, type ScreenSource } from "../src/main/screenshot/displays.ts";
 import { normalizeShortcut } from "../src/main/screenshot/accelerator.ts";

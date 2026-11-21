@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { fetchWithRetry, isRetryableError, isRetryableStatus, retryDelay, toolCallId } from "../src/ai/retry.ts";
 import { FailureError } from "../src/ai/failure.ts";

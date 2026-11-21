@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { toAnthropicTools } from "../src/ai/anthropic-messages-request.ts";
 import { toChatCompletionsTools } from "../src/ai/openai-chat-completions-request.ts";
 import { toResponsesTools } from "../src/ai/openai-responses-request.ts";

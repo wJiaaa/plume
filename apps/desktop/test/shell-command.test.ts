@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { commandFrom, isShellFence } from "../src/renderer/markdown/shell-command.ts";
 
 test("只有 shell 一类的围栏有「在终端运行」", () => {

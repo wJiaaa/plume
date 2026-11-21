@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { openaiResponsesProvider } from "../src/ai/openai-responses.ts";
 import { toResponsesInput } from "../src/ai/openai-responses-request.ts";
 import { resetReasoningCompat } from "../src/ai/reasoning-compat.ts";

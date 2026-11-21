@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { BackgroundCallState, SessionView, ToolResultMessage } from "@plume/contract";
 import { viewChange } from "../src/renderer/session-live.ts";
 import { type CallState, callStatus, callStopped, callUnanswered } from "../src/renderer/conversation/view-state.ts";

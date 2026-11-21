@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import type { SessionSummary } from "@plume/contract";
 import { APP_SCHEME, sessionFromUrl } from "../src/main/deep-link.ts";
 import { RECENT_LIMIT, type TrayItem, trayMenu, trayTitle } from "../src/main/tray-menu.ts";

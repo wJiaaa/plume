@@ -14,7 +14,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, test } from "node:test";
+import { afterAll, test } from "vitest";
 import { translateIn } from "../../../packages/client/ui/src/i18n/translate.ts";
 import type { UpdatePhase } from "../src/shared/update.ts";
 import { installedAppBundle, swapScript } from "../src/main/update/install-update.ts";
@@ -36,7 +36,7 @@ import { notesForLocale } from "../src/renderer/update/notes-locale.ts";
 import { confirmLabel, controlsFor, failureDetail, fractionOf, labelFor, PHASES, shouldShow } from "../src/renderer/update/view.ts";
 
 const temps: string[] = [];
-after(async () => {
+afterAll(async () => {
 	for (const dir of temps) await rm(dir, { recursive: true, force: true });
 });
 async function temp(): Promise<string> {

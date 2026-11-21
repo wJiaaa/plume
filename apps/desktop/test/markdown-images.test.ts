@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { AgentService } from "@plume/contract";
 import type { Remote } from "@plume/rpc";
 import { connectFiles, localImageUrl } from "../src/renderer/files/open-file.ts";

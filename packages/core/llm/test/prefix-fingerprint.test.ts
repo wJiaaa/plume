@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { comparePrefix, payloadSegments } from "../src/ai/prefix-fingerprint.ts";
 
 test("只追加消息时没有变化；改了中间一条，变化落在那一条上", () => {

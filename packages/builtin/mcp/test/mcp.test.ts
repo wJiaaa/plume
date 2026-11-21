@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { HumanAnswer, HumanRequestInput, McpServersService, PluginContext, PluginSecrets, ToolDefinition, ToolRun } from "@plume/contract";
 import type { McpApi } from "../src/api.ts";
 import { applyDraft, checkDraft, offeredServers, readPluginServers, readServers, type ServerConfig, withValues, writeServers } from "../src/config.ts";

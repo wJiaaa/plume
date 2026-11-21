@@ -18,7 +18,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { toResponsesInput } from "../src/ai/openai-responses-request.ts";
 import type { AssistantMessage, Message } from "../src/types.ts";
 import { emptyUsage } from "../src/types.ts";

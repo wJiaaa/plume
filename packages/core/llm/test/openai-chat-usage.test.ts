@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { openaiChatCompletionsProvider } from "../src/ai/openai-chat-completions.ts";
 import type { AssistantMessage, ModelConfig, ProviderConfig } from "../src/types.ts";
 

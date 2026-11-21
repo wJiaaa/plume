@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 import { tintedOverlay } from "../src/renderer/window-overlay-colors.ts";
 
 const LIGHT = { color: "#f3f3f3", symbolColor: "#9a9a9a" };

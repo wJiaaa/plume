@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { motionReduced } from "../../../packages/client/ui/src/motion/reduced.ts";
 
 test("减少动效的 on / off 优先于系统，system 和未设置跟随系统，切换后立即生效", (t) => {
 	const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
 	const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-	t.after(() => {
+	t.onTestFinished(() => {
 		if (documentDescriptor) Object.defineProperty(globalThis, "document", documentDescriptor);
 		else Reflect.deleteProperty(globalThis, "document");
 		if (windowDescriptor) Object.defineProperty(globalThis, "window", windowDescriptor);

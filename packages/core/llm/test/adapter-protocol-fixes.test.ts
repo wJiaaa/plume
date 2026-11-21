@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { anthropicMessagesProvider, learnThinkingReplay, resetThinkingReplay, thinkingReplay } from "../src/ai/anthropic-messages.ts";
 import { toAnthropicMessages } from "../src/ai/anthropic-messages-request.ts";
 import { openaiChatCompletionsProvider } from "../src/ai/openai-chat-completions.ts";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { InstalledPlugin, MarketEntry } from "../src/shared/market.ts";
 import { merge, UNFILED } from "../src/renderer/market/catalog.ts";
 

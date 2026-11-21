@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { applyUsage, readUsage } from "../src/ai/usage-fields.ts";
 import { openaiResponsesProvider } from "../src/ai/openai-responses.ts";
 import { anthropicMessagesProvider } from "../src/ai/anthropic-messages.ts";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { childComposerState } from "../src/renderer/conversation/child-composer-state.ts";
 import { sameRow } from "../src/renderer/conversation/turns.ts";
 

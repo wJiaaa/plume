@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { findMentionRanges, formatMention, parseMentionTrigger, rankMentions } from "../src/renderer/composer/mentions.ts";
 import { parseInvocation } from "../src/renderer/composer/commands.ts";
 import { withSessionReferences } from "../src/renderer/composer/session-references.ts";

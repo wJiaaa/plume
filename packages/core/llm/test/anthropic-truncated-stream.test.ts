@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { anthropicMessagesProvider } from "../src/ai/anthropic-messages.ts";
 import type { AssistantMessage, ModelConfig, ProviderConfig } from "../src/types.ts";
 

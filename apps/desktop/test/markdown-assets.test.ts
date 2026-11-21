@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { directoryOf, isAbsolutePath, relativeTo, resolveAsset } from "../src/renderer/markdown/assets.ts";
 
 test("相对路径落在目录里", () => {

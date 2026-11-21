@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { anthropicMessagesProvider, resetThinkingReplay } from "../src/ai/anthropic-messages.ts";
 import { openaiChatCompletionsProvider, resetChatCompletionsCompat } from "../src/ai/openai-chat-completions.ts";
 import { openaiResponsesProvider } from "../src/ai/openai-responses.ts";

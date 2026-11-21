@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { appendConversationDraft, conversationDraftTarget, externalWebUrl } from "../src/renderer/plugin-navigation.ts";
 
 const projects = [{ id: "project", name: "Example", path: "/workspace" }];

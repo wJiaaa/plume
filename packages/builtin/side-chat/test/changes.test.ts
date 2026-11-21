@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import type { HookLayer, Message, PluginContext, PromptSubmit, SessionSummary } from "@plume/contract";
 import { changeIds, sideChangesNote } from "../src/changes.ts";
 import plugin from "../src/index.ts";
@@ -30,7 +30,7 @@ test("只认本体记在工具结果上的改动，出错的也算，去重；�
 
 async function fixture(t: TestContext) {
 	const directory = mkdtempSync(join(tmpdir(), "plume-side-chat-"));
-	t.after(() => rmSync(directory, { recursive: true, force: true }));
+	t.onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
 	const summary = (id: string, parentId?: string): SessionSummary =>
 		({ id, title: "", cwd: "/w", running: false, createdAt: 0, updatedAt: 0, ...(parentId ? { parentId, owner: "plume.side-chat" } : {}) }) as SessionSummary;
 	const sessions = new Map([

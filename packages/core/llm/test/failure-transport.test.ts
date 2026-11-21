@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { classifyFailure, failureOf, worthRetrying } from "../src/ai/failure.ts";
 import { RetryBudget, fetchWithRetry, retryStream } from "../src/ai/retry.ts";

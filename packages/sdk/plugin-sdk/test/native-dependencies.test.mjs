@@ -4,14 +4,14 @@ import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { describe, test } from "vitest";
 import { pathToFileURL } from "node:url";
 import { buildPlugin } from "../lib/build.mjs";
 import { TARGETS, trimNative } from "../lib/targets.mjs";
 
 async function fixture(t, dependencies, entry = "export default true;") {
 	const work = await mkdtemp(join(tmpdir(), "plume-native-dependencies-"));
-	t.after(() => rm(work, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(work, { recursive: true, force: true }));
 	const source = join(work, "source");
 	const plugin = join(source, "plugin");
 	await mkdir(join(plugin, "src"), { recursive: true });
@@ -277,12 +277,12 @@ test("复制出的 Mach-O、ELF 补上执行位，其余文件权限不变", { s
 	assert.deepEqual(await readFile(join(modules, "fixture-elf/elf.so")), Buffer.from("7f454c4602010100", "hex"));
 });
 
-test("直接或传递的必需依赖缺失时报错", async (t) => {
-	await t.test("直接依赖缺失", async (t) => {
+describe("直接或传递的必需依赖缺失时报错", () => {
+	test("直接依赖缺失", async (t) => {
 		const f = await fixture(t, { "fixture-missing-required": "1.0.0" });
 		await assert.rejects(buildPlugin(f.plugin), /找不到运行依赖 fixture-missing-required/);
 	});
-	await t.test("传递依赖缺失", async (t) => {
+	test("传递依赖缺失", async (t) => {
 		const f = await fixture(t, { "fixture-root": "1.0.0" });
 		const root = await f.package("root", { name: "fixture-root", dependencies: { "fixture-missing-required": "1.0.0" } });
 		await f.link(f.plugin, "fixture-root", root);
@@ -290,13 +290,13 @@ test("直接或传递的必需依赖缺失时报错", async (t) => {
 	});
 });
 
-test("已安装 optional 包的损坏清单和读取错误不能当成依赖缺失吞掉", async (t) => {
+describe("已安装 optional 包的损坏清单和读取错误不能当成依赖缺失吞掉", () => {
 	for (const [kind, title] of [
 		["json", "损坏清单"],
 		["io", "读取错误"],
 		["path", "定位错误"],
 	]) {
-		await t.test(title, async (t) => {
+		test(title, async (t) => {
 			const f = await fixture(t, { "fixture-root": "1.0.0" });
 			const root = await f.package("root", { name: "fixture-root", optionalDependencies: { "fixture-broken": "1.0.0" } });
 			await f.link(f.plugin, "fixture-root", root);
@@ -317,7 +317,7 @@ test("已安装 optional 包的损坏清单和读取错误不能当成依赖缺�
 
 test("打包时按目标裁：别的平台的分包、prebuilds 目录都删掉，目标那份留着", async (t) => {
 	const work = await mkdtemp(join(tmpdir(), "plume-trim-native-"));
-	t.after(() => rm(work, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(work, { recursive: true, force: true }));
 	const write = async (path, content) => {
 		await mkdir(dirname(join(work, path)), { recursive: true });
 		await writeFile(join(work, path), content);

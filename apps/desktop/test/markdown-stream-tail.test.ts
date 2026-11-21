@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { parseMarkdown, parseMarkdownChunks } from "../src/renderer/markdown/blocks.ts";
 import { parseInline } from "../src/renderer/markdown/inline.ts";
 import { completeTail, completeTailHeld } from "../src/renderer/markdown/stream-tail.ts";

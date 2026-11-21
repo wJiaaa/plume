@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import { createSideChatBindings } from "../src/bindings.ts";
 
 async function fixture(t: TestContext) {
 	const dir = await mkdtemp(join(tmpdir(), "plume-side-chat-bindings-"));
-	t.after(() => rm(dir, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(dir, { recursive: true, force: true }));
 	const sides = new Map<string, { parentId: string; createdAt: number }>();
 	const deleted: string[] = [];
 	let clock = 0;

@@ -10,7 +10,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { anthropicMessagesProvider, resetThinkingReplay } from "../src/ai/anthropic-messages.ts";
 import { thinkingOptionsFor } from "../src/ai/thinking-options.ts";
 import type { AssistantMessage, ModelConfig, ProviderConfig, RequestOptions } from "../src/types.ts";

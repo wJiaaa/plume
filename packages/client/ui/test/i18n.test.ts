@@ -1,10 +1,10 @@
 /**
  * 界面文案的两份目录（中文、英文）：key 一样、`{变量}` 一样、复数形式齐全，以及语言怎么选。
- * 类型保证了 en 不缺 key，但 `node --test` 只剥类型不检查，类型也看不到字符串里面。
+ * 类型保证了 en 不缺 key，但 vitest 只剥类型不检查，类型也看不到字符串里面。
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { formatList } from "../src/i18n/list.ts";
 import { resolveUiLocale } from "../src/i18n/locales.ts";
 import { MESSAGE_CATALOGS, type MessageKey, type PluralForms, type ResolvedUiLocale } from "../src/i18n/messages/index.ts";

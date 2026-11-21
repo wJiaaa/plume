@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { treeRows } from "../src/renderer/files/useFileTree.ts";
 import { DRAGGED_PATHS, droppedPaths, isDescendantPath, joinPath, parentOf, relativeTo, rootOf, splitExtension } from "../src/renderer/files/paths.ts";
 import { connectFiles, findFile, openFileIn, fileOf, isFolder, moveFiles, removeFiles, setFileRemovedHandler } from "../src/renderer/files/open-file.ts";

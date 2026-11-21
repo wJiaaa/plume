@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import type { HookLayer, Message, ParentSession, ParentStatus, PluginContext, SessionLaunch, SessionSummary, ToolDefinition, ToolRun } from "@plume/contract";
 import { CARRY_ON, CONTROL_MAIN, DISPATCH_TASK, cardTitle, isDispatchSuggestion } from "../src/controls.ts";
 import type { SideChatApi } from "../src/api.ts";
@@ -77,7 +77,7 @@ test("control_main：暂停、废清单、接着做、看状态当场生效，�
 
 async function fixture(t: TestContext) {
 	const directory = mkdtempSync(join(tmpdir(), "plume-side-chat-"));
-	t.after(() => rmSync(directory, { recursive: true, force: true }));
+	t.onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
 	const summaries: SessionSummary[] = [
 		{ id: "main", title: "", cwd: "/w", project: "p1", running: false, createdAt: 0, updatedAt: 0 } as SessionSummary,
 		{ id: "side", title: "", cwd: "/w", running: false, createdAt: 0, updatedAt: 0, parentId: "main", owner: "plume.side-chat" } as SessionSummary,

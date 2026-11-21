@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { createPluginRegistry } from "../src/renderer/plugin-registry.ts";
 
 test("槽位：按 order 稳定排序，order 相同的保持放入先后；同 key 再放换掉旧的、排到同 order 的最后", () => {

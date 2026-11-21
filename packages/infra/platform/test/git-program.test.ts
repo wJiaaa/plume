@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { gitProgram } from "../src/git.ts";
 
 test("Windows 上用 PATH 上的 git，从不用仓库里放着的那个", () => {

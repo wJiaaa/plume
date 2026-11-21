@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 import { expandTemplate, splitArguments } from "../src/expand.ts";
 import type { CommandProvider, PluginContext } from "@plume/contract";
 import type { CommandsApi } from "../src/api.ts";
@@ -81,10 +81,10 @@ test("deliver：认 steer、followUp，prompt 等于没写；写错的照默认�
 
 test("/commands 打开设置里的命令管理，不发消息；带了话不吞；同名的命令文件被它遮住", async (t) => {
 	const home = await mkdtemp(join(tmpdir(), "plume-commands-manage-"));
-	t.after(() => rm(home, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(home, { recursive: true, force: true }));
 	const prior = process.env.CLAUDE_CONFIG_DIR;
 	process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
-	t.after(() => {
+	t.onTestFinished(() => {
 		if (prior === undefined) delete process.env.CLAUDE_CONFIG_DIR;
 		else process.env.CLAUDE_CONFIG_DIR = prior;
 	});
@@ -106,10 +106,10 @@ test("/commands 打开设置里的命令管理，不发消息；带了话不吞�
 
 test("设置页切到项目：列出项目和个人两层；项目的文件只在看着那个项目时认；没选项目不能建项目命令", async (t) => {
 	const home = await mkdtemp(join(tmpdir(), "plume-commands-scope-"));
-	t.after(() => rm(home, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(home, { recursive: true, force: true }));
 	const prior = process.env.CLAUDE_CONFIG_DIR;
 	process.env.CLAUDE_CONFIG_DIR = join(home, "claude");
-	t.after(() => {
+	t.onTestFinished(() => {
 		if (prior === undefined) delete process.env.CLAUDE_CONFIG_DIR;
 		else process.env.CLAUDE_CONFIG_DIR = prior;
 	});

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { SessionView } from "@plume/contract";
 import { callCount, elapsed, ordered } from "../src/format.ts";
 import { dispatchFromProgress, isDispatch, reportProse, wayBack, type TaskRecord } from "../src/types.ts";

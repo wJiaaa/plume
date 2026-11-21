@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { CompactionRun, Hiccup, Message } from "@plume/contract";
 import { runs } from "../src/renderer/conversation/grouping.ts";
 import { RunsCache, TurnBlocksCache } from "../src/renderer/conversation/transcript-shape.ts";

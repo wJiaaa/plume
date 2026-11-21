@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { normalizeImageMediaType, toAnthropicMessages, wellFormedDeep } from "../src/ai/anthropic-messages-request.ts";
 import { emptyUsage, type AssistantMessage, type Message, type ToolResultMessage } from "../src/types.ts";
 

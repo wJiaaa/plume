@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import test, { type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import { openMarket, serveMarket } from "./market-fixture.ts";
 
 async function plugin(dir: string, body = "export default {};") {

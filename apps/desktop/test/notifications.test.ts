@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { AgentEvent, Locale, SessionSummary } from "@plume/contract";
 import { createNotifications } from "../src/main/notifications.ts";
 const summary: SessionSummary = { id: "parent", title: "写说明", cwd: "/work", createdAt: 0, updatedAt: 1, running: false };

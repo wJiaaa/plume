@@ -66,16 +66,12 @@ export class UpdateDownload {
 	 * 一个是失败、要告诉窗口，错误本身分不出来。
 	 */
 	private pausing = false;
-	// 不写成构造参数属性：`node --test` 剥类型时那种写法会生成代码，Node 直接拒绝。
-	private target: DownloadTarget;
 	/** 正在跑的那一轮，`pause` 等它真的停下（阶段在它的 catch 里才变成 paused）。 */
 	private running: Promise<UpdatePhase> | null = null;
 	/** 正在做的下载之后那一步，见 `install`。 */
 	private installing: Promise<void> | null = null;
 
-	constructor(target: DownloadTarget) {
-		this.target = target;
-	}
+	constructor(private readonly target: DownloadTarget) {}
 
 	get state(): UpdatePhase {
 		return this.phase;

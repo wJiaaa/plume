@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { installPlugin } from "../lib/install.mjs";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jv1sAAAAASUVORK5CYII=", "base64");
 
 test("安装和重新安装带上根目录图标，缺图标仍可安装且不会残留旧图标", (t) => {
 	const work = mkdtempSync(join(tmpdir(), "plume-install-icon-"));
-	t.after(() => rmSync(work, { recursive: true, force: true }));
+	t.onTestFinished(() => rmSync(work, { recursive: true, force: true }));
 	const source = join(work, "example");
 	const root = join(work, "plugins");
 	mkdirSync(join(source, "dist"), { recursive: true });

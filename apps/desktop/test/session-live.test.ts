@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { AgentEvent, AgentService, AssistantMessage, Message, SessionView, ToolResultMessage, UserMessage } from "@plume/contract";
 import type { Remote } from "@plume/rpc";
 import { applyLive, readSessionView, viewChange } from "../src/renderer/session-live.ts";

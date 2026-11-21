@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import { BUILTIN_AGENTS, builtinAgents } from "../src/agents.ts";
 import { AgentDefinitions, parseAgent, renderAgent } from "../src/definitions.ts";
 import { MESSAGES } from "../src/messages.ts";
@@ -16,7 +16,7 @@ function fixture(t: TestContext) {
 	const project = join(root, "project");
 	mkdirSync(project);
 	mkdirSync(join(root, ".Trash"));
-	t.after(() => rmSync(root, { recursive: true, force: true }));
+	t.onTestFinished(() => rmSync(root, { recursive: true, force: true }));
 	const write = (dir: string, file: string, raw: string) => {
 		mkdirSync(dir, { recursive: true });
 		writeFileSync(join(dir, file), raw);

@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { Message } from "@plume/contract";
 import { questionsIn, questionWindow, timeSeparators } from "../src/renderer/conversation/question-navigation.ts";
 import { withQuotes } from "../src/renderer/conversation/quote.ts";

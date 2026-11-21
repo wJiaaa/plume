@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { manifestProblems, readCatalogInfo, readManifest } from "../lib/manifest.mjs";
 
 test("package.json 读成说明：去掉空白，类型不对的、空的当没写，kind 缺省是普通插件", () => {

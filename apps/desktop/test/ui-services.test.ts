@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { provideUiService, removeUiServices, uiService } from "../src/renderer/ui-services.ts";
 
 test("界面侧服务：后提供的生效，撤下恢复前一个，没人提供是 undefined", (t) => {
-	t.after(() => {
+	t.onTestFinished(() => {
 		removeUiServices("example.builtin");
 		removeUiServices("example.market");
 	});
@@ -20,7 +20,7 @@ test("界面侧服务：后提供的生效，撤下恢复前一个，没人提�
 });
 
 test("界面侧服务：同一插件再提供同名的换掉自己前一个并排到最后，别的服务不受影响", (t) => {
-	t.after(() => {
+	t.onTestFinished(() => {
 		removeUiServices("example.a");
 		removeUiServices("example.b");
 	});

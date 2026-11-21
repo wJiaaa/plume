@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 import { DeferredSessions } from "../src/deferred.ts";
 
 test("改成按需搜索的会话记进文件：重开（新建一份）还在，删掉的会话一起抹掉", async () => {

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { after, test } from "node:test";
+import { afterAll, test } from "vitest";
 import { initPlugin } from "../lib/init.mjs";
 import { lintPlugin } from "../lib/lint/index.mjs";
 
@@ -15,7 +15,7 @@ const sdk = resolve(import.meta.dirname, "..");
 const version = JSON.parse(readFileSync(join(sdk, "package.json"), "utf8")).version;
 const work = mkdtempSync(join(tmpdir(), "plume-plugin-workspace-"));
 
-after(() => rmSync(work, { recursive: true, force: true }));
+afterAll(() => rmSync(work, { recursive: true, force: true }));
 
 test("别的 workspace 里 init：SDK 依赖是 npm 上的版本号", () => {
 	writeFileSync(join(work, "pnpm-workspace.yaml"), "packages:\n  - plugins/*\n");

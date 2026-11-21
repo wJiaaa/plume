@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { cleanAppearance, patchAppearance, resetAppearancePatch, type Appearance } from "../src/shared/appearance.ts";
 import { codePalette } from "../src/renderer/code-appearance.ts";
 import { DARK_CODE_THEMES, LIGHT_CODE_THEMES, findCodeTheme } from "../../../packages/client/ui/src/lib/code/themes.ts";

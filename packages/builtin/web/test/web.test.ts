@@ -5,7 +5,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { PluginSecrets, ToolRun } from "@plume/contract";
 import type { SearchKeys } from "../src/api.ts";
 import { htmlToText } from "../src/html-text.ts";

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { Documents } from "../src/documents.ts";
 import { isDocumentList, MAX_DOCUMENT_BYTES, MAX_DOCUMENTS } from "../src/document-types.ts";
 import { mcpResult } from "../src/tools.ts";

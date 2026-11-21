@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { fetchWithRetry, retryStream } from "../src/ai/retry.ts";
 
 /** A socket dying mid-stream, exactly as undici reports it. */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import test from "node:test";
+import { test, type TestContext, vi } from "vitest";
 import { openMarket, serveMarket } from "./market-fixture.ts";
 
 const plugin = (id: string, version: string, body = "export default {};") => ({
@@ -11,7 +11,7 @@ const plugin = (id: string, version: string, body = "export default {};") => ({
 });
 
 /** 装上 1.0.0，市场随后发出 1.1.0：落后一版，等着更新。 */
-async function behindOneVersion(t: test.TestContext, busy: () => boolean) {
+async function behindOneVersion(t: TestContext, busy: () => boolean) {
 	const served = await serveMarket(t);
 	await served.publish([plugin("example", "1.0.0")]);
 	const opened = await openMarket(t, served.url, { busy });
@@ -24,8 +24,12 @@ test("自动更新等会话空闲：有会话在跑时不换插件、照常列�
 	let busy = true;
 	let asked = 0;
 	const { market, added, removed, target } = await behindOneVersion(t, () => (asked++, busy));
-	t.mock.timers.enable({ apis: ["setTimeout"] });
-	t.after(() => market.stop());
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	// 先停市场（它要 clearTimeout 假计时器），再换回真的。
+	t.onTestFinished(async () => {
+		await market.stop();
+		vi.useRealTimers();
+	});
 
 	let state = await market.setAutoUpdate(true);
 	assert.deepEqual(state.outdated, [{ id: "example", name: "example", version: "1.1.0" }]);
@@ -37,14 +41,14 @@ test("自动更新等会话空闲：有会话在跑时不换插件、照常列�
 	assert.equal(asked, 2);
 
 	// 一分钟后还在忙：接着等。
-	t.mock.timers.tick(60_000);
+	vi.advanceTimersByTime(60_000);
 	// 人点「更新」排在重试后面，传空名单什么都不换，只为等重试做完。
 	await market.update([]);
 	assert.equal(asked, 3);
 	assert.deepEqual(removed, []);
 
 	busy = false;
-	t.mock.timers.tick(60_000);
+	vi.advanceTimersByTime(60_000);
 	await market.update([]);
 	assert.equal(asked, 4);
 	assert.deepEqual(removed, ["example"]);

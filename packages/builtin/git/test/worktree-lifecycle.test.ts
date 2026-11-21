@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, test } from "node:test";
+import { afterEach, beforeEach, test } from "vitest";
 import type { SessionWorktree } from "../src/worktree/api.ts";
 import { cleanOldWorktrees, createSessionWorktree, reclaimWorktree, restoreWorktree, worktreeState } from "../src/worktree/lifecycle.ts";
 import { abortSync, mergeIntoBase, syncFromBase } from "../src/worktree/merge.ts";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { SessionSummary, ToolResultMessage } from "@plume/contract";
 import type { SessionChange } from "@plume/contract/ui";
 import { publishSessionChanges, subscribeSessionChanges } from "../src/renderer/plugin-session-changes.ts";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { matchingToolCards } from "../src/renderer/tool-card-matching.ts";
 
 test("精确卡片优先于动态工具族；前缀按 order、注册顺序排列并能撤销", () => {

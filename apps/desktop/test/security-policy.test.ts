@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { isRemoteOrDevicePath } from "../src/shared/remote-path.ts";
 import { opensAsProgram } from "../src/main/security-policy.ts";
 

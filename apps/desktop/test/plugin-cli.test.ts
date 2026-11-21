@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { cmdPath, pluginCliScripts } from "../src/main/plugin-cli.ts";
 
 test("sh：路径用单引号包住，空格、$、单引号都不被 shell 解释", () => {

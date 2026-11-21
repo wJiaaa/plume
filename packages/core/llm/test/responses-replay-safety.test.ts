@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { openaiResponsesProvider } from "../src/ai/openai-responses.ts";
 import { toResponsesInput } from "../src/ai/openai-responses-request.ts";
 import type { AssistantMessage, Message, ModelConfig, ProviderConfig } from "../src/types.ts";

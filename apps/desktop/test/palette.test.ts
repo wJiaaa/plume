@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { rankEntries, scoreEntry } from "../src/renderer/sidebar/palette.ts";
 
 test("命令名精确匹配高于会话里包含该词，同分保持最近顺序", () => {

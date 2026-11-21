@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { nativeText } from "../src/main/i18n.ts";
 
 test("会话库打不开：两种语言都填上路径和原因，原因里的 $& 原样留着", () => {

@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { normalizeToolSchema, toAnthropicTools } from "../src/ai/anthropic-messages-request.ts";
 import type { ToolSpec } from "../src/types.ts";
 

@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { fileLinkCaption, filePathInCode, filePathInUrl, splitLineSuffix } from "../src/renderer/markdown/file-link.ts";
 
 test("写成路径的文字，签上留文件名，路径进提示", () => {

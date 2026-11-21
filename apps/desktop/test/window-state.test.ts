@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { reopenMaximized, stateToSave } from "../src/main/window-bounds.ts";
 
 const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height });

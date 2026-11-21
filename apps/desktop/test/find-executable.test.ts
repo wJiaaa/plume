@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { candidateNames, envValue, findExecutable, searchDirs } from "../src/main/find-executable.ts";
 
 test("Windows 按 PATHEXT 挨个试扩展名：磁盘上的是 gofmt.exe", () => {

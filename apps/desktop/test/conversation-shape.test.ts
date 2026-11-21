@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { AssistantMessage, Hiccup, Message, RegisteredToolInfo, ToolKind } from "@plume/contract";
 import type { ToolLine } from "@plume/contract/ui";
 import { runKey, runs } from "../src/renderer/conversation/grouping.ts";

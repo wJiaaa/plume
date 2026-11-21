@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 test("会话删掉了：存下的路径结论里它的那几条一起清掉，别的会话的留着", async () => {
 	const entries = new Map<string, string>([

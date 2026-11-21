@@ -5,7 +5,7 @@
  * 好的时候没用，坏的时候误导人。所以认得出的几种换个说法：发生了什么、该怎么办。认不出的原样放过去——翻错了比不翻更糟，
  * 原文至少还搜得到。
  *
- * 写成纯函数，`node --test` 能逐条验证。词条由调用方的 `translate` 查，见 `groupNotices`。
+ * 写成纯函数，单测能逐条验证。词条由调用方的 `translate` 查，见 `groupNotices`。
  */
 
 import type { MessageKey } from "@plume/ui";

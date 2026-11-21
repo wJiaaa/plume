@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { touchedFile } from "../src/renderer/markdown/touched-file.ts";
 
 const cwd = "/repo";

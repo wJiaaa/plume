@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, test } from "node:test";
+import { afterEach, beforeEach, test } from "vitest";
 import type { PluginContext, PromptSubmit, PromptVerdict, SessionScope, SessionSummary, SessionWorktreeService } from "@plume/contract";
 import type { GitApi } from "../src/api.ts";
 import type { WorktreeApi } from "../src/worktree/api.ts";

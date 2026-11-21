@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { FIT_LEVELS, MAX_FIT_LEVEL, MIN_NAME_WIDTH, nextLevel, settle, tight } from "../src/renderer/composer/fit.ts";
 
 test("名字放得下不算紧", () => {

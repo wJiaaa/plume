@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { type Inline, parseInline } from "../src/renderer/markdown/inline.ts";
 import { stripEmoji } from "../src/renderer/markdown/strip-emoji.ts";
 

@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { CANDIDATES, type Candidate, candidatesFor, launchPlan } from "../src/main/open-target-ids.ts";
 import { cmdInvocation } from "../src/main/windows-command.ts";
 

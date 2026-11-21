@@ -8,23 +8,13 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, normalize } from "node:path";
-import type { TestContext } from "node:test";
+import { type TestContext, vi } from "vitest";
+import { createMarket } from "../src/main/market.ts";
 import { TARGET } from "../src/main/market-remote.ts";
 
-const electron = registerHooks({
-	resolve(specifier, context, nextResolve) {
-		if (specifier === "electron")
-			return {
-				url: 'data:text/javascript,export const app = { getPreferredSystemLanguages: () => ["zh-CN"] }, BrowserWindow = {}, ipcMain = {}, shell = {};',
-				shortCircuit: true,
-			};
-		return nextResolve(specifier, context);
-	},
-});
-const { createMarket } = await import("../src/main/market.ts").finally(() => electron.deregister());
+vi.mock("electron", () => ({ app: { getPreferredSystemLanguages: () => ["zh-CN"] }, BrowserWindow: {}, ipcMain: {}, shell: {} }));
 
 export interface FixturePlugin {
 	id: string;
@@ -59,7 +49,7 @@ export async function serveMarket(t: TestContext) {
 		);
 	});
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	t.after(async () => {
+	t.onTestFinished(async () => {
 		server.closeAllConnections();
 		await new Promise((resolve) => server.close(resolve));
 		await rm(root, { recursive: true, force: true });
@@ -111,7 +101,7 @@ export async function serveMarket(t: TestContext) {
 /** 开一个连着 catalogUrl 的市场，自动更新关着；added、removed 是让 agent 进程加载、卸下的插件；busy 是 agent 进程有没有会话在跑，缺省一直闲着。 */
 export async function openMarket(t: TestContext, catalogUrl: string, { busy = () => false }: { busy?: () => boolean } = {}) {
 	const work = await mkdtemp(join(tmpdir(), "plume-market-"));
-	t.after(() => rm(work, { recursive: true, force: true }));
+	t.onTestFinished(() => rm(work, { recursive: true, force: true }));
 	const settingsFile = join(work, "market.json");
 	await writeFile(settingsFile, JSON.stringify({ autoUpdate: false }));
 	const added: string[] = [];

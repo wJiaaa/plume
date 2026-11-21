@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { anthropicMessagesProvider, learnThinkingReplay, resetThinkingReplay } from "../src/ai/anthropic-messages.ts";
 import { toAnthropicMessages } from "../src/ai/anthropic-messages-request.ts";
 import { emptyUsage, type AssistantMessage, type Message, type ModelConfig, type ProviderConfig, type StopReason } from "../src/types.ts";

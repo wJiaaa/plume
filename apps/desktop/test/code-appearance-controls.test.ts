@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { readableInk } from "../src/renderer/settings/readable-ink.ts";
 import { CODE_FONTS, codeFontMenu, matchCodeFont } from "../src/renderer/settings/code-fonts.ts";
 

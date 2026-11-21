@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext } from "vitest";
 import type { CommandProvider, Message, PluginContext, SessionMessage, SessionObservation, SessionSummary, StopReason } from "@plume/contract";
 import type { SideChatApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
@@ -17,7 +17,7 @@ const textOf = (message: string | SessionMessage) =>
  */
 async function fixture(t: TestContext) {
 	const directory = mkdtempSync(join(tmpdir(), "plume-side-chat-"));
-	t.after(() => rmSync(directory, { recursive: true, force: true }));
+	t.onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
 	const summaries: SessionSummary[] = [
 		{ id: "main", title: "", cwd: "/w", running: false, createdAt: 0, updatedAt: 0 } as SessionSummary,
 		{ id: "side", title: "", cwd: "/w", running: false, createdAt: 0, updatedAt: 0, parentId: "main", owner: "plume.side-chat" } as SessionSummary,

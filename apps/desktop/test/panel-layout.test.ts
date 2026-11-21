@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { panelArrangement, panelHeightFor, panelWidthFor, readPanelPrefs, readPanelTabs, writePanelPrefs, writePanelTabs } from "../src/renderer/layout.ts";
 import { panelGeometry } from "../src/renderer/panel-layout.ts";
 

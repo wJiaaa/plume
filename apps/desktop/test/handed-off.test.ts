@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { AgentEvent, SessionSummary } from "@plume/contract";
 import type { SessionActivity } from "@plume/contract/ui";
 import { handedOffFrom, noteSessionDoing, sessionDoing } from "../src/renderer/conversation/handed-off.ts";

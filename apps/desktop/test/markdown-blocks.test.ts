@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { type Block, parseMarkdown } from "../src/renderer/markdown/blocks.ts";
 
 function only(blocks: Block[], kind: Block["kind"]): Block {

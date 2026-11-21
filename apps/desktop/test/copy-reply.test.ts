@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { copyReply } from "../src/renderer/markdown/copy-reply.ts";
 
 test("复制扩展只处理闭合围栏并保留其他原文和空行", () => {

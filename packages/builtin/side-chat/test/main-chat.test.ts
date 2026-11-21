@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { Message } from "@plume/contract";
 import { mainChatContext, mainChatExcerpt, markBefore, readHistory, withMark } from "../src/main-chat.ts";
 

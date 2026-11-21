@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { classifyFailure, messageFromBody, serverDelayMs, worthRetrying } from "../src/ai/failure.ts";
 import { RetryBudget, fetchWithRetry } from "../src/ai/retry.ts";

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import childProcess, { ChildProcess, spawn, type SpawnOptions } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { PassThrough } from "node:stream";
-import test, { type TestContext } from "node:test";
+import { test, type TestContext, vi } from "vitest";
 import { stopProcessTree } from "../scripts/stop-process.mjs";
 
 test("结束一个不肯自己退出的子进程，而不是一直等下去", { skip: process.platform === "win32" }, async () => {
@@ -26,19 +26,20 @@ function windowsFixture(t: TestContext) {
 	assert.ok(platform);
 	const child = Object.assign(new ChildProcess(), { pid: 43210, stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough() });
 	const killer = Object.assign(new ChildProcess(), { stdout: new PassThrough(), stderr: new PassThrough() });
-	const unref = t.mock.method(child, "unref", () => child);
-	const spawned = t.mock.method(childProcess, "spawn", (command: string, args: readonly string[], options: SpawnOptions) => {
+	const unref = vi.spyOn(child, "unref").mockImplementation(() => child);
+	const spawned = vi.spyOn(childProcess, "spawn").mockImplementation(((command: string, args: readonly string[], options: SpawnOptions) => {
 		assert.equal(command, "taskkill");
 		assert.deepEqual(args, ["/PID", String(child.pid), "/T", "/F"]);
 		assert.equal(options.timeout, 5_000);
 		return killer;
-	});
+	}) as unknown as typeof childProcess.spawn);
 	// 内置模块的具名导入是一份拷贝，这一步才让它指向替身。
 	syncBuiltinESMExports();
 	Object.defineProperty(process, "platform", { ...platform, value: "win32" });
-	t.mock.timers.enable({ apis: ["setTimeout"] });
-	t.after(() => {
-		spawned.mock.restore();
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	t.onTestFinished(() => {
+		vi.useRealTimers();
+		spawned.mockRestore();
 		syncBuiltinESMExports();
 		Object.defineProperty(process, "platform", platform);
 		for (const stream of [child.stdin, child.stdout, child.stderr, killer.stdout, killer.stderr]) stream.destroy();
@@ -72,7 +73,7 @@ test("Windows：taskkill 先结束、目标的退出通知后到时，等它到�
 	child.emit("exit", 1, null);
 	assert.equal(await outcome, null);
 	assert.ok([child.stdin, child.stdout, child.stderr].every((stream) => stream.destroyed));
-	assert.equal(unref.mock.callCount(), 1);
+	assert.equal(unref.mock.calls.length, 1);
 });
 
 test("Windows：目标到点还没退出时，报出 taskkill 说了什么", async (t) => {
@@ -92,15 +93,15 @@ test("Windows：目标到点还没退出时，报出 taskkill 说了什么", asy
 	killer.stderr.write("Access is denied.");
 	killer.emit("close", 1, null);
 	await drained();
-	t.mock.timers.tick(999);
+	vi.advanceTimersByTime(999);
 	await drained();
 	assert.equal(settled, false);
-	t.mock.timers.tick(1);
+	vi.advanceTimersByTime(1);
 	const error = await outcome;
 	assert.ok(error instanceof Error);
 	assert.match(error.message, /taskkill 没能结束进程 43210（退出码 1，信号 null）：Failed PID 43210\. Access is denied\./);
 	assert.ok([child.stdin, child.stdout, child.stderr].every((stream) => stream.destroyed));
-	assert.equal(unref.mock.callCount(), 1);
+	assert.equal(unref.mock.calls.length, 1);
 });
 
 test("Windows：taskkill 起不来时报错，管道照样放开", async (t) => {
@@ -110,5 +111,5 @@ test("Windows：taskkill 起不来时报错，管道照样放开", async (t) => 
 	killer.emit("error", failure);
 	await result;
 	assert.ok([child.stdin, child.stdout, child.stderr].every((stream) => stream.destroyed));
-	assert.equal(unref.mock.callCount(), 1);
+	assert.equal(unref.mock.calls.length, 1);
 });

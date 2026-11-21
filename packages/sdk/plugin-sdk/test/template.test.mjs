@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { after, before, test } from "node:test";
+import { afterAll, beforeAll, test } from "vitest";
 import { pathToFileURL } from "node:url";
 import { buildPlugin } from "../lib/build.mjs";
 import { checkPlugin } from "../lib/check.mjs";
@@ -20,12 +20,12 @@ const sdk = resolve(import.meta.dirname, "..");
 const work = mkdtempSync(join(tmpdir(), "plume-plugin-sdk-"));
 const dir = join(work, "hello-world");
 
-before(() => {
+beforeAll(() => {
 	assert.ok(existsSync(join(sdk, "dist/ui.d.ts")), "先生成 SDK 的类型声明：pnpm --filter @plumeai/plugin-sdk typecheck");
 	initPlugin(dir);
 });
 
-after(() => rmSync(work, { recursive: true, force: true }));
+afterAll(() => rmSync(work, { recursive: true, force: true }));
 
 test("init 出独立项目：不写依赖，SDK 链进 node_modules，带上 skill 和给 agent 的说明", () => {
 	const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));

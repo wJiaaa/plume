@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { streamAssistant, useLlmRegistry } from "../src/ai/index.ts";
 import { emptyUsage, type AssistantMessage, type ModelConfig, type Provider, type ProviderConfig, type StreamEvent } from "../src/types.ts";

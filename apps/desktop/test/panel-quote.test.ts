@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { panelQuoteFrom } from "../src/main/panel-quote.ts";
 
 test("跨窗引用保留来源和换行，不把额外发送参数带回主窗口", () => {

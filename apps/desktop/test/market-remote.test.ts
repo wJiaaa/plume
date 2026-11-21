@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { allowedUrl, fetchBytes, TARGET } from "../src/main/market-remote.ts";
 import { openMarket, serveMarket } from "./market-fixture.ts";
 

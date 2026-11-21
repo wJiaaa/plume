@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { toChatCompletionsMessages } from "../src/ai/openai-chat-completions-request.ts";
 import { toResponsesInput } from "../src/ai/openai-responses-request.ts";
 import { emptyUsage } from "../src/types.ts";

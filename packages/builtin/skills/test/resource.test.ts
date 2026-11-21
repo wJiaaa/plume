@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, before, test } from "node:test";
+import { afterAll, beforeAll, test } from "vitest";
 import type { ResourceAddress, ResourceScope } from "@plume/contract";
 import type { Skill } from "../src/loader.ts";
 import { skillResource } from "../src/resource.ts";
@@ -10,7 +10,7 @@ import { skillResource } from "../src/resource.ts";
 let root: string;
 let skillDir: string;
 
-before(async () => {
+beforeAll(async () => {
 	root = await mkdtemp(join(tmpdir(), "plume-skill-res-"));
 	skillDir = join(root, "skills", "pdf");
 	await mkdir(join(skillDir, "references"), { recursive: true });
@@ -20,7 +20,7 @@ before(async () => {
 	await symlink(join(root, "secret.txt"), join(skillDir, "escape.txt"));
 });
 
-after(async () => {
+afterAll(async () => {
 	await rm(root, { recursive: true, force: true });
 });
 

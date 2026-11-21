@@ -8,7 +8,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "vitest";
 import type { CallContext, PluginContext, PluginSecrets } from "@plume/contract";
 import type { McpApi, McpView } from "../src/api.ts";
 import { writeServers } from "../src/config.ts";
@@ -87,7 +87,7 @@ async function fakeServer(): Promise<{ origin: string; close: () => Promise<void
 }
 
 /** 装上插件，拿到它经 `ctx.serve` 开出来的接口；`servers.json` 里只有一台指向假服务的 http 服务。 */
-async function served(t: { after: (fn: () => Promise<void>) => void }): Promise<{ api: McpApi; origin: string }> {
+async function served(t: TestContext): Promise<{ api: McpApi; origin: string }> {
 	const fake = await fakeServer();
 	const dir = await mkdtemp(join(tmpdir(), "plume-mcp-login-"));
 	const effects: (() => void | Promise<void>)[] = [];
@@ -112,7 +112,7 @@ async function served(t: { after: (fn: () => Promise<void>) => void }): Promise<
 	} as unknown as PluginContext;
 	await writeServers(join(dir, "servers.json"), [{ id: "remote", name: "remote", transport: "http", url: `${fake.origin}/mcp`, enabled: true }], {});
 	await mcpPlugin.apply(ctx);
-	t.after(async () => {
+	t.onTestFinished(async () => {
 		for (const fn of effects) await fn();
 		await fake.close();
 		await rm(dir, { recursive: true, force: true });

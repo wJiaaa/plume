@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, test } from "node:test";
+import { afterEach, beforeEach, test } from "vitest";
 import { commitDiff, commitDiffSummary, diffRefs } from "../src/git/history.ts";
 import { stagePaths, unstagePaths } from "../src/git/status.ts";
 import { usePlainView } from "./plain-view.ts";

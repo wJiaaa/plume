@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { applicationMenuTemplate } from "../src/main/app-menu.ts";
 
 type Item = { role?: string; type?: string; label?: string; submenu?: Item[] };

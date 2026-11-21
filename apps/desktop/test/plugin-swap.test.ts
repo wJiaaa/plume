@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { discard, swapIn } from "../src/main/plugin-swap.ts";
 import { heldOpen, renameWithRetry } from "../src/main/rename-retry.ts";
 

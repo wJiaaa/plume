@@ -1,6 +1,6 @@
 import type { AssistantMessage, CompactionRun, Message, UserMessage } from "@plume/contract";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { contextReading, contextUsed, readingOf, rewrittenFrom } from "../src/renderer/composer/context-usage.ts";
 
 type Usage = AssistantMessage["usage"];

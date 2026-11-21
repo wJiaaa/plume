@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { ChangeLine } from "@plume/contract";
 import { MESSAGES } from "../src/messages.ts";
 import { commentPlace, diffCommentPrompt, diffComments } from "../src/panel/diff-comments.ts";

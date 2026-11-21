@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { test } from "node:test";
+import { test } from "vitest";
 import { chromeKey, chromeProfile, cookieKey, decryptCookie, planSync, readChromeCookies, toCookie } from "../src/main/chrome-cookies.ts";
 
 const key = chromeKey("test-password");

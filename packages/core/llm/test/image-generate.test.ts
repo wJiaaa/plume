@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { imageDimensions, sniffImageType } from "../src/images/dimensions.ts";
 import { generateImages, resetImageRoutes } from "../src/images/generate.ts";
 import { viaChatCompletions } from "../src/images/chat-images.ts";

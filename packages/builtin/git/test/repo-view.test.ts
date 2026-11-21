@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, test } from "node:test";
+import { afterEach, beforeEach, test } from "vitest";
 import { collectCommitPatch } from "../src/git/commit-message.ts";
 import { collectWorkspaceDiff } from "../src/git/diff.ts";
 import { commitDiff, commitDiffSummary, diffRefs, gitLog } from "../src/git/history.ts";

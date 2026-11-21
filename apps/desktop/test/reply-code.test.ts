@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { parseMarkdown, parseMarkdownChunks } from "../src/renderer/markdown/blocks.ts";
 import { completeTail } from "../src/renderer/markdown/stream-tail.ts";
 

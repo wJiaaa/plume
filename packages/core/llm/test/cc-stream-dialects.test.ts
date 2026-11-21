@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { openaiChatCompletionsProvider, resetChatCompletionsCompat } from "../src/ai/openai-chat-completions.ts";
 import { mapFinishReason } from "../src/ai/chat-delta.ts";
 import { resetReasoningCompat } from "../src/ai/reasoning-compat.ts";

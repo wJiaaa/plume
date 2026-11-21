@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { explainGitFailure } from "../src/git/errors.ts";
 import { parseNumstat, parseStatusZ, statusBranch } from "../src/git/parse.ts";
 import { classifyRemote, defaultRemote, remoteOfUpstream } from "../src/git/remote-state.ts";

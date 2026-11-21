@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { ModelConfig } from "../src/renderer/models/store.ts";
 import { importedModel } from "../src/renderer/settings/models/model-defaults.ts";
 import { firstChatModelId } from "../src/renderer/settings/models/model-sync.ts";

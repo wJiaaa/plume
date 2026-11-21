@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { UserMessage } from "@plume/contract";
 import { attachmentBody, attachmentImageLabel } from "../src/renderer/composer/attachments/placeholders.ts";
 import { draftFromMessage, editedContent, lastUserIndex } from "../src/renderer/conversation/revert-draft.ts";

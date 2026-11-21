@@ -20,7 +20,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { toAnthropicMessages } from "../src/ai/anthropic-messages-request.ts";
 import { toResponsesInput } from "../src/ai/openai-responses-request.ts";
 import { sanitizeChatCompletionsHistory, toChatCompletionsMessages } from "../src/ai/openai-chat-completions-request.ts";
