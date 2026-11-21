@@ -17,7 +17,7 @@
 | `pnpm check:styles` | 只跑样式检查（`scripts/check-styles.mjs`），九条规则见 [spec/tech/styling.md](spec/tech/styling.md) |
 | `pnpm check:plugins` | 只跑插件检查（`scripts/check-plugins.mjs`）：插件只引用公开接口；skill 跟得上插件接口；本体不按名字认插件、插件的工具和段，内置插件之间也不按名字互相认（名单在 `scripts/check-core-names.mjs`，规则见 [spec/domain/plugin-primitives.md](spec/domain/plugin-primitives.md)） |
 | `pnpm check:links` | 只查 Markdown 里的相对链接都指向存在的文件（`scripts/check-links.mjs`） |
-| `pnpm check:conventions` | 只查几条能机械判断的约定（`scripts/check-conventions.mjs`）：包放在 `packages/<组>/<包>`（contract 除外）；`@plume/contract` 转出的类型（消息类型、`CallContext`）在定义它们的包以外一律从 `@plume/contract` 引；下面「约定」里的术语不写成别名（名单在脚本里） |
+| `pnpm check:conventions` | 只查几条能机械判断的约定（`scripts/check-conventions.mjs`）：包放在 `packages/<组>/<包>`（contract 除外）；`@plume/contract` 转出的类型（消息类型、`CallContext`）在定义它们的包以外一律从 `@plume/contract` 引；下面「约定」里的术语不写成别名（名单在脚本里）；`packages/core/{agent,loop,sandbox,workspace}/src` 的 TypeScript 文件不超过 800 行（`packages/core/agent/src/host.ts` 例外） |
 | `pnpm arch` | 只查依赖方向（dependency-cruiser，规则在 `.dependency-cruiser.cjs`）；已有的循环登记在 `.dependency-cruiser-known-violations.json`，清掉一处后 `pnpm arch:baseline` 重新生成 |
 | `pnpm lint` / `pnpm lint:fix` | oxlint（`.oxlintrc.json`），警告也算失败 / 能自动修的修掉 |
 | `pnpm fmt` / `pnpm fmt:check` | oxfmt（`.oxfmtrc.json`：tab 缩进、行宽 160，JSON 两个空格，不排 Markdown 和 `packages/core/llm`）全仓排版 / 只查不改 |
@@ -38,7 +38,7 @@
 
 Git 钩子由 lefthook 管（`lefthook.yml`，`pnpm install` 时装上）：pre-commit 对暂存的文件先排版再跑 lint（改过的自动重新暂存；用 `git commit -- <路径>` 提交时改过就拦下，原样再提交一次），并跑样式、文案、插件、链接、约定检查，commit-msg 查提交信息（见 [spec/tech/commits.md](spec/tech/commits.md)），pre-push 跑 `pnpm check` 和 `pnpm knip`，推 `v*` tag 时还查发版文案。
 
-改动插件宿主或循环时，在 `packages/core/agent/test/` 里补测试（`src/testing.ts` 有假模型服务）；改动进程、协议、界面或插件时跑 `pnpm smoke`。`packages/core/llm` 的类型声明在类型检查时生成到 `dist/`。
+改动插件宿主时在 `packages/core/agent/test/` 里补测试（`src/testing.ts` 有假模型服务），改动循环时在 `packages/core/loop/test/` 里补测试；改动进程、协议、界面或插件时跑 `pnpm smoke`。`packages/core/llm` 的类型声明在类型检查时生成到 `dist/`。
 
 ## 约定
 

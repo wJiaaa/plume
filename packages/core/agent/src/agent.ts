@@ -313,7 +313,8 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			return events.pluginsChanged();
 		},
 		busy() {
-			// 列表里删掉了、还没收尾的也算（`active`）；后台看 `waiting`：没跑完的派发、交回了没送达的、刚跑完还在聚合窗口里的、没结束的一次性后台任务；挂着的监视、服务、唤醒不算。
+			// 列表里删掉了、还没收尾的也算（`active`）。后台看 `waiting`：没跑完的派发、交回了没送达的、刚跑完还在聚合窗口里的，
+			// 没结束的一次性后台任务；挂着的监视、服务、唤醒不算。
 			const running = [...sessions.values(), ...turn.active()].some(held);
 			return running || [...sessions.keys()].some((id) => waiting(id));
 		},

@@ -23,7 +23,7 @@
 
 ## 事实来源
 
-- 本体：`packages/core/agent/src/agent.ts` 的 `deleteTree`、`deleteArchivedSessions`、`clearSessions`；`packages/core/agent/src/session-db.ts` 的 `delete`（外键级联）；`packages/core/agent/src/host.ts` 的 `sessionDeleted`（发 `onDeleted`）
+- 本体：`packages/core/agent/src/session/lifecycle.ts` 的 `deleteTree`；`packages/core/agent/src/service/sessions.ts` 的 `deleteArchivedSessions`、`clearSessions`；`packages/core/agent/src/session-db.ts` 的 `delete`（外键级联）；`packages/core/agent/src/host.ts` 的 `sessionDeleted`（发 `onDeleted`）
 - 图：`packages/core/agent/src/media.ts` 的 `mediaNames`、`removeImages`、`sweepImages`；会话库的 `holdMedia`、`mediaInUse`
 - 插件的例子：`packages/builtin/subagents/src/store.ts`（`deleteByParent`）、`packages/builtin/diagnostics/src/store.ts`（`keepOnly`）、`packages/builtin/mcp/src/index.ts`（连接、文档、延迟加载的记录）、`packages/builtin/plan/src/index.ts`、`packages/builtin/prompt/src/presets.ts`、`packages/builtin/side-chat/src/bindings.ts`（`forget`、`keepOnly`）、`packages/builtin/git/src/worktree/serve.ts`（`discardWorktree`）
 - 界面：`apps/desktop/src/renderer/app/sessions.ts` 的 `forgetSessions`、`refresh`；`forgetPanels`、`forgetThreadFolds`、`forgetLocatedPaths`

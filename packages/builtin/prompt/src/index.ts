@@ -7,7 +7,7 @@
  *
  * 身份和准则人能换（设置 › 个性化「身份与准则」，见 `presets.ts`）：一个会话用哪一套在它第一次请求时定下，之后不变。
  *
- * 会话内冻结、中途的改动作为增量送达、消息里的日期和插话说明不在这里，由本体包在整条钩子链外面（`packages/core/agent/src/prompt/`）。
+ * 会话内冻结、中途的改动作为增量送达、消息里的日期和插话说明不在这里，由本体包在整条钩子链外面（`packages/core/loop/src/prompt/`）。
  */
 
 import type { Plugin } from "@plume/contract";
