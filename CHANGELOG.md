@@ -2,6 +2,36 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.8] - 2026-11-21
+
+<!-- plume:notes en -->
+### Changes
+
+- **Compaction no longer throws away your prompt cache again and again.** When a long chat neared its limit, Plume first trimmed old tool output on its own. That usually bought only a little room, so it trimmed again later and then wrote a summary anyway. Each trim changed the start of the history, so the next request paid full price for almost the whole conversation again. Plume now writes the summary as soon as the chat reaches the limit, and the history is rewritten only that one time.
+- **Summaries don't count unconfirmed claims as done.** A compaction summary used to treat what the model said the same way as what tools actually returned. A sub-session the model only claimed to have started, or a background task it made up, could end up in the summary as a real blocker. Now only things backed by a tool result count as done or running. Claims that only the model made are marked as unverified, and claims that were later corrected are dropped.
+- **Sessions that message each other stop when you tell them to.** Two busy sessions writing back and forth could keep each other going past the limit of 10 wake-ups in a row, and a message could restart a session you had just stopped. Messages no longer wake a session you stopped, and the limit now also counts messages read at the end of a turn. Messages that can't wake the other session wait until its user next speaks. The sender is told about this, so its model doesn't assume the other side has taken over.
+- **Sub-session reports arrive on time.** A sub-session woken by its own background work sometimes held its report until you next spoke in the parent chat, even though the parent was idle. Reports now wake the parent right away. A sub-session that finishes first waits at most a minute for its siblings before reporting.
+- **Archived sessions stay quiet.** An archived session could still be woken by a message, a sub-session's report or a finished background task, and run more turns that cost money without showing in the sidebar. Archiving now settles all of these, and messages sent to an archived session are refused.
+- **Undo still covers files changed before a question.** If a tool changed files and then asked you something, and you stopped it while it was waiting, those changes weren't recorded. Undo couldn't revert them and the delivery card didn't list them. They are now recorded like any other change.
+- **"Test connection" works with more relay services.** Some relay services return their model list in a format "Test connection" didn't recognise, so it said no models could be listed even though "Fetch models" worked. Both now read the same formats.
+- **Smoother while replying.** Long chats re-render much less while a reply streams in or tool results arrive. The panel area, the tool rows at the end of a turn and the input bar do less work, and the session database stores messages faster.
+- **The session summary at the top of the environment card is gone.** The session summary plugin has been removed from the plugin market. The environment card now shows just the folder at the top.
+- **Smaller fixes.** The retry countdown no longer stays on screen after a failed retry. Writing credentials or an exported Markdown file no longer leaves temporary files behind when the write fails. Changing an unrelated setting no longer rewrites the credentials file. API keys typed by hand into settings.json are now ignored; enter them in Settings instead.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **压缩不再一次次让缓存作废。** 原来长对话快满时，Plume 先自己剪掉一些旧的工具输出，往往只腾出一点地方，过一阵又剪一次，最后还是要写摘要。每剪一次，历史的开头就变了，下一次请求几乎整段对话都要重新按全价算。现在到线就直接写摘要，历史只在这一次改写。
+- **摘要不再把没证实的事当成做完了。** 原来压缩摘要里，模型自己说的和工具真实返回的分量一样：模型只是说开了子会话、或者编出一个后台任务，摘要里就可能写成真的待办和阻塞。现在只有工具结果能证明的事才算做完、在跑；只有模型说过的标成未核实，后来被纠正过的直接去掉。
+- **互相发信的会话，按了停就停。** 原来两个都在忙的会话互相回信，可以绕过「接连叫起 10 轮」的上限一直跑下去；刚按停的会话，下一封信又把它叫起来。现在信不叫醒按停的会话，一轮收尾时读到的信也算进上限。叫不醒对方的信留到对方的人下次开口时读，发信的一方会被告知，不会以为对方已经接手。
+- **子会话的汇报按时送到。** 原来子会话被它自己的后台任务叫起来做完一轮后，汇报有时一直排着，等你在主会话里开口才出现，哪怕主会话早就闲着。现在汇报当场叫醒主会话；先做完的子会话最多等兄弟会话一分钟，到点就先送。
+- **归档的会话不会再悄悄跑起来。** 原来归档的会话还会被信、子会话的汇报或后台任务的结果叫起，侧栏里看不到，却在调模型花钱。现在归档时把这些一并结掉，寄给归档会话的信直接拒收。
+- **问你之前改过的文件，撤回照样能退。** 原来工具先改了文件、再停下来问你，你在它等答复时按了停，那几处改动就没记下：撤回退不掉，交付卡上也看不到。现在和别的改动一样记上。
+- **「测试连接」认得出更多中转站。** 有些中转站返回模型列表的格式「测试连接」不认，明明「拉取模型」拉得到，它却说列不出模型。现在两边认的格式一样。
+- **回复时更流畅。** 流式输出和工具结果落地时，长对话里写完的旧消息不再整片重画；面板区、一轮收尾时的工具行和输入框那一排也少做了很多无用功，会话库存消息更快。
+- **环境卡片顶上不再有会话摘要。** 会话摘要插件已经从插件市场撤下，环境卡片顶上只写目录名。
+- **几处小修。** 重试失败后，界面上的重试倒计时不再一直挂着。写凭据或导出 Markdown 失败时不再留下临时文件；改别的设置时也不再重写凭据文件。手写进 settings.json 的 API key 不再生效，请在设置里填。
+
 ## [0.7.7] - 2026-11-21
 
 <!-- plume:notes en -->
