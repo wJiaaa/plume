@@ -70,7 +70,8 @@ test("说到一半就断的流不会被当成说完了", async () => {
 	assert.match(String(message.errorMessage), /一半/);
 });
 
-test("断了是可以重发的，重发之后拿到的是完整那次，不是两次拼起来", async () => {
+// 走的是真的重发退避，要等 4 秒多，vitest 默认的 5 秒上限会时过时不过。
+test("断了是可以重发的，重发之后拿到的是完整那次，不是两次拼起来", { timeout: 15_000 }, async () => {
 	const { message, calls } = await run([HALF, WHOLE], 3);
 	assert.equal(calls, 2, "第一次断了就该再问一次");
 	assert.equal(message.stopReason, "stop");
