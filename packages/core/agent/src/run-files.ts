@@ -263,10 +263,11 @@ export class Workspace {
 		return {
 			files,
 			exec: (exec) => async (command, options) => {
+				// 先查调用还在不在：调用答完以后插件手里留着的 `exec` 不能先弹一张提权卡、再因调用已结束而抛错。
+				call.alive("ToolRun.exec");
 				const { recordChanges, ...rest } = options ?? {};
 				await confirmCommandAppData(call, String(command), { ...changeScope, cwd: rest.cwd ?? call.cwd });
 				if (recordChanges !== true) return exec(command, options);
-				call.alive("ToolRun.exec");
 				const observation = await this.commands.begin({ sessionId: call.sessionId, cwd: rest.cwd ?? call.cwd });
 				let process: Awaited<ReturnType<ToolRun["exec"]>>;
 				try {
