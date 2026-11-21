@@ -75,7 +75,12 @@ export function SwapText({ swapKey, glide = false, children }: { swapKey: string
 		if (!(old instanceof HTMLElement) || !(current instanceof HTMLElement)) return;
 		continueGlide(old, current, phase);
 		said.current = current.textContent;
-		width.current = easeWidth(element, current, old.getBoundingClientRect().width);
+		easeWidth(
+			element,
+			current,
+			() => old.getBoundingClientRect().width,
+			(to) => (width.current = to),
+		);
 	}, [leaving]);
 
 	// 同一句的字变了（参数流进来、句尾多了「失败」「+3 −1」）：从原来的宽缓过去。挂上时只记下跑着的那一句有多宽。
@@ -89,7 +94,14 @@ export function SwapText({ swapKey, glide = false, children }: { swapKey: string
 			if (glide) width.current = element.getBoundingClientRect().width;
 			return;
 		}
-		if (width.current !== null && !motionReduced()) width.current = easeWidth(element, current, width.current);
+		const from = width.current;
+		if (from !== null && !motionReduced())
+			easeWidth(
+				element,
+				current,
+				() => from,
+				(to) => (width.current = to),
+			);
 	});
 
 	return (
@@ -136,22 +148,47 @@ export function SwapText({ swapKey, glide = false, children }: { swapKey: string
 	);
 }
 
-/** 框宽缓到 `layer` 的字宽，返回缓向的宽。还在缓时从此刻画着的宽度接着走，不然从 `from`（原来那句的宽）起步。 */
-function easeWidth(element: HTMLElement, layer: HTMLElement, from: number): number {
-	const moving = element.style.width !== "";
-	const start = moving ? element.getBoundingClientRect().width : from;
-	if (moving) element.style.width = "";
-	const to = layer.getBoundingClientRect().width;
-	// 不用缓：缓到一半被放回 auto 的那次过渡已经取消、不会再有 `transitionend`，右沿的渐隐要在这里摘掉，不然一直挂着。
-	if (Math.abs(start - to) < 0.5) {
-		delete element.dataset.moving;
-		return to;
+/**
+ * 框宽缓到 `layer` 的字宽，缓向的宽交给 `done`。还在缓时从此刻画着的宽度接着走，不然从 `from()`（原来那句的宽）起步。
+ *
+ * 不当场做，排到这次提交完、画出来之前一起做：缓一次要读、写、再读、强制排一次版、再写，一行一行各做各的就是每行两次整页排版。
+ * 一轮收尾时十几行一起从「正在…」换成做完的说法，一次提交里交错着排三十多遍版。攒在一起先把要读的读完、再一起写，
+ * 只排三遍。同一个框在这之前又要缓一次（同一次提交里接连变了两回），从最早那次的起点直接缓到最后那句：中间那句没画出来过。
+ */
+function easeWidth(element: HTMLElement, layer: HTMLElement, from: () => number, done: (to: number) => void): void {
+	const queued = easing.get(element);
+	easing.set(element, { layer, from: queued?.from ?? from, done });
+	if (easing.size === 1 && !queued) queueMicrotask(flushEasing);
+}
+
+const easing = new Map<HTMLElement, { layer: HTMLElement; from: () => number; done: (to: number) => void }>();
+
+function flushEasing(): void {
+	const jobs = [...easing].filter(([element, job]) => element.isConnected && job.layer.isConnected);
+	easing.clear();
+	// 先读起点：还在缓的，从此刻画着的宽度接着走。
+	const starts = jobs.map(([element, job]) => (element.style.width !== "" ? element.getBoundingClientRect().width : job.from()));
+	// 放回 auto，再量各自新句的字宽。
+	for (const [element] of jobs) element.style.width = "";
+	const targets = jobs.map(([, job]) => job.layer.getBoundingClientRect().width);
+	const moving: [HTMLElement, number][] = [];
+	for (const [at, [element, job]] of jobs.entries()) {
+		const start = starts[at]!;
+		const to = targets[at]!;
+		job.done(to);
+		// 不用缓：缓到一半被放回 auto 的那次过渡已经取消、不会再有 `transitionend`，右沿的渐隐要在这里摘掉，不然一直挂着。
+		if (Math.abs(start - to) < 0.5) {
+			delete element.dataset.moving;
+			continue;
+		}
+		element.dataset.moving = "";
+		element.style.width = `${start}px`;
+		moving.push([element, to]);
 	}
-	element.dataset.moving = "";
-	element.style.width = `${start}px`;
-	void element.offsetWidth;
-	element.style.width = `${to}px`;
-	return to;
+	if (moving.length === 0) return;
+	// 钉住的起点排进版里，过渡才从它出发。一次就够：几个框的起点都已经写上了。
+	void moving[0]![0].offsetWidth;
+	for (const [element, to] of moving) element.style.width = `${to}px`;
 }
 
 /**
