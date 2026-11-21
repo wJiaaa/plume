@@ -21,6 +21,7 @@ import type { Lifecycle } from "./session/lifecycle.ts";
 import type { ModelRequests } from "./session/model-requests.ts";
 import type { Occupancy } from "./session/occupancy.ts";
 import type { Registry } from "./session/registry.ts";
+import { oneLineTitle } from "./session/session.ts";
 import type { Steward } from "./session/steward.ts";
 import type { Turn } from "./session/turn.ts";
 import type { SessionWakeups } from "./wakeups.ts";
@@ -155,7 +156,7 @@ export async function createHost(deps: CreateHostDeps): Promise<{ host: PluginHo
 			setTitle: async (sessionId, title, options) => {
 				const session = find(String(sessionId));
 				if (options?.automatic && session.summary.titleEdited) return;
-				const cleaned = typeof title === "string" ? title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+				const cleaned = oneLineTitle(title);
 				if (!cleaned || cleaned === session.summary.title) return;
 				session.summary.title = cleaned;
 				saveSummary(session);

@@ -132,7 +132,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		queues: { list: (sessionId) => queues.list(sessionId) },
 		held: (session) => held(session),
 	});
-	const { shownBackgroundCalls, idleWaiters, backgroundChanged, emitBackgroundCalls, parentStatus, syncBackground, waiting, checkIdle, whenIdle } = idle;
+	const { backgroundChanged, emitBackgroundCalls, parentStatus, syncBackground, waiting, checkIdle, whenIdle } = idle;
 	const approvals = createApprovals({ approvalTimeoutMs: options.approvalTimeoutMs, modelSettings, emit, log });
 	const messages = createMessages({
 		...{ mediaDir, messagesOf },
@@ -170,7 +170,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		projects: { find: (projectId) => projects.find(projectId) },
 		...{ modelSettings, store, sessions },
 		...{ applyProjectConfig: governance.applyProjectConfig, emit, summaries, withChildren, find, saveSummary, refreshProject: governance.refreshProject },
-		...{ scratchDir, shownBackgroundCalls, idleWaiters },
+		...{ scratchDir, idle },
 		quitting: () => quitting,
 		background: { cancelSession: (sessionId, fate) => background.cancelSession(sessionId, fate) },
 		jobs: { forget: (sessionId) => jobs.forget(sessionId), stopRunning: (sessionId) => jobs.stopRunning(sessionId) },
@@ -251,7 +251,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const { handed, queues, drainQueue, enqueue, enqueueTask } = queueing;
 	const wake = createWake({ ...{ background }, quitting: () => quitting, ...{ held, sessions }, runTurn: (...args) => turn.runTurn(...args), emit });
 	const dispatch = createDispatch({
-		...{ host, messagesOf, observe, lifecycle, find, recordOf, sessions, begin, whenIdle, store, log },
+		...{ host, messagesOf, readMessages: registry.readMessages, observe, lifecycle, find, recordOf, sessions, begin, whenIdle, log },
 		quitting: () => quitting,
 		...{ background, held },
 		runTurn: (...args) => turn.runTurn(...args),

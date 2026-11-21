@@ -76,20 +76,15 @@ export interface ModelRequestsDeps {
 }
 
 export interface ModelRequests {
-	retryPolicyFor(session?: Session): RequestOptions["retryPolicy"];
 	buildContext(session: Session): Promise<ModelContext>;
 	completeOnce(request: ModelCompletion): Promise<string>;
-	forkOnce(
-		session: Session,
-		provider: ProviderConfig,
-		model: ModelConfig,
-		messages: Message[],
-		signal: AbortSignal | undefined,
-		retried: Pick<RequestOptions, "onRetry">,
-		requireComplete: boolean,
-	): Promise<string>;
 	request(session: Session, context: ModelContext, signal: AbortSignal): Promise<AssistantMessage | "switched">;
 	partsOf(message: AssistantMessage): InputParts | undefined;
+}
+
+/** 回复里的正文，几段接在一起。 */
+function replyText(reply: AssistantMessage): string {
+	return reply.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
 }
 
 export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
@@ -128,6 +123,7 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 	 */
 	async function buildContext(session: Session): Promise<ModelContext> {
 		const settings = await readSessionSettings(session);
+		const record = await recordOf(session);
 		const { model } = resolveModel(settings, modelOf(session));
 		const input: ModelContext = {
 			sessionId: session.summary.id,
@@ -144,7 +140,7 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 			systemPrompt: "",
 			sections: [],
 			// 压缩过的话是摘要加之后的原文，被剪过的结果换成一行（见 `historyFor`），重复的结果换成「这是第 N 次」。
-			messages: structuredClone(replaceRepeats(historyFor(await messagesOf(session), await recordOf(session)), session.repetition.replaced)),
+			messages: structuredClone(replaceRepeats(historyFor(await messagesOf(session), record), session.repetition.replaced)),
 			tools: host.toolSpecs(),
 		};
 		await restoreImages(mediaDir, input.messages);
@@ -152,7 +148,6 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 		 * 冻结、日期、插话说明包在整条钩子链外面（见 `prompt/`）：插件的层不管挂在哪、对段和工具表做了什么，都改不坏前缀缓存。
 		 * 增量、日期和插话说明在钩子链之前加：它们按「跟在本体给的历史里哪一条后面」定位，插件往里插了消息就对不上了。
 		 */
-		const record = await recordOf(session);
 		const prompt = preparePrompt(record.prompt, input.messages);
 		input.messages = withEnvironment(withSteeringNote(prompt.messages));
 		let trace: HookTrace | undefined;
@@ -204,15 +199,31 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 			{ systemPrompt, messages: asked, tools: [] },
 			{ ...(signal ? { signal } : {}), maxTokens: maxTokens ?? model.maxOutputTokens, thinking: "off", retryPolicy: retryPolicyFor(session), ...retried },
 		);
+		return replyText(await settleOnce(session, requestId, stream, signal, request.requireComplete === true));
+	}
+
+	/**
+	 * 一次性调用的收尾：读完流，回复记进观察和花销；人停了、出错了、要说完（`requireComplete`）却没说完都抛错。
+	 * `before` 在停止检查之后、出错检查之前：分叉对不上时请求根本没发出去，要说的是这个，不是「出错了」。
+	 */
+	async function settleOnce(
+		session: Session | undefined,
+		requestId: string,
+		stream: ReturnType<typeof streamAssistant>,
+		signal: AbortSignal | undefined,
+		requireComplete: boolean,
+		before?: () => void,
+	): Promise<AssistantMessage> {
 		let next = await stream.next();
 		while (!next.done) next = await stream.next();
 		const reply = next.value;
 		if (session) observe(session.summary.id, { type: "response", id: requestId, reply });
 		store.spend(session?.summary.id ?? null, reply);
 		signal?.throwIfAborted();
+		before?.();
 		if (reply.stopReason === "error" || reply.stopReason === "aborted") throw new Error(reply.errorMessage || text("model.failed"));
-		if (request.requireComplete && reply.stopReason !== "stop") throw new Error(text("model.incomplete"));
-		return reply.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+		if (requireComplete && reply.stopReason !== "stop") throw new Error(text("model.incomplete"));
+		return reply;
 	}
 
 	/**
@@ -264,21 +275,14 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 				},
 			},
 		);
-		let next = await stream.next();
-		while (!next.done) next = await stream.next();
-		const reply = next.value;
-		observe(session.summary.id, { type: "response", id: requestId, reply });
-		store.spend(session.summary.id, reply);
-		signal?.throwIfAborted();
-		if (changed !== undefined) {
+		const reply = await settleOnce(session, requestId, stream, signal, requireComplete, () => {
+			if (changed === undefined) return;
 			log("agent", "warn", `会话 ${session.summary.id} 的分叉请求和上一次主请求的前缀在 ${changed} 处对不上，没有发出去`);
 			throw new Error(text("model.forkMismatch", { segment: changed }));
-		}
-		if (reply.stopReason === "error" || reply.stopReason === "aborted") throw new Error(reply.errorMessage || text("model.failed"));
-		if (requireComplete && reply.stopReason !== "stop") throw new Error(text("model.incomplete"));
+		});
 		// 说了不要调工具还是调了：这次回复不是要的那段字。
 		if (reply.content.some((block) => block.type === "toolCall")) throw new Error(text("model.forkToolCall"));
-		return reply.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+		return replyText(reply);
 	}
 
 	/** 发一次请求：每次都重新读设置，会话中途换的模型从下一个请求起生效。 */
@@ -365,5 +369,5 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 		return reply;
 	}
 
-	return { retryPolicyFor, buildContext, completeOnce, forkOnce, request, partsOf: (message) => requestParts.get(message) };
+	return { buildContext, completeOnce, request, partsOf: (message) => requestParts.get(message) };
 }

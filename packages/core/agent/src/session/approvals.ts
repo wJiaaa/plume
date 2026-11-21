@@ -21,9 +21,6 @@ export interface ApprovalsDeps {
 export interface Approvals {
 	askUser(session: Session, request: ApprovalRequest, grant: AlwaysAllow | undefined, signal: AbortSignal): Promise<ApprovalDecision>;
 	requestUser(session: Session, request: HumanRequest, signal: AbortSignal): Promise<HumanAnswer>;
-	relayedBy(session: Session, toolCallId: string, outcome: Settled): void;
-	waitForAnswer(session: Session, request: PendingRequest, timeout: number, signal: AbortSignal): Promise<Settled>;
-	showApprovals(session: Session): void;
 }
 
 export function createApprovals(deps: ApprovalsDeps): Approvals {
@@ -100,5 +97,5 @@ export function createApprovals(deps: ApprovalsDeps): Approvals {
 		});
 	}
 
-	return { askUser, requestUser, relayedBy, waitForAnswer, showApprovals };
+	return { askUser, requestUser };
 }

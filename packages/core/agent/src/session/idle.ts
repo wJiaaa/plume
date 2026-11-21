@@ -18,16 +18,14 @@ export interface IdleDeps {
 }
 
 export interface Idle {
-	shownBackgroundCalls: Map<string, string>;
-	idleWaiters: Map<string, Array<() => void>>;
+	/** 删掉的会话：等它闲下来的人不用再等了，记着的那份也丢掉。 */
+	forget(sessionIds: readonly string[]): void;
 	backgroundChanged(sessionId: string): void;
-	backgroundCallsOf(sessionId: string): Record<string, BackgroundCallState>;
 	backgroundCallsField(sessionId: string): { backgroundCalls?: Record<string, BackgroundCallState> };
 	emitBackgroundCalls(sessionId: string): void;
 	parentStatus(session: Session): ParentStatus;
 	syncBackground(session: Session): boolean;
 	waiting(sessionId: string): boolean;
-	isIdle(session: Session): boolean;
 	checkIdle(session: Session): void;
 	whenIdle(session: Session): Promise<void>;
 }
@@ -121,16 +119,19 @@ export function createIdle(deps: IdleDeps): Idle {
 	}
 
 	return {
-		shownBackgroundCalls,
-		idleWaiters,
+		forget(sessionIds) {
+			for (const id of sessionIds) {
+				shownBackgroundCalls.delete(id);
+				for (const resolve of idleWaiters.get(id) ?? []) resolve();
+				idleWaiters.delete(id);
+			}
+		},
 		backgroundChanged,
-		backgroundCallsOf,
 		backgroundCallsField,
 		emitBackgroundCalls,
 		parentStatus,
 		syncBackground,
 		waiting,
-		isIdle,
 		checkIdle,
 		whenIdle,
 	};

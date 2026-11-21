@@ -24,7 +24,6 @@ export interface Queueing {
 	handed: ChildTasks;
 	handedPrompts: WeakMap<UserMessage, { childId: string; task: ChildTask }>;
 	handedOf(childId: string): ChildTask[];
-	emitHanded(childId: string): void;
 	queues: SessionQueues;
 	queuedPrompt(entry: QueuedMessage, interrupt: boolean): UserMessage;
 	drainQueue(session: Session): void;
@@ -124,5 +123,5 @@ export function createQueueing(deps: QueueingDeps): Queueing {
 		return !queues.list(session.summary.id).some((queued) => queued.id === entry.id);
 	}
 
-	return { handed, handedPrompts, handedOf, emitHanded, queues, queuedPrompt, drainQueue, steer, enqueue, enqueueTask };
+	return { handed, handedPrompts, handedOf, queues, queuedPrompt, drainQueue, steer, enqueue, enqueueTask };
 }

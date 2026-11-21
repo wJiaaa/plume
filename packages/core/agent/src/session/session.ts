@@ -13,10 +13,28 @@ import type {
 	UserMessage,
 } from "@plume/contract";
 import type { ModelConfig } from "@plume/llm/types";
-import type { ContextRecord, RepetitionWatch, SentRequest } from "@plume/loop";
+import { RepetitionWatch, type ContextRecord, type SentRequest } from "@plume/loop";
 import { text } from "../i18n.ts";
 import { MEDIA_NAME } from "../media.ts";
 import type { StoredSettings } from "../models.ts";
+
+/** 内存里的一个会话：`messages` 是 undefined 时用到才从库里读（见 `messagesOf`），`record` 同样。 */
+export function newSession(summary: SessionSummary, messages: Message[] | undefined, record?: ContextRecord): Session {
+	return {
+		summary,
+		messages,
+		...(record ? { record } : {}),
+		progress: new Map(),
+		startedAt: new Map(),
+		hiccups: [],
+		repetition: new RepetitionWatch(),
+	};
+}
+
+/** 插件给的会话标题：压成一行、最长 80 字；不是字符串时是空串。 */
+export function oneLineTitle(title: unknown): string {
+	return typeof title === "string" ? title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+}
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 

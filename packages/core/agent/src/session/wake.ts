@@ -29,7 +29,6 @@ export interface Wake {
 	/** 别的会话的信、开出来的会话的交回此刻叫不醒它：它的人按了停，或者被它们接连叫起到了上限。这时它们留到人开口。 */
 	wakeHeld(session: Session): boolean;
 	nudgeOrigin(session: Session): void;
-	spawnedRunning(parentId: string): boolean;
 }
 
 export function createWake(deps: WakeDeps): Wake {
@@ -122,5 +121,5 @@ export function createWake(deps: WakeDeps): Wake {
 		return false;
 	}
 
-	return { wakeReports, admitWake, wakeHeld, nudgeOrigin, spawnedRunning };
+	return { wakeReports, admitWake, wakeHeld, nudgeOrigin };
 }

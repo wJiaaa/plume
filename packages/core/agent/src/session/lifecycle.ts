@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import type { AgentEvent, AgentService, Log, Message, SessionAccess, SessionSummary, SessionTarget } from "@plume/contract";
 import { isImageModel } from "@plume/llm/image-models";
 import { THINKING_LEVELS } from "@plume/llm/thinking-options";
-import { errorText, kindOf, RepetitionWatch, type ContextRecord } from "@plume/loop";
+import { errorText, kindOf, type ContextRecord } from "@plume/loop";
 import type { BackgroundRuns } from "../background.ts";
 import type { ChildTasks } from "../child-tasks.ts";
 import type { PluginHost } from "../host.ts";
@@ -18,7 +18,8 @@ import type { Projects } from "../projects.ts";
 import type { SessionQueues } from "../queue.ts";
 import type { SessionDb } from "../session-db.ts";
 import type { SessionWakeups } from "../wakeups.ts";
-import type { Session } from "./session.ts";
+import type { Idle } from "./idle.ts";
+import { newSession, oneLineTitle, type Session } from "./session.ts";
 
 type ProjectConfig = Awaited<ReturnType<typeof layerProjectSettings>>;
 
@@ -38,8 +39,7 @@ export interface LifecycleDeps {
 	saveSummary(session: Session): void;
 	refreshProject(session: Session): void;
 	scratchDir(sessionId: string): string;
-	shownBackgroundCalls: Map<string, string>;
-	idleWaiters: Map<string, Array<() => void>>;
+	idle: Pick<Idle, "forget">;
 	quitting(): boolean;
 	/** 回边：后台运行在生命周期模块之后创建，在 `createAgent` 里接上。 */
 	background: Pick<BackgroundRuns, "cancelSession">;
@@ -60,24 +60,32 @@ export interface LifecycleDeps {
 	log: Log;
 }
 
+/** 插件建顶层会话（`launch`、独立会话）时给的项目、目录、标题、模型和思考档位。 */
+type PlainOptions = Pick<NonNullable<Parameters<SessionAccess["create"]>[0]>, "project" | "cwd" | "title" | "model" | "thinking">;
+type PlainExtra = Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner" | "steward">>;
+
 export interface Lifecycle {
-	createPlain(
-		target: SessionTarget,
-		extra?: Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner" | "steward">>,
-		history?: { messages: Message[]; record: ContextRecord },
-	): Promise<SessionSummary>;
+	createPlain(target: SessionTarget, extra?: PlainExtra, history?: { messages: Message[]; record: ContextRecord }): Promise<SessionSummary>;
 	deleteTree(sessionIds: string[]): void;
 	archive(session: Session, archived: boolean): void;
 	stopSession(session: Session): void;
 	runnableParent(session: Session): Session;
 	owned(owner: string, sessionId: string): Session;
 	relocate(session: Session, cwd: string): Promise<void>;
-	existingCwd(options: { project?: unknown; cwd?: unknown } | undefined): Promise<string | undefined>;
-	checkChoice(options: { model?: string; thinking?: SessionSummary["thinking"] } | undefined): Promise<void>;
+	plainChoice(options: PlainOptions | undefined): Promise<[SessionTarget, PlainExtra]>;
 	moveSession(session: Session, project: { id: string } | undefined, cwd: string): void;
 	configureOwn(owner: string, sessionId: string, change: Parameters<SessionAccess["configure"]>[1]): Promise<SessionSummary>;
 	createStandalone(owner: string, options: Parameters<SessionAccess["create"]>[0] | undefined): Promise<SessionSummary>;
 	createChild(owner: string, options: Parameters<SessionAccess["create"]>[0] | undefined): Promise<SessionSummary>;
+}
+
+/** 已有目录的绝对路径。 */
+async function isDirectory(path: string): Promise<boolean> {
+	if (!isAbsolute(path)) return false;
+	return stat(path).then(
+		(entry) => entry.isDirectory(),
+		() => false,
+	);
 }
 
 export function createLifecycle(deps: LifecycleDeps): Lifecycle {
@@ -96,8 +104,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		saveSummary,
 		refreshProject,
 		scratchDir,
-		shownBackgroundCalls,
-		idleWaiters,
+		idle,
 		quitting,
 		background,
 		jobs,
@@ -114,11 +121,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 	 * 不挂在别的会话下的会话：人在侧栏新建的，插件经 `ctx.sessions.launch` 开的（`extra` 带上它给的标题、模型、来处、代管插件），
 	 * 和插件经 `ctx.sessions.create` 建的独立会话（`extra` 带上 `owner`，见 `createStandalone`）。
 	 */
-	async function createPlain(
-		target: SessionTarget,
-		extra: Partial<Pick<SessionSummary, "title" | "model" | "thinking" | "spawnedFrom" | "owner" | "steward">> = {},
-		history?: { messages: Message[]; record: ContextRecord },
-	): Promise<SessionSummary> {
+	async function createPlain(target: SessionTarget, extra: PlainExtra = {}, history?: { messages: Message[]; record: ContextRecord }): Promise<SessionSummary> {
 		const project = target.project ? projects.find(target.project) : undefined;
 		let cwd = project?.path ?? target.cwd?.trim();
 		if (cwd === "") throw new Error(text("session.emptyCwd"));
@@ -145,15 +148,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		};
 		if (history) store.copy(summary, history.messages, history.record);
 		else store.create(summary);
-		const session: Session = {
-			summary,
-			messages: history?.messages ?? [],
-			...(history ? { record: history.record } : {}),
-			progress: new Map(),
-			startedAt: new Map(),
-			hiccups: [],
-			repetition: new RepetitionWatch(),
-		};
+		const session = newSession(summary, history?.messages ?? [], history?.record);
 		sessions.set(summary.id, session);
 		applyProjectConfig(session, configured);
 		emit({ type: "sessions", sessions: summaries() });
@@ -172,7 +167,6 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 			session.steering = [];
 			session.controller?.abort();
 			sessions.delete(id);
-			shownBackgroundCalls.delete(id);
 			void host.sessionEnded(id, "deleted");
 			// 插件按会话记的东西（读过的文件之类）跟着清掉。
 			host.sessionDeleted(id);
@@ -183,8 +177,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		queues.forget(ids);
 		handed.forget(ids);
 		// 等它闲下来的人不用再等了：它不在了。
-		for (const id of ids) for (const resolve of idleWaiters.get(id) ?? []) resolve();
-		for (const id of ids) idleWaiters.delete(id);
+		idle.forget(ids);
 		// 草稿只为那次对话而写，跟着会话一起走；删不掉只记日志，不挡删除本身。
 		for (const id of ids)
 			void rm(scratchDir(id), { recursive: true, force: true }).catch((error: unknown) =>
@@ -259,40 +252,47 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 	 */
 	async function relocate(session: Session, cwd: string): Promise<void> {
 		if (session.summary.kind !== "top" || cwd === session.summary.cwd) return;
-		const isDirectory =
-			isAbsolute(cwd) &&
-			(await stat(cwd).then(
-				(entry) => entry.isDirectory(),
-				() => false,
-			));
-		if (!isDirectory) {
+		if (!(await isDirectory(cwd))) {
 			log("agent", "error", `会话 ${session.summary.id} 没换目录：prompt.submit 给的 ${cwd} 不是已有目录的绝对路径`);
 			return;
 		}
 		for (const id of withChildren(session.summary.id)) {
 			const each = sessions.get(id);
-			if (!each) continue;
-			each.summary.cwd = cwd;
-			delete each.projectLayer;
-			delete each.projectNotices;
-			host.sessionContextReset(each.summary.id);
-			store.saveSummary(each.summary);
+			if (each) settleCwd(each, cwd);
 		}
 		emit({ type: "sessions", sessions: summaries() });
+	}
+
+	/** 一个会话换了工作目录（项目已经记好）：按目录读的项目配置作废、存下来，插件按会话记的上下文重来。 */
+	function settleCwd(session: Session, cwd: string): void {
+		session.summary.cwd = cwd;
+		delete session.projectLayer;
+		delete session.projectNotices;
+		store.saveSummary(session.summary);
+		host.sessionContextReset(session.summary.id);
 	}
 
 	/** 插件给的工作目录（`launch`、独立会话）：给了项目就不看它；要是已有目录的绝对路径，插件给的路径没人看过，错了当场说清楚。 */
 	async function existingCwd(options: { project?: unknown; cwd?: unknown } | undefined): Promise<string | undefined> {
 		const cwd = options?.project ? undefined : typeof options?.cwd === "string" && options.cwd.trim() ? options.cwd.trim() : undefined;
 		if (cwd === undefined) return undefined;
-		const isDirectory =
-			isAbsolute(cwd) &&
-			(await stat(cwd).then(
-				(entry) => entry.isDirectory(),
-				() => false,
-			));
-		if (!isDirectory) throw new Error(text("session.badCwd", { cwd }));
+		if (!(await isDirectory(cwd))) throw new Error(text("session.badCwd", { cwd }));
 		return cwd;
+	}
+
+	/** 插件建顶层会话时给的选择，收成 `createPlain` 的前两个参数；模型、思考档位不认识、目录不对都当场抛错。 */
+	async function plainChoice(options: PlainOptions | undefined): Promise<[SessionTarget, PlainExtra]> {
+		await checkChoice(options);
+		const cwd = await existingCwd(options);
+		const title = oneLineTitle(options?.title);
+		return [
+			{ ...(options?.project ? { project: String(options.project) } : {}), ...(cwd ? { cwd } : {}) },
+			{
+				...(title ? { title } : {}),
+				...(options?.model !== undefined ? { model: options.model } : {}),
+				...(options?.thinking !== undefined ? { thinking: options.thinking } : {}),
+			},
+		];
 	}
 
 	/** 插件建子会话、独立会话时给的模型和思考档位：不认识就当场抛错。 */
@@ -313,13 +313,9 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		for (const each of family) {
 			// 目录换了，在旧目录里的这一段就结束了；下一轮在新目录里重新开始。
 			if (cwd !== each.summary.cwd) void host.sessionEnded(each.summary.id, "moved");
-			each.summary.cwd = cwd;
 			if (project) each.summary.project = project.id;
 			else delete each.summary.project;
-			delete each.projectLayer;
-			delete each.projectNotices;
-			store.saveSummary(each.summary);
-			host.sessionContextReset(each.summary.id);
+			settleCwd(each, cwd);
 		}
 		emit({ type: "sessions", sessions: summaries() });
 		// 新目录里的项目配置可能定了另一档权限，不等下一轮，权限签现在就跟上。
@@ -363,18 +359,8 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 	 */
 	async function createStandalone(owner: string, options: Parameters<SessionAccess["create"]>[0] | undefined): Promise<SessionSummary> {
 		if (quitting()) throw new Error(text("session.quitting"));
-		await checkChoice(options);
-		const cwd = await existingCwd(options);
-		const title = typeof options?.title === "string" ? options.title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
-		return createPlain(
-			{ ...(options?.project ? { project: String(options.project) } : {}), ...(cwd ? { cwd } : {}) },
-			{
-				...(title ? { title } : {}),
-				...(options?.model !== undefined ? { model: options.model } : {}),
-				...(options?.thinking !== undefined ? { thinking: options.thinking } : {}),
-				owner,
-			},
-		);
+		const [target, extra] = await plainChoice(options);
+		return createPlain(target, { ...extra, owner });
 	}
 
 	/**
@@ -403,7 +389,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 			kind: "child",
 		};
 		store.create(summary);
-		sessions.set(summary.id, { summary, messages: [], progress: new Map(), startedAt: new Map(), hiccups: [], repetition: new RepetitionWatch() });
+		sessions.set(summary.id, newSession(summary, []));
 		emit({ type: "sessions", sessions: summaries() });
 		return summary;
 	}
@@ -416,8 +402,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		runnableParent,
 		owned,
 		relocate,
-		existingCwd,
-		checkChoice,
+		plainChoice,
 		moveSession,
 		configureOwn,
 		createStandalone,

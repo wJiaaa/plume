@@ -17,7 +17,6 @@ export interface GovernanceDeps {
 }
 
 export interface Governance {
-	manages(plugin: string): boolean;
 	governs(plugin: string, summary: SessionSummary): boolean;
 	concerned(session: Session): Set<string>;
 	applyProjectConfig(session: Session, configured: ProjectConfig): void;
@@ -98,5 +97,5 @@ export function createGovernance(deps: GovernanceDeps): Governance {
 		void readSessionSettings(session).catch(() => undefined);
 	}
 
-	return { manages, governs, concerned, applyProjectConfig, readSessionSettings, refreshProject };
+	return { governs, concerned, applyProjectConfig, readSessionSettings, refreshProject };
 }

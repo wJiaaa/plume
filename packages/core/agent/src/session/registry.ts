@@ -1,9 +1,9 @@
 import { isAbsolute, join, resolve } from "node:path";
 import type { AgentEvent, Message, SessionSummary } from "@plume/contract";
-import { emptyRecord, RepetitionWatch, settleStaleRuns, type ContextRecord } from "@plume/loop";
+import { emptyRecord, settleStaleRuns, type ContextRecord } from "@plume/loop";
 import { text } from "../i18n.ts";
 import type { SessionDb } from "../session-db.ts";
-import type { Session } from "./session.ts";
+import { newSession, type Session } from "./session.ts";
 
 export interface RegistryDeps {
 	dataDir: string;
@@ -18,7 +18,6 @@ export interface RegistryDeps {
 export interface Registry {
 	sessions: Map<string, Session>;
 	scratchDir(sessionId: string): string;
-	lineage(sessionId: string): string[];
 	lineageScratchDirs(sessionId: string): string[];
 	sessionRoots(summary: SessionSummary): string[];
 	summaries(): SessionSummary[];
@@ -42,14 +41,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
 	const sessions = new Map<string, Session>();
 	for (const summary of store.summaries()) {
-		sessions.set(summary.id, {
-			summary: { ...summary, running: false },
-			messages: undefined,
-			progress: new Map(),
-			startedAt: new Map(),
-			hiccups: [],
-			repetition: new RepetitionWatch(),
-		});
+		sessions.set(summary.id, newSession({ ...summary, running: false }, undefined));
 	}
 
 	/**
@@ -157,7 +149,6 @@ export function createRegistry(deps: RegistryDeps): Registry {
 	return {
 		sessions,
 		scratchDir,
-		lineage,
 		lineageScratchDirs,
 		sessionRoots,
 		summaries,

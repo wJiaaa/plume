@@ -140,7 +140,7 @@ export class BackgroundRuns {
 		const { frame, delivery } = options ?? {};
 		this.enqueue(run.parentId, {
 			text: words,
-			...(frame ? { frame: { owner, head: String(frame.head ?? ""), ...(typeof frame.tail === "function" ? { tail: frame.tail } : {}) } } : {}),
+			...(frame ? { frame: frameOf(frame, owner) } : {}),
 			...(delivery ? { delivery: deliveryOf(delivery, owner) } : {}),
 			valid: () => this.valid(run),
 		});
@@ -173,7 +173,7 @@ export class BackgroundRuns {
 		const report: Pending = {
 			text: words,
 			delivery: { ...deliveryOf(options.delivery, plugin), sessionId: launchedId },
-			...(frame ? { frame: { owner: plugin, head: String(frame.head ?? ""), ...(typeof frame.tail === "function" ? { tail: frame.tail } : {}) } } : {}),
+			...(frame ? { frame: frameOf(frame, plugin) } : {}),
 			valid: () => true,
 		};
 		if (options.wake) this.enqueue(sessionId, report);
@@ -377,6 +377,11 @@ export class BackgroundRuns {
 		}
 		for (const parentId of parents) this.changed(parentId);
 	}
+}
+
+/** 插件给的 `frame` 只留 `head`、`tail` 两项，记下是哪个插件的。 */
+function frameOf(frame: ReportFrame, owner: string): Frame {
+	return { owner, head: String(frame.head ?? ""), ...(typeof frame.tail === "function" ? { tail: frame.tail } : {}) };
 }
 
 function deliveryStatus(status: unknown): DeliveredReport["status"] {

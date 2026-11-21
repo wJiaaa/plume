@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isImageModel } from "@plume/llm/image-models";
 import { THINKING_LEVELS } from "@plume/llm/thinking-options";
 import type { AgentService, Log, SessionSummary, SessionView } from "@plume/contract";
-import { contextBreakdown, historyFor, keptRecord, marks, RepetitionWatch, rewrittenAt, runsOf } from "@plume/loop";
+import { contextBreakdown, historyFor, keptRecord, marks, rewrittenAt, runsOf } from "@plume/loop";
 import type { PluginHost } from "../host.ts";
 import { text } from "../i18n.ts";
 import type { ModelSettings } from "../model-settings.ts";
@@ -17,6 +17,7 @@ import type { Idle } from "../session/idle.ts";
 import type { Lifecycle } from "../session/lifecycle.ts";
 import type { Queueing } from "../session/queueing.ts";
 import type { Registry } from "../session/registry.ts";
+import { newSession } from "../session/session.ts";
 
 export interface SessionsServiceDeps {
 	log: Log;
@@ -292,7 +293,7 @@ export function sessionsService(
 				kind: "top",
 			};
 			store.copy(summary, kept, record);
-			sessions.set(summary.id, { summary, messages: kept, record, progress: new Map(), startedAt: new Map(), hiccups: [], repetition: new RepetitionWatch() });
+			sessions.set(summary.id, newSession(summary, kept, record));
 			emit({ type: "sessions", sessions: summaries() });
 			return summary;
 		},

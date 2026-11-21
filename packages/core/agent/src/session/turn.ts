@@ -90,11 +90,7 @@ export interface TurnDeps {
 }
 
 export interface Turn {
-	compactor: ReturnType<typeof createCompactor>;
 	compactNow(sessionId: string, instructions: string): Promise<{ done: Promise<CompactionOutcome> }>;
-	compactIdle(session: Session, controller: AbortController): Promise<void>;
-	consumeBoundary(session: Session, controller: AbortController, ending?: boolean): Promise<boolean>;
-	postLetter(from: Session, toId: string, input: LetterInput): LetterReceipt;
 	runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel?: boolean): Promise<TurnStop>;
 	active(): Iterable<Session>;
 }
@@ -465,7 +461,8 @@ export function createTurn(deps: TurnDeps): Turn {
 		// 从这里起不再有循环来取插话：之后送来的排进队尾或开新的一轮，见 `steer`。
 		if (session.looping === controller) session.looping = undefined;
 		// 退出应用时停下的不是人按的停：重开以后说「上次执行被中断」，而不是「已暂停」。
-		session.summary.stop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
+		const final: TurnStop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
+		session.summary.stop = final;
 		// 先把「还在不在等后台」对到此刻再说收场：后台结果叫起的这一轮开头取走那批送达时不重算它（`take`），不先对，
 		// 观察者在收场这一刻读到的还是开轮前那个「在等」，spawn-session 就会当它还有事没回来，汇报不叫醒来处。
 		syncBackground(session);
@@ -513,8 +510,9 @@ export function createTurn(deps: TurnDeps): Turn {
 			wakeReports(session);
 			checkIdle(session);
 		}
-		return structuredClone(stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop);
+		// 不读 `summary.stop`：上面 `wakeReports` 可能当场开起下一轮，它开头就清掉了。
+		return structuredClone(final);
 	}
 
-	return { compactor, compactNow, compactIdle, consumeBoundary, postLetter, runTurn, active: () => active.values() };
+	return { compactNow, runTurn, active: () => active.values() };
 }

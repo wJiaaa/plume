@@ -15,7 +15,6 @@ import type { BackgroundRuns } from "../background.ts";
 import type { PluginHost } from "../host.ts";
 import { text } from "../i18n.ts";
 import type { SessionQueues } from "../queue.ts";
-import type { SessionDb } from "../session-db.ts";
 import type { Lifecycle } from "./lifecycle.ts";
 import { userMessage, type Session } from "./session.ts";
 
@@ -26,13 +25,13 @@ export interface DispatchDeps {
 	host: Pick<PluginHost, "run" | "toolOwners"> & { workspace: Pick<PluginHost["workspace"], "beginPrompt"> };
 	messagesOf(session: Session): Promise<Message[]>;
 	observe(sessionId: string, event: SessionObservation["event"], timestamp?: number): void;
-	lifecycle: Pick<Lifecycle, "checkChoice" | "createPlain" | "existingCwd" | "stopSession">;
+	lifecycle: Pick<Lifecycle, "createPlain" | "plainChoice" | "stopSession">;
 	find(sessionId: string): Session;
 	recordOf(session: Session): Promise<ContextRecord>;
 	sessions: Map<string, Session>;
 	begin(session: Session, prompt: UserMessage): void;
 	whenIdle(session: Session): Promise<void>;
-	store: Pick<SessionDb, "messages">;
+	readMessages(session: Session): Message[];
 	log: Log;
 	quitting(): boolean;
 	background: Pick<BackgroundRuns, "reportBack">;
@@ -50,12 +49,9 @@ export interface Dispatch {
 	submitPrompt(session: Session, prompt: UserMessage, signal: AbortSignal): Promise<PromptVerdict>;
 	launchedPrompts: WeakSet<UserMessage>;
 	launchSession(owner: string, options: Parameters<SessionAccess["launch"]>[0] | undefined): ReturnType<SessionAccess["launch"]>;
-	forkedHistory(source: Session | undefined, toolCallId: string | undefined): Promise<{ messages: Message[]; record: ContextRecord }>;
 	reportBack(owner: string, sessionId: string, words: string, options: Parameters<SessionAccess["reportBack"]>[2]): boolean;
 	childMessage(message: string | SessionMessage): UserMessage;
 	sendChild(session: Session, message: string | SessionMessage, signal: AbortSignal | undefined): Promise<TurnStop>;
-	lastReply(messages: readonly Message[], since?: number): string;
-	calledBy(session: Session, toolCallId: string | undefined, plugin: string): boolean;
 	parentFor(child: Session, plugin: string): ParentSession | undefined;
 }
 
@@ -64,13 +60,13 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		host,
 		messagesOf,
 		observe,
-		lifecycle: { checkChoice, createPlain, existingCwd, stopSession },
+		lifecycle: { createPlain, plainChoice, stopSession },
 		find,
 		recordOf,
 		sessions,
 		begin,
 		whenIdle,
-		store,
+		readMessages,
 		log,
 		quitting,
 		background,
@@ -133,21 +129,17 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		if (quitting()) throw new Error(text("session.quitting"));
 		const words = typeof options?.message === "string" ? options.message : "";
 		if (!words.trim()) throw new Error(text("session.emptyMessage"));
-		await checkChoice(options);
+		const [target, extra] = await plainChoice(options);
 		const from = options?.spawnedFrom;
 		const source = from !== undefined ? find(String(from?.sessionId)) : undefined;
 		if (source && source.summary.kind !== "top") throw new Error(text("session.nestedChild"));
 		const name = typeof from?.name === "string" ? from.name.trim() : "";
 		if (name && !SPAWN_NAME.test(name)) throw new Error(text("session.badSpawnName", { name }));
 		const history = options?.fork === true ? await forkedHistory(source, from?.toolCallId) : undefined;
-		const cwd = await existingCwd(options);
-		const title = typeof options?.title === "string" ? options.title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
 		const summary = await createPlain(
-			{ ...(options?.project ? { project: String(options.project) } : {}), ...(cwd ? { cwd } : {}) },
+			target,
 			{
-				...(title ? { title } : {}),
-				...(options?.model !== undefined ? { model: options.model } : {}),
-				...(options?.thinking !== undefined ? { thinking: options.thinking } : {}),
+				...extra,
 				...(from
 					? {
 							spawnedFrom: {
@@ -177,9 +169,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 				.then(() => {
 					// 闲下来以后它就只是人的会话了：开它的插件不再收它的观察（代管的照 `steward` 收）。
 					delete session.launchedBy;
-					return sessions.has(summary.id)
-						? { stop: structuredClone(session.summary.stop), reply: lastReply(session.messages ?? store.messages(summary.id)) }
-						: { reply: "" };
+					return sessions.has(summary.id) ? { stop: structuredClone(session.summary.stop), reply: lastReply(readMessages(session)) } : { reply: "" };
 				}),
 		};
 	}
@@ -261,7 +251,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 	/** `toolCallId` 是不是插件 `plugin` 注册的工具在这个会话里的一次调用（撤回截掉了的不算）。 */
 	function calledBy(session: Session, toolCallId: string | undefined, plugin: string): boolean {
 		if (typeof toolCallId !== "string") return false;
-		const history = session.messages ?? store.messages(session.summary.id);
+		const history = readMessages(session);
 		const call = history
 			.flatMap((message) => (message.role === "assistant" ? message.content : []))
 			.find((block) => block.type === "toolCall" && block.id === toolCallId);
@@ -310,5 +300,5 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		};
 	}
 
-	return { submitPrompt, launchedPrompts, launchSession, forkedHistory, reportBack, childMessage, sendChild, lastReply, calledBy, parentFor };
+	return { submitPrompt, launchedPrompts, launchSession, reportBack, childMessage, sendChild, parentFor };
 }
