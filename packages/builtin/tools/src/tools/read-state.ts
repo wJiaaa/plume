@@ -11,16 +11,29 @@ export interface ReadRecord {
 	partial?: boolean;
 }
 
+const RECORDS = "readFiles";
+/** 记录变了以后调它存盘（`read-store.ts` 装上的）；直接调工具的测试没装，只记在内存里。 */
+const SAVE = "readFilesSave";
+
 function readState(ctx: ToolContext): Map<string, ReadRecord> {
-	const existing = ctx.state.get("readFiles");
+	const existing = ctx.state.get(RECORDS);
 	if (existing instanceof Map) return existing;
 	const fresh = new Map<string, ReadRecord>();
-	ctx.state.set("readFiles", fresh);
+	ctx.state.set(RECORDS, fresh);
 	return fresh;
 }
 
+/** 把存盘的记录装回会话的状态里，之后每次记下都交给 `save`。 */
+export function restoreReads(state: Map<string, unknown>, records: Map<string, ReadRecord>, save: (records: Map<string, ReadRecord>) => void): void {
+	state.set(RECORDS, records);
+	state.set(SAVE, save);
+}
+
 export function markRead(ctx: ToolContext, path: string, stamp?: FileStamp, partial = false): void {
-	readState(ctx).set(path, { stamp: stamp && { mtimeMs: stamp.mtimeMs, size: stamp.size }, partial });
+	const records = readState(ctx);
+	records.set(path, { stamp: stamp && { mtimeMs: stamp.mtimeMs, size: stamp.size }, partial });
+	const save = ctx.state.get(SAVE);
+	if (typeof save === "function") save(records);
 }
 
 /**

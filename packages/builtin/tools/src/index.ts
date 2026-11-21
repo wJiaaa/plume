@@ -5,7 +5,7 @@
  * 读写文件经本体的 `ToolRun.files`（读写边界、问人、资源地址、改动快照），可能改文件的命令带 `recordChanges` 交给本体观测，
  * 项目文件清单用本体的 `ctx.workspace.files`。本体登记着的资源地址（`ctx.resources.list()`）经 `model.context` 写成系统提示词的 `resources` 段。
  *
- * 状态按会话放在内存里（读过哪些文件、后台任务的输出读到哪了）：会话删掉时清掉。后台任务的进程由本体按登记停（删会话、退出应用、本插件停用）。
+ * 状态按会话放在内存里（读过哪些文件、后台任务的输出读到哪了）：会话删掉时清掉。读过哪些文件另外存盘（`tools/read-store.ts`），重启后会话接着用。后台任务的进程由本体按登记停（删会话、退出应用、本插件停用）。
  */
 
 import type { Plugin, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
@@ -13,6 +13,7 @@ import { setLocaleSource } from "./messages.ts";
 import { TOOLS } from "./tools.ts";
 import { WAKEUP_TOOLS } from "./tools/wakeups.ts";
 import { translatedShellCommand } from "./tools/reroute.ts";
+import { readStore } from "./tools/read-store.ts";
 import { toDefinition } from "./tools/types.ts";
 
 /** 只列给顶层会话的工具，见 `model.context` 那一层。 */
@@ -23,9 +24,13 @@ export default {
 	apply(ctx) {
 		setLocaleSource(() => ctx.locale());
 		const states = new Map<string, Map<string, unknown>>();
+		const reads = readStore(ctx.dataDir, (error) => ctx.log.warn(`读过的文件记录存盘失败：${String(error)}`));
 		const state = (sessionId: string) => {
 			let found = states.get(sessionId);
-			if (!found) states.set(sessionId, (found = new Map()));
+			if (!found) {
+				states.set(sessionId, (found = new Map()));
+				reads.attach(found, sessionId);
+			}
 			return found;
 		};
 
@@ -44,6 +49,7 @@ export default {
 
 		ctx.sessions.onDeleted((sessionId) => {
 			states.delete(sessionId);
+			void reads.forget(sessionId).catch((error) => ctx.log.warn(`删掉读过的文件记录失败：${String(error)}`));
 		});
 		ctx.effect(() => {
 			states.clear();
