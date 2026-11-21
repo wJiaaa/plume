@@ -11,6 +11,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { errorText, type RegisteredTool } from "@plume/loop";
 import { activeLocale, text } from "./i18n.ts";
 import { jsonFiles } from "./json-files.ts";
 import { PluginValues } from "./plugin-values.ts";
@@ -143,14 +144,6 @@ const PAGE_METHODS = [
 	"answerDialogs",
 	"chromeLogins",
 ] as const satisfies readonly Exclude<keyof WebPages, "onEvent">[];
-
-export interface RegisteredTool {
-	definition: ToolDefinition;
-	/** 注册它的插件。 */
-	plugin: string;
-	/** 注册它的插件是内置的：工具表里排在前面，见 `compareTools`。 */
-	builtin: boolean;
-}
 
 /** 第一组里按做的是哪种活排：先读、列、找、搜，再写、改，最后跑命令和管后台。 */
 const KIND_RANK = { view: 0, list: 1, find: 2, search: 3, create: 4, modify: 5, command: 6, watch: 7, job: 8 } satisfies Record<ToolKind, number>;
@@ -1298,10 +1291,6 @@ function validAliases(aliases: unknown, parameters: Record<string, unknown>): bo
 		}
 	}
 	return true;
-}
-
-export function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 /** `a` 比 `b` 新（x.y.z 逐段按数字比，认不出的段当 0）。 */

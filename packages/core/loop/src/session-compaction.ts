@@ -25,7 +25,8 @@ import type { PrefixSegment } from "@plume/llm/prefix-fingerprint";
 import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
 import { cacheHotMs } from "@plume/llm/vendors";
 import { type ContextRecord, historyFor, latest, oversized, rewrittenAt } from "./compaction.ts";
-import { errorText, type PluginHost } from "./host.ts";
+import { errorText } from "./errors.ts";
+import type { LoopHost } from "./host.ts";
 import { sessionScope } from "./session-scope.ts";
 import { contextUsage, textTokens, tokenEstimate, toolTokens } from "./token-estimate.ts";
 
@@ -67,7 +68,7 @@ export interface CompactMode {
 }
 
 export interface CompactorDeps {
-	host: PluginHost;
+	host: LoopHost;
 	log: Log;
 	emit(event: AgentEvent): void;
 	saveContext(sessionId: string, record: ContextRecord): void;

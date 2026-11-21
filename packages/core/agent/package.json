@@ -15,6 +15,7 @@
     "@plume/contract": "workspace:*",
     "@plume/document-text": "workspace:*",
     "@plume/llm": "workspace:*",
+    "@plume/loop": "workspace:*",
     "@plume/platform": "workspace:*",
     "@plume/sandbox": "workspace:*",
     "@plume/workspace": "workspace:*"

@@ -1,0 +1,18 @@
+export { type ContextRecord, emptyRecord, historyFor, keptRecord, rewrittenAt } from "./compaction.ts";
+export { contextBreakdown, estimateContext } from "./context-breakdown.ts";
+export { DECLINED, REJECTED } from "./declined.ts";
+export { errorText } from "./errors.ts";
+export { foldRetry, settleHiccups } from "./hiccups.ts";
+export type { RegisteredTool } from "./host.ts";
+export { setLocale } from "./i18n.ts";
+export { runSteps, type TurnScope } from "./loop.ts";
+export { withEnvironment } from "./prompt/date.ts";
+export { type FrozenPrompt, mergeTools, preparePrompt } from "./prompt/frozen.ts";
+export { settlePrompt, validSections } from "./prompt/sections.ts";
+export { withSteeringNote } from "./prompt/steering.ts";
+export { RepetitionWatch, replaceRepeats } from "./repetition.ts";
+export { type CompactingSession, type CompactMode, createCompactor, marks, runsOf, type SentRequest, settleStaleRuns } from "./session-compaction.ts";
+export { kindOf, sessionScope } from "./session-scope.ts";
+export { streamTurn } from "./stream-turn.ts";
+export { blockTokens, textTokens, toolTokens } from "./token-estimate.ts";
+export { type CallCommands, type CallFileAccess, type CallFiles, sameGrant } from "./tool-run.ts";

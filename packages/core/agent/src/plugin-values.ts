@@ -9,6 +9,7 @@
  */
 
 import type { PluginSessionStore, PluginSettings, PluginStore, PluginValueKind } from "@plume/contract";
+import { errorText } from "@plume/loop";
 import { text } from "./i18n.ts";
 import type { JsonFiles } from "./json-files.ts";
 
@@ -269,8 +270,4 @@ function checkedKey(key: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }

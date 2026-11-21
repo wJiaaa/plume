@@ -7,7 +7,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FileChanges, PluginChanges, PluginResources, ResourceHandler, SessionSummary, ShellInfo } from "@plume/contract";
-import { REJECTED } from "../../../core/agent/src/declined.ts";
+import { REJECTED } from "../../../core/loop/src/declined.ts";
 import { Workspace } from "../../../core/agent/src/run-files.ts";
 import type { ToolContext } from "../src/tools/types.ts";
 

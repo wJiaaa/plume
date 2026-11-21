@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { ToolResultMessage } from "@plume/contract";
 import { reply } from "../../../builtin/compaction/test/helpers.ts";
-import { RepetitionWatch, replaceRepeats } from "../src/repetition.ts";
+import { RepetitionWatch, replaceRepeats } from "@plume/loop";
 
 const result = (id: string, output = "一样", isError = false): ToolResultMessage => ({
 	role: "toolResult",

@@ -13,10 +13,10 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import type { ApprovalContent, ApprovalDecision, Plugin, RunProcess, ToolResultMessage, ToolRun } from "@plume/contract";
-import { DECLINED } from "../src/declined.ts";
+import { DECLINED, type CallFiles } from "@plume/loop";
 import { PluginHost } from "../src/host.ts";
 import { text } from "../src/i18n.ts";
-import { type CallFiles, Workspace } from "../src/run-files.ts";
+import { Workspace } from "../src/run-files.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {

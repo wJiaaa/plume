@@ -41,6 +41,10 @@
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts"],
     },
+    "packages/core/loop": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+    },
     // src/index.ts、src/runner-entry.ts 是 package.json 的 exports，knip 自己认得。
     "packages/core/sandbox": {
       "entry": ["test/**/*.test.ts"],

@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CompactSummary, Message, ModelContext, Plugin, PluginContext } from "@plume/contract";
 import type { ModelConfig, ProviderConfig } from "@plume/llm/types";
-import { emptyRecord } from "../src/compaction.ts";
+import { emptyRecord, createCompactor, type CompactingSession } from "@plume/loop";
 import { PluginHost } from "../src/host.ts";
-import { createCompactor, type CompactingSession } from "../src/session-compaction.ts";
 
 let dir: string;
 let hosts: PluginHost[];

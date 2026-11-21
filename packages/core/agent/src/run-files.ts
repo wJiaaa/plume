@@ -12,13 +12,9 @@
 import { realpath } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import type {
-	ApprovalContent,
-	ApprovalDecision,
-	FileChanges,
 	FileStamp,
 	InstalledPlugin,
 	Message,
-	PermissionMode,
 	PluginChanges,
 	PluginResources,
 	PluginWorkspace,
@@ -26,9 +22,9 @@ import type {
 	RunFiles,
 	SandboxProcess,
 	SessionSummary,
-	ShellInfo,
 	ToolRun,
 } from "@plume/contract";
+import { type CallFileAccess, type CallFiles, DECLINED } from "@plume/loop";
 import { dialectsOf, withinOrIs } from "@plume/platform";
 import {
 	ArtifactStore,
@@ -54,48 +50,7 @@ import {
 	withPluginView,
 	writesAppData,
 } from "@plume/workspace";
-import { DECLINED } from "./declined.ts";
 import { text } from "./i18n.ts";
-
-/** 造一次调用的 `files` 要的东西，循环（`tool-run.ts`）按这次调用给。 */
-export interface CallFiles {
-	sessionId: string;
-	/** 这次调用的工作目录：相对路径按它解析，读它里面的不问。 */
-	cwd: string;
-	/** 这个会话的临时目录（`scratch://`）。 */
-	scratchDir: string;
-	/** 同一脉的会话的临时目录（`ToolRun.scratchDirs`），写进去不算改 Plume 的数据目录、不用人亲自点头；不给时只算 `scratchDir`。 */
-	scratchDirs?: readonly string[];
-	/** 外层要求这次调用不改动工作区（`ToolExecution.readOnly`）：`change`、`write` 一律拒绝。 */
-	readOnly?: boolean;
-	/** 同一个项目的其他源码目录（`ToolRun.projectRoots`）。 */
-	projectRoots?: readonly string[];
-	/** 人拖进来的文件（`ToolRun.allowedPaths`）。 */
-	allowedPaths?: readonly string[];
-	signal: AbortSignal;
-	/** 这次调用的 shell（`ToolRun.shell`）：一行命令按它的语法拆。 */
-	shell(): Promise<ShellInfo>;
-	/** 经过闸问一次（`ToolRun.ask` 那一条路）。不给就是没人可问（只在直接造它的测试里）。 */
-	ask?(content: ApprovalContent): Promise<ApprovalDecision>;
-	/**
-	 * 写 Plume 自己的目录（`writesAppData`）时用：`work` 跑着的期间，这次调用的问都只认人在卡上答（同提权：权限模式、「以后不再问」、
-	 * 帮我批准都不替人点头，卡上没有「以后不再问」），交回时说人在其间点没点过头。不给就是没人可问，这类写入一律拒绝。
-	 */
-	appData?<T>(work: () => Promise<T>): Promise<{ value: T; approved: boolean }>;
-	/** 这次调用所在项目现在的权限模式。完全访问下命令不进沙箱，命令写明要改 Plume 自己的目录时本体先问人（`exec`）。 */
-	permission?(): Promise<PermissionMode>;
-	/** 调用答完以后再用就抛错。 */
-	alive(what: string): void;
-}
-
-/** 一次调用的文件能力：挂到 `run` 上的 `files`，包一层 `exec` 观测命令，调用收场时交出这次改了哪些文件。 */
-export interface CallFileAccess {
-	files: RunFiles;
-	/** 包住这次调用的 `ToolRun.exec`：带 `recordChanges` 的命令由本体观测。 */
-	exec(exec: ToolRun["exec"]): ToolRun["exec"];
-	/** 这次调用到现在记下的改动（`ToolOutput.changes`）；什么都没改、没观测时是 undefined。 */
-	recorded(): Promise<FileChanges | undefined>;
-}
 
 // i18n-exempt：交给模型的工具结果。
 const READ_ONLY = "Not changed: this conversation may not change files right now.";

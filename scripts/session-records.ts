@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { ContextRecord } from "../packages/core/agent/src/compaction.ts";
+import type { ContextRecord } from "../packages/core/loop/src/compaction.ts";
 import type { Message, SessionSummary } from "../packages/contract/src/index.ts";
 
 export function plumeHome(): string {

@@ -11,7 +11,7 @@
 import { KEEP_MIN } from "../packages/builtin/compaction/src/budget.ts";
 import { FORK_HOT_MS } from "../packages/builtin/compaction/src/fork.ts";
 import type { Message, UsageCacheMissCause } from "../packages/contract/src/index.ts";
-import { messageTokens } from "../packages/core/agent/src/token-estimate.ts";
+import { messageTokens } from "../packages/core/loop/src/token-estimate.ts";
 import { CACHE_NOISE_FLOOR_TOKENS } from "../packages/core/agent/src/usage-record.ts";
 
 interface AuditCall {

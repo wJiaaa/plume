@@ -61,23 +61,49 @@ import type {
 	UserContent,
 	UserMessage,
 } from "@plume/contract";
+import {
+	type CompactMode,
+	contextBreakdown,
+	type ContextRecord,
+	createCompactor,
+	emptyRecord,
+	errorText,
+	estimateContext,
+	foldRetry,
+	historyFor,
+	keptRecord,
+	kindOf,
+	marks,
+	preparePrompt,
+	RepetitionWatch,
+	replaceRepeats,
+	rewrittenAt,
+	runsOf,
+	runSteps,
+	sameGrant,
+	type SentRequest,
+	sessionScope,
+	settleHiccups,
+	settlePrompt,
+	settleStaleRuns,
+	streamTurn,
+	validSections,
+	withEnvironment,
+	withSteeringNote,
+} from "@plume/loop";
 import { renameWithRetry } from "./atomic-write.ts";
 import { jsonFiles } from "./json-files.ts";
 import { openProjects } from "./projects.ts";
 import { createModelSettings } from "./model-settings.ts";
 import { PluginProviderSources } from "./plugin-providers.ts";
-import { type ContextRecord, emptyRecord, historyFor, keptRecord, rewrittenAt } from "./compaction.ts";
-import { createCompactor, type CompactMode, marks, runsOf, type SentRequest, settleStaleRuns } from "./session-compaction.ts";
 import { projectRootsFor } from "./project-roots.ts";
 import { layerProjectSettings, projectLayerView, withProjectLayer } from "./project-config.ts";
 import { operateSessionFile } from "./file-operations.ts";
 import { managedMediaPath, readManagedMedia } from "./media-access.ts";
 import { listSessionDirectory, locateSessionFiles, readSessionFile, readSessionFileBytes, sessionFilePath } from "./files.ts";
-import { foldRetry, settleHiccups } from "./hiccups.ts";
-import { errorText, type HostPages, PluginHost } from "./host.ts";
+import { type HostPages, PluginHost } from "./host.ts";
 import { activeLocale, setLocale, text } from "./i18n.ts";
 import { conversationMarkdown } from "./conversation-markdown.ts";
-import { runSteps } from "./loop.ts";
 import { BackgroundRuns, DELIVERED_HEADER, type ReadyKind, reportTexts } from "./background.ts";
 import { BackgroundJobs } from "./jobs.ts";
 import { SessionWakeups } from "./wakeups.ts";
@@ -85,22 +111,14 @@ import { lettersText } from "./letters.ts";
 import { ChildTasks } from "./child-tasks.ts";
 import { SessionQueues, type Source, childTask, stewardMessage } from "./queue.ts";
 import { openSessionDb, protectSource } from "./session-db.ts";
-import { kindOf, sessionScope } from "./session-scope.ts";
 import { sessionTrees, storageUse, withinRange } from "./storage.ts";
 import { createVault, providerKeys } from "./vault.ts";
-import { contextBreakdown, estimateContext } from "./context-breakdown.ts";
 import { imageNameOf, MEDIA_NAME, parkImages, readImage, removeImages, restoreImages, saveImage, sweepImages } from "./media.ts";
 import { ChangeStore } from "@plume/workspace";
 import { drawImages, findImageModel } from "./images.ts";
-import { RepetitionWatch, replaceRepeats } from "./repetition.ts";
-import { withEnvironment } from "./prompt/date.ts";
-import { preparePrompt } from "./prompt/frozen.ts";
-import { settlePrompt, validSections } from "./prompt/sections.ts";
-import { withSteeringNote } from "./prompt/steering.ts";
 import { commandAccess, contextShell, settleShell } from "./commands.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
-import { DEFAULT_THINKING, lookup, personalizationOf, resolveModel, sameGrant, type StoredSettings, stripForeignHandles, thinkingFor } from "./models.ts";
-import { streamTurn } from "./stream-turn.ts";
+import { DEFAULT_THINKING, lookup, personalizationOf, resolveModel, type StoredSettings, stripForeignHandles, thinkingFor } from "./models.ts";
 import { estimateParts, type InputParts, tailActivity } from "./usage-record.ts";
 
 /** 抽字的文档最大多少字节：再大的文件读进来、解开都要好几秒，进程这段时间什么都做不了。 */

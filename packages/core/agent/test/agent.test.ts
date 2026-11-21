@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentEvent, ApprovalRequest, HumanRequest, Message, Plugin, PluginContext } from "@plume/contract";
-import { REJECTED } from "../src/declined.ts";
+import { REJECTED } from "@plume/loop";
 import { type Agent, type AgentOptions, createAgent } from "../src/index.ts";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";

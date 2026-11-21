@@ -9,9 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentEvent, Message, Plugin, PromptSection, ToolSpec } from "@plume/contract";
 import { type Agent, createAgent } from "../src/index.ts";
-import { withEnvironment } from "../src/prompt/date.ts";
-import { type FrozenPrompt, mergeTools, preparePrompt } from "../src/prompt/frozen.ts";
-import { withSteeringNote } from "../src/prompt/steering.ts";
+import { withEnvironment, type FrozenPrompt, mergeTools, preparePrompt, withSteeringNote } from "@plume/loop";
 import { type FakeModel, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";
 

@@ -8,9 +8,9 @@
  */
 
 import type { Locale } from "@plume/contract";
+import { setLocale as setLoopLocale } from "@plume/loop";
 
 const zhCN = {
-	"loop.argumentsLost": "模型服务连续 3 轮丢失了工具调用的参数，请更换模型或服务商后重试。",
 	"model.incomplete": "模型回复不完整，本次结果没有写入。",
 	"project.configNotObject": "{path} 的内容不是一个对象。",
 	"project.configInvalidJson": "{path} 不是合法的 JSON：{error}",
@@ -125,13 +125,6 @@ const zhCN = {
 	"secrets.unavailable": "没有加密密钥用的钥匙",
 	"model.none": "还没有可用的模型，先在「设置 → 模型」里添加供应商和模型。",
 	"model.failed": "模型没有回答",
-	"loop.truncatedCalls": "回复连续多次在工具参数写到一半时达到输出长度上限，已停下。可以让它把内容拆小，或换一个输出上限更大的模型。",
-	"loop.requestRejected": "模型服务拒收了这次请求。已把其中过大的工具输出压成一行，正在重试。",
-	"loop.contextOverflow": "上下文超出了模型的上限，正在压缩历史后重试。",
-	"loop.outputLimit": "回复连续多次达到输出长度上限，已停下。最后一段回答可能不完整。",
-	"loop.emptyReplies": "模型连续返回空回复，请重试或更换模型。",
-	"loop.stalled": "同一个调用反复得到相同结果，已停下。告诉它换个方向，或直接说明你想怎么处理。",
-	"loop.badStepVerdict": "step.end 返回的结论不认得，已按默认方式接着走。",
 	"compaction.busy": "对话正在进行中，等它结束再压缩。",
 	"model.forkNoRequest": "这个会话还没发过可以分叉的主请求（没发过，或之后换了模型）",
 	"model.forkMismatch": "分叉请求和上一次主请求的前缀在 {segment} 处对不上，没有发出去",
@@ -162,7 +155,6 @@ const zhCN = {
 	"session.badArchivedListener": "ctx.sessions.onArchived 要一个函数",
 	"session.childArchive": "子会话、插件的会话归插件管，不能归档",
 	"session.notChild": "这不是子会话，没有可以交过去的父会话",
-	"session.callEnded": "这次工具调用已经结束，它拿到的 {what} 不能再用",
 	"session.badJob": "登记后台任务要给出 command、output 和 stop",
 	"session.jobNotFound": "找不到这个后台任务",
 	"session.badWakeup": "约唤醒要给出 at 或 cron 之一、prompt 和 message",
@@ -221,7 +213,6 @@ const zhCN = {
 export type TextKey = keyof typeof zhCN;
 
 const en: Record<TextKey, string> = {
-	"loop.argumentsLost": "The model provider lost tool arguments for 3 consecutive rounds. Try a different model or provider.",
 	"model.incomplete": "The model response is incomplete. The result was not saved.",
 	"project.configNotObject": "{path} doesn't contain a JSON object.",
 	"project.configInvalidJson": "{path} isn't valid JSON: {error}",
@@ -339,14 +330,6 @@ const en: Record<TextKey, string> = {
 	"secrets.unavailable": "There is no key to encrypt secrets with",
 	"model.none": "No model is available yet. Add a provider and a model in Settings → Models first.",
 	"model.failed": "The model did not answer",
-	"loop.truncatedCalls":
-		"The reply kept hitting the output limit halfway through a tool call, so the run stopped. Ask it to split the work into smaller pieces, or switch to a model with a larger output limit.",
-	"loop.requestRejected": "The provider refused this request. Oversized tool output was cut to one line each, and it is being sent again.",
-	"loop.contextOverflow": "The conversation no longer fits in the model's context window. Compacting the history, then retrying.",
-	"loop.outputLimit": "Stopped after several replies in a row ran into the output length limit. The last answer may be cut off.",
-	"loop.emptyReplies": "The model kept returning empty replies. Try again or switch models.",
-	"loop.stalled": "Stopped: the same call kept coming back with the same result. Point it somewhere else, or say how you want this handled.",
-	"loop.badStepVerdict": "step.end returned a verdict it could not use; carried on as usual.",
 	"compaction.busy": "The conversation is still running. Compact it once it finishes.",
 	"model.forkNoRequest": "This session has no main request to fork from (none sent yet, or the model changed since)",
 	"model.forkMismatch": "The forked request no longer matches the previous request's prefix at {segment}, so it was not sent",
@@ -377,7 +360,6 @@ const en: Record<TextKey, string> = {
 	"session.badArchivedListener": "ctx.sessions.onArchived needs a function",
 	"session.childArchive": "Child sessions and plugin-owned sessions are managed by their plugin and cannot be archived",
 	"session.notChild": "This is not a child session, so there is no parent to hand it to",
-	"session.callEnded": "This tool call has ended; the {what} it was given can no longer be used",
 	"session.badJob": "A background job needs a command, output and stop",
 	"session.jobNotFound": "Background job not found",
 	"session.badWakeup": "A wakeup needs exactly one of at or cron, a prompt and a message",
@@ -439,6 +421,7 @@ let active: Locale = "zh-CN";
 
 export function setLocale(locale: Locale): void {
 	if (locale in CATALOGS) active = locale;
+	setLoopLocale(locale);
 }
 
 export function activeLocale(): Locale {

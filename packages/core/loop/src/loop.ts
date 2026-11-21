@@ -11,7 +11,8 @@
 import type { AssistantMessage, Log, Message, ModelContext, NoticeLevel, StepEnd, StepVerdict, ToolResultMessage, TurnStop } from "@plume/contract";
 import { isContextOverflow } from "@plume/llm/failure";
 import type { ToolCallContent } from "@plume/llm/types";
-import { errorText, type PluginHost } from "./host.ts";
+import { errorText } from "./errors.ts";
+import type { LoopHost } from "./host.ts";
 import { text } from "./i18n.ts";
 import { Recovery } from "./recovery.ts";
 import type { RepetitionWatch } from "./repetition.ts";
@@ -32,7 +33,7 @@ export interface TurnScope {
 	scratchDir: ToolScope["scratchDir"];
 	scratchDirs?: ToolScope["scratchDirs"];
 	signal: AbortSignal;
-	host: PluginHost;
+	host: LoopHost;
 	log: Log;
 	repetition: RepetitionWatch;
 	/** 组这一次请求的上下文（经 model.context）。 */

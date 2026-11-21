@@ -40,11 +40,6 @@ export interface StoredSettings {
 	sessionManager?: string;
 }
 
-/** 两条批准是不是同一条：同一个名下、同一个 subject。 */
-export function sameGrant(a: AlwaysAllow, b: AlwaysAllow): boolean {
-	return a.subject === b.subject && a.plugin === b.plugin;
-}
-
 function normalizeGrant(raw: unknown): AlwaysAllow | undefined {
 	if (!raw || typeof raw !== "object") return undefined;
 	const { subject, plugin } = raw as { subject?: unknown; plugin?: unknown };

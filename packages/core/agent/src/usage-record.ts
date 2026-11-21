@@ -10,7 +10,7 @@
 
 import type { AssistantMessage, Message, ModelContext, PromptSection, UsageCacheMissCause, UsageTokenPart } from "@plume/contract";
 import { requestUsage, type RequestPrefix } from "@plume/llm/types";
-import { blockTokens, textTokens, toolTokens } from "./token-estimate.ts";
+import { blockTokens, textTokens, toolTokens } from "@plume/loop";
 
 /** 送进去的按来源分的几类。系统提示词按段的类别（`PromptSection.category`）拆成前三类。 */
 const INPUT_PARTS = [

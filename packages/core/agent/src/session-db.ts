@@ -28,10 +28,9 @@ import type {
 	UsageTokenPart,
 } from "@plume/contract";
 import type { AssistantContent } from "@plume/llm/types";
-import type { ContextRecord } from "./compaction.ts";
+import { type ContextRecord, kindOf } from "@plume/loop";
 import { text } from "./i18n.ts";
 import { mediaNames } from "./media.ts";
-import { kindOf } from "./session-scope.ts";
 import { billedParts, diagnoseCache, type PreviousRequest, type SpendNote, TOKEN_PARTS, thinkingMs } from "./usage-record.ts";
 
 /**

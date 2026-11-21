@@ -7,8 +7,7 @@ import type { ToolCallContent } from "@plume/llm/types";
 import todo from "../../../builtin/todo/src/index.ts";
 import { commandAccess } from "../src/commands.ts";
 import { PluginHost, type HostSessions } from "../src/host.ts";
-import { runSteps, type TurnScope } from "../src/loop.ts";
-import { RepetitionWatch } from "../src/repetition.ts";
+import { runSteps, type TurnScope, RepetitionWatch } from "@plume/loop";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {

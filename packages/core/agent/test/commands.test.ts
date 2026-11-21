@@ -14,7 +14,7 @@ import type { AgentEvent, ApprovalContent, ApprovalDecision, ModelContext, Permi
 import { resetSystemShell } from "@plume/platform";
 import { commandAccess, settleShell } from "../src/commands.ts";
 import { type Agent, createAgent } from "../src/index.ts";
-import type { CallCommands } from "../src/tool-run.ts";
+import type { CallCommands } from "@plume/loop";
 import { type FakeModel, type FakeReply, fakeAnthropic } from "../src/testing.ts";
 import { BUILTINS } from "./builtins.ts";
 

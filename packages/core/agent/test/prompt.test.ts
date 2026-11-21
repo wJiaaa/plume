@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ModelContext, Plugin } from "@plume/contract";
 import { PluginHost } from "../src/host.ts";
-import { settlePrompt } from "../src/prompt/sections.ts";
+import { settlePrompt } from "@plume/loop";
 
 describe("systemPrompt 跟着 sections 重拼", () => {
 	const sections = [

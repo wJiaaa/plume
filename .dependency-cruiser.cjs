@@ -64,34 +64,26 @@ module.exports = {
 
 		{
 			name: "sandbox-below-agent",
-			comment: "sandbox 是本体的能力层，只认命令、目录、档位，不知道会话和循环：不依赖 agent、llm。",
+			comment: "sandbox 是本体的能力层，只认命令、目录、档位，不知道会话和循环：不依赖 agent、llm、loop。",
 			severity: "error",
 			from: { path: "^packages/core/sandbox/" },
-			to: { path: "^packages/core/(agent|llm)/" },
-		},
-
-		{
-			name: "loop-knows-no-sandbox",
-			comment: "循环只经 ToolScope 拿到跑命令的能力（agent 的 commands.ts 装配），不直接引用沙箱的实现。",
-			severity: "error",
-			from: { path: "^packages/core/agent/src/(loop|stream-turn|recovery|repetition|compaction|session-compaction|tool-run)\\.ts$" },
-			to: { path: "^packages/core/sandbox/" },
+			to: { path: "^packages/core/(agent|llm|loop)/" },
 		},
 
 		{
 			name: "workspace-below-agent",
-			comment: "workspace 是本体的能力层，只认路径、目录、数据目录，不知道会话和循环：不依赖 agent、llm、sandbox。",
+			comment: "workspace 是本体的能力层，只认路径、目录、数据目录，不知道会话和循环：不依赖 agent、llm、loop、sandbox。",
 			severity: "error",
 			from: { path: "^packages/core/workspace/" },
-			to: { path: "^packages/core/(agent|llm|sandbox)/" },
+			to: { path: "^packages/core/(agent|llm|loop|sandbox)/" },
 		},
 
 		{
-			name: "loop-knows-no-workspace",
-			comment: "循环只经 ToolScope 拿到读文件的能力（agent 的 run-files.ts 装配），不直接引用工作区的实现。",
+			name: "loop-is-the-core",
+			comment: "循环只认 contract 和 llm：宿主经 LoopHost、跑命令和读写文件经 ToolScope 由 agent 装配后交进来。",
 			severity: "error",
-			from: { path: "^packages/core/agent/src/(loop|stream-turn|recovery|repetition|compaction|session-compaction|tool-run)\\.ts$" },
-			to: { path: "^packages/core/workspace/" },
+			from: { path: "^packages/core/loop/", pathNot: "^packages/core/loop/test/" },
+			to: { path: "^(apps/|packages/(core/(agent|sandbox|workspace)|infra|client|builtin|sdk|testing)/)" },
 		},
 
 		{
