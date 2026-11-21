@@ -234,9 +234,9 @@
 		--plume-syntax-tag: #79b8ff;
 		--plume-syntax-attribute: #e3c07b;
 
-		/* 深底上同样的投影看不见，旋钮像贴在轨道上；玻璃的内高光要压暗，否则是一道亮线。 */
+		/* 深底上同样的投影看不见，旋钮像贴在轨道上；玻璃不要顶边内高光，压暗了也会叠在描边上、让顶边看着比另外三边粗。 */
 		--plume-shadow-knob: 0 1px 3px rgb(0 0 0 / 0.55);
-		--plume-shadow-glass: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 1px 6px -2px rgb(0 0 0 / 0.38);
+		--plume-shadow-glass: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 1px 6px -2px rgb(0 0 0 / 0.38);
 		/* 深底上一圈大范围的黑晕加顶边高光，提示条像悬在半空；只留一道贴边的影子，靠浮层底和描边分层。 */
 		--plume-shadow-toast: 0 1px 2px rgb(0 0 0 / 0.28);
 	}

@@ -64,7 +64,7 @@
 
 ### 阴影
 
-按用途选八档：`shadow-rest` 主输入框、`shadow-menu` 菜单浮层、`shadow-tip` 提示、`shadow-dialog` 对话框、`shadow-overlay` 图片上的浮条、`shadow-knob` 旋钮、`shadow-glass` 带内高光的半透明浮层、`shadow-toast` 提示条。深色的旋钮和玻璃阴影单独加深，深色的提示条只留一道贴边的影子；抽屉靠底色和线分层，不额外投影。
+按用途选八档：`shadow-rest` 主输入框、`shadow-menu` 菜单浮层、`shadow-tip` 提示、`shadow-dialog` 对话框、`shadow-overlay` 图片上的浮条、`shadow-knob` 旋钮、`shadow-glass` 半透明浮层（浅色下带顶边内高光）、`shadow-toast` 提示条。深色的旋钮和玻璃阴影单独加深，深色的玻璃不带内高光，深色的提示条只留一道贴边的影子；抽屉靠底色和线分层，不额外投影。
 
 ### 加 token、皮肤
 
