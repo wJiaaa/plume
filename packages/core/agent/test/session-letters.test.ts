@@ -107,6 +107,7 @@ it("寄给闲着的会话：聚合后为它开一轮，消息带 peer，开头�
 	const first = letter(target.id, { from: "问的 [aaaaaa]", text: "第一句", guide: "GUIDE" });
 	const second = letter(target.id, { from: "问的 [aaaaaa]", text: "第二句", guide: "GUIDE" });
 	expect(first.queued).toBe(false);
+	expect(first.held).toBe(false);
 	await done(target.id, 1);
 	expect(await first.read).toEqual({ status: "read" });
 	expect(await second.read).toEqual({ status: "read" });
@@ -165,16 +166,24 @@ it("收件方的人按停：攒着的信都留着、不叫醒它，人下一次�
 	expect(messages[1]).toMatchObject({ peer: [{ text: "停之前" }] });
 });
 
-it("停下以后寄来的照常为它开一轮，留着的信一起读到、排在前面", async () => {
-	const { service, target, done, letterOf } = await open([keepCall, { text: "读到了" }]);
+it("停下以后寄来的也不叫醒它：回执说留着，不显得在等后台，人开口时和停之前的一起读到、按先后排", async () => {
+	const { service, target, done, letterOf } = await open([keepCall, { text: "答人" }]);
 	const letter = (await letterOf())!;
 	const kept = letter(target.id, { from: "问的", text: "停之前" });
 	service.stop(target.id);
 	const fresh = letter(target.id, { from: "问的", text: "停之后" });
+	expect(fresh).toMatchObject({ queued: false, held: true });
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	const idle = await service.getSession(target.id);
+	expect(idle.messages).toEqual([]);
+	expect(idle.summary.running).toBe(false);
+	expect(idle.summary.background ?? false).toBe(false);
+
+	service.send(target.id, { content: [{ type: "text", text: "人开口" }] });
 	await done(target.id, 1);
 	expect(await kept.read).toEqual({ status: "read" });
 	expect(await fresh.read).toEqual({ status: "read" });
-	expect((await service.getSession(target.id)).messages[0]).toMatchObject({ peer: [{ text: "停之前" }, { text: "停之后" }] });
+	expect((await service.getSession(target.id)).messages[1]).toMatchObject({ peer: [{ text: "停之前" }, { text: "停之后" }] });
 });
 
 it("读信的那一轮被插话打断：信留着，接在插话后面读到", async () => {
@@ -224,6 +233,14 @@ it("收件方归档了：攒着的、留着的信都是 closed，归档的会话
 	await new Promise((resolve) => setTimeout(resolve, 600));
 	expect((await service.getSession(target.id)).messages).toEqual([]);
 	expect(() => letter(target.id, { from: "问的", text: "归档以后" })).toThrow("寄不到");
+});
+
+it("寄信的会话归档了：在跑的那一轮也不能再寄", async () => {
+	const { service, asker, letterOf } = await open([keepCall]);
+	const letter = (await letterOf())!;
+	const other = await service.createSession({ cwd: dir });
+	await service.setSessionArchived(asker.id, true);
+	expect(() => letter(other.id, { from: "问的", text: "归档以后" })).toThrow("已经归档");
 });
 
 it("忙着时收到的信，收件方被按停又归档：信是 closed，不一直挂着", async () => {
@@ -276,6 +293,7 @@ it("接连被信叫起十轮、人一句话也没说：第十一封不叫醒，�
 		await done(target.id, round);
 	}
 	const eleventh = letter(target.id, { from: "问的", text: "第 11 封" });
+	expect(eleventh).toMatchObject({ queued: false, held: true });
 	await vi.waitFor(() => expect(events.some((event) => event.type === "notice" && event.sessionId === target.id && event.level === "info")).toBe(true), {
 		timeout: 5_000,
 		interval: 10,
@@ -299,3 +317,41 @@ it("接连被信叫起十轮、人一句话也没说：第十一封不叫醒，�
 	watching.abort();
 	// 每封信都要等聚合的那一小会儿（四百毫秒）才开一轮，十二轮加起来超过默认的五秒。
 }, 15_000);
+
+it("本来要收场的一轮因为信接着跑也算一轮：对方总赶在它收尾前寄到，十轮以后留到人开口，不在一轮里一直接着跑", async () => {
+	let requests = 0;
+	let sent = 0;
+	let targetId = "";
+	let post: ToolRun["letter"];
+	const { service, target, letterOf } = await open(
+		() => (requests++ === 0 ? keepCall : { text: "读到了" }),
+		(ctx) =>
+			ctx.hook("step.end", async (input, next) => {
+				// 收件方每一步收尾前都刚好收到一封，等过凑批的窗口，循环最后那次看收件箱时就有攒好的一批。
+				if (input.sessionId === targetId && post && sent < 12) {
+					sent += 1;
+					post(targetId, { from: "问的", text: `第 ${sent} 封` });
+					await new Promise((resolve) => setTimeout(resolve, 500));
+				}
+				return next(input);
+			}),
+	);
+	const events: AgentEvent[] = [];
+	const watching = new AbortController();
+	void (async () => {
+		for await (const event of service.watch({ signal: watching.signal })) events.push(event);
+	})();
+	post = (await letterOf())!;
+	targetId = target.id;
+	service.send(target.id, { content: [{ type: "text", text: "人开口" }] });
+	// 人开口那一句一次回复，再为十封信各接着跑一步；第十一封留着，这一轮收场。
+	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.stop).toEqual({ reason: "done" }), { timeout: 15_000, interval: 20 });
+	const view = await service.getSession(target.id);
+	expect(view.messages.filter((message) => message.role === "assistant")).toHaveLength(11);
+	expect(sent).toBe(11);
+	expect(events.some((event) => event.type === "notice" && event.sessionId === target.id && event.level === "info")).toBe(true);
+	const letters = view.messages.flatMap((message) => (message.role === "user" && message.peer ? message.peer : []));
+	expect(letters.map((letter) => letter.text)).toEqual(Array.from({ length: 10 }, (_, index) => `第 ${index + 1} 封`));
+	watching.abort();
+	// 每封等过凑批的窗口（五百毫秒），十一封加起来超过默认的五秒。
+}, 20_000);

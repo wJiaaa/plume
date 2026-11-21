@@ -38,8 +38,11 @@ export interface TurnScope {
 	repetition: RepetitionWatch;
 	/** 组这一次请求的上下文（经 model.context）。 */
 	context(): Promise<ModelContext>;
-	/** 完整工具结果之后、下一请求之前消费插话和后台结果，返回是否写入了消息。 */
-	boundary(): Promise<boolean>;
+	/**
+	 * 完整工具结果之后、下一请求之前消费插话和后台结果，返回是否写入了消息。`ending`：这一轮本来到这里就收场了，读进什么就为它接着跑，
+	 * 宿主据此像叫醒闲着的会话一样把关（别的会话的信接连叫起的上限）。
+	 */
+	boundary(ending: boolean): Promise<boolean>;
 	/** 发一次请求，等它落定；还什么都没说时人换了模型，放手返回 `"switched"`。 */
 	request(context: ModelContext): Promise<AssistantMessage | "switched">;
 	/** 一条消息写进会话。 */
@@ -74,7 +77,7 @@ export async function runSteps(scope: TurnScope): Promise<TurnStop> {
 	let lostRounds = 0;
 	for (let step = 1; step <= MAX_STEPS; step++) {
 		if (scope.signal.aborted) return { reason: "aborted" };
-		await scope.boundary();
+		await scope.boundary(false);
 		if (scope.signal.aborted) return { reason: "aborted" };
 		// 写进会话之前把参数换成规范名：存下的、层看到的、工具读的是同一份，见 `canonicalCalls`。
 		const reply = canonicalCalls(await requestReply(scope), scope.host);
@@ -135,8 +138,8 @@ export async function runSteps(scope: TurnScope): Promise<TurnStop> {
 			if (verdict.continue && verdict.say) await scope.commit(said(verdict.say));
 			continue;
 		}
-		// 最后一步也要看收件箱：等钩子时刚送到的消息不能跟着自然完成一起丢掉。
-		const received = await scope.boundary();
+		// 最后一步也要看收件箱：等钩子时刚送到的消息不能跟着自然完成一起丢掉。step.end 要接着做（带着 say）时本来就不收场。
+		const received = await scope.boundary(!(verdict.continue && verdict.say));
 		if (scope.signal.aborted) return { reason: "aborted" };
 		if (received) continue;
 		if (!verdict.continue) return { reason: verdict.reason ?? "done", ...(verdict.error ? { error: verdict.error } : {}) };

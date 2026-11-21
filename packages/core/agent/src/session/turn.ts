@@ -65,7 +65,7 @@ export interface TurnDeps {
 	requestUser(session: Session, request: HumanRequest, signal: AbortSignal): Promise<HumanAnswer>;
 	parentFor(session: Session, plugin: string): ParentSession | undefined;
 	jobs: Pick<BackgroundJobs, "track">;
-	background: Pick<BackgroundRuns, "channel" | "take" | "hasHeld" | "hasReady" | "readyKind" | "holdReady" | "hold" | "letter">;
+	background: Pick<BackgroundRuns, "channel" | "take" | "takeKind" | "hasHeld" | "hasReady" | "hold" | "letter">;
 	wakeups: Pick<SessionWakeups, "schedule">;
 	queues: Pick<SessionQueues, "peekSteered" | "has" | "take" | "hasSteered" | "unsteer">;
 	submitPrompt(session: Session, prompt: UserMessage, signal: AbortSignal): Promise<PromptVerdict>;
@@ -83,6 +83,7 @@ export interface TurnDeps {
 	wakeReports(session: Session): void;
 	checkIdle(session: Session): void;
 	admitWake(session: Session, kind: ReadyKind): boolean;
+	wakeHeld(session: Session): boolean;
 	queuedPrompt(entry: QueuedMessage, interrupt: boolean): UserMessage;
 	thinkingOf(session: Session): Session["summary"]["thinking"];
 }
@@ -91,7 +92,7 @@ export interface Turn {
 	compactor: ReturnType<typeof createCompactor>;
 	compactNow(sessionId: string, instructions: string): Promise<{ done: Promise<CompactionOutcome> }>;
 	compactIdle(session: Session, controller: AbortController): Promise<void>;
-	consumeBoundary(session: Session, controller: AbortController): Promise<boolean>;
+	consumeBoundary(session: Session, controller: AbortController, ending?: boolean): Promise<boolean>;
 	postLetter(from: Session, toId: string, input: LetterInput): LetterReceipt;
 	runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel?: boolean): Promise<TurnStop>;
 	active(): Iterable<Session>;
@@ -142,6 +143,7 @@ export function createTurn(deps: TurnDeps): Turn {
 		wakeReports,
 		checkIdle,
 		admitWake,
+		wakeHeld,
 		queuedPrompt,
 		thinkingOf,
 	} = deps;
@@ -215,8 +217,12 @@ export function createTurn(deps: TurnDeps): Turn {
 	/**
 	 * 把这一刻送到的读进会话：先是人的插话，再是后台结果和别的会话的信（合成一条运行时送达）。
 	 * 人开口了，被信和交回接连叫起的轮数（`Session.autoWakes`）清零。
+	 *
+	 * `ending`：这一轮本来到这里就收场了，读进什么就接着跑什么。这时只有别的会话的信、开出来的会话的交回在等的，和闲着时被它们
+	 * 叫醒是一回事，同样计数、到上限留到人开口（`admitWake`）。循环里最后一步的收件箱和一轮收尾后的接着读都走这里：只在其中一处数，
+	 * 两个会话的往来总赶在对方收尾前攒好，就一直接着跑、撞不到上限。人这次插了话的不数，人开口了。
 	 */
-	async function consumeBoundary(session: Session, controller: AbortController): Promise<boolean> {
+	async function consumeBoundary(session: Session, controller: AbortController, ending = false): Promise<boolean> {
 		let received = false;
 		const sessionId = session.summary.id;
 		while (!controller.signal.aborted) {
@@ -245,6 +251,10 @@ export function createTurn(deps: TurnDeps): Turn {
 			}
 		}
 		if (controller.signal.aborted) return received;
+		if (ending && !received) {
+			const kind = background.takeKind(sessionId);
+			if (kind !== undefined && !admitWake(session, kind)) return received;
+		}
 		let reports = background.take(session.summary.id);
 		// 信和开出来的会话交回的（`delivery.sessionId`）不是这个会话自己派出去的事：没写进会话就收了场的放回去，同 `BackgroundRuns.cancelSession`。
 		const taken = reports.filter((report) => "letter" in report || report.delivery?.sessionId !== undefined);
@@ -301,11 +311,12 @@ export function createTurn(deps: TurnDeps): Turn {
 
 	/**
 	 * `from` 给 `toId` 寄一封信（`ToolRun.letter`）。两边都得是顶层会话；发件方的 id、目录照实填。信是单向的，见 `LetterReceipt`。
-	 * 一封信是一件新的事，和人开口一样：停下过的会话也为它开一轮（叫不叫得醒另看 `wakeReports` 的上限）。
+	 * 信不替人做主：人按了停的会话不为它开一轮，留到人开口（`wakeReports`），回执照实说（`held`）。归档了的会话收工了，不再寄信。
 	 */
 	function postLetter(from: Session, toId: string, input: LetterInput): LetterReceipt {
 		const to = sessions.get(String(toId));
 		if (quitting() || !sessions.has(from.summary.id)) throw new Error(text("session.parentStopped"));
+		if (from.summary.archived) throw new Error(text("session.archivedSender"));
 		if (!to || to.summary.kind !== "top" || to.summary.archived || from.summary.kind !== "top" || to === from)
 			throw new Error(text("session.badLetterTarget", { id: String(toId) }));
 		const words = typeof input?.text === "string" ? input.text.trim() : "";
@@ -315,8 +326,7 @@ export function createTurn(deps: TurnDeps): Turn {
 		// 「会话在不在忙」只看 `held`（见 `Session.controller`），不另看 `summary.running`。
 		const queued = held(to);
 		const read = background.letter(to.summary.id, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
-		to.stopped = false;
-		return { id: peer.id!, queued, read };
+		return { id: peer.id!, queued, held: wakeHeld(to), read };
 	}
 
 	async function runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel = false): Promise<TurnStop> {
@@ -356,7 +366,7 @@ export function createTurn(deps: TurnDeps): Turn {
 					log,
 					repetition: session.repetition,
 					context: () => buildContext(session),
-					boundary: () => consumeBoundary(session, controller),
+					boundary: (ending) => consumeBoundary(session, controller, ending),
 					request: (context) => request(session, context, controller.signal),
 					commit: async (message) => {
 						await commit(session, message);
@@ -431,23 +441,15 @@ export function createTurn(deps: TurnDeps): Turn {
 			} else accepted = await consumeBoundary(session, controller);
 			// 拦下的这条没写进会话，这一轮什么也没做，按完成收场：不留「已暂停 · 继续」。
 			stop = controller.signal.aborted ? { reason: "aborted" } : !accepted ? { reason: "done" } : await steps();
-			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。步骤已经做完，这时读到的信是叫起了它。
+			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。步骤已经做完，这时读到的是叫起了它（`ending`）。
+			// 什么也没读进（到了上限留着、钩子拦下、都作废了）就收场，剩下的由收场后的 `wakeReports` 再看。
 			while (
 				!controller.signal.aborted &&
 				stop.reason === "done" &&
 				(session.steering?.length || queues.hasSteered(sessionId) || background.hasReady(sessionId))
 			) {
-				// 只有信、交回在等：和闲着时被它们叫醒是一回事，同样计数、到上限留到人开口（`admitWake`）。不计的话两个会话的往来
-				// 总赶在对方收尾前攒好，就一直在收尾这里接着跑、永远撞不到上限。有人插话时人开口了，计数本来就清零。
-				if (!session.steering?.length && !queues.hasSteered(sessionId)) {
-					const kind = background.readyKind(sessionId);
-					if (kind === undefined) {
-						background.holdReady(sessionId);
-						break;
-					}
-					if (!admitWake(session, kind)) break;
-				}
-				if (await consumeBoundary(session, controller)) stop = await steps();
+				if (!(await consumeBoundary(session, controller, true))) break;
+				stop = await steps();
 			}
 			if (controller.signal.aborted) stop = { reason: "aborted" };
 		} catch (error) {

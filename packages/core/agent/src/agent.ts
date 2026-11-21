@@ -284,6 +284,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		wakeReports: wake.wakeReports,
 		checkIdle,
 		admitWake: wake.admitWake,
+		wakeHeld: wake.wakeHeld,
 		queuedPrompt: queueing.queuedPrompt,
 		thinkingOf,
 	});

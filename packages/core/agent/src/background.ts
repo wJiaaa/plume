@@ -55,19 +55,29 @@ type Frame = ReportFrame & { owner: string };
 /** 取出来的一份：后台结果的话，或者一封信。 */
 export type Report = ({ text: string; delivery?: DeliveredReport; frame?: Frame } | { letter: Letter }) & { valid(): boolean };
 
-/**
- * 攒着还没取的一份：工具给的可以是函数，取的那一刻才定送不送。`spawned`：开出来的会话交回的、要叫醒来处的一份
- * （`SessionAccess.reportBack` 的 `wake`），叫不叫醒另有规矩，见 `readyKind`。
- */
-type Pending = ({ text: string | (() => string | undefined); delivery?: DeliveredReport; frame?: Frame; spawned?: true } | { letter: Letter }) & {
+/** 攒着还没取的一份：工具给的可以是函数，取的那一刻才定送不送。 */
+type Pending = ({ text: string | (() => string | undefined); delivery?: DeliveredReport; frame?: Frame } | { letter: Letter }) & {
 	valid(): boolean;
 };
 
 /**
- * 一批攒好的送达是什么，决定叫不叫醒会话（见 agent 的 `wakeReports`）：`other` 里有后台命令、子会话这些会话自己派出去的事的结果，
- * `letter` 里有别的会话的信（没有前一种），`spawned` 全是开出来的会话交回的。
+ * 一批送达是什么，决定叫不叫醒会话、让不让本来要收场的一轮接着跑（见 `session/wake.ts` 的 `wakeReports`、`admitWake`）：
+ * `other` 里有后台命令、子会话这些会话自己派出去的事的结果，`letter` 里有别的会话的信（没有前一种），`spawned` 全是开出来的会话交回的。
  */
 export type ReadyKind = "other" | "letter" | "spawned";
+
+/** 不是这个会话自己派出去的事：别的会话的信、开出来的会话交回的（只有 `reportBack` 写得出 `delivery.sessionId`）。 */
+function fromElsewhere(report: Pending): boolean {
+	return "letter" in report || report.delivery?.sessionId !== undefined;
+}
+
+/** 这几份是什么，见 `ReadyKind`；作废的不算，一份也不剩时是 undefined。 */
+function kindOf(reports: readonly Pending[]): ReadyKind | undefined {
+	const live = reports.filter((report) => report.valid());
+	if (live.length === 0) return undefined;
+	if (live.some((report) => !fromElsewhere(report))) return "other";
+	return live.some((report) => "letter" in report) ? "letter" : "spawned";
+}
 
 interface Batch {
 	reports: Pending[];
@@ -162,7 +172,6 @@ export class BackgroundRuns {
 			text: words,
 			delivery: { ...deliveryOf(options.delivery, plugin), sessionId: launchedId },
 			...(frame ? { frame: { owner: plugin, head: String(frame.head ?? ""), ...(typeof frame.tail === "function" ? { tail: frame.tail } : {}) } } : {}),
-			...(options.wake ? { spawned: true as const } : {}),
 			valid: () => true,
 		};
 		if (options.wake) this.enqueue(sessionId, report);
@@ -247,11 +256,13 @@ export class BackgroundRuns {
 	/** 攒好的这一批是什么，见 `ReadyKind`；没有攒好的、或者攒好的都作废了时是 undefined。 */
 	readyKind(parentId: string): ReadyKind | undefined {
 		const batch = this.batches.get(parentId);
-		if (!batch?.ready) return undefined;
-		const live = batch.reports.filter((report) => report.valid());
-		if (live.length === 0) return undefined;
-		if (live.some((report) => !("letter" in report) && !report.spawned)) return "other";
-		return live.some((report) => "letter" in report) ? "letter" : "spawned";
+		return batch?.ready ? kindOf(batch.reports) : undefined;
+	}
+
+	/** 这一刻 `take` 取得到的（留着的和攒好的）是什么，见 `ReadyKind`；没有或者都作废了时是 undefined。 */
+	takeKind(parentId: string): ReadyKind | undefined {
+		const batch = this.batches.get(parentId);
+		return kindOf([...(this.held.get(parentId) ?? []), ...(batch?.ready ? batch.reports : [])]);
 	}
 
 	/** 攒好的这一批不叫醒会话了，整批留到它下一轮开头读（见 `held`）。 */
@@ -299,10 +310,9 @@ export class BackgroundRuns {
 	 */
 	cancelSession(sessionId: string, fate: "stopped" | "closed" = "stopped"): void {
 		const batch = this.batches.get(sessionId);
-		const kept = (report: Pending) => "letter" in report || report.delivery?.sessionId !== undefined;
-		const others = [...(this.held.get(sessionId) ?? []), ...(batch?.reports.filter(kept) ?? [])];
+		const others = [...(this.held.get(sessionId) ?? []), ...(batch?.reports.filter(fromElsewhere) ?? [])];
 		this.held.delete(sessionId);
-		if (batch) batch.reports = batch.reports.filter((report) => !kept(report));
+		if (batch) batch.reports = batch.reports.filter((report) => !fromElsewhere(report));
 		if (fate === "closed") {
 			for (const report of others) if ("letter" in report) report.letter.settle({ status: "closed" });
 		} else this.hold(sessionId, others);

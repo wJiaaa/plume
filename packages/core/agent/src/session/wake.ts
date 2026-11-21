@@ -26,6 +26,8 @@ export interface WakeDeps {
 export interface Wake {
 	wakeReports(session: Session): void;
 	admitWake(session: Session, kind: ReadyKind): boolean;
+	/** 别的会话的信、开出来的会话的交回此刻叫不醒它：它的人按了停，或者被它们接连叫起到了上限。这时它们留到人开口。 */
+	wakeHeld(session: Session): boolean;
 	nudgeOrigin(session: Session): void;
 	spawnedRunning(parentId: string): boolean;
 }
@@ -39,6 +41,7 @@ export function createWake(deps: WakeDeps): Wake {
 	 * - 全是交回的：来处被人按停、上一轮没以完成收场的不叫醒，留到下一轮开头读；从它开出来的会话还有在跑的先不叫，最后一个停下时再看
 	 *   （`nudgeOrigin`），可最多等到这一批攒好后 `SPAWNED_WAIT_MS`，到点还有在跑的也先送。
 	 * - 接连叫起到了上限的不叫醒，留到人开口，对话里提示一句。
+	 * - 人按了停的什么都不叫醒，整批留到人开口：按停说的是现在别再接着做，别的会话寄来的信也不例外。
 	 */
 	function wakeReports(session: Session): void {
 		const id = session.summary.id;
@@ -54,14 +57,16 @@ export function createWake(deps: WakeDeps): Wake {
 			const waited = Date.now() - (background.readyAt(id) ?? Date.now());
 			if (spawnedRunning(id) && waited < SPAWNED_WAIT_MS) return waitSpawned(session, SPAWNED_WAIT_MS - waited);
 		}
-		if (session.stopped || !admitWake(session, kind)) return;
+		// 留着而不是放着不管：放着的一批一直「攒好了」，会话就一直显得在等后台（`BackgroundRuns.pending`）。
+		if (session.stopped) return background.holdReady(id);
+		if (!admitWake(session, kind)) return;
 		const controller = new AbortController();
 		session.controller = controller;
 		session.turn = runTurn(session, undefined, controller);
 	}
 
 	/**
-	 * 攒好的这一批要叫起一轮（闲着时叫醒，或一轮收尾时接着读）：别的会话的信、交回的（不是 `other`）计一次数，到了上限整批留到人开口，
+	 * 这一批要叫起一轮（闲着时叫醒，或本来要收场的一轮为它接着跑，见 turn 的 `consumeBoundary`）：别的会话的信、交回的（不是 `other`）计一次数，到了上限整批留到人开口，
 	 * 对话里提示一句——只说一次，对方还在不停地寄的话，每来一批弹一次就成了刷屏；人开口后计数清零，再撞上限再说。返回叫不叫。
 	 */
 	function admitWake(session: Session, kind: ReadyKind): boolean {
@@ -78,6 +83,10 @@ export function createWake(deps: WakeDeps): Wake {
 			emit({ type: "notice", sessionId: id, text: text("session.autoWakeLimit", { count: String(AUTO_WAKE_LIMIT) }), level: "info" });
 		}
 		return false;
+	}
+
+	function wakeHeld(session: Session): boolean {
+		return session.stopped === true || (session.autoWakes ?? 0) >= AUTO_WAKE_LIMIT;
 	}
 
 	/**
@@ -113,5 +122,5 @@ export function createWake(deps: WakeDeps): Wake {
 		return false;
 	}
 
-	return { wakeReports, admitWake, nudgeOrigin, spawnedRunning };
+	return { wakeReports, admitWake, wakeHeld, nudgeOrigin, spawnedRunning };
 }
