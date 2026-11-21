@@ -20,12 +20,12 @@ export function SettingsSectionTitle({ children }: { children: React.ReactNode }
 /**
  * 其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。
  *
- * 卡片用 `float` 那张纸：设置卡片和弹出菜单是同一个颜色，两个主题下都比页面亮一档的实底。边框随之用 `line-float`，
+ * 卡片用 `float` 那张纸：设置卡片和弹出菜单是同一个颜色，两个主题下都比页面亮一档的实底；圆角是一整块内容区那一档（`panel`）。边框随之用 `line-float`，
  * 那是给「画在自己那张纸上」的线准备的；卡片里面的线和控件怎么跟着换，见 `controls.css` 的 `.plume-settings-card`。
  */
 export function SettingsCard({ children, className = "", ...rest }: React.ComponentProps<"div">) {
 	return (
-		<div {...rest} className={`plume-settings-card overflow-hidden rounded-lg border border-line-float bg-float ${className}`}>
+		<div {...rest} className={`plume-settings-card overflow-hidden rounded-panel border border-line-float bg-float ${className}`}>
 			{children}
 		</div>
 	);
@@ -48,12 +48,12 @@ export function SettingsRow({
 		 * 行宽不够时控件掉到文字下面。控件是 `shrink-0`（挤没了的分段选择比挪了位置的更糟），并排时说明文字只能拿剩下的，
 		 * 窄窗口下会变成两三个字宽、十几行高的一条。按这一行的宽度量（容器查询），宽窗口不受影响。
 		 */
-		<div className="@container border-b border-line-soft px-4 py-3.5 last:border-b-0">
+		<div className="@container border-b border-line-soft px-4 py-3 last:border-b-0">
 			{/*
 			 * 控件落在这一行的中线上，不是贴着标题那一行：带说明文字的行占大多数，贴着标题的话一整张卡片右边那列全体偏上。
 			 * 只在同一行并排时才居中；窄窗口下控件掉到文字下面，是另一种排法。
 			 */}
-			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-4">
+			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-6">
 				<div className="min-w-0 flex-1">
 					<Text as="div" size="label" weight="medium">
 						{title}

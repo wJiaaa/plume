@@ -4,13 +4,11 @@ import { useMemo } from "react";
 import { MAIN_TOOLBAR_HEIGHT } from "../../shared/window-chrome.ts";
 import { clamp, layoutMode, RAIL_WIDTH, SIDEBAR_DEFAULT, SIDEBAR_MIN } from "../layout.ts";
 import { NavItem } from "../nav-item.tsx";
-import { SettingsNav } from "../settings/pages.tsx";
 import { ProjectList } from "../sidebar/ProjectList.tsx";
 import { sessionWindows } from "../session-windows.ts";
 import { setSidebar } from "./panels.ts";
-import { update, useChrome } from "./state.ts";
+import { useChrome } from "./state.ts";
 import { DRAG, HEADER_BAR } from "./shell-classes.ts";
-import { ArrowLeft } from "../icons.tsx";
 import { sidebarActions } from "./actions.ts";
 import { openNew } from "./sessions.ts";
 
@@ -33,12 +31,6 @@ export function SidebarResizer({ width, max }: { width: number; max: number }) {
 	);
 }
 
-/** 侧栏里放什么：工作区是会话列表，设置页是章节列表。开关、拖宽度、抽屉两边共用。 */
-export function SidebarContent() {
-	const { screen } = useChrome();
-	return screen === "settings" ? <SettingsSidebar /> : <Sidebar />;
-}
-
 /**
  * 侧栏身子上面那一截：窗口顶上那一条在侧栏这一段，红绿灯和前进、后退、侧栏开关浮在这里，能拖窗口。
  * 和对话的标题栏一样高（见 `ScreenCard`），侧栏和对话的身子顶边对齐。
@@ -59,29 +51,8 @@ export function SidebarTopRow({ divider }: { divider: boolean }) {
 	);
 }
 
-function SettingsSidebar() {
-	const { t } = useI18n();
-	const { settingsSection, windowWidth } = useChrome();
-	const compact = layoutMode(windowWidth) === "compact";
-	return (
-		<>
-			<div className={`pt-1 pb-3 ${compact ? "px-3" : "px-2"}`}>
-				<button
-					type="button"
-					onClick={() => update({ screen: "chat", drawerOpen: false })}
-					className={`m-1 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg px-1.5 text-left text-label text-ink-muted transition hover:bg-card-hover hover:text-ink ${compact ? "h-10" : "h-8"}`}
-				>
-					<ArrowLeft />
-					{t("app.backWorkspace")}
-				</button>
-			</div>
-			<SettingsNav section={settingsSection} compact={compact} onPick={(section) => update({ settingsSection: section, drawerOpen: false })} />
-		</>
-	);
-}
-
-/** 对话的侧栏：新对话钉在上面，下面是项目和会话。去处（插件的页面、插件市场、设置）和搜索、通知在活动栏里，见 Rail.tsx。 */
-function Sidebar() {
+/** 对话的侧栏：新对话钉在上面，下面是项目和会话。开关、拖宽度、抽屉都在 app.tsx。去处（插件的页面、插件市场、设置）和搜索、通知在活动栏里，见 Rail.tsx。 */
+export function SidebarContent() {
 	const { t } = useI18n();
 	const { sessions, projects, currentId, pendingId, windowWidth, split } = useChrome();
 	const compact = layoutMode(windowWidth) === "compact";

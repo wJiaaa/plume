@@ -73,7 +73,7 @@ export function start(service: Remote<AgentService>): void {
 			pluginDraft({ text: draft.text, append: !draft.replace, images: draft.images, send: draft.send });
 		},
 		openSession: openSessionFor,
-		openSettings: (key) => update({ screen: "settings", settingsSection: `plugin:${key}`, drawerOpen: false }),
+		openSettings: (key) => update({ settingsOpen: true, settingsSection: `plugin:${key}`, drawerOpen: false }),
 		openPage: (key) => update({ screen: `page:${key}`, drawerOpen: false }),
 		Conversation: PluginConversation,
 		Markdown: PluginMarkdown,
@@ -84,7 +84,7 @@ export function start(service: Remote<AgentService>): void {
 			const { currentId, sessions } = useChrome();
 			return sessions.find((summary) => summary.id === currentId)?.model;
 		},
-		openModelSettings: () => update({ screen: "settings", settingsSection: "models" }),
+		openModelSettings: () => update({ settingsOpen: true, settingsSection: "models" }),
 		queueTask: async (sessionId, instruction) => await agent.queueTask(sessionId, instruction),
 	});
 	// ⌘P 开文件树，⌥⌘P（Windows、Linux 上 Ctrl+P、Ctrl+Alt+P）开文件本身：同一个字母，加 ⌥ 表示「另一个」。
@@ -145,9 +145,9 @@ export function start(service: Remote<AgentService>): void {
 		window.plume.onCommand((command) => {
 			if (command.startsWith("open-session:")) void select(command.slice("open-session:".length));
 			else if (command === "new-session") openNew();
-			else if (command === "settings") update({ screen: "settings", drawerOpen: false });
+			else if (command === "settings") update({ settingsOpen: true, drawerOpen: false });
 			else if (command === "updates") {
-				update({ screen: "settings", settingsSection: "about", drawerOpen: false });
+				update({ settingsOpen: true, settingsSection: "about", drawerOpen: false });
 				void checkUpdates(true);
 			}
 		});

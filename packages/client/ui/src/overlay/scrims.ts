@@ -9,7 +9,7 @@
  */
 
 export interface Scrim {
-	/** `#rrggbb`。 */
+	/** CSS 颜色，可以是 `var(--plume-…)`：由用它的一方在用的时候解开，主题、配色变了跟得上。 */
 	color: string;
 	/** 盖住底下多少，0–1。 */
 	alpha: number;

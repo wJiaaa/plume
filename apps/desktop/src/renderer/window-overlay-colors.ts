@@ -13,7 +13,10 @@ export interface OverlayColors {
 
 /** 遮罩盖住这么多以上，页面几乎看不见了：按钮不再跟着变暗，否则关窗口的按钮也跟着看不见。 */
 const HEAVY = 0.5;
-/** 重遮罩上的符号按深色主题的样子画：带子底色往白色混这么多。 */
+/**
+ * 重遮罩上的符号按带子此刻的深浅画：深的（往黑里压）按深色主题的样子，带子底色往白色混这么多；
+ * 浅的（磨砂遮罩盖的是窗口底色，带子几乎没变）照原来的符号色。
+ */
 const HEAVY_SYMBOL = 0.6;
 const WHITE = { r: 255, g: 255, b: 255 };
 
@@ -23,7 +26,7 @@ export function tintedOverlay(colors: OverlayColors, scrims: readonly Scrim[]): 
 	const color = under(colors.color);
 	const heavy = scrims.some((scrim) => scrim.alpha >= HEAVY);
 	const base = parseHex(color);
-	const symbolColor = heavy && base ? toHex(mix(base, WHITE, HEAVY_SYMBOL)) : under(colors.symbolColor);
+	const symbolColor = heavy && base ? (isDark(base) ? toHex(mix(base, WHITE, HEAVY_SYMBOL)) : colors.symbolColor) : under(colors.symbolColor);
 	return { color, symbolColor };
 }
 
@@ -40,6 +43,10 @@ function parseHex(hex: string): Rgb | undefined {
 
 export function toHex({ r, g, b }: Rgb): string {
 	return `#${[r, g, b].map((value) => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function isDark({ r, g, b }: Rgb): boolean {
+	return r + g + b < 3 * 128;
 }
 
 /** `from` 往 `to` 混 `amount`。 */

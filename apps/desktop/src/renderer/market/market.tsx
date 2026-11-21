@@ -320,7 +320,7 @@ function KindTabs({
 						aria-selected={id === value}
 						data-market-kind={id}
 						onClick={() => onChange(id)}
-						className={`text-heading font-semibold transition-colors duration-[var(--plume-t-quick)] ${
+						className={`text-display font-semibold transition-colors duration-[var(--plume-t-quick)] ${
 							id === value ? "text-ink" : "text-ink-faint hover:text-ink-muted"
 						}`}
 					>

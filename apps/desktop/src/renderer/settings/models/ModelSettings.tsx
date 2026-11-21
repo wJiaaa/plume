@@ -36,7 +36,7 @@ export function ModelSettings() {
 		// 窗口矮到放不下供应商编辑器的最小高度时，整页还能滚。
 		<Scroller className="flex-1" contentClassName="flex flex-col">
 			<PageHeader
-				className="shrink-0 pt-2"
+				className="shrink-0"
 				title={t("modelSettings.title")}
 				actions={
 					<>
@@ -58,7 +58,7 @@ export function ModelSettings() {
 				}
 			>
 				{/* 上限、能力和价格都从这份目录来；它会自动更新，这里给个看得见的版本和手动更新的入口。 */}
-				<p className="mt-1 text-detail text-ink-faint" data-model-catalog="">
+				<p className="text-detail text-ink-faint" data-model-catalog="">
 					{t("modelSettings.catalogStatus", {
 						source: p.catalog.name,
 						date: formatDate(new Date(p.catalog.updatedAt)),

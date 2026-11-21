@@ -4,8 +4,8 @@
  * 一个地方是一个界面，会话界面还要加上开着的是哪个会话；其他界面不管开着哪个会话都算同一个地方。
  */
 
-/** 窗口主区域的几个界面。插件的页面是 `page:插件名/id`。 */
-export type Screen = "chat" | "settings" | "market" | `page:${string}`;
+/** 窗口主区域的几个界面。插件的页面是 `page:插件名/id`。设置不在这里：它是盖在界面上的浮层（`AppState.settingsOpen`）。 */
+export type Screen = "chat" | "market" | `page:${string}`;
 
 export interface NavEntry {
 	screen: Screen;

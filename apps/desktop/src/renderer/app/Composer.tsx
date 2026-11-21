@@ -264,7 +264,7 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 			if (result.openPanel) showPanel(`${command.plugin}/${result.openPanel}`, true);
 			const settingsKey = `${command.plugin}/${result.openSettings}`;
 			if (result.openSettings && listSettingsSections().some((section) => section.key === settingsKey))
-				update({ screen: "settings", settingsSection: `plugin:${settingsKey}`, drawerOpen: false });
+				update({ settingsOpen: true, settingsSection: `plugin:${settingsKey}`, drawerOpen: false });
 			return null;
 		}
 		return result;
@@ -559,7 +559,7 @@ function ComposerModels({ view, disabled }: { view?: SessionView; disabled?: boo
 	const onError = (message: string) => notify(message, "error");
 	return (
 		<div className="flex min-w-0 items-center gap-0.5">
-			<ModelTrigger session={session} disabled={disabled} onError={onError} onOpenSettings={() => update({ screen: "settings", settingsSection: "models" })} />
+			<ModelTrigger session={session} disabled={disabled} onError={onError} onOpenSettings={() => update({ settingsOpen: true, settingsSection: "models" })} />
 			<EffortTrigger session={session} disabled={disabled} onError={onError} />
 		</div>
 	);

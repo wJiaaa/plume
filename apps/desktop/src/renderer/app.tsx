@@ -28,7 +28,7 @@ import { createPlugin, investigate, openSettingsSection, tryPrompt } from "./app
 import { SidebarContent, SidebarResizer, SidebarTopRow } from "./app/Sidebar.tsx";
 import { hasSidebar, Rail } from "./app/Rail.tsx";
 import { ChatWorkspace, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
-import { SettingsScreen } from "./app/SettingsScreen.tsx";
+import { SettingsDialog } from "./app/SettingsDialog.tsx";
 
 export function App() {
 	return (
@@ -44,7 +44,7 @@ function Shell() {
 	const { t } = useI18n();
 	const managedSkin = useManagedSkin();
 	const app = useChrome();
-	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen } = app;
+	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen, settingsOpen } = app;
 	const [verticalShares, setVerticalShares] = useState<Record<string, number>>({});
 	const compact = layoutMode(windowWidth) === "compact";
 	// 窗口回到前台重问已知目录：终端里可能刚执行过 git init。当前会话的目录与轮次变化由 PanelArea 处理。
@@ -53,7 +53,7 @@ function Shell() {
 		window.addEventListener("focus", recheck);
 		return () => window.removeEventListener("focus", recheck);
 	}, []);
-	// 插件市场和插件的页面没有侧栏：侧栏开没开的偏好留着，回到对话、设置时照旧。切过去不滑，整个界面一下换掉。
+	// 插件市场和插件的页面没有侧栏：侧栏开没开的偏好留着，回到对话时照旧。切过去不滑，整个界面一下换掉。
 	const sided = hasSidebar(screen);
 	const navOpen = (compact ? drawerOpen : sidebarOpen) && sided;
 	const pushed = !compact && sidebarOpen && sided;
@@ -95,12 +95,12 @@ function Shell() {
 		else setSidebar({ open: !sidebarOpen });
 	};
 
-	// ⌘B 开合侧栏，设置页里开合的是章节列表；没有侧栏的界面不接，留给页面自己。
+	// ⌘B 开合侧栏；没有侧栏的界面不接，留给页面自己。设置浮层开着时也不接：底下的侧栏看不见，开合了也不知道。
 	useEffect(() => {
 		if (panelWindow) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.repeat || composingKey(event)) return;
-			if (sided && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && shortcutLetter(event) === "b") {
+			if (sided && !state.settingsOpen && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && shortcutLetter(event) === "b") {
 				event.preventDefault();
 				toggle();
 			}
@@ -119,7 +119,8 @@ function Shell() {
 		const typing = (target: EventTarget | null) =>
 			target instanceof HTMLElement && (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA");
 		const onKey = (event: KeyboardEvent) => {
-			if (event.defaultPrevented || event.repeat || typing(event.target)) return;
+			// 设置浮层开着时底下的界面看不见，不在它背后换会话、换界面。
+			if (event.defaultPrevented || event.repeat || state.settingsOpen || typing(event.target)) return;
 			const back = mac
 				? event.metaKey && !event.altKey && !event.shiftKey && event.code === "BracketLeft"
 				: event.altKey && !event.ctrlKey && event.key === "ArrowLeft";
@@ -132,7 +133,7 @@ function Shell() {
 		};
 		// 3、4 是鼠标侧键；在 mouseup 上接，按下本身不拦。
 		const onMouse = (event: MouseEvent) => {
-			if (event.button !== 3 && event.button !== 4) return;
+			if (state.settingsOpen || (event.button !== 3 && event.button !== 4)) return;
 			event.preventDefault();
 			void go(event.button === 3 ? -1 : 1);
 		};
@@ -160,7 +161,7 @@ function Shell() {
 	useEffect(() => {
 		if (panelWindow || !panelInWorkspace) return;
 		const onKey = (event: KeyboardEvent) => {
-			if (event.repeat || composingKey(event)) return;
+			if (event.repeat || composingKey(event) || state.settingsOpen) return;
 			const panel = listPanels(nextTurnCwd(state, state.view?.summary), state.currentId !== undefined).find(
 				(entry) => entry.shortcut && matchesShortcut(event, entry.shortcut),
 			);
@@ -194,15 +195,7 @@ function Shell() {
 				onForward={() => void go(1)}
 			/>
 			{sided && (
-				<ToolbarButton
-					label={
-						screen === "settings"
-							? t(navOpen ? "app.hideSettingsNavigation" : "app.showSettingsNavigation", { shortcut: "⌘B" })
-							: t(navOpen ? "shell.hideSidebar" : "shell.showSidebar")
-					}
-					onClick={toggle}
-					active={compact && navOpen}
-				>
+				<ToolbarButton label={t(navOpen ? "shell.hideSidebar" : "shell.showSidebar")} onClick={toggle} active={compact && navOpen}>
 					<SidebarIcon open={navOpen} />
 				</ToolbarButton>
 			)}
@@ -310,6 +303,10 @@ function Shell() {
 	 * 外圈铺侧栏色时它比侧栏还亮，会话列表夹在外圈和对话中间、不上不下，看着发灰。
 	 */
 	const fill = managedSkin ? "bg-root" : window.plume.vibrancy ? "bg-window-tint" : "bg-shell";
+	/*
+	 * 设置浮层开着时整个窗口外壳 inert：遮罩挡住了指针，这里再挡住键盘和读屏，人碰不到的东西脚本也点不到。
+	 * 浮层、提示条、看图器都 portal 到 body，不在这一层里，不受影响。
+	 */
 
 	/*
 	 * Windows、Linux：顶上一条横贯的带子，后退、前进、侧栏开关在左端，系统按钮在右端，侧栏和卡片都在它下面。
@@ -317,12 +314,13 @@ function Shell() {
 	 */
 	if (HEADER_BAR)
 		return (
-			<div className={`flex h-full flex-col overflow-hidden ${fill}`} data-plume-head-fill={managedSkin ? "root" : "window"}>
+			<div className={`flex h-full flex-col overflow-hidden ${fill}`} data-plume-head-fill={managedSkin ? "root" : "window"} inert={settingsOpen}>
 				<WindowHeader fill={managedSkin ? "bg-root" : "bg-sidebar"} insets={titlebar}>
 					<div className={`flex items-center gap-0.5 ${NO_DRAG}`}>{toolbar}</div>
 				</WindowHeader>
 				<div className="relative flex min-h-0 flex-1 overflow-hidden">
 					{body}
+					{settingsOpen && <SettingsDialog />}
 					<ImageViewerHost />
 					<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
 				</div>
@@ -335,13 +333,13 @@ function Shell() {
 			data-sidebar-sliding={moving && !compact ? (navOpen ? "open" : "close") : undefined}
 			// 停靠的侧栏透明，吸顶的标题要铺和这一层一样的底（styles.css 的 `[data-plume-head]`）。
 			data-plume-head-fill={managedSkin ? "root" : "window"}
+			inert={settingsOpen}
 		>
 			{body}
-			{/* 设置页顶上整条都能拖窗口，连同卡片上方和侧栏、卡片之间的缝。放在侧栏开关前面：拖拽区按文档顺序合成，开关的洞要后挖。 */}
-			{screen === "settings" && <div aria-hidden className={`absolute inset-x-0 top-0 z-30 ${DRAG}`} style={{ height: MAIN_TOOLBAR_HEIGHT }} />}
 			<div className={`absolute z-30 flex items-center gap-0.5 ${NO_DRAG}`} style={{ left: titlebar.start, top: 0, height: MAIN_TOOLBAR_HEIGHT }}>
 				{toolbar}
 			</div>
+			{settingsOpen && <SettingsDialog />}
 			<ImageViewerHost />
 			<Toaster onInvestigate={investigate} onOpenSession={openNoticeSession} />
 		</div>
@@ -427,19 +425,18 @@ function SessionWindowShell() {
 	);
 }
 
-/** 工作区以外的页面：设置、市场、插件的页面。对话由 `ChatWorkspace` 画。 */
+/** 工作区以外的页面：市场、插件的页面。对话由 `ChatWorkspace` 画，设置是盖在上面的浮层（`SettingsDialog`）。 */
 function Main() {
 	const { screen, target, projects } = useChrome();
 	usePluginUis();
 	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
-	// 只有插件的页面要会话视图：停在设置、市场时，后台那个会话每输出一拍，这里不跟着重画。
+	// 只有插件的页面要会话视图：停在市场时，后台那个会话每输出一拍，这里不跟着重画。
 	const view = useAppPick((current) => (current.screen.startsWith("page:") ? current.view : undefined));
 	// 插件在它的页面上被停用、卸下：页面跟着没了，回到工作区，不留一块空白。
 	const pageGone = screen.startsWith("page:") && !page;
 	useEffect(() => {
 		if (pageGone) update({ screen: "chat" });
 	}, [pageGone]);
-	if (screen === "settings") return <SettingsScreen />;
 	if (screen === "market") return <MarketScreen onOpenSettings={openSettingsSection} onTry={tryPrompt} onCreate={createPlugin} projects={projects} />;
 	if (page) return <PageSlot key={page.key} page={page} props={pageProps(view, target)} />;
 	return null;

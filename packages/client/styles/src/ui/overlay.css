@@ -10,11 +10,27 @@
  * 也不回弹——一个会弹的退场是在要人看它。
  *
  * 遮罩只压暗。背后模糊试过 4px 和 2px，都去掉了：它把后面的窗口变成一片雾，而那正是你马上要回去的窗口。
+ * 例外是磨砂（`Overlay` 的 `frosted`，给设置这种要待一会儿的大浮层）：底下的界面本来就该退成背景。
  */
 .plume-scrim-in,
 .plume-scrim-out {
 	/* 浓度和 Overlay.tsx 的 SCRIM_ALPHA 一致：窗口自己的按钮按那个数跟着压暗。 */
 	background: color-mix(in srgb, var(--plume-shade) 22%, transparent);
+}
+
+/*
+ * 磨砂：盖一层窗口底色再糊开，不往黑里压。浓度和 Overlay.tsx 的 FROST_ALPHA 一致，理由同上。
+ * 糊的半径小，底下流式输出时每帧重糊的开销有限。透明度动画照样作用在糊过的结果上，进出场跟着一起淡。
+ */
+.plume-scrim-frost {
+	background: color-mix(in srgb, var(--plume-shell) 60%, transparent);
+	backdrop-filter: blur(4px);
+}
+
+@media (prefers-color-scheme: dark) {
+	.plume-scrim-frost {
+		background: color-mix(in srgb, var(--plume-shell) 64%, transparent);
+	}
 }
 
 .plume-scrim-in {

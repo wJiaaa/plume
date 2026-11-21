@@ -70,16 +70,15 @@ export const SETTINGS_GROUPS: { label: MessageKey; items: { id: SettingsSection;
 	},
 ];
 
-/** 章节列表：分组标题 12px 最浅色，条目一律正文色，选中和悬停同一层底。 */
-export function SettingsNav({ section, compact, onPick }: { section: SettingsSection; compact: boolean; onPick: (section: SettingsSection) => void }) {
+/** 章节表加上插件的分区，空组去掉。插件的分区按 `group` 进组：不给的排在「基本」组最后，`agent` 排在「智能体」后面，`data` 排在「存储」前面，`vcs` 自成一组。 */
+function useSettingsGroups() {
 	const { t, resolvedLocale } = useI18n();
 	usePluginUis();
-	// 插件的分区按 `group` 进组：不给的排在「基本」组最后，`agent` 排在「智能体」后面，`data` 排在「存储」前面，`vcs` 自成一组。
 	const pluginItems = (group: SettingsSectionEntry["group"]) =>
 		listSettingsSections()
 			.filter((entry) => entry.group === group)
 			.map((entry) => ({ id: `plugin:${entry.key}` as SettingsSection, text: localized(entry.title, resolvedLocale), icon: entry.icon ?? Blocks }));
-	const groups = SETTINGS_GROUPS.map((group, index) => {
+	return SETTINGS_GROUPS.map((group, index) => {
 		const own = group.items.map((item) => ({ ...item, text: t(item.label) }));
 		if (index === 0) return { ...group, items: [...own, ...pluginItems(undefined)] };
 		if (group.label === "settings.group.agent") return { ...group, items: [...own, ...pluginItems("agent")] };
@@ -87,24 +86,45 @@ export function SettingsNav({ section, compact, onPick }: { section: SettingsSec
 		if (group.label === "settings.group.vcs") return { ...group, items: pluginItems("vcs") };
 		return { ...group, items: own };
 	}).filter((group) => group.items.length > 0);
+}
+
+/** 这一章在章节列表里叫什么，设置浮层顶上的面包屑用它；插件的分区刚撤下时没有。 */
+export function useSettingsSectionName(section: SettingsSection): string | undefined {
+	return useSettingsGroups()
+		.flatMap((group) => group.items)
+		.find((item) => item.id === section)?.text;
+}
+
+/**
+ * 章节列表：分组标题最浅色，条目一律正文色，选中和悬停同一层底。头一组（基本）和最后一组（关于与归档）不写组名，
+ * 只留给读屏：头一组不用说明，最后一组靠上面的空隙分开就够了。`compact`（窄窗口）时只剩图标，名字放进悬停提示。
+ */
+export function SettingsNav({ section, compact, onPick }: { section: SettingsSection; compact: boolean; onPick: (section: SettingsSection) => void }) {
+	const { t } = useI18n();
+	const groups = useSettingsGroups();
 	return (
 		<nav aria-label={t("settings.sections")} className="flex min-h-0 flex-1 flex-col">
-			<Scroller className="flex-1" contentClassName={`pb-3 ${compact ? "px-3" : "px-2"}`}>
+			<Scroller className="flex-1" contentClassName="px-2 pt-2.5 pb-3">
 				{groups.map((group, index) => (
-					<div key={group.label} className={`flex flex-col gap-1 ${index > 0 ? "mt-4" : ""}`}>
-						<div className="px-2.5 pb-1 text-caption font-medium text-ink-faint">{t(group.label)}</div>
+					<div key={group.label} className={`flex flex-col gap-0.5 ${index > 0 ? "mt-4" : ""}`}>
+						<div className={compact || index === 0 || group.label === "settings.group.about" ? "sr-only" : "px-2 pb-1 text-caption font-medium text-ink-faint"}>
+							{t(group.label)}
+						</div>
 						{group.items.map((item) => (
 							<button
 								key={item.id}
 								type="button"
 								aria-current={section === item.id ? "page" : undefined}
+								// 打开设置时焦点落在停着的那一章上，不落在第一章：浮层把焦点交给第一个能点的，而那多半不是这一章。
+								autoFocus={section === item.id}
 								onClick={() => onPick(item.id)}
-								className={`flex w-full items-center gap-2 rounded-field px-2.5 text-left text-label text-ink transition ${compact ? "h-10" : "h-8"} ${
-									section === item.id ? "bg-card-hover" : "hover:bg-card-hover"
+								data-plume-tip={compact ? item.text : undefined}
+								className={`flex h-8 w-full items-center gap-2 rounded-field text-left text-label text-ink transition ${compact ? "justify-center" : "px-2"} ${
+									section === item.id ? "bg-card-hover font-medium" : "hover:bg-card-hover"
 								}`}
 							>
 								<item.icon size={16} />
-								{item.text}
+								<span className={compact ? "sr-only" : "min-w-0 truncate"}>{item.text}</span>
 							</button>
 						))}
 					</div>
@@ -503,6 +523,20 @@ export function AppearanceSettings() {
 								options={[
 									{ value: "standard", label: t("appearance.contentWidthStandard") },
 									{ value: "wide", label: t("appearance.contentWidthWide") },
+								]}
+							/>
+						}
+					/>
+					<Row
+						title={t("appearance.runningMark")}
+						detail={t("appearance.runningMarkDetail")}
+						control={
+							<Segmented
+								value={appearance.runningMark ?? "breathe"}
+								onChange={(runningMark) => updateAppearance({ runningMark })}
+								options={[
+									{ value: "breathe", label: t("appearance.runningMarkBreathe") },
+									{ value: "spinner", label: t("appearance.runningMarkSpinner") },
 								]}
 							/>
 						}

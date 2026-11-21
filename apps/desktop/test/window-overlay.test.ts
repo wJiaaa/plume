@@ -29,6 +29,13 @@ test("重遮罩底下带子变暗，符号按深色主题的样子画，还读�
 	assert.deepEqual(video, { color: "#000000", symbolColor: "#999999" });
 });
 
+test("磨砂遮罩盖的是窗口底色：带子几乎不变，符号照原样，不按深色主题提亮", () => {
+	assert.deepEqual(tintedOverlay(LIGHT, [{ color: "#f3f3f3", alpha: 0.6 }]), LIGHT);
+	// 深色下带子还是深的，符号仍按深色主题的样子画，读得清。
+	const dark = tintedOverlay({ color: "#171717", symbolColor: "#8a8a8a" }, [{ color: "#171717", alpha: 0.64 }]);
+	assert.deepEqual(dark, { color: "#171717", symbolColor: "#a2a2a2" });
+});
+
 test("不是 #rrggbb 的颜色原样留着，不混出一个错的", () => {
 	assert.deepEqual(tintedOverlay({ color: "transparent", symbolColor: "#9a9a9a" }, [{ color: "#000000", alpha: 0.22 }]), {
 		color: "transparent",

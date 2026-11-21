@@ -43,7 +43,9 @@ export interface AppState {
 	autoSend?: string;
 	sending?: string;
 	screen: Screen;
-	/** 设置页停在哪一章；离开设置页再回来还是这一章。 */
+	/** 设置浮层开着没有。它盖在 `screen` 上，不算一个界面，后退、前进不记它。 */
+	settingsOpen: boolean;
+	/** 设置停在哪一章；关掉再打开还是这一章。 */
 	settingsSection: SettingsSection;
 	/** agent 进程退出后整个界面不可用，顶部常驻提示。 */
 	fatal?: string;
@@ -132,6 +134,7 @@ export let state: AppState = {
 	appended: {},
 	loading: false,
 	screen: "chat",
+	settingsOpen: false,
 	settingsSection: "general",
 	fullScreen: false,
 	windowWidth: window.innerWidth,
@@ -176,7 +179,10 @@ function sameChrome(before: AppState, after: AppState): boolean {
 
 export function update(patch: Partial<AppState> | ((current: AppState) => Partial<AppState>)): void {
 	const previous = state;
-	state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
+	const changes = typeof patch === "function" ? patch(state) : patch;
+	state = { ...state, ...changes };
+	// 换界面、换会话、开新对话都会写 `screen`：去别处时收起设置浮层，不必每个入口各关一次。
+	if (state.settingsOpen && "screen" in changes && !("settingsOpen" in changes)) state = { ...state, settingsOpen: false };
 	// 换了界面或会话就记一笔，不靠每个调用方报告：会话从侧栏、新建、事件流里都会打开，漏报一处历史就缺一块。
 	if (!arriving && (state.screen !== previous.screen || state.currentId !== previous.currentId)) state = { ...state, nav: record(state.nav, here(state)) };
 	if (!sameChrome(previous, state)) chrome = state;

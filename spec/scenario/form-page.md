@@ -6,7 +6,7 @@
 
 ### 版式
 
-- 设置页用 `apps/desktop/src/renderer/settings/controls.tsx` 的版式：`PageHeader`（页标题和介绍）→ 设置卡片（`Card`）→ 卡片里一行一个设置（`Row`：名字和说明在左，控件在右）；要整行宽的输入框用 `Field`（标签在上、控件在下，可带 `hint`）。页与页的标题位置、介绍行宽都由它定，章节里不另写。
+- 设置页用 `apps/desktop/src/renderer/settings/controls.tsx` 的版式：`PageHeader`（介绍和右上角的按钮；章名在设置浮层顶上的面包屑里，这里只留给读屏）→ 设置卡片（`Card`）→ 卡片里一行一个设置（`Row`：名字和说明在左，控件在右）；要整行宽的输入框用 `Field`（标签在上、控件在下，可带 `hint`）。介绍的位置、行宽都由它定，章节里不另写，也不另画一个大标题。
 - 代码外观是一张带实时预览的连续卡片：统一 `p-4 space-y-4`，项目标题用 `label`、说明用 `caption`，项目顶部细线下留 `pt-3`；描边和紧接的行内代码示例之间不插分割线，不套普通 `Row` 的整行内边距。
 - 布尔设置用 `Toggle`，两三个互斥选项用 `Segmented`，选项多的用 `InlineSelect`。
 
@@ -37,5 +37,5 @@
 ## 事实来源
 
 - `apps/desktop/src/renderer/settings/controls.tsx`、`apps/desktop/src/renderer/settings/pages.tsx`
-- `apps/desktop/src/renderer/app/SettingsScreen.tsx`、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`、`apps/desktop/src/renderer/settings/personalization.tsx`（“已保存”）
+- `apps/desktop/src/renderer/app/SettingsDialog.tsx`、`apps/desktop/src/renderer/settings/models/ModelSettings.tsx`、`apps/desktop/src/renderer/settings/personalization.tsx`（“已保存”）
 - `apps/desktop/src/main/smoke.ts`

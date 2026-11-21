@@ -28,13 +28,6 @@ function icon(paths: ReactNode): Icon {
 	};
 }
 
-export const ArrowLeft = icon(
-	<>
-		<path d="m12 19-7-7 7-7" />
-		<path d="M19 12H5" />
-	</>,
-);
-
 export const Settings2 = icon(
 	<>
 		<path d="M14 17H5" />

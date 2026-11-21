@@ -13,9 +13,9 @@ import { nextTurnCwd, state, update, useAppPick, useChrome } from "./state.ts";
 import { DRAG, HEADER_BAR } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
 
-/** 有自己侧栏的界面：对话是项目和会话，设置是章节列表。插件市场和插件的页面整页给内容，活动栏右边直接是卡片。 */
+/** 有自己侧栏的界面只有对话（项目和会话）。插件市场和插件的页面整页给内容，活动栏右边直接是卡片。 */
 export function hasSidebar(screen: Screen): boolean {
-	return screen === "chat" || screen === "settings";
+	return screen === "chat";
 }
 
 /**
@@ -26,7 +26,7 @@ export function hasSidebar(screen: Screen): boolean {
  */
 export function Rail() {
 	const { t, resolvedLocale } = useI18n();
-	const { screen, sessions, projects, currentId } = useChrome();
+	const { screen, settingsOpen, sessions, projects, currentId } = useChrome();
 	const currentSummary = useAppPick((current) => current.view?.summary);
 	usePluginUis();
 	const go = (next: Screen) => update({ screen: next, drawerOpen: false });
@@ -70,7 +70,7 @@ export function Rail() {
 					cwd={nextTurnCwd(state, currentSummary)}
 					actions={sidebarActions}
 					openPage={(key) => go(key === "market" ? "market" : `page:${key}`)}
-					openSettings={(settingsSection) => update({ screen: "settings", settingsSection, drawerOpen: false })}
+					openSettings={(settingsSection) => update({ settingsOpen: true, settingsSection, drawerOpen: false })}
 					openPanel={(key) => {
 						go("chat");
 						showPanel(key, true);
@@ -79,10 +79,10 @@ export function Rail() {
 				<UpdateBadge />
 				<RailItem
 					nav="settings"
-					active={screen === "settings"}
+					active={settingsOpen}
 					label={t("sidebar.settings")}
 					icon={<Settings size={17} strokeWidth={1.8} />}
-					onClick={() => go("settings")}
+					onClick={() => update({ settingsOpen: true, drawerOpen: false })}
 				/>
 			</div>
 		</nav>

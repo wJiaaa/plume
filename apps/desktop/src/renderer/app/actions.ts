@@ -189,9 +189,9 @@ export function openModelsSection(): void {
 	update({ settingsSection: "models" });
 }
 
-/** 插件详情里「设置」一节的入口：去设置里那一节。 */
-export function openSettingsSection(section: SettingsSection): void {
-	update({ screen: "settings", settingsSection: section });
+/** 打开设置浮层，给了 `section` 就停在那一章，没给就是上次那一章。 */
+export function openSettingsSection(section?: SettingsSection): void {
+	update({ settingsOpen: true, drawerOpen: false, ...(section ? { settingsSection: section } : {}) });
 }
 
 /** 市场的「新建插件」：开一个新对话，输入框里放好点名写插件技能的 `/plume-plugin `，人接着说想要什么插件。 */

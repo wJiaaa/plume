@@ -22,9 +22,18 @@ export function useWindowOverlay(header: RefObject<HTMLElement | null>, symbol: 
 		let base: OverlayColors | undefined;
 		let sent = "";
 		let frame = 0;
+		const probe = document.createElement("span");
+		probe.hidden = true;
+		document.body.append(probe);
 		const send = () => {
 			if (!base) return;
-			const colors = tintedOverlay(base, heldScrims());
+			// 遮罩的颜色可以是 token（磨砂遮罩交的是窗口底色），在这一刻解成 `#rrggbb`；解不开的不算进去。
+			const scrims = heldScrims().flatMap((scrim) => {
+				probe.style.color = scrim.color;
+				const color = cssToHex(getComputedStyle(probe).color);
+				return color ? [{ ...scrim, color }] : [];
+			});
+			const colors = tintedOverlay(base, scrims);
 			const key = `${colors.color} ${colors.symbolColor}`;
 			if (key === sent) return;
 			sent = key;
@@ -52,23 +61,24 @@ export function useWindowOverlay(header: RefObject<HTMLElement | null>, symbol: 
 			dark.removeEventListener("change", later);
 			sheets.disconnect();
 			stopScrims();
+			probe.remove();
 		};
 	}, [header, symbol, appearance, skin]);
 }
 
-let probe: CanvasRenderingContext2D | null | undefined;
+let canvas: CanvasRenderingContext2D | null | undefined;
 
 /**
  * 计算出来的颜色写成 `#rrggbb`。token 是 `color-mix()` 推出来的，计算值可能是 `color(srgb …)` 一类 Electron 的
  * `setTitleBarOverlay` 不认的写法，所以在一像素的画布上涂一下再读回来。
  */
 function cssToHex(css: string): string | undefined {
-	probe ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-	if (!probe) return undefined;
-	probe.clearRect(0, 0, 1, 1);
-	probe.fillStyle = css;
-	probe.fillRect(0, 0, 1, 1);
-	const [r = 0, g = 0, b = 0, a = 0] = probe.getImageData(0, 0, 1, 1).data;
+	canvas ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+	if (!canvas) return undefined;
+	canvas.clearRect(0, 0, 1, 1);
+	canvas.fillStyle = css;
+	canvas.fillRect(0, 0, 1, 1);
+	const [r = 0, g = 0, b = 0, a = 0] = canvas.getImageData(0, 0, 1, 1).data;
 	// 透明的带子（皮肤没给底色）说明不了按钮该画在什么上面，不送，留着上一次的。
 	return a === 0 ? undefined : toHex({ r, g, b });
 }

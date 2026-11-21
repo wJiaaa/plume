@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { dismissHoverLayers } from "./hover-layers.ts";
 import { portal } from "./portal.ts";
 import { holdScrim } from "./scrims.ts";
@@ -8,6 +8,9 @@ import { holdScrim } from "./scrims.ts";
  * 窗口自己的按钮就是按这个压暗的（见 `scrims.ts`）。
  */
 export const SCRIM_ALPHA = 0.22;
+/** 磨砂遮罩盖上窗口底色的浓度，浅色、深色各一档，和 `overlay.css` 里 `.plume-scrim-frost` 画的一致，理由同上。 */
+const FROST_ALPHA = { light: 0.6, dark: 0.64 };
+const DARK = "(prefers-color-scheme: dark)";
 
 export const OverlayDepth = createContext(0);
 /** 播完退场，再运行 `after`——没有别的要做时运行 `onClose`。 */
@@ -33,12 +36,15 @@ export function Overlay({
 	width = 460,
 	label,
 	returnFocus,
+	frosted = false,
 }: {
 	children: React.ReactNode | ((dismiss: Dismiss) => React.ReactNode);
 	onClose: () => void;
 	width?: number;
 	label?: string;
 	returnFocus?: HTMLElement;
+	/** 遮罩不压暗，改成盖一层窗口底色再糊开，底下的界面退成背景。给要待一会儿的大浮层（设置）；问一句就走的对话框不用。 */
+	frosted?: boolean;
 }) {
 	const depth = useContext(OverlayDepth) + 1;
 	const id = useId();
@@ -89,7 +95,12 @@ export function Overlay({
 	 * 标题栏里系统自己的按钮跟着遮罩变暗，并在遮罩开始离开时就变亮，而不是等它走完——和页面开始变亮
 	 * 是同一刻。
 	 */
-	useEffect(() => (leaving ? undefined : holdScrim("#000000", SCRIM_ALPHA)), [leaving]);
+	const dark = usePrefersDark(frosted);
+	useEffect(() => {
+		if (leaving) return undefined;
+		// 磨砂的颜色交 token 本身，由量颜色的一方在用的时候解开：在设置里换主题、换配色，按钮跟着这一刻的底色走。
+		return frosted ? holdScrim("var(--plume-shell)", dark ? FROST_ALPHA.dark : FROST_ALPHA.light) : holdScrim("#000000", SCRIM_ALPHA);
+	}, [leaving, frosted, dark]);
 	useLayoutEffect(() => {
 		const previous = returnFocus ?? document.activeElement;
 		const element = card.current;
@@ -156,7 +167,7 @@ export function Overlay({
 			<div
 				ref={scrim}
 				data-plume-overlay={depth}
-				className={`[app-region:no-drag] fixed inset-0 flex justify-center p-4 sm:p-8 items-center ${leaving ? "plume-scrim-out" : "plume-scrim-in"}`}
+				className={`[app-region:no-drag] fixed inset-0 flex justify-center p-4 sm:p-8 items-center ${leaving ? "plume-scrim-out" : "plume-scrim-in"}${frosted ? " plume-scrim-frost" : ""}`}
 				style={{ zIndex: 60 + depth * 20, ...exitFrom.scrim }}
 				onMouseDown={(event) => {
 					if (event.target === event.currentTarget) dismiss();
@@ -183,4 +194,18 @@ export function Overlay({
 			</div>
 		</OverlayDepth.Provider>,
 	);
+}
+
+/** 现在是不是深色。`enabled` 为假时不订阅，恒为假：只有磨砂遮罩的浓度分深浅。 */
+function usePrefersDark(enabled: boolean): boolean {
+	const subscribe = useCallback(
+		(change: () => void) => {
+			if (!enabled) return () => {};
+			const query = matchMedia(DARK);
+			query.addEventListener("change", change);
+			return () => query.removeEventListener("change", change);
+		},
+		[enabled],
+	);
+	return useSyncExternalStore(subscribe, () => enabled && matchMedia(DARK).matches);
 }

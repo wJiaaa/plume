@@ -1,5 +1,5 @@
 /**
- * 设置页的版式：页头、卡片、带标签的一行。
+ * 设置页的版式：一章的页头、卡片、带标签的一行。
  *
  * 同一件事有两种形状，区别正是要点：`Row` 把标签和控件放在一行，控件小的时候合适；`Field` 上下叠放，整行宽的输入框要这种。
  * 两个并排放在这里，选哪个一眼看得出。
@@ -11,9 +11,10 @@ import { Text } from "@plume/ui";
 export { SettingsCard as Card, SettingsNotice as Notice, SettingsRow as Row, SettingsSectionTitle as SectionTitle } from "@plume/ui";
 
 /**
- * 一个设置页顶上那一块：标题、一句介绍，右边可能有一两颗按钮；`children` 接在介绍下面（模型页那行目录版本）。
+ * 一章顶上那一块：一句介绍，右边可能有一两颗按钮；`children` 接在介绍下面（模型页那行目录版本）。
  *
- * 标题下到正文的距离、介绍的行宽都在这里定一次：各页各写一份的话会漂成好几种，相邻两页切过去正文第一行上下跳。
+ * 章名在设置浮层顶上的面包屑里，这里只把它留给读屏（`h1`），不再画一个大标题。没有介绍、按钮时这一块不占地方，
+ * 正文从顶上开始。介绍到正文的距离、介绍的行宽都在这里定一次：各页各写一份的话会漂成好几种，相邻两章切过去正文第一行上下跳。
  */
 export function PageHeader({
 	title,
@@ -26,16 +27,19 @@ export function PageHeader({
 	intro?: React.ReactNode;
 	actions?: React.ReactNode;
 	children?: React.ReactNode;
-	/** 位置和宽度，不是间距：标题下面那一段由这里给。 */
+	/** 位置和宽度，不是间距：下面那一段由这里给。 */
 	className?: string;
 }) {
+	const shown = Boolean(intro || actions || children);
 	return (
-		<header className={`flex flex-wrap items-start justify-between gap-3 pb-7 ${className}`}>
-			<div className="min-w-0">
-				<h1 className="text-display leading-tight font-semibold tracking-tight text-ink">{title}</h1>
-				{intro && <p className="mt-2 max-w-[600px] text-label leading-relaxed text-ink-muted">{intro}</p>}
-				{children}
-			</div>
+		<header className={`${shown ? "flex flex-wrap items-start justify-between gap-3 pb-6" : ""} ${className}`}>
+			<h1 className="sr-only">{title}</h1>
+			{shown && (
+				<div className="min-w-0">
+					{intro && <p className="max-w-[600px] text-label leading-relaxed text-ink-muted">{intro}</p>}
+					{children}
+				</div>
+			)}
 			{actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
 		</header>
 	);
