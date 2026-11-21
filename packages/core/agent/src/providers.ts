@@ -45,21 +45,8 @@ function listingHeaders(provider: StoredProvider): Record<string, string> {
 export async function testProvider(provider: StoredProvider, targetModelId: string | undefined): Promise<ProviderTestResult> {
 	const started = Date.now();
 
-	let models: string[] | undefined;
-	if (!targetModelId) {
-		try {
-			const listed = await fetch(modelsUrl(provider), { headers: listingHeaders(provider), signal: AbortSignal.timeout(LISTING_TIMEOUT_MS) });
-			if (listed.ok) {
-				const body = (await listed.json()) as { data?: { id?: string }[] };
-				models = body.data
-					?.map((model) => model.id ?? "")
-					.filter(Boolean)
-					.slice(0, 200);
-			}
-		} catch {
-			models = undefined;
-		}
-	}
+	const listed = targetModelId ? undefined : await fetchModels(provider);
+	const models = listed?.ok && listed.models.length > 0 ? listed.models.slice(0, 200) : undefined;
 
 	const config = providerConfig(provider);
 	const configured = config.models;
