@@ -654,11 +654,12 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 					toolResult(
 						call,
 						asking
-							? {
-									output: asking === "request" ? CANCELLED_ASKING : CANCELLED_WAITING,
+							? // 问之前已经改了文件的（先写、再问第二次）不能说没跑过，改动也照样记上：撤回、交付卡认的是它。
+								withChanges({
+									output: asking === "request" || changed ? CANCELLED_ASKING : CANCELLED_WAITING,
 									isError: true,
 									details: { cancelled: true } satisfies CancelledDetails,
-								}
+								})
 							: { ...result, details: result.details ?? ({ cancelled: true } satisfies CancelledDetails) },
 						startedAt,
 					),
