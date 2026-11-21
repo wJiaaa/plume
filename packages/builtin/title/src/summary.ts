@@ -14,10 +14,11 @@ export const TITLE_SUMMARY_TIMEOUT_MS = 15_000;
 export const TITLE_INPUT_MAX_CHARS = 4000;
 
 /**
- * 输出上限。`ctx.model.complete` 不让模型思考，60 个 token 足够一句标题；
- * 这只是上限，服务商按实际生成的收费。
+ * 输出上限。`ctx.model.complete` 会叫模型别思考，但有的模型经中转关不掉（DeepSeek 经 Magpie 的 Responses 实测照样想），
+ * 思考也算在输出里：上限只够一句标题时，思考把它吃完、正文是空的。所以留够想完再写标题的量；
+ * 这只是上限，服务商按实际生成的收费，不思考的模型照样只花一句标题的钱。
  */
-export const TITLE_MAX_TOKENS = 60;
+export const TITLE_MAX_TOKENS = 2000;
 
 /** 洗完还超过这么长的是回答而不是标题：丢掉、保留默认标题，好过半句话当标题。 */
 const TITLE_MAX_CHARS = 30;

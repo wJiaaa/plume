@@ -35,6 +35,8 @@ export default {
 					sessionId,
 					...(settings.get().model ? { model: settings.get().model } : {}),
 					maxTokens: TITLE_MAX_TOKENS,
+					// 被上限截断时抛错进日志：不然拿到空串或半句话，标题悄悄没起，没人知道为什么。
+					requireComplete: true,
 					signal: AbortSignal.any([controller.signal, AbortSignal.timeout(TITLE_SUMMARY_TIMEOUT_MS)]),
 				});
 				const title = cleanTitleSummary(reply);
