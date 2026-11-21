@@ -23,9 +23,9 @@ const OFFER_DONE = "好，就在这里翻。";
 const ARCHIVING = "好，这就归档。";
 
 /**
- * 开新会话（内置插件 plume.spawn-session）：假模型在对话里调 `spawn_session`（`own_initiative`），对话里画出建议卡片，收着的环境开关上
- * 挂圆点、说明里有「等你决定」；点「开始」，新会话开在同一处、记着来处，第一句是「背景 + 任务」，跑完第一轮后它的汇报交回原对话：那边多一行
- * 「来自关联会话」，被叫起一轮；卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方钉着那个会话跑完了，点过去看过就收走。
+ * 开新会话（内置插件 plume.spawn-session）：假模型在对话里调 `spawn_session`（`own_initiative`），对话里画出建议卡片，但环境卡片不列、开关不提醒；
+ * 点「开始」，新会话开在同一处、记着来处，第一句是「背景 + 任务」，环境卡片“产出”里出现带运行点的标准行；跑完第一轮后它的汇报交回原对话：
+ * 那边多一行「来自关联会话」，被叫起一轮；调用处卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方钉着那个会话跑完了，点过去看过就收走。
  * 回到原对话说一件无关的新事，假模型调 `spawn_session`（`offer`）：输入框上方弹出「要另开一个会话吗？」，调用等着；点「就在这里做」，
  * 调用的位置留一行「问过要不要另开会话 · 就在这里做」，模型接着在这里做。在新会话里说「做完就归档」，假模型调 `archive_session`：
  * 这一轮停在这一下（之后不再问模型），收场后会话归档，界面离开它。
@@ -78,7 +78,8 @@ export async function checkSpawnSession(options: {
 		if (all.includes("toolu_spawn")) return { text: SUGGESTED };
 		if (all.includes(PROMPT)) {
 			briefed ||= all.includes("Background (from the session that started this one)");
-			return { text: CLEANED };
+			// 留出足够长的运行窗口，真实界面能看见环境行图标上的运行点，而不是和一帧内完成竞速。
+			return { text: CLEANED, stream: { chunkSize: 1, delayMs: 100 } };
 		}
 		return {
 			toolCalls: [
@@ -123,23 +124,15 @@ export async function checkSpawnSession(options: {
 
 		const card = "[data-screen=chat] [data-spawn-suggestion=suggested]";
 		await until(`document.querySelector(${JSON.stringify(card)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "对话里画出建议卡片");
-		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "环境开关上挂着圆点");
-		if (!(await page<string>(`document.querySelector('[data-environment-toggle]').getAttribute('aria-label')`)).includes("等你决定"))
-			throw new Error("环境开关的说明里没有待决定的建议");
-		// 环境卡片里那一条只列出来，没有开始、选模型；点了滚回对话里那张卡片、闪一下。
+		if (await page<boolean>(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`))
+			throw new Error("只提了建议、还没开会话，环境开关不该挂圆点");
+		// 建议只留在原本的工具卡片位置；环境卡片里不显示，真的开出会话后才作为“产出”出现。
 		await clickVisible(page, `[data-environment-toggle]`);
-		const pendingEntry = "[data-spawn-environment][data-state=suggested]";
-		await until(`document.querySelector(${JSON.stringify(pendingEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`, "环境卡片里列出这条建议");
-		if (await page<boolean>(`document.querySelector('[data-spawn-section] [data-spawn-action=start], [data-spawn-section] [data-model-trigger]') !== null`))
-			throw new Error("环境卡片里那一节不该能开始、选模型");
-		await capture("smoke-spawn-session-environment.png");
-		await clickVisible(page, pendingEntry);
-		await until(
-			`document.querySelector(${JSON.stringify("[data-screen=chat] [data-plume-flash] [data-spawn-suggestion=suggested]")}) !== null`,
-			"点了滚回对话里那张卡片、闪一下",
-		);
+		if (await page<boolean>(`document.querySelector('[data-spawn-environment][data-state=suggested]') !== null`))
+			throw new Error("还没开始的建议出现在了环境卡片里");
+		await capture("smoke-spawn-session-environment-empty.png");
 		await clickVisible(page, `[data-environment-toggle]`);
-		await until(`document.querySelector('[data-spawn-section]') === null`, "收起环境卡片");
+		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 		const worktreeToggle = `${card} [data-plume-worktree-toggle]`;
 		await until(`document.querySelector(${JSON.stringify(worktreeToggle)}) !== null`, "项目是仓库，卡片上有工作树开关");
 		if ((await page<string>(`document.querySelector(${JSON.stringify(worktreeToggle)}).getAttribute('aria-pressed')`)) === "true")
@@ -180,7 +173,17 @@ export async function checkSpawnSession(options: {
 		const branch = (await promisify(execFile)("git", ["symbolic-ref", "--short", "HEAD"], { cwd: startedCwd })).stdout.trim();
 		if (!branch.startsWith("plume/session-")) throw new Error(`新会话的工作树不在它自己的分支上：${branch}`);
 		await until(`document.querySelector('[data-screen=chat] [data-spawn-suggestion=started]') !== null`, "卡片缩成一行「新会话」");
-		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') === null`, "开始以后圆点撤下");
+		await clickVisible(page, `[data-environment-toggle]`);
+		const startedEntry = "[data-environment-group=output] [data-spawn-environment][data-state=started]";
+		await until(
+			`document.querySelector(${JSON.stringify(startedEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`,
+			"开出以后环境卡片的产出里出现新会话",
+		);
+		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(startedEntry + " .plume-env-row-icon[data-running]")}) !== null`)))
+			throw new Error("正在运行的新会话没有在图标上挂运行点");
+		await capture("smoke-spawn-session-environment-started.png");
+		await clickVisible(page, `[data-environment-toggle]`);
+		await until(`document.querySelector('[data-environment]') === null`, "看完已开启的新会话后收起环境卡片");
 
 		const delivery = "[data-screen=chat] [data-delivery-row][data-delivery-session]";
 		await until(

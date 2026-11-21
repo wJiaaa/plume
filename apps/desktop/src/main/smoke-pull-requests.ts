@@ -30,6 +30,8 @@ export async function checkPullRequests(options: {
 	};
 	const until = (expression: string, label: string) => waitMain(() => page<boolean>(expression), label);
 	/** `scope` 里按无障碍名、文字或第一层 span 的文字认出的按钮（中英文界面各给一个名字）。 */
+	/** 设置里弹出的对话框：设置浮层自己也是一个 `role=dialog`，叠在它上面的那个不含设置的正文。 */
+	const DIALOG = '[role="dialog"]:not(:has([data-settings-dialog]))';
 	const click = (scope: string, labels: string[]) =>
 		clickVisibleIn(
 			page,
@@ -245,19 +247,19 @@ export async function checkPullRequests(options: {
 		await click(list, ["添加账号", "Add an account"]);
 		await until(`document.querySelector('${settings}') !== null`, "添加账号导航到代码托管设置");
 		await click(settings, ["添加账号", "Add an account"]);
-		await click('[role="dialog"]', ["GitLab"]);
+		await click(DIALOG, ["GitLab"]);
 		await fill('input[name="forge-base-url"]', baseUrl);
 		await fill('input[name="forge-token"]', token);
 		await fill('input[name="forge-label"]', accountLabel);
-		await click('[role="dialog"]', ["验证并保存", "Verify and save"]);
+		await click(DIALOG, ["验证并保存", "Verify and save"]);
 		await until(
-			`document.querySelector('[role="dialog"] [role="status"]')?.textContent.includes('smoke-user') && ['已连接', 'Connected'].some(text => document.querySelector('[role="dialog"]')?.textContent.includes(text))`,
+			`document.querySelector(${JSON.stringify(`${DIALOG} [role="status"]`)})?.textContent.includes('smoke-user') && ['已连接', 'Connected'].some(text => document.querySelector(${JSON.stringify(DIALOG)})?.textContent.includes(text))`,
 			"假 GitLab 身份验证保存成功",
 		);
 		await capture("smoke-pull-requests-account.png");
-		await click('[role="dialog"]', ["完成", "Done"]);
+		await click(DIALOG, ["完成", "Done"]);
 		await until(
-			`document.querySelector('[role="dialog"]') === null && document.querySelector('${settings}')?.textContent.includes(${JSON.stringify(accountLabel)})`,
+			`document.querySelector(${JSON.stringify(DIALOG)}) === null && document.querySelector('${settings}')?.textContent.includes(${JSON.stringify(accountLabel)})`,
 			"账号保存在设置列表",
 		);
 		await returnToSession();

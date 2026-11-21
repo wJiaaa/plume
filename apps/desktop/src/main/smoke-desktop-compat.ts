@@ -13,15 +13,15 @@ const PANEL_TOGGLE = "[data-panel-toggle] button";
 /** 对话卡片里转录的正文那一栏，嵌在里面的子转录不算。 */
 const TRANSCRIPT_TEXT = JSON.stringify("[data-panel-layout] > main [data-plume-session]");
 const SIDEBAR = 'aside[aria-label="侧边栏"]';
-/** 顶行的后退：从插件市场、设置页回到刚才的会话。 */
+/** 顶行的后退：从插件市场回到刚才的会话。 */
 const BACK = 'button[aria-label^="后退"]';
 const FILES_LAUNCH = '[data-panel-launch="plume/files"]';
 const FILES_TAB = '[data-panel-area] [data-panel-tab="plume/files"]';
 /** 面板内容不在面板区的卡片里，另放在一层（换会话不搬 DOM），看得见的那一份没有 inert。 */
 const FILES_CONTENT = '[data-panel-layer] [data-panel="plume/files"]:not([inert])';
 const PRESERVED = '[data-panel="plume/files"] [data-smoke-preserved]';
-/** 窗口顶行的侧栏开关；设置页里同一颗按钮开合的是章节列表。 */
-const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置导航 "]';
+/** 窗口顶行的侧栏开关。 */
+const NAV_TOGGLE = 'button[aria-label*="侧边栏 "]';
 
 /**
  * 桌面兼容（`PLUME_SMOKE_ONLY=desktop-compat`）：几种缩放比、窗口大小和明暗主题下，窗口外壳的几何站得住。
@@ -29,12 +29,11 @@ const NAV_TOGGLE = 'button[aria-label*="侧边栏 "], button[aria-label*="设置
  * 1. 顶上各行的控件都压在自己那一行的中线上，面板开关点得到，开出的标签整个露在标签条里；
  * 2. 普通大小的窗口变窄时面板区改成上下排，不丢面板、不重建面板内容、不改写存下的宽度和标签，拉宽回来原样；
  * 3. 125% 下侧栏边缘落在小数设备像素上时，标题栏和面板区的图标还画在同一列设备像素上；
- * 4. 设置页的章节列表滑动时，设置那一列一次到最终宽度，之后只平移；
- * 5. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画；
+ * 4. 侧栏开合时，对话标题逐帧跟着卡片走、碰到窗口按钮才停，不先跳开再回来，也不压到按钮上；滑完撤掉动画；
  *    宽档对话列（外观设置）：正文和输入框一样宽、侧栏开着就到上限，侧栏拖到最宽也放得下，开合时每一帧都一样宽；
- * 6. 面板区开合时对话和面板区贴着一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
+ * 5. 面板区开合时对话和面板区贴着一起滑，面板内容跟着自己的卡片走；对话顶行右端的按钮跟着卡片走、不横着跳；
  *    开着的环境卡片不重挂，停靠、浮着只换一次，打开时点下去当场换好、收起时滑完再换，不在半路上闪；滑完撤掉动画；
- * 7. 侧栏开合时环境卡片同样不重挂，对话那一栏变窄时点下去当场换好、变宽时滑完再换。
+ * 6. 侧栏开合时环境卡片同样不重挂，对话那一栏变窄时点下去当场换好、变宽时滑完再换。
  *
  * 缩放比经 DevTools 协议模拟（`Emulation.setDeviceMetricsOverride`）：冒烟只起一个 Electron，`--force-device-scale-factor`
  * 要在启动前给、一次只能一种；模拟的缩放比换的是每个 CSS 像素合几个设备像素，布局和栅格化走的是同一条路。
@@ -461,45 +460,7 @@ export async function checkDesktopCompat(options: {
 			}
 		}
 
-		// ── 4. 设置导航滑动时设置列只平移 ──────────────────────────────
-		await setViewport(984, 684, 1);
-		await reset();
-		window.webContents.send("plume:command", "settings");
-		const column = `[...document.querySelectorAll('[data-screen=settings]')].find(e => e.checkVisibility())`;
-		await until(`Boolean(${column})`, "打开设置页");
-		await settle();
-		for (const phase of ["收起", "展开"]) {
-			// 指针先移过去，像手一样：顶行按钮悬停之后才接按下。
-			const at = await page<{ x: number; y: number }>(
-				`(() => { const r = document.querySelector('button[aria-label*="设置导航"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
-			);
-			await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", ...at });
-			// 采到滑动开始又停下为止，不按固定帧数：机器忙时送到按下的时间可能比一次滑动还长。
-			await page(`(() => { window.__smokeHold = (async () => {
-				const out = []; let moved = false, still = 0;
-				for (let i = 0; i < 400 && still < 12; i++) {
-					await new Promise(requestAnimationFrame);
-					const el = ${column}, card = el.closest('.rounded-panel');
-					const sample = { width: Math.round(el.getBoundingClientRect().width * 10) / 10, left: Math.round(card.getBoundingClientRect().x * 10) / 10 };
-					const last = out.at(-1);
-					if (last && last.left !== sample.left) { moved = true; still = 0; } else if (moved) still++;
-					out.push(sample);
-				}
-				return out;
-			})(); })()`);
-			for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", { type, ...at, button: "left", clickCount: 1 });
-			const held = await page<{ width: number; left: number }[]>("window.__smokeHold");
-			const widths = [...new Set(held.map((sample) => sample.width))];
-			const lefts = new Set(held.map((sample) => sample.left));
-			console.log("PLUME_DESKTOP_COMPAT_SETTINGS " + JSON.stringify({ phase, widths, positions: lefts.size }));
-			assert.ok(lefts.size >= 3, `${phase}：章节列表真的滑了，中间有帧，否则宽度说明不了什么`);
-			assert.ok(widths.length <= 2, `${phase}：设置列一次到最终宽度：${JSON.stringify(widths)}`);
-			await settle();
-			if (phase === "收起") await shot("desktop-compat-settings-collapsed.png");
-		}
-		await clickVisible(page, BACK);
-
-		// ── 5. 侧栏开合时对话标题跟着卡片走 ────────────────────────────
+		// ── 4. 侧栏开合时对话标题跟着卡片走 ────────────────────────────
 		await setViewport(1200, 760, 1);
 		await reset();
 		const title = `document.querySelector('[data-panel-layout] > main header')?.firstElementChild`;
@@ -556,7 +517,7 @@ export async function checkDesktopCompat(options: {
 			);
 		}
 
-		// ── 5b. 宽档对话列：侧栏开合时正文宽度一帧不变，侧栏拖到最宽也放得下 ──────────
+		// ── 4b. 宽档对话列：侧栏开合时正文宽度一帧不变，侧栏拖到最宽也放得下 ──────────
 		await page(`window.plume.saveAppearance({ contentWidth: "wide" })`);
 		const SESSION = "[data-panel-layout] > main [data-plume-session]";
 		const columnSample = `(() => { const session = document.querySelector(${JSON.stringify(SESSION)}), box = session.parentElement, style = getComputedStyle(box);
@@ -605,24 +566,12 @@ export async function checkDesktopCompat(options: {
 		await setViewport(1200, 760, 1);
 		await reset();
 
-		/**
-		 * 开合时环境卡片一直是同一个节点，只换一次地方：对话那一栏变窄时点下去当场按滑完的宽度换好，变宽时滑完才换，
-		 * 半路上不换。`held` 的第一帧是点之前的样子，`moving` 标着正在滑的帧。
-		 */
-		const laneSteady = (label: string, held: { width: number; moving: boolean; lane: string | null; same: boolean }[], narrowing: boolean) => {
+		/** 开合时环境卡片一直是同一个节点，每一帧都浮在转录右上角。`held` 的第一帧是点之前的样子。 */
+		const laneSteady = (label: string, held: { lane: string | null; same: boolean }[]) => {
 			assert.ok(
-				held.every((sample) => sample.same),
-				`${label}：环境卡片没被重挂：${JSON.stringify(held)}`,
+				held.every((sample) => sample.same && sample.lane === "floating"),
+				`${label}：环境卡片一直浮着、没被重挂：${JSON.stringify(held)}`,
 			);
-			const switched = held.findIndex((sample, index) => index > 0 && sample.lane !== held[index - 1]!.lane);
-			if (switched < 0) return;
-			assert.ok(
-				held.slice(switched).every((sample) => sample.lane === held[switched]!.lane),
-				`${label}：环境卡片只换一次地方：${JSON.stringify(held)}`,
-			);
-			const firstMoved = held.findIndex((sample) => sample.width !== held[0]!.width);
-			if (narrowing) assert.ok(switched <= firstMoved, `${label}：环境卡片在滑之前就换好：${JSON.stringify(held)}`);
-			else assert.ok(!held[switched]!.moving, `${label}：环境卡片滑完才换：${JSON.stringify(held)}`);
 		};
 		const laneOf = `(document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane ?? null)`;
 		// 正文跟随实际栏宽；逐帧连续性由 panel-transcript 段验证。这里同时开着环境卡片，检查正文不越界。
@@ -633,12 +582,12 @@ export async function checkDesktopCompat(options: {
 			);
 		};
 
-		// ── 6. 面板区开合时两张卡片一起滑，环境卡片不闪 ──────────────────
-		// 环境卡片开着：宽的时候停靠在右边那一列，面板区打开后那一栏变窄，它浮到转录上。
+		// ── 5. 面板区开合时两张卡片一起滑，环境卡片不闪 ──────────────────
+		// 环境卡片开着：面板区开合、对话那一栏变宽变窄时，它一直浮在转录右上角。
 		if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`))) await clickVisible(page, `[data-environment-toggle]`);
-		await until(`document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane === 'docked'`, "环境卡片停靠");
+		await until(`document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.dataset.conversationLane === 'floating'`, "环境卡片浮着");
 		await settle();
-		// 标在卡片自己的根上：换停靠、浮着时它要是被卸下重挂，这个标记就没了。
+		// 标在卡片自己的根上：开合时它要是被卸下重挂，这个标记就没了。
 		await page(`document.querySelector('[data-environment]').setAttribute('data-smoke-same-card', '')`);
 		const PANEL_LAYER = '[data-panel-layer]:not(.invisible) [data-panel="plume/files"]';
 		const panelSample = `(() => { const box = (s) => document.querySelector(s)?.getBoundingClientRect(), area = document.querySelector('[data-panel-area]');
@@ -688,14 +637,14 @@ export async function checkDesktopCompat(options: {
 			for (const sample of sliding) assert.ok(Math.abs(sample.area - sample.chat) < 1, `${phase}：面板区贴着对话：${JSON.stringify(sample)}`);
 			const offsets = new Set(sliding.flatMap((sample) => (sample.content === null ? [] : [Math.round(sample.content - sample.area)])));
 			assert.ok(offsets.size === 1, `${phase}：面板内容跟着卡片走：${JSON.stringify(held)}`);
-			laneSteady(phase, held, phase === "打开");
+			laneSteady(phase, held);
 			textFits(phase, held);
 			await settle();
-			assert.equal(await page<string | null>(laneOf), phase === "打开" ? "floating" : "docked", `${phase}：落定后环境卡片的放法`);
+			assert.equal(await page<string | null>(laneOf), "floating", `${phase}：落定后环境卡片浮着`);
 			assert.ok(await page<boolean>(`getComputedStyle(document.querySelector('[data-panel-area]')).transitionProperty === 'all'`), `${phase}：滑完撤掉动画`);
 		}
-		// ── 7. 侧栏开合时环境卡片也不闪 ──────────────────────────────
-		// 面板区开着、窗口 1300 宽：侧栏收起后对话那一栏够停靠，展开后不够，开合一次各跨一次停靠线。
+		// ── 6. 侧栏开合时环境卡片也不闪 ──────────────────────────────
+		// 面板区开着、窗口 1300 宽：侧栏开合时对话那一栏一路变宽变窄，环境卡片一直浮着、不重挂。
 		await setViewport(1300, 760, 1);
 		await press(PANEL_TOGGLE);
 		await until(`${panelShown} && ${laneOf} === 'floating'`, "侧栏开着、面板区开着时环境卡片浮着");
@@ -726,13 +675,13 @@ export async function checkDesktopCompat(options: {
 				new Set(held.filter((sample) => sample.moving).map((sample) => sample.width)).size >= 3,
 				`侧栏${phase}：对话那一栏真的滑了：${JSON.stringify(held)}`,
 			);
-			laneSteady(`侧栏${phase}`, held, phase === "展开");
+			laneSteady(`侧栏${phase}`, held);
 			textFits(`侧栏${phase}`, held);
 			await settle();
-			assert.equal(await page<string | null>(laneOf), phase === "收起" ? "docked" : "floating", `侧栏${phase}：落定后环境卡片的放法`);
+			assert.equal(await page<string | null>(laneOf), "floating", `侧栏${phase}：落定后环境卡片浮着`);
 		}
 
-		// ── 8. 面板区顶着上限时开合侧栏，面板里的内容不跟着逐帧改尺寸 ──────
+		// ── 7. 面板区顶着上限时开合侧栏，面板里的内容不跟着逐帧改尺寸 ──────
 		// 侧栏收着时把面板区拉到最宽：侧栏一展开，工作区变窄，面板区就被上限夹着一路变窄，收起时再一路变宽回来。
 		await press(NAV_TOGGLE);
 		await settle();

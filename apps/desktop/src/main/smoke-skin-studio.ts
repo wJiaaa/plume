@@ -6,7 +6,7 @@ import type { Remote } from "@plume/rpc";
 import { nativeTheme, type BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { clickVisible, clickVisibleIn } from "./smoke-kit.ts";
+import { clickVisible, clickVisibleIn, closeSettings } from "./smoke-kit.ts";
 
 /** 只用本次冒烟数据目录；通过真实界面选肤、复制、AI工具应用和停用恢复。 */
 export async function checkSkinStudio(options: {
@@ -76,8 +76,9 @@ export async function checkSkinStudio(options: {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
 		await clickVisible(page, `[data-nav=market]`);
+		// 面包屑最后一个按钮：网格页是「插件市场」，详情页是「这一类」，点了都回网格；详情页的面包屑有两个按钮，不挑一个就点不到唯一的那个。
 		if (await page<boolean>(`document.querySelector('nav[aria-label="插件市场"] button') !== null`))
-			await clickVisible(page, `nav[aria-label="插件市场"] button`);
+			await clickVisible(page, `nav[aria-label="插件市场"] button:last-of-type`);
 		await until(`document.querySelector('[data-card="skin-studio"] > button') !== null`, "市场列出换肤工坊");
 		await clickVisible(page, `[data-card="skin-studio"] > button`);
 		await until(`document.querySelector(${JSON.stringify(studioSwitch)}) !== null`, "工坊详情有开关");
@@ -179,7 +180,7 @@ export async function checkSkinStudio(options: {
 		"字体偏好仍可编辑",
 	);
 	await capture("smoke-skin-appearance.png");
-	await button("返回工作区");
+	await closeSettings(page);
 	// 剪贴板出口留在本次测试窗口内，避免覆盖用户正在使用的系统剪贴板。
 	await page(
 		`window.__skinClipboardWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.__skinCopied = value; }; void 0;`,
@@ -271,23 +272,25 @@ export async function checkSkinStudio(options: {
 	await capture("smoke-skin-background-empty.png");
 	// 原生选图的冒烟替身读取 smoke.png；专项入口尚未生成这张完整截图。
 	await capture("smoke.png");
-	// 磨砂是整个窗口的质感，不要图、不看皮肤：打开后外圈和新对话底下、预览里都铺上颗粒，设置落盘；看完关掉，后面选图的步骤照旧。
+	// 磨砂是窗口外圈和会话区域的质感，不要图、不看皮肤：打开后外圈、新对话和预览里都铺上颗粒，设置落盘；看完关掉，后面选图的步骤照旧。
 	await button("磨砂", background);
 	await wait(async () => (await appearance()).grain === true, "磨砂设置落盘");
 	await until(
-		`document.querySelector('[data-screen=empty] > .chat-grain') !== null && document.querySelector('${background} [data-chat-background-drop] > .chat-grain') !== null`,
+		`document.querySelector('[data-screen=empty] > .surface-grain') !== null && document.querySelector('${background} [data-chat-background-drop] > .surface-grain') !== null`,
 		"不选图也铺上磨砂",
 	);
-	for (const selector of ["[data-screen=empty] > .chat-grain", "[data-plume-head-fill]"])
+	for (const selector of ["[data-screen=empty] > .surface-grain", "[data-plume-head-fill]"])
 		assert.ok(
-			await page<boolean>(`getComputedStyle(document.querySelector('${selector}')).backgroundImage.startsWith('url("data:image/svg+xml')`),
-			`${selector} 铺的是噪点图`,
+			await page<boolean>(
+				`(() => { const style = getComputedStyle(document.querySelector('${selector}')); return style.backgroundImage.startsWith('url("data:image/svg+xml') && style.backgroundAttachment === 'fixed'; })()`,
+			),
+			`${selector} 铺的是固定到视口的噪点图`,
 		);
 	await capture("smoke-skin-background-grain.png");
 	await button("无", background);
 	await wait(async () => (await appearance()).grain === false, "关掉磨砂");
 	await until(
-		`document.querySelector('.chat-grain') === null && getComputedStyle(document.querySelector('[data-plume-head-fill]')).backgroundImage === 'none'`,
+		`document.querySelector('.surface-grain') === null && getComputedStyle(document.querySelector('[data-plume-head-fill]')).backgroundImage === 'none'`,
 		"关掉后外圈和对话区都不再铺颗粒",
 	);
 	const formatResults = await page<Array<{ name?: string; error?: string }>>(`(async () => {
@@ -348,7 +351,7 @@ export async function checkSkinStudio(options: {
 	await settings("外观");
 	await until(`document.querySelector('[data-screen=settings] [data-plume-code-appearance]') !== null`, "外观页打开");
 	assert.ok(await page<boolean>(`document.querySelector('[data-screen=settings] [data-chat-background-settings]') === null`), "首页背景只在换肤工坊里设置");
-	await button("返回工作区");
+	await closeSettings(page);
 	await button("换肤工坊", ".plume-composer");
 	await button("铺满", background);
 	await wait(async () => (await appearance()).chatBackgroundFit === "cover", "工坊修改铺放设置");

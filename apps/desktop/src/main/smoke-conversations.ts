@@ -4,7 +4,7 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { clickReal, clickRealIn, clickVisible, contextMenuVisible, lastOf } from "./smoke-kit.ts";
+import { clickReal, clickRealIn, clickVisible, closeSettings, contextMenuVisible, lastOf } from "./smoke-kit.ts";
 import { nativeEnter, nativeModEnter } from "./smoke-message-edits.ts";
 
 /** 本体会话界面：项目折叠、项目草稿、置顶、停止后保留队列及手动发送。 */
@@ -329,7 +329,7 @@ export async function checkConversations(options: {
 		await clickVisible(page, "[role=dialog] button", /^删除 \d+ 个$/);
 		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId), "会话已删除");
 		await until(`!${mentioned}`, "删除后 localStorage 里不再留这个会话的记录");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 
 		console.log(
 			"PLUME_CONVERSATIONS_SMOKE",

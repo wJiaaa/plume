@@ -7,7 +7,7 @@ import type { Remote } from "@plume/rpc";
 import { BrowserWindow, nativeImage, shell } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { plumeHome } from "./home.ts";
-import { clickReal, clickVisible, contextMenuVisibleIn, firstOf } from "./smoke-kit.ts";
+import { clickReal, clickVisible, closeSettings, contextMenuVisibleIn, firstOf } from "./smoke-kit.ts";
 
 /** 真生图插件、会话事件和窗口交接；模型与生图服务只访问本机，系统定位出口用记录替身。 */
 export async function checkGallery(options: {
@@ -105,7 +105,7 @@ export async function checkGallery(options: {
 		await type("[data-model-editor-id]", "gpt-image-1");
 		await click("[data-model-editor-save]");
 		await until("document.querySelector('[data-model-row=\"gpt-image-1\"]') !== null", "生图模型保存");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 
 		const before = new Set((await agent.sessions()).map((item) => item.id));
 		window.webContents.send("plume:command", "new-session");

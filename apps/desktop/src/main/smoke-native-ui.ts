@@ -70,8 +70,9 @@ export async function checkNativeUi(options: {
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-nav=market]') !== null`, "回到工作区");
 		await clickVisible(page, `[data-nav=market]`);
+		// 面包屑最后一个按钮：网格页是「插件市场」，详情页是「这一类」，点了都回网格；详情页的面包屑有两个按钮，不挑一个就点不到唯一的那个。
 		if (await page<boolean>(`document.querySelector('nav[aria-label="插件市场"] button') !== null`))
-			await clickVisible(page, `nav[aria-label="插件市场"] button`);
+			await clickVisible(page, `nav[aria-label="插件市场"] button:last-of-type`);
 		await until(`document.querySelector('[data-card="native-ui"] > button') !== null`, "市场列出原生界面插件");
 		await clickVisible(page, `[data-card="native-ui"] > button`);
 		const toggle = '[data-plugin-detail="native-ui"] [role=switch]';

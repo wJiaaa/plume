@@ -7,7 +7,7 @@ import { clickVisible } from "./smoke-kit.ts";
 
 /** 专项入口只准备主会话、一个其他面板和侧聊（内置插件，随应用加载），复用完整冒烟的同一组断言。 */
 export async function prepareQuoteSideChat(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
-	const { window, page, until, click, setModel } = options;
+	const { window, outDir, page, until, click, capture, setModel } = options;
 	setModel((request) => ({
 		text: (request.tools as Array<{ name: string }> | undefined)?.some((tool) => tool.name === "read_main_chat")
 			? "划词侧边聊天准备好了。"
@@ -40,6 +40,14 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 		"document.activeElement === document.querySelector('[data-panel=\"plume.side-chat/chat\"]:not([inert]) .cm-content')",
 		"新开的侧聊输入框拿到焦点",
 	);
+	await page("window.plume.saveAppearance({ grain: true })");
+	await until(
+		`(() => { const side = document.querySelector('[data-panel="plume.side-chat/chat"]:not([inert])'); const layers = side?.querySelectorAll('.surface-grain'); return layers?.length === 1 && getComputedStyle(layers[0]).backgroundAttachment === 'fixed' && side.closest('[data-frame-clip]')?.querySelector(':scope > .surface-grain') === null; })()`,
+		"侧聊只铺一层固定到视口的会话颗粒",
+	);
+	await capture(window, join(outDir, "smoke-side-chat-grain.png"));
+	await page("window.plume.saveAppearance({ grain: false })");
+	await until(`document.querySelector('[data-panel="plume.side-chat/chat"]:not([inert]) .surface-grain') === null`, "侧聊关掉磨砂");
 	await checkSideCommands(options);
 	await checkUnreadDot(options);
 }

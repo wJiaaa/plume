@@ -29,7 +29,7 @@ const PLAN_ON = "Plan mode is on";
  * 2. 点「修改…」写意见、修订：模型收到的是没批准和这句意见，开关还开着，它改完再交；这一次点「拒绝」：这一轮停下，开关不动。
  * 3. 权限切到完全访问再发一句：`edit` 照样被拒，命令跑在只读沙箱里写不出文件，申请离开沙箱的被拒；计划卡照样出来、停着不被自动放行。
  *    点「接受」：卡收起、开关关掉，同一轮里模型接着读、改 hello.txt，改成了；模型收到的批准结果说计划模式已关。
- * 4. 环境卡片里「计划」一节列出批准的那份。
+ * 4. 环境卡片的“产出”里列出批准的那份计划，不重复画“计划”小标题。
  * 5. 权限切回请求批准、再开计划模式交一份：卡上主按钮是「接受」（键帽 ⌘↩），「接受并开启自动模式」是次按钮（⇧⌘↩）；
  *    在卡上按 ⌘↩（Windows 上 Ctrl+Enter）只接受：计划模式关掉、模型接着做，权限签仍是请求批准。
  *
@@ -253,13 +253,16 @@ export async function checkPlan(options: {
 		const stop = (await agent.sessions()).find((item) => item.id === sessionId)?.stop;
 		if (stop && stop.reason !== "done") throw new Error(`批准的那一轮没有正常收尾：${JSON.stringify(stop)}`);
 
-		// 4. 环境卡片里「计划」一节列出批准的那份；看完收起，免得它留在后面的截图里。
+		// 4. 环境卡片的“产出”里列出批准的计划，不再重复画“计划”小标题；看完收起，免得它留在后面的截图里。
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关在");
 		await clickVisible(page, `[data-environment-toggle]`);
-		await until(`document.querySelector('[data-plan-section]')?.textContent.includes('改 hello.txt（定稿）') === true`, "环境卡片里列出批准的计划");
+		await until(
+			`document.querySelector('[data-environment-group=output] [data-plan-environment]')?.textContent.includes('改 hello.txt（定稿）') === true`,
+			"环境卡片的产出里列出批准的计划",
+		);
 		await capture("smoke-plan-environment.png");
 		await clickVisible(page, `[data-environment-toggle]`);
-		await until(`document.querySelector('[data-plan-section]') === null`, "收起环境卡片");
+		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 
 		// 5. 请求批准档下再交一份：主按钮是「接受」，⌘↩ 只接受、不动权限；连权限一起改的「接受并开启自动模式」要 ⇧⌘↩。
 		await clickVisible(page, `[data-permission-chip]`);

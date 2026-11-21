@@ -4,7 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
-import { clickVisible, clickVisibleIn, contextMenuVisible } from "./smoke-kit.ts";
+import { clickVisible, clickVisibleIn, closeSettings, contextMenuVisible } from "./smoke-kit.ts";
 
 const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
 const STARTED = "服务起来了，盯着输出、约好回来都安排好了。";
@@ -134,6 +134,14 @@ export async function checkEnvironment(options: {
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-port]')?.textContent.startsWith(':') === true`, "服务那一行有端口签", 30_000);
 		await until(`document.querySelector('[data-environment-monitor]') !== null`, "监视那一行有监视签");
+		if (
+			!(await page<boolean>(
+				`document.querySelector('[data-environment-group=background] > .plume-environment-group-label')?.textContent.startsWith('后台') === true`,
+			))
+		)
+			throw new Error("后台内容没有归进统一的“后台”分组");
+		if (await page<boolean>(`getComputedStyle(document.querySelector('.plume-environment-card')).backdropFilter !== 'none'`))
+			throw new Error("环境卡片仍在使用毛玻璃，而不是批准的实底浮层");
 		// 服务打印了本机地址，plume.tools 经 `TrackedJob.stand` 标成挂着的；监视登记时就是挂着的。两样都还在跑，会话却不算还有后台的事没完
 		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后归档。
 		await wait(async () => (await agent.sessions()).find((item) => !previous.has(item.id))?.background !== true, "服务被认成挂着的，会话不再等它结束");
@@ -146,35 +154,63 @@ export async function checkEnvironment(options: {
 		await until(`document.querySelectorAll('[data-environment-section$="/jobs"] [data-environment-wakeup]').length === 2`, "检查和后台命令列在同一节里，两个");
 		if (await page<boolean>(`document.querySelector('[data-environment-section$="/wakeups"], [data-environment-stop-all]') !== null`))
 			throw new Error("环境卡片里还有单独的定时唤醒一节或「全部停止」");
-		if (!(await page<boolean>(`/检查 · \\d+:\\d\\d$/.test(document.querySelector('[data-environment-wakeup][data-plan=checkIn]').textContent)`)))
-			throw new Error("检查那一行没在小字里写「检查 · 几点」");
+		if (
+			!(await page<boolean>(
+				`/检查 · \\d+:\\d\\d$/.test(document.querySelector('[data-environment-wakeup][data-plan=checkIn] .plume-env-row-fact').textContent)`,
+			))
+		)
+			throw new Error("检查那一行没在右端事实里写「检查 · 几点」");
 		if (!(await page<boolean>(`document.querySelector('[data-environment-monitor]').textContent === '监视'`))) throw new Error("监视那一行没有「监视」签");
 		if (await page<boolean>(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`))
 			throw new Error("卡片开着时开关上还挂着圆点");
 		await capture("smoke-environment-card.png");
+		for (const theme of ["dark", "light"] as const) {
+			await page(`window.plume.saveAppearance({ theme: ${JSON.stringify(theme)} })`);
+			await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${theme === "dark"}`, `环境卡片切到${theme}`);
+			await capture(`smoke-environment-card-${theme}.png`);
+		}
 
-		// 卡片的放法：在右边那一列里，从不进输入框上方；够宽时停靠、输入框让出这一列，窄了浮在转录右上角。
+		// 卡片的放法：宽窄都浮在转录右上角，不让输入框让位，也从不进输入框上方。
 		const placement = () =>
-			page<{ lane: string | null; inComposer: boolean; overlap: boolean }>(`(() => {
+			page<{ lane: string | null; inComposer: boolean; overlap: boolean; composerShifted: boolean }>(`(() => {
 				const card = document.querySelector('[data-environment]');
 				const composer = document.querySelector('.plume-composer-dock');
+				// 输入框那一行（对话网格的第二行）不为卡片让出右边一列。
+				const row = [...(document.querySelector('[data-screen=chat]')?.children ?? [])].find((child) => composer && child.contains(composer));
 				const a = card?.getBoundingClientRect(), b = composer?.getBoundingClientRect();
 				return {
 					lane: card?.closest('[data-conversation-lane]')?.getAttribute('data-conversation-lane') ?? null,
 					inComposer: Boolean(card?.closest('.plume-composer-dock')),
 					overlap: Boolean(a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom),
+					composerShifted: Boolean(row && getComputedStyle(row).marginRight !== '0px'),
 				};
 			})()`);
 		const wide = await placement();
-		if (!wide.lane || wide.inComposer || wide.overlap) throw new Error(`环境卡片没在右边那一列：${JSON.stringify(wide)}`);
+		if (wide.lane !== "floating" || wide.inComposer || wide.overlap || wide.composerShifted)
+			throw new Error(`宽窗口里环境卡片没浮在转录右上角：${JSON.stringify(wide)}`);
+
+		// 「显示哪些内容」：卡片外不挂设置按钮，在卡片上右键打开，按 Esc 收起。
+		const sectionsMenu = `[...document.querySelectorAll('[role=menu]')].some((menu) => menu.textContent.includes('显示哪些内容'))`;
+		const cardPoint = await page<{ x: number; y: number }>(
+			`(() => { const r = document.querySelector('.plume-environment-card').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 20) }; })()`,
+		);
+		window.webContents.sendInputEvent({ type: "mouseMove", ...cardPoint });
+		await settled();
+		if (await page<boolean>(`[...document.querySelectorAll('[data-environment] button')].some((button) => !button.closest('.plume-environment-card'))`))
+			throw new Error("悬停卡片时卡片外还露出按钮");
+		await contextMenuVisible(page, ".plume-environment-card", 40, 20);
+		await until(sectionsMenu, "在卡片上右键打开「显示哪些内容」");
+		await capture("smoke-environment-sections.png");
+		window.webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+		window.webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+		await until(`!(${sectionsMenu})`, "按 Esc 收起菜单");
+		window.webContents.sendInputEvent({ type: "mouseMove", x: 0, y: 0 });
+
 		const [width, height] = window.getContentSize();
 		window.setContentSize(Math.min(width!, 700), height!);
-		await until(
-			`document.querySelector('[data-environment]')?.closest('[data-conversation-lane]')?.getAttribute('data-conversation-lane') === 'floating'`,
-			"窄窗口里环境卡片浮在转录上",
-		);
+		await settled();
 		const narrow = await placement();
-		if (narrow.inComposer || narrow.overlap) throw new Error(`窄窗口里环境卡片落到了输入框那里：${JSON.stringify(narrow)}`);
+		if (narrow.lane !== "floating" || narrow.inComposer || narrow.overlap) throw new Error(`窄窗口里环境卡片没浮在转录上：${JSON.stringify(narrow)}`);
 		await capture("smoke-environment-card-narrow.png");
 		window.setContentSize(width!, height!);
 		await settled();
@@ -192,7 +228,11 @@ export async function checkEnvironment(options: {
 
 		// 点服务那一行：任务面板里列出服务地址，带打开、复制。
 		const port = await page<string>(`document.querySelector('[data-environment-port]').textContent.slice(1)`);
-		await clickVisibleIn(page, `[...document.querySelectorAll('[data-environment-port]')].map((port) => port.closest('button'))`, "服务那一行");
+		await clickVisibleIn(
+			page,
+			`[...document.querySelectorAll('[data-environment-port]')].map((port) => port.closest('.plume-env-row')?.querySelector('.plume-env-row-main'))`,
+			"服务那一行",
+		);
 		await until(`document.querySelector('[data-session-services] [data-service-endpoint="${port}"]') !== null`, "任务面板列出服务地址");
 		if (!(await page<string>(`document.querySelector('[data-service-endpoint="${port}"]').textContent`)).includes(`127.0.0.1:${port}`))
 			throw new Error("服务地址不是本机这个端口");
@@ -235,22 +275,21 @@ export async function checkEnvironment(options: {
 
 		// 换界面语言：转录里的工具行、送达那一行和卡片当场换成英文。工具行在 memo 后面，没订阅语言时会停在中文。
 		// 先在那一行的节点上做个记号，回来时还在才说明对话没被重挂——重挂了谁都会换，验不出什么。
-		const setLanguage = async (sections: string, title: string, option: string, backLabel: string) => {
+		const setLanguage = async (sections: string, title: string, option: string) => {
 			window.webContents.send("plume:command", "settings");
 			await until(`document.querySelector('[data-screen=settings]') !== null`, `换成 ${option}：打开设置`);
 			await clickVisible(page, `[aria-label="${sections}"] button`, sections === "设置章节" ? "常规" : "General");
 			await clickVisible(page, `[aria-haspopup=menu][aria-label="${title}"]`);
 			// 选项前面还有语言的小标记（EN、中），按结尾认。
 			await clickVisible(page, `[role=menuitem]`, new RegExp(`${option}$`));
-			await clickVisible(page, "button", backLabel);
-			await until(`document.querySelector('[data-screen=chat]') !== null`, `换成 ${option}：回到对话`);
+			await closeSettings(page);
 		};
 		await page(`document.querySelector(${JSON.stringify(again)}).plumeSmokeMark = true`);
-		await setLanguage("设置章节", "界面语言", "English", "Back to workspace");
+		await setLanguage("设置章节", "界面语言", "English");
 		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(again)})?.plumeSmokeMark === true`)))
 			throw new Error("换语言后对话被重新挂载了，验不出工具行跟没跟着换");
 		await until(
-			`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`Scheduled check-in ${AGAIN}`)}) && document.querySelector(${JSON.stringify(row)}).textContent.includes(${JSON.stringify(`Check-in · ${FIRE}`)}) && /^Check-in · /.test(document.querySelector('[data-environment-wakeup] [data-plume-tip] > :last-child')?.textContent ?? '')`,
+			`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`Scheduled check-in ${AGAIN}`)}) && document.querySelector(${JSON.stringify(row)}).textContent.includes(${JSON.stringify(`Check-in · ${FIRE}`)}) && /^Check-in · /.test(document.querySelector('[data-environment-wakeup] .plume-env-row-fact')?.textContent ?? '')`,
 			"换成英文后工具行、送达那一行和卡片当场跟着换",
 		);
 		if (
@@ -260,7 +299,7 @@ export async function checkEnvironment(options: {
 		)
 			throw new Error("换成英文后转录里还有中文的工具说法");
 		await capture("smoke-environment-english.png");
-		await setLanguage("Settings sections", "Interface language", "简体中文", "返回工作区");
+		await setLanguage("Settings sections", "Interface language", "简体中文");
 		await until(`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`已安排检查 ${AGAIN}`)})`, "换回中文");
 
 		// 在卡片里取消再安排的那个：转录里安排它的那一行跟着标「已停止」。
@@ -323,8 +362,8 @@ export async function checkEnvironment(options: {
 			await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
 			if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`))) await clickVisible(page, `[data-environment-toggle]`);
 			await until(
-				`document.querySelector('[data-environment-summary]')?.textContent.includes(${JSON.stringify(SUMMARY)}) === true`,
-				"卡片里出现会话摘要",
+				`document.querySelector('.plume-environment-card-head [data-environment-summary]')?.textContent.includes(${JSON.stringify(SUMMARY)}) === true`,
+				"卡片页头出现会话摘要",
 				150_000,
 			);
 			if (summaries !== 1) throw new Error(`应该生成一次摘要，实际 ${summaries} 次`);

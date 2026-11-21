@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
-import { clickVisible } from "./smoke-kit.ts";
+import { clickVisible, closeSettings } from "./smoke-kit.ts";
 import { toolResult } from "./smoke-question.ts";
 
 const FIRST = "冒烟：把 always-allow.txt 写两遍";
@@ -52,7 +52,7 @@ export async function checkAlwaysAllow(options: {
 		await until(`document.querySelector('[data-screen=settings]') !== null`, `${label}：打开设置`);
 		await clickVisible(page, "[aria-label=设置章节] button", "常规");
 	};
-	const back = () => clickVisible(page, "button", "返回工作区");
+	const back = () => closeSettings(page);
 
 	const write = (id: string) => ({ toolCalls: [{ id, name: "write", args: { path: FILE, content: `${id}\n` } }] });
 	setModel((request) => {

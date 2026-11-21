@@ -4,7 +4,7 @@ import type { Remote } from "@plume/rpc";
 import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { clickVisibleIn } from "./smoke-kit.ts";
+import { clickVisibleIn, closeSettings } from "./smoke-kit.ts";
 
 /** 临时选的模型只给当前会话用；改默认模型后，新建、跨项目新建和 /clear 都不能沿用它。 */
 export async function checkModelDefaults({
@@ -67,7 +67,7 @@ export async function checkModelDefaults({
 	);
 	await click("[role=menuitem]", "设为默认模型");
 	await until(`document.querySelector('[data-model-row="fake-default"]')?.textContent.includes('默认')`, "默认模型已改为 B");
-	await click("button", "返回工作区");
+	await closeSettings(page);
 	await until(shows("fake-model"), "已有会话保留 A");
 	await click(`[data-plume-row="${original.id}"] button[aria-label^="归档会话"]`);
 	await until(`document.querySelector('[data-screen=empty]') !== null && ${shows("fake-default")}`, "归档返回空白页不带入已用过的 A");

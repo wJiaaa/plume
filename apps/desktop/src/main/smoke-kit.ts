@@ -43,6 +43,15 @@ export function clickVisible(page: Page, selector: string, text?: TextMatch, tim
 }
 
 /**
+ * 点设置浮层顶上的关闭，等它退完场。退场那一下底下的界面还是 inert，紧接着的聚焦、打字、点击会落空；
+ * 底下的界面一直在，等「回到对话」这类条件当场就成立，说明不了浮层走了没有。
+ */
+export async function closeSettings(page: Page): Promise<void> {
+	await clickVisible(page, "[data-settings-close]");
+	await waitFor(async () => (await page("document.querySelector('[data-settings-dialog]') === null")) === true, "设置浮层关掉");
+}
+
+/**
  * 同 `clickVisible`，候选由页面里的一段表达式给出（得到元素的列表，`null` 跳过；表达式抛错当作还没有，接着等）：
  * 要挑某一个（`.slice(-1)` 最后一条回复）、按祖先的文字挑这样 CSS 选择器写不出来时用。`label` 只用在超时的报错里。
  */

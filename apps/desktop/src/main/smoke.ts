@@ -80,7 +80,7 @@ import { checkDesktopCompat } from "./smoke-desktop-compat.ts";
 import { checkBootScreen } from "./smoke-boot-screen.ts";
 import { checkScreenshotLifetime } from "./smoke-screenshot-lifetime.ts";
 import { recentSessions } from "./tray-menu.ts";
-import { clickEachVisible, clickVisible, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
+import { clickEachVisible, clickVisible, closeSettings, containing, contextMenuVisibleIn, firstOf, inDragRegion, waitFor } from "./smoke-kit.ts";
 
 const FINAL_TEXT = "改好了：hello.txt 第一行现在是 hi。";
 const TASK_TITLE = "写说明";
@@ -546,7 +546,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await capture(window, join(outDir, "smoke-archived.png"));
 			await click("[data-plume-archive-row] button", "取消归档");
 			await until(`document.querySelector('[data-plume-archive-row]') === null`, "取消归档后离开已归档");
-			await click("button", "返回工作区");
+			await closeSettings(page);
 			await until(
 				`document.querySelector('[data-plume-row]') !== null && document.querySelector('[data-plume-section=pinned]') !== null`,
 				"取消归档后回到置顶区",
@@ -742,7 +742,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			async () => (await readFile(join(plumeHome(), "plugin-data", "plume.title", "settings.json"), "utf8").catch(() => "")).includes('"enabled": false'),
 			"智能标题的开关存进插件数据目录",
 		);
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "回到工作区");
 
 		// 临时提示走全局提示条，不再挤在输入框上方；校验失败不能清掉草稿。
@@ -1435,7 +1435,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click("[aria-label=设置章节] button", "外观");
 		await click("button[aria-pressed]", "浅色");
 		await until(`!matchMedia('(prefers-color-scheme: dark)').matches`, "切到浅色");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 
 		// 2. 新对话直接输入；建议只填草稿，重复点击、切项目和选模型都不创建会话。
 		const sessionsDb = join(outDir, "home", "sessions", "sessions.db");
@@ -1843,7 +1843,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click("[data-plume-delete-all-archived]");
 		await click("[role=dialog] button", /^删除 \d+ 个$/);
 		await until(`document.querySelector('[data-plume-delete-all-archived]') === null`, "删掉定时任务开出的会话");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 
 		// 6. 插件作者的路子：应用生成的 plume-plugin 用应用自己的二进制跑，装进去的插件不重启就加载。
 		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
@@ -1972,14 +1972,14 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			throw new Error("操控区插话没有送进子会话");
 		if (toolNames(sideRequest).includes("task")) throw new Error("侧边聊天不该拿到 task");
 		if (!JSON.stringify(sideRequest.messages).includes("派个子 Agent 写一份说明")) throw new Error("侧边聊天的提问里没有主对话的内容");
-		// 环境卡片里子会话按建它的插件分节：节名是插件的显示名，不把 plume.xxx 这种插件名露给人。
+		// 子 Agent 和侧边聊天统一并进“产出”，不再按插件身份重复画“子智能体”“侧边聊天”小标题。
 		if (!(await page(`document.querySelector('[data-environment]') !== null`))) await click("[data-environment-toggle]");
-		await until(`document.querySelector('[data-environment-section^="children:"] .plume-environment-section-label') !== null`, "环境卡片列出子会话");
-		const childSections = (await page(
-			`[...document.querySelectorAll('[data-environment-section^="children:"] .plume-environment-section-label')].map((label) => label.textContent.trim())`,
-		)) as string[];
-		if (childSections.some((label) => !label || label.startsWith("plume.")))
-			throw new Error(`环境卡片子会话的节名应是插件的显示名，实际是 ${childSections.join()}`);
+		await until(
+			`document.querySelector('[data-environment-group=output] [data-environment-section=children] [data-environment-child]') !== null`,
+			"环境卡片的产出里列出子会话",
+		);
+		if (await page(`document.querySelector('[data-environment-section=children] .plume-environment-section-label') !== null`))
+			throw new Error("环境卡片仍按子会话来源重复画小标题");
 		await capture(window, join(outDir, "smoke-environment-children.png"));
 		await click("[data-environment-toggle]");
 		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
@@ -2065,7 +2065,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`/\\d/.test(document.querySelector('[data-usage-total]')?.textContent ?? '')`, "存储页量出会话记录");
 		await capture(window, join(outDir, "smoke-storage.png"));
 		// 插件的设置放在哪：使用统计占设置导航一行，市场详情里给去那里的入口。
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await click("[data-nav=market]");
 		await until(`document.querySelector('[data-screen=market] [data-card="usage"] > button') !== null`, "市场列出使用统计");
 		await click(`[data-card="usage"] > button`);
@@ -2090,7 +2090,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		};
 		await keepAwake(true);
 		await keepAwake(false);
-		await click("button", "返回工作区");
+		await closeSettings(page);
 
 		// 7. 外观：主题和会话背景
 		await click("[data-nav=settings]");
@@ -2253,7 +2253,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			const saved = JSON.parse(await readFile(join(outDir, "home", "appearance.json"), "utf8")) as { theme?: string; chatBackground?: string };
 			return saved.theme === "dark" && Boolean(saved.chatBackground);
 		}, "外观设置存下来");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`document.querySelector('[data-screen=chat] > .chat-backdrop') !== null`, "会话里铺上背景");
 		await delay(500);
 		await checkComposer("深色背景图会话页");
@@ -2283,7 +2283,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelector('[data-avatar-picker]') === null`, "收起选脸弹层");
 		await click("button", "取消");
 		await until(`document.querySelector('[data-agent-editor]') === null`, "关掉子智能体编辑器");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "从智能体页回到会话");
 
 		// 8. 新对话继承当前项目；离开项目恢复 Chat 草稿，不改已有会话的归属。

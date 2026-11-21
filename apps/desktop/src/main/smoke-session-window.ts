@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { basename, join } from "node:path";
 import { BrowserWindow } from "electron";
 import { TOP_ROW_HEIGHT, trafficLights } from "../shared/window-chrome.ts";
-import { clickEachVisible, clickVisibleIn, contextMenuVisible } from "./smoke-kit.ts";
+import { clickEachVisible, clickVisibleIn, closeSettings, contextMenuVisible } from "./smoke-kit.ts";
 
 /**
  * 会话菜单开出真实独立窗口，验证外壳（贴顶的标题栏、没有卡片、不透明）、置顶、面板或文件交给主窗口、回到主窗口，
@@ -179,7 +179,7 @@ export async function checkSessionWindow(options: {
 		await until(`document.querySelector(${JSON.stringify(archivedRow)}) !== null`, "已归档里找到这段会话");
 		await click(`${archivedRow} button`, "取消归档");
 		await until(`document.querySelector(${JSON.stringify(archivedRow)}) === null`, "取消归档");
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`document.querySelector(${JSON.stringify(row(other))}) !== null`, "取消归档后回到侧栏");
 		window.hide();
 	} catch (error) {

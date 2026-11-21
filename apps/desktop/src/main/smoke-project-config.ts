@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
-import { clickVisible } from "./smoke-kit.ts";
+import { clickVisible, closeSettings } from "./smoke-kit.ts";
 
 /** 权限菜单里各档的名字，按开头找（菜单项里还有一行说明）。 */
 const MODE_TITLE: Record<string, RegExp> = { ask: /^请求批准/, auto: /^帮我批准/, full: /^完全访问/ };
@@ -65,7 +65,7 @@ export async function checkProjectConfig({
 			throw new Error("项目配置卡需要明确说出放宽权限的项、禁止字段被忽略");
 		await page(`${card}.scrollIntoView({ block: 'center' })`);
 		await capture(window, join(outDir, "smoke-project-config.png"));
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`${chip} !== null`, "回到对话");
 
 		// 项目要求请求批准，本机换成更宽的帮我批准（本机已是帮我批准时重选一次）：换档时读过项目配置的会话重新比，权限签跟着变。
@@ -88,7 +88,7 @@ export async function checkProjectConfig({
 	} finally {
 		if (previous === null) await rm(file, { force: true });
 		else await writeFile(file, previous);
-		if (await page(`document.querySelector('[data-screen=settings]') !== null`)) await click("button", "返回工作区");
+		if (await page(`document.querySelector('[data-screen=settings]') !== null`)) await closeSettings(page);
 	}
 	// 换回原来那档：本机设置还原，会话也重读还原了的项目配置，权限签回到本机那档。
 	await clickVisible(page, "[data-permission-chip]");

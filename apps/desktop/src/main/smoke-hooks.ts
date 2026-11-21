@@ -4,6 +4,7 @@ import type { FakeReply } from "@plume/agent/testing";
 import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
+import { closeSettings } from "./smoke-kit.ts";
 
 /**
  * 钩子插件的界面：工作区里放一条没信任的项目钩子（PreToolUse 拦下 bash），装上插件、开一个会话，看输入框上方说「待审核」，
@@ -111,7 +112,7 @@ export async function checkHooks(options: {
 		await until(`document.querySelector('[data-commands-settings] button[aria-label="打开项目命令目录"]') !== null`, "打开目录按钮换成项目的");
 		await themes("commands");
 
-		await click("button", "返回工作区");
+		await closeSettings(page);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到会话");
 		await until(`document.querySelector('[data-hook-trust-banner]') === null`, "信任以后输入框上方不再提示");
 
