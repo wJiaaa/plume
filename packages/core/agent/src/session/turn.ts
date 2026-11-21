@@ -174,7 +174,7 @@ export function createTurn(deps: TurnDeps): Turn {
 		if (quitting() || held(session)) throw new Error(text("compaction.busy"));
 		// 没有可用的模型就当场说，不画一行注定失败的压缩。
 		resolveModel(await readSessionSettings(session), modelOf(session));
-		if (held(session)) throw new Error(text("compaction.busy"));
+		if (quitting() || held(session)) throw new Error(text("compaction.busy"));
 		const controller = new AbortController();
 		session.controller = controller;
 		active.add(session);

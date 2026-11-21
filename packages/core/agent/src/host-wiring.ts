@@ -53,7 +53,7 @@ export interface CreateHostDeps {
 	lifecycle: Pick<Lifecycle, "archive" | "createStandalone" | "createChild" | "configureOwn" | "owned" | "runnableParent" | "stopSession" | "deleteTree">;
 	modelRequests: Pick<ModelRequests, "completeOnce">;
 	projects: Pick<Projects, "list">;
-	occupancy: Pick<Occupancy, "held">;
+	occupancy: Pick<Occupancy, "held" | "looping">;
 	dispatch: Pick<Dispatch, "launchSession" | "reportBack" | "childMessage" | "sendChild">;
 	steward: Pick<Steward, "postToSession" | "settleAsSteward" | "stewarded">;
 	turn: Pick<Turn, "compactNow" | "runTurn" | "active">;
@@ -80,7 +80,7 @@ export async function createHost(deps: CreateHostDeps): Promise<{ host: PluginHo
 		lifecycle: { archive, createStandalone, createChild, configureOwn, owned, runnableParent, stopSession, deleteTree },
 		modelRequests: { completeOnce },
 		projects,
-		occupancy: { held },
+		occupancy: { held, looping },
 		dispatch: { launchSession, reportBack, childMessage, sendChild },
 		steward: { postToSession, settleAsSteward, stewarded },
 		turn,
@@ -219,7 +219,8 @@ export async function createHost(deps: CreateHostDeps): Promise<{ host: PluginHo
 			report: async (owner, runId, words, options) => background.report(owner, runId, words, options),
 			steer: async (owner, sessionId, message) => {
 				const session = owned(owner, sessionId);
-				if (!session.controller || session.controller.signal.aborted) throw new Error(text("session.notRunning"));
+				// 只看循环在不在跑：`/compact`、收尾的压缩也占着控制器，那时没有循环来取，插进去的话收场时被清掉、送不到。
+				if (!looping(session)) throw new Error(text("session.notRunning"));
 				(session.steering ??= []).push(childMessage(message));
 			},
 			disposeOwner: async (owner) => {

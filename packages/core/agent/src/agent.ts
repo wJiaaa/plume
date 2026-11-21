@@ -202,7 +202,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		...{ options, dataDir, mediaDir, log, files, modelSettings, pluginProviders, vault, store, background, jobs, wakeups },
 		...{ events, registry, governance, idle, lifecycle, modelRequests },
 		projects: { list: () => projects.list() },
-		occupancy: { held: (session) => occupancy.held(session) },
+		occupancy: { held: (session) => occupancy.held(session), looping: (session) => occupancy.looping(session) },
 		dispatch: {
 			launchSession: (owner, launchOptions) => dispatch.launchSession(owner, launchOptions),
 			reportBack: (owner, sessionId, words, reportOptions) => dispatch.reportBack(owner, sessionId, words, reportOptions),
