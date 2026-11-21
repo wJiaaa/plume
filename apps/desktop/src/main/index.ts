@@ -539,9 +539,13 @@ function createWindow(hidden: boolean, appearance: Appearance): BrowserWindow {
 	window.on("leave-full-screen", reportFullScreen);
 	window.webContents.on("did-finish-load", reportFullScreen);
 	// 最小化页面也看不到：渲染不节流，页面一直是「可见」的，动画照跑。告诉它，它好停下来。
+	// 从程序坞里被别处拿出来（会话窗口、面板窗口交回主窗口时 `restore()` 再 `focus()`）时 macOS 上不一定有 `restore` 事件，
+	// 页面会一直停着动画，对话框、设置浮层的退场播不完、关不掉；拿到焦点、重新显示时也报一次。
 	const reportMinimized = () => window.webContents.send("plume:minimized", window.isMinimized());
 	window.on("minimize", reportMinimized);
 	window.on("restore", reportMinimized);
+	window.on("show", reportMinimized);
+	window.on("focus", reportMinimized);
 
 	if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL);
 	else void window.loadFile(join(import.meta.dirname, "../renderer/index.html"));
