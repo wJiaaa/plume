@@ -103,7 +103,6 @@ export default {
 			// 和输入框上计划模式那颗开关同一枚。
 			icon: ListOrdered,
 		});
-		// 30：环境卡片里排在子会话之后、建议的新会话之前。
-		ui.environmentSection("plans", plansSection(ui, PANEL), { label: (locale) => MESSAGES[locale].title, order: 30 });
+		ui.environmentSection("plans", plansSection(ui, PANEL), { label: (locale) => MESSAGES[locale].title, place: "output", order: 30 });
 	},
 } satisfies UiPlugin;

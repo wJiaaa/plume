@@ -79,6 +79,7 @@ const zhCN = {
 	viewTrajectory: "查看调用轨迹",
 	exported: "导出的轨迹",
 	compactions: "压缩记录",
+	compactionCount: (count: number) => `压缩过 ${count} 次`,
 	/** 约好的那几行小字里的种类，和转录里那一行同一套叫法：检查（`schedule_wakeup`）、定时任务（只来一次的 cron）、轮询（反复的 cron）。 */
 	plans: { checkIn: "检查", prompt: "定时任务", loop: "轮询" } as Record<Plan, string>,
 	nextAt: (time: string) => `下次 ${time}`,
@@ -190,6 +191,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		viewTrajectory: "View trajectory",
 		exported: "Exported trajectory",
 		compactions: "Compactions",
+		compactionCount: (count: number) => `Compacted ${count} ${count === 1 ? "time" : "times"}`,
 		plans: { checkIn: "Check-in", prompt: "Scheduled prompt", loop: "Loop" },
 		nextAt: (time: string) => `next ${time}`,
 		wakeupExpires: (time: string) => `expires ${time}`,

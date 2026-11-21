@@ -376,24 +376,6 @@ button.plume-diagnostics-group-head:hover {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.plume-diagnostics-wakeup {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	padding: 6px 8px;
-	border-radius: var(--plume-radius-item);
-}
-.plume-diagnostics-wakeup > svg {
-	flex-shrink: 0;
-	margin-top: 3px;
-	color: var(--plume-ink-muted);
-}
-.plume-diagnostics-section-label {
-	display: flex;
-	align-items: center;
-	height: 28px;
-	padding: 0 8px;
-}
 .plume-diagnostics-file {
 	display: flex;
 	flex-direction: column;

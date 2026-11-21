@@ -93,6 +93,7 @@ export * from "./primitives/TimeAgo.tsx";
 export * from "./primitives/useCountUp.ts";
 export * from "./row/FlowRow.tsx";
 export * from "./row/HoverRow.tsx";
+export * from "./row/EnvironmentRow.tsx";
 export * from "./scroll/BackToLatest.tsx";
 export * from "./scroll/OverlayScrollbar.tsx";
 export * from "./scroll/ScrollText.tsx";

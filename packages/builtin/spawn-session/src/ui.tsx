@@ -1,6 +1,6 @@
 /**
- * plume.spawn-session 的界面入口：`spawn_session` 在对话里画成的卡片和行，offer 弹在输入框上方的那张卡，环境卡片里「建议的新会话」那一节，
- * 和收着的环境开关上「N 条建议的新会话等你决定」的圆点；还有 `hand_off_to_session`、`dismiss_task`、`archive_session` 在转录里的说法。
+ * plume.spawn-session 的界面入口：`spawn_session` 在对话里画成的卡片和行，offer 弹在输入框上方的那张卡，以及环境卡片“产出”里已经真正开出的新会话；
+ * 还有 `hand_off_to_session`、`dismiss_task`、`archive_session` 在转录里的说法。
  *
  * 建议卡站在调用的位置、自成一行（插件登记了卡片的工具不并进一段活）：一张等人点「开始」的卡片折进过程就没人点了。
  * 参数还在写时只是一行过程行（标题写到哪画到哪、扫光），写完整张卡片一次出现——写的时候就画卡片框，先冒出空标题和一颗按不动的
@@ -10,8 +10,7 @@
  * 只有没跑完要说，它改变人接下来做什么。它每结束一轮，这个对话里另有一行「来自关联会话」（本体画）。
  * offer 的卡由本体摆在输入框上方（`ui.requestCard`），人选完在调用的位置留一行「问过要不要另开会话 · 选了什么」；选了新会话、开出来以后同样缩成那一行。
  *
- * 环境卡片那一节只列出来：提完建议模型接着干活，卡片被顶到几屏之上时，还没处理的由开关上的圆点提醒，点一条滚回对话里那张卡片。
- * 选模型、开始只在卡片上——300px 那一列挤不下一排控件，两处都能开始也要多想一下该在哪点。两处读同一份状态（`state.ts`）。
+ * 环境卡片不列建议：建议只有真的开出了会话，才作为一条“产出”出现。待决定的建议仍留在它原本的工具卡片位置，不让环境卡片变成第二个决策入口。
  *
  * 开出来的会话「没跑完」「已完成」一直这么说，人看过以后也不清掉：插件读不到侧栏的已读状态。工作树开关从模型说的起步，没有「新会话默认开」的设置可跟。
  */
@@ -19,8 +18,8 @@
 import type { ThinkingLevel } from "@plume/contract";
 import type { EnvironmentSectionProps, Remote, RequestCardProps, SessionView, ToolCardProps, UiContext, UiPlugin } from "@plume/contract/ui";
 import { proposal } from "@plume/styles";
-import { ApprovalFrame, Button, FlowRow, IconButton, Text, Toggle, useI18n, WorktreeToggle } from "@plume/ui";
-import { Archive, BellOff, ChevronRight, Forward, MessageCircle, SquarePen, Undo2, X } from "@plume/ui/icons";
+import { ApprovalFrame, Button, EnvironmentRow, FlowRow, IconButton, Text, Toggle, useI18n, useNow, WorktreeToggle } from "@plume/ui";
+import { Archive, BellOff, ChevronRight, Forward, MessageCircle, MessageSquarePlus, SquarePen, Undo2, X } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { SpawnSessionApi, SpawnSettings } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
@@ -79,11 +78,6 @@ function withdrawnIn(messages: SessionView["messages"]): Set<string> {
 /** 从来处复制来的那几次调用，见 `inherited`。 */
 function inheritedIn(messages: SessionView["messages"], createdAt: number): Set<string> {
 	return new Set(messages.flatMap((message) => (message.role === "toolResult" && inherited(message, createdAt) ? [message.toolCallId] : [])));
-}
-
-/** 还能点「开始」：没过期、没被模型撤回。 */
-function open(suggestion: Suggestion, withdrawn: Set<string>, now: number): boolean {
-	return suggestion.details.expiresAt > now && !withdrawn.has(suggestion.callId);
 }
 
 /**
@@ -399,47 +393,26 @@ function useSuggestions(session: SessionView): { all: Suggestion[]; withdrawn: S
 	}, [messages, createdAt]);
 }
 
-/** 还在等人决定的几条：没开始、没收起、没撤回、没过期。 */
-function usePending(session: SessionView): Suggestion[] {
-	const started = useStarted(session.summary.id);
-	const dismissed = useDismissed();
-	const { all, withdrawn } = useSuggestions(session);
-	const now = Date.now();
-	return all.filter((one) => open(one, withdrawn, now) && !dismissed.includes(one.callId) && !started.some((done) => done.callId === one.callId));
+/** 运行中的新会话用经过时间，和环境卡片里别的后台运行同一套机器事实。 */
+function environmentElapsed(at: number, now: number): string {
+	const seconds = Math.max(0, Math.floor((now - at) / 1000));
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-/** 环境开关上的那句话：有等人决定的建议才说。 */
-function useAttention(session: SessionView): string | undefined {
-	const text = useText();
-	const pending = usePending(session).length;
-	return pending > 0 ? text.pending(pending) : undefined;
-}
-
-/**
- * 环境卡片里「建议的新会话」：等人决定的排在前面，只有标题和理由，点了滚回对话里那张卡片去选模型、开始；
- * 开始以后缩成一行，说那个会话在做什么，点了过去。收起、撤回、过期的不再列出。
- */
-function SuggestionsSection({ session }: EnvironmentSectionProps) {
-	const text = useText();
+/** 环境卡片“产出”只列已经真正开出的建议会话；待决定、收起、撤回和过期的建议全不出现。 */
+function StartedSessionsSection({ session }: EnvironmentSectionProps) {
 	const parentId = session.summary.id;
 	const started = useStarted(parentId);
-	const pending = usePending(session);
 	const { all } = useSuggestions(session);
 	const begun = all.flatMap((one) => {
 		const found = started.find((done) => done.callId === one.callId);
 		return found ? [{ ...one, startedId: found.sessionId }] : [];
 	});
-	if (pending.length === 0 && begun.length === 0) return null;
+	if (begun.length === 0) return null;
 	return (
 		<div data-spawn-section="">
-			<div className="plume-spawn-section-label">
-				<Text size="caption" tone="faint">
-					{text.suggested}
-				</Text>
-			</div>
-			{pending.map((one) => (
-				<PendingEntry key={one.callId} parentId={parentId} suggestion={one} />
-			))}
 			{begun.map((one) => (
 				<StartedEntry key={one.callId} callId={one.callId} title={one.details.title} startedId={one.startedId} />
 			))}
@@ -447,40 +420,22 @@ function SuggestionsSection({ session }: EnvironmentSectionProps) {
 	);
 }
 
-function PendingEntry({ parentId, suggestion }: { parentId: string; suggestion: Suggestion }) {
-	const reveal = () => void ui.revealToolCall(parentId, suggestion.callId).catch((error: unknown) => ui.notify(String(error), "error"));
-	return (
-		<button type="button" data-spawn-environment={suggestion.callId} data-state="suggested" className="plume-spawn-row plume-spawn-pending" onClick={reveal}>
-			<SquarePen size={14} strokeWidth={1.8} aria-hidden className="plume-spawn-card-icon" />
-			<span className="plume-spawn-card-body">
-				<Text size="label" className="plume-spawn-line" data-spawn-title>
-					{suggestion.details.title}
-				</Text>
-				{suggestion.details.summary && (
-					<Text size="caption" tone="muted" className="plume-spawn-summary">
-						{suggestion.details.summary}
-					</Text>
-				)}
-			</span>
-			<ChevronRight size={12} strokeWidth={2} aria-hidden className="plume-spawn-card-icon" />
-		</button>
-	);
-}
-
 function StartedEntry({ callId, title, startedId }: { callId: string; title: string; startedId: string }) {
 	const text = useText();
 	const status = useStatus(startedId);
+	const started = ui.useSession(startedId);
+	const now = useNow(status === "running", 1000);
 	return (
-		<button type="button" data-spawn-environment={callId} data-state="started" className="plume-spawn-row" onClick={() => void ui.openSession(startedId)}>
-			{/* 一眼读到状态，不用看右边的字：在跑是强调色，跑完是绿点，没跑完是红点。 */}
-			<span aria-hidden className="plume-spawn-dot" data-status={status} />
-			<Text size="label" className="plume-spawn-grow">
-				{title}
-			</Text>
-			<Text size="caption" tone={status === "failed" ? "danger" : "faint"} data-spawn-status>
-				{text[status]}
-			</Text>
-		</button>
+		<EnvironmentRow
+			icon={<MessageSquarePlus size={14} strokeWidth={1.8} />}
+			title={title}
+			fact={status === "running" && started ? environmentElapsed(started.summary.createdAt, now) : text[status]}
+			running={status === "running"}
+			onClick={() => void ui.openSession(startedId)}
+			data-spawn-environment={callId}
+			data-state="started"
+			data-spawn-status={status}
+		/>
 	);
 }
 
@@ -526,7 +481,10 @@ export default {
 			detail: (locale) => MESSAGES[locale].offersDetail,
 			page: "general",
 		});
-		// 40：环境卡片里排在计划之后。
-		context.environmentSection("suggestions", SuggestionsSection, { label: (locale) => MESSAGES[locale].suggested, order: 40, attention: useAttention });
+		context.environmentSection("started-sessions", StartedSessionsSection, {
+			label: (locale) => MESSAGES[locale].newSession,
+			place: "output",
+			order: 40,
+		});
 	},
 } satisfies UiPlugin;

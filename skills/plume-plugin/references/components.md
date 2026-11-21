@@ -627,12 +627,14 @@ export const MENU_MAX_HEIGHT = 340;
 
 ```tsx
 /** Escape、点遮罩、取消和完成共用一套生命周期，嵌套的对话框也一样。 */
-export function Overlay({ width = 460 }: {
+export function Overlay({ width = 460, frosted = false }: {
 	children: React.ReactNode | ((dismiss: Dismiss) => React.ReactNode);
 	onClose: () => void;
 	width?: number;
 	label?: string;
 	returnFocus?: HTMLElement;
+	/** 遮罩不压暗，改成盖一层窗口底色再糊开，底下的界面退成背景。给要待一会儿的大浮层（设置）；问一句就走的对话框不用。 */
+	frosted?: boolean;
 })
 
 export type Dismiss = (after?: () => void) => void;
@@ -924,6 +926,33 @@ export function FlowRow({ danger = false, ...rest }: {
 	label?: string;
 	/** 整行红字：这一行说的是一次失败（压缩失败）。 */
 	danger?: boolean;
+} & Record<`data-${string}`, string | undefined>)
+```
+
+## 环境卡片的行
+
+### `EnvironmentRow`
+
+```tsx
+export function EnvironmentRow({ running = false, urgent = false, ...rest }: {
+	/** 前置图标，14px，说这一行是什么（命令、检查、子会话）。 */
+	icon: ReactNode;
+	/** 这一行的那句话：人写的、或者命令的说明。装不下时悬停读出来。 */
+	title: string;
+	/** 行尾的事实：端口、几点、`2/5`、「已完成」。短；要说清的长话放 `tip`。 */
+	fact?: ReactNode;
+	/** 还在跑：图标右下角挂绿点。 */
+	running?: boolean;
+	/** 0–1，行底那根细线画多长：检查是剩下的时间，进度是走完的那段。不给就没有线。 */
+	progress?: number | undefined;
+	/** 快到点了：细线、图标和行尾换成强调色（检查的最后一分钟）。 */
+	urgent?: boolean;
+	/** 悬停提示，挂在整行上：完整的命令、种类和时间。 */
+	tip?: string | undefined;
+	/** 点了去哪；不给时这一行只是一条记录，不能点。 */
+	onClick?: (() => void) | undefined;
+	/** 悬停、键盘焦点进来时盖住行尾的那颗按钮：停下、取消。`label` 是按钮上的字。 */
+	action?: ({ label: string; onClick: () => void; disabled?: boolean } & Record<`data-${string}`, string | undefined>) | undefined;
 } & Record<`data-${string}`, string | undefined>)
 ```
 

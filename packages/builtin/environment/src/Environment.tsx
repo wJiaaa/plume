@@ -1,8 +1,8 @@
 import type { ImageContent, SessionView } from "@plume/contract";
-import type { ConversationCardProps, EnvironmentSectionEntry, UiContext } from "@plume/contract/ui";
-import { IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
+import type { ConversationCardProps, EnvironmentPlace, EnvironmentSectionEntry, UiContext } from "@plume/contract/ui";
+import { EnvironmentRow, IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, useNow, usePopover } from "@plume/ui";
 import { Bot, File, Layers, Settings2 } from "@plume/ui/icons";
-import { Fragment, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MESSAGES } from "./messages.ts";
 import type { EnvironmentState } from "./state.ts";
 
@@ -13,10 +13,8 @@ export interface Runtime {
 }
 
 /**
- * 卡片自己的几节和它们在卡片里的位置：只是和会话本身有关、不用别的插件的数据的这几样。别的节都经 `ui.environmentSection` 登记、
- * 按 order 排进这几节之间（现在有后台任务 10、计划 30、建议的新会话 40、拉取请求 60、会话摘要 80、压缩记录 85），
- * 所以这里的 order 留着空档。卡片不认是哪个插件登记的，那个插件没装或停用了，只是少一节。
- * `children` 是插件建的子会话，按建它的插件（`owner`）分成几节，一个插件一节，在菜单里作为一项一起开关。
+ * 卡片自己有三项可藏的内容：页头的打开方式、宿主知道的子会话、消息里的引用。别的内容经 `ui.environmentSection` 登记，
+ * `place` 决定它属于摘要、后台、产出还是页脚，插件身份不再成为卡片里的层级。
  */
 const OWN = { openIn: 0, children: 20, references: 90 } as const;
 type SectionName = keyof typeof OWN;
@@ -64,8 +62,8 @@ function usePrefs() {
 /**
  * 标题栏上开关环境卡片的那颗，开着就亮。
  *
- * 卡片收着时，各节经 `attention` 报的事在按钮上挂一个圆点，那句话按节的 order 接在说明后面：等人决定的（建议的新会话还没人点开始），
- * 或会自己叫醒会话的（监视、待触发的检查和定时任务）。人把那一节关掉了就不再提醒。
+ * 卡片收着时，各节经 `attention` 报的事在按钮上挂一个圆点，那句话按节的 order 接在说明后面：会自己叫醒会话的监视、检查和定时任务。
+ * 人把那一节关掉了就不再提醒。普通的长跑服务不提醒。
  */
 export function EnvironmentToggle({ session, runtime }: { session: SessionView; runtime: Runtime }) {
 	const words = MESSAGES[useI18n().resolvedLocale];
@@ -115,38 +113,69 @@ export function EnvironmentToggle({ session, runtime }: { session: SessionView; 
 		</>
 	);
 }
-function Section({ name, label, children }: { name: string; label?: string; children: ReactNode }) {
+
+/**
+ * 后台、产出、引用三块共用的外壳。行来自几个异步插件，不能在 React 数据上先数；观察标准行和引用签的 `data-environment-item`，
+ * 标题右边的数字才跟实际画出来的一致。没有内容时整块由 CSS 撤下，不留标题和分隔线。
+ */
+function Group({ name, label, children }: { name: string; label: string; children: ReactNode }) {
+	const ref = useRef<HTMLElement>(null);
+	const [count, setCount] = useState(0);
+	useLayoutEffect(() => {
+		const element = ref.current;
+		if (!element) return;
+		const measure = () => setCount(element.querySelectorAll("[data-environment-item]").length);
+		measure();
+		const observer = new MutationObserver(measure);
+		observer.observe(element, { childList: true, subtree: true });
+		return () => observer.disconnect();
+	}, []);
 	return (
-		<section data-environment-section={name} className="plume-environment-card-section">
-			{label && (
-				<div className="plume-environment-section-label">
-					<Text size="caption" tone="faint">
-						{label}
-					</Text>
-				</div>
-			)}
-			{children}
+		<section ref={ref} className="plume-environment-group" data-environment-group={name}>
+			<Text as="h3" size="caption" tone="faint" className="plume-environment-group-label">
+				{label}
+				{count > 0 && <span>{count}</span>}
+			</Text>
+			<div className="plume-environment-group-content">{children}</div>
 		</section>
 	);
 }
 
-function EnvironmentBody({ session, runtime, extra }: { session: SessionView; runtime: Runtime; extra: readonly EnvironmentSectionEntry[] }) {
+function ExtraSections({ entries, session }: { entries: readonly EnvironmentSectionEntry[]; session: SessionView }) {
+	return entries.map((entry) => (
+		<section key={entry.key} className="plume-environment-card-section" data-environment-section={entry.key}>
+			<entry.component session={session} />
+		</section>
+	));
+}
+
+function elapsed(at: number, now: number): string {
+	const seconds = Math.max(0, Math.floor((now - at) / 1000));
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function EnvironmentBody({
+	session,
+	runtime,
+	extra,
+	onChooseSections,
+}: {
+	session: SessionView;
+	runtime: Runtime;
+	extra: readonly EnvironmentSectionEntry[];
+	onChooseSections: (target: HTMLElement) => void;
+}) {
 	const words = MESSAGES[useI18n().resolvedLocale];
 	const { hidden } = usePrefs();
 	const data = runtime.state.useChildren(session.summary.id, true);
-	const displayName = runtime.ui.usePluginDisplayName();
 	const [allReferences, setAllReferences] = useState(false);
+	const now = useNow(true, 1000);
 	const id = session.summary.id;
 	const children = data.children
 		.filter((child) => child.title.trim() !== "")
 		.sort((a, b) => Number(b.running) - Number(a.running) || a.createdAt - b.createdAt);
-	/*
-	 * 按建它的插件分节，节名是那个插件的显示名（`ui.usePluginDisplayName`），查不到时是通用的「子会话」：插件名不给人看，
-	 * 这里也不认哪个插件是做什么的。
-	 * 先出现的插件在前（各节内部的顺序同上：在跑的在前，再按建的先后）。
-	 */
-	const owners = new Map<string, typeof children>();
-	for (const child of children) owners.set(child.owner ?? "", [...(owners.get(child.owner ?? "") ?? []), child]);
 	const files = session.messages.flatMap((message) => (message.role === "user" ? (message.attachments?.filter((file) => file.path) ?? []) : []));
 	const uniqueFiles = [...new Map(files.map((file) => [file.path!, file])).values()];
 	const images = session.messages.flatMap((message) =>
@@ -155,145 +184,165 @@ function EnvironmentBody({ session, runtime, extra }: { session: SessionView; ru
 			: [],
 	);
 	const pictures = [...new Map(images.map((image) => [image.media || image.data, image])).values()];
-	const openChild = (childId: string) => runtime.state.openChild(id, childId);
-	const childRows = (rows: typeof children) =>
-		rows.slice(0, 5).map((child) => (
-			<button type="button" key={child.id} className="plume-environment-row" onClick={() => openChild(child.id)}>
-				<Bot size={14} />
-				<Text size="detail" className="plume-environment-grow">
-					<ScrollText text={child.title} />
-				</Text>
-				<Text size="caption" tone="faint">
-					{child.running ? words.active : child.stop?.reason === "aborted" ? words.paused : words.done}
-				</Text>
-			</button>
-		));
-	const own: Record<SectionName, ReactNode> = {
-		openIn: (
-			<Section name="openIn">
-				<runtime.ui.ProjectOpener path={session.summary.cwd} />
-			</Section>
-		),
-		children: owners.size > 0 && (
-			<>
-				{[...owners].map(([owner, rows]) => (
-					<Section key={owner} name={`children:${owner}`} label={(owner && displayName(owner)) || words.childSessions}>
-						{childRows(rows)}
-						{rows.length > 5 && (
-							<button type="button" className="plume-environment-row" onClick={() => runtime.ui.openPanel("children", id)}>
-								<Text size="caption" tone="faint">
-									{words.more(rows.length - 5)}
-								</Text>
-							</button>
-						)}
-					</Section>
-				))}
-			</>
-		),
-		references: (uniqueFiles.length > 0 || pictures.length > 0) && (
-			<Section name="references" label={words.references}>
-				{pictures.length > 0 && (
-					<div className="plume-environment-pictures">
-						{(allReferences ? pictures : pictures.slice(0, 8)).map((image, index) => {
-							const src = image.media ? runtime.ui.mediaUrl(image.media) : `data:${image.mimeType};base64,${image.data}`;
-							return (
-								<button
-									type="button"
-									key={index}
-									className="plume-environment-image"
-									onClick={(event) =>
-										runtime.ui.openImage(
-											pictures.map((picture) => ({
-												src: picture.media ? runtime.ui.mediaUrl(picture.media) : `data:${picture.mimeType};base64,${picture.data}`,
-											})),
-											index,
-											{ from: event.currentTarget },
-										)
-									}
-								>
-									<img src={src} alt={`${words.references} ${index + 1}`} loading="lazy" />
-								</button>
-							);
-						})}
-					</div>
-				)}
-				{(allReferences ? uniqueFiles : uniqueFiles.slice(0, 8)).map((file) => (
-					<button
-						type="button"
-						key={file.path}
-						className="plume-environment-row"
-						data-plume-tip={file.path}
-						onClick={() => void runtime.ui.openFile(file.path!, id).catch((error: unknown) => runtime.ui.notify(String(error), "error"))}
-					>
-						<File size={14} />
-						<Text size="detail" className="plume-environment-grow">
-							<ScrollText text={file.name} />
-						</Text>
-					</button>
-				))}
-				{!allReferences && (uniqueFiles.length > 8 || pictures.length > 8) && (
-					<button type="button" className="plume-environment-row" onClick={() => setAllReferences(true)}>
-						<Text size="caption" tone="faint">
-							{words.more(Math.max(0, uniqueFiles.length - 8) + Math.max(0, pictures.length - 8))}
-						</Text>
-					</button>
-				)}
-			</Section>
-		),
-	};
-	// 自己的几节和别的插件加的按 order 排在一起；别的插件那一节没东西时返回 null，`:empty` 让它不占位、不画分隔线。
-	const order = [
-		...SECTIONS.map((name) => ({ key: name, order: OWN[name], node: own[name] })),
-		...extra.map((entry) => ({
-			key: entry.key,
-			order: entry.order,
-			node: (
-				<section className="plume-environment-card-section" data-environment-section={entry.key}>
-					<entry.component session={session} />
-				</section>
-			),
-		})),
-	]
-		.filter((entry) => !hidden.includes(entry.key))
-		.sort((a, b) => a.order - b.order);
+	const entries = (place: EnvironmentPlace) => extra.filter((entry) => entry.place === place && !hidden.includes(entry.key)).sort((a, b) => a.order - b.order);
+	const project = session.summary.cwd.match(/[^\\/]+(?=[\\/]*$)/)?.[0] ?? session.summary.cwd;
 	return (
 		<>
-			{data.error && (
-				<Text as="p" size="caption" tone="danger" role="alert">
-					{data.error}
-				</Text>
-			)}
-			{order.map((entry) => (
-				<Fragment key={entry.key}>{entry.node}</Fragment>
-			))}
+			<header className="plume-environment-card-head">
+				<div className="plume-environment-place">
+					<Text size="label" weight="semibold" className="plume-environment-project" data-plume-tip={session.summary.cwd}>
+						{project}
+					</Text>
+					{!hidden.includes("openIn") && <runtime.ui.ProjectOpener path={session.summary.cwd} compact />}
+				</div>
+				<ExtraSections entries={entries("head")} session={session} />
+			</header>
+			<div className="plume-environment-card-body">
+				<Group name="background" label={words.backgroundGroup}>
+					<ExtraSections entries={entries("background")} session={session} />
+				</Group>
+				<Group name="output" label={words.output}>
+					{!hidden.includes("children") && children.length > 0 && (
+						<section className="plume-environment-card-section" data-environment-section="children">
+							{children.map((child) => (
+								<EnvironmentRow
+									key={child.id}
+									icon={<Bot size={14} />}
+									title={child.title}
+									fact={child.running ? elapsed(child.createdAt, now) : child.stop?.reason === "aborted" ? words.paused : words.done}
+									running={child.running}
+									onClick={() => runtime.state.openChild(id, child.id)}
+									data-environment-child={child.id}
+								/>
+							))}
+						</section>
+					)}
+					<ExtraSections entries={entries("output")} session={session} />
+				</Group>
+				{!hidden.includes("references") && (uniqueFiles.length > 0 || pictures.length > 0) && (
+					<Group name="references" label={words.references}>
+						<section className="plume-environment-card-section" data-environment-section="references">
+							{(allReferences ? uniqueFiles : uniqueFiles.slice(0, 8)).map((file) => (
+								<button
+									type="button"
+									key={file.path}
+									className="plume-environment-reference"
+									data-environment-item
+									data-plume-tip={file.path}
+									onClick={() => void runtime.ui.openFile(file.path!, id).catch((error: unknown) => runtime.ui.notify(String(error), "error"))}
+								>
+									<File size={12} />
+									<Text size="caption" className="plume-environment-reference-name">
+										<ScrollText text={file.name} />
+									</Text>
+								</button>
+							))}
+							{pictures.length > 0 && (
+								<div className="plume-environment-pictures">
+									{(allReferences ? pictures : pictures.slice(0, 8)).map((image, index) => {
+										const src = image.media ? runtime.ui.mediaUrl(image.media) : `data:${image.mimeType};base64,${image.data}`;
+										return (
+											<button
+												type="button"
+												key={image.media || image.data || index}
+												className="plume-environment-image"
+												data-environment-item
+												onClick={(event) =>
+													runtime.ui.openImage(
+														pictures.map((picture) => ({
+															src: picture.media ? runtime.ui.mediaUrl(picture.media) : `data:${picture.mimeType};base64,${picture.data}`,
+														})),
+														index,
+														{ from: event.currentTarget },
+													)
+												}
+											>
+												<img src={src} alt={`${words.references} ${index + 1}`} loading="lazy" />
+											</button>
+										);
+									})}
+								</div>
+							)}
+							{!allReferences && (uniqueFiles.length > 8 || pictures.length > 8) && (
+								<button type="button" className="plume-environment-more" onClick={() => setAllReferences(true)}>
+									<Text size="caption" tone="faint">
+										{words.more(Math.max(0, uniqueFiles.length - 8) + Math.max(0, pictures.length - 8))}
+									</Text>
+								</button>
+							)}
+						</section>
+					</Group>
+				)}
+				{data.error && (
+					<Text as="p" size="caption" tone="danger" className="plume-environment-error" role="alert">
+						{data.error}
+					</Text>
+				)}
+			</div>
+			<div className="plume-environment-card-empty">
+				<button type="button" onClick={(event) => onChooseSections(event.currentTarget)}>
+					<Settings2 size={14} />
+					<Text size="caption" tone="faint">
+						{words.chooseSections}
+					</Text>
+				</button>
+			</div>
+			<footer className="plume-environment-card-foot">
+				<ExtraSections entries={entries("foot")} session={session} />
+			</footer>
 		</>
 	);
 }
 
+/**
+ * 浮在转录右上角的实底会话仪表卡。「显示哪些内容」有两个入口：在卡片上右键（链接、选中的字照旧用自己的菜单），
+ * 和各节都藏起来、卡片空了时露出的恢复入口。菜单点一项后保持打开，便于连续勾选。
+ *
+ * 收起时先播完离开的动画再拆掉：开关从开变关的那次渲染里立起 `leaving`，卡片的动画播完放下。减少动态效果时全局规则把动画
+ * 压到 0.01ms，结束事件照常来。
+ */
 export function EnvironmentCard({ session, placement, runtime }: ConversationCardProps & { runtime: Runtime }) {
 	const { resolvedLocale } = useI18n();
 	const words = MESSAGES[resolvedLocale];
 	const { open, hidden } = usePrefs();
 	const extra = runtime.ui.useEnvironmentSections();
 	const menu = usePopover();
-	if (!open) return null;
+	const [wasOpen, setWasOpen] = useState(open);
+	const [leaving, setLeaving] = useState(false);
+	if (wasOpen !== open) {
+		setWasOpen(open);
+		setLeaving(!open);
+	}
+	if (!open && !leaving) return null;
 	const items = [
 		...SECTIONS.map((name) => ({ key: name, order: OWN[name], label: words[LABEL_KEY[name]] })),
 		...extra.map((entry) => ({ key: entry.key, order: entry.order, label: typeof entry.label === "function" ? entry.label(resolvedLocale) : entry.label })),
 	].sort((a, b) => a.order - b.order);
 	return (
-		<div data-environment className="plume-environment-card" data-placement={placement}>
-			<div className="plume-environment-card-head">
-				<Text size="label" tone="muted" className="plume-environment-grow">
-					{words.environment}
-				</Text>
-				<IconButton size="sm" label={words.sections} active={menu.open} icon={<Settings2 size={13} />} onClick={menu.toggle} />
+		<div
+			data-environment
+			className="plume-environment"
+			data-placement={placement}
+			data-leaving={leaving ? "" : undefined}
+			onContextMenu={(event) => {
+				const target = event.target as Element;
+				const selection = window.getSelection();
+				if (target.closest("input, textarea, [contenteditable], a[href]") || (selection && !selection.isCollapsed)) return;
+				event.preventDefault();
+				event.stopPropagation();
+				menu.openAtPoint(event);
+			}}
+		>
+			<div
+				className="plume-environment-card"
+				onAnimationEnd={(event) => {
+					if (event.target === event.currentTarget && !open) setLeaving(false);
+				}}
+			>
+				<EnvironmentBody key={session.summary.id} session={session} runtime={runtime} extra={extra} onChooseSections={menu.openAt} />
 			</div>
-			<div className="plume-environment-card-body">
-				<EnvironmentBody key={session.summary.id} session={session} runtime={runtime} extra={extra} />
-			</div>
-			{menu.open && (
-				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end">
+			{open && menu.open && (
+				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="start" role="menu" label={words.sections}>
 					<MenuBody>
 						<MenuLabel>{words.sections}</MenuLabel>
 						{items.map((item) => (

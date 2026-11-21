@@ -400,7 +400,7 @@ export function TitleBar({ pane }: { pane?: TitlePane }) {
 	const { t, resolvedLocale } = useI18n();
 	usePluginUis();
 	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
-	const name = screen === "settings" ? t("sidebar.settings") : page ? localized(page.title, resolvedLocale) : undefined;
+	const name = page ? localized(page.title, resolvedLocale) : undefined;
 	const other = pane && !pane.focused;
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
 	const current = useAppPick((store) => (other ? undefined : store.view?.summary));
@@ -504,23 +504,17 @@ function StewardMark({ plugin }: { plugin: string }) {
  * 量的是这一列不是窗口：面板区开着时，宽窗口里的正文也可能只剩一条，卡片就该回到输入框上方。
  */
 const CARD_FLOAT_WIDTH = 320 + 32 + 420;
-/**
- * 右边那一列（`lane` 的卡片，环境卡片）：卡片 300 宽，右边距 12，和正文之间再留 12。
- * 让出这一列以后正文还有 520px 时停靠，正文和输入框整体往左让，卡片不盖住字；不够宽就浮在转录上，这时让位会把正文挤成一条缝。
- */
-const LANE_WIDTH = 300 + 24;
-const LANE_DOCK_WIDTH = LANE_WIDTH + 520;
 
 /** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）；不在滑时是 undefined。 */
 const ChatSlide = createContext<number | undefined>(undefined);
 
-function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolean } {
+function useCardRoom(column: HTMLElement | null): boolean {
 	const slideTarget = useContext(ChatSlide);
-	const [room, setRoom] = useState({ float: false, dock: false });
+	const [room, setRoom] = useState(false);
 	useLayoutEffect(() => {
 		if (!column) return;
 		/*
-		 * 侧栏、面板区开合时这一列每一帧一个宽度，跟着量的话卡片会在半路跨过停靠线、浮动线，换个地方，滑着滑着闪一下。
+		 * 侧栏、面板区开合时这一列每一帧一个宽度，跟着量的话卡片会在半路跨过浮动线，换个地方，滑着滑着闪一下。
 		 * 滑着时按滑之前和滑完的宽度里窄的那个定：变窄点下去当场就按滑完的放好，变宽滑完再换。
 		 * 滑之前的宽度在这里量：开合那一下的布局 effect 里过渡刚开始，量到的还是起点。
 		 */
@@ -529,9 +523,7 @@ function useCardRoom(column: HTMLElement | null): { float: boolean; dock: boolea
 		const end = slideTarget === undefined || !main ? undefined : slideTarget - (main.getBoundingClientRect().width - start);
 		const measure = () => {
 			const width = end === undefined ? column.clientWidth : Math.min(start, end);
-			const float = width >= CARD_FLOAT_WIDTH;
-			const dock = width >= LANE_DOCK_WIDTH;
-			setRoom((before) => (before.float === float && before.dock === dock ? before : { float, dock }));
+			setRoom(width >= CARD_FLOAT_WIDTH);
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -569,11 +561,9 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 	const app = useChrome();
 	const { projects, windowWidth } = app;
 	const [column, setColumn] = useState<HTMLElement | null>(null);
-	const room = useCardRoom(column);
-	const roomToFloat = room.float;
+	const roomToFloat = useCardRoom(column);
 	const [lane, setLane] = useState<HTMLElement | null>(null);
 	const laneOpen = useLaneOpen(lane);
-	const docked = laneOpen && room.dock;
 	// 背景图、磨砂往上铺满透明的标题栏：只有 macOS 的会话窗口标题栏压在对话上；主窗口的标题栏在卡片外面，Windows、Linux 的在顶上那条带子里。
 	const headerHeight = sessionWindow && !HEADER_BAR ? TOP_ROW_HEIGHT : 0;
 	if (!view || (!loading && view.messages.length === 0 && !view.draft)) {
@@ -601,16 +591,16 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 		);
 	}
 	/*
-	 * 右边那一列：停靠时占整块的两行（从顶到底，正文和输入框让出它的宽度），浮着时只占转录那一行（不压输入框）。
-	 * 这一块是两行的网格，卡片绝对定位在哪几行里就以哪几行为界：停靠、浮着之间只换它占的行，一直是同一个节点，
-	 * 卡片不重挂、不闪。卡片自己不挡点击，空处点下去还是转录；卡片太长自己滚。
+	 * 右边那一列（`lane` 的卡片，环境卡片）：280 宽，浮在转录那一行的右上角，不让正文和输入框让位，也不压输入框。
+	 * 这一块是两行的网格，卡片绝对定位在转录那一行里，以它为界；一直是同一个节点，侧栏、面板区开合时卡片不重挂、不闪。
+	 * 卡片自己不挡点击，空处点下去还是转录；卡片太长自己滚。
 	 * 这一列有卡片、别的卡片也浮得下时，别的卡片排到它下面，不各占一个角互相压着。
 	 */
 	const laneCards = !loading && (
 		<div
 			ref={setLane}
-			data-conversation-lane={docked ? "docked" : "floating"}
-			className={`pointer-events-none absolute top-3 right-3 bottom-3 z-20 col-start-1 row-start-1 ${docked ? "row-end-3" : "row-end-2"} flex w-[300px] flex-col gap-3 empty:hidden [&>*]:pointer-events-auto`}
+			data-conversation-lane="floating"
+			className="pointer-events-none absolute top-3 right-3 bottom-3 z-20 col-start-1 row-start-1 row-end-2 flex w-[280px] flex-col gap-3 empty:hidden [&>*]:pointer-events-auto"
 		>
 			<ConversationCards lane session={view} placement="floating" {...cardActions(view.summary.id)} />
 			{laneOpen && roomToFloat && (
@@ -625,7 +615,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 		<section ref={setColumn} data-screen="chat" className="relative isolate grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto]">
 			<ChatBackdrop empty={!loading && view.messages.length === 0 && !view.draft} headerHeight={headerHeight} />
 			{laneCards}
-			<div className={`relative col-start-1 row-start-1 flex min-h-0 flex-col${docked ? " mr-[324px]" : ""}`}>
+			<div className="relative col-start-1 row-start-1 flex min-h-0 flex-col">
 				{loading ? <ChatLoading /> : <Conversation view={view} />}
 				{/* 浮着的卡片自己不挡点击：卡片之间、卡片旁边的空处点下去还是转录。 */}
 				{roomToFloat && !laneOpen && !loading && (
@@ -637,7 +627,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 					</div>
 				)}
 			</div>
-			<div className={`col-start-1 row-start-2 flex flex-col${docked ? " mr-[324px]" : ""}`}>
+			<div className="col-start-1 row-start-2 flex flex-col">
 				<Composer key={view.summary.id} view={view} cards={!roomToFloat && !loading} />
 			</div>
 		</section>
@@ -718,7 +708,7 @@ function Conversation({ view }: { view: SessionView }) {
 		},
 		[id],
 	);
-	const onOpenSettings = useCallback(() => update({ screen: "settings", settingsSection: "models" }), []);
+	const onOpenSettings = useCallback(() => update({ settingsOpen: true, settingsSection: "models" }), []);
 	const edits = useMemo<MessageEdits>(
 		() => ({
 			edit: (index, message, text, files) => editMessage(id, index, message, text, files),
@@ -777,7 +767,7 @@ const TASK_ACTIONS: ChildTaskActions = {
 
 /** 插件的 `ui.Conversation`：引用到的是当前对话的输入框，「去设置」去模型设置。 */
 export function PluginConversation(props: ConversationProps) {
-	const onOpenSettings = useCallback(() => update({ screen: "settings", settingsSection: "models" }), []);
+	const onOpenSettings = useCallback(() => update({ settingsOpen: true, settingsSection: "models" }), []);
 	const onQuote = useCallback((quote: DraftQuote) => {
 		setQuotes(draftScope(state.view), (quotes) => [...quotes, quote]);
 		focusComposer();

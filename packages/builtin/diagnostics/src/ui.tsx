@@ -94,8 +94,17 @@ export default {
 		});
 		ui.panel("output", Output, { title: (locale) => MESSAGES[locale].output, listed: false });
 		const sections = environmentSections(runtime);
-		ui.environmentSection("jobs", sections.Background, { label: (locale) => MESSAGES[locale].jobs, order: 10, attention: sections.useAttention });
-		ui.environmentSection("compactions", sections.Compactions, { label: (locale) => MESSAGES[locale].compactions, order: 85 });
+		ui.environmentSection("jobs", sections.Background, {
+			label: (locale) => MESSAGES[locale].jobs,
+			place: "background",
+			order: 10,
+			attention: sections.useAttention,
+		});
+		ui.environmentSection("compactions", sections.Compactions, {
+			label: (locale) => MESSAGES[locale].compactions,
+			place: "foot",
+			order: 85,
+		});
 		ui.sessionMenuItem("trajectory", {
 			label: (locale) => MESSAGES[locale].viewTrajectory,
 			icon: History,

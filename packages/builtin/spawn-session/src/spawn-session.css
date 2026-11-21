@@ -64,27 +64,6 @@
 	gap: 4px;
 }
 
-/* 环境卡片里那一节：小标题和别的节一样高、一样缩进。 */
-.plume-spawn-section-label {
-	display: flex;
-	align-items: center;
-	height: 28px;
-	padding: 0 8px;
-}
-
-/* 还没开始的那几条只列出来：标题一行、理由至多三行，点了滚回对话里那张卡片。按钮里只放行内元素，标题和理由用 span 各占一行。 */
-.plume-spawn-row.plume-spawn-pending {
-	align-items: flex-start;
-	padding: 6px 8px;
-}
-
-.plume-spawn-pending > .plume-spawn-card-body > .plume-spawn-line {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
 /* 从环境卡片点过来时，`ui.revealToolCall` 给卡片外层挂上 `data-plume-flash`：边框和底色亮一下，说「是这张」。 */
 [data-plume-flash] .plume-spawn-card {
 	animation: plume-spawn-flash 1.6s ease-out;
@@ -96,58 +75,6 @@
 		border-color: var(--plume-accent);
 		background: color-mix(in srgb, var(--plume-accent) 8%, transparent);
 	}
-}
-
-.plume-spawn-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	min-width: 0;
-	min-height: 32px;
-	padding: 5px 8px;
-	border: 0;
-	background: transparent;
-	color: var(--plume-ink);
-	text-align: left;
-	cursor: pointer;
-	border-radius: var(--plume-radius-field);
-}
-
-.plume-spawn-row:hover {
-	background: var(--plume-card-hover);
-}
-
-.plume-spawn-row:active {
-	background: var(--plume-elevated);
-}
-
-.plume-spawn-grow {
-	min-width: 0;
-	flex: 1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.plume-spawn-dot {
-	flex-shrink: 0;
-	width: 6px;
-	height: 6px;
-	border-radius: var(--plume-radius-field);
-	background: var(--plume-ink-faint);
-}
-
-.plume-spawn-dot[data-status="running"] {
-	background: var(--plume-accent);
-}
-
-.plume-spawn-dot[data-status="done"] {
-	background: var(--plume-ok);
-}
-
-.plume-spawn-dot[data-status="failed"] {
-	background: var(--plume-danger);
 }
 
 /* offer 的卡：内边距照审批卡的正文和底部那一排（`ApprovalOverlay`），「以后不再问」推到最左。 */

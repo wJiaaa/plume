@@ -24,6 +24,7 @@
 | `AgentAvatar`、`AvatarPile`、`assignAvatars` | 智能体头像、状态表情与叠放；按种类稳定分配，插件与产品共用 | `ui/motion.css` |
 | `Collapse` | 展开、收起时保留内容直到尺寸过渡完成，支持减少动态效果 | `ui/motion.css` |
 | `FlowRow` | 转录里的过程行：思考、一段工具活、压缩、送达和来信那一行，插件的工具卡片画成一行时也用它（建议新会话写到一半、开始以后，侧边聊天交出去以后） | `ui/flow.css` |
+| `EnvironmentRow` | 环境卡片“后台”“产出”和页脚的一行：统一图标、说明、淡色行尾、运行点、悬停动作与细进度线，插件不自己画另一套 | `ui/environment.css` |
 | `ApprovalFrame`、`ApprovalExpiry` | 审批卡的外框（收放的标题栏、类型小标签、倒计时、+N）和每秒走的「m:ss 后失效」；产品的通用审批卡、插件的提问卡共用外框，自己画外框的插件卡（计划、MCP 表单）只用倒计时 | Tailwind 类 |
 | `Sideways` | 横向标签栏，普通鼠标滚轮横滚，触摸板保持原生方向；PR 账号标签复用 | `ui/scroll.css` |
 | `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |

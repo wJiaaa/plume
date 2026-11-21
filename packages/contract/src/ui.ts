@@ -552,13 +552,22 @@ export interface EnvironmentSectionProps {
 	session: SessionView;
 }
 
+/**
+ * 一节放在环境卡片的哪一块。`head` 是卡片顶上、目录名下面的一段话（会话在做什么）；`background` 是人不在时还会动的
+ * （在跑的命令、监视、约好的检查）；`output` 是这个会话做出来的（计划、开出来的会话、拉取请求）；`foot` 是卡片底下的一行记录。
+ * `background`、`output` 两块的标题和行数由画卡片的插件画，节里只放 `EnvironmentRow`，不画自己的小标题。
+ */
+export type EnvironmentPlace = "head" | "background" | "output" | "foot";
+
 /** 别的插件登记的一节环境卡片，见 `UiContext.useEnvironmentSections`。 */
 export interface EnvironmentSectionEntry {
 	/** `插件名/id`，全局唯一，可以拿来记「这一节藏起来了」。 */
 	key: string;
-	/** 卡片「显示哪些内容」菜单里的名字。 */
+	/** 卡片右键「显示哪些内容」菜单里的名字。 */
 	label: LocalizedText;
 	order: number;
+	/** 排在卡片的哪一块。 */
+	place: EnvironmentPlace;
 	/** 已经包好错误边界：一节出错只撤下这一节。 */
 	component: ComponentType<EnvironmentSectionProps>;
 	/**
@@ -579,7 +588,7 @@ export interface ConversationCardProps {
 	/** 卡片跟着的会话：正文里开着的那一个。 */
 	session: SessionView;
 	/**
-	 * 画在哪：`floating` 浮在转录右上角（或停靠在右边那一列），`inline` 在输入框正上方。浮着的要自己的底色和阴影，压在正文上面也读得清。
+	 * 画在哪：`floating` 浮在转录右上角，`inline` 在输入框正上方。浮着的要自己的底色和阴影，压在正文上面也读得清。
 	 * 登记时给了 `lane` 的卡片总是 `floating`。
 	 */
 	placement: "floating" | "inline";
@@ -955,8 +964,11 @@ export interface UiContext {
 	 * 停用时撤下。没登记（或停用了）时宿主按 `DeliveredReport` 的通用字段画默认的一行。
 	 */
 	agentDelivery(component: ComponentType<AgentDeliveryProps>): void;
-	/** 当前项目的系统打开方式；复用文件预览的默认目标和菜单。 */
-	readonly ProjectOpener: ComponentType<{ path: string }>;
+	/**
+	 * 当前项目的系统打开方式；复用文件预览的默认目标和菜单。缺省是一整行「在 某应用 中打开」；`compact` 只写应用名，
+	 * 放在一行的右端（环境卡片的页头）。
+	 */
+	readonly ProjectOpener: ComponentType<{ path: string; compact?: boolean }>;
 	/**
 	 * 人明确选择入口时在主窗口打开一个会话，和点侧栏里那一行一样；不会自动发送，不替人换屏（只在人点了插件界面上的按钮时调，
 	 * 如「打开上次会话」打开插件经 `ctx.sessions.launch` 开出来的会话）。没有的会话抛错。
@@ -1045,26 +1057,27 @@ export interface UiContext {
 	 * 对话那一列放得下它（320px 的卡片之外还剩 420px 正文）时浮在转录右上角，放不下时在输入框正上方，经 `placement` 告诉组件。
 	 * 按 order 从小到大（默认 0，相同时按注册先后）；没什么可说时返回 null，不占地方。只画开着的会话，新对话不画。id 在插件内唯一。
 	 *
-	 * `lane: true` 的卡片（环境卡片）占右边 300px 宽的一列，从不放到输入框上方：对话那一列让出 324px 后正文还有 520px 时停靠，
-	 * 转录和输入框整体往左让、卡片不盖住字；不够时浮在转录右上角。这一列从顶到转录底，卡片太长要自己滚（`max-height: 100%`、
-	 * `min-height: 0`，正文 `overflow-y: auto`）。这一列有卡片时，别的卡片浮得下就排到它下面，浮不下照旧在输入框上方。
+	 * `lane: true` 的卡片（环境卡片）占右边 280px 宽的一列，总是浮在转录右上角、压在正文上面，不让转录和输入框让位，
+	 * 也从不放到输入框上方。这一列从顶到转录底，卡片太长要自己滚（`max-height: 100%`、`min-height: 0`，正文 `overflow-y: auto`）。
+	 * 这一列有卡片时，别的卡片浮得下就排到它下面，浮不下照旧在输入框上方。
 	 */
 	conversationCard(id: string, component: ComponentType<ConversationCardProps>, options?: { order?: number; lane?: boolean }): void;
 	/**
 	 * 往会话的环境卡片里加一节（卡片由随应用提供的会话环境插件画，它经 `useEnvironmentSections` 拿到各节、不认是谁登记的）：和这个会话相关的一件周边的事，比如当前分支的拉取请求，每一行都只是入口，
-	 * 点了去插件自己的页面或面板。没什么可说时返回 null，卡片不留空位，也不画分隔线。`label` 是卡片「显示哪些内容」菜单里的名字。
-	 * 按 order 从小到大排进卡片自己的几节之间（默认 0）。id 在插件内唯一，停用时撤下。
+	 * 点了去插件自己的页面或面板。没什么可说时返回 null，卡片不留空位。`label` 是卡片右键「显示哪些内容」菜单里的名字。
+	 * `place` 定它排在卡片的哪一块（见 `EnvironmentPlace`，默认 `output`）；`background`、`output`、`foot` 里的每一行用 `@plume/ui` 的
+	 * `EnvironmentRow` 画，一张卡片里的行才长得一样。同一块里按 order 从小到大排（默认 0）。id 在插件内唯一，停用时撤下。
 	 *
-	 * `attention` 是一个 React hook：这一节此刻有没有要提醒人的事，有就返回一句给人看的话（按界面语言，「2 条建议的新会话等你决定」
-	 * 「1 个监视在跑，2 个检查待触发」），没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话按节的
-	 * order 接在它的说明后面；只在这时调，所以它要读的数据可以只在被调时拉。要提醒的是两种事：等人决定的（建议的新会话还没人点开始），
-	 * 和会自己叫醒这个会话的（监视、待触发的检查和定时任务：人不回来，会话也会自己开一轮）。普通的「有东西在跑」不算（开着一个
-	 * 开发服务器是常态），算进去圆点就一直亮着。规则同 React 的 hook。
+	 * `attention` 是一个 React hook：这一节此刻有没有要提醒人的事，有就返回一句给人看的话（按界面语言，「1 个监视在跑，2 个检查待触发」），
+	 * 没有返回 undefined。卡片收着、这一节没被藏起来时，标题栏上开关卡片的那颗挂一个圆点，这句话按节的 order 接在它的说明后面；
+	 * 只在这时调，所以它要读的数据可以只在被调时拉。要提醒的是会自己叫醒这个会话的（监视、待触发的检查和定时任务：人不回来，
+	 * 会话也会自己开一轮），和卡片里列着、等人回来决定的。普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。
+	 * 规则同 React 的 hook。
 	 */
 	environmentSection(
 		id: string,
 		component: ComponentType<EnvironmentSectionProps>,
-		options: { label: LocalizedText; order?: number; attention?: (session: SessionView) => string | undefined },
+		options: { label: LocalizedText; place?: EnvironmentPlace; order?: number; attention?: (session: SessionView) => string | undefined },
 	): void;
 	/** React hook：各插件登记的环境卡片分区，按 order 排好，给画环境卡片的插件用；增减跟着变。只在组件里调。 */
 	useEnvironmentSections(): readonly EnvironmentSectionEntry[];
@@ -1266,7 +1279,7 @@ export interface UiContext {
 	listCommands(context?: { cwd?: string }): Promise<ListedCommand[]>;
 	/** 产品的对话视图，见 `ConversationProps`。 */
 	readonly Conversation: ComponentType<ConversationProps>;
-	/** 产品的会话背景设置：选图、拖入图片、预览、铺放、效果、浓淡、显示位置，以及整个窗口的磨砂质感（不看皮肤、不要图）；外观页不再有这一节，背景只经它设置。 */
+	/** 产品的会话背景设置：选图、拖入图片、预览、铺放、效果、浓淡、显示位置，以及窗口外圈和对话区的磨砂质感（不看皮肤、不要图）；外观页不再有这一节，背景只经它设置。 */
 	readonly ChatBackgroundSettings: ComponentType<{ title?: string }>;
 	/** 产品的正文渲染器，插件的任务和回报卡不另带一套 Markdown。 */
 	readonly Markdown: ComponentType<MarkdownProps>;

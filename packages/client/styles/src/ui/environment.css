@@ -1,0 +1,156 @@
+/*
+ * 环境卡片里的一行（见 row/EnvironmentRow.tsx）。卡片里的行出自好几个插件，这里是它们共用的那一套：同样的高度、
+ * 同样的图标列、行尾同样的浅色小字。
+ *
+ * 「还在跑」只有一种说法：图标右下角的绿点，描一圈卡片底色和图标分开。「还剩多少」只有一种说法：行底的细线。
+ */
+.plume-env-row {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	min-height: 32px;
+	border-radius: var(--plume-radius-item);
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+@media (hover: hover) {
+	.plume-env-row:has(> button.plume-env-row-main):hover {
+		background: var(--plume-card-hover);
+	}
+}
+.plume-env-row:has(> button.plume-env-row-main:active) {
+	background: var(--plume-elevated);
+}
+
+.plume-env-row-main {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 6px 8px;
+	border-radius: var(--plume-radius-item);
+	text-align: left;
+	font-size: var(--text-detail);
+}
+
+.plume-env-row-icon {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	color: var(--plume-ink-faint);
+	transition: color var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-env-row-icon[data-running]::after {
+	content: "";
+	position: absolute;
+	right: -2px;
+	bottom: -1px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--plume-ok);
+	box-shadow: 0 0 0 2px var(--plume-env-row-ring, var(--plume-float));
+	transition: box-shadow var(--plume-t-quick) var(--plume-e-soft);
+}
+/* 悬停时行有了底色，绿点外那一圈跟着换成悬停后的颜色，不留一圈亮边。 */
+@media (hover: hover) {
+	.plume-env-row:has(> button.plume-env-row-main):hover .plume-env-row-icon[data-running]::after {
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--plume-fg) 5%, var(--plume-env-row-ring, var(--plume-float)));
+	}
+}
+
+.plume-env-row-title {
+	flex: 1;
+	min-width: 0;
+}
+
+.plume-env-row-tail {
+	display: grid;
+	justify-items: end;
+	align-items: center;
+	padding-right: 6px;
+}
+.plume-env-row-tail > * {
+	grid-area: 1 / 1;
+}
+.plume-env-row-fact {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+	font-size: var(--text-caption);
+	font-variant-numeric: tabular-nums;
+	color: var(--plume-ink-faint);
+	transition:
+		opacity var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+/* 动作平时藏着，悬停或键盘焦点进了这一行才盖住行尾：一列「停止」「取消」常驻，读起来全是按钮。 */
+.plume-env-row-action {
+	height: 22px;
+	padding: 0 8px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-elevated);
+	font-size: var(--text-caption);
+	color: var(--plume-ink);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-env-row:hover .plume-env-row-action,
+.plume-env-row:focus-within .plume-env-row-action {
+	opacity: 1;
+	pointer-events: auto;
+}
+.plume-env-row[data-has-action]:hover .plume-env-row-fact,
+.plume-env-row[data-has-action]:focus-within .plume-env-row-fact {
+	opacity: 0;
+}
+.plume-env-row-action:hover {
+	color: var(--plume-danger);
+}
+.plume-env-row-action:active {
+	background: color-mix(in srgb, var(--plume-danger) 15%, transparent);
+}
+.plume-env-row-action:disabled {
+	opacity: 0.45;
+	pointer-events: none;
+}
+
+.plume-env-row-progress {
+	position: absolute;
+	right: 8px;
+	bottom: 3px;
+	left: 34px;
+	height: 2px;
+	overflow: hidden;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-line-float);
+	pointer-events: none;
+}
+.plume-env-row-progress > i {
+	display: block;
+	height: 100%;
+	background: color-mix(in srgb, var(--plume-fg) 38%, transparent);
+	transform-origin: left;
+	transition:
+		transform var(--plume-t-slow) linear,
+		background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-env-row[data-urgent] .plume-env-row-progress > i {
+	background: var(--plume-accent);
+}
+.plume-env-row[data-urgent] .plume-env-row-icon,
+.plume-env-row[data-urgent] .plume-env-row-fact {
+	color: var(--plume-accent);
+}

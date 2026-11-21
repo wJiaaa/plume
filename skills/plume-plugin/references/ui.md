@@ -59,7 +59,7 @@ export default {
 | `ui.composerChip(id, Component, { side, order })` | 输入框上方、项目签那一行加一格，见「项目签那一行」 |
 | `ui.composerAbove(id, Component, { order })` | 主输入框上方独占一行，收到 `{ session }`；返回 null 不占位，组件自己管理展开退场，不会浮到转录侧面 |
 | `ui.conversationCard(id, Component, { order, lane })` | 跟着会话的一张卡片，见「跟着会话的卡片」 |
-| `ui.environmentSection(id, Component, { label, order?, attention? })` | 往会话的环境卡片里加一节，见「环境卡片」 |
+| `ui.environmentSection(id, Component, { label, place?, order?, attention? })` | 往会话的环境卡片里加一节，见「环境卡片」 |
 | `ui.useEnvironmentSections()` | 给画环境卡片的插件用的 React hook，拿到各插件登记的节，见「环境卡片」 |
 | `ui.sessionToolbar(id, Component)` | 有会话的标题栏里放局部控件，见「标题栏和会话菜单」 |
 | `ui.sessionMenuItem(id, { label, icon?, run })` | 会话操作菜单加一项，见「标题栏和会话菜单」 |
@@ -84,7 +84,7 @@ export default {
 | `ui.FilePreview` | `{ sessionId, path, contents }`，文件标题栏和只读预览；`contents` 是插件经 remote 读取的 `FileContents`，不授予额外文件读取权限 |
 | `ui.documentViewer(extensions, Component)` | 注册只读文档预览，见「文件、终端和系统打开」 |
 | `ui.DocumentPreview` | 文件面板和插件共用的文档展示，同上 |
-| `ui.ProjectOpener` | 以 `{ path }` 显示目录的打开方式，同上 |
+| `ui.ProjectOpener` | 以 `{ path, compact? }` 显示目录的打开方式，同上 |
 | `ui.quoteAction({ label, run })` | 在主会话划词菜单加一项，见「划词询问」 |
 | `ui.quoteInPanel(panelId, sessionId, quote)` | 把划词引用追加到本插件面板的输入框，同上 |
 | `ui.draftInSession(sessionId \| undefined, { text, images?, send?, replace? })` | 把字和图片写进输入框的草稿，见「提示、开面板、写输入框」 |
@@ -392,7 +392,7 @@ ui.conversationCard("todo", TodoCard);
 
 一直在变的一件事（todo 清单做到哪了），不是转录里的又一条记录，所以不随消息滚走。对话那一列放得下它（320px 的卡片之外还剩 420px 正文）时浮在转录右上角，放不下时（窄窗口、面板区开着）在输入框正上方；只画开着的会话，新对话不画。组件收到 `session`（会话的视图：消息、`summary.running`、`summary.stop`）和 `placement`（`floating` / `inline`）：浮着的要自己的实底（`--plume-float`）和阴影（`--plume-shadow-glass`），压在正文上面也读得清。没什么可说时（清单空了、全勾完了）返回 null，不占地方。
 
-`lane: true` 的卡片占右边一列：够宽时停靠，不够时浮在转录上，从不到输入框上方，太长自己滚。
+`lane: true` 的卡片占右边 280px 的一列：总是浮在转录右上角，不让正文让位，从不到输入框上方，太长自己滚。
 
 卡片上可以有停下、接着做的按钮：`stop()` 停下这个会话正在跑的一轮（和输入框的停止按钮一样），`carryOn(text)` 替人说一句让它接着做（和转录底下的「继续」一样，会话里标成界面替人说的话）。只在人点了卡片上的按钮时调，不在渲染、定时器里自己调。
 
@@ -411,15 +411,15 @@ ui.conversationCard("todo", TodoCard);
 
 ## 环境卡片
 
-会话的环境卡片由内置的 `plume.environment` 画。`ui.environmentSection(id, Component, { label, order?, attention? })` 往里加一节：和会话相关的一件周边的事，每一行只是入口，点了去自己的页面或面板（`ui.openPage`、`ui.openPanel`）。
+会话的环境卡片由内置的 `plume.environment` 画。`ui.environmentSection(id, Component, { label, place?, order?, attention? })` 往里加一节；插件不按自己的身份再造一层信息架构，而是把内容放进这张卡片固定的语义位置。
 
-- 组件收到 `{ session }`；没东西时返回 null，不占位、不画分隔线。`label` 是卡片「显示哪些内容」菜单里的名字。
-- 卡片不替插件画小标题，要小标题的自己画（文字用 `Text size="caption" tone="faint"`）。
-- order 排进卡片自己的几节（打开方式 0、子会话 20（按建它的插件分几节，节名是 `ui.usePluginDisplayName` 查到的显示名）、引用 90）和别的插件的节之间；内置插件已经用了的：后台任务 10（含检查、定时任务和轮询）、压缩记录 85（`plume.diagnostics`），计划 30（`plume.plan`），建议的新会话 40（`plume.spawn-session`）。例子：`plume.pull-requests` 用 60 放当前分支的拉取请求（一行，没有小标题）；`plume.summary` 用 80 放会话摘要（带「摘要」小标题）。
-- `attention(session)` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关的说明后面。
-- 要提醒的是两种事：等人回来决定的，和会自己叫醒这个会话的（人不回来，会话也会自己开一轮）；普通的「有东西在跑」不算（开着一个开发服务器是常态），算进去圆点就一直亮着。例子：`plume.spawn-session` 还没人点开始的建议经 `attention` 说「N 条建议的新会话等你决定」；`plume.diagnostics` 的后台任务一节说「1 个监视在跑，2 个检查待触发」（监视有输出就开一轮，检查、定时任务到点开一轮，普通后台命令不算）。
+- 组件收到 `{ session }`；没东西时返回 null，不占位。`label` 是卡片右键「显示哪些内容」菜单里的名字。
+- `place` 有四个值：`head` 是目录名下面的一段会话摘要；`background` 是人不在时还会动的命令、监视和检查；`output` 是计划、真正开出的会话和拉取请求；`foot` 是压缩记录这类整张卡片的注脚。缺省是 `output`。
+- `background`、`output`、`foot` 里的每一项用 `EnvironmentRow`，不要画自己的小标题。卡片统一画「后台」「产出」标题、行高、图标列、淡色行尾、运行点和细进度线。`head` 直接画摘要正文；同一个 place 内按 order 从小到大排。
+- `attention(session)` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关说明后面。
+- 会自己叫醒这个会话的事才提醒：监视、待触发的检查和定时任务。普通长跑服务不算，尚未开始的会话建议也只留在原本的建议卡，不进环境卡片、不点亮环境开关。
 
-`ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`、`label`、`order`、已包好错误边界的 `component`），按 order 排好。
+`ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`，以及 `label`、`place`、`order`、已包好错误边界的 `component`），按 order 排好。
 
 ## 输入框的灰字建议、回复里的标记
 
@@ -501,7 +501,7 @@ ui.linkOpener({
 - `ui.useFileMenu(root)`：组件内调用的 hook，返回 `{ open, onContextMenu(event, { path, onOpen }), element }`；复用打开方式、在访达中显示和复制路径菜单。
 - `ui.documentViewer(extensions, Component)`：注册只读文档预览，扩展名小写且不带点；同扩展名后注册的生效，停用后恢复前一个。
 - `ui.DocumentPreview`：`{ name, identity, readBytes(signal), fallback? }`，文件面板和插件共用的文档展示；调用方负责读取与权限校验，只交数据、不交磁盘路径，identity 随文件版本改变；无匹配或渲染失败回到 fallback。
-- `ui.ProjectOpener`：以 `{ path }` 显示目录的打开方式，复用文件预览的默认应用与选择菜单；只有用户点击才调用系统打开。
+- `ui.ProjectOpener`：以 `{ path }` 显示整行目录打开方式，`compact: true` 时只写应用名、适合放在环境卡片页头；复用文件预览的默认应用与选择菜单，只有用户点击才调用系统打开。
 - `ui.terminalOpener(open)`：为文件树等入口登记「在终端中打开」：人点击后调用 `open(directory, sessionId)`，目录和归属会话由宿主提供。一个插件保留一个处理器，最新登记的优先；停用后恢复前一个，没有处理器时宿主提示终端插件没有加载，执行失败弹提示条。
 - `ui.terminalRunner(run)`：为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener`。
 - `ui.openPath(path)`：用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令。
@@ -680,7 +680,7 @@ function ModelSetting() {
 
 要让人在插件里切「跟随系统 / 浅色 / 深色」，就是改外观页那三张主题卡片，不是做一套皮肤：`ui.setTheme("dark")` 等同人在外观页点「深色」，存盘、各窗口同步；组件里用 `ui.useTheme()` 读当前选的是哪张。有皮肤接管深浅模式时外观页的主题只读，`setTheme` 同样不改，所以先 `ui.skin(null)` 撤下自己的皮肤再调。只在人点了插件界面上的按钮时调，不在工具或定时逻辑里替人改。
 
-背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、效果、浓淡，以及整个窗口的磨砂质感（窗口外圈和对话区一起，不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
+背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、效果、浓淡，以及窗口外圈和对话区的磨砂质感（不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
 
 `root` 是窗口最外层（活动栏、顶上那一条）的底色，默认跟随 `shell`；`sidebar` 是侧栏的那一档：侧栏一栏和窄窗口的抽屉取 `shell` 和它六四开混出来的颜色，和外圈、对话都差一档，Windows、Linux 顶上那条带子也铺它；`accent-dim` 是强调弱底，默认是强调色的 10% 透明底。数据皮肤可直接给出完整的面、线、字 token；若一份配色只适用于一个模式，给 `light`、`dark` 同一组 token，并用 `mode` 指定深浅模式。
 

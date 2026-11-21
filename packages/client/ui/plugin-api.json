@@ -53,6 +53,7 @@
   { "title": "加载和占位", "names": ["StatusSpinner", "ActionSpinner", "BreatheLoader", "SkeletonList", "SkeletonBar", "useSlowLoad"] },
   { "title": "列表的行", "names": ["HoverRow", "HoverRowMark", "HoverRowReveal", "hoverSlot", "Caret", "MarkNumber"] },
   { "title": "过程行", "names": ["FlowRow"] },
+  { "title": "环境卡片的行", "names": ["EnvironmentRow"] },
   { "title": "文件图标", "names": ["lookFor", "iconColour"] },
   { "title": "滚动", "names": ["Scroller", "OverlayScrollbar", "ScrollText", "Sideways"] },
   { "title": "语言", "names": ["useI18n"] },
