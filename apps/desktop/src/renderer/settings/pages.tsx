@@ -438,7 +438,7 @@ export function AppearanceSettings() {
 			<CodeAppearanceSettings key={resets} appearance={appearance} patch={updateAppearance} />
 			<section>
 				<SectionTitle>{t("appearance.preferences")}</SectionTitle>
-				<Card data-appearance-preferences="" className="[&_[data-settings-row]>div:first-child>.text-ink-muted]:text-caption">
+				<Card data-appearance-preferences="">
 					<Row
 						title={t("appearance.pointerCursor")}
 						detail={t("appearance.pointerCursorDetail")}

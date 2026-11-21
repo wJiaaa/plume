@@ -31,7 +31,7 @@ export function SettingsCard({ children, className = "", ...rest }: React.Compon
 	);
 }
 
-/** 卡片里带标签的一行，控件靠右。 */
+/** 卡片里带标签的一行，控件靠右。说明比名字小两档（`caption`），一张卡片读下来先看到的是一列名字。 */
 export function SettingsRow({
 	title,
 	detail,
@@ -59,7 +59,7 @@ export function SettingsRow({
 						{title}
 					</Text>
 					{detail && (
-						<Text as="div" size="label" tone="muted" className="mt-0.5 leading-relaxed">
+						<Text as="div" size="caption" tone="muted" className="mt-0.5 leading-relaxed">
 							{detail}
 						</Text>
 					)}

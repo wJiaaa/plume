@@ -713,7 +713,7 @@ export function SettingsCard({ children, className = "", ...rest }: React.Compon
 ### `SettingsRow`
 
 ```tsx
-/** 卡片里带标签的一行，控件靠右。 */
+/** 卡片里带标签的一行，控件靠右。说明比名字小两档（`caption`），一张卡片读下来先看到的是一列名字。 */
 export function SettingsRow(props: {
 	title: React.ReactNode;
 	detail?: React.ReactNode;
