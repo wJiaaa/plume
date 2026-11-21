@@ -116,6 +116,8 @@ export class BackgroundRuns {
 		// 先登记再执行：同步的停止也看得到这一次派发。
 		this.runs.set(id, run);
 		const settle = (stop: TurnStop) => {
+			// 记录留着（之后插件还可能 `wait`、`report`），停它的闭包放掉：它抓着子会话，留着就连整段消息一起回收不掉。
+			run.cancel = () => undefined;
 			run.stop = structuredClone(stop);
 			run.settledAt = Date.now();
 			finished.resolve(run.stop);
