@@ -104,20 +104,20 @@ export function replaceRepeats(messages: Message[], replaced: ReadonlyMap<string
 		if (message.role !== "assistant") continue;
 		for (const part of message.content) if (part.type === "toolCall") calls.set(part.id, `${part.name} ${stable(part.arguments)}`);
 	}
+	// 先收齐眼前还摆着的原文（没被换掉的结果），只算和某条被换掉的同一个调用的那几份：每步都要跑，不按被换掉的条数各扫一遍历史。
+	const wanted = new Set<string | undefined>();
+	for (const message of messages) if (message.role === "toolResult" && replaced.has(message.toolCallId)) wanted.add(calls.get(message.toolCallId));
+	const originals = new Set<string>();
+	for (const message of messages) {
+		if (message.role !== "toolResult" || replaced.has(message.toolCallId)) continue;
+		const fingerprint = calls.get(message.toolCallId);
+		if (wanted.has(fingerprint)) originals.add(`${fingerprint} ${sample(message)}`);
+	}
 	return messages.map((message) => {
 		if (message.role !== "toolResult") return message;
 		const notice = replaced.get(message.toolCallId);
 		if (notice === undefined) return message;
-		const fingerprint = calls.get(message.toolCallId);
-		const content = sample(message);
-		const original = messages.some(
-			(other) =>
-				other !== message &&
-				other.role === "toolResult" &&
-				!replaced.has(other.toolCallId) &&
-				calls.get(other.toolCallId) === fingerprint &&
-				sample(other) === content,
-		);
+		const original = originals.has(`${calls.get(message.toolCallId)} ${sample(message)}`);
 		return original ? { ...message, content: [{ type: "text", text: notice }] } : message;
 	});
 }
