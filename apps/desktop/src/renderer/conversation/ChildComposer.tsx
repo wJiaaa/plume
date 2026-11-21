@@ -5,7 +5,7 @@ import type { ConversationProps, SessionChoice } from "@plume/contract/ui";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useI18n } from "@plume/ui";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildFocus, type ChildDraft } from "./child-drafts.ts";
 import type { PickedFile } from "../composer/attachments/picked.ts";
 import { ComposerSend, ComposerShell } from "../composer/index.ts";
@@ -153,8 +153,17 @@ export function ChildComposer({
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 只读与否经下面的 effect 重配 compartment；attachments.extension、commands.extension、history.extension 只建一次
 		[files, menu],
 	);
-	useEffect(() => {
-		editor.current?.dispatch({ effects: editable.current.reconfigure([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]) });
+	// 变只读（标签接上会话、重新加载那几帧外层也 inert）时浏览器把焦点挪到 body：新开的侧边聊天刚拿到焦点，接上会话就丢了。
+	// 变只读前手里有焦点的，恢复可编辑时还回去；只读期间焦点被别处拿走了就不抢。layout effect：赶在浏览器挪走焦点之前看 hasFocus。
+	const hadFocus = useRef(false);
+	useLayoutEffect(() => {
+		const view = editor.current;
+		if (!view) return;
+		if (state.readOnly) hadFocus.current = view.hasFocus;
+		view.dispatch({ effects: editable.current.reconfigure([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]) });
+		if (state.readOnly || !hadFocus.current) return;
+		hadFocus.current = false;
+		if (!document.activeElement || document.activeElement === document.body) view.contentDOM.focus({ preventScroll: true });
 	}, [state.readOnly]);
 	useEffect(() => {
 		if (!active || loading || !draftKey || !editor.current || !takeChildFocus(draftKey)) return;
