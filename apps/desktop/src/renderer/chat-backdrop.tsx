@@ -125,7 +125,7 @@ export function ChatBackdrop({ empty, headerHeight = 0 }: { empty: boolean; head
 
 /** 对话区的磨砂：排在图后面，叠在图上；不跟图的浓度走。颗粒本身是 styles.css 的 `--grain-layer`，和外圈同一块。 */
 export function GrainLayer({ headerHeight = 0 }: { headerHeight?: number }) {
-	return <div aria-hidden className="chat-grain" style={{ "--plume-pane-header": `${headerHeight}px` } as CSSProperties} />;
+	return <div aria-hidden className="surface-grain" style={{ "--plume-pane-header": `${headerHeight}px` } as CSSProperties} />;
 }
 
 /** 那一层本身。设置页的预览也画它，所以效果和遮罩只写一处。 */

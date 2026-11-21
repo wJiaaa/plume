@@ -12,6 +12,8 @@ import { Activity, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { FileScope, touchedPaths } from "../files/scope.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { useLiveSession } from "../session-live.ts";
+import { useAppearance } from "../appearance-settings.ts";
+import { GrainLayer } from "../chat-backdrop.tsx";
 import { ApprovalOverlay } from "./ApprovalOverlay.tsx";
 import { ChildComposer, type ReadComposerDocument } from "./ChildComposer.tsx";
 import type { DraftQuote } from "./quote.ts";
@@ -60,6 +62,7 @@ export function ChildConversation({
 	answer: (sessionId: string, toolCallId: string, value: unknown) => Promise<void>;
 }) {
 	const view = useLiveSession(sessionId);
+	const grain = useAppearance().grain === true;
 	const arrival = useArrival(sessionId ?? "");
 	const files = useMemo(
 		() => ({ sessionId: sessionId ?? "", cwd: view?.summary.cwd ?? "", touched: touchedPaths(view?.messages ?? []) }),
@@ -108,6 +111,7 @@ export function ChildConversation({
 	}, []);
 	return (
 		<section ref={section} data-screen="" data-child-conversation={sessionId ?? ""} className="relative isolate flex h-full min-h-0 flex-col">
+			{grain && <GrainLayer />}
 			{loading ? (
 				<div role="status" aria-busy="true" className="plume-defer-in flex flex-1 items-center justify-center">
 					<ActionSpinner size={20} className="text-ink-faint" />

@@ -238,14 +238,15 @@
 		}
 	}
 
-	/* 对话区的磨砂：和外圈同一层颗粒（`--grain-layer`，见下面侧栏那一节），向上铺满透明的标题栏，叠在背景图上。 */
-	.chat-grain {
+	/* 会话区的磨砂（主会话和侧边聊天）：与外圈共用 `--grain-layer` 并固定到视口，取同一片颗粒；主会话还能向上铺满透明标题栏并叠在背景图上。 */
+	.surface-grain {
 		position: absolute;
 		inset: 0;
 		top: calc(-1 * var(--plume-pane-header, 0px));
 		z-index: -1;
 		pointer-events: none;
 		background-image: var(--grain-layer);
+		background-attachment: fixed;
 	}
 
 	/*
