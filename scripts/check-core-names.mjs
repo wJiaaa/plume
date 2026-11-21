@@ -78,7 +78,6 @@ const MARKET_PLUGINS = [
 	"plume.sessions",
 	"plume.skin-studio",
 	"plume.ssh",
-	"plume.summary",
 	"plume.usage",
 	"plume.welcome",
 ];

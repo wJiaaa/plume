@@ -42,9 +42,9 @@ const SMOKE_ENTRY = "apps/desktop/src/main/smoke.ts";
 /** 主流程里已经走过同样的检查，单独跑只用来复现。 */
 const REPRO_ONLY = new Set(["files"]);
 /** 用时长的先起，整轮结束得早；没列的排在后面。 */
-const LONG_FIRST = ["main", "environment", "environment-summary", "market", "desktop-compat", "native-ui", "conversations", "session-menu"];
-/** 大半时间在等定时器（定时唤醒、摘要的一分钟），几乎不占算力：不占 PLUME_SMOKE_JOBS 的名额。 */
-const IDLE = new Set(["environment", "environment-summary"]);
+const LONG_FIRST = ["main", "environment", "market", "desktop-compat", "native-ui", "conversations", "session-menu"];
+/** 大半时间在等定时器（定时唤醒的一分钟），几乎不占算力：不占 PLUME_SMOKE_JOBS 的名额。 */
+const IDLE = new Set(["environment"]);
 /** 真的读写系统剪贴板，这几段不同时跑。 */
 const CLIPBOARD = new Set(["preview", "input-menu"]);
 /** 一段的上限。最长的环境卡片那段要等定时唤醒到点，两分多钟。 */

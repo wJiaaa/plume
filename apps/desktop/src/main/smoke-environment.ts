@@ -6,11 +6,9 @@ import type { BrowserWindow } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import { clickVisible, clickVisibleIn, closeSettings, contextMenuVisible } from "./smoke-kit.ts";
 
-const PROMPTS = ["起一个本地服务，盯着它，一分钟后叫醒你", "顺便看看端口", "好，等它自己醒"];
+const PROMPT = "起一个本地服务，盯着它，一分钟后叫醒你";
 const STARTED = "服务起来了，盯着输出、约好回来都安排好了。";
-const REPLIES = ["端口在环境卡片里。", "好的，到点我会自己接着做。"];
 const WOKE = "唤醒到点了，接着看服务。";
-const SUMMARY = "冒烟会话：起了一个本地服务，监视一条命令的输出，安排了检查回来看服务。";
 const FIRE = "冒烟里到点的检查";
 const CANCEL = "冒烟里取消的检查";
 const AGAIN = "冒烟里被叫醒后再安排的检查";
@@ -21,22 +19,17 @@ const SERVER = `node -e "require('node:http').createServer((q, s) => s.end('ok')
  * 环境卡片的几样关联：假模型一轮里起一条后台 HTTP 服务、一个没有输出的 `monitor`、两次 `schedule_wakeup`（一分钟、十分钟后的检查）。
  * 卡片收着时开关上有圆点、说明里数着监视和待触发的检查；打开后「后台任务」一节里服务那一行有端口签、监视那一行有「监视」签，
  * 服务被认成挂着的（`TrackedJob.stand`）、会话不再算有后台的事没完：这一轮的交付卡（写了个文件）、「继续」（清单剩一项没勾）和完成通知要的 idle 事件照样出来；同一节里两个检查，取消掉十分钟那个；
- * 点服务那一行到任务面板看服务地址。再说两句凑够摘要要的三句人话，等一分钟那个到点——对话里出现「检查 · …」那一行、会话被叫醒开一轮，
+ * 点服务那一行到任务面板看服务地址。等一分钟那个到点——对话里出现「检查 · …」那一行、会话被叫醒开一轮，
  * 那一轮再安排一次；换成英文界面，转录里的工具行（在 memo 后面）、送达那一行和卡片不重挂就当场换过来，再换回中文；在卡片里取消它，安排它的那一行标「已停止」。最后归档这个会话：服务、监视跟着停掉（端口不再应答），
  * 之后没有「后台命令完成」那一行、不再请求模型。卡片里没有「全部停止」。这段要一分多钟，大头是等到点的一分钟。
- *
- * 会话摘要单独一段（`part: "summary"`，段名 environment-summary）：装上市场插件 plume.summary，说三句人话，这一轮结束静下来一分钟后
- * 卡片里出现摘要，设置 › 智能体里有选摘要模型的那一行。原来接在唤醒后面，两个一分钟串着等，整段两分多钟；分开后两段并行。
  */
 export async function checkEnvironment(options: {
 	window: BrowserWindow;
 	agent: Remote<AgentProcessApi>;
-	plugin: { cli: string | undefined | void; install(name: string): Promise<void>; installDir: string };
 	outDir: string;
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
-	part: "wakeup" | "summary";
 }): Promise<void> {
-	const { window, agent, plugin, outDir, setModel, part } = options;
+	const { window, agent, outDir, setModel } = options;
 	const page = <T>(code: string) => window.webContents.executeJavaScript(code) as Promise<T>;
 	const wait = async (condition: () => Promise<boolean>, label: string, timeout = 15_000) => {
 		const end = Date.now() + timeout;
@@ -69,10 +62,6 @@ export async function checkEnvironment(options: {
 		await clickVisible(page, `[data-composer-send=send]`);
 	};
 	const toggleLabel = () => page<string>(`document.querySelector('[data-environment-toggle]')?.getAttribute('aria-label') ?? ''`);
-	if (part === "summary") {
-		await checkSummary();
-		return;
-	}
 	let requests = 0;
 	setModel((request) => {
 		requests++;
@@ -84,10 +73,8 @@ export async function checkEnvironment(options: {
 		// 被叫醒的那一轮再约一次：之后在卡片里取消它，看约它的那一行标「已停止」。
 		if (last.includes("<wakeup"))
 			return { toolCalls: [{ id: "toolu_env_again", name: "schedule_wakeup", args: { delay_seconds: 60, prompt: "再看一次服务", reason: AGAIN } }] };
-		if (last.includes(PROMPTS[1]!)) return { text: REPLIES[0]! };
-		if (last.includes(PROMPTS[2]!)) return { text: REPLIES[1]! };
 		if (last.includes("toolu_env_server")) return { text: STARTED };
-		if (!last.includes(PROMPTS[0]!)) return { text: `没认出这一轮：${last.slice(0, 200)}` };
+		if (!last.includes(PROMPT)) return { text: `没认出这一轮：${last.slice(0, 200)}` };
 		return {
 			toolCalls: [
 				{ id: "toolu_env_server", name: "bash", args: { command: SERVER, description: "冒烟用的本地服务", run_in_background: true } },
@@ -119,7 +106,7 @@ export async function checkEnvironment(options: {
 		const previous = new Set((await agent.sessions()).map((item) => item.id));
 		window.webContents.send("plume:command", "new-session");
 		await until(`document.querySelector('[data-screen=empty]') !== null`, "新建对话");
-		await send(PROMPTS[0]!);
+		await send(PROMPT);
 		await wait(async () => (await agent.sessions()).some((item) => !previous.has(item.id)), "新会话已创建");
 		await until(chatHas(STARTED), "这一轮安排好服务、监视和唤醒后收尾");
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
@@ -238,12 +225,6 @@ export async function checkEnvironment(options: {
 			throw new Error("服务地址不是本机这个端口");
 		await capture("smoke-environment-endpoint.png");
 
-		// 凑够摘要要的三句人话。
-		await send(PROMPTS[1]!);
-		await until(chatHas(REPLIES[0]!), "第二句的回复");
-		await send(PROMPTS[2]!);
-		await until(chatHas(REPLIES[1]!), "第三句的回复");
-
 		// 一分钟那个到点：送达那一行（「检查 · 那句话」）和被叫醒的一轮。
 		const row = "[data-screen=chat] [data-delivery-row][data-delivery-kind=wakeup]";
 		await until(`document.querySelector(${JSON.stringify(row)})?.textContent.includes(${JSON.stringify(FIRE)}) === true`, "对话里出现检查到点那一行", 120_000);
@@ -332,59 +313,5 @@ export async function checkEnvironment(options: {
 	} finally {
 		events.cancel();
 		setModel(undefined);
-	}
-
-	/** 说三句人话（摘要要够三句），这一轮结束静下来一分钟后卡片里出现摘要；生成摘要不算在会话里，不出现在对话中。 */
-	async function checkSummary() {
-		if (!plugin.cli) throw new Error("没有生成 plume-plugin 启动脚本");
-		await plugin.install("summary");
-		await wait(async () => (await agent.plugins()).some((status) => status.key === "summary" && status.state === "active"), "装上会话摘要插件");
-		let summaries = 0;
-		const replies = [STARTED, ...REPLIES];
-		setModel((request) => {
-			if (JSON.stringify(request.system ?? "").includes("实时摘要")) {
-				summaries++;
-				return { text: SUMMARY };
-			}
-			const messages = (request.messages ?? []) as Array<{ role?: string }>;
-			// 和上面一样看上一条回复之后的全部：人这句后面还接着一段 `<env>` 环境信息。
-			const last = JSON.stringify(messages.slice(messages.findLastIndex((message) => message.role === "assistant") + 1));
-			const index = PROMPTS.findIndex((prompt) => last.includes(prompt));
-			return { text: replies[index] ?? `没认出这一轮：${last.slice(0, 200)}` };
-		});
-		try {
-			window.webContents.send("plume:command", "new-session");
-			await until(`document.querySelector('[data-screen=empty]') !== null`, "新建对话");
-			for (const [index, prompt] of PROMPTS.entries()) {
-				await send(prompt);
-				await until(chatHas(replies[index]!), `第 ${index + 1} 句的回复`);
-			}
-			await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关已加载");
-			if (!(await page<boolean>(`document.querySelector('[data-environment]') !== null`))) await clickVisible(page, `[data-environment-toggle]`);
-			await until(
-				`document.querySelector('.plume-environment-card-head [data-environment-summary]')?.textContent.includes(${JSON.stringify(SUMMARY)}) === true`,
-				"卡片页头出现会话摘要",
-				150_000,
-			);
-			if (summaries !== 1) throw new Error(`应该生成一次摘要，实际 ${summaries} 次`);
-			// 环境卡片也在对话那一屏里：去掉它再看转录。
-			const transcript = await page<string>(
-				`(() => { const screen = document.querySelector('[data-screen=chat]').cloneNode(true); screen.querySelector('[data-environment]')?.remove(); return screen.textContent; })()`,
-			);
-			if (transcript.includes(SUMMARY)) throw new Error("摘要混进了对话");
-			await page(`document.querySelector('[data-environment-summary]').scrollIntoView({ block: 'nearest' })`);
-			await capture("smoke-environment-summary.png");
-		} finally {
-			setModel(undefined);
-		}
-
-		window.webContents.send("plume:command", "settings");
-		await until(`document.querySelector('[aria-label=设置章节]') !== null`, "设置打开");
-		await clickVisible(page, `[aria-label=设置章节] button`, "智能体");
-		await until(`document.body.textContent.includes('会话摘要模型')`, "智能体设置里有会话摘要模型");
-		await page(
-			`[...document.querySelectorAll('*')].find((node) => node.childElementCount === 0 && node.textContent === '会话摘要模型')?.scrollIntoView({ block: 'center' })`,
-		);
-		await capture("smoke-environment-summary-model.png");
 	}
 }
