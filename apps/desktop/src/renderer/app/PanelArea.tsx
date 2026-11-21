@@ -1,4 +1,4 @@
-import type { SessionView } from "@plume/contract";
+import type { SessionSummary, SessionView } from "@plume/contract";
 import type { PanelProps } from "@plume/contract/ui";
 import { acceleratorLabel, ClosableTab, IconButton, ResizeHandle, Sideways, translate, useI18n } from "@plume/ui";
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
@@ -262,9 +262,10 @@ export function PanelArea({
 	const managedSkin = useManagedSkin();
 	usePluginUis();
 	const panels = detached && panelWindow ? [panelEntry(panelWindow.panel)].filter((entry): entry is PanelEntry => Boolean(entry)) : listPanels();
-	const view = usePanelSession(scope);
-	const cwd = panelCwd(app, scope, view);
-	const running = view?.summary.running ?? false;
+	// 只要摘要：订阅整份视图的话，流式输出时草稿每一拍都把标签条、开始页整片重画一遍。
+	const summary = usePanelSummary(scope);
+	const cwd = panelCwd(app, scope, summary);
+	const running = summary?.running ?? false;
 	useLayoutEffect(() => setPanelScope(cwd, scope !== ""), [cwd, scope, running]);
 	const available = listPanels(cwd, scope !== "");
 	const group = tabsOf(app, scope, panels);
@@ -438,8 +439,16 @@ function usePanelSession(scope: string): SessionView | undefined {
 	return scope === currentId ? current : scope ? (live ?? parked.get(scope)) : undefined;
 }
 
-function panelCwd(app: Chrome, scope: string, view?: SessionView): string | undefined {
-	const summary = view?.summary ?? app.sessions.find((entry) => entry.id === scope);
+/** 同 `usePanelSession`，只取摘要：屏上那个会话的摘要在草稿、输出变化时不换引用。 */
+function usePanelSummary(scope: string): SessionSummary | undefined {
+	const current = useAppPick((app) => (scope === app.currentId ? app.view?.summary : undefined));
+	const currentId = useAppPick((app) => app.currentId);
+	const live = useLiveSession(scope && scope !== currentId ? scope : undefined);
+	return scope === currentId ? current : scope ? (live ?? parked.get(scope))?.summary : undefined;
+}
+
+function panelCwd(app: Chrome, scope: string, session?: SessionSummary): string | undefined {
+	const summary = session ?? app.sessions.find((entry) => entry.id === scope);
 	if (summary) return summary.cwd ?? app.projects.find((entry) => entry.id === summary.project)?.path;
 	if (scope) return undefined;
 	const target = app.target;
@@ -452,7 +461,7 @@ const PanelContents = memo(function PanelContents({ panel, tab, scope, shown }: 
 	const app = useChrome();
 	const view = usePanelSession(scope);
 	const hasView = useAppPick((current) => current.view !== undefined);
-	const cwd = panelCwd(app, scope, view);
+	const cwd = panelCwd(app, scope, view?.summary);
 	const [restoring, setRestoring] = useState(Boolean(tab.file && !fileOf(tab.id).path));
 	const [failed, setFailed] = useState(false);
 	useEffect(() => {
