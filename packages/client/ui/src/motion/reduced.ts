@@ -14,5 +14,9 @@ export function motionReduced(): boolean {
 	const setting = document.documentElement.dataset.reduceMotion;
 	if (setting === "on") return true;
 	if (setting === "off") return false;
-	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	// 同一个查询对象一直跟着系统设置变，取一次就够：流式输出时每一拍、每一段字都问，每次新建一个查询是白算。
+	systemQuery ??= window.matchMedia("(prefers-reduced-motion: reduce)");
+	return systemQuery.matches;
 }
+
+let systemQuery: MediaQueryList | undefined;

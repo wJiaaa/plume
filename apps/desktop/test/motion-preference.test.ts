@@ -20,7 +20,12 @@ test("减少动效的 on / off 优先于系统，system 和未设置跟随系统
 		value: {
 			matchMedia(query: string) {
 				assert.equal(query, "(prefers-reduced-motion: reduce)");
-				return { matches: systemReduced };
+				// 和真的 `MediaQueryList` 一样跟着系统设置变：`motionReduced` 只取一次查询对象。
+				return {
+					get matches() {
+						return systemReduced;
+					},
+				};
 			},
 		},
 	});
