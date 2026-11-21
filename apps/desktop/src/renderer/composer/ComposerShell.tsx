@@ -69,11 +69,15 @@ export function ComposerShell({
 		const probe = handle?.querySelector(`.${ROLL_VALUE}`) ?? handle;
 		if (!row || !probe) return;
 		const was = row.getAttribute("data-plume-fit");
+		// 只在值变了时写：写同样的值也让整排按属性选择器重算样式，量的那一下就多排一遍版。多数时候第一级就放得下，一笔都不用写。
+		const mark = (value: string) => {
+			if (row.getAttribute("data-plume-fit") !== value) row.setAttribute("data-plume-fit", value);
+		};
 		const level = settle((at) => {
-			row.setAttribute("data-plume-fit", String(at));
+			mark(String(at));
 			return tight(probe);
 		});
-		if (was !== null) row.setAttribute("data-plume-fit", was);
+		if (was !== null) mark(was);
 		setFit(level);
 	}, []);
 	useEffect(() => {
