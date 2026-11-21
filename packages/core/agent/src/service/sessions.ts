@@ -22,7 +22,7 @@ export interface SessionsServiceDeps {
 	log: Log;
 	modelSettings: Pick<ModelSettings, "read" | "change">;
 	projects: Pick<Projects, "list" | "find" | "save">;
-	store: Pick<SessionDb, "stats" | "sizes" | "copy">;
+	store: Pick<SessionDb, "stats" | "spendOf" | "sizes" | "copy">;
 	host: Pick<PluginHost, "sessionContextReset" | "status">;
 	events: Pick<Events, "emit">;
 	registry: Pick<
@@ -149,7 +149,7 @@ export function sessionsService(
 				...store.stats(sessionId),
 				children: withChildren(sessionId)
 					.slice(1)
-					.map((id) => ({ owner: sessions.get(id)?.summary.owner, usage: store.stats(id).usage })),
+					.map((id) => ({ owner: sessions.get(id)?.summary.owner, usage: store.spendOf(id) })),
 			};
 		},
 		listSessions: () => summaries(),

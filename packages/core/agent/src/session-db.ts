@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type {
 	AssistantMessage,
 	Message,
@@ -178,6 +178,8 @@ export interface SessionDb {
 	/** 花销表按小时、供应商、模型合好。 */
 	usage(): UsageRequestBucket[];
 	stats(sessionId: string): Omit<SessionStats, "children">;
+	/** 只要花销时用它：`stats` 还要把这个会话的记录逐条解析一遍。 */
+	spendOf(sessionId: string): SessionStats["usage"];
 	/** 每条会话的记录占多少字节。 */
 	sizes(): Map<string, number>;
 	/** 整个库另存到 path，覆盖那里原有的文件。 */
@@ -238,15 +240,26 @@ export function openSessionDb(path: string, log: (message: string) => void): Ses
 	return sessionStore(db, log);
 }
 
+/** 同一段 SQL 只编译一次（`prepare` 每次都重新编译，流式草稿约 80ms 写一次）；按库各存一份，库没人引用了跟着回收。 */
+const statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+function prepared(db: DatabaseSync, source: string): StatementSync {
+	let cache = statements.get(db);
+	if (!cache) statements.set(db, (cache = new Map()));
+	let statement = cache.get(source);
+	if (!statement) cache.set(source, (statement = db.prepare(source)));
+	return statement;
+}
+
 function sessionStore(db: DatabaseSync, log: (message: string) => void): SessionDb {
+	const sql = (source: string) => prepared(db, source);
 	const streams = new Map<string, DraftStream>();
 	/** 库文件本身的路径：导出时不许替换它（`protectSource`）。 */
-	const mainFile = () => (db.prepare("PRAGMA database_list").all() as { name: string; file: string }[]).find((entry) => entry.name === "main")!.file;
+	const mainFile = () => (sql("PRAGMA database_list").all() as { name: string; file: string }[]).find((entry) => entry.name === "main")!.file;
 	/** 上一批草稿没写进去，还没成功过：只说一次，不是每次重试都说。 */
 	let failing = false;
 
 	const updateSummary = (summary: SessionSummary): boolean =>
-		Number(db.prepare("UPDATE sessions SET updated_at = ?, summary = ? WHERE id = ?").run(summary.updatedAt, stored(summary), summary.id).changes) > 0;
+		Number(sql("UPDATE sessions SET updated_at = ?, summary = ? WHERE id = ?").run(summary.updatedAt, stored(summary), summary.id).changes) > 0;
 
 	function forget(sessionId: string): void {
 		const stream = streams.get(sessionId);
@@ -262,17 +275,15 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 		try {
 			transaction(db, () => {
 				// 回复已经写进会话、或者会话删了：草稿没了，这批也就不用写了。
-				const known = db
-					.prepare(
-						"SELECT (SELECT COALESCE(MAX(n), 0) FROM draft_chunks WHERE session_id = ?) AS n, EXISTS (SELECT 1 FROM drafts WHERE session_id = ?) AS open",
-					)
-					.get(sessionId, sessionId) as {
+				const known = sql(
+					"SELECT (SELECT COALESCE(MAX(n), 0) FROM draft_chunks WHERE session_id = ?) AS n, EXISTS (SELECT 1 FROM drafts WHERE session_id = ?) AS open",
+				).get(sessionId, sessionId) as {
 					n: number;
 					open: number;
 				};
 				if (!known.open) return;
-				db.prepare("INSERT INTO draft_chunks (session_id, n, body) VALUES (?, ?, ?)").run(sessionId, known.n + 1, JSON.stringify(mergePieces(stream.pending)));
-				db.prepare("UPDATE drafts SET updated_at = ? WHERE session_id = ?").run(Date.now(), sessionId);
+				sql("INSERT INTO draft_chunks (session_id, n, body) VALUES (?, ?, ?)").run(sessionId, known.n + 1, JSON.stringify(mergePieces(stream.pending)));
+				sql("UPDATE drafts SET updated_at = ? WHERE session_id = ?").run(Date.now(), sessionId);
 			});
 			stream.pending = [];
 			stream.chars = 0;
@@ -283,6 +294,12 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			failing = true;
 			schedule(sessionId, stream);
 		}
+	}
+
+	function spendOf(sessionId: string): SessionStats["usage"] {
+		const usage = sql(`SELECT TOTAL(input) AS input, TOTAL(output) AS output, TOTAL(cache_read) AS cacheRead,
+				TOTAL(cache_write) AS cacheWrite, TOTAL(cost) AS cost, TOTAL(priced = 0) AS unpriced FROM spend WHERE session_id = ?`).get(sessionId);
+		return { ...usage } as SessionStats["usage"];
 	}
 
 	function schedule(sessionId: string, stream: DraftStream): void {
@@ -298,35 +315,36 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 	return {
 		summaries() {
 			// 条数按记录现数，不信摘要里存的那份：摘要只在变了的时候写，记录才是准的。
-			const rows = db
-				.prepare("SELECT summary, (SELECT COUNT(*) FROM records r WHERE r.session_id = s.id) AS n FROM sessions s ORDER BY updated_at DESC")
-				.all() as { summary: string; n: number }[];
+			const rows = sql("SELECT summary, (SELECT COUNT(*) FROM records r WHERE r.session_id = s.id) AS n FROM sessions s ORDER BY updated_at DESC").all() as {
+				summary: string;
+				n: number;
+			}[];
 			return rows.map((row) => {
 				const summary = JSON.parse(row.summary) as SessionSummary;
 				return { ...summary, kind: kindOf(summary), messageCount: Number(row.n), running: false };
 			});
 		},
 		queues() {
-			const rows = db.prepare("SELECT session_id, entries FROM queue").all() as { session_id: string; entries: string }[];
+			const rows = sql("SELECT session_id, entries FROM queue").all() as { session_id: string; entries: string }[];
 			return new Map(rows.map((row) => [row.session_id, JSON.parse(row.entries) as unknown]));
 		},
 		saveQueue(sessionId, entries) {
-			if (entries.length === 0) db.prepare("DELETE FROM queue WHERE session_id = ?").run(sessionId);
+			if (entries.length === 0) sql("DELETE FROM queue WHERE session_id = ?").run(sessionId);
 			else
-				db.prepare(
+				sql(
 					"INSERT INTO queue (session_id, entries) SELECT id, ? FROM sessions WHERE id = ? ON CONFLICT (session_id) DO UPDATE SET entries = excluded.entries",
 				).run(JSON.stringify(entries), sessionId);
 		},
 		messages(sessionId) {
-			const rows = db.prepare("SELECT body FROM records WHERE session_id = ? ORDER BY seq").all(sessionId) as { body: string }[];
+			const rows = sql("SELECT body FROM records WHERE session_id = ? ORDER BY seq").all(sessionId) as { body: string }[];
 			return rows.map((row) => JSON.parse(row.body) as Message);
 		},
 		context(sessionId) {
-			const row = db.prepare("SELECT context FROM sessions WHERE id = ?").get(sessionId) as { context: string | null } | undefined;
+			const row = sql("SELECT context FROM sessions WHERE id = ?").get(sessionId) as { context: string | null } | undefined;
 			return row?.context ? (JSON.parse(row.context) as ContextRecord) : undefined;
 		},
 		create(summary) {
-			db.prepare("INSERT INTO sessions (id, updated_at, summary) VALUES (?, ?, ?)").run(summary.id, summary.updatedAt, stored(summary));
+			sql("INSERT INTO sessions (id, updated_at, summary) VALUES (?, ?, ?)").run(summary.id, summary.updatedAt, stored(summary));
 		},
 		saveSummary(summary) {
 			updateSummary(summary);
@@ -337,26 +355,26 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 				if (message.role === "assistant") insertSpend(db, summary.id, message, note);
 				if (!updateSummary(summary)) return;
 				appendRecord(db, summary.id, message);
-				if (message.role === "assistant") db.prepare("DELETE FROM drafts WHERE session_id = ?").run(summary.id);
+				if (message.role === "assistant") sql("DELETE FROM drafts WHERE session_id = ?").run(summary.id);
 			});
 			if (message.role === "assistant") forget(summary.id);
 		},
 		saveContext(sessionId, record) {
-			db.prepare("UPDATE sessions SET context = ? WHERE id = ?").run(JSON.stringify(record), sessionId);
+			sql("UPDATE sessions SET context = ? WHERE id = ?").run(JSON.stringify(record), sessionId);
 		},
 		truncate(summary, keep, record) {
 			transaction(db, () => {
 				if (!updateSummary(summary)) return;
 				// seq 从 1 起连续（只追加、只截尾），留前 keep 条就是 seq ≤ keep；之后追加的接着 keep + 1。
-				db.prepare("DELETE FROM records WHERE session_id = ? AND seq > ?").run(summary.id, keep);
-				db.prepare("UPDATE sessions SET context = ? WHERE id = ?").run(JSON.stringify(record), summary.id);
-				db.prepare("DELETE FROM drafts WHERE session_id = ?").run(summary.id);
+				sql("DELETE FROM records WHERE session_id = ? AND seq > ?").run(summary.id, keep);
+				sql("UPDATE sessions SET context = ? WHERE id = ?").run(JSON.stringify(record), summary.id);
+				sql("DELETE FROM drafts WHERE session_id = ?").run(summary.id);
 			});
 			forget(summary.id);
 		},
 		copy(summary, messages, record) {
 			transaction(db, () => {
-				db.prepare("INSERT INTO sessions (id, updated_at, summary, context) VALUES (?, ?, ?, ?)").run(
+				sql("INSERT INTO sessions (id, updated_at, summary, context) VALUES (?, ?, ?, ?)").run(
 					summary.id,
 					summary.updatedAt,
 					stored(summary),
@@ -371,11 +389,11 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 				const names = new Set<string>();
 				for (const sessionId of sessionIds) {
 					forget(sessionId);
-					for (const row of db.prepare("SELECT name FROM media_refs WHERE session_id = ?").all(sessionId)) names.add(String(row.name));
-					db.prepare("DELETE FROM media_refs WHERE session_id = ?").run(sessionId);
-					db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+					for (const row of sql("SELECT name FROM media_refs WHERE session_id = ?").all(sessionId)) names.add(String(row.name));
+					sql("DELETE FROM media_refs WHERE session_id = ?").run(sessionId);
+					sql("DELETE FROM sessions WHERE id = ?").run(sessionId);
 				}
-				const used = db.prepare("SELECT 1 FROM media_refs WHERE name = ? LIMIT 1");
+				const used = sql("SELECT 1 FROM media_refs WHERE name = ? LIMIT 1");
 				return [...names].filter((name) => used.get(name) === undefined);
 			});
 			// 立刻把空间还回去。vacuum 搬动的页都经过 WAL，不 checkpoint 的话库变小了、WAL 却胀到差不多同样大。
@@ -384,7 +402,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			return released;
 		},
 		holdMedia(sessionId, name) {
-			db.prepare("INSERT OR IGNORE INTO media_refs (session_id, name) SELECT ?, ? WHERE ? = '' OR EXISTS (SELECT 1 FROM sessions WHERE id = ?)").run(
+			sql("INSERT OR IGNORE INTO media_refs (session_id, name) SELECT ?, ? WHERE ? = '' OR EXISTS (SELECT 1 FROM sessions WHERE id = ?)").run(
 				sessionId ?? "",
 				name,
 				sessionId ?? "",
@@ -393,8 +411,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 		},
 		mediaInUse() {
 			return new Set(
-				db
-					.prepare("SELECT DISTINCT name FROM media_refs")
+				sql("SELECT DISTINCT name FROM media_refs")
 					.all()
 					.map((row) => String(row.name)),
 			);
@@ -414,8 +431,8 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 				const head: AssistantMessage = { ...draft, content: [] };
 				try {
 					transaction(db, () => {
-						db.prepare("DELETE FROM drafts WHERE session_id = ?").run(sessionId);
-						db.prepare("INSERT INTO drafts (session_id, head, updated_at) SELECT id, ?, ? FROM sessions WHERE id = ?").run(
+						sql("DELETE FROM drafts WHERE session_id = ?").run(sessionId);
+						sql("INSERT INTO drafts (session_id, head, updated_at) SELECT id, ?, ? FROM sessions WHERE id = ?").run(
 							JSON.stringify(head),
 							Date.now(),
 							sessionId,
@@ -438,30 +455,25 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 		spend(sessionId, reply) {
 			insertSpend(db, sessionId, reply);
 		},
+		spendOf,
 		stats(sessionId) {
-			const usage = db
-				.prepare(`SELECT TOTAL(input) AS input, TOTAL(output) AS output, TOTAL(cache_read) AS cacheRead,
-					TOTAL(cache_write) AS cacheWrite, TOTAL(cost) AS cost, TOTAL(priced = 0) AS unpriced FROM spend WHERE session_id = ?`)
-				.get(sessionId);
-			const counts = db
-				.prepare(`SELECT TOTAL(json_extract(body, '$.role') = 'user' AND COALESCE(json_extract(body, '$.synthetic'), 0) = 0) AS turns,
+			const counts = sql(`SELECT TOTAL(json_extract(body, '$.role') = 'user' AND COALESCE(json_extract(body, '$.synthetic'), 0) = 0) AS turns,
 					TOTAL(json_extract(body, '$.role') = 'assistant') AS steps,
-					TOTAL(json_extract(body, '$.usage.input')) AS input, TOTAL(json_extract(body, '$.usage.cacheRead')) AS cacheRead, TOTAL(json_extract(body, '$.usage.cacheWrite')) AS cacheWrite FROM records WHERE session_id = ?`)
-				.get(sessionId);
+					TOTAL(json_extract(body, '$.usage.input')) AS input, TOTAL(json_extract(body, '$.usage.cacheRead')) AS cacheRead, TOTAL(json_extract(body, '$.usage.cacheWrite')) AS cacheWrite FROM records WHERE session_id = ?`).get(
+				sessionId,
+			);
 			return {
 				turns: Number(counts?.turns),
 				steps: Number(counts?.steps),
 				replyUsage: { input: Number(counts?.input), cacheRead: Number(counts?.cacheRead), cacheWrite: Number(counts?.cacheWrite) },
-				usage: { ...usage },
+				usage: spendOf(sessionId),
 			} as Omit<SessionStats, "children">;
 		},
 		usage() {
 			// 小时按本机时区切，和页面上的「今天」是同一个口径：晚上 11 点的调用算当天的。
 			// 耗时构成只看主请求；生成段截在整次以内，思考记的时候已经截过（`thinkingMs`），减出来的等待不会是负数。
 			const timedMain = "prompt IS NOT NULL AND duration_ms IS NOT NULL";
-			const rows = db
-				.prepare(
-					`SELECT strftime('%Y-%m-%d %H', ts / 1000, 'unixepoch', 'localtime') AS hour, provider, model,
+			const rows = sql(`SELECT strftime('%Y-%m-%d %H', ts / 1000, 'unixepoch', 'localtime') AS hour, provider, model,
 						COUNT(*) AS requests, TOTAL(input) AS input, TOTAL(output) AS output, TOTAL(cache_read) AS cacheRead,
 						TOTAL(cache_write) AS cacheWrite, TOTAL(cost) AS cost, TOTAL(priced = 0) AS unpriced,
 						TOTAL(stream_ms >= ${MIN_STREAM_MS} AND attempt_output > 0) AS timed,
@@ -476,9 +488,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 						TOTAL(tools) AS tools, TOTAL(tool_errors) AS toolErrors, TOTAL(tool_ms) AS toolMs,
 						TOTAL(miss_tokens) AS missTokens, TOTAL(miss_cost) AS missCost, TOTAL(CASE WHEN miss_cost IS NULL THEN miss_tokens END) AS missUnpriced,
 						${MISS_CAUSES.map((cause) => `TOTAL(CASE WHEN miss_cause = '${cause}' THEN miss_tokens END) AS miss_${cause}`).join(", ")}
-					FROM spend GROUP BY hour, provider, model ORDER BY hour`,
-				)
-				.all() as Record<string, string | number>[];
+					FROM spend GROUP BY hour, provider, model ORDER BY hour`).all() as Record<string, string | number>[];
 			// node:sqlite 给的行没有原型，过 rpc 前拼成普通对象。
 			return rows.map(({ sessions, missTokens, missCost, missUnpriced, ...row }) => {
 				const bucket: Record<string, unknown> = {};
@@ -495,7 +505,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			});
 		},
 		sizes() {
-			const rows = db.prepare("SELECT session_id, TOTAL(length(CAST(body AS BLOB))) AS bytes FROM records GROUP BY session_id").all() as {
+			const rows = sql("SELECT session_id, TOTAL(length(CAST(body AS BLOB))) AS bytes FROM records GROUP BY session_id").all() as {
 				session_id: string;
 				bytes: number;
 			}[];
@@ -508,7 +518,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			const partial = `${path}.${process.pid}.partial`;
 			rmSync(partial, { force: true });
 			try {
-				db.prepare("VACUUM INTO ?").run(partial);
+				sql("VACUUM INTO ?").run(partial);
 				renameSync(partial, path);
 			} catch (error) {
 				rmSync(partial, { force: true });
@@ -516,7 +526,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 			}
 		},
 		exportSession(sessionId, path) {
-			if (!db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) throw new Error(`Session not found: ${sessionId}`);
+			if (!sql("SELECT 1 FROM sessions WHERE id = ?").get(sessionId)) throw new Error(`Session not found: ${sessionId}`);
 			const source = mainFile();
 			protectSource(source, path);
 			const stream = streams.get(sessionId);
@@ -552,7 +562,7 @@ function sessionStore(db: DatabaseSync, log: (message: string) => void): Session
 		},
 		dropDraft(sessionId) {
 			forget(sessionId);
-			db.prepare("DELETE FROM drafts WHERE session_id = ?").run(sessionId);
+			sql("DELETE FROM drafts WHERE session_id = ?").run(sessionId);
 		},
 		close() {
 			// 正常退出时把还没写出的那批写完；关库会把 WAL 并回库文件。
@@ -622,17 +632,19 @@ function insertSpend(db: DatabaseSync, sessionId: string | null, reply: Assistan
 		...main,
 	};
 	const names = Object.keys(columns);
-	db.prepare(`INSERT INTO spend (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`).run(...Object.values(columns));
+	prepared(db, `INSERT INTO spend (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`).run(...Object.values(columns));
 }
 
 function mainColumns(db: DatabaseSync, sessionId: string, reply: AssistantMessage, note: SpendNote): Record<string, string | number | null> {
-	const previous = db
-		.prepare("SELECT prompt, provider, model FROM spend WHERE session_id = ? AND prompt IS NOT NULL ORDER BY id DESC LIMIT 1")
-		.get(sessionId) as PreviousRequest | undefined;
+	const previous = prepared(db, "SELECT prompt, provider, model FROM spend WHERE session_id = ? AND prompt IS NOT NULL ORDER BY id DESC LIMIT 1").get(
+		sessionId,
+	) as PreviousRequest | undefined;
 	const reported =
-		db
-			.prepare("SELECT 1 FROM spend WHERE session_id = ? AND provider = ? AND model = ? AND prompt IS NOT NULL AND cache_read + cache_write > 0 LIMIT 1")
-			.get(sessionId, reply.provider, reply.model) !== undefined;
+		prepared(db, "SELECT 1 FROM spend WHERE session_id = ? AND provider = ? AND model = ? AND prompt IS NOT NULL AND cache_read + cache_write > 0 LIMIT 1").get(
+			sessionId,
+			reply.provider,
+			reply.model,
+		) !== undefined;
 	const diagnosis = diagnoseCache(reply, previous, reported, note.boundary);
 	const parts = billedParts(reply, note.parts);
 	return {
@@ -649,13 +661,13 @@ function mainColumns(db: DatabaseSync, sessionId: string, reply: AssistantMessag
 }
 
 function appendRecord(db: DatabaseSync, sessionId: string, message: Message): void {
-	db.prepare("INSERT INTO records (session_id, seq, body) SELECT ?, COALESCE(MAX(seq), 0) + 1, ? FROM records WHERE session_id = ?").run(
+	prepared(db, "INSERT INTO records (session_id, seq, body) SELECT ?, COALESCE(MAX(seq), 0) + 1, ? FROM records WHERE session_id = ?").run(
 		sessionId,
 		JSON.stringify(message),
 		sessionId,
 	);
 	// 带的图记在这个会话名下（`media_refs`）：分叉拷过去的消息也走这里，新会话有自己的一份。
-	for (const name of mediaNames(message)) db.prepare("INSERT OR IGNORE INTO media_refs (session_id, name) VALUES (?, ?)").run(sessionId, name);
+	for (const name of mediaNames(message)) prepared(db, "INSERT OR IGNORE INTO media_refs (session_id, name) VALUES (?, ?)").run(sessionId, name);
 }
 
 /** 在一个写事务里跑 `fn`；已经在事务里时并进外面那个。 */
@@ -673,7 +685,7 @@ function transaction<T>(db: DatabaseSync, fn: () => T): T {
 }
 
 function userVersion(db: DatabaseSync): number {
-	return Number((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version);
+	return Number((prepared(db, "PRAGMA user_version").get() as { user_version: number }).user_version);
 }
 
 /** 新库建表；结构版本不是这一版的库不碰：往别的形状的表里写，库就悄悄坏了。 */
@@ -696,7 +708,7 @@ function prepareSchema(db: DatabaseSync): void {
  * 这一轮记成被中断（`interrupted`）：恢复出的回复只有文字，光看转录像是说完了，界面就不给「继续」。
  */
 function recoverDrafts(db: DatabaseSync): void {
-	const rows = db.prepare("SELECT d.session_id, d.head, d.updated_at, s.summary FROM drafts d JOIN sessions s ON s.id = d.session_id").all() as {
+	const rows = prepared(db, "SELECT d.session_id, d.head, d.updated_at, s.summary FROM drafts d JOIN sessions s ON s.id = d.session_id").all() as {
 		session_id: string;
 		head: string;
 		updated_at: number;
@@ -704,17 +716,17 @@ function recoverDrafts(db: DatabaseSync): void {
 	}[];
 	for (const row of rows) {
 		transaction(db, () => {
-			const chunks = db.prepare("SELECT body FROM draft_chunks WHERE session_id = ? ORDER BY n").all(row.session_id) as { body: string }[];
+			const chunks = prepared(db, "SELECT body FROM draft_chunks WHERE session_id = ? ORDER BY n").all(row.session_id) as { body: string }[];
 			const message = assembleDraft(
 				JSON.parse(row.head) as AssistantMessage,
 				chunks.map((chunk) => JSON.parse(chunk.body) as DraftPiece[]),
 			);
-			db.prepare("DELETE FROM drafts WHERE session_id = ?").run(row.session_id);
+			prepared(db, "DELETE FROM drafts WHERE session_id = ?").run(row.session_id);
 			if (!message) return;
 			const summary = JSON.parse(row.summary) as SessionSummary;
 			summary.updatedAt = Math.max(summary.updatedAt, row.updated_at);
 			summary.stop = { reason: "interrupted" };
-			db.prepare("UPDATE sessions SET updated_at = ?, summary = ? WHERE id = ?").run(summary.updatedAt, JSON.stringify(summary), row.session_id);
+			prepared(db, "UPDATE sessions SET updated_at = ?, summary = ? WHERE id = ?").run(summary.updatedAt, JSON.stringify(summary), row.session_id);
 			appendRecord(db, row.session_id, message);
 		});
 	}

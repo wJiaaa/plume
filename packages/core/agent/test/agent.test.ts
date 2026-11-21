@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentEvent, ApprovalRequest, HumanRequest, Message, Plugin, PluginContext } from "@plume/contract";
 import { REJECTED } from "@plume/loop";
@@ -1162,12 +1162,12 @@ it("工具结果的 details 存不成 JSON 时丢掉 details，输出照常交�
 
 it("一条消息写不进会话库时内存里也没有它，条数和会话库一致（撤回、编辑重发按条数截断）", async () => {
 	const { service, session, idle } = await start([{ toolCalls: [read] }, { text: "不该到这里" }]);
-	// 模拟磁盘出错：工具结果那一条插入会话库时抛错。
-	const prepare = DatabaseSync.prototype.prepare;
-	const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (this: DatabaseSync, sql: string) {
-		if (sql.startsWith("INSERT INTO records") && spy.mock.calls.filter(([text]) => text.startsWith("INSERT INTO records")).length === 3)
-			throw new Error("disk I/O error");
-		return prepare.call(this, sql);
+	// 模拟磁盘出错：工具结果那一条插入会话库时抛错。语句编译一次反复用，所以拦的是执行，不是编译。
+	const run = StatementSync.prototype.run;
+	let inserts = 0;
+	const spy = vi.spyOn(StatementSync.prototype, "run").mockImplementation(function (this: StatementSync, ...params: Parameters<StatementSync["run"]>) {
+		if (this.sourceSQL.startsWith("INSERT INTO records") && ++inserts === 3) throw new Error("disk I/O error");
+		return run.apply(this, params);
 	});
 	try {
 		const done = idle();
