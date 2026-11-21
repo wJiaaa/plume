@@ -14,7 +14,7 @@ export interface Runtime {
 
 /**
  * 卡片自己有三项可藏的内容：页头的打开方式、宿主知道的子会话、消息里的引用。别的内容经 `ui.environmentSection` 登记，
- * `place` 决定它属于摘要、后台、产出还是页脚，插件身份不再成为卡片里的层级。
+ * `place` 决定它属于后台、产出还是页脚，插件身份不再成为卡片里的层级。
  */
 const OWN = { openIn: 0, children: 20, references: 90 } as const;
 type SectionName = keyof typeof OWN;
@@ -195,7 +195,6 @@ function EnvironmentBody({
 					</Text>
 					{!hidden.includes("openIn") && <runtime.ui.ProjectOpener path={session.summary.cwd} compact />}
 				</div>
-				<ExtraSections entries={entries("head")} session={session} />
 			</header>
 			<div className="plume-environment-card-body">
 				<Group name="background" label={words.backgroundGroup}>

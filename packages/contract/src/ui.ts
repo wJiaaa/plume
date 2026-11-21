@@ -553,11 +553,11 @@ export interface EnvironmentSectionProps {
 }
 
 /**
- * 一节放在环境卡片的哪一块。`head` 是卡片顶上、目录名下面的一段话（会话在做什么）；`background` 是人不在时还会动的
+ * 一节放在环境卡片的哪一块。`background` 是人不在时还会动的
  * （在跑的命令、监视、约好的检查）；`output` 是这个会话做出来的（计划、开出来的会话、拉取请求）；`foot` 是卡片底下的一行记录。
  * `background`、`output` 两块的标题和行数由画卡片的插件画，节里只放 `EnvironmentRow`，不画自己的小标题。
  */
-export type EnvironmentPlace = "head" | "background" | "output" | "foot";
+export type EnvironmentPlace = "background" | "output" | "foot";
 
 /** 别的插件登记的一节环境卡片，见 `UiContext.useEnvironmentSections`。 */
 export interface EnvironmentSectionEntry {

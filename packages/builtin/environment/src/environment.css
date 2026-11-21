@@ -90,10 +90,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* 摘要等 head 节直接在目录行下面说这一段会话正在做什么，不再带自己的“摘要”小标题。 */
-.plume-environment-card-head > .plume-environment-card-section:not(:empty) {
-	padding-top: 7px;
-}
 
 .plume-environment-card-body {
 	overflow-y: auto;

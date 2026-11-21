@@ -811,7 +811,7 @@ function registerEnvironmentSection(plugin: string, id: unknown, component: unkn
 	if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error(`环境卡片的一节 ${id} 需要一个组件`);
 	const { label, place = "output", order = 0, attention } = (options ?? {}) as Record<string, unknown>;
 	if (!validTitle(label)) throw new Error(`环境卡片的一节 ${id} 需要 label`);
-	if (place !== "head" && place !== "background" && place !== "output" && place !== "foot") throw new Error(`环境卡片的一节 ${id} 的 place 不认识`);
+	if (place !== "background" && place !== "output" && place !== "foot") throw new Error(`环境卡片的一节 ${id} 的 place 不认识`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
 	if (attention !== undefined && typeof attention !== "function") throw new Error(`环境卡片的一节 ${id} 的 attention 要是一个 hook`);
 	const key = `${plugin}/${id}`;

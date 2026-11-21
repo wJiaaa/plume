@@ -414,8 +414,8 @@ ui.conversationCard("todo", TodoCard);
 会话的环境卡片由内置的 `plume.environment` 画。`ui.environmentSection(id, Component, { label, place?, order?, attention? })` 往里加一节；插件不按自己的身份再造一层信息架构，而是把内容放进这张卡片固定的语义位置。
 
 - 组件收到 `{ session }`；没东西时返回 null，不占位。`label` 是卡片右键「显示哪些内容」菜单里的名字。
-- `place` 有四个值：`head` 是目录名下面的一段会话摘要；`background` 是人不在时还会动的命令、监视和检查；`output` 是计划、真正开出的会话和拉取请求；`foot` 是压缩记录这类整张卡片的注脚。缺省是 `output`。
-- `background`、`output`、`foot` 里的每一项用 `EnvironmentRow`，不要画自己的小标题。卡片统一画「后台」「产出」标题、行高、图标列、淡色行尾、运行点和细进度线。`head` 直接画摘要正文；同一个 place 内按 order 从小到大排。
+- `place` 有三个值：`background` 是人不在时还会动的命令、监视和检查；`output` 是计划、真正开出的会话和拉取请求；`foot` 是压缩记录这类整张卡片的注脚。缺省是 `output`。
+- `background`、`output`、`foot` 里的每一项用 `EnvironmentRow`，不要画自己的小标题。卡片统一画「后台」「产出」标题、行高、图标列、淡色行尾、运行点和细进度线。同一个 place 内按 order 从小到大排。
 - `attention(session)` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关说明后面。
 - 会自己叫醒这个会话的事才提醒：监视、待触发的检查和定时任务。普通长跑服务不算，尚未开始的会话建议也只留在原本的建议卡，不进环境卡片、不点亮环境开关。
 
