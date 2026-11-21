@@ -155,6 +155,11 @@ export async function streamTurn(turn: StreamTurn): Promise<AssistantMessage | S
 	} catch (error) {
 		if (switched()) return letGo();
 		turn.draft(undefined);
+		// 适配器直接抛错（不是交回一条出错的回复）时，等着的那次重试也得收场：不然界面上的倒计时一直挂到下一轮开始。
+		if (pending) {
+			pending = false;
+			turn.settled({ outcome: stop?.aborted ? "stopped" : "gave_up", attempts: attempts() });
+		}
 		throw error;
 	} finally {
 		cancelTrailing();
