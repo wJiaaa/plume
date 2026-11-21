@@ -16,6 +16,7 @@ import { syncModelCatalog } from "../src/model-catalog-sync.ts";
 import { stripForeignHandles } from "../src/models.ts";
 import { applyImport, parseBundle, uniqueProviderName } from "../src/provider-transfer.ts";
 import { type FakeModel, fakeAnthropic } from "../src/testing.ts";
+import { createVault, providerKeys } from "../src/vault.ts";
 
 let dir: string;
 let agent: Agent | undefined;
@@ -46,8 +47,16 @@ const entry = (modelId: string, supportsThinking = false) => ({
 	supportsTools: true,
 });
 
+/** key 只认 vault 里的：文件里带 key 的供应商，像设置页保存时那样先把 key 存进 vault，文件里只留其余的。 */
+async function withStoredKeys(file: unknown): Promise<unknown> {
+	const providers = (file as { providers?: unknown } | undefined)?.providers;
+	if (!Array.isArray(providers) || !providers.some((provider: { apiKey?: unknown } | null) => provider?.apiKey)) return file;
+	const stored = await providerKeys(createVault(join(dir, "data"))).takeKeys({ providers });
+	return { ...(file as object), providers: stored.providers };
+}
+
 async function start(file: unknown = { providers: [] }) {
-	await writeFile(join(dir, "settings.json"), JSON.stringify(file));
+	await writeFile(join(dir, "settings.json"), JSON.stringify(await withStoredKeys(file)));
 	agent = await createAgent({ dataDir: join(dir, "data"), settingsFile: join(dir, "settings.json"), plugins: [], log: () => undefined });
 	return agent.service;
 }

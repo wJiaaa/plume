@@ -8,6 +8,7 @@ import prompt from "../../../builtin/prompt/src/index.ts";
 import { createAgent, type Agent } from "../src/index.ts";
 import { projectConfigPath } from "../src/project-config.ts";
 import { fakeAnthropic, type FakeModel, type FakeReply } from "../src/testing.ts";
+import { createVault, providerKeys } from "../src/vault.ts";
 
 let dir: string;
 let agent: Agent | undefined;
@@ -43,28 +44,32 @@ async function project(name: string, config: unknown): Promise<string> {
 
 async function start(replies: Parameters<typeof fakeAnthropic>[0] = [{ text: "done" }]) {
 	model = await fakeAnthropic(replies);
+	// key 只认 vault 里的：和设置页保存时一样，先存进 vault，文件里只留其余的。
+	const { providers } = await providerKeys(createVault(join(dir, "data"))).takeKeys({
+		providers: [
+			{
+				id: "p",
+				name: "test",
+				api: "anthropic-messages",
+				baseUrl: model.url,
+				apiKey: "private-global-key",
+				enabled: true,
+				models: ["global", "cheap", "strong"].map((modelId) => ({
+					modelId,
+					name: modelId,
+					contextWindow: 200000,
+					maxOutputTokens: 32000,
+					supportsThinking: false,
+					supportsImages: false,
+					supportsTools: true,
+				})),
+			},
+		],
+	});
 	await writeFile(
 		join(dir, "settings.json"),
 		JSON.stringify({
-			providers: [
-				{
-					id: "p",
-					name: "test",
-					api: "anthropic-messages",
-					baseUrl: model.url,
-					apiKey: "private-global-key",
-					enabled: true,
-					models: ["global", "cheap", "strong"].map((modelId) => ({
-						modelId,
-						name: modelId,
-						contextWindow: 200000,
-						maxOutputTokens: 32000,
-						supportsThinking: false,
-						supportsImages: false,
-						supportsTools: true,
-					})),
-				},
-			],
+			providers,
 			defaultModel: "p/global",
 			permissionMode: "auto",
 			alwaysAllow: [{ plugin: "test.project-config", subject: "global" }],

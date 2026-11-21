@@ -11,6 +11,7 @@ import { catalogModelFor, catalogPricing } from "@plume/llm/model-catalog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
 import { fakeAnthropic } from "../src/testing.ts";
+import { createVault, providerKeys } from "../src/vault.ts";
 
 const model = (modelId: string, extra: Partial<ModelEntry> = {}): ModelEntry => ({
 	modelId,
@@ -41,9 +42,17 @@ afterEach(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 
+/** key 只认 vault 里的：文件里带 key 的供应商，像设置页保存时那样先把 key 存进 vault，文件里只留其余的。 */
+async function withStoredKeys(file: unknown): Promise<unknown> {
+	const providers = (file as { providers?: unknown } | undefined)?.providers;
+	if (!Array.isArray(providers) || !providers.some((provider: { apiKey?: unknown } | null) => provider?.apiKey)) return file;
+	const stored = await providerKeys(createVault(join(dir, "data"))).takeKeys({ providers });
+	return { ...(file as object), providers: stored.providers };
+}
+
 async function start(providers: PluginProvider[], file: unknown = { providers: [own] }) {
 	listed = providers;
-	await writeFile(join(dir, "settings.json"), JSON.stringify(file));
+	await writeFile(join(dir, "settings.json"), JSON.stringify(await withStoredKeys(file)));
 	const plugin: Plugin = {
 		name: "test.gateway",
 		apply(context) {

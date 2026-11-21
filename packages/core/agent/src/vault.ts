@@ -31,14 +31,13 @@ const PLUGIN_PREFIX = "plume-sealed:v1:";
 const PLUGIN_SEALED = /^plume-sealed:v1:[A-Za-z0-9+/]+={0,2}$/;
 
 export interface Vault {
-	/** `id` 下存的密钥；没有，或者这把钥匙打不开时是 null。钥匙文件读不出来时抛错（见 `unseal`）。 */
-	secret(id: string): Promise<string | null>;
-	/** 同 `secret`，一次取好几条：密文文件只读一次。 */
+	/** 每个 `id` 下存的密钥，密文文件只读一次；没有，或者这把钥匙打不开时是 null。钥匙文件读不出来时抛错（见 `unseal`）。 */
 	secrets(ids: readonly string[]): Promise<Record<string, string | null>>;
-	/** 一次写进几条；值是空串的那条删掉，不存一个没有意义的东西。 */
-	putSecrets(entries: Record<string, string>): Promise<void>;
-	/** 不满足 `keep` 的都删掉：删掉的供应商，它的 key 一起忘掉。 */
-	keepSecrets(keep: (id: string) => boolean): Promise<void>;
+	/**
+	 * 一次写进几条；值是空串的那条删掉，不存一个没有意义的东西。给了 `keep` 时，不在 `entries` 里又不满足它的也删掉：
+	 * 删掉的供应商，它的 key 一起忘掉。什么都没变时不写文件。
+	 */
+	putSecrets(entries: Record<string, string>, keep?: (id: string) => boolean): Promise<void>;
 	/** 插件 `plugin` 的 `ctx.secrets`：同一把钥匙按插件名派生出的子钥，别的插件封的解不开。 */
 	pluginSecrets(plugin: string): PluginSecrets;
 }
@@ -233,23 +232,24 @@ export function createVault(dir: string): Vault {
 	return {
 		pluginSecrets,
 		secrets,
-		async secret(id) {
-			return (await secrets([id]))[id] ?? null;
-		},
-		putSecrets: (entries) =>
+		putSecrets: (entries, keep) =>
 			serially(async () => {
-				const secrets = await read();
+				const stored = await read();
+				const next = keep ? Object.fromEntries(Object.entries(stored).filter(([id]) => id in entries || keep(id))) : { ...stored };
+				let changed = Object.keys(next).length !== Object.keys(stored).length;
 				for (const [id, value] of Object.entries(entries)) {
-					if (value) secrets[id] = await seal(value);
-					else delete secrets[id];
+					if (!value) {
+						if (!(id in next)) continue;
+						delete next[id];
+						changed = true;
+						continue;
+					}
+					// 值没变就留着原来的密文：每次保存设置都会把所有 key 交过来，不比一下就是改个收藏也重新加密、整份写回。
+					if (next[id] !== undefined && (await unseal(next[id])) === value) continue;
+					next[id] = await seal(value);
+					changed = true;
 				}
-				await write(secrets);
-			}),
-		keepSecrets: (keep) =>
-			serially(async () => {
-				const secrets = await read();
-				const kept = Object.fromEntries(Object.entries(secrets).filter(([id]) => keep(id)));
-				if (Object.keys(kept).length !== Object.keys(secrets).length) await write(kept);
+				if (changed) await write(next);
 			}),
 	};
 }
@@ -284,15 +284,15 @@ export function providerKeys(vault: Vault) {
 
 	return {
 		/**
-		 * 把 key 填回供应商。vault 里有的为准（两边都有时它是新的那份）；手写进 `settings.json` 的 key 照样能用，
-		 * 下次保存设置时挪进 vault。插件提供的供应商在这之后才接上，key 由插件自己存，不进 vault。
+		 * 把 key 填回供应商：只认 vault 里的，`settings.json` 里写着的 `apiKey` 不认（key 只经设置页、导入进 vault）。
+		 * 插件提供的供应商在这之后才接上，key 由插件自己存，不进 vault。
 		 */
 		async withKeys(settings: StoredSettings): Promise<StoredSettings> {
 			if (settings.providers.length === 0) return settings;
 			const keys = await stored(settings.providers.map((provider) => providerSecretId(provider.id)));
-			const providers = settings.providers.map((provider) => {
+			const providers = settings.providers.map(({ apiKey: _written, ...provider }) => {
 				const key = keys[providerSecretId(provider.id)];
-				return key === null || key === undefined ? provider : { ...provider, apiKey: key };
+				return typeof key === "string" ? { ...provider, apiKey: key } : provider;
 			});
 			return { ...settings, providers };
 		},
@@ -308,9 +308,8 @@ export function providerKeys(vault: Vault) {
 				if (!provider.apiKey && unreadable.has(id)) held.add(id);
 				else keys[id] = provider.apiKey ?? "";
 			}
-			await vault.putSecrets(keys);
+			await vault.putSecrets(keys, (id) => !id.startsWith("provider:") || held.has(id));
 			for (const id of Object.keys(keys)) unreadable.delete(id);
-			await vault.keepSecrets((id) => !id.startsWith("provider:") || id in keys || held.has(id));
 			return { ...settings, providers: settings.providers.map(({ apiKey: _apiKey, ...provider }) => provider) };
 		},
 	};

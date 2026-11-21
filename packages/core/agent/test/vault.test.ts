@@ -12,9 +12,11 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
 import type { StoredProvider } from "../src/models.ts";
 import type { Plugin, PluginContext } from "@plume/contract";
-import { createVault, providerKeys } from "../src/vault.ts";
+import { createVault, providerKeys, type Vault } from "../src/vault.ts";
 
 let dir: string;
+
+const secret = async (vault: Vault, id: string) => (await vault.secrets([id]))[id];
 let agent: Agent | undefined;
 
 beforeEach(async () => {
@@ -40,12 +42,12 @@ it("存进去的取得回来，密文里没有原文；这把钥匙打不开的�
 	const stored = JSON.parse(await readFile(join(dir, "credentials.json"), "utf8")) as { secrets: Record<string, string> };
 	expect(stored.secrets["provider:p1"]).toMatch(/^v1:/);
 	expect(JSON.stringify(stored)).not.toContain("sk-fake-one");
-	expect(await createVault(dir).secret("provider:p1")).toBe("sk-fake-one");
+	expect(await secret(createVault(dir), "provider:p1")).toBe("sk-fake-one");
 
 	await writeFile(join(dir, "credentials.json"), JSON.stringify({ secrets: { a: "v1:bm90IGV2ZW4gY2xvc2U=", b: "旧版本的明文" } }));
-	expect(await vault.secret("a")).toBeNull();
-	expect(await vault.secret("b")).toBeNull();
-	expect(await vault.secret("missing")).toBeNull();
+	expect(await secret(vault, "a")).toBeNull();
+	expect(await secret(vault, "b")).toBeNull();
+	expect(await secret(vault, "missing")).toBeNull();
 });
 
 it.skipIf(process.platform === "win32")("钥匙和密文都是 0600", async () => {
@@ -61,13 +63,13 @@ it.skipIf(!chmodBlocks)("钥匙文件读不出来时报错，不换一把新的"
 	await chmod(keyFile, 0o000);
 	try {
 		// 不是 null：null 表示密钥没了，调用方会把它删掉。
-		await expect(vault.secret("provider:p1")).rejects.toThrow(keyFile);
+		await expect(vault.secrets(["provider:p1"])).rejects.toThrow(keyFile);
 		await expect(vault.putSecrets({ "provider:p2": "sk-new" })).rejects.toThrow(keyFile);
 	} finally {
 		await chmod(keyFile, 0o600);
 	}
 	expect(await readFile(keyFile)).toEqual(before);
-	expect(await vault.secret("provider:p1")).toBe("sk-kept");
+	expect(await secret(vault, "provider:p1")).toBe("sk-kept");
 });
 
 it.skipIf(!chmodBlocks)("密文文件读不出来时报错，不当成空的、把存着的 key 删掉", async () => {
@@ -76,12 +78,12 @@ it.skipIf(!chmodBlocks)("密文文件读不出来时报错，不当成空的、�
 	const vault = createVault(dir);
 	await chmod(file, 0o000);
 	try {
-		await expect(vault.secret("provider:p1")).rejects.toThrow(file);
+		await expect(vault.secrets(["provider:p1"])).rejects.toThrow(file);
 		await expect(vault.putSecrets({ "provider:p2": "sk-new" })).rejects.toThrow(file);
 	} finally {
 		await chmod(file, 0o600);
 	}
-	expect(await vault.secret("provider:p1")).toBe("sk-kept");
+	expect(await secret(vault, "provider:p1")).toBe("sk-kept");
 });
 
 it("长度不对的钥匙挪到旁边，不覆盖", async () => {
@@ -118,12 +120,12 @@ it("几个进程同时第一次用，最后只有一把钥匙", async () => {
 	// 四个进程各自读、改、写 credentials.json，后写的会盖掉先写的条目；这里只问每个能打开的都打得开。
 	const stored = JSON.parse(await readFile(join(dir, "credentials.json"), "utf8")) as { secrets: Record<string, string> };
 	const vault = createVault(dir);
-	for (const id of Object.keys(stored.secrets)) expect(await vault.secret(id)).toBe(`sk-${id.slice(1)}`);
+	for (const id of Object.keys(stored.secrets)) expect(await secret(vault, id)).toBe(`sk-${id.slice(1)}`);
 	expect(Object.keys(stored.secrets).length).toBeGreaterThan(0);
 	expect(pids).toHaveLength(4);
 });
 
-it("读设置时填回 key：vault 里的为准，手写在文件里的照样能用；写时拿出来、删掉的供应商一起忘掉", async () => {
+it("读设置时填回 key：只认 vault 里的，文件里写着的不认；写时拿出来、删掉的供应商一起忘掉", async () => {
 	const vault = createVault(dir);
 	const keys = providerKeys(vault);
 	const toWrite = await keys.takeKeys({ providers: [provider("p1", "sk-one"), provider("p2", "sk-two")] });
@@ -133,7 +135,7 @@ it("读设置时填回 key：vault 里的为准，手写在文件里的照样能
 	expect(filled.providers.map((entry) => [entry.id, entry.apiKey])).toEqual([
 		["p1", "sk-one"],
 		["p2", "sk-two"],
-		["p3", "sk-typed"],
+		["p3", undefined],
 	]);
 
 	await keys.takeKeys({ providers: [provider("p1", "sk-one")] });
@@ -155,10 +157,10 @@ it.skipIf(!chmodBlocks)("钥匙文件读不出来时读到的设置没有 key，
 	expect(loaded.providers[0]!.apiKey).toBeUndefined();
 	// 桌面端下一次改设置时把手里这份写回去，那时钥匙已经读得出来了。
 	await keys.takeKeys(loaded);
-	expect(await createVault(dir).secret("provider:p1")).toBe("sk-kept");
+	expect(await secret(createVault(dir), "provider:p1")).toBe("sk-kept");
 });
 
-it("经 agent 保存的供应商：settings.json 里没有 key、只有本人可读，重开以后 key 还在", async () => {
+it("经 agent 保存的供应商：settings.json 里没有 key、只有本人可读，重开以后 key 还在；手写进文件的 key 不认", async () => {
 	const settingsFile = join(dir, "settings.json");
 	const dataDir = join(dir, "data");
 	await writeFile(settingsFile, JSON.stringify({ providers: [provider("p-typed", "sk-fake-typed")] }));
@@ -174,7 +176,7 @@ it("经 agent 保存的供应商：settings.json 里没有 key、只有本人可
 	await agent.shutdown();
 	agent = await createAgent({ dataDir, settingsFile, plugins: [], log: () => undefined });
 	expect((await agent.service.getSettings()).providers.map((entry) => [entry.name, entry.hasKey])).toEqual([
-		["p-typed", true],
+		["p-typed", false],
 		["新的", true],
 	]);
 });
@@ -253,4 +255,15 @@ it("插件拿到的 `ctx.secrets` 由本体给：自己封的自己解得开，�
 	expect(await two.unseal(sealed)).toBeNull();
 	// 钥匙是本体给供应商 key 用的那把，在 Plume 的数据目录里，不在哪个插件的数据目录里。
 	expect(await readdir(dataDir)).toContain("vault.key");
+});
+
+it("key 都没变时不重写凭据文件：改别的设置不该把每把 key 重新加密一遍", async () => {
+	const keys = providerKeys(createVault(dir));
+	await keys.takeKeys({ providers: [provider("p1", "sk-one"), provider("p2", "sk-two")] });
+	const file = join(dir, "credentials.json");
+	const before = await readFile(file, "utf8");
+	await keys.takeKeys({ providers: [provider("p1", "sk-one"), provider("p2", "sk-two")] });
+	expect(await readFile(file, "utf8")).toBe(before);
+	await keys.takeKeys({ providers: [provider("p1", "sk-one")] });
+	expect(Object.keys((JSON.parse(await readFile(file, "utf8")) as { secrets: object }).secrets)).toEqual(["provider:p1"]);
 });
