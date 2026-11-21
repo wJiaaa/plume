@@ -259,16 +259,7 @@ export function createCompactor(deps: CompactorDeps) {
 			return finish({ ok: false, code: "already-tight" }, false);
 		}
 
-		const tail = new Set(history.slice(head).flatMap((message) => (message.role === "toolResult" ? [message.toolCallId] : [])));
-		if ("pruneOnly" in result && result.pruneOnly === true) {
-			const previousViews = record.views;
-			// i18n-exempt：invalid() 的理由只进日志。
-			if (!adoptViews(record, result.views, tail)) return invalid(`context.compact 给的剪枝视图对不上历史里的工具结果`);
-			settle({ status: mode.manual ? "skipped" : "done", code: "prune-only", before: history.length, after: history.length }, mode.manual !== undefined);
-			return finish({ ok: false, code: "prune-only" }, record.views !== previousViews);
-		}
-
-		const { keep, summary, head: given, via, views } = result as Exclude<CompactSummary, undefined | { pruneOnly: true }>;
+		const { keep, summary, head: given, via, views } = result;
 		const replacement = validHead(given);
 		if (
 			!Number.isInteger(keep) ||

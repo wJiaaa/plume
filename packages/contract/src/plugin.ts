@@ -844,7 +844,7 @@ export interface ContextCompact {
 	 */
 	previous?: { head: number };
 	/**
-	 * 历史上一次被改写（压缩、只剪枝）的时刻：在这之前落定的回复，用量量的是改写前的那份，不能拿来判断现在有多满。
+	 * 历史上一次被改写（压缩）的时刻：在这之前落定的回复，用量量的是改写前的那份，不能拿来判断现在有多满。
 	 * 没改写过不给。
 	 */
 	rewrittenAt?: number;
@@ -912,7 +912,7 @@ export interface ToolResultView {
  * 给了 `keep`，`history` 里从 `keep` 起原样留着，之前的（含上一次压缩换上的那几条）换成 `head`。
  * `keep` 要落在上一次换上的那几条之后、最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary`
  * 只在按条丢弃（`via: "dropped"`）时可以是空串；不合规矩的宿主当作压缩失败。
- * `views` 是留下的那截里剪过的工具结果。只剪了工具结果、没有可摘要的（`pruneOnly`）时只给 `views`。
+ * `views` 是留下的那截里剪过的工具结果：前缀只在压缩这一次重写，要剪的随边界一起交回。
  */
 export type CompactSummary =
 	| {
@@ -923,7 +923,6 @@ export type CompactSummary =
 			via?: CompactionVia;
 			views?: ToolResultView[];
 	  }
-	| { pruneOnly: true; views: ToolResultView[] }
 	| undefined;
 
 /**

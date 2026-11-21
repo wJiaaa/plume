@@ -125,7 +125,7 @@ export default {
 		 */
 		ctx.hook("context.compact", async (input, next) => {
 			const result = await next(input);
-			if (!result || "pruneOnly" in result) return result;
+			if (!result) return result;
 			const latest = approvedPlans(await ctx.sessions.messages(input.sessionId)).at(-1);
 			if (!latest || input.history.slice(result.keep).some((message) => message.role === "toolResult" && message.toolCallId === latest.toolCallId))
 				return result;

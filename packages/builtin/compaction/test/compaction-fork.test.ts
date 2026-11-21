@@ -25,7 +25,7 @@ function history(): Message[] {
 const big = { id: "fake/model", name: "Fake", contextWindow: 200_000, maxOutputTokens: 32_000 };
 const hot = () => ({ model: "fake/model", at: Date.now() });
 const done = (result: CompactSummary) => {
-	if (!result || "pruneOnly" in result) throw new Error("应该压缩了");
+	if (!result) throw new Error("应该压缩了");
 	return result;
 };
 
@@ -103,7 +103,7 @@ it("一轮收尾后问的：分叉没拿到摘要就不压，不退回独立请�
 	expect(requests).toHaveLength(0);
 });
 
-it("/compact 的说明进分叉的指令；手动压缩不走只剪枝的近路", async () => {
+it("/compact 的说明进分叉的指令", async () => {
 	const { forks, models } = recorder("INDEPENDENT", "FORKED");
 	const messages = history();
 	messages[messages.length - 2] = say("先看第五个文件。", 1000);
@@ -130,18 +130,25 @@ it("新边界落在上一次换上的头后面", async () => {
 	expect(result.keep).toBeGreaterThan(2);
 });
 
-it("只剪了工具结果就够了：交回剪枝视图，不摘要", async () => {
+it("剪了工具结果就够也照样摘要：前缀只在摘要这一次重写", async () => {
 	const messages: Message[] = [user("找一下")];
 	for (let i = 0; i < 3; i++)
 		messages.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
 	messages.push(say("完成", 9000));
 	const { requests, models } = recorder();
-	const result = await compact(compactInput(messages), { models, words, kindOf });
+	const result = done(await compact(compactInput(messages), { models, words, kindOf }));
+	expect(requests.length).toBeGreaterThanOrEqual(1);
+	expect(result.keep).toBeGreaterThan(0);
+});
+
+it("短到切不出可摘要的一段：不压，也不单独改写已经发出去的结果", async () => {
+	const messages: Message[] = [user("找一下")];
+	for (let i = 0; i < 2; i++)
+		messages.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
+	messages.push(say("完成", 9000));
+	const { requests, models } = recorder();
+	expect(await compact(compactInput(messages), { models, words, kindOf })).toBeUndefined();
 	expect(requests).toHaveLength(0);
-	expect(result && "pruneOnly" in result).toBe(true);
-	if (!result || !("pruneOnly" in result)) return;
-	expect(result.views.map((view) => view.toolCallId)).toEqual(["g0", "g1", "g2"]);
-	for (const view of result.views) expect(view.texts[0]).toMatch(/characters omitted by Plume/);
 });
 
 it("留下的那截里剪过的结果随边界一起交回", async () => {

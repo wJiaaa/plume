@@ -16,6 +16,25 @@ import { shownPath } from "./stale-results.ts";
  */
 const MAX_PASSES = 4;
 
+/**
+ * 独立摘要请求里每条工具结果最多留多少字（留头留尾）。摘要要的是做了什么、结果怎样，不是文件全文和整页输出；这次请求不吃缓存、按原价读，
+ * 大头恰恰是工具结果。先剪到这条线，多数时候一次请求就放得下，不用分段多写几遍。分叉那条路读的是缓存，照发完整历史，不经这里。
+ */
+const SUMMARY_RESULT_CHARS = 2000;
+
+/** 工具结果的文字剪到 `SUMMARY_RESULT_CHARS` 以内，几块按 `allowance` 分；要照着做的说明（技能正文）是规矩，不剪。 */
+function clipResults(messages: Message[]): Message[] {
+	return messages.map((message) => {
+		if (message.role !== "toolResult" || message.instructions) return message;
+		const share = allowance(
+			message.content.map((part) => (part.type === "text" ? part.text.length : 0)),
+			SUMMARY_RESULT_CHARS,
+		);
+		if (share === Number.POSITIVE_INFINITY) return message;
+		return { ...message, content: message.content.map((part) => (part.type === "text" ? { ...part, text: clip(part.text, share) } : part)) };
+	});
+}
+
 /** 手动压缩：说明、停止信号，和失败时报给人的话。手动的失败要说出来，自动的退回本地整理。 */
 export interface Manual {
 	instructions?: string;
@@ -35,6 +54,7 @@ export async function summarize(
 	/** 实测用量与字符估算之比，见 `compactIfNeeded` 里的 `scale`。 */
 	scale = 1,
 ): Promise<string | null> {
+	messages = clipResults(messages);
 	const focus = focusNote(manual?.instructions);
 	const instructionFor = (iterative: boolean): string => [iterative ? UPDATE_SUMMARY : FIRST_SUMMARY, focus].filter(Boolean).join("\n\n");
 	const instructionTokens = (iterative: boolean) =>

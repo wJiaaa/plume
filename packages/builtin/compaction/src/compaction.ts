@@ -1,10 +1,11 @@
 /**
- * 长会话留在上下文窗口里。三样办法，便宜的在前，各答一个不同的问题：
+ * 长会话留在上下文窗口里。三样办法，各答一个不同的问题：
  *
- *   1. 剪掉过大的工具结果（`prune.ts`、`stale-results.ts`）。不用模型、不发请求，常常单靠它就够——在大仓库里跑过三次 grep 的会话，
- *      大半就是那三个结果。
- *   2. 较早的那一半换成一份结构化的摘要（这里），把边界交给宿主记下：只交回一份短的历史、不记边界的话，下一轮从会话重建历史，
- *      每条原文都回来了，又从头压一遍——对话永远不会比会话小，会话只会长。
+ *   1. 过大的工具结果在第一次发出前剪成头尾（`prune.ts` 的 `freshView`，在 model.context 里）。只看这条结果本身，每次剪出同一份，
+ *      已经发出去的前缀从不改写。
+ *   2. 到线就把较早的那段换成一份结构化的摘要（这里），把边界交给宿主记下：只交回一份短的历史、不记边界的话，下一轮从会话重建历史，
+ *      每条原文都回来了，又从头压一遍——对话永远不会比会话小，会话只会长。前缀只在这一次重写，所以被覆盖的、看过的大结果也在这时
+ *      一起剪（`stale-results.ts`）。
  *   3. `recall` 工具按需把原文读回来：摘要过的东西没丢，只是移出了窗口，等人问起。
  *
  * 第三样让第二样可以压得狠：摘要生来有损，旁边有一份搜得到的转录就不是。
@@ -24,12 +25,12 @@ import { updatesPlan, withoutStalePlan } from "./task-context.ts";
 
 type Via = "fork" | "independent" | "fallback" | "dropped";
 
-/** 压完的历史：`kept` 是末尾原样（或剪过）留下的条数，不给是只剪了工具结果、边界没动。 */
+/** 压完的历史：`kept` 是末尾原样（或剪过）留下的条数。 */
 interface Compacted {
 	messages: Message[];
 	summary: string;
-	kept?: number;
-	via?: Via;
+	kept: number;
+	via: Via;
 }
 
 export interface CompactDeps {
@@ -97,19 +98,9 @@ function replyOrigin(history: readonly Message[]): ReplyOrigin | undefined {
 
 /** 压完的历史换成宿主要的结论：边界、头，和留下的那截里剪过的工具结果。 */
 function summaryOf(history: readonly Message[], result: Compacted): CompactSummary {
-	if (result.kept === undefined) {
-		const views = viewsOf(history, result.messages, 0);
-		return views.length > 0 ? { pruneOnly: true, views } : undefined;
-	}
 	const keep = history.length - result.kept;
 	const head = result.messages.slice(0, result.messages.length - result.kept);
-	return {
-		keep,
-		summary: result.summary,
-		head,
-		...(result.via ? { via: result.via } : {}),
-		views: viewsOf(history, result.messages.slice(head.length), keep),
-	};
+	return { keep, summary: result.summary, head, via: result.via, views: viewsOf(history, result.messages.slice(head.length), keep) };
 }
 
 /** `tail` 和 `history` 从 `from` 起一一对应；文字和原来不一样的工具结果记成剪枝视图。 */
@@ -170,13 +161,14 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	 * 八十几 k，永远到不了线。没量过（第一条回复落地前、刚压完）才退回估算，那时宿主连系统提示词和工具表一起估。
 	 */
 	const measured = request.usage;
-	const originalMessages = messages;
 	const used = measured.tokens;
 	const budget = compactionBudget(model, overhead, force ? Math.max(0, used - overhead) : undefined);
 	if (!force && used < budget.trigger) return null;
 
 	/*
-	 * 先剪大的工具结果，看看够不够：剪是字符串活，摘要是一次慢、计费、偏偏在窗口紧时最容易失败的模型调用。
+	 * 剪工具结果只为摘要服务，不单独当一次压缩：剪的多是历史靠前的结果，改写从那里起整段缓存作废，剪完离线又近，过几轮再越线、
+	 * 再整段作废一次，最后照样要摘要（真实会话里见过同一会话连剪两次、每次重读十几万 token，之后还是摘要了）。到线就摘要，前缀只在
+	 * 这一次重写；剪过的留在留下的那截里（随边界一起交回），也让独立摘要请求小一些。
 	 *
 	 * 什么都没有的结果最先清，不碰有内容的：没搜到、空目录占着地方，又不回答任何以后会再问的问题。被后来的观察覆盖的结果也只在
 	 * 这里清：会话中途不改写已经发出去的内容，压缩本来就要重写前缀。
@@ -192,25 +184,10 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	const unseenPart = stale.slice(unseenFrom);
 	const seenPruned = pruneToolResults(seenPart, undefined, artifacts);
 	const unseenPruned = pruneToolResults(unseenPart, FRESH_RESULT_MAX_CHARS, artifacts);
-	const pruned = seenPruned === seenPart && unseenPruned === unseenPart ? stale : [...seenPruned, ...unseenPruned];
-	if (pruned !== messages) {
-		/*
-		 * 用量过的那份校准估算，再把同一个校准用到剪过的那份上。拿实测除以剪过那份的估算，任何剪法算出来都还是 `used`，有实测时
-		 * 这条路永远走不到。`messages` 代表上一次发出去的那份：宿主给的历史已经用上了记下的剪枝视图，剪过的再剪不会再省一次。
-		 */
-		const sent = estimate.messages(messages);
-		const calibration = measured.measured && sent > 0 ? Math.max(0, used - overhead) / sent : 1;
-		const next = estimate.messages(pruned) * calibration;
-		/*
-		 * 要越过线一段余量：乘积两边都是估算，往乐观那边错就会发出一轮放不下的请求，回来一样大、再没什么可剪。点名要压
-		 * （`/compact`）时不走这条近路：剪工具输出不动对话本身，而那正是敲 `/compact` 的人想收起来的。
-		 */
-		if (!force && next < budget.settled) return { messages: pruned, summary: "" };
-		messages = pruned;
-	}
+	messages = seenPruned === seenPart && unseenPruned === unseenPart ? stale : [...seenPruned, ...unseenPruned];
 
-	// 短到没有值得摘要的过去，多大都一样。
-	if (messages.length <= KEEP_MIN + 2) return pruned !== originalMessages ? { messages: pruned, summary: "" } : null;
+	// 短到没有值得摘要的过去，多大都一样：每条结果第一次发出前已经剪过（`freshView`），这里不再单独改写前缀。
+	if (messages.length <= KEEP_MIN + 2) return null;
 
 	/*
 	 * 估算按它整体错了多少校正，切点才落在该落的地方。触发线用实测，但下面的预算是一条一条花的，服务商没给每条的数。校正只作用于

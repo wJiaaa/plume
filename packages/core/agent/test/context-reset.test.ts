@@ -195,21 +195,9 @@ it("摘要保存后刷新记忆和循环状态", async () => {
 	expect(test.save.mock.invocationCallOrder[0]).toBeLessThan(test.reset.mock.invocationCallOrder[0]!);
 });
 
-it("实际剪枝刷新，重复同一份视图不再刷新", async () => {
-	const test = await compactor({ pruneOnly: true, views: [{ toolCallId: "call", texts: ["节选"] }] });
-	expect(await test.run()).toMatchObject({ compacted: true, outcome: { code: "prune-only" } });
-	expect(test.record.views).toEqual({ call: ["节选"] });
-	expect(test.reset).toHaveBeenCalledExactlyOnceWith("s1");
-	expect(test.onCompacted).toHaveBeenCalledExactlyOnceWith(test.session);
-	await test.run();
-	expect(test.reset).toHaveBeenCalledTimes(1);
-});
-
 it.each([
 	["无动作", undefined],
-	["空剪枝", { pruneOnly: true, views: [] }],
 	["无效边界", { keep: 3, summary: "摘要", head: [{ role: "user", content: [{ type: "text", text: "摘要" }], timestamp: 0 }] }],
-	["剪枝不存在的结果", { pruneOnly: true, views: [{ toolCallId: "missing", texts: ["节选"] }] }],
 	["插件失败", new Error("失败")],
 ] as const)("%s 不刷新上下文", async (_name, result) => {
 	const test = await compactor(result as CompactSummary | Error);

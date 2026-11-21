@@ -506,9 +506,9 @@ export interface SessionView {
 
 /**
  * `/compact` 和自动压缩的结果。`done` 压完了；`too-short` 对话太短；`already-tight` 已经够紧凑、压了也不会更小；
- * `prune-only` 只剪了几段过长的工具输出、没有要摘要的；`cancelled` 被停下；`failed` 出错（`error` 是原因）。
+ * `cancelled` 被停下；`failed` 出错（`error` 是原因）。
  */
-export type CompactionCode = "done" | "too-short" | "already-tight" | "prune-only" | "cancelled" | "failed";
+export type CompactionCode = "done" | "too-short" | "already-tight" | "cancelled" | "failed";
 
 /** 转录里的一次压缩：画在开始时会话的第 `at` 条消息之前（数到末尾的画在最后）。存在会话库里，撤回截掉它时一起去掉。 */
 export interface CompactionRun {

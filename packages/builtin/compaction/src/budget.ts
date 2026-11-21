@@ -1,5 +1,5 @@
 /**
- * 压缩用到的每一条线，按窗口和开销在这一处算：触发线、只剪枝够不够的余量、保留尾部、尾部删到哪、按条丢弃落到哪、摘要回复留多少。
+ * 压缩用到的每一条线，按窗口和开销在这一处算：触发线、压完要落到哪、保留尾部、按条丢弃落到哪、摘要回复留多少。
  * 散在几处各算各的，同一个「8000 / 四分之一窗口」会写好几遍，单位还不统一。`CompactionBudget` 里除 `trigger` 以外都是历史本身的
  * token，开销（系统提示词和工具表）已扣掉。
  *
@@ -20,10 +20,10 @@ export interface BudgetModel {
  */
 const COMPACTION_RATIO = 0.9;
 /**
- * 压完要落到触发线以下多少才算压完：只剪枝落到这里就不摘要，摘要旁的尾部也只删到这里。比的是两个估算的乘积，错的方向是静悄悄的——
- * 以为放得下、其实放不下，下一轮一点没变小。
+ * 压完要落到触发线以下多少才算压完：摘要旁的尾部删到这里为止。比的是两个估算的乘积，错的方向是静悄悄的——以为放得下、其实放不下，
+ * 下一轮一点没变小。
  */
-const PRUNE_MARGIN = 0.1;
+const SETTLE_MARGIN = 0.1;
 /**
  * 原样保留的尾部最多占窗口多少。按大小而不是条数：六条短回复是很小的尾巴，一个工具结果是一整个文件时就很大。它决定最近的工作能不能
  * 原样留下：正在改的文件得完整留着，不然下一轮又去读；更早的能经 `recall` 找回来。
@@ -84,7 +84,7 @@ function compactionWindow(model: Pick<BudgetModel, "contextWindow" | "tierLines"
 export interface CompactionBudget {
 	/** 整份请求（开销加历史）到这里就压。 */
 	trigger: number;
-	/** 历史落到这以下算压完了：只剪枝落到这里就不摘要，摘要旁的尾部也只删到这里。 */
+	/** 历史落到这以下算压完了：摘要旁的尾部删到这里为止。 */
 	settled: number;
 	/** 历史最多能占多少还不越线。光开销就占满触发线时不大于 0。 */
 	room: number;
@@ -103,7 +103,7 @@ export function compactionBudget(model: Pick<BudgetModel, "contextWindow" | "tie
 	const keep = contextWindow * KEEP_BUDGET;
 	return {
 		trigger,
-		settled: Math.max(0, trigger - contextWindow * PRUNE_MARGIN - overhead),
+		settled: Math.max(0, trigger - contextWindow * SETTLE_MARGIN - overhead),
 		room: trigger - overhead,
 		keep: retiring === undefined ? keep : Math.min(keep, retiring * KEEP_BUDGET),
 		dropped: Math.max(0, contextWindow * SAFE_AFTER - overhead),

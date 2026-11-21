@@ -74,9 +74,9 @@ function run(at: number, extra: Partial<CompactionRun> = {}): CompactionRun {
 	return { id: `r${at}`, at, startedAt: 0, status: "done", phase: "summarizing", retries: 0, code: "done", ...extra };
 }
 
-test("压缩落在转录第几条：只认真改写了历史的（换成摘要、只剪了工具结果），取最后那次", () => {
+test("压缩落在转录第几条：只认真改写了历史的（换成摘要），取最后那次", () => {
 	assert.equal(rewrittenFrom([]), 0);
-	assert.equal(rewrittenFrom([run(4), run(9, { code: "prune-only", status: "skipped" })]), 9);
+	assert.equal(rewrittenFrom([run(4), run(9)]), 9);
 	assert.equal(rewrittenFrom([run(4), run(9, { status: "failed", code: "failed" }), run(12, { status: "running", code: undefined })]), 4);
 });
 

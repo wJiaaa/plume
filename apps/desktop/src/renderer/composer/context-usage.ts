@@ -33,11 +33,11 @@ export function contextUsed(messages: readonly Message[], from = 0): number | nu
 }
 
 /**
- * 最近一次改写了发给模型的历史的压缩（换成摘要，或只剪了工具结果）落在转录的第几条：`CompactionRun.at`。这之前的回复量的是改写前的
+ * 最近一次改写了发给模型的历史的压缩（换成摘要）落在转录的第几条：`CompactionRun.at`。这之前的回复量的是改写前的
  * 历史，和 agent 进程算有多满时的 `staleAt` 是同一条线。没有时是 0。
  */
 export function rewrittenFrom(runs: readonly CompactionRun[]): number {
-	return runs.reduce((from, run) => (run.code === "done" || run.code === "prune-only" ? Math.max(from, run.at) : from), 0);
+	return runs.reduce((from, run) => (run.code === "done" ? Math.max(from, run.at) : from), 0);
 }
 
 export function contextReading(messages: readonly Message[], limit: number, from = 0): ContextReading | null {

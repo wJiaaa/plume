@@ -508,7 +508,7 @@ ctx.hook("prompt.submit", async (input, next) => {
 | `model` | `{ id, name, contextWindow, maxOutputTokens, tierLines? }`：这个会话现在用的模型；`tierLines` 是价格分档线（输入越过就整次按高一档计），从低到高 |
 | `history` | 现在发给模型的历史（插件改之前的那份），副本。压缩过的，前面是上一次换上的那几条（摘要和一句确认，或按条丢弃时的一条说明），之后是边界以后的原文；剪过的工具结果是剪过的那份 |
 | `previous` | 上一次压缩的 `{ head }`：上一次换上的那几条占了 `history` 开头几条，新的 `keep` 要大于它；没压缩过没有。上一份摘要就在 `history` 开头 |
-| `rewrittenAt` | 历史上一次被改写（压缩、只剪枝）的时刻，之前（含）落定的回复的用量不能拿来量现在有多满；没改写过没有 |
+| `rewrittenAt` | 历史上一次被改写（压缩）的时刻，之前（含）落定的回复的用量不能拿来量现在有多满；没改写过没有 |
 | `request` | 这一次真正要发出去的 `{ systemPrompt, messages, tools }`；只读，别改 |
 | `usage` | `request` 有多满 `{ tokens, measured }`，本体按和上下文用量圆环同一套算法算好：最近一条落定回复服务商量的数加上它之后消息的估算（`rewrittenAt` 之前落定的不算）；没有可用的时 `measured` 为假，`tokens` 是整份请求（系统提示词、工具表、消息）的估算。判断要不要压用它，不要自己量 |
 | `estimate` | 本体估 token 的那一份：`messages(list)`、`text(s)`、`tools(list)`，按字数折算、按文字分别计（ASCII 约 3.5 个字符一个，中文等非 ASCII 字符一个一个，图片按定数），满是数字的命令输出会低估；不取整，逐条估的能直接相加。决定从哪切、摘要请求放不放得下时用它，可以拿 `usage` 按比例校准，不要自己再写一份 |
@@ -519,9 +519,9 @@ ctx.hook("prompt.submit", async (input, next) => {
 | `signal` | 用户停止这一轮时中止 |
 | `progress(event)` | 走到哪一步了（定下要压、开始写摘要时先报一次 `summarizing`，界面显示「正在生成摘要」）：`{ phase: "summarizing" }`、`{ phase: "retrying", delayMs }`、`{ phase: "fallback" }`（摘要没拿到、本地整理），转录里那一行跟着变 |
 
-输出 `{ keep, summary, head, via?, views? }`、`{ pruneOnly: true, views }` 或 `undefined`（不压）。`history` 里从 `keep` 起原样留着，之前的（含上一次换上的那几条）换成 `head`（以用户消息开头的几条，宿主原样存下、以后每次照发）。`keep` 要大于 `previous.head`、在最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary` 只在 `via: "dropped"`（按条丢弃）时可以是空串，不合规矩的当作压缩失败。`via` 说摘要怎么来的（`fork`、`independent`、`fallback`、`dropped`）。`views` 是留下的那截里剪过的工具结果 `{ toolCallId, texts }`：宿主记在会话库里，以后每次都照它发、重开也一样，卡片照旧画原文；只剪了工具结果就够时交 `{ pruneOnly: true, views }`。会话里的消息一条不动，宿主记下边界、头和视图，之后每次请求都按它拼历史。
+输出 `{ keep, summary, head, via?, views? }` 或 `undefined`（不压）。`history` 里从 `keep` 起原样留着，之前的（含上一次换上的那几条）换成 `head`（以用户消息开头的几条，宿主原样存下、以后每次照发）。`keep` 要大于 `previous.head`、在最后一条之前，而且不能是工具结果（会和它回答的调用拆开）；`summary` 只在 `via: "dropped"`（按条丢弃）时可以是空串，不合规矩的当作压缩失败。`via` 说摘要怎么来的（`fork`、`independent`、`fallback`、`dropped`）。`views` 是留下的那截里剪过的工具结果 `{ toolCallId, texts }`：宿主记在会话库里，以后每次都照它发、重开也一样，卡片照旧画原文。剪枝只随一次压缩交：会话中途单独改写已经发出去的结果，缓存从那条起整段作废。会话里的消息一条不动，宿主记下边界、头和视图，之后每次请求都按它拼历史。
 
-最里层是 `undefined`。内置插件 plume.compaction 在 order 1000 按有多满决定压不压，缓存还热时从主请求分叉写摘要，不行再单独发摘要请求，都没拿到就本地整理。要换成自己的压法，在外层（默认 order 0）不调 `next`；在外层改里层的结论时先看是不是 `pruneOnly`。这一层抛错时转录里那一行写「压缩失败」，这一步照常发全文。
+最里层是 `undefined`。内置插件 plume.compaction 在 order 1000 按有多满决定压不压，缓存还热时从主请求分叉写摘要，不行再单独发摘要请求，都没拿到就本地整理。要换成自己的压法，在外层（默认 order 0）不调 `next`；在外层改里层的结论时先看它是不是 `undefined`。这一层抛错时转录里那一行写「压缩失败」，这一步照常发全文。
 
 ```ts
 // 只留最近 20 条，前面的让模型写一段话的摘要。

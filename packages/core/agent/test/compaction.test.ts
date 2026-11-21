@@ -1,5 +1,5 @@
 /**
- * 压缩经宿主走一遍：从主请求分叉（前缀核对、退回独立请求）、一轮收尾后的压缩、`/compact`、剪枝视图重开以后照发、
+ * 压缩经宿主走一遍：从主请求分叉（前缀核对、退回独立请求）、一轮收尾后的压缩、`/compact`、随压缩记下的剪枝视图重开以后照发、
  * 转录里那一行压缩的收场。用产品带的内置插件和假模型，量的是线上真正发出去的请求体。
  */
 
@@ -274,18 +274,21 @@ it("压缩剪过的工具结果记在会话库里：下一轮、重开应用以�
 			});
 		},
 	};
-	const calls = [1, 2, 3, 4].map((n) => ({ id: `b${n}`, name: "big", args: { n } }));
+	const call = (n: number) => ({ id: `b${n}`, name: "big", args: { n } });
 	// 只在第一轮收尾时收窄窗口：之后的几轮照常，不再压。
-	const { service, session, ask } = await start([big, squeezeWhenIdle(1)], [{ toolCalls: calls }, { text: "找到了" }, { text: "好" }, { text: "又好" }]);
+	const { service, session, ask } = await start(
+		[big, squeezeWhenIdle(1)],
+		[{ toolCalls: [call(1)] }, { toolCalls: [call(2), call(3)] }, { text: "找到了" }, { text: "FORK_SUMMARY" }, { text: "好" }, { text: "又好" }],
+	);
 	await ask(session.id, "找一下");
-	// 剪掉四个大结果就够了：不要摘要，只记下剪过的样子。
-	expect(model!.requests).toHaveLength(2);
-	expect((await service.getSession(session.id)).compactionRuns).toEqual([]);
+	// 收尾时分叉写了摘要：b1 收进摘要，留下的那截里两个看过的大结果剪成头尾，随边界一起记下。
+	expect(model!.requests).toHaveLength(4);
+	expect((await service.getSession(session.id)).compactionRuns).toMatchObject([{ status: "done", code: "done", via: "fork" }]);
 	const stored = JSON.parse(
 		new DatabaseSync(join(dir, "data/sessions/sessions.db"), { readOnly: true }).prepare("SELECT context FROM sessions WHERE id = ?").get(session.id)
 			?.context as string,
 	) as { views?: Record<string, string[]> };
-	expect(Object.keys(stored.views ?? {}).sort()).toEqual(["b1", "b2", "b3", "b4"]);
+	expect(Object.keys(stored.views ?? {}).sort()).toEqual(["b2", "b3"]);
 
 	await ask(session.id, "然后呢");
 	const results = (request: Record<string, unknown> | undefined) =>
@@ -294,7 +297,7 @@ it("压缩剪过的工具结果记在会话库里：下一轮、重开应用以�
 				.flatMap((message) => (Array.isArray(message.content) ? message.content : []))
 				.filter((block: { type?: string }) => block.type === "tool_result"),
 		);
-	const before = results(model!.requests[2]);
+	const before = results(model!.requests[4]);
 	expect(JSON.stringify(before)).toContain("characters omitted by Plume to fit the context window");
 	expect(JSON.stringify(before)).toContain("artifact://");
 	// 会话里存的仍是原文。
@@ -306,7 +309,7 @@ it("压缩剪过的工具结果记在会话库里：下一轮、重开应用以�
 	watching = new AbortController();
 	const reopened = await boot([big, squeezeWhenIdle(0)]);
 	await reopened.ask(session.id, "再来");
-	expect(results(model!.requests[3])).toEqual(before);
+	expect(results(model!.requests[5])).toEqual(before);
 });
 
 it("重开以后还标着「进行中」的那一行压缩说成被中断，上一次的边界不动", async () => {

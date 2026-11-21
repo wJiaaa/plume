@@ -1,5 +1,5 @@
 /**
- * 压缩真正要守住的两样预算：摘要请求能有多重，剪枝要省多少才跳过摘要。
+ * 压缩真正要守住的预算：摘要请求能有多重，压完落到哪。
  */
 
 import { expect, it } from "vitest";
@@ -80,30 +80,18 @@ it("放不下的请求不发：手动压缩说清原因", async () => {
 	expect(requests).toHaveLength(0);
 });
 
-it("剪掉上一次整份发出去的结果、按实测折算后放得下时，不要摘要", async () => {
+it("剪完就放得下也照样摘要：前缀只在摘要这一次重写；独立请求里的工具结果只留头尾", async () => {
 	const history: Message[] = [user("找一下")];
 	for (let i = 0; i < 3; i++)
 		history.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
 	history.push(say("完成", estimate.messages(history)));
 	const { requests, models } = recorder();
 	const result = await compactIfNeeded(request(history, models));
-	expect(result).toBeTruthy();
-	expect(requests).toHaveLength(0);
-	expect(result!.kept).toBeUndefined();
-	expect(result!.messages).toHaveLength(history.length);
-	expect(estimate.messages(result!.messages)).toBeLessThan(10_000 * 0.7);
-});
-
-it("实测比估算大、剪完落不到余量以下时照样摘要", async () => {
-	const history: Message[] = [user("找一下")];
-	for (let i = 0; i < 3; i++)
-		history.push(reply([{ type: "toolCall", id: `g${i}`, name: "grep", arguments: { pattern: `p${i}` } }]), toolResult(`g${i}`, `${i}`.repeat(12_000)));
-	for (let i = 0; i < 6; i++) history.push(say(`说明 ${"z".repeat(1200)}`), user(`继续 ${"q".repeat(1200)}`));
-	history.push(say("完成", estimate.messages(history) * 2));
-	const { requests, models } = recorder();
-	const result = await compactIfNeeded(request(history, models));
 	expect(result?.kept).toBeDefined();
 	expect(requests.length).toBeGreaterThanOrEqual(1);
+	const results = requests.flatMap((sent) => sent.messages).filter((message) => message.role === "toolResult");
+	expect(results.length).toBeGreaterThan(0);
+	for (const message of results) expect(textOf(message).length).toBeLessThan(2100);
 });
 
 it("摘要请求要的回复就是发前核对给它留的位置", async () => {

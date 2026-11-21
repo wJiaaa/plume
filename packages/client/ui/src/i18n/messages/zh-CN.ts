@@ -877,7 +877,6 @@ export const zhCN = {
 	"compactNote.done": "已压缩上下文：{before} 条消息整理为 {after} 条，完整对话仍可查看。",
 	"compactNote.too-short": "对话还太短，没什么可压缩的。",
 	"compactNote.already-tight": "已经够紧凑了，这次压缩不会更小。",
-	"compactNote.prune-only": "只裁掉了几段过长的工具输出，没有需要总结的历史。",
 	"compactNote.cancelled": "压缩已取消，原上下文保持不变。",
 	"compactNote.failed": "压缩失败：{error}",
 	"composer.queueLabel": "排队中的消息",

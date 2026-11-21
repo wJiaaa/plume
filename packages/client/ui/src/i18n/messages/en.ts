@@ -912,7 +912,6 @@ export const en = {
 	"compactNote.done": "Compacted. Messages: {before} → {after}. The full conversation is still there to read.",
 	"compactNote.too-short": "The conversation is too short to compact.",
 	"compactNote.already-tight": "Already compact; another pass wouldn't make it smaller.",
-	"compactNote.prune-only": "Only trimmed a few oversized tool outputs; there was no history to summarize.",
 	"compactNote.cancelled": "Compaction cancelled. The context is unchanged.",
 	"compactNote.failed": "Compaction failed: {error}",
 	"composer.queueLabel": "Queued messages",
