@@ -1512,8 +1512,12 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await checkWelcomeHead("浅色欢迎页");
 		await checkDraftChips("浅色");
 		// 用真实 CSS 动画的时间轴采样，不用静态截图代替中间帧验证。
+		// 入场动画只填充开始前的错峰延迟（backwards），播完就不再生效、不在 getAnimations() 里；上面等它落位时已经播完，先在原地重启一遍再采样。
 		const reveal = await page(`(() => {
 			const chips = [...document.querySelectorAll('.plume-draft-chip')];
+			chips.forEach(chip => { chip.style.animationName = 'none'; });
+			document.body.offsetWidth;
+			chips.forEach(chip => { chip.style.animationName = ''; });
 			const animations = chips.map(chip => chip.getAnimations().find(animation => animation.animationName === 'plume-draft-chip-in'));
 			if (animations.length !== 4 || animations.some(animation => !animation)) return { error: '缺少建议入场动画' };
 			const timing = animations.map(animation => animation.effect.getTiming());
@@ -2089,7 +2093,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		};
 		await keepAwake(true);
 		await keepAwake(false);
+		// 设置是浮层，关掉回到打开它的地方：这里是市场详情。后面的外观要在对话里看背景图和侧栏，从活动栏回到对话。
 		await closeSettings(page);
+		await until(`document.querySelector('[data-plugin-detail="usage"]') !== null`, "关掉设置回到使用统计的详情");
+		await click("[data-nav=chat]");
+		await until(`document.querySelector('[data-screen=chat]') !== null && document.querySelector('[data-plume-row]') !== null`, "从市场回到对话");
 
 		// 7. 外观：主题和会话背景
 		await click("[data-nav=settings]");
