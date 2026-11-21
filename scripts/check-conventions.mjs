@@ -11,6 +11,7 @@
  *    进仓库的文档、注释和文案里。CHANGELOG.md 抄的是已经发出去的提交信息，不查。
  * 4. 核心源文件行数：packages/core/{agent,loop,sandbox,workspace}/src 下的 TypeScript 文件每个最多 800 行；
  *    packages/core/llm 自成一体，不查。现有超限文件只在下面的 SOURCE_LINE_EXCEPTIONS 登记，每条带原因。
+ *    例外表里的文件降到上限以内或已经不在了，也报出来，提醒把它删掉。
  *
  * 只看进仓库的文件（`git ls-files`，加上还没 add 的新文件），构建产物和被忽略的拷贝不算。
  */
@@ -108,12 +109,15 @@ const SOURCE_LINE_LIMIT = 800;
 const SOURCE_LINE_EXCEPTIONS = new Map([["packages/core/agent/src/host.ts", "插件宿主，单独治理，不在 agent.ts 这次重构范围"]]);
 const coreSources = files.filter((file) => /^packages\/core\/(?:agent|loop|sandbox|workspace)\/src\/.*\.ts$/.test(file));
 for (const file of coreSources) {
-	if (SOURCE_LINE_EXCEPTIONS.has(file)) continue;
 	const text = read(file);
 	if (text === undefined) continue;
 	const lineCount = text === "" ? 0 : text.split(/\r\n|\n|\r/).length - (/(?:\r\n|\n|\r)$/.test(text) ? 1 : 0);
-	if (lineCount > SOURCE_LINE_LIMIT) report(file, 0, `实际 ${lineCount} 行，超过上限 ${SOURCE_LINE_LIMIT}`);
+	// 例外只给仍超限的文件：降到上限以内就该从例外表删掉，免得它再长回去也没人拦。
+	if (SOURCE_LINE_EXCEPTIONS.has(file)) {
+		if (lineCount <= SOURCE_LINE_LIMIT) report(file, 0, `只有 ${lineCount} 行，不再超过上限 ${SOURCE_LINE_LIMIT}，从 SOURCE_LINE_EXCEPTIONS 删掉`);
+	} else if (lineCount > SOURCE_LINE_LIMIT) report(file, 0, `实际 ${lineCount} 行，超过上限 ${SOURCE_LINE_LIMIT}`);
 }
+for (const file of SOURCE_LINE_EXCEPTIONS.keys()) if (!coreSources.includes(file)) report(file, 0, `文件已经不在了，从 SOURCE_LINE_EXCEPTIONS 删掉`);
 
 if (problems.length > 0) {
 	console.error(`约定检查没过：\n${problems.join("\n")}`);
