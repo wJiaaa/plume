@@ -657,7 +657,7 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的�
 ```
 
 - 返回 `{ session, done, idle }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）。
-- **交回来处**：`ctx.sessions.reportBack(sessionId, text, { delivery, frame?, wake? })` 把开出来的会话一轮的结果作为一条运行时送达交回它的 `spawnedFrom` 那个会话（`delivery` 和 `report` 的同一个形状，宿主填上它的 id，默认画成「来自关联会话」一行、点了过去；`frame` 同 `report`，同一次送达里你交的几份合成一段）。每一轮都可以交，重启以后也能交：认的是 `spawnedFrom`，不是句柄；要知道它哪一轮收场了，声明 `observe: "all"` 看 `turnEnd`。`wake: true` 请宿主叫醒来处：只在来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑（还有在跑的就等最后一个停下再一起送）、接连被叫起没到上限时叫醒，否则留到来处下一轮开头读；不给就不叫醒。来处删了、归档了、正在退出时返回 false；`spawnedFrom.toolCallId` 不是你的工具在来处的一次调用、或你的插件停用了时抛错。
+- **交回来处**：`ctx.sessions.reportBack(sessionId, text, { delivery, frame?, wake? })` 把开出来的会话一轮的结果作为一条运行时送达交回它的 `spawnedFrom` 那个会话（`delivery` 和 `report` 的同一个形状，宿主填上它的 id，默认画成「来自关联会话」一行、点了过去；`frame` 同 `report`，同一次送达里你交的几份合成一段）。每一轮都可以交，重启以后也能交：认的是 `spawnedFrom`，不是句柄；要知道它哪一轮收场了，声明 `observe: "all"` 看 `turnEnd`。`wake: true` 请宿主叫醒来处：只在来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑（还有在跑的就等最后一个停下再一起送，最多等一分钟，到点先送）、接连被叫起没到上限时叫醒，否则留到来处下一轮开头读；不给就不叫醒。来处删了、归档了、正在退出时返回 false；`spawnedFrom.toolCallId` 不是你的工具在来处的一次调用、或你的插件停用了时抛错。
 - `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`。
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」；拿着管理授权时能 `stop`，见「管理会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。

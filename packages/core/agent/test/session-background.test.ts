@@ -289,6 +289,66 @@ it("一轮收场时观察者读到的摘要是此刻的：送达叫起的那一�
 	await vi.waitFor(() => expect(seen).toEqual([true, false]), { timeout: 2_000, interval: 10 });
 });
 
+it("派出去还没回来时归档：后台运行停掉，结果交不回来，归档的会话不再开一轮", async () => {
+	let dispatched!: SessionRun;
+	const { owner, parent, service, done } = await open(
+		[{ toolCalls: [{ id: "call_dispatch", name: "dispatch", args: {} }] }, { text: "等待子任务" }, { text: "子任务完成" }, { text: "不该出现" }],
+		(ctx) => {
+			ctx.tools.register({
+				name: "dispatch",
+				description: "后台派发",
+				parameters: { type: "object", properties: {} },
+				async execute(_args, run) {
+					const child = await ctx.sessions.create({ parentId: run.sessionId });
+					dispatched = await ctx.sessions.start(child.id, "CHILD_TASK");
+					return { output: "已派发" };
+				},
+			});
+		},
+	);
+	service.send(parent.id, { content: [{ type: "text", text: "开始" }] });
+	await done(parent.id, 2);
+	await service.setSessionArchived(parent.id, true);
+	expect(await owner.report(dispatched.id, "CHILD_RESULT")).toBe(false);
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	const view = await service.getSession(parent.id);
+	expect(view.messages.filter((message) => message.role === "assistant")).toHaveLength(2);
+	expect(view.summary.background).toBeUndefined();
+});
+
+it("归档时还在跑的一轮照旧做完；它在归档以后派出去的事回来了，也不再叫起归档的会话", async () => {
+	const gate = Promise.withResolvers<void>();
+	let dispatched!: SessionRun;
+	const { owner, parent, service, done } = await open(
+		[{ toolCalls: [{ id: "call_dispatch", name: "dispatch", args: {} }] }, { text: "派出去了" }, { text: "子任务完成" }, { text: "不该出现" }],
+		(ctx) => {
+			ctx.tools.register({
+				name: "dispatch",
+				description: "等放行再后台派发",
+				parameters: { type: "object", properties: {} },
+				async execute(_args, run) {
+					await gate.promise;
+					const child = await ctx.sessions.create({ parentId: run.sessionId });
+					dispatched = await ctx.sessions.start(child.id, "CHILD_TASK");
+					return { output: "已派发" };
+				},
+			});
+		},
+	);
+	service.send(parent.id, { content: [{ type: "text", text: "开始" }] });
+	await vi.waitFor(async () => expect((await service.getSession(parent.id)).summary.running).toBe(true));
+	await service.setSessionArchived(parent.id, true);
+	gate.resolve();
+	await done(parent.id, 2);
+	expect(words((await service.getSession(parent.id)).messages.at(-1)!)).toBe("派出去了");
+	await owner.wait(dispatched.id);
+	await owner.report(dispatched.id, "CHILD_RESULT");
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	const view = await service.getSession(parent.id);
+	expect(view.messages.filter((message) => message.role === "assistant")).toHaveLength(2);
+	expect(view.summary.background).toBeUndefined();
+});
+
 it("同子会话续跑用新 runId，旧运行的结束原因和送达不读取最新 stop", async () => {
 	const entered = Promise.withResolvers<void>();
 	const { owner, other, parent, service, done } = await open([{ text: "第一轮完成" }, { text: "父结论" }], (ctx) => {

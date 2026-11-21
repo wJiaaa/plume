@@ -72,6 +72,8 @@ export type ReadyKind = "other" | "letter" | "spawned";
 interface Batch {
 	reports: Pending[];
 	ready: boolean;
+	/** 攒好（`ready`）的时刻：全是交回的一批在等兄弟会话停下，最多等到这之后 `SPAWNED_WAIT_MS`（见 agent 的 `wakeReports`）。 */
+	readyAt?: number;
 	timer: ReturnType<typeof setTimeout>;
 }
 
@@ -210,6 +212,7 @@ export class BackgroundRuns {
 			ready: false,
 			timer: setTimeout(() => {
 				batch.ready = true;
+				batch.readyAt = Date.now();
 				this.ready(parentId);
 			}, GATHER_MS),
 		};
@@ -233,6 +236,12 @@ export class BackgroundRuns {
 
 	hasReady(parentId: string): boolean {
 		return this.batches.get(parentId)?.ready === true;
+	}
+
+	/** 攒好的这一批是什么时候攒好的；没有攒好的时是 undefined。 */
+	readyAt(parentId: string): number | undefined {
+		const batch = this.batches.get(parentId);
+		return batch?.ready ? batch.readyAt : undefined;
 	}
 
 	/** 攒好的这一批是什么，见 `ReadyKind`；没有攒好的、或者攒好的都作废了时是 undefined。 */

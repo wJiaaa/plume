@@ -252,6 +252,49 @@ it("从来处开出来的会话还有在跑的：先不叫醒，最后一个停�
 	expect((await service.getSession(first.session.id)).summary.spawnedFrom).toEqual({ sessionId: source.id, toolCallId: "call_1", name: "jia" });
 });
 
+it("兄弟会话跑得久：先做完的那份最多等一分钟，到点还有在跑的也先送，后做完的另送一次", async () => {
+	let gate!: () => void;
+	const opened = new Promise<void>((resolve) => (gate = resolve));
+	const { service, sessions, source } = await withSuggestion(
+		(last) => {
+			if (last.includes("做甲")) return { text: "甲做完了" };
+			if (last.includes("做乙")) return { toolCalls: [{ id: "call_wait", name: "wait", args: {} }] };
+			if (last.includes("等好了")) return { text: "乙做完了" };
+			return { text: "收到" };
+		},
+		(ctx) =>
+			ctx.tools.register({
+				name: "wait",
+				description: "等",
+				parameters: { type: "object", properties: {} },
+				execute: async () => {
+					await opened;
+					return { output: "等好了" };
+				},
+			}),
+	);
+	const first = await sessions().launch({ cwd: dir, message: "做甲", spawnedFrom: { sessionId: source.id, toolCallId: "call_1", name: "jia" } });
+	const second = await sessions().launch({ cwd: dir, message: "做乙", spawnedFrom: { sessionId: source.id, toolCallId: "call_1", name: "yi" } });
+	await first.done;
+	// 假计时器跟着真时间走，网络和假模型照常；要跳过的只有那一分钟。
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], shouldAdvanceTime: true });
+	try {
+		sessions().reportBack(first.session.id, "甲的汇报", { delivery: { ...line, id: "a" }, wake: true });
+		await new Promise((resolve) => setTimeout(resolve, 1_200));
+		expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+		await vi.advanceTimersByTimeAsync(60_000);
+		await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant"]);
+		expect((await service.getSession(source.id)).messages[4]).toMatchObject({ delivery: [{ id: "a" }] });
+	} finally {
+		vi.useRealTimers();
+	}
+	gate();
+	await second.done;
+	sessions().reportBack(second.session.id, "乙的汇报", { delivery: { ...line, id: "b" }, wake: true });
+	await settled(service, source.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant", "delivery", "assistant"]);
+	expect((await service.getSession(source.id)).messages[6]).toMatchObject({ delivery: [{ id: "b" }] });
+});
+
 it("fork 带着来处在那次调用之前的记录开；没有调用、短名不对时抛错", async () => {
 	const { service, sessions, source } = await withSuggestion([{ text: "接着做了" }]);
 	const forked = await sessions().launch({ cwd: dir, message: "接着做剩下的", fork: true, spawnedFrom: { sessionId: source.id, toolCallId: "call_1" } });

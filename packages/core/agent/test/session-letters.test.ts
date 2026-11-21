@@ -214,6 +214,41 @@ it("收件方删掉了：攒着的信是 closed；钩子拦下送达时是 dropp
 	expect((await service.getSession(other.id)).messages).toEqual([]);
 });
 
+it("收件方归档了：攒着的、留着的信都是 closed，归档的会话不开一轮；寄给已归档的会话抛错", async () => {
+	const { service, target, letterOf } = await open([keepCall, { text: "不该出现" }]);
+	const letter = (await letterOf())!;
+	// 还在凑批的窗口里就归档：不该为它开一轮。
+	const pending = letter(target.id, { from: "问的", text: "刚寄出" });
+	await service.setSessionArchived(target.id, true);
+	expect(await pending.read).toEqual({ status: "closed" });
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	expect((await service.getSession(target.id)).messages).toEqual([]);
+	expect(() => letter(target.id, { from: "问的", text: "归档以后" })).toThrow("寄不到");
+});
+
+it("忙着时收到的信，收件方被按停又归档：信是 closed，不一直挂着", async () => {
+	const { service, target, letterOf } = await open([keepCall, { toolCalls: [{ id: "call_gate", name: "gate", args: {} }] }, { text: "不该出现" }], (ctx) =>
+		ctx.tools.register({
+			name: "gate",
+			description: "等",
+			parameters: { type: "object", properties: {} },
+			async execute(_args, run) {
+				await new Promise((resolve) => run.signal.addEventListener("abort", resolve, { once: true }));
+				return { output: "停了" };
+			},
+		}),
+	);
+	const letter = (await letterOf())!;
+	service.send(target.id, { content: [{ type: "text", text: "做事" }] });
+	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.running).toBe(true));
+	const receipt = letter(target.id, { from: "问的", text: "插一句" });
+	expect(receipt.queued).toBe(true);
+	service.stop(target.id);
+	await vi.waitFor(async () => expect((await service.getSession(target.id)).summary.running).toBe(false));
+	await service.setSessionArchived(target.id, true);
+	expect(await receipt.read).toEqual({ status: "closed" });
+});
+
 it("只在顶层会话之间：子会话拿不到，寄给子会话、自己、不存在的会话抛错，空信抛错", async () => {
 	// 子会话里那次 `keep` 没有寄信口子，不挂着。
 	const { sessions, asker, target, kept, letterOf } = await open([keepCall, keepCall, { text: "子会话做完" }]);
