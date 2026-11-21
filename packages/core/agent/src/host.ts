@@ -12,7 +12,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { errorText, type RegisteredTool } from "@plume/loop";
-import { activeLocale, text } from "./i18n.ts";
+import { activeLocale, text, type TextKey } from "./i18n.ts";
 import { jsonFiles } from "./json-files.ts";
 import { PluginValues } from "./plugin-values.ts";
 import { Workspace } from "./run-files.ts";
@@ -374,17 +374,12 @@ export class PluginHost {
 	 */
 	observe(observation: SessionObservation, concerned: ReadonlySet<string>): void {
 		const draft = observation.event.type === "draft";
-		for (const { plugin, all, drafts, listener } of this.observers) {
-			if (!all && !concerned.has(plugin)) continue;
-			if (draft && !drafts) continue;
-			try {
-				void Promise.resolve(listener(structuredClone(observation))).catch((error: unknown) => {
-					this.options.log(plugin, "error", `运行观察失败：${errorText(error)}`);
-				});
-			} catch (error) {
-				this.options.log(plugin, "error", `运行观察失败：${errorText(error)}`);
-			}
-		}
+		const watching = [...this.observers].filter(({ plugin, all, drafts }) => (all || concerned.has(plugin)) && (!draft || drafts));
+		this.notify(
+			watching,
+			(listener) => listener(structuredClone(observation)),
+			(plugin, reason) => this.options.log(plugin, "error", `运行观察失败：${reason}`),
+		);
 	}
 
 	/** 会话删掉了：告诉登记过 `ctx.sessions.onDeleted` 的插件。某个插件出错只记日志，不拦着别的。 */
@@ -393,48 +388,38 @@ export class PluginHost {
 		void this.workspace
 			.forget(sessionId)
 			.catch((error: unknown) => this.options.log("agent", "error", `删掉会话 ${sessionId} 的改动快照失败：${errorText(error)}`));
-		for (const { plugin, listener } of [...this.deletedListeners]) {
-			try {
-				listener(sessionId);
-			} catch (error) {
-				this.options.log(plugin, "error", `处理会话删除出错：${errorText(error)}`);
-			}
-		}
+		this.notify(
+			this.deletedListeners,
+			(listener) => listener(sessionId),
+			(plugin, reason) => this.options.log(plugin, "error", `处理会话删除出错：${reason}`),
+		);
 	}
 
 	/** 有插件装上、卸下、启停了：告诉登记过 `ctx.plugins.onChange` 的插件。某个插件出错只记日志，不拦着别的。 */
 	private pluginsChanged(): void {
-		for (const { plugin, listener } of [...this.pluginListeners]) {
-			try {
-				listener();
-			} catch (error) {
-				this.options.log(plugin, "error", `处理插件变化出错：${errorText(error)}`);
-			}
-		}
+		this.notify(
+			this.pluginListeners,
+			(listener) => listener(),
+			(plugin, reason) => this.options.log(plugin, "error", `处理插件变化出错：${reason}`),
+		);
 	}
 
 	/** 历史被替换或裁剪后，插件按会话冻结的上下文要重读；失败只记日志，不拦其他插件。 */
 	sessionContextReset(sessionId: string): void {
-		for (const { plugin, listener } of [...this.contextResetListeners]) {
-			try {
-				void Promise.resolve(listener(sessionId)).catch((error: unknown) => {
-					this.options.log(plugin, "error", `刷新会话上下文失败：${errorText(error)}`);
-				});
-			} catch (error) {
-				this.options.log(plugin, "error", `刷新会话上下文失败：${errorText(error)}`);
-			}
-		}
+		this.notify(
+			this.contextResetListeners,
+			(listener) => listener(sessionId),
+			(plugin, reason) => this.options.log(plugin, "error", `刷新会话上下文失败：${reason}`),
+		);
 	}
 
 	/** 会话归档、取消归档了：告诉登记过 `ctx.sessions.onArchived` 的插件。某个插件出错只记日志，不拦着别的。 */
 	sessionArchived(sessionId: string, archived: boolean): void {
-		for (const { plugin, listener } of [...this.archivedListeners]) {
-			try {
-				listener(sessionId, archived);
-			} catch (error) {
-				this.options.log(plugin, "error", `处理会话归档出错：${errorText(error)}`);
-			}
-		}
+		this.notify(
+			this.archivedListeners,
+			(listener) => listener(sessionId, archived),
+			(plugin, reason) => this.options.log(plugin, "error", `处理会话归档出错：${reason}`),
+		);
 	}
 
 	/** 会话不再活着了：告诉登记过 `ctx.sessions.onEnded` 的插件，等它们都收完尾。某个插件出错只记日志，不拦着别的。 */
@@ -452,23 +437,37 @@ export class PluginHost {
 
 	/** 插件的网页上发生了一件事（主进程报来的）：交给这个插件经 `ctx.pages.onEvent` 订阅的监听。出错只记日志。 */
 	pageEvent(plugin: string, event: WebPageEvent): void {
-		for (const entry of [...this.pageListeners]) {
-			if (entry.plugin !== plugin) continue;
-			try {
-				entry.listener(event);
-			} catch (error) {
-				this.options.log(plugin, "error", `处理网页事件出错：${errorText(error)}`);
-			}
-		}
+		const own = [...this.pageListeners].filter((entry) => entry.plugin === plugin);
+		this.notify(
+			own,
+			(listener) => listener(event),
+			(plugin, reason) => this.options.log(plugin, "error", `处理网页事件出错：${reason}`),
+		);
 	}
 
 	/** 主动停止和自然结束分开：即使空闲时按停止，也要撤掉插件排着的工作。 */
 	sessionStopped(sessionId: string): void {
-		for (const { plugin, listener } of [...this.stoppedListeners]) {
+		this.notify(
+			this.stoppedListeners,
+			(listener) => listener(sessionId),
+			(plugin, reason) => this.options.log(plugin, "error", `处理会话停止出错：${reason}`),
+		);
+	}
+
+	/**
+	 * 挨个叫一组监听：先拷一份（监听里可能撤掉自己）。某个插件出错（同步抛的、返回的 promise 拒绝的）交给 `failed` 记日志，
+	 * 不拦着别的。
+	 */
+	private notify<L>(
+		listeners: Iterable<{ plugin: string; listener: L }>,
+		call: (listener: L) => unknown,
+		failed: (plugin: string, reason: string) => void,
+	): void {
+		for (const { plugin, listener } of [...listeners]) {
 			try {
-				listener(sessionId);
+				void Promise.resolve(call(listener)).catch((error: unknown) => failed(plugin, errorText(error)));
 			} catch (error) {
-				this.options.log(plugin, "error", `处理会话停止出错：${errorText(error)}`);
+				failed(plugin, errorText(error));
 			}
 		}
 	}
@@ -871,6 +870,24 @@ export class PluginHost {
 			live();
 			record.disposers.push(dispose);
 		};
+		/** 同 `own`，返回的函数让插件自己撤：撤时也从清理表里拿掉，反复登记、撤下（MCP 服务连了又断）不让清理表一直长。 */
+		const removable = (dispose: () => void) => {
+			const off = () => {
+				const at = record.disposers.indexOf(off);
+				if (at >= 0) record.disposers.splice(at, 1);
+				dispose();
+			};
+			own(off);
+			return off;
+		};
+		/** 登记一个监听（`onDeleted`、`onEnded` 这些）：不是函数当场抛 `invalid`，停用时撤下，返回的函数让插件自己撤。 */
+		const listen = <L>(listeners: Set<{ plugin: string; listener: L }>, listener: L, invalid: TextKey) => {
+			if (typeof listener !== "function") throw new Error(text(invalid));
+			const entry = { plugin: name, listener };
+			const off = removable(() => void listeners.delete(entry));
+			listeners.add(entry);
+			return off;
+		};
 		const network = new AbortController();
 		own(() => network.abort());
 		return {
@@ -900,14 +917,7 @@ export class PluginHost {
 				// 停用时撤下：重新加载的插件要能再登记同一个 scheme。插件自己撤下时也从清理表里拿掉，理由同 `tools.register`。
 				register: (handler) => {
 					live();
-					const remove = this.workspace.resources.register(handler);
-					const unregister = () => {
-						const at = record.disposers.indexOf(unregister);
-						if (at >= 0) record.disposers.splice(at, 1);
-						remove();
-					};
-					own(unregister);
-					return unregister;
+					return removable(this.workspace.resources.register(handler));
 				},
 				list: () => this.workspace.resources.list(),
 				keepArtifact: (sessionId, tool, content) => this.workspace.resources.keepArtifact(sessionId, tool, content),
@@ -986,12 +996,7 @@ export class PluginHost {
 					live();
 					return sessions.delete(name, sessionId);
 				},
-				onStopped: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("session.badStoppedListener"));
-					const entry = { plugin: name, listener };
-					own(() => void this.stoppedListeners.delete(entry));
-					this.stoppedListeners.add(entry);
-				},
+				onStopped: (listener) => void listen(this.stoppedListeners, listener, "session.badStoppedListener"),
 				observe: (listener, options) => {
 					live();
 					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
@@ -999,36 +1004,10 @@ export class PluginHost {
 					own(() => void this.observers.delete(entry));
 					this.observers.add(entry);
 				},
-				onDeleted: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, listener };
-					own(() => void this.deletedListeners.delete(entry));
-					this.deletedListeners.add(entry);
-				},
-				onContextReset: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, listener };
-					const off = () => {
-						this.contextResetListeners.delete(entry);
-						const at = record.disposers.indexOf(off);
-						if (at >= 0) record.disposers.splice(at, 1);
-					};
-					own(off);
-					this.contextResetListeners.add(entry);
-					return off;
-				},
-				onArchived: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("session.badArchivedListener"));
-					const entry = { plugin: name, listener };
-					own(() => void this.archivedListeners.delete(entry));
-					this.archivedListeners.add(entry);
-				},
-				onEnded: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, listener };
-					own(() => void this.endedListeners.delete(entry));
-					this.endedListeners.add(entry);
-				},
+				onDeleted: (listener) => void listen(this.deletedListeners, listener, "plugin.badListener"),
+				onContextReset: (listener) => listen(this.contextResetListeners, listener, "plugin.badListener"),
+				onArchived: (listener) => void listen(this.archivedListeners, listener, "session.badArchivedListener"),
+				onEnded: (listener) => void listen(this.endedListeners, listener, "plugin.badListener"),
 			},
 			pages: {
 				...(Object.fromEntries(
@@ -1041,18 +1020,7 @@ export class PluginHost {
 						},
 					]),
 				) as Omit<WebPages, "onEvent">),
-				onEvent: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("pages.badListener"));
-					const entry = { plugin: name, listener };
-					const off = () => {
-						this.pageListeners.delete(entry);
-						const at = record.disposers.indexOf(off);
-						if (at >= 0) record.disposers.splice(at, 1);
-					};
-					own(off);
-					this.pageListeners.add(entry);
-					return off;
-				},
+				onEvent: (listener) => listen(this.pageListeners, listener, "pages.badListener"),
 			},
 			locale: activeLocale,
 			notice: (sessionId, message, level = "info") => {
@@ -1066,16 +1034,12 @@ export class PluginHost {
 					const taken = list.at(-1);
 					if (taken) log.info(`工具 ${tool.name} 覆盖了插件 ${taken.plugin} 的同名工具`);
 					const registered: RegisteredTool = { definition: tool, plugin: name, builtin: record.builtin };
-					// 插件自己撤下（MCP 服务断开、改了配置）时也从清理表里拿掉：反复连断不该让清理表一直长。
-					const unregister = () => {
-						const at = record.disposers.indexOf(unregister);
-						if (at >= 0) record.disposers.splice(at, 1);
+					const unregister = removable(() => {
 						const rest = (this.tools.get(tool.name) ?? []).filter((entry) => entry !== registered);
 						if (rest.length > 0) this.tools.set(tool.name, rest);
 						else this.tools.delete(tool.name);
 						this.options.toolsChanged?.();
-					};
-					own(unregister);
+					});
 					this.tools.set(tool.name, [...list, registered]);
 					this.options.toolsChanged?.();
 					return unregister;
@@ -1085,12 +1049,7 @@ export class PluginHost {
 			},
 			plugins: {
 				list: () => this.installed(),
-				onChange: (listener) => {
-					if (typeof listener !== "function") throw new Error(text("plugin.badListener"));
-					const entry = { plugin: name, listener };
-					own(() => void this.pluginListeners.delete(entry));
-					this.pluginListeners.add(entry);
-				},
+				onChange: (listener) => void listen(this.pluginListeners, listener, "plugin.badListener"),
 			},
 			hook: <N extends HookName>(hook: N, run: HookLayer<N>, options: { order?: number } = {}) => {
 				if (!HOOKS.has(hook)) throw new Error(text("plugin.noHook", { hook: String(hook) }));
@@ -1121,9 +1080,9 @@ export class PluginHost {
 				live();
 				return this.values.createStore(name, key, initial, own);
 			},
-			sessionStore: (key, initial, load) => {
+			sessionStore: (key, initial) => {
 				live();
-				return this.values.createSessionStore(name, key, initial, load, own, (message) => log.warn(message));
+				return this.values.createSessionStore(name, key, initial, own);
 			},
 			serve: (api) => {
 				if (typeof api !== "object" || api === null) throw new Error(text("plugin.serveNotObject"));
