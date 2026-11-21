@@ -12,17 +12,15 @@ import { ChangeStore } from "@plume/workspace";
 import { BackgroundRuns } from "./background.ts";
 import type { HostPages, PluginHost } from "./host.ts";
 import { createHost } from "./host-wiring.ts";
-import { setLocale, text } from "./i18n.ts";
+import { setLocale } from "./i18n.ts";
 import { jsonFiles } from "./json-files.ts";
 import { BackgroundJobs } from "./jobs.ts";
 import { sessionFilePath } from "./files.ts";
 import { managedMediaPath } from "./media-access.ts";
-import { removeImages, sweepImages } from "./media.ts";
+import { sweepImages } from "./media.ts";
 import { loadCachedModelCatalog, MODEL_CATALOG_SYNC_INTERVAL_MS, syncModelCatalog } from "./model-catalog-sync.ts";
 import { createModelSettings } from "./model-settings.ts";
-import { DEFAULT_THINKING, lookup } from "./models.ts";
 import { PluginProviderSources } from "./plugin-providers.ts";
-import { layerProjectSettings } from "./project-config.ts";
 import { projectRootsFor } from "./project-roots.ts";
 import { openProjects } from "./projects.ts";
 import { conversationService } from "./service/conversation.ts";
@@ -41,7 +39,6 @@ import { createModelRequests } from "./session/model-requests.ts";
 import { createOccupancy } from "./session/occupancy.ts";
 import { createQueueing } from "./session/queueing.ts";
 import { createRegistry } from "./session/registry.ts";
-import { userMessage } from "./session/session.ts";
 import { createSteward } from "./session/steward.ts";
 import { createTurn } from "./session/turn.ts";
 import { createWake } from "./session/wake.ts";
@@ -171,7 +168,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const lifecycle = createLifecycle({
 		...{ chatsDir, mediaDir },
 		projects: { find: (projectId) => projects.find(projectId) },
-		...{ modelSettings, layerProjectSettings, DEFAULT_THINKING, lookup, text, removeImages, store, sessions },
+		...{ modelSettings, store, sessions },
 		...{ applyProjectConfig: governance.applyProjectConfig, emit, summaries, withChildren, find, saveSummary, refreshProject: governance.refreshProject },
 		...{ scratchDir, shownBackgroundCalls, idleWaiters },
 		quitting: () => quitting,
@@ -296,7 +293,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		...modelSettings.service,
 		...projects.service,
 		...sessionsService({ log, modelSettings, projects, store, host, events, registry, governance, idle, lifecycle, queueing }),
-		...conversationService({ registry, messages, lifecycle, occupancy, queueing, userMessage, quitting: () => quitting }),
+		...conversationService({ registry, messages, lifecycle, occupancy, queueing, quitting: () => quitting }),
 		...filesService({ dataDir, mediaDir, trash: options.trash, projects, events, registry }),
 		...exportService({ dataDir, log, modelSettings, store, host, registry }),
 		...pluginsService({ pluginsFile, files, host, events }),

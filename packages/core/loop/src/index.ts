@@ -3,7 +3,7 @@ export { contextBreakdown, estimateContext } from "./context-breakdown.ts";
 export { DECLINED, REJECTED } from "./declined.ts";
 export { errorText } from "./errors.ts";
 export { foldRetry, settleHiccups } from "./hiccups.ts";
-export type { RegisteredTool } from "./host.ts";
+export type { LoopHost, RegisteredTool } from "./host.ts";
 export { setLocale } from "./i18n.ts";
 export { runSteps, type TurnScope } from "./loop.ts";
 export { withEnvironment } from "./prompt/date.ts";

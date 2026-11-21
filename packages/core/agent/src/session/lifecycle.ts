@@ -8,12 +8,12 @@ import { errorText, kindOf, RepetitionWatch, type ContextRecord } from "@plume/l
 import type { BackgroundRuns } from "../background.ts";
 import type { ChildTasks } from "../child-tasks.ts";
 import type { PluginHost } from "../host.ts";
-import type { text } from "../i18n.ts";
+import { text } from "../i18n.ts";
 import type { BackgroundJobs } from "../jobs.ts";
-import type { removeImages } from "../media.ts";
+import { removeImages } from "../media.ts";
 import type { ModelSettings } from "../model-settings.ts";
-import type { DEFAULT_THINKING, lookup } from "../models.ts";
-import type { layerProjectSettings } from "../project-config.ts";
+import { DEFAULT_THINKING, lookup } from "../models.ts";
+import { layerProjectSettings } from "../project-config.ts";
 import type { Projects } from "../projects.ts";
 import type { SessionQueues } from "../queue.ts";
 import type { SessionDb } from "../session-db.ts";
@@ -28,11 +28,6 @@ export interface LifecycleDeps {
 	/** 回边：项目列表在生命周期模块之后创建，在 `createAgent` 里接上。 */
 	projects: Pick<Projects, "find">;
 	modelSettings: Pick<ModelSettings, "read">;
-	layerProjectSettings: typeof layerProjectSettings;
-	DEFAULT_THINKING: typeof DEFAULT_THINKING;
-	lookup: typeof lookup;
-	text: typeof text;
-	removeImages: typeof removeImages;
 	store: Pick<SessionDb, "copy" | "create" | "delete" | "saveSummary">;
 	sessions: Map<string, Session>;
 	applyProjectConfig(session: Session, configured: ProjectConfig): void;
@@ -91,11 +86,6 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		mediaDir,
 		projects,
 		modelSettings,
-		layerProjectSettings,
-		DEFAULT_THINKING,
-		lookup,
-		text,
-		removeImages,
 		store,
 		sessions,
 		applyProjectConfig,

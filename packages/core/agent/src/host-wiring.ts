@@ -38,7 +38,7 @@ export interface CreateHostDeps {
 	dataDir: string;
 	mediaDir: string;
 	log: Log;
-	files: JsonFiles;
+	files: Pick<JsonFiles, "read">;
 	modelSettings: Pick<ModelSettings, "read" | "service">;
 	pluginProviders: Pick<PluginProviderSources, "add">;
 	vault: Pick<Vault, "pluginSecrets">;

@@ -1,10 +1,11 @@
-import type { AgentService, OutgoingMessage, UserMessage } from "@plume/contract";
+import type { AgentService } from "@plume/contract";
 import { text } from "../i18n.ts";
 import type { Lifecycle } from "../session/lifecycle.ts";
 import type { Messages } from "../session/messages.ts";
 import type { Occupancy } from "../session/occupancy.ts";
 import type { Queueing } from "../session/queueing.ts";
 import type { Registry } from "../session/registry.ts";
+import { userMessage } from "../session/session.ts";
 
 export interface ConversationServiceDeps {
 	registry: Pick<Registry, "find">;
@@ -12,7 +13,6 @@ export interface ConversationServiceDeps {
 	lifecycle: Pick<Lifecycle, "stopSession">;
 	occupancy: Pick<Occupancy, "held" | "begin" | "looping">;
 	queueing: Pick<Queueing, "handed" | "queues" | "steer" | "enqueue" | "enqueueTask" | "queuedPrompt">;
-	userMessage(input: OutgoingMessage): UserMessage;
 	quitting(): boolean;
 }
 
@@ -42,7 +42,6 @@ export function conversationService(
 		lifecycle: { stopSession },
 		occupancy: { held, begin, looping },
 		queueing: { handed, queues, steer, enqueue, enqueueTask, queuedPrompt },
-		userMessage,
 		quitting,
 	} = deps;
 	return {

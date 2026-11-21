@@ -8,7 +8,7 @@ import type { Session } from "./session.ts";
 type ProjectConfig = Awaited<ReturnType<typeof layerProjectSettings>>;
 
 export interface GovernanceDeps {
-	modelSettings: ModelSettings;
+	modelSettings: Pick<ModelSettings, "read" | "sessionManager">;
 	/** 回边：插件宿主后建，在 `createAgent` 里接上。 */
 	hostStatus(): PluginStatus[];
 	sessions: Map<string, Session>;

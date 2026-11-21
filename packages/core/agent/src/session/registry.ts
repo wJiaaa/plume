@@ -7,7 +7,7 @@ import type { Session } from "./session.ts";
 
 export interface RegistryDeps {
 	dataDir: string;
-	store: SessionDb;
+	store: Pick<SessionDb, "summaries" | "saveSummary" | "messages" | "context">;
 	emit(event: AgentEvent): void;
 	/** 回边：插件宿主后建，在 `createAgent` 里接上。 */
 	sessionContextReset(sessionId: string): void;

@@ -22,7 +22,7 @@ import type {
 	TurnStop,
 	UserMessage,
 } from "@plume/contract";
-import { createCompactor, errorText, runSteps, sessionScope, type CompactMode, type ContextRecord } from "@plume/loop";
+import { createCompactor, errorText, runSteps, sessionScope, type CompactMode, type ContextRecord, type LoopHost } from "@plume/loop";
 import { type BackgroundRuns, DELIVERED_HEADER, type ReadyKind, reportTexts } from "../background.ts";
 import type { ChildTasks } from "../child-tasks.ts";
 import { commandAccess } from "../commands.ts";
@@ -40,7 +40,8 @@ import type { Session } from "./session.ts";
 import { userMessage } from "./session.ts";
 
 export interface TurnDeps {
-	host: Pick<PluginHost, "run" | "tool" | "toolOwners" | "sessionContextReset"> & { workspace: Pick<PluginHost["workspace"], "call"> };
+	/** 循环要的那几样（`LoopHost`）原样交给 `@plume/loop`，自己只用 `workspace.call`。 */
+	host: LoopHost & { workspace: Pick<PluginHost["workspace"], "call"> };
 	log: Log;
 	emit(event: AgentEvent): void;
 	store: Pick<SessionDb, "saveContext" | "dropDraft">;
