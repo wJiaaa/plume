@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import type { Message } from "@plume/contract";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -138,6 +138,22 @@ describe("媒体目录", () => {
 				{ type: "text", text: "[unsupported image: image/bmp]" },
 				expect.objectContaining({ type: "image", data: big, mimeType: "image/png" }),
 			]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it.skipIf(process.platform === "win32")("合法的图片名底下放一个软链：插件读不到、发给模型的历史也不带上它指向的文件", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "plume-media-"));
+		try {
+			const secret = join(dir, "secret.txt");
+			await writeFile(secret, "not an image");
+			const name = `${"a".repeat(40)}.png`;
+			await symlink(secret, join(dir, name));
+			expect(await readImage(dir, name)).toBeNull();
+			const sent: Message[] = [{ role: "user", content: [{ type: "image", data: "", media: name, mimeType: "image/png" }], timestamp: 0 }];
+			await restoreImages(dir, sent);
+			expect(sent[0]?.content).toEqual([]);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

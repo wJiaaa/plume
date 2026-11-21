@@ -7,7 +7,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { access, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, open, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ImageContent, Message } from "@plume/contract";
 import { writeFileAtomic } from "./atomic-write.ts";
@@ -91,12 +92,29 @@ export async function saveImage(dir: string, data: string, mimeType: string): Pr
 	return name;
 }
 
+/**
+ * 按名字读一张图的字节；名字不对、读不到时是 null。不跟随软链、不读普通文件以外的东西：合法的图片名底下放一个软链，
+ * 不能借插件的 `ctx.media.read`、发给模型的历史读到别的文件（界面协议那条路见 `media-access.ts`）。
+ */
+async function readMediaFile(dir: string, name: string): Promise<Buffer | null> {
+	if (!MEDIA_NAME.test(name)) return null;
+	const handle = await open(join(dir, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
+	if (!handle) return null;
+	try {
+		return (await handle.stat()).isFile() ? await handle.readFile() : null;
+	} catch {
+		return null;
+	} finally {
+		await handle.close();
+	}
+}
+
 /** 按名字读回一张图；名字不对、文件不在时是 null。 */
 export async function readImage(dir: string, name: string): Promise<{ data: string; mimeType: string } | null> {
 	const match = MEDIA_NAME.exec(name);
 	if (!match) return null;
 	const mimeType = Object.entries(EXTENSIONS).find(([, extension]) => extension === match[1])?.[0];
-	const bytes = await readFile(join(dir, name)).catch(() => null);
+	const bytes = await readMediaFile(dir, name);
 	return bytes && mimeType ? { data: bytes.toString("base64"), mimeType } : null;
 }
 
@@ -134,12 +152,9 @@ export async function restoreImages(dir: string, messages: Message[]): Promise<v
 				continue;
 			}
 			if (block.type === "image" && !block.data && block.media) {
-				if (!MEDIA_NAME.test(block.media)) continue;
-				try {
-					block.data = (await readFile(join(dir, block.media))).toString("base64");
-				} catch {
-					continue;
-				}
+				const bytes = await readMediaFile(dir, block.media);
+				if (!bytes) continue;
+				block.data = bytes.toString("base64");
 			}
 			kept.push(block);
 		}
