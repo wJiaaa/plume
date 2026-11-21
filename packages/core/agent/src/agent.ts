@@ -2353,6 +2353,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		if (session.looping === controller) session.looping = undefined;
 		// 退出应用时停下的不是人按的停：重开以后说「上次执行被中断」，而不是「已暂停」。
 		session.summary.stop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
+		// 先把「还在不在等后台」对到此刻再说收场：后台结果叫起的这一轮开头取走那批送达时不重算它（`take`），不先对，
+		// 观察者在收场这一刻读到的还是开轮前那个「在等」，spawn-session 就会当它还有事没回来，汇报不叫醒来处。
+		syncBackground(session);
 		observe(sessionId, { type: "turnEnd", stop: session.summary.stop });
 		const task = prompt && handedPrompts.get(prompt);
 		if (task) handed.settle(task.childId, task.task, session.summary.stop);
@@ -2367,7 +2370,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 			session.summary.kind === "top";
 		// 被一条打断的消息接替了：新的一轮紧接着开始，这里不说「停了」，免得界面闪一下「已暂停」。
 		if (session.controller === controller && !idle) release(session);
-		syncBackground(session);
 		try {
 			// 这一轮里没变成消息的草稿（流到一半抛错、拒收后没写进会话的回复）不留给下次打开时恢复。
 			store.dropDraft(sessionId);

@@ -4,7 +4,8 @@
  * 叫不叫醒来处（`wake`），看这一轮是谁引起的：开出来的第一轮、来处寄来的信引起的那一轮叫醒；人在它里面说话引起的、被停下的、
  * 出错的不叫醒，汇报留到来处下一轮开头读。后台结果叫起的那一轮（它派的子 Agent 回来了）接着算引起它的那件事。
  * 一轮收尾时还有派出去的事没回来（`SessionSummary.background`），先不交：真正的结论在回来以后那一轮里，那时再交。
- * 那件事要是被人停掉、没再引起新的一轮，隔一阵看一眼（`LINGER_MS`），后台空了就把这一轮的汇报交上，不叫醒——人停下的事不该叫起来处。
+ * 那件事要是被人停掉、没再引起新的一轮，隔一阵看一眼（`LINGER_MS`），后台空了、会话也闲着就把这一轮的汇报交上，不叫醒——人停下的事不该叫起来处。
+ * 只有新的一轮收场才接手这份汇报：会话「在跑」不一定是新开了一轮，收尾后的压缩、`/compact` 也占着它、却不再有收场，见了在跑就撒手的话，这一轮的汇报就再也交不出去。
  * 被人按停的那一轮不交——停下是人的决定，叫醒来处去处理半截结果是在和这个决定争。
  * 什么时候真叫醒由本体定：来处闲着、它开出的会话都不在跑，几份合成一次送达；连着叫醒太多次就留到人开口（见 `ReportBackOptions.wake`）。
  *
@@ -77,10 +78,9 @@ export class Reports {
 		if (event.type === "approval") {
 			if (event.approval) this.waiting.add(observation.sessionId);
 			else this.waiting.delete(observation.sessionId);
-		} else if (event.type === "running" && event.running) {
-			// 又跑起来了（回来的结果叫起了它、人说了话）：交不交由这一轮收尾时定。
-			this.stopLingering(observation.sessionId);
 		} else if (event.type === "turnEnd") {
+			// 收尾时没回来的事叫起了新的一轮、这一轮收场了：交不交由它定，上一轮留下的 `carry` 跟着它算。
+			this.stopLingering(observation.sessionId);
 			// i18n-exempt：日志
 			void this.turnEnded(observation.sessionId, event.stop).catch((error: unknown) =>
 				this.deps.warn(`会话 ${observation.sessionId} 没交回去：${String(error)}`),
@@ -157,15 +157,15 @@ export class Reports {
 		}
 	}
 
-	/** 等收尾时没回来的那件事：又跑起来了就不管（`observe`），后台空了还没跑就把这一轮的汇报交上，不叫醒。 */
+	/** 等收尾时没回来的那件事：有新的一轮收场就交给它（`observe`），后台空了、会话闲着就把这一轮的汇报交上，不叫醒。 */
 	private linger(sessionId: string, origin: Origin, stop: TurnStop): void {
 		this.stopLingering(sessionId);
 		const timer = setInterval(() => {
 			void (async () => {
 				const summary = await this.deps.get(sessionId);
 				if (this.lingering.get(sessionId) !== timer) return;
-				if (!summary || summary.running) return this.stopLingering(sessionId);
-				if (summary.background) return;
+				if (!summary) return this.stopLingering(sessionId);
+				if (summary.running || summary.background) return;
 				this.stopLingering(sessionId);
 				if (!this.carry.delete(sessionId)) return;
 				this.deliver(sessionId, summary.title, origin, stop, await this.deps.messages(sessionId), false);

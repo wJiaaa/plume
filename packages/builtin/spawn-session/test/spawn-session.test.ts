@@ -79,7 +79,7 @@ const spawnCall = (id: string, name = "spawn_session") =>
 	({ role: "assistant", content: [{ type: "toolCall", id, name, arguments: {} }] }) as unknown as Message;
 
 /** 一组会话：p 是来处，别的按 `spawnedFrom` 挂在它下面。`reportBack` 收下每一份。 */
-function family(children: Record<string, { toolCallId: string; messages: Message[]; background?: boolean; name?: string }>) {
+function family(children: Record<string, { toolCallId: string; messages: Message[]; background?: boolean; running?: boolean; name?: string }>) {
 	const sent: Array<{ sessionId: string; text: string; options: ReportBackOptions }> = [];
 	const parent = [spawnCall("c1"), spawnCall("c2"), spawnCall("other", "plan_execute")];
 	const reports = new Reports({
@@ -89,6 +89,7 @@ function family(children: Record<string, { toolCallId: string; messages: Message
 						id,
 						title: `标题 ${id}`,
 						kind: "top",
+						running: children[id].running === true,
 						...(children[id].background ? { background: true } : {}),
 						spawnedFrom: { sessionId: "p", toolCallId: children[id].toolCallId, ...(children[id].name ? { name: children[id].name } : {}) },
 					} as SessionSummary)
@@ -150,28 +151,53 @@ it("每轮汇报：收尾时还有事没回来先不交，回来以后那一轮�
 	expect(sent).toHaveLength(1);
 });
 
-it("每轮汇报：收尾时没回来的事被人停掉、没再开一轮，后台空了照样交上这一轮的，不叫醒；又跑起来了就不管", async () => {
+it("每轮汇报：收尾时没回来的事被人停掉、没再开一轮，后台空了、会话闲着时照样交上这一轮的，不叫醒；又开了一轮就交给那一轮收场时定", async () => {
 	vi.useFakeTimers();
 	try {
-		const child = { toolCallId: "c1", background: true, messages: [user("任务"), reply("已起后台命令，等结果")] };
-		const { reports, sent, end } = family({ s1: child, s2: { toolCallId: "c2", background: true, messages: [user("任务"), reply("等着")] } });
+		const child = { toolCallId: "c1", background: true, running: false, messages: [user("任务"), reply("已起后台命令，等结果")] };
+		const other = {
+			toolCallId: "c2",
+			background: true,
+			running: false,
+			messages: [user("<session-message>", { peer: [{ sessionId: "p", from: "p", text: "去做" }] }), reply("等着")],
+		};
+		const { reports, sent, end } = family({ s1: child, s2: other });
 		reports.launched("s1", { sessionId: "p", toolCallId: "c1" }, "标题");
 		reports.launched("s2", { sessionId: "p", toolCallId: "c2" }, "标题");
-		const ending = end("s1");
-		await vi.advanceTimersByTimeAsync(0);
-		await ending;
-		const ending2 = end("s2");
-		await vi.advanceTimersByTimeAsync(0);
-		await ending2;
+		for (const id of ["s1", "s2"]) {
+			const ending = end(id);
+			await vi.advanceTimersByTimeAsync(0);
+			await ending;
+		}
 		await vi.advanceTimersByTimeAsync(5_000);
 		expect(sent).toEqual([]);
 
-		// s1 的后台被人停掉了；s2 被回来的结果叫起，交不交由那一轮收尾时定。
+		// s1 的后台被人停掉了，但收尾后的压缩还占着它：在跑不等于新开了一轮，接着等，闲下来再交。
 		child.background = false;
-		reports.observe({ sessionId: "s2", at: 0, timestamp: 0, event: { type: "running", running: true } } as SessionObservation);
+		child.running = true;
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(sent).toEqual([]);
+		child.running = false;
 		await vi.advanceTimersByTimeAsync(5_000);
 		expect(sent.map((one) => [one.sessionId, one.options.wake])).toEqual([["s1", false]]);
 		expect(sent[0]!.text).toContain("已起后台命令，等结果");
+
+		// s2 被回来的结果叫起了新的一轮：后台空了、在跑时不交，那一轮收场时接着算上一轮——来处的信引起的，叫醒。
+		other.background = false;
+		other.running = true;
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(sent).toHaveLength(1);
+		other.running = false;
+		other.messages.push(user("结果", { synthetic: true, delivery: [] }), reply("做完了"));
+		const ending = end("s2");
+		await vi.advanceTimersByTimeAsync(0);
+		await ending;
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(sent.map((one) => [one.sessionId, one.options.wake])).toEqual([
+			["s1", false],
+			["s2", true],
+		]);
+		expect(sent[1]!.text).toContain("做完了");
 	} finally {
 		vi.useRealTimers();
 	}

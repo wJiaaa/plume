@@ -26,6 +26,8 @@ async function open(replies: FakeReply[], configure: (ctx: PluginContext) => voi
 	const plugins: Plugin[] = [
 		{
 			name: "test.owner",
+			// 有的测试要看会话收场那一刻摘要的样子。
+			observe: "all",
 			apply(ctx) {
 				owner = ctx.sessions;
 				configure(ctx);
@@ -254,6 +256,37 @@ it("摘要的 background：派出去就立起，父轮收尾、送达开轮之�
 	expect(from).toBeGreaterThanOrEqual(0);
 	const settled = states.slice(from).findIndex((state) => !state.running && !state.background);
 	expect(settled).toBe(states.length - from - 1);
+});
+
+it("一轮收场时观察者读到的摘要是此刻的：送达叫起的那一轮做完，background 已经落了，派出去还没回来时仍立着", async () => {
+	let dispatched!: SessionRun;
+	const seen: boolean[] = [];
+	const { owner, parent, service, done } = await open(
+		[{ toolCalls: [{ id: "call_dispatch", name: "dispatch", args: {} }] }, { text: "等待子任务" }, { text: "子任务完成" }, { text: "最终合并" }],
+		(ctx) => {
+			// 和 spawn-session 一样：收到收场就去读摘要，判断它还有没有事没回来。
+			ctx.sessions.observe((observation) => {
+				if (observation.event.type !== "turnEnd" || observation.sessionId !== parent.id) return;
+				void ctx.sessions.get(observation.sessionId).then((summary) => seen.push(summary?.background === true));
+			});
+			ctx.tools.register({
+				name: "dispatch",
+				description: "后台派发",
+				parameters: { type: "object", properties: {} },
+				async execute(_args, run) {
+					const child = await ctx.sessions.create({ parentId: run.sessionId });
+					dispatched = await ctx.sessions.start(child.id, "CHILD_TASK");
+					return { output: "已派发" };
+				},
+			});
+		},
+	);
+	service.send(parent.id, { content: [{ type: "text", text: "开始" }] });
+	await done(parent.id, 2);
+	await owner.wait(dispatched.id);
+	expect(await owner.report(dispatched.id, "CHILD_RESULT")).toBe(true);
+	await done(parent.id, 3);
+	await vi.waitFor(() => expect(seen).toEqual([true, false]), { timeout: 2_000, interval: 10 });
 });
 
 it("同子会话续跑用新 runId，旧运行的结束原因和送达不读取最新 stop", async () => {
