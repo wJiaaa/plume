@@ -14,12 +14,10 @@ import { text } from "./i18n.ts";
 import type { JsonFiles } from "./json-files.ts";
 
 interface Source {
-	/** 现在的值；还在读（`sessionStore` 的 `load`）时是 undefined，读完叫醒订阅者。 */
-	read(sessionId: string): { value: unknown } | undefined;
+	/** 现在的值。 */
+	read(sessionId: string): unknown;
 	/** 按会话的来源：会话删掉时丢掉它那份。 */
 	forget?(sessionId: string): void;
-	/** 按会话的来源：这个会话最后一个订阅者走了。 */
-	release?(sessionId: string): void;
 }
 
 interface Watch {
@@ -81,22 +79,18 @@ export class PluginValues {
 		try {
 			while (!signal.aborted) {
 				const source = this.sources.get(base);
-				const current = source && watch.version !== seen ? source.read(id) : undefined;
-				if (!current) {
+				if (!source || watch.version === seen) {
 					await new Promise<void>((resolve) => (wake = resolve));
 					wake = undefined;
 					continue;
 				}
 				seen = watch.version;
-				yield current.value;
+				yield source.read(id);
 			}
 		} finally {
 			watch.wakers.delete(waker);
 			signal.removeEventListener("abort", waker);
-			if (watch.wakers.size === 0) {
-				watches.delete(id);
-				this.sources.get(base)?.release?.(id);
-			}
+			if (watch.wakers.size === 0) watches.delete(id);
 			if (watches.size === 0) this.watches.delete(base);
 		}
 	}
@@ -160,7 +154,7 @@ export class PluginValues {
 			queue = next.catch(() => undefined);
 			return next;
 		};
-		this.declare(plugin, base, { read: () => ({ value }) }, own);
+		this.declare(plugin, base, { read: () => value }, own);
 		this.settings.set(plugin, set);
 		own(() => {
 			alive = false;
@@ -181,7 +175,7 @@ export class PluginValues {
 	createStore<T>(plugin: string, key: string, initial: T, own: Own): PluginStore<T> {
 		const base = baseOf(plugin, "store", checkedKey(key));
 		let value = initial;
-		this.declare(plugin, base, { read: () => ({ value }) }, own);
+		this.declare(plugin, base, { read: () => value }, own);
 		const set = (next: T) => {
 			value = next;
 			this.changed(base);
@@ -189,69 +183,17 @@ export class PluginValues {
 		return { get: () => value, set, update: (change) => set(change(value)) };
 	}
 
-	createSessionStore<T>(
-		plugin: string,
-		key: string,
-		initial: T,
-		load: ((sessionId: string) => Promise<T>) | undefined,
-		own: Own,
-		log: (message: string) => void,
-	): PluginSessionStore<T> {
+	createSessionStore<T>(plugin: string, key: string, initial: T, own: Own): PluginSessionStore<T> {
 		const base = baseOf(plugin, "session", checkedKey(key));
-		if (load !== undefined && typeof load !== "function") throw new Error(text("plugin.listenerNotFunction"));
 		const values = new Map<string, T>();
-		/** 正在读的会话；读完前又被 `set` 过的，读到的旧值不要。 */
-		const loading = new Set<string>();
-		/**
-		 * 值是 `load` 读回来的会话（插件没 `set` 过）：没人看着时丢掉，下次订阅再读，不然翻过的会话一个个都留在内存里。
-		 * 插件 `set` 的不丢：它不一定读得回来。
-		 */
-		const loaded = new Set<string>();
-		const watched = (sessionId: string) => this.watches.get(base)?.has(sessionId) === true;
-		const release = (sessionId: string) => {
-			if (!loaded.delete(sessionId)) return;
-			values.delete(sessionId);
-		};
 		const get = (sessionId: string) => (values.has(sessionId) ? (values.get(sessionId) as T) : initial);
-		const read = (sessionId: string): { value: unknown } | undefined => {
-			if (values.has(sessionId) || !load) return { value: get(sessionId) };
-			if (!loading.has(sessionId)) {
-				loading.add(sessionId);
-				void Promise.resolve()
-					.then(() => load(sessionId))
-					.then(
-						(value) => {
-							if (!values.has(sessionId)) {
-								values.set(sessionId, value);
-								loaded.add(sessionId);
-							}
-						},
-						(error: unknown) => {
-							log(text("plugin.storeLoad", { key, error: errorText(error) }));
-							if (!values.has(sessionId)) {
-								values.set(sessionId, initial);
-								loaded.add(sessionId);
-							}
-						},
-					)
-					.finally(() => {
-						loading.delete(sessionId);
-						// 读的时候订阅者已经走了：没人要这份，不留。
-						if (watched(sessionId)) this.changed(base, sessionId);
-						else release(sessionId);
-					});
-			}
-			return undefined;
-		};
 		const forget = (sessionId: string) => {
-			loaded.delete(sessionId);
 			if (!values.delete(sessionId)) return;
 			this.changed(base, sessionId);
 		};
-		this.declare(plugin, base, { read, forget, release }, own);
+		this.declare(plugin, base, { read: get, forget }, own);
 		const set = (sessionId: string, value: T) => {
 			values.set(String(sessionId), value);
-			loaded.delete(String(sessionId));
 			this.changed(base, String(sessionId));
 		};
 		return {

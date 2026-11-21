@@ -1748,12 +1748,9 @@ export interface PluginContext {
 	 */
 	store<T>(key: string, initial: T): PluginStore<T>;
 	/**
-	 * 同 `store`，但每个会话一份（`ui.useSessionStore(key, sessionId)`）：会话删掉时那一份跟着丢掉。没设过的会话读到 `initial`；
-	 * 给了 `load` 的（值有一部分存在盘上，比如上次生成的摘要），界面订阅一个这次还没设过的会话时先调它，读到之前界面拿到的是 undefined，
-	 * 读完前又 `set` 过的以 `set` 的为准；它抛错就记日志、用 `initial`。逻辑入口的 `get` 不调 `load`。
-	 * `load` 读回来的只在界面看着时留着：那个会话最后一个订阅者走了就丢掉，下次订阅再读，逻辑入口那时 `get` 到的是 `initial`；`set` 过的一直留着。
+	 * 同 `store`，但每个会话一份（`ui.useSessionStore(key, sessionId)`）：会话删掉时那一份跟着丢掉。没设过的会话读到 `initial`。
 	 */
-	sessionStore<T>(key: string, initial: T, load?: (sessionId: string) => Promise<T>): PluginSessionStore<T>;
+	sessionStore<T>(key: string, initial: T): PluginSessionStore<T>;
 	readonly log: Logger;
 	/** 插件自己调一次模型、画图、读花销，见 `ModelAccess`。 */
 	readonly model: ModelAccess;

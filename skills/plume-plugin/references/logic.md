@@ -28,7 +28,7 @@ export default {
 | `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
 | `ctx.serve(api)` | 把一个对象开给自己的界面入口（见「serve」）；一个插件只能开一个，停用时收回 |
 | `ctx.settings(defaults, normalize?)` | 插件自己的设置：存盘、界面经 `ui.useSettings()` 读改、两边改了都通知，见「设置和运行状态」 |
-| `ctx.store(key, initial)`、`ctx.sessionStore(key, initial, load?)` | 给界面看的运行状态（按会话的会话删掉时丢掉），`set` 了界面跟着重画，见「设置和运行状态」 |
+| `ctx.store(key, initial)`、`ctx.sessionStore(key, initial)` | 给界面看的运行状态（按会话的会话删掉时丢掉），`set` 了界面跟着重画，见「设置和运行状态」 |
 | `ctx.log` | `info` / `warn` / `error`，自动带插件名，记进数据目录的 `logs/plume.log` |
 | `ctx.locale()` | 当前界面语言 `"zh-CN"` 或 `"en"`，给人看的文字按它选 |
 | `ctx.notice(sessionId, text, level?)` | 在界面上弹一条提示条，`level` 是 `"info"`（默认）、`"warn"`、`"error"`；不管那个会话是不是正开着 |
@@ -772,7 +772,7 @@ Plume 自带的服务：
 
 - **设置** `const settings = await ctx.settings(defaults, normalize?)`：一份对象，存在 `dataDir` 的 `settings.json`。读到的和 `defaults` 浅合并，再过 `normalize`（给了的话：校验、补齐，抛错就不改）；没给 `normalize` 只收 `defaults` 里有的键。`settings.get()` 现读，`settings.set(patch)` 合并、写盘（排队、整份替换）、通知；`settings.onChange(listener)` 收两边的改动（作废缓存用）。界面入口 `const [value, set] = ui.useSettings<T>()`，`set(patch)` 走同一条路，交回 `normalize` 过的值。一个插件只能调一次 `ctx.settings`。界面看得到全部内容：密钥不放这里，经 `ctx.secrets` 封好放进自己的文件。
 - **运行状态** `const state = ctx.store(key, initial)`：只在内存里，`get` / `set` / `update`，界面 `ui.useStore<T>(key)` 订阅，`set` 了跟着重画；停用、重启回到 `initial`。只推最新的那份，中间值可能跳过：画的是当前状态，不是一串事件。
-- **按会话的运行状态** `ctx.sessionStore(key, initial, load?)`：同上，每个会话一份（`get(id)` / `set(id, v)` / `update` / `delete`），界面 `ui.useSessionStore<T>(key, sessionId)`；会话删掉时本体丢掉那一份，不用自己 `onDeleted`。值有一部分在盘上（上次生成的摘要）时给 `load(sessionId)`：界面订阅一个这次还没设过的会话时先读它，读到之前界面拿到 undefined；读回来的只在界面看着时留着，那个会话最后一个订阅者走了就丢掉、下次订阅再读（逻辑入口这时 `get` 到 `initial`），`set` 过的一直留着。
+- **按会话的运行状态** `ctx.sessionStore(key, initial)`：同上，每个会话一份（`get(id)` / `set(id, v)` / `update` / `delete`），界面 `ui.useSessionStore<T>(key, sessionId)`；会话删掉时本体丢掉那一份，不用自己 `onDeleted`。
 - 值要能结构化克隆、不宜太大（每次改整份发给界面）。界面第一次拿到之前（逻辑入口还没登记、停用着）是 undefined，画成加载中。界面对 store 只读，要改走 `ui.remote()` 调逻辑入口的方法，规则留在逻辑入口一处。
 - 一连串事件（终端输出）、要中途取消的长调用、要传大块内容的，仍用下面的 `serve`。
 
@@ -794,7 +794,7 @@ const [settings, set] = ui.useSettings<MySettings>();
 const progress = ui.useSessionStore<{ done: number }>("progress", sessionId);
 ```
 
-例子：plume.title、plume.side-chat、plume.spawn-session（设置），插件仓库的 plume.summary（设置加带 `load` 的 `sessionStore`）、plume.memory（设置加 `onChange` 作废快照）。
+例子：plume.title、plume.side-chat、plume.spawn-session（设置），插件仓库的 plume.memory（设置加 `onChange` 作废快照）。
 
 ## serve：给自己的界面开接口
 
