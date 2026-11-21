@@ -2,6 +2,30 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.7.7] - 2026-11-21
+
+<!-- plume:notes en -->
+### Changes
+
+- **Settings opens on top of what you're doing.** Opening settings used to take you away from your chat, the plugin market or a plugin's page, and you had to find your way back afterwards. Settings is now a large card over the current screen, with what's behind it softly blurred. Press Esc, click outside it or use the close button to go straight back to where you were. It also closes by itself when you open a chat or go somewhere else from inside settings. Section titles now sit in a breadcrumb at the top, and the descriptions under each setting are the same size on every page, including sections added by plugins.
+- **A tidier environment card.** The card used to have a separate heading and row style for each plugin, and in wide windows it docked as a column that pushed the conversation aside. It now always floats in the top-right corner without moving the conversation. Its contents are grouped by role: the folder and session summary at the top, then "Background" (running commands, watches, checks and scheduled tasks), "Output" (approved plans, sub-sessions, new sessions and the pull request for this branch), references, and compaction history at the bottom. Every row looks the same. Right-click the card to choose what it shows. Suggested sessions you haven't started stay in the conversation and no longer light up the environment button.
+- **Choose a spinner for running chats.** Settings › Appearance has a new "Running indicator" option. A running chat in the sidebar can show a spinner instead of the breathing dot.
+- **Smart titles work with models that always think.** Some models keep thinking even when asked not to, for example DeepSeek through Magpie. Their thinking used up the space meant for the title, so the chat quietly kept the start of your message as its name. These models now get a proper title too.
+- **`/` commands in the side chat.** Typing `/` in the side chat never opened the command menu. It now opens, even before your first message. A new side chat tab also puts the cursor in its input box, so you can start typing right away. Plan mode is only available in the main chat, so `/plan` is no longer listed in side chats and sub-agents.
+- **No more "read the file first" after a restart.** When a chat carried on after Plume restarted, editing a file it had just read was refused until it read the file again. Files it has read are now remembered across restarts. A file that changed after it was read still has to be read again.
+- **Smaller fixes.** With the frosted grain on, the side chat now has the same grain as the main chat. In dark mode, the top edge of glass panels no longer looks thicker than the other edges. On macOS, dialogs and settings close normally again after the window is brought back from the Dock by another window.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **设置盖在当前界面上打开，关掉就回到原处。** 原来打开设置会离开正在看的对话、插件市场或插件页面，关掉后还得自己找回去。现在设置是盖在当前界面上的一张大卡片，背后的界面柔和地糊开。按 Esc、点卡片外面或点关闭，就回到原来的地方；在设置里打开会话、去别的界面时，它也会自己收起。章名放在顶上的面包屑里；每一页设置项下的说明文字都一样大，插件加的分区也一样。
+- **环境卡片更整齐了。** 原来卡片里每个插件各画一层小标题、各用一种行，宽窗口下还会停靠成一列、把对话挤到一边。现在卡片总是浮在右上角，不挤对话。内容按用途分块：顶上是目录和会话摘要，然后是「后台」（在跑的命令、监视、检查和定时任务）、「产出」（批准的计划、子会话、开出来的新会话和当前分支的拉取请求）、引用，压缩记录在最下面。每一行都是同一个样子。在卡片上右键选显示哪些内容。还没开始的新会话建议只留在对话里，不再点亮环境开关。
+- **在跑的会话可以用转圈表示。** 设置 › 外观新增「运行指示」，侧栏里正在运行的会话可以用转圈代替呼吸点。
+- **关不掉思考的模型也能起好标题。** 有的模型叫它别思考也照样想，比如经 Magpie 用的 DeepSeek。思考占掉了留给标题的篇幅，会话就悄悄沿用消息开头当名字。现在这些模型也能起出正经的标题。
+- **侧边聊天能用 `/` 命令了。** 原来在侧边聊天里敲 `/` 不会弹出命令菜单，现在能弹，第一句之前就能用。新开的侧边聊天标签，光标直接落在输入框里，打开就能打字。计划模式只在主会话里用，侧边聊天和子 Agent 的菜单里不再列出 `/plan`。
+- **重开 Plume 后不再被要求先重读文件。** 原来 Plume 重开以后接着跑的会话，改它刚读过的文件会被拦下，要它再读一遍。现在读过哪些文件重开后还记得；读完以后被改过的文件，仍然要重新读。
+- **几处小修。** 开了磨砂时，侧边聊天也有和主会话一样的颗粒。深色下玻璃浮层的顶边不再比另外三边粗。macOS 上窗口被别的窗口从程序坞里拿出来后，对话框和设置又能正常关掉了。
+
 ## [0.7.6] - 2026-11-20
 
 <!-- plume:notes en -->
