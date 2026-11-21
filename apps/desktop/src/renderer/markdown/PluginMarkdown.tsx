@@ -1,18 +1,16 @@
 /** 插件的正文沿用产品渲染器；显式指定会话时，文件签也使用那一场对话的边界。 */
 import type { MarkdownProps } from "@plume/contract/ui";
+import type { Message } from "@plume/contract";
 import { Fragment, useMemo, type ReactNode } from "react";
-import { FileScope, touchedPaths } from "../files/scope.ts";
+import { FileScope, useFileScopeValue } from "../files/scope.ts";
 import { useLiveSession } from "../session-live.ts";
 import { type Inline, parseInline } from "./inline.ts";
 import { Markdown } from "./Markdown.tsx";
 
 export function PluginMarkdown({ sessionId, inline, ...props }: MarkdownProps) {
 	const view = useLiveSession(sessionId);
-	const scope = useMemo(
-		() => (view ? { sessionId: view.summary.id, cwd: view.summary.cwd, touched: touchedPaths(view.messages) } : null),
-		// oxlint-disable-next-line react-hooks/exhaustive-deps -- view 每拍都是新对象，按它的几个字段记住
-		[view?.summary.id, view?.summary.cwd, view?.messages],
-	);
+	const files = useFileScopeValue(view?.summary.id ?? "", view?.summary.cwd ?? "", view?.messages ?? NO_MESSAGES);
+	const scope = view ? files : null;
 	if (inline) return <InlineMarks text={props.text} className={props.className} />;
 	return sessionId ? (
 		<FileScope.Provider value={scope}>
@@ -22,6 +20,9 @@ export function PluginMarkdown({ sessionId, inline, ...props }: MarkdownProps) {
 		<Markdown {...props} />
 	);
 }
+
+/** 还没读到会话时的那一份：身份不变，碰过的文件不跟着每次重画重算。 */
+const NO_MESSAGES: readonly Message[] = [];
 
 /** 一句短话里的行内记号（`MarkdownProps.inline`）：链接、图片、公式、HTML 标签只留字，这里没有值得跳过去的地方。 */
 function InlineMarks({ text, className }: { text: string; className?: string }) {

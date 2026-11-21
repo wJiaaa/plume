@@ -8,8 +8,8 @@
 import type { ApprovalDecision, Message } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
 import { ActionSpinner } from "@plume/ui";
-import { Activity, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileScope, touchedPaths } from "../files/scope.ts";
+import { Activity, useCallback, useEffect, useRef, useState } from "react";
+import { FileScope, useFileScopeValue } from "../files/scope.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { useLiveSession } from "../session-live.ts";
 import { useAppearance } from "../appearance-settings.ts";
@@ -64,10 +64,7 @@ export function ChildConversation({
 	const view = useLiveSession(sessionId);
 	const grain = useAppearance().grain === true;
 	const arrival = useArrival(sessionId ?? "");
-	const files = useMemo(
-		() => ({ sessionId: sessionId ?? "", cwd: view?.summary.cwd ?? "", touched: touchedPaths(view?.messages ?? []) }),
-		[sessionId, view?.summary.cwd, view?.messages],
-	);
+	const files = useFileScopeValue(sessionId ?? "", view?.summary.cwd ?? "", view?.messages ?? NO_MESSAGES);
 	const running = view?.summary.running ?? false;
 	// 每份会话独占附件 hook 和草稿。隐藏时停止编辑器、拖放监听等副作用，状态仍在。
 	// scope 只用来分草稿：侧边聊天的 `draftKey` 是面板标签的 id，不是会话 id；@ 提及、命令、历史要的会话、目录和项目只给露着的那一份，用真的。

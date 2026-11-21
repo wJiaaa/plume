@@ -6,7 +6,7 @@
  */
 
 import type { Message } from "@plume/contract";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { lineFile, toolKind } from "../conversation/tool-lines.ts";
 
 export interface FileScopeValue {
@@ -22,10 +22,21 @@ export function useFileScope(): FileScopeValue | null {
 }
 
 /**
+ * 画一场对话的地方交给 `FileScope` 的那一份。消息每落一条（每个工具结果都是一条）都要重新数一遍碰过的文件，但多半还是那几个：
+ * 按内容记住，路径没变就还是同一个对象。换成新对象的话，转录里每一个读它的组件（文件签、代码块、人的气泡）都跟着重画，
+ * 窗口里挂着的二十轮在每条消息落地的那一下整片重画一遍。
+ */
+export function useFileScopeValue(sessionId: string, cwd: string, messages: readonly Message[]): FileScopeValue {
+	// 路径里不会有 NUL，拿它连起来比内容。
+	const key = useMemo(() => touchedPaths(messages).join("\0"), [messages]);
+	return useMemo(() => ({ sessionId, cwd, touched: key ? key.split("\0") : [] }), [sessionId, cwd, key]);
+}
+
+/**
  * 这场对话里成功的调用对着的文件（插件经 `ToolLine.file` 说的；列目录的不算），按写来的样子，没有解析：
  * 绝对路径，或相对会话的工作目录。
  */
-export function touchedPaths(messages: readonly Message[]): string[] {
+function touchedPaths(messages: readonly Message[]): string[] {
 	const failed = new Set<string>();
 	for (const message of messages) if (message.role === "toolResult" && message.isError) failed.add(message.toolCallId);
 	const answered = new Set<string>();

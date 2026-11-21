@@ -14,7 +14,7 @@ import type { MessageEdits } from "../conversation/message-edits.ts";
 import type { DraftQuote } from "../conversation/quote.ts";
 import { Welcome } from "../composer/Welcome.tsx";
 import { ConversationCards, listPages, listPanels, localized, SessionToolbar, usePluginUis } from "../plugins.tsx";
-import { FileScope, type FileScopeValue, touchedPaths } from "../files/scope.ts";
+import { FileScope, type FileScopeValue, useFileScopeValue } from "../files/scope.ts";
 import { MarketToolbar } from "../market/market.tsx";
 import { ChildConversation, type ChildTaskActions } from "../conversation/ChildConversation.tsx";
 import { usePluginDisplayName } from "../market/store.ts";
@@ -694,7 +694,7 @@ function Conversation({ view }: { view: SessionView }) {
 	const id = view.summary.id;
 	const arrival = useArrival(id);
 	// 回复里的文件签按这个会话找文件、读文件，见 `files/scope.ts`。
-	const files = useMemo(() => ({ sessionId: id, cwd: view.summary.cwd, touched: touchedPaths(view.messages) }), [id, view.summary.cwd, view.messages]);
+	const files = useFileScopeValue(id, view.summary.cwd, view.messages);
 	const onCarryOn = useCallback((prompt: string) => carryOn(id, prompt), [id]);
 	const onSend = useCallback(
 		async (text: string, displayText?: string) => {
