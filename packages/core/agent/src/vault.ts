@@ -17,7 +17,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { renameWithRetry } from "./atomic-write.ts";
+import { writeFileAtomic } from "./atomic-write.ts";
 import { text } from "./i18n.ts";
 import type { StoredSettings } from "./models.ts";
 import type { PluginSecrets } from "@plume/contract";
@@ -213,10 +213,7 @@ export function createVault(dir: string): Vault {
 
 	async function write(secrets: Record<string, string>): Promise<void> {
 		await mkdir(dir, { recursive: true });
-		// 临时文件各用各的名字：两个 Plume 同时写时，共用一个名字会让后换名的那个找不到文件。
-		const tmp = `${file}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-		await writeFile(tmp, JSON.stringify({ secrets }, null, 2), { mode: 0o600 });
-		await renameWithRetry(tmp, file);
+		await writeFileAtomic(file, JSON.stringify({ secrets }, null, 2), { mode: 0o600 });
 	}
 
 	/** 每次写都是读、改、整份写回，排成一队，后一次不会把前一次刚写进的那条盖掉。 */

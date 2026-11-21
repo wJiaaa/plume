@@ -34,7 +34,7 @@ const HELD_OPEN = new Set(["EPERM", "EBUSY", "EACCES"]);
  * 只在 Windows 上等：macOS、Linux 上同样的错误码说的是权限，等也不会变，重试只会把报错拖后。一共试 8 次，每次多等 20ms，
  * 合计半秒多，够扫描器放开一个小文件。
  */
-export async function renameWithRetry(from: string, to: string): Promise<void> {
+async function renameWithRetry(from: string, to: string): Promise<void> {
 	for (let attempt = 1; ; attempt++) {
 		try {
 			await rename(from, to);

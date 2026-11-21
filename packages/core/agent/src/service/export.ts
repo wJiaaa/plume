@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { AgentService, Log, ToolDefinition } from "@plume/contract";
 import { errorText, marks } from "@plume/loop";
-import { renameWithRetry } from "../atomic-write.ts";
+import { writeFileAtomic } from "../atomic-write.ts";
 import { conversationMarkdown } from "../conversation-markdown.ts";
 import type { PluginHost } from "../host.ts";
 import { activeLocale, text } from "../i18n.ts";
@@ -83,13 +82,7 @@ export function exportService(deps: ExportServiceDeps): Pick<AgentService, "expo
 				},
 				activeLocale(),
 			);
-			const partial = `${file}.${randomUUID()}.partial`;
-			try {
-				await writeFile(partial, markdown, { encoding: "utf8", flag: "wx" });
-				await renameWithRetry(partial, file);
-			} finally {
-				await rm(partial, { force: true });
-			}
+			await writeFileAtomic(file, markdown);
 		},
 	};
 }
