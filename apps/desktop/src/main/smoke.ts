@@ -1049,9 +1049,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			return;
 		}
 
-		if (process.env.PLUME_SMOKE_ONLY === "environment" || process.env.PLUME_SMOKE_ONLY === "environment-summary") {
-			const part = process.env.PLUME_SMOKE_ONLY === "environment" ? "wakeup" : "summary";
-			await checkEnvironment({ window, agent, plugin, outDir, setModel: (next) => (override = next), part });
+		if (process.env.PLUME_SMOKE_ONLY === "environment") {
+			await checkEnvironment({ window, agent, outDir, setModel: (next) => (override = next) });
 			console.log("PLUME_SMOKE", JSON.stringify({ ok: true, suite: process.env.PLUME_SMOKE_ONLY }));
 			window.webContents.debugger.detach();
 			await shutdown();
