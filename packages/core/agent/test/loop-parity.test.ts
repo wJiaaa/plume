@@ -157,7 +157,7 @@ it("无清单也每二十个沉默工具步提醒一次，提醒只说明现状�
 	expect(notes).toHaveLength(2);
 	for (const note of notes) {
 		expect(note).toContain("连续 20 次请求没有对用户说过话");
-		expect(note).toContain("不要给阶段性结论");
+		expect(note).toContain("没核实的标明是推测");
 		expect(note).toContain("不需要为此新建任务清单");
 	}
 	expect(state.requests()).toBe(41);
