@@ -6,9 +6,21 @@
  */
 
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
-import { ActionSpinner, Collapse, HoverRow, HoverRowReveal, hoverSlot, IconButton, RollingText, ScrollText, useI18n, usePopover } from "@plume/ui";
+import {
+	ActionSpinner,
+	Collapse,
+	HoverRow,
+	HoverRowReveal,
+	hoverSlot,
+	IconButton,
+	RollingText,
+	ScrollText,
+	useConfirmer,
+	useI18n,
+	usePopover,
+} from "@plume/ui";
 import { ChevronDown, ChevronRight, ChevronUp, Folder, FolderOpen, ListFilter, MoreHorizontal, Plus, SquarePen } from "@plume/ui/icons";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Group, groupSessions, nestSpawned, withSpawned, projectSessions, type SessionSort } from "./grouping.ts";
 import { projectSort } from "./order.ts";
 import { ListMenu } from "./ListMenu.tsx";
@@ -21,6 +33,7 @@ import { SidebarReorderContext, useSidebarReorderContext, useReorderState } from
 import { useSidebarReorder } from "./useSidebarReorder.ts";
 import { CarriedPill, DropLineIndicator } from "./DropIndicator.tsx";
 import type { SidebarActions } from "./actions.ts";
+import { deleteSessionQuestion, RequestDeleteContext } from "./delete-session.tsx";
 
 const COLLAPSED_KEY = "plume.sidebar.collapsed";
 /** 项目里的会话怎么排：是偏好，记下来，下次打开还是这样排。 */
@@ -71,7 +84,7 @@ export function ProjectList({
 	compact: boolean;
 	actions: SidebarActions;
 }) {
-	const { t } = useI18n();
+	const { t, resolvedLocale } = useI18n();
 	const [collapsed, setCollapsed] = useState(() => readList(COLLAPSED_KEY));
 	/** 每个项目现在露几段，没有就是 SESSION_PAGE。不落盘：下次打开从头看起。 */
 	const [shown, setShown] = useState<Record<string, number>>({});
@@ -92,6 +105,16 @@ export function ProjectList({
 		setSort(next);
 		setDragged([]);
 	};
+	// 行上的「删除」问到这里：问的时候才读整张列表，回调本身不随会话变，行不因此重画。
+	const confirm = useConfirmer();
+	const latest = useRef(sessions);
+	useEffect(() => {
+		latest.current = sessions;
+	}, [sessions]);
+	const requestDelete = useCallback(
+		(session: SessionSummary) => void deleteSessionQuestion(session, latest.current, resolvedLocale, actions.remove).then(confirm.ask),
+		[resolvedLocale, actions, confirm.ask],
+	);
 	/** 有子会话在跑的会话。 */
 	const busyParents = useMemo(() => new Set(sessions.flatMap((session) => (session.parentId && session.running ? [session.parentId] : []))), [sessions]);
 
@@ -117,136 +140,139 @@ export function ProjectList({
 
 	return (
 		<SidebarReorderContext value={reorder.contextValue}>
-			{reorder.dragging && <CarriedPill item={reorder.dragging} />}
-			{creating && <ProjectDialog actions={actions} onClose={() => setCreating(false)} />}
-			{listMenu.open && (
-				<ListMenu
-					anchor={listMenu.anchor}
-					sort={sort}
-					onSort={chooseSort}
-					canFold={foldable.length > 0}
-					allFolded={allFolded}
-					onFoldAll={foldAll}
-					onClose={listMenu.close}
-				/>
-			)}
-			{groups.pinned.length > 0 && (
-				<>
-					<SectionLabel
-						first
-						section="pinned"
-						sessions={withSpawned(groups.pinned, groups.spawned)}
-						count={withSpawned(groups.pinned, groups.spawned).length}
-						collapsed={isCollapsed(PINNED)}
-						onToggle={() => toggle(PINNED)}
-					>
-						{t("projectList.pinned")}
-					</SectionLabel>
-					<Collapse open={!isCollapsed(PINNED)}>
-						<div className={`flex flex-col ${gap}`}>
-							<SessionRows
-								sessions={groups.pinned}
-								spawned={groups.spawned}
-								busyParents={busyParents}
-								lit={lit}
-								compact={compact}
-								projects={projects}
-								actions={actions}
-							/>
-						</div>
-					</Collapse>
-				</>
-			)}
-			{/* 空列表也保留入口，创建第一个项目不必离开侧栏。 */}
-			<SectionLabel
-				first={groups.pinned.length === 0}
-				section="projects"
-				sessions={groups.projects.flatMap((group) => withSpawned(group.sessions, groups.spawned))}
-				count={groups.projects.length}
-				collapsed={isCollapsed(PROJECTS)}
-				onToggle={() => toggle(PROJECTS)}
-				action={
-					<>
-						<IconButton
-							size="sm"
-							label={t("sidebar.listSettings")}
-							menu={listMenu.open}
-							onClick={listMenu.toggle}
-							icon={<ListFilter size={13} strokeWidth={2} aria-hidden />}
-						/>
-						<IconButton size="sm" label={t("project.new")} onClick={() => setCreating(true)} icon={<Plus size={13} strokeWidth={2} aria-hidden />} />
-					</>
-				}
-			>
-				{t("projectList.projects")}
-			</SectionLabel>
-			<Collapse open={!isCollapsed(PROJECTS)}>
-				{groups.projects.map((group) => (
-					<ProjectGroup
-						key={group.id}
-						group={group}
-						spawned={groups.spawned}
-						live={projectSessions(sessions, group.id).length}
-						busyParents={busyParents}
-						projects={projects}
-						lit={lit}
-						compact={compact}
-						actions={actions}
-						collapsed={isCollapsed(group.id)}
-						onToggleCollapsed={() => toggle(group.id)}
-						onExpand={() => expand(group.id)}
-						shown={shown[group.id] ?? SESSION_PAGE}
-						onShowMore={() => setShown((current) => ({ ...current, [group.id]: (current[group.id] ?? SESSION_PAGE) + SESSION_PAGE }))}
-						onCollapse={() => setShown((current) => ({ ...current, [group.id]: SESSION_PAGE }))}
+			<RequestDeleteContext value={requestDelete}>
+				{confirm.element}
+				{reorder.dragging && <CarriedPill item={reorder.dragging} />}
+				{creating && <ProjectDialog actions={actions} onClose={() => setCreating(false)} />}
+				{listMenu.open && (
+					<ListMenu
+						anchor={listMenu.anchor}
+						sort={sort}
+						onSort={chooseSort}
+						canFold={foldable.length > 0}
+						allFolded={allFolded}
+						onFoldAll={foldAll}
+						onClose={listMenu.close}
 					/>
-				))}
-			</Collapse>
-
-			{groups.loose.length > 0 && (
-				<div className="pt-4">
-					<SectionLabel
-						first
-						held
-						section="recent"
-						sessions={withSpawned(groups.loose, groups.spawned)}
-						count={withSpawned(groups.loose, groups.spawned).length}
-						collapsed={isCollapsed(RECENT)}
-						onToggle={() => toggle(RECENT)}
-						action={
+				)}
+				{groups.pinned.length > 0 && (
+					<>
+						<SectionLabel
+							first
+							section="pinned"
+							sessions={withSpawned(groups.pinned, groups.spawned)}
+							count={withSpawned(groups.pinned, groups.spawned).length}
+							collapsed={isCollapsed(PINNED)}
+							onToggle={() => toggle(PINNED)}
+						>
+							{t("projectList.pinned")}
+						</SectionLabel>
+						<Collapse open={!isCollapsed(PINNED)}>
+							<div className={`flex flex-col ${gap}`}>
+								<SessionRows
+									sessions={groups.pinned}
+									spawned={groups.spawned}
+									busyParents={busyParents}
+									lit={lit}
+									compact={compact}
+									projects={projects}
+									actions={actions}
+								/>
+							</div>
+						</Collapse>
+					</>
+				)}
+				{/* 空列表也保留入口，创建第一个项目不必离开侧栏。 */}
+				<SectionLabel
+					first={groups.pinned.length === 0}
+					section="projects"
+					sessions={groups.projects.flatMap((group) => withSpawned(group.sessions, groups.spawned))}
+					count={groups.projects.length}
+					collapsed={isCollapsed(PROJECTS)}
+					onToggle={() => toggle(PROJECTS)}
+					action={
+						<>
 							<IconButton
 								size="sm"
-								label={t("projectList.newLooseChat")}
-								onClick={() => actions.newSession({})}
-								icon={<Plus size={13} strokeWidth={2} aria-hidden />}
+								label={t("sidebar.listSettings")}
+								menu={listMenu.open}
+								onClick={listMenu.toggle}
+								icon={<ListFilter size={13} strokeWidth={2} aria-hidden />}
 							/>
-						}
-					>
-						{t("projectList.recent")}
-					</SectionLabel>
-					{/* 和项目里一样的行、一样的间距，读起来是一张列表；不分页，整段只从标题折叠。 */}
-					<Collapse open={!isCollapsed(RECENT)}>
-						<div className={`flex flex-col ${gap}`}>
-							<SessionRows
-								sessions={groups.loose}
-								spawned={groups.spawned}
-								busyParents={busyParents}
-								lit={lit}
-								compact={compact}
-								projects={projects}
-								actions={actions}
-							/>
-						</div>
-					</Collapse>
-				</div>
-			)}
+							<IconButton size="sm" label={t("project.new")} onClick={() => setCreating(true)} icon={<Plus size={13} strokeWidth={2} aria-hidden />} />
+						</>
+					}
+				>
+					{t("projectList.projects")}
+				</SectionLabel>
+				<Collapse open={!isCollapsed(PROJECTS)}>
+					{groups.projects.map((group) => (
+						<ProjectGroup
+							key={group.id}
+							group={group}
+							spawned={groups.spawned}
+							live={projectSessions(sessions, group.id).length}
+							busyParents={busyParents}
+							projects={projects}
+							lit={lit}
+							compact={compact}
+							actions={actions}
+							collapsed={isCollapsed(group.id)}
+							onToggleCollapsed={() => toggle(group.id)}
+							onExpand={() => expand(group.id)}
+							shown={shown[group.id] ?? SESSION_PAGE}
+							onShowMore={() => setShown((current) => ({ ...current, [group.id]: (current[group.id] ?? SESSION_PAGE) + SESSION_PAGE }))}
+							onCollapse={() => setShown((current) => ({ ...current, [group.id]: SESSION_PAGE }))}
+						/>
+					))}
+				</Collapse>
 
-			{groups.pinned.length === 0 && groups.projects.length === 0 && groups.loose.length === 0 && (
-				<p className="px-2 py-6 text-center text-detail leading-relaxed text-ink-faint">
-					{t("sidebar.noSessions")}
-					<br />
-					{t("sidebar.newChatHint")}
-				</p>
-			)}
+				{groups.loose.length > 0 && (
+					<div className="pt-4">
+						<SectionLabel
+							first
+							held
+							section="recent"
+							sessions={withSpawned(groups.loose, groups.spawned)}
+							count={withSpawned(groups.loose, groups.spawned).length}
+							collapsed={isCollapsed(RECENT)}
+							onToggle={() => toggle(RECENT)}
+							action={
+								<IconButton
+									size="sm"
+									label={t("projectList.newLooseChat")}
+									onClick={() => actions.newSession({})}
+									icon={<Plus size={13} strokeWidth={2} aria-hidden />}
+								/>
+							}
+						>
+							{t("projectList.recent")}
+						</SectionLabel>
+						{/* 和项目里一样的行、一样的间距，读起来是一张列表；不分页，整段只从标题折叠。 */}
+						<Collapse open={!isCollapsed(RECENT)}>
+							<div className={`flex flex-col ${gap}`}>
+								<SessionRows
+									sessions={groups.loose}
+									spawned={groups.spawned}
+									busyParents={busyParents}
+									lit={lit}
+									compact={compact}
+									projects={projects}
+									actions={actions}
+								/>
+							</div>
+						</Collapse>
+					</div>
+				)}
+
+				{groups.pinned.length === 0 && groups.projects.length === 0 && groups.loose.length === 0 && (
+					<p className="px-2 py-6 text-center text-detail leading-relaxed text-ink-faint">
+						{t("sidebar.noSessions")}
+						<br />
+						{t("sidebar.newChatHint")}
+					</p>
+				)}
+			</RequestDeleteContext>
 		</SidebarReorderContext>
 	);
 }

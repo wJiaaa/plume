@@ -62,7 +62,7 @@ export function SessionMenu({
 	actions: SessionMenuActions;
 	onClose: () => void;
 	/**
-	 * 问要不要删这个会话。只给已归档的：确认框归打开菜单的那一方，菜单一点就卸了，留不住它。
+	 * 问要不要删这个会话；不给就不列「删除」。确认框归打开菜单的那一方，菜单一点就卸了，留不住它。
 	 */
 	onRequestDelete?: () => void;
 }) {
@@ -247,17 +247,6 @@ export function SessionMenu({
 						{t("sessionMenu.revokeSteward")}
 					</MenuItem>
 				)}
-				{session.archived && onRequestDelete && (
-					<MenuItem
-						icon={<Trash2 {...ICON} className="text-danger" />}
-						onClick={() => {
-							onClose();
-							onRequestDelete();
-						}}
-					>
-						<span className="text-danger">{t("common.delete")}</span>
-					</MenuItem>
-				)}
 				<MenuSeparator />
 				<MenuItem icon={<Folder {...ICON} />} disabled={session.running} onClick={() => setMode("projects")}>
 					{t("sessionMenu.project")}
@@ -329,6 +318,21 @@ export function SessionMenu({
 					{t("sessionMenu.copySessionId")}
 				</MenuItem>
 				<SessionMenuItems session={session} onClose={onClose} />
+				{/* 删除放最后、隔一道线：会丢东西的一项不和日常操作挨着，手滑点不到。 */}
+				{onRequestDelete && (
+					<>
+						<MenuSeparator />
+						<MenuItem
+							icon={<Trash2 {...ICON} className="text-danger" />}
+							onClick={() => {
+								onClose();
+								onRequestDelete();
+							}}
+						>
+							<span className="text-danger">{t("common.delete")}</span>
+						</MenuItem>
+					</>
+				)}
 			</MenuBody>
 		</Popover>
 	);

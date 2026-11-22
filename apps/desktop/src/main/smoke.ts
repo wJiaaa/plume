@@ -261,6 +261,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 					"导出为 Markdown",
 					"复制会话 ID",
 					"查看调用轨迹",
+					"删除",
 				])
 			)
 				throw new Error(`会话菜单项不符：${JSON.stringify(items)}`);
@@ -426,10 +427,13 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				`document.querySelector('[data-plume-section=pinned]') === null && document.querySelectorAll('[data-plume-row]').length === 1`,
 				"取消置顶回到原分区",
 			);
-			await click('[data-plume-row] button[aria-label="置顶会话"]');
-			await until(`document.querySelector('[data-plume-section=pinned]') !== null`, "行上置顶按钮生效");
-			await click('[data-plume-row] button[aria-label="取消置顶"]');
-			await until(`document.querySelector('[data-plume-section=pinned]') === null`, "行上取消置顶按钮生效");
+			// 行上的「⋯」开的是同一份菜单，挂在按钮上。
+			await click("[data-plume-row] [data-plume-row-more]");
+			await click(`${sessionMenu} [role=menuitem]`, "置顶");
+			await until(`document.querySelector('[data-plume-section=pinned]') !== null`, "行上「⋯」菜单置顶生效");
+			await click("[data-plume-row] [data-plume-row-more]");
+			await click(`${sessionMenu} [role=menuitem]`, "取消置顶");
+			await until(`document.querySelector('[data-plume-section=pinned]') === null`, "行上「⋯」菜单取消置顶生效");
 			await openSessionMenu();
 			await click(`${sessionMenu} [role=menuitem]`, "标记为未读");
 			await waitFor(async () => savedSummary().unread === true, "当前会话手动未读不立即消失");
@@ -1838,7 +1842,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await click(`[data-plume-row="${firstRun.lastSessionId}"] > button`);
 		await until(`document.querySelector('[data-screen=chat]') !== null`, "回到定时任务开出的会话");
 		for (const id of [firstRun.lastSessionId, secondRun.lastSessionId]) {
-			await click(`[data-plume-row="${id}"] button[aria-label^="归档会话"]`);
+			await click(`[data-plume-row="${id}"] [data-plume-row-more]`);
+			await click('[role=menu][aria-label="会话选项"] [role=menuitem]', "归档");
 			await until(`document.querySelector('[data-plume-row="${id}"]') === null`, "定时任务开出的会话归档");
 		}
 		await click("[data-nav=settings]");

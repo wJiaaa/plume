@@ -69,7 +69,8 @@ export async function checkModelDefaults({
 	await until(`document.querySelector('[data-model-row="fake-default"]')?.textContent.includes('默认')`, "默认模型已改为 B");
 	await closeSettings(page);
 	await until(shows("fake-model"), "已有会话保留 A");
-	await click(`[data-plume-row="${original.id}"] button[aria-label^="归档会话"]`);
+	await click(`[data-plume-row="${original.id}"] [data-plume-row-more]`);
+	await click('[role=menu][aria-label="会话选项"] [role=menuitem]', "归档");
 	await until(`document.querySelector('[data-screen=empty]') !== null && ${shows("fake-default")}`, "归档返回空白页不带入已用过的 A");
 
 	window.webContents.send("plume:command", "new-session");

@@ -13,4 +13,6 @@ export interface SidebarActions extends SessionMenuActions {
 	removeProject(projectId: string): void;
 	/** 把项目里还列着的会话都归档。 */
 	archiveProject(projectId: string): void;
+	/** 按给的顺序一个个删掉这些会话（问过人之后，见 `deleteSessionQuestion`）。 */
+	remove(sessionIds: string[]): void;
 }

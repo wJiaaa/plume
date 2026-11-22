@@ -1,5 +1,5 @@
 /**
- * 删除会话前问的那句话，已归档的页和会话菜单（打开着的已归档会话的标题栏）共用一份。
+ * 删除会话前问的那句话，已归档的页和会话菜单（侧栏行、标题栏）共用一份。
  *
  * 说出删掉的有多少条消息；从它分叉、由它开出来的后续会话不跟着删，各自留下成独立的会话，这一点说出来，
  * 第二个按钮是连它们一起删。插件管的东西（工作树）由插件经删除提示各补一行，人确认前就知道会留下什么。
@@ -7,13 +7,20 @@
 
 import type { Locale, SessionSummary } from "@plume/contract";
 import { type ConfirmOptions, translate } from "@plume/ui";
+import { createContext } from "react";
 import { deleteNotes } from "../plugins.tsx";
 import { nestSpawned, withSpawned } from "./grouping.ts";
 
 /**
+ * 侧栏的会话行要问「删不删」时找的那一位：确认框挂在列表上，一张列表一个，不是每行一个；算后续会话要整张会话列表，
+ * 也只有列表手里有，放进行的属性里，会话一变每一行都得重画。没有提供方的地方，菜单不列「删除」。
+ */
+export const RequestDeleteContext = createContext<((session: SessionSummary) => void) | null>(null);
+
+/**
  * 从它的后续会话，以及后续会话的后续会话，归不归档都算。
  *
- * 不只是侧栏此刻画在它下面的：能删的只有已归档的，已归档的来源不在列表里，它的后续会话在侧栏上早已各自独立。
+ * 不只是侧栏此刻画在它下面的：已归档的来源不在侧栏里，它的后续会话在侧栏上早已各自独立；
  * 删掉它改变的是这些会话再也回不到它下面。谁算谁的后续，规则和侧栏的嵌套一样，只是放在一张平铺的列表上。
  */
 function nestedUnder(session: SessionSummary, sessions: readonly SessionSummary[]): SessionSummary[] {

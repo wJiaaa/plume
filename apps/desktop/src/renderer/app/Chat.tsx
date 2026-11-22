@@ -456,10 +456,6 @@ function SessionTitle({ session }: { session: SessionSummary }) {
 	const { projects, sessions } = useChrome();
 	const menu = usePopover();
 	const confirm = useConfirmer();
-	const remove = (sessionIds: string[]) =>
-		void (async () => {
-			for (const id of sessionIds) await agent.deleteSession(id);
-		})().catch((error: unknown) => notify(errorText(error), "error"));
 	return (
 		<>
 			<Folder size={15} strokeWidth={1.7} aria-hidden className="shrink-0 text-ink-faint" />
@@ -478,7 +474,7 @@ function SessionTitle({ session }: { session: SessionSummary }) {
 					below
 					session={session}
 					onClose={menu.close}
-					onRequestDelete={() => void deleteSessionQuestion(session, sessions, resolvedLocale, remove).then(confirm.ask)}
+					onRequestDelete={() => void deleteSessionQuestion(session, sessions, resolvedLocale, sidebarActions.remove).then(confirm.ask)}
 					projects={projects}
 					actions={titleActions}
 				/>

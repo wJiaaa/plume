@@ -4,7 +4,7 @@ import type { Remote } from "@plume/rpc";
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import type { AgentProcessApi } from "../shared/protocol.ts";
 import type { ModelOverride } from "./smoke-browser.ts";
-import { clickReal, clickRealIn, clickVisible, closeSettings, contextMenuVisible, lastOf } from "./smoke-kit.ts";
+import { clickReal, clickRealIn, clickVisible, contextMenuVisible, lastOf } from "./smoke-kit.ts";
 import { nativeEnter, nativeModEnter } from "./smoke-message-edits.ts";
 
 /** 本体会话界面：项目折叠、项目草稿、置顶、停止后保留队列及手动发送。 */
@@ -321,15 +321,13 @@ export async function checkConversations(options: {
 		// 五、删掉会话后界面里按会话记的都清掉：存下的面板标签、开合，侧栏的收起记录……localStorage 里不再有它的 id。
 		const mentioned = `Object.keys(localStorage).some((key) => key.includes(${JSON.stringify(sessionId)}) || localStorage.getItem(key)?.includes(${JSON.stringify(sessionId)}))`;
 		if (!(await page<boolean>(mentioned))) throw new Error("开着面板的会话没在 localStorage 里留下面板记录，删除后的清理验不到");
-		await click(`[data-plume-row="${sessionId}"] button[aria-label^="归档会话"]`);
-		await until(`document.querySelector('[data-plume-row="${sessionId}"]') === null`, "归档要删的会话");
-		await click("[data-nav=settings]");
-		await click("[aria-label=设置章节] button", "已归档的聊天");
-		await click("[data-plume-delete-all-archived]");
-		await clickVisible(page, "[role=dialog] button", /^删除 \d+ 个$/);
+		// 不用先归档：行上「⋯」打开的就是会话菜单，「删除」问过一句就删。它下面嵌着后续会话时确认键叫「删除此会话」，只删它自己。
+		await click(`[data-plume-row="${sessionId}"] [data-plume-row-more]`);
+		await click('[role=menu][aria-label="会话选项"] [role=menuitem]', "删除");
+		await clickVisible(page, "[role=dialog] button", /^删除(此会话)?$/);
 		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId), "会话已删除");
+		await until(`document.querySelector('[data-plume-row="${sessionId}"]') === null`, "侧栏不再列删掉的会话");
 		await until(`!${mentioned}`, "删除后 localStorage 里不再留这个会话的记录");
-		await closeSettings(page);
 
 		console.log(
 			"PLUME_CONVERSATIONS_SMOKE",

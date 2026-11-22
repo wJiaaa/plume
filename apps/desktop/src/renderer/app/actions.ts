@@ -63,6 +63,10 @@ export const sidebarActions: SidebarActions = {
 			.then(async () => await agent.removeProject(projectId))
 			.catch((error: unknown) => notify(errorText(error), "error")),
 	archiveProject: (projectId) => void archiveProject(projectId),
+	remove: (sessionIds) =>
+		void (async () => {
+			for (const id of sessionIds) await agent.deleteSession(id);
+		})().catch((error: unknown) => notify(errorText(error), "error")),
 	archive: (sessionId, archived = true) => void agent.setSessionArchived(sessionId, archived).catch((error: unknown) => notify(errorText(error), "error")),
 	rename: async (sessionId, title) => {
 		await agent.renameSession(sessionId, title);
