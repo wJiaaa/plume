@@ -47,3 +47,22 @@ test("编辑重发留着图片和附件的块，人打的那句换成新的；�
 	assert.equal(lastUserIndex([sent, { role: "user", content: [{ type: "text", text: "继续" }], synthetic: true, timestamp: 2 }]), 0);
 	assert.equal(lastUserIndex([]), -1);
 });
+
+test("只带了开头的大文本附件撤回后只剩名字和路径，不把开头当成整份放回", async () => {
+	const big = "y".repeat(50_000);
+	const message: UserMessage = {
+		role: "user",
+		content: [
+			{ type: "text", text: attachmentBody("big.log", big, "Attached file", "/tmp/big.log") },
+			{ type: "text", text: "看看【big.log】" },
+		],
+		displayText: "看看【big.log】",
+		attachments: [{ name: "big.log", kind: "text", mimeType: "text/plain", label: "big.log", path: "/tmp/big.log" }],
+		timestamp: 1,
+	};
+	const draft = await draftFromMessage(message);
+	assert.deepEqual(
+		draft.attachments.map(({ name, isText, text, path }) => ({ name, isText, text, path })),
+		[{ name: "big.log", isText: false, text: undefined, path: "/tmp/big.log" }],
+	);
+});

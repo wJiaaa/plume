@@ -36,9 +36,39 @@ function locatedAt(path?: string): string {
 	return path ? ` (at ${JSON.stringify(path)})` : "";
 }
 
-/** 文本附件的内容怎么写进提示词：带名字、围起来，模型分得清文件和前后那句话。 */
+/**
+ * 文本附件整份写进提示词的上限（字符）。附件进了会话就跟着每一轮重发：一份 25 万字的请求日志整份贴进去，
+ * 头一轮就是 7.5 万 token，之后几十轮每轮都带着，而模型第一步往往还是按路径用工具去读它。
+ */
+const INLINE_TEXT_CHARS = 30_000;
+/** 有路径的大文件只带开头：够认出是什么、长什么样，其余模型按路径自己读。 */
+const PREVIEW_CHARS = 4_000;
+/** 没有路径的（读不回原文）只能多带，和文档抽字的上限一样（`@plume/document-text`）。 */
+const PATHLESS_TEXT_CHARS = 120_000;
+
+/**
+ * 文本附件的内容怎么写进提示词：带名字、围起来，模型分得清文件和前后那句话。
+ *
+ * 超过上限的只带开头，围栏后面一行照实说带了多少、原文在哪。这种块撤回时认不回内容（见 `revert-draft.ts` 的 `bodyOf`），
+ * 回到输入框只剩名字和路径，再发出去是一份不带内容、带路径的附件：不会把开头那段当成整份重发。
+ */
 export function attachmentBody(name: string, text: string, label = "Attached file", path?: string): string {
-	return `\n\n### ${label}: ${name}${locatedAt(path)}\n\`\`\`\n${text}\n\`\`\`\n\n`;
+	const keep = path ? PREVIEW_CHARS : PATHLESS_TEXT_CHARS;
+	if (text.length <= INLINE_TEXT_CHARS || text.length <= keep) return `\n\n### ${label}: ${name}${locatedAt(path)}\n\`\`\`\n${text}\n\`\`\`\n\n`;
+	const head = headOf(text, keep);
+	const note = path
+		? `[only the first ${head.length} of ${text.length} characters are included above; the whole file is at ${JSON.stringify(path)} — read it with your tools when you need more]`
+		: `[only the first ${head.length} of ${text.length} characters were attached; the rest was not sent]`;
+	return `\n\n### ${label}: ${name}${locatedAt(path)}\n\`\`\`\n${head}\n\`\`\`\n${note}\n\n`;
+}
+
+/** 前 `max` 个字，尽量停在一行的末尾；不切开代理对。 */
+function headOf(text: string, max: number): string {
+	let end = max;
+	const newline = text.lastIndexOf("\n", end);
+	if (newline > max / 2) end = newline;
+	else if (/[\uD800-\uDBFF]/.test(text.charAt(end - 1))) end -= 1;
+	return text.slice(0, end);
 }
 
 /** 读不出内容的文件写成这样：说清楚没带内容，模型就不会装作读过；有位置时它能自己用工具去读。 */

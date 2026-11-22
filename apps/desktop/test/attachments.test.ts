@@ -99,3 +99,28 @@ test("只有一个附件时不写序号；同门类多个时写门类内的序�
 	assert.deepEqual(segments, [{ kind: "text", text: "无标记" }]);
 	assert.equal(unplaced.length, 1);
 });
+
+test("大文本附件：有路径的只带开头和路径，没路径的带到上限；都照实说带了多少", () => {
+	// 一份 25 万字的请求日志整份贴进去，之后每一轮都带着它重发，模型第一步往往还是按路径去读。
+	const big = Array.from({ length: 5_000 }, (_, index) => `line ${index} ${"x".repeat(40)}`).join("\n");
+	const [withPath] = spellDraft("看看", [{ name: "log.json", mimeType: "application/json", isText: true, text: big, path: "/w/log.json" }]);
+	assert.ok(withPath?.type === "text" && isAttachmentBody(withPath.text));
+	assert.ok(withPath.text.length < 5_000, `inlined ${withPath.text.length} characters`);
+	assert.ok(withPath.text.startsWith('\n\n### Attached file: log.json (at "/w/log.json")\n```\nline 0 '));
+	assert.match(
+		withPath.text,
+		new RegExp(
+			`\n\`\`\`\n\\[only the first \\d+ of ${big.length} characters are included above; the whole file is at "/w/log\\.json" — read it with your tools`,
+		),
+	);
+	assert.match(withPath.text, /x\n```\n/, "停在一行的末尾");
+
+	const [pathless] = spellDraft("看看", [{ name: "paste.txt", mimeType: "text/plain", isText: true, text: big }]);
+	assert.ok(pathless?.type === "text");
+	assert.ok(pathless.text.length > 100_000 && pathless.text.length < 121_000);
+	assert.match(pathless.text, new RegExp(`\\[only the first \\d+ of ${big.length} characters were attached; the rest was not sent\\]`));
+
+	const small = "a".repeat(29_000);
+	const [whole] = spellDraft("看看", [{ name: "a.txt", mimeType: "text/plain", isText: true, text: small, path: "/w/a.txt" }]);
+	assert.ok(whole?.type === "text" && whole.text.includes(small) && !whole.text.includes("only the first"));
+});
