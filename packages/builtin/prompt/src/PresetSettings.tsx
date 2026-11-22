@@ -1,5 +1,5 @@
 /**
- * 设置 › 个性化里「身份与准则」那一节：列出内置的两套和自己写的，选一套给之后新开的会话用；都能改、复制，内置的改过能恢复默认，自己写的能删。
+ * 设置 › 个性化里「身份与准则」那一节：列出内置的两套和自己写的，选一套给之后新开的会话用；能新建，都能改、复制，内置的改过能恢复默认，自己写的能删。
  *
  * 改在弹窗里：身份、准则是几屏长的英文，铺在设置页里会把列表挤下去。
  * 选的、写的都在逻辑入口那边（插件数据目录），经 `ui.remote()` 读写；校验也在那边，存不进去的原因按界面语言交回来。
@@ -20,7 +20,7 @@ import {
 	useConfirmer,
 	useI18n,
 } from "@plume/ui";
-import { CircleAlert, Copy, Pencil, RotateCcw, Trash2 } from "@plume/ui/icons";
+import { CircleAlert, Copy, Pencil, Plus, RotateCcw, Trash2 } from "@plume/ui/icons";
 import { field } from "@plume/styles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type BuiltinId, type PresetDraft, type PresetsView, type PresetView, type PromptApi } from "./api.ts";
@@ -29,7 +29,7 @@ import { MESSAGES } from "./messages.ts";
 type Messages = (typeof MESSAGES)["zh-CN"];
 type Notify = (message: string, level?: "info" | "warn" | "error") => void;
 
-/** 正在改的那一套：`create` 是复制出来、还没存的。`key` 认没存的草稿：Esc 关掉后再打开同一套还在。内置的不改名字。 */
+/** 正在改的那一套：`create` 是新建或复制出来、还没存的。`key` 认没存的草稿：Esc 关掉后再打开同一套还在。内置的不改名字。 */
 interface Editing {
 	mode: "create" | "change";
 	key: string;
@@ -74,6 +74,8 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 	);
 
 	const open = (next: Omit<Editing, "draft">) => setEditing({ ...next, draft: drafts.current.get(next.key) ?? next.original });
+
+	const create = () => open({ mode: "create", key: "new", builtin: false, original: { name: "", identity: "", guidelines: "" } });
 
 	const copy = (preset: PresetView) => {
 		const original = { ...draftOf(preset, text), name: text.copyName(nameOf(preset, text)) };
@@ -126,43 +128,59 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 					{view.problem.reason === "missing" ? text.problemMissing : text.problemInvalid}
 				</SettingsNotice>
 			)}
-			<SettingsCard role="radiogroup" aria-label={text.title} data-prompt-presets="">
-				{view.presets.map((preset) => {
-					const selected = preset.id === view.selected;
-					return (
-						<div key={preset.id} className="prompt-row" data-prompt-preset={preset.id}>
-							<button type="button" role="radio" aria-checked={selected} className="prompt-choice" onClick={() => selected || void act(api.select(preset.id))}>
-								<ChoiceMark kind="radio" checked={selected} />
-								<span className="prompt-choice-body">
-									<span className="prompt-choice-head">
-										<Text size="label" weight="medium">
-											{nameOf(preset, text)}
-										</Text>
-										<Text size="caption" tone="faint">
-											{preset.builtin ? text.builtinBadge : text.custom}
-											{preset.modified ? ` · ${text.modified}` : ""}
-											{selected ? ` · ${text.inUse}` : ""}
+			<SettingsCard>
+				{/* 选哪一套是一组单选；末尾的「新建一套」不是选项，放在这一组外面。 */}
+				<div role="radiogroup" aria-label={text.title} data-prompt-presets="">
+					{view.presets.map((preset) => {
+						const selected = preset.id === view.selected;
+						return (
+							<div key={preset.id} className="prompt-row" data-prompt-preset={preset.id}>
+								<button
+									type="button"
+									role="radio"
+									aria-checked={selected}
+									className="prompt-choice"
+									onClick={() => selected || void act(api.select(preset.id))}
+								>
+									<ChoiceMark kind="radio" checked={selected} />
+									<span className="prompt-choice-body">
+										<span className="prompt-choice-head">
+											<Text size="label" weight="medium">
+												{nameOf(preset, text)}
+											</Text>
+											<Text size="caption" tone="faint">
+												{preset.builtin ? text.builtinBadge : text.custom}
+												{preset.modified ? ` · ${text.modified}` : ""}
+												{selected ? ` · ${text.inUse}` : ""}
+											</Text>
+										</span>
+										<Text as="span" size="detail" tone="muted" className="prompt-choice-detail">
+											{detailOf(preset, text)}
 										</Text>
 									</span>
-									<Text as="span" size="detail" tone="muted" className="prompt-choice-detail">
-										{detailOf(preset, text)}
-									</Text>
+								</button>
+								{/* 悬停或聚焦到这一行时才出现，和子智能体、命令那几行一样。 */}
+								<span className="prompt-actions">
+									<IconButton
+										label={text.edit}
+										icon={<Pencil size={14} aria-hidden />}
+										onClick={() => open({ mode: "change", key: preset.id, id: preset.id, builtin: preset.builtin, original: draftOf(preset, text) })}
+									/>
+									<IconButton label={text.copy} icon={<Copy size={14} aria-hidden />} onClick={() => copy(preset)} />
+									{preset.modified && <IconButton label={text.reset} icon={<RotateCcw size={14} aria-hidden />} onClick={() => reset(preset)} />}
+									{!preset.builtin && <IconButton label={text.remove} icon={<Trash2 size={14} aria-hidden />} onClick={() => remove(preset)} />}
 								</span>
-							</button>
-							{/* 悬停或聚焦到这一行时才出现，和子智能体、命令那几行一样。 */}
-							<span className="prompt-actions">
-								<IconButton
-									label={text.edit}
-									icon={<Pencil size={14} aria-hidden />}
-									onClick={() => open({ mode: "change", key: preset.id, id: preset.id, builtin: preset.builtin, original: draftOf(preset, text) })}
-								/>
-								<IconButton label={text.copy} icon={<Copy size={14} aria-hidden />} onClick={() => copy(preset)} />
-								{preset.modified && <IconButton label={text.reset} icon={<RotateCcw size={14} aria-hidden />} onClick={() => reset(preset)} />}
-								{!preset.builtin && <IconButton label={text.remove} icon={<Trash2 size={14} aria-hidden />} onClick={() => remove(preset)} />}
-							</span>
-						</div>
-					);
-				})}
+							</div>
+						);
+					})}
+				</div>
+				{/* 列表只有几行，新建放在末尾最顺手：和各套同一种行，平常就看得见，不靠悬停才出现。 */}
+				<button type="button" className="prompt-row prompt-create" onClick={create} data-prompt-create="">
+					<Plus size={16} aria-hidden />
+					<Text size="label" tone="muted">
+						{text.create}
+					</Text>
+				</button>
 			</SettingsCard>
 
 			{editing && (

@@ -22,8 +22,26 @@
 	background: var(--plume-card-hover);
 }
 
-.prompt-row + .prompt-row {
+.prompt-row + .prompt-row,
+.prompt-create {
 	border-top: 1px solid var(--plume-line-soft);
+}
+
+/* 末尾的「新建一套」：和各套同一种行，加号对齐上面的单选圈，字色淡一档，读起来是动作而不是又一套。 */
+.prompt-create {
+	width: 100%;
+	border-right: 0;
+	border-bottom: 0;
+	border-left: 0;
+	background: transparent;
+	color: var(--plume-ink-muted);
+	text-align: left;
+	cursor: pointer;
+}
+
+/* 悬停已经由 .prompt-row 变底色；键盘走到这里时也一样。 */
+.prompt-create:focus-visible {
+	background: var(--plume-card-hover);
 }
 
 .prompt-choice {
