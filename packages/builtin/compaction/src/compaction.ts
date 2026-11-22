@@ -18,7 +18,7 @@ import { type BudgetModel, type CompactionBudget, compactionBudget, KEEP_MIN } f
 import { forkable, forkSummary } from "./fork.ts";
 import { droppedMessage, type KindOf, type ReplyOrigin, RetiredHistory, summaryMessages } from "./head.ts";
 import type { ManualWords, Models, Observer } from "./models.ts";
-import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, pruneToolResults } from "./prune.ts";
+import { type ArtifactSink, dropUneventful, FRESH_RESULT_MAX_CHARS, freshView, PRUNE_THRESHOLD_CHARS, pruneToolResults } from "./prune.ts";
 import { dropStaleResults } from "./stale-results.ts";
 import { fallbackSummary, summarize } from "./summary.ts";
 import { updatesPlan, withoutStalePlan } from "./task-context.ts";
@@ -182,9 +182,27 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	const unseenFrom = stale.findLastIndex((message) => message.role === "assistant") + 1;
 	const seenPart = stale.slice(0, unseenFrom);
 	const unseenPart = stale.slice(unseenFrom);
-	const seenPruned = pruneToolResults(seenPart, undefined, artifacts);
-	const unseenPruned = pruneToolResults(unseenPart, FRESH_RESULT_MAX_CHARS, artifacts);
+	/*
+	 * 这里先不存原文：剪的大多是随后要摘要掉的那段，给它们存的原文没人再会去读，存下的份数却有上限，按修改时间挤掉的正是留下的尾部
+	 * 和工具自己外溢出去、还在被指着的那些。切点定下来以后只给留下的那几条存（`addressed`）。
+	 */
+	const seenPruned = pruneToolResults(seenPart);
+	const unseenPruned = pruneToolResults(unseenPart, FRESH_RESULT_MAX_CHARS);
 	messages = seenPruned === seenPart && unseenPruned === unseenPart ? stale : [...seenPruned, ...unseenPruned];
+	/** 剪过的那条 → 它的原文和剪它的线，给留下的那几条补存原文、换上带地址的那份。 */
+	const originals = new Map<Message, { source: Message; threshold: number }>();
+	messages.forEach((message, index) => {
+		const source = stale[index] as Message;
+		if (message !== source) originals.set(message, { source, threshold: index < unseenFrom ? PRUNE_THRESHOLD_CHARS : FRESH_RESULT_MAX_CHARS });
+	});
+	const addressed = (result: Compacted | null): Compacted | null => {
+		if (!result || !artifacts || originals.size === 0) return result;
+		const next = result.messages.map((message) => {
+			const original = originals.get(message);
+			return original ? (pruneToolResults([original.source], original.threshold, artifacts)[0] ?? message) : message;
+		});
+		return { ...result, messages: next };
+	};
 
 	// 短到没有值得摘要的过去，多大都一样：每条结果第一次发出前已经剪过（`freshView`），这里不再单独改写前缀。
 	if (messages.length <= KEEP_MIN + 2) return null;
@@ -320,7 +338,7 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 			tail = fitted;
 		}
 	}
-	if (!summary) return dropOldest(messages, estimate, model, budget, scale, floor, request);
+	if (!summary) return addressed(dropOldest(messages, estimate, model, budget, scale, floor, request));
 	const text = summary;
 
 	// 摘要写好了，按它的实际长度再收一次尾部：分叉那份覆盖整段，删多少都在摘要里；独立的那份已经按最长留过位置。
@@ -339,11 +357,11 @@ export async function compactIfNeeded(request: CompactionRequest): Promise<Compa
 	const { room } = budget;
 	if (room > 0 && scaled(compacted) >= room) {
 		const dropped = dropOldest(messages, estimate, model, budget, scale, floor, request);
-		if (dropped && scaled(dropped.messages) < room) return dropped;
+		if (dropped && scaled(dropped.messages) < room) return addressed(dropped);
 		if (dropped && scaled(dropped.messages) < scaled(result?.messages ?? messages)) result = dropped;
 		if (result && scaled(result.messages) + overhead > model.contextWindow) return null;
 	}
-	return result;
+	return addressed(result);
 }
 
 /**
