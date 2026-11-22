@@ -63,9 +63,39 @@ export function formatCharWindow(text: string, start = 0, max = MAX_LINE_CHARS):
 	return formatWindow(charWindow(text, start, max), text.length);
 }
 
-export function formatMatchWindowAt(text: string, matchAt: number, max = MAX_LINE_CHARS): string {
-	if (text.length <= max) return text;
-	return formatWindow(matchWindowAt(text, matchAt, max), text.length);
+/** 一行里命中散在各处时，每处给多宽：两千字的窗口只罩得住一处，几十处命中要的是每处附近的一小段。 */
+const HIT_WINDOW_CHARS = 400;
+/** 一行最多给几处：再多就该收窄模式了，也免得一行就占满 grep 的输出上限。 */
+const MAX_HIT_WINDOWS = 12;
+
+/**
+ * 长行里每处命中的窗口，按位置排好，一处一段。
+ *
+ * 压缩过的 JS 整个文件是一行：只给第一处的窗口，同一行里后面几十处命中就看不见，模型只能自己写脚本去找位置。
+ * 所有命中落在一个常规窗口里时照旧给一个；否则每处给一个窄窗口，各自带着地址（省略了多少字、从哪里接着读）。
+ */
+export function formatMatchWindowsAt(text: string, starts: readonly number[]): string[] {
+	const sorted = [...new Set(starts)].sort((a, b) => a - b);
+	if (text.length <= MAX_LINE_CHARS) return [text];
+	const wide = matchWindowAt(text, sorted[0] ?? 0);
+	if (sorted.every((at) => at >= wide.start && at < wide.end)) return [formatWindow(wide, text.length)];
+
+	const windows: CharWindow[] = [];
+	let hidden = 0;
+	for (const at of sorted) {
+		const last = windows[windows.length - 1];
+		if (last && at < last.end) continue;
+		if (windows.length === MAX_HIT_WINDOWS) {
+			hidden++;
+			continue;
+		}
+		// 不和上一段重叠：重叠的那几个字已经给过了。
+		const start = Math.max(last?.end ?? 0, at - Math.floor(HIT_WINDOW_CHARS / 3));
+		windows.push(charWindow(text, start, HIT_WINDOW_CHARS));
+	}
+	const shown = windows.map((window) => formatWindow(window, text.length));
+	if (hidden > 0) shown[shown.length - 1] += ` [${hidden} more match${hidden === 1 ? "" : "es"} on this line not shown; narrow the pattern]`;
+	return shown;
 }
 
 export function formatMatchWindow(text: string, pattern?: string, options?: MatchOptions, max = MAX_LINE_CHARS): string {
@@ -73,12 +103,22 @@ export function formatMatchWindow(text: string, pattern?: string, options?: Matc
 	return formatWindow(matchWindow(text, pattern, options, max), text.length);
 }
 
-/** `text` 里的 UTF-8 字节偏移换成字符串下标。 */
-export function utf8ByteOffsetToIndex(text: string, bytes: number): number {
-	if (bytes <= 0) return 0;
+/** 同一行的一串 UTF-8 字节偏移换成字符串下标，按偏移从小到大一段段解码，不为每个偏移把整行重新编码一遍。 */
+export function utf8ByteOffsetsToIndices(text: string, bytes: readonly number[]): number[] {
 	const buf = Buffer.from(text, "utf8");
-	if (bytes >= buf.length) return text.length;
-	return buf.subarray(0, bytes).toString("utf8").length;
+	const order = bytes.map((_, index) => index).sort((a, b) => bytes[a]! - bytes[b]!);
+	const out = Array.from<number>({ length: bytes.length });
+	let byte = 0;
+	let index = 0;
+	for (const at of order) {
+		const target = Math.max(0, Math.min(buf.length, bytes[at]!));
+		if (target > byte) {
+			index += buf.subarray(byte, target).toString("utf8").length;
+			byte = target;
+		}
+		out[at] = index;
+	}
+	return out;
 }
 
 function matchIndex(text: string, pattern: string | undefined, options?: MatchOptions): number {
@@ -96,12 +136,12 @@ function matchIndex(text: string, pattern: string | undefined, options?: MatchOp
 	}
 }
 
-export function longLineFooter(entries: { line: number; length: number; shownFrom: number; shownTo: number }[]): string {
+export function longLineFooter(entries: { line: number; length: number; shownFrom: number; shownTo: number }[], width = MAX_LINE_CHARS): string {
 	if (entries.length === 0) return "";
 	if (entries.length === 1) {
 		const entry = entries[0]!;
 		const next = entry.shownTo < entry.length ? `; call read again with char_offset=${entry.shownTo + 1} for more` : "";
 		return `\n\n[line ${entry.line} is ${entry.length} characters; showing ${entry.shownFrom}-${entry.shownTo}${next}]`;
 	}
-	return `\n\n[${entries.length} lines exceed ${MAX_LINE_CHARS} characters; showing a ${MAX_LINE_CHARS}-character window. Continue a line with char_offset]`;
+	return `\n\n[${entries.length} lines exceed ${width} characters; showing a ${width}-character window. Continue a line with char_offset]`;
 }

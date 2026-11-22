@@ -7,7 +7,6 @@
  */
 
 import { createReadStream } from "node:fs";
-import { MAX_LINE_CHARS } from "./long-line.ts";
 import { looksBinary } from "./paths.ts";
 
 /**
@@ -42,6 +41,7 @@ export async function readLineWindow(
 	offset: number,
 	limit: number,
 	charStart: number,
+	width: number,
 	budget: number,
 	signal?: AbortSignal,
 ): Promise<LineWindowRead> {
@@ -70,8 +70,8 @@ export async function readLineWindow(
 			 * 至少是 `renderLines` 要花的：这一行加 `→`，或者它的一个字符窗口。取下限，先用完额度的总是渲染那边，
 			 * 它说的「输出到上限了」才是真的。
 			 */
-			const inline = text.length <= MAX_LINE_CHARS && charStart <= 0;
-			used += inline ? text.length + 2 : Math.max(0, Math.min(MAX_LINE_CHARS, text.length - charStart) - 1);
+			const inline = text.length <= width && charStart <= 0;
+			used += inline ? text.length + 2 : Math.max(0, Math.min(width, text.length - charStart) - 1);
 			if (used > budget) collecting = false;
 		}
 		parts = [];

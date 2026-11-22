@@ -108,6 +108,32 @@ it("命中在一行的前 2000 个字之后，结果里照样有", async () => {
 	expect(text).toMatch(/char_offset=/);
 });
 
+for (const fallback of [false, true]) {
+	it(`压缩成一行的文件里散在各处的命中，每处各给一段 (fallback=${fallback})`, async () => {
+		// 压缩过的 JS 整个是一行：以前只给第一处的窗口，后面几十处命中看不见，模型只好写脚本去找位置。
+		const dir = await workspace();
+		const hits = Array.from({ length: 30 }, (_, i) => `HIT_${String(i).padStart(2, "0")}`);
+		// 中文垫字：ripgrep 报的是字节偏移，换成字符下标错了的话窗口里就没有命中。
+		await writeFile(join(dir, "bundle.js"), hits.map((hit) => `${"中".repeat(5_000)}${hit}`).join(""));
+		if (fallback) withoutRipgrep();
+		const text = textOf(await grepTool.execute({ pattern: "HIT_\\d+" }, ctx(dir)));
+		for (const hit of hits.slice(0, 12)) expect(text, hit).toContain(hit);
+		expect(text).not.toContain("HIT_12");
+		expect(text).toMatch(/18 more matches on this line not shown/);
+		expect(text.match(/bundle\.js:1:/g)?.length).toBe(12);
+		expect(text.match(/char_offset=/g)?.length).toBe(12);
+		expect((await grepTool.execute({ pattern: "HIT_\\d+" }, ctx(dir))).details).toMatchObject({ count: 1 });
+	});
+}
+
+it("长行里挨在一起的几处命中，照旧一个窗口", async () => {
+	const dir = await workspace();
+	await writeFile(join(dir, "bundle.js"), `${"a".repeat(50_000)}NEAR_1 NEAR_2 NEAR_3${"b".repeat(50_000)}`);
+	const text = textOf(await grepTool.execute({ pattern: "NEAR_\\d" }, ctx(dir)));
+	expect(text.match(/bundle\.js:1:/g)?.length).toBe(1);
+	expect(text).toContain("NEAR_1 NEAR_2 NEAR_3");
+});
+
 it("什么都没匹配到的正则，报的是它本身", async () => {
 	const dir = await workspace();
 	const res = await grepTool.execute({ pattern: "class\\s+Missing" }, ctx(dir));

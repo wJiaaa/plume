@@ -67,3 +67,27 @@ it("char_offset 的读是模型自己要的窗口，整行都能编辑", async (
 	const seen = await editTool.execute({ path: file, old_string: needle, new_string: "SWAPPED" }, ctx);
 	expect(seen.isError, textOf(seen)).toBeUndefined();
 });
+
+it("char_limit 一次给宽一段，不用两千字一页地翻；上下限都夹住", async () => {
+	// 压缩过的 JS：知道要看哪一大段时，两千字一页地翻，每页都要把整个上下文再发一遍。
+	const content = Array.from({ length: 4_000 }, (_, index) => `fn${index}();`).join("");
+	const { file, ctx } = await workspace(content, "bundle.js");
+	const wide = await readTool.execute({ path: file, char_offset: 1001, char_limit: 20_000 } as never, ctx);
+	const text = textOf(wide);
+	expect(text).toContain(content.slice(1000, 21_000));
+	expect(text).toMatch(/char_offset=21001/);
+	expect(wide.details).toMatchObject({ charFrom: 1001, charTo: 21_000, fileView: { columns: { from: 1001, to: 21_000 } } });
+
+	const capped = await readTool.execute({ path: file, char_limit: 1_000_000 } as never, ctx);
+	expect(capped.details).toMatchObject({ charFrom: 1, charTo: 30_000 });
+	const floored = await readTool.execute({ path: file, char_limit: 10 } as never, ctx);
+	expect(floored.details).toMatchObject({ charFrom: 1, charTo: 2000 });
+});
+
+it("char_limit 够宽时整行原样给，不当长行", async () => {
+	const content = `${"x".repeat(5_000)}\nshort`;
+	const { file, ctx } = await workspace(content, "wide.txt");
+	const text = textOf(await readTool.execute({ path: file, char_limit: 8_000 } as never, ctx));
+	expect(text).toContain("x".repeat(5_000));
+	expect(text).not.toMatch(/char_offset/);
+});

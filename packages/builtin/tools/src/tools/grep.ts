@@ -8,7 +8,7 @@ import { errorResult } from "./result.ts";
 import type { Tool, ToolContext, ToolResult } from "./types.ts";
 import { globToRegExp } from "./glob.ts";
 import { insideGitWorkTree, SKIP_DIRS } from "./project-files.ts";
-import { formatMatchWindow, formatMatchWindowAt, utf8ByteOffsetToIndex, type MatchOptions } from "./long-line.ts";
+import { formatMatchWindow, formatMatchWindowsAt, MAX_LINE_CHARS, utf8ByteOffsetsToIndices, type MatchOptions } from "./long-line.ts";
 import { displayPath, looksBinary } from "./paths.ts";
 import { describeGrep } from "./describe.ts";
 
@@ -21,11 +21,26 @@ const ERROR_LINE_CHARS = 200;
 
 /**
  * 留着 文件:行号 的地址。长行留命中附近的窗口（不是前两千字），并给出 `char_offset`，read 能打开其余部分。
+ * 知道这一行每处命中在哪（`matchesAt`）时，散在各处的命中各给一段，每段一行、都带同一个地址，见 `formatMatchWindowsAt`；
+ * 几段仍算一条命中，条数上限和「省略了几条」照旧按行数。
  */
-function shortenLine(line: string, pattern?: string, options?: MatchOptions, matchAt?: number): string {
+function shortenLine(line: string, pattern?: string, options?: MatchOptions, matchesAt?: readonly number[]): string {
 	const { address, content } = splitGrepLine(line);
-	const body = matchAt === undefined ? formatMatchWindow(content, pattern, options) : formatMatchWindowAt(content, matchAt);
-	return address ? `${address}${body}` : body;
+	const bodies = matchesAt?.length ? formatMatchWindowsAt(content, matchesAt) : [formatMatchWindow(content, pattern, options)];
+	return bodies.map((body) => `${address}${body}`).join("\n");
+}
+
+/** 一行里正则的每一处命中，给兜底用：ripgrep 自己报每处位置，兜底的 `exec` 只找第一处。 */
+function matchStarts(text: string, regex: RegExp, first: number): number[] {
+	if (text.length <= MAX_LINE_CHARS) return [first];
+	const global = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : `${regex.flags}g`);
+	const starts: number[] = [];
+	for (let found = global.exec(text); found; found = global.exec(text)) {
+		starts.push(found.index);
+		// 空匹配不前进的话会原地打转。
+		if (found[0] === "") global.lastIndex++;
+	}
+	return starts.length > 0 ? starts : [first];
 }
 
 /** ripgrep 或兜底给的 `路径:行号:内容`。路径本身不开窗口。 */
@@ -206,9 +221,9 @@ async function runRipgrepJson(
 			const raw = (event.data?.lines?.text ?? "").replace(/\r?\n$/, "");
 			const lineNo = event.data?.line_number ?? 0;
 			const rel = displayPath(ctx.cwd, pathText);
-			const byteStart = event.type === "match" ? event.data?.submatches?.[0]?.start : undefined;
-			const matchAt = typeof byteStart === "number" ? utf8ByteOffsetToIndex(raw, byteStart) : undefined;
-			lines.push(shortenLine(`${rel}:${lineNo}:${raw}`, args.pattern, { literal, ignoreCase: args.case_insensitive }, matchAt));
+			const byteStarts = event.type === "match" ? (event.data?.submatches ?? []).map((one) => one.start).filter((start) => typeof start === "number") : [];
+			const matchesAt = byteStarts.length > 0 ? utf8ByteOffsetsToIndices(raw, byteStarts) : undefined;
+			lines.push(shortenLine(`${rel}:${lineNo}:${raw}`, args.pattern, { literal, ignoreCase: args.case_insensitive }, matchesAt));
 			owners.push(resolve(ctx.cwd, pathText));
 			return true;
 		},
@@ -434,7 +449,8 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 			const opts = { literal, ignoreCase: args.case_insensitive };
 			const last = Math.min(fileLines.length - 1, i + contextLines);
 			for (let c = Math.max(0, i - contextLines, shownTo + 1); c <= last; c++) {
-				lines.push(shortenLine(`${rel}:${c + 1}:${fileLines[c]}`, args.pattern, opts, c === i ? found.index : undefined));
+				const matchesAt = c === i ? matchStarts(fileLines[c]!, regex, found.index) : undefined;
+				lines.push(shortenLine(`${rel}:${c + 1}:${fileLines[c]}`, args.pattern, opts, matchesAt));
 				owners.push(path);
 			}
 			shownTo = Math.max(shownTo, last);

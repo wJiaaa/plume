@@ -15,6 +15,11 @@ import { describeRead } from "./describe.ts";
 
 const DEFAULT_LIMIT = 2000;
 /**
+ * 一行最多给多宽（`char_limit` 的上限）。压缩过的 JS 整个文件是一行，两千字一页地翻，每翻一页都要把整个上下文再发一遍；
+ * 知道要看哪一大段时一次给够。上限留在单次输出的额度以内。
+ */
+const MAX_CHAR_LIMIT = 30_000;
+/**
  * 正文的字数上限，留出头部路径、页脚和长行提示的余量。一次读给多少字要有个数：读出来的被当成「读过了」，
  * 之后 edit 据此放行，要是读出来的太长被别处剪掉，模型没看见的行也成了读过的。
  */
@@ -52,6 +57,7 @@ interface ReadArgs {
 	offset?: number;
 	limit?: number;
 	char_offset?: number;
+	char_limit?: number;
 }
 
 /** 小写的扩展名：下面按它决定走哪条路。 */
@@ -72,12 +78,13 @@ export const readTool: Tool<ReadArgs> = {
 	name: "read",
 	describe: describeRead,
 	kind: "view",
-	aliases: { path: ["file", "filePath"], char_offset: ["charOffset"] },
+	aliases: { path: ["file", "filePath"], char_offset: ["charOffset"], char_limit: ["charLimit"] },
 	description:
 		"Read a file. Text comes back under a `[path]` header as 1-indexed lines, `NNNN→content`; the `NNNN→` prefix is not part of the file. " +
 		"A long source file read without `offset`/`limit` comes back as its STRUCTURE: declarations and doc comments, each body folded to " +
 		"`⋯ N lines (from-to)`. Read that range to see a body — never guess at it. Short files, data files and `offset`/`limit` windows are verbatim. " +
-		"A line over 2000 characters comes back as a window; continue it with `char_offset`. Images come back as images. " +
+		"A line over 2000 characters comes back as a window; continue it with `char_offset`, and widen the window with `char_limit` " +
+		"when you need a large piece of a minified or single-line file. Images come back as images. " +
 		"When you already know several files you need, read them all in one reply: calls sent together run in parallel.",
 	parameters: {
 		type: "object",
@@ -88,6 +95,10 @@ export const readTool: Tool<ReadArgs> = {
 			char_offset: {
 				type: "number",
 				description: "1-indexed character to start from on each line, for a line read or grep said was over 2000 characters.",
+			},
+			char_limit: {
+				type: "number",
+				description: `Characters to show from each long line, ${MAX_LINE_CHARS} to ${MAX_CHAR_LIMIT}. Defaults to ${MAX_LINE_CHARS}.`,
 			},
 		},
 		required: ["path"],
@@ -100,6 +111,8 @@ export const readTool: Tool<ReadArgs> = {
 
 		if (!path) return errorResult("`path` is required.");
 		const charOffset = Math.max(1, numberArg(raw.char_offset) ?? 1);
+		const width = Math.min(MAX_CHAR_LIMIT, Math.max(MAX_LINE_CHARS, Math.floor(numberArg(raw.char_limit) ?? MAX_LINE_CHARS)));
+		const columns = { charOffset, width };
 
 		/*
 		 * 先认地址，而且只认有人登记了的 scheme。
@@ -111,7 +124,7 @@ export const readTool: Tool<ReadArgs> = {
 		if (isAddress(ctx.resources, path)) {
 			const got = await ctx.files.read(path);
 			if (!got.ok) return errorResult(got.message);
-			if (got.resource) return resourceResult(got.resource, { offset: args.offset, limit: args.limit, charOffset });
+			if (got.resource) return resourceResult(got.resource, { offset: args.offset, limit: args.limit, ...columns });
 			scratch = got.path;
 		}
 		const named = scratch ?? ctx.files.resolve(path);
@@ -154,7 +167,7 @@ export const readTool: Tool<ReadArgs> = {
 
 		const extractable = EXTRACTABLE.has(extensionOf(absolute));
 		// 太大了，为几千个字不值得整个读进来；抽字要整份文档，所以文档照旧整个读。
-		if (info.size > STREAM_ABOVE_BYTES && !extractable) return readLarge(args, ctx, absolute, named, shownPath, info, charOffset);
+		if (info.size > STREAM_ABOVE_BYTES && !extractable) return readLarge(args, ctx, absolute, named, shownPath, info, columns);
 
 		const buffer = await readFile(absolute);
 
@@ -192,7 +205,7 @@ export const readTool: Tool<ReadArgs> = {
 		// 末尾的换行会多出一个空元素，那不是一行。
 		if (allLines.length > 1 && allLines[allLines.length - 1] === "") allLines.pop();
 
-		const askedWindow = args.offset !== undefined || args.limit !== undefined || charOffset > 1;
+		const askedWindow = args.offset !== undefined || args.limit !== undefined || charOffset > 1 || raw.char_limit !== undefined;
 
 		/*
 		 * 不带窗口地读一个长源码文件，返回它的形状而不是字节。
@@ -214,7 +227,7 @@ export const readTool: Tool<ReadArgs> = {
 						outlined: true,
 						shownLines: shape.shownLines,
 						foldedLines: shape.foldedLines,
-						...viewOf(named, false, { from: 1, to: allLines.length, total: allLines.length, charOffset: 1 }),
+						...viewOf(named, false, { from: 1, to: allLines.length, total: allLines.length, charOffset: 1, width: MAX_LINE_CHARS }),
 					},
 				};
 			}
@@ -222,7 +235,7 @@ export const readTool: Tool<ReadArgs> = {
 
 		const offset = Math.max(1, args.offset ?? 1);
 		const limit = Math.max(1, args.limit ?? DEFAULT_LIMIT);
-		const shown = renderLines(allLines.slice(offset - 1, offset - 1 + limit), offset, allLines.length, charOffset - 1);
+		const shown = renderLines(allLines.slice(offset - 1, offset - 1 + limit), offset, allLines.length, charOffset - 1, width);
 		if (!shown) {
 			return errorResult(`Line ${offset} is past the end of the file (${allLines.length} lines).`);
 		}
@@ -242,7 +255,7 @@ export const readTool: Tool<ReadArgs> = {
 				shownFrom: offset,
 				shownTo: shownEnd,
 				...(long[0] ? { charFrom: long[0].shownFrom, charTo: long[0].shownTo, longLines: long.length } : {}),
-				...viewOf(named, true, { from: offset, to: shownEnd, total: allLines.length, charOffset }),
+				...viewOf(named, true, { from: offset, to: shownEnd, total: allLines.length, ...columns }),
 			},
 		};
 	},
@@ -253,14 +266,14 @@ export const readTool: Tool<ReadArgs> = {
  * `named` 是调用里写的路径解析成的绝对路径、不追符号链接，和 edit、write 认路径的写法一样，同一个文件的读和改才对得上。
  * 文字按行给：从头读到尾的不写 `lines`；每一行用的是同一个从 `charOffset` 起的字符窗口（大纲从第 1 个字符起）。
  */
-function viewOf(named: string, verbatim: boolean, text?: { from: number; to: number; total: number; charOffset: number }): FileViewDetails {
+function viewOf(named: string, verbatim: boolean, text?: { from: number; to: number; total: number; charOffset: number; width: number }): FileViewDetails {
 	if (!text) return { fileView: { path: named, verbatim } };
 	const whole = text.from <= 1 && text.to >= text.total;
 	return {
 		fileView: {
 			path: named,
 			...(whole ? {} : { lines: { from: text.from, to: text.to } }),
-			columns: { from: text.charOffset, to: text.charOffset + MAX_LINE_CHARS - 1 },
+			columns: { from: text.charOffset, to: text.charOffset + text.width - 1 },
 			verbatim,
 		},
 	};
@@ -285,14 +298,14 @@ async function readLarge(
 	named: string,
 	shownPath: string,
 	info: Stats,
-	charOffset: number,
+	{ charOffset, width }: { charOffset: number; width: number },
 ): Promise<ToolResult> {
-	const askedWindow = args.offset !== undefined || args.limit !== undefined || charOffset > 1;
+	const askedWindow = args.offset !== undefined || args.limit !== undefined || charOffset > 1 || args.char_limit !== undefined;
 	const offset = Math.max(1, args.offset ?? 1);
 	const limit = Math.max(1, args.limit ?? DEFAULT_LIMIT);
-	const window = await readLineWindow(absolute, offset, limit, charOffset - 1, OUTPUT_BUDGET, ctx.signal);
+	const window = await readLineWindow(absolute, offset, limit, charOffset - 1, width, OUTPUT_BUDGET, ctx.signal);
 	if (window.binary) return errorResult(`${args.path} looks like a binary file (${info.size} bytes) and cannot be read as text.`);
-	const shown = renderLines(window.lines, offset, window.totalLines, charOffset - 1);
+	const shown = renderLines(window.lines, offset, window.totalLines, charOffset - 1, width);
 	if (!shown) return errorResult(`Line ${offset} is past the end of the file (${window.totalLines} lines).`);
 	const { body, shownEnd, long, footer } = shown;
 	// 说出来，不当成整行：超出留下那部分的 `char_offset` 会被读成行尾。
@@ -310,20 +323,20 @@ async function readLarge(
 			shownFrom: offset,
 			shownTo: shownEnd,
 			...(long[0] ? { charFrom: long[0].shownFrom, charTo: long[0].shownTo, longLines: long.length } : {}),
-			...viewOf(named, true, { from: offset, to: shownEnd, total: window.totalLines, charOffset }),
+			...viewOf(named, true, { from: offset, to: shownEnd, total: window.totalLines, charOffset, width }),
 		},
 	};
 }
 
 /**
- * 从 `offset` 起的这一段带行号排出来，逐行按 `charStart` 开字符窗口；`slice` 为空（`offset` 越过末尾）时返回 null。
+ * 从 `offset` 起的这一段带行号排出来，逐行按 `charStart` 开 `width` 宽的字符窗口；`slice` 为空（`offset` 越过末尾）时返回 null。
  * `totalLines` 是整个文件的行数，页脚据此说还剩多少。
  */
-function renderLines(slice: string[], offset: number, totalLines: number, charStart: number): LineWindow | null {
+function renderLines(slice: string[], offset: number, totalLines: number, charStart: number, width: number): LineWindow | null {
 	if (slice.length === 0) return null;
 
 	const long: LineWindow["long"] = [];
-	const width = String(offset + slice.length - 1).length;
+	const numberWidth = String(offset + slice.length - 1).length;
 	/*
 	 * 按字数截断。
 	 *
@@ -334,9 +347,9 @@ function renderLines(slice: string[], offset: number, totalLines: number, charSt
 	let used = 0;
 	for (const [i, line] of slice.entries()) {
 		const lineNo = offset + i;
-		const inline = line.length <= MAX_LINE_CHARS && charStart <= 0;
-		const window = inline ? null : charWindow(line, charStart);
-		const row = `${String(lineNo).padStart(width, " ")}→${inline ? line : formatCharWindow(line, charStart)}`;
+		const inline = line.length <= width && charStart <= 0;
+		const window = inline ? null : charWindow(line, charStart, width);
+		const row = `${String(lineNo).padStart(numberWidth, " ")}→${inline ? line : formatCharWindow(line, charStart, width)}`;
 		if (rendered.length > 0 && used + row.length + 1 > OUTPUT_BUDGET) break;
 		rendered.push(row);
 		used += row.length + 1;
@@ -347,7 +360,7 @@ function renderLines(slice: string[], offset: number, totalLines: number, charSt
 	const capped = rendered.length < slice.length ? ` (output capped at ${OUTPUT_BUDGET.toLocaleString("en-US")} characters)` : "";
 	const lineFooter =
 		shownEnd < totalLines ? `\n\n[showing lines ${offset}-${shownEnd} of ${totalLines}${capped}; call read again with offset=${shownEnd + 1} for more]` : "";
-	return { body: rendered.join("\n"), shownEnd, long, footer: lineFooter + longLineFooter(long) };
+	return { body: rendered.join("\n"), shownEnd, long, footer: lineFooter + longLineFooter(long, width) };
 }
 
 /**
@@ -356,17 +369,17 @@ function renderLines(slice: string[], offset: number, totalLines: number, charSt
  * 窗口参数对地址同样有效，超出单条结果上限的内容也按窗口给：剪枝标记让模型 `read artifact://…` 取回中段，整段返回的话，
  * 它作为新结果又被剪成同样的头尾，中段永远取不回来。
  */
-function resourceResult(resource: Resource, window: { offset?: number; limit?: number; charOffset: number }): ToolResult {
+function resourceResult(resource: Resource, window: { offset?: number; limit?: number; charOffset: number; width: number }): ToolResult {
 	// 读到的东西来自插件登记的 scheme，形状不对时照旧作为错误交给模型。
 	try {
 		let content = resource.content;
-		const asked = window.offset !== undefined || window.limit !== undefined || window.charOffset > 1;
+		const asked = window.offset !== undefined || window.limit !== undefined || window.charOffset > 1 || window.width > MAX_LINE_CHARS;
 		if (asked || content.length > OUTPUT_BUDGET) {
 			const lines = content.split("\n");
 			if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
 			const offset = Math.max(1, window.offset ?? 1);
 			const limit = Math.max(1, window.limit ?? DEFAULT_LIMIT);
-			const shown = renderLines(lines.slice(offset - 1, offset - 1 + limit), offset, lines.length, window.charOffset - 1);
+			const shown = renderLines(lines.slice(offset - 1, offset - 1 + limit), offset, lines.length, window.charOffset - 1, window.width);
 			if (!shown) return errorResult(`Line ${offset} is past the end of ${resource.url} (${lines.length} lines).`);
 			content = shown.body + shown.footer;
 		}

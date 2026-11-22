@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { LINE_KEEP_BYTES, readLineWindow, STREAM_ABOVE_BYTES } from "../../src/tools/large-text.ts";
+import { MAX_LINE_CHARS } from "../../src/tools/long-line.ts";
 import { readTool } from "../../src/tools/read.ts";
 import { decodeText } from "../../src/tools/text-layout.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
@@ -47,7 +48,7 @@ it("流式读出的窗口就是 split 给的窗口", async () => {
 		const file = join(dir, `${name}.txt`);
 		await writeFile(file, text);
 		const expected = splitLines(text);
-		const got = await readLineWindow(file, 1, 2000, 0, Number.MAX_SAFE_INTEGER);
+		const got = await readLineWindow(file, 1, 2000, 0, MAX_LINE_CHARS, Number.MAX_SAFE_INTEGER);
 		expect(got.totalLines, `${name}: line count`).toBe(expected.length);
 		expect(got.lines, `${name}: lines`).toEqual(expected);
 	}
@@ -61,7 +62,7 @@ it("跨流分块的行完整出来", async () => {
 	await writeFile(file, text);
 	const expected = splitLines(text);
 	for (const offset of [1, 5_000, 11_111, 29_990]) {
-		const got = await readLineWindow(file, offset, 50, 0, Number.MAX_SAFE_INTEGER);
+		const got = await readLineWindow(file, offset, 50, 0, MAX_LINE_CHARS, Number.MAX_SAFE_INTEGER);
 		expect(got.totalLines).toBe(expected.length);
 		expect(got.lines, `offset ${offset}`).toEqual(expected.slice(offset - 1, offset - 1 + 50));
 	}
