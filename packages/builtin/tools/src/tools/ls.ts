@@ -48,9 +48,22 @@ export const lsTool: Tool<LsArgs> = {
 
 		// 排序只看是不是目录和名字，readdir 的 dirent 就有；先排好截到 400 条，大小只给显示出来的文件取：
 		// `node_modules/.pnpm` 这种几千项的目录，挨个 stat 完再丢掉大半是白等。
-		const rows = entries
-			.filter((entry) => args.all || !entry.name.startsWith("."))
-			.map((entry) => ({ name: entry.name, dir: entry.isDirectory() }))
+		const visible = entries.filter((entry) => args.all || !entry.name.startsWith("."));
+		/*
+		 * 软链的 dirent 只说它是链接：指向目录的（pnpm 的 `node_modules/<包>`、monorepo 里链进来的包）照文件列，模型就去 read 它，
+		 * 拿回一个「是目录」的错误再改 ls。链接不多，只给它们取一次指向的东西。坏掉的链接照文件列。
+		 */
+		const linkedDirs = new Set(
+			(
+				await Promise.all(
+					visible
+						.filter((entry) => entry.isSymbolicLink())
+						.map(async (entry) => ((await stat(join(absolute, entry.name)).catch(() => null))?.isDirectory() ? entry.name : null)),
+				)
+			).filter((name) => name !== null),
+		);
+		const rows = visible
+			.map((entry) => ({ name: entry.name, dir: entry.isDirectory() || linkedDirs.has(entry.name) }))
 			.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
 		const shown: { name: string; dir: boolean; size: number }[] = [];
 		for (let at = 0; at < Math.min(rows.length, MAX_ENTRIES); at += 64) {
