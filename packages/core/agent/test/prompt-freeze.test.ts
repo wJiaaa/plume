@@ -279,6 +279,22 @@ describe("会话内冻结的系统提示词", () => {
 		const after = run([...midway, assistant(4), user("b", 5), assistant(6, "toolUse"), result(7)], [tool("extra")]);
 		expect(JSON.stringify(after.tools)).toBe(JSON.stringify(next.tools));
 	});
+
+	it("循环在一轮中间补的那句（续写、催促）不算一轮的开头：不送增量、不换工具表", () => {
+		// 以前末尾是用户消息就比：模型改了 AGENTS.md 后被催一句，这一步就收到增量、工具表也换了，缓存从中间作废。
+		const { run, inner } = harness();
+		const first = run([user("a", 1)], [tool("read")]);
+		inner.skills = "技能 v2";
+		const nudge: Message = { role: "user", content: [{ type: "text", text: "继续" }], timestamp: at(3), synthetic: true, midTurn: true };
+		const history = [user("a", 1), assistant(2), nudge];
+		const nudged = run(history, [tool("read"), tool("extra")]);
+		expect(updates(nudged.messages)).toHaveLength(0);
+		expect(JSON.stringify(nudged.tools)).toBe(JSON.stringify(first.tools));
+		// 下一轮开头照常比、照常换。
+		const next = run([...history, assistant(4), user("b", 5)], [tool("read"), tool("extra")]);
+		expect(updates(next.messages)).toHaveLength(1);
+		expect(next.tools.map((spec) => spec.name)).toEqual(["read", "extra"]);
+	});
 });
 
 describe("经真实的 agent：插件挂在哪一层都绕不过冻结", () => {

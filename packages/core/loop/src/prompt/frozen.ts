@@ -79,8 +79,9 @@ export function preparePrompt(
 			/*
 			 * 只在一轮的开头（历史末尾是一条用户消息：人的话、插话、送达）比：一轮里的每一步都比的话，模型改了 AGENTS.md
 			 * 之后的下一步就会收到一条增量，夹在工具结果和它的下一条回复之间；这一轮做完再告诉它就够了。
+			 * 循环自己补的那句（`midTurn`：续写、催促）也是用户消息，但还在这一轮里，不比。
 			 */
-			if (last.role === "user") {
+			if (last.role === "user" && !last.midTurn) {
 				const changes = diffSections(
 					currentSections(
 						base.sections,

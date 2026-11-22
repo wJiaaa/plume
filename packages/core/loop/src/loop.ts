@@ -247,9 +247,9 @@ function withHint(verdict: StepVerdict, hint: string | undefined): StepVerdict {
 	return { continue: true, say: verdict.say ? `${verdict.say}\n\n${hint}` : hint };
 }
 
-/** 收尾时要对模型说的话（续写、催促、插件给的）：以用户的身份说，界面不当成人打的字。 */
+/** 收尾时要对模型说的话（续写、催促、插件给的）：以用户的身份说，界面不当成人打的字；还在这一轮里，不算一轮的开头。 */
 function said(text: string): Message {
-	return { role: "user", content: [{ type: "text", text }], timestamp: Date.now(), synthetic: true };
+	return { role: "user", content: [{ type: "text", text }], timestamp: Date.now(), synthetic: true, midTurn: true };
 }
 
 async function commitAll(commit: (message: Message) => Promise<void>, results: ToolResultMessage[]): Promise<void> {

@@ -333,6 +333,13 @@ export interface UserMessage {
 	 */
 	interrupting?: true;
 	/**
+	 * 循环自己在一轮中间以用户身份补的一句（续写、催促、插件 `step.end` 给的 `say`，见 `loop.ts` 的 `said`）。
+	 *
+	 * 它和送达一样是 `synthetic` 的用户消息，但不开新的一轮：冻结的提示词和工具表只在一轮的开头换（`prompt/frozen.ts`），
+	 * 把它也当成开头的话，一轮中间就会送出增量、换掉工具表，缓存从那里作废。
+	 */
+	midTurn?: true;
+	/**
 	 * The files that were attached, by name and kind — never their contents.
 	 *
 	 * A text attachment's body is expanded into the prompt, which is what the model needs and the
