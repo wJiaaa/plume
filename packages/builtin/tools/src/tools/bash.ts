@@ -18,6 +18,7 @@ import type { BackgroundChannel, CancelledDetails, RunProcess, SandboxProcess, T
 import { backgroundJobs, type BackgroundJob, type BackgroundJobs } from "./background-jobs.ts";
 import { readJobOutput } from "./job-output.ts";
 import { OutputBuffer } from "./bash-output.ts";
+import { cleanLine, newestLines } from "./monitor-lines.ts";
 import { createOutputLog, type OutputLog } from "./output-log.ts";
 import { describeStatus, readExit } from "./exit-status.ts";
 import { declinedResult, errorResult } from "./result.ts";
@@ -484,7 +485,7 @@ function reportEnd(job: BackgroundJob, jobs: BackgroundJobs): void {
 		() => {
 			if (jobs.isQuiet(job.id)) return undefined;
 			jobs.observed(job.id);
-			const { status, text } = readJob(job);
+			const { status, text } = readJob(job, true);
 			// i18n-exempt：送给模型的话，不随界面语言变。
 			return (
 				"你之前放到后台的命令结束了。下面是它的退出状态和你上次读取之后的输出，不用再拿 bash_output 去查：\n\n" +
@@ -632,9 +633,9 @@ function waitForNews(job: BackgroundJob, signal: AbortSignal | undefined): Promi
 
 /**
  * 一个后台任务此刻的状态，和模型上次读过之后的输出；读完游标移到末尾。bash_output 和结束时的送达共用它：
- * 送达就是替模型做了那一次读取。更早的部分模型已经看过，要回看就读完整日志。
+ * 送达就是替模型做了那一次读取。更早的部分模型已经看过，要回看就读完整日志。`delivery` 是结束时的那次送达。
  */
-function readJob(job: BackgroundJob): { status: string; text: string } {
+function readJob(job: BackgroundJob, delivery = false): { status: string; text: string } {
 	const status =
 		job.finishedAt === undefined
 			? job.status
@@ -649,9 +650,23 @@ function readJob(job: BackgroundJob): { status: string; text: string } {
 	if (stream) {
 		text = stream.unread.render(MODEL_OUTPUT_CHARS);
 		hint = fullLogHint(stream.unread, job.outputPath);
+		if (delivery && job.kind === "monitor") [text, hint] = monitorTail(text, hint, job.outputPath);
 		markJobRead(job);
 	}
 	return { status, text: `${text || "(no new output)"}${hint}` };
+}
+
+/**
+ * monitor 的命令自己结束时那次送达：和它跑着时的每一批一样清洗、只留最新的 `DELIVERY_MAX_CHARS` 字。照 bash_output 的样子送的话，
+ * 一条话多的命令在上一批之后、退出之前打的几万字（带颜色码、进度条的每一次重画）原样进了历史，之后每一轮都重发。
+ */
+function monitorTail(raw: string, hint: string, path: string | undefined): [string, string] {
+	const { text, dropped } = newestLines(raw.split("\n").map(cleanLine).filter(Boolean));
+	if (dropped === 0) return [text, hint];
+	// i18n-exempt：送给模型的话，不随界面语言变，和 monitor 每一批里的那句一样。
+	// 有 `hint` 时 `raw` 本身已经省掉了中间一段，数出来的行数不是真的，就不数。
+	const earlier = hint ? "更早的输出" : `更早的 ${dropped} 行`;
+	return [`[${earlier}超出单次送达的上限，没有放进来${path ? `；完整输出在 ${path}` : ""}]\n${text}`, ""];
 }
 
 /**

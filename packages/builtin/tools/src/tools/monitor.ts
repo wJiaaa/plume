@@ -15,6 +15,7 @@ import { errorResult } from "./result.ts";
 import type { BackgroundChannel, SandboxProcess } from "@plume/contract";
 import type { Tool, ToolResult } from "./types.ts";
 import { describeCommand } from "./describe.ts";
+import { cleanLine, DELIVERY_MAX_CHARS, newestLines } from "./monitor-lines.ts";
 
 /**
  * 第一行新输出之后，等多久把同一阵的其余行凑齐。
@@ -30,15 +31,6 @@ const GATHER_MS = 1_000;
  * 再长，「编译好了告诉我」就不值得了。
  */
 const MIN_INTERVAL_MS = 10_000;
-/**
- * 一次送达最多带多少字；超了留最新的行、只数一下其余的。
- *
- * 送达留在历史里，之后每一轮都重发。4000 字约一千 token，放得下一整个带栈的错误，又小到一个用满行数上限的 monitor 不会让上下文翻倍。
- * 留最新的，因为监视的东西最新的状态才是现在为真的；更早的在磁盘上的完整日志里。
- */
-const DELIVERY_MAX_CHARS = 4_000;
-/** 单行截在这里：打成一行的压缩包不能独自占满一次送达。 */
-const LINE_MAX_CHARS = 1_000;
 /** 还没换行的文字长到这么长就当一行：进度条永远不换行。 */
 const PARTIAL_MAX_CHARS = 4_096;
 /**
@@ -155,7 +147,7 @@ interface Batch {
  * 把一个在跑的任务的输出分批送给模型，到了上限就停。
  *
  * 它自己结束不在这里送：自己退出的命令和别的后台任务一样由 bash 送（`reportEnd`），那次送达读的是上一批之后打印的——正是这里还没送的，
- * 因为每送一批都把任务标成已读。这里再送一次就是同样的行说两遍。
+ * 因为每送一批都把任务标成已读。这里再送一次就是同样的行说两遍。那一次也照这里的清洗和上限（`monitor-lines.ts`）。
  */
 function follow(job: BackgroundJob, process: SandboxProcess, jobs: BackgroundJobs, channel: BackgroundChannel, maxEvents: number, idleMs: number): void {
 	let partial = "";
@@ -172,7 +164,7 @@ function follow(job: BackgroundJob, process: SandboxProcess, jobs: BackgroundJob
 		clearTimeout(flushTimer);
 		flushTimer = undefined;
 		if (pending.length === 0 && !stopped) return;
-		const batch: Batch = { ...newest(pending), ...(stopped ? { stopped } : {}) };
+		const batch: Batch = { ...newestLines(pending), ...(stopped ? { stopped } : {}) };
 		pending = [];
 		lastSent = Date.now();
 		markJobRead(job, partial);
@@ -239,7 +231,7 @@ function follow(job: BackgroundJob, process: SandboxProcess, jobs: BackgroundJob
 			if (at === -1 && text.length - from <= PARTIAL_MAX_CHARS) break;
 			const raw = text.slice(from, at === -1 ? text.length : at);
 			from = at === -1 ? text.length : at + 1;
-			const line = clean(raw);
+			const line = cleanLine(raw);
 			if (!line) continue;
 			pending.push(line);
 			if (++events >= maxEvents) {
@@ -254,14 +246,6 @@ function follow(job: BackgroundJob, process: SandboxProcess, jobs: BackgroundJob
 	process.onExit(end);
 	process.onError(end);
 	armIdle();
-}
-
-/** 一批里放得进一次送达的最新那些行，和更早的放不下的有几行。 */
-function newest(lines: string[]): Omit<Batch, "stopped"> {
-	let size = 0;
-	let from = lines.length;
-	while (from > 0 && size + lines[from - 1]!.length + 1 <= DELIVERY_MAX_CHARS) size += lines[--from]!.length + 1;
-	return { text: lines.slice(from).join("\n"), lines: lines.length, dropped: from };
 }
 
 /** 一批 monitor 输出给模型的样子：丢了多少行、为什么停了都写在标签里面，模型读到的和它看见的行在一处。 */
@@ -281,19 +265,4 @@ function monitorBlock(job: BackgroundJob, batch: Batch): string {
 		"只在这些输出需要你处理时才行动，否则一句话带过；用不着它了就用 bash_output 加 kill: true 停掉：\n\n" +
 		`<monitor_events id="${job.id}" command="${attribute(job.command)}" lines="${batch.lines}" status="${batch.stopped ? "stopped" : "running"}">\n${body}\n</monitor_events>`
 	);
-}
-
-// oxlint-disable-next-line no-control-regex -- 要匹配的就是终端转义序列
-const ESCAPES = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
-// oxlint-disable-next-line no-control-regex -- 转义序列去掉以后剩下的控制字符
-const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f]/g;
-
-/** 一行在终端里最后留下的样子：颜色去掉，用 `\r` 重画的行（进度条、转圈）只留最后一次——不然每次重画都是一行。 */
-function clean(raw: string): string {
-	const line = raw
-		.slice(raw.lastIndexOf("\r", raw.length - 2) + 1)
-		.replace(ESCAPES, "")
-		.replace(CONTROLS, "")
-		.trimEnd();
-	return line.length > LINE_MAX_CHARS ? `${line.slice(0, LINE_MAX_CHARS)}…` : line;
 }

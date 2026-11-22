@@ -177,7 +177,24 @@ it("自己结束的命令和别的后台任务一样送一次结束，带上上�
 	expect(channel.sent).toHaveLength(2);
 	expect(channel.sent[1]!.delivery).toMatchObject({ id, status: "done", details: { kind: "job", exitCode: 0 } });
 	expect(channel.sent[1]!.delivery?.details).not.toHaveProperty("monitor");
-	expect(channel.take(1)).toContain(`<background_job id="${id}" command="tail -f app.log" status="exited with code 0">\nbye\n\n</background_job>`);
+	expect(channel.take(1)).toContain(`<background_job id="${id}" command="tail -f app.log" status="exited with code 0">\nbye\n</background_job>`);
+});
+
+it("结束那次送达也照每批的上限和清洗：退出前刷屏的输出不会原样进历史", async () => {
+	// 以前这一次走 bash_output 的读法：上一批之后打的几万字，连颜色码和进度条的每次重画，原样送进历史、之后每轮重发。
+	await start({ max_events: 1_000 });
+	process.print("ready\n");
+	await vi.advanceTimersByTimeAsync(1_000);
+	for (let index = 0; index < 300; index++) process.print(`\x1b[32mline ${index}\x1b[0m ${"·".repeat(80)}\n`);
+	process.print("10%\r50%\r100%\n");
+	process.exit(1);
+	const text = channel.take(1)!;
+	expect(text.length).toBeLessThan(4_600);
+	expect(text).not.toContain("\x1b");
+	expect(text).not.toContain("10%");
+	expect(text).toContain('status="exited with code 1"');
+	expect(text).toMatch(/\[更早的 \d+ 行超出单次送达的上限，没有放进来\]\nline \d+ ·/);
+	expect(text).toContain("100%\n</background_job>");
 });
 
 it("人按停时 monitor 跟着停；bash_output 停掉的，攒着没送的那批不再送", async () => {
