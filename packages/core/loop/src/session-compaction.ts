@@ -305,7 +305,8 @@ export function createCompactor(deps: CompactorDeps) {
 	 */
 	async function withhold(session: CompactingSession): Promise<(() => Promise<void>) | undefined> {
 		const record = await deps.recordOf(session);
-		const ids = oversized(historyFor(await deps.messagesOf(session), record), record);
+		const { provider, model } = await deps.model(session);
+		const ids = oversized(unaccepted(historyFor(await deps.messagesOf(session), record), provider.id, model.modelId), record);
 		if (ids.length === 0) return undefined;
 		record.withheld.push(...ids);
 		rewritten(session, record);
@@ -325,6 +326,19 @@ export function createCompactor(deps: CompactorDeps) {
 	}
 
 	return { compact, withhold, changed };
+}
+
+/**
+ * 拒收以后能剪的那段：同一个模型最后一次接受了请求之后才进来的消息。那之前的大结果它刚收过，这次拒收不会是它们引起的；剪了它们只会让模型
+ * 从此只剩一行，前缀从第一条被剪的起整段重写，重发碰巧成功时这些还撤不回来。换过模型的，上一次接受不算数，整段照旧都算。
+ */
+function unaccepted(messages: Message[], providerId: string, modelId: string): Message[] {
+	const last = messages.findLastIndex(
+		(message) => message.role === "assistant" && message.stopReason !== "error" && message.stopReason !== "aborted" && message.stopReason !== "pending",
+	);
+	const reply = messages[last];
+	if (reply?.role !== "assistant" || reply.provider !== providerId || reply.model !== modelId) return messages;
+	return messages.slice(last + 1);
 }
 
 function withHot(ms: number | undefined): { cacheHotMs?: number } {

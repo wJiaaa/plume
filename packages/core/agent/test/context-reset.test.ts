@@ -108,7 +108,7 @@ it("一个插件的同步异常或异步拒绝不妨碍其他刷新订阅", asyn
 	expect(logs.join("\n")).toContain("异步坏了");
 });
 
-async function compactor(result: CompactSummary | Error) {
+async function compactor(result: CompactSummary | Error, extra: Message[] = []) {
 	const h = host();
 	const reset = vi.fn();
 	await h.load([
@@ -125,6 +125,7 @@ async function compactor(result: CompactSummary | Error) {
 	]);
 	const messages: Message[] = Array.from({ length: 8 }, (_, timestamp) => ({ role: "user", content: [{ type: "text", text: "消息" }], timestamp }));
 	messages[3] = { role: "toolResult", toolCallId: "call", toolName: "read", content: [{ type: "text", text: "x".repeat(9000) }], isError: false, timestamp: 3 };
+	messages.push(...extra);
 	const record = emptyRecord();
 	const session: CompactingSession = { summary: { id: "s1", title: "会话", cwd: dir, createdAt: 0, updatedAt: 0, running: false, kind: "top" }, record };
 	const model: ModelConfig = {
@@ -233,4 +234,40 @@ it("撤销拒收后的裁剪：剪掉的回到原样，存下来并刷新", asyn
 	expect(test.save).toHaveBeenLastCalledWith("s1", test.record);
 	expect(test.reset).toHaveBeenCalledTimes(2);
 	expect(test.onCompacted).toHaveBeenCalledTimes(2);
+});
+
+it("拒收后只剪同一个模型最后一次接受之后进来的大结果；换过模型的整段照旧都算", async () => {
+	const accepted = (model: string): Message => ({
+		role: "assistant",
+		content: [{ type: "text", text: "看过了" }],
+		api: "anthropic-messages",
+		provider: "p",
+		model,
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		stopReason: "stop",
+		timestamp: 8,
+	});
+	const fresh: Message = {
+		role: "toolResult",
+		toolCallId: "new",
+		toolName: "read",
+		content: [{ type: "text", text: "y".repeat(9000) }],
+		isError: false,
+		timestamp: 9,
+	};
+
+	// 同一个模型刚收过 `call` 那条：它不是这次拒收的原因，只剪之后进来的 `new`。
+	const same = await compactor(undefined, [accepted("m"), fresh]);
+	expect(await same.instance.withhold(same.session)).toBeTypeOf("function");
+	expect(same.record.withheld).toEqual(["new"]);
+
+	// 收过的都是旧的、之后什么也没进来：没有可剪的，不改写前缀。
+	const nothing = await compactor(undefined, [accepted("m")]);
+	expect(await nothing.instance.withhold(nothing.session)).toBeUndefined();
+	expect(nothing.record.withheld).toEqual([]);
+
+	// 上一次是别的模型收的：不算数，两条都剪。
+	const switched = await compactor(undefined, [accepted("other"), fresh]);
+	await switched.instance.withhold(switched.session);
+	expect(switched.record.withheld).toEqual(["call", "new"]);
 });
