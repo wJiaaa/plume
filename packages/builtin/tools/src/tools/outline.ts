@@ -88,10 +88,30 @@ const LINE_COMMENT_RE = /^\s*(?:\/\/|#|--)/;
 /** 缩进浅的右括号是结构不是实现：留着它形状才看得清。 */
 const CLOSER_RE = /^[\t ]{0,2}[)}\]]+[;,]?\s*$/;
 
-/** 缩进有几层，四个空格算一层。 */
-function depthOf(line: string): number {
+/** 缩进有几层：一个 Tab 一层，空格按这个文件的一层（`indentUnit`）算。 */
+function depthOf(line: string, unit: number): number {
 	const indent = /^[\t ]*/.exec(line)?.[0] ?? "";
-	return indent.replaceAll("    ", "\t").replaceAll(" ", "").length;
+	const tabs = indent.length - indent.replaceAll("\t", "").length;
+	return tabs + Math.floor((indent.length - tabs) / unit);
+}
+
+/**
+ * 这个文件用几个空格缩一层：2 或 4。用空格缩进的代码行里，缩进量除以 4 余 2 的占到两成就是 2，不然是 4。
+ *
+ * 写死四个空格的话，两个空格缩进的 JS、TS（prettier 的默认）里函数体的第一层也算顶层：`  const step = compute()` 被当成声明，
+ * 留下的比例过了门槛，整个文件不折，或者折出来满是局部变量。不取「最浅的一层」：四个空格的文件里偶尔有两个空格对齐的续行，
+ * 一行就能把整个文件的层数翻倍、类的方法全算成实现。文档注释里 ` * ` 那一格空格不算。
+ */
+function indentUnit(lines: readonly string[]): number {
+	let indented = 0;
+	let half = 0;
+	for (const line of lines) {
+		const spaces = /^ +/.exec(line)?.[0].length ?? 0;
+		if (spaces < 2 || !line.trim() || line.trim().startsWith("*")) continue;
+		indented++;
+		if (spaces % 4 === 2) half++;
+	}
+	return indented > 0 && half / indented >= 0.2 ? 2 : 4;
 }
 
 /**
@@ -100,8 +120,8 @@ function depthOf(line: string): number {
  * 绑定（`const` 这类）只认顶层的：函数体里的 `const step = compute()` 一样匹配，一个满是局部变量的函数会多出
  * 几十条「声明」，留下的比例超过门槛，整个文件就不折了。函数、类、类型、方法允许往里一层，类的成员在那里。
  */
-function isDeclaration(line: string): boolean {
-	const depth = depthOf(line);
+function isDeclaration(line: string, unit: number): boolean {
+	const depth = depthOf(line, unit);
 	if (depth > 1) return false;
 	for (const { kind, re } of PATTERNS) {
 		if (!re.test(line)) continue;
@@ -117,7 +137,8 @@ function isDeclaration(line: string): boolean {
  * 紧挨在声明上面的注释跟它一起留：文档注释往往是屏幕上信息最多的东西，把它和它说的那段分开，还不如都丢掉。
  */
 function keepMask(lines: string[]): boolean[] {
-	const keep = lines.map((line) => isDeclaration(line) || IMPORT_RE.test(line) || CLOSER_RE.test(line));
+	const unit = indentUnit(lines);
+	const keep = lines.map((line) => isDeclaration(line, unit) || IMPORT_RE.test(line) || CLOSER_RE.test(line));
 
 	for (let i = 0; i < lines.length; i++) {
 		if (!keep[i]) continue;

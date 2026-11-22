@@ -115,6 +115,28 @@ it("几乎全是声明的文件不折叠：没什么可省的", () => {
 	expect(outline("types.ts", decls, linesOf(decls))).toBeNull();
 });
 
+it("两个空格缩进的文件照样折：函数体第一层的局部变量不算声明", () => {
+	// 以前四个空格才算一层，prettier 排的 TS 里 `  const step = …` 被当成顶层声明，大纲里满是局部变量或者干脆不折。
+	const content = sourceFile().replaceAll("\t", "  ");
+	const result = outline("mod.ts", content, linesOf(content));
+	expect(result, "两个空格缩进的样本也要出大纲").toBeTruthy();
+	expect(result!.text).toMatch(/export function thing0/);
+	expect(result!.text).not.toMatch(/const step3 =/);
+});
+
+it("四个空格的文件里零星的两格对齐不改变层数：类的方法仍是声明", () => {
+	// 每个方法里有一行两格对齐的续行：按「最浅的一层」判的话整个文件成了两格一层，方法全算成实现。
+	const methods = Array.from({ length: 30 }, (_, i) => {
+		const body = Array.from({ length: 8 }, (_, j) => `        int step${j} = compute(${i}, ${j});`).join("\n");
+		return `    public int method${i}(String input) {\n${body}\n        return check(input,\n          ${i});\n    }\n`;
+	}).join("\n");
+	const content = `public class Big {\n${methods}}\n`;
+	const result = outline("Big.java", content, linesOf(content));
+	expect(result).toBeTruthy();
+	expect(result!.text).toMatch(/public int method29\(String input\)/);
+	expect(result!.text).not.toMatch(/int step3 =/);
+});
+
 it("声明之间很短的一段保持原样，不变成折叠标记", () => {
 	const content = sourceFile(2) + Array.from({ length: 70 }, (_, i) => `export const tail${i} = ${i};`).join("\n") + "\n";
 	const result = outline("mod.ts", content, linesOf(content));
