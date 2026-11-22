@@ -6,7 +6,8 @@
  * 钩子仍按 bash 跑；回一个错误再等一轮会白花一整个请求。其余匹配 `REROUTES` 的才在 bash 里拦下报错。
  *
  * 只拦纯粹的等价调用：`cat a.txt | wc -l` 在数行数，`cat a > b` 在复制，`cat a && echo done` 在组合，
- * 出现任何管道、重定向、串联，都说明这条命令有 read 给不了的东西，放行。
+ * 出现任何管道、重定向、串联，都说明这条命令有 read 给不了的东西，放行。开头的 `cd <目录> &&` 例外：那只是换个地方读。
+ * 旗标也只认工具做得到的（`flagsWithin`）：拦下 `grep -c`、`ls -R`，模型只能拆成几次调用去凑，所以放行。
  *
  * 建议的工具必须在这个会话里可用：说「用 read」却没有 read，是把模型推向一扇不存在的门。
  */
@@ -48,7 +49,7 @@ export function translatedShellCommand(command: string): { name: string; args: R
  * `--changed-within`……）glob 给不了，叫模型去用 glob 是让它丢掉这些，放行。按白名单认，不按黑名单：find 的谓词太多。
  */
 function globEquivalent(line: string): boolean {
-	const [name, ...args] = (line.trim().match(WORDS) ?? []).map((word) => (/^[\x22\x27]/.test(word) ? word.slice(1, -1) : word));
+	const [name, ...args] = wordsOf(line);
 	if (name === "find") {
 		// 起点目录在前，第一个以 `-`、`(`、`!`、`\` 开头的词起是表达式。
 		let at = 0;
@@ -73,21 +74,71 @@ function globEquivalent(line: string): boolean {
 	return positional <= 2;
 }
 
+/** 按词切开，引号去掉：第一个是命令名。 */
+function wordsOf(line: string): string[] {
+	return (line.trim().match(WORDS) ?? []).map((word) => (/^[\x22\x27]/.test(word) ? word.slice(1, -1) : word));
+}
+
+/**
+ * 旗标都在工具做得到的范围里：短旗标逐个字母查 `letters`，`valued` 里的带一个值（`-C 3`、`-C3`、`--glob=x`）。
+ * 按白名单认：`grep -c` 在数、`grep -v` 在反选、`ls -R` 在递归、`ls -t` 按时间排，工具都给不了，叫模型改用工具是让它丢掉这些。
+ */
+function flagsWithin(line: string, letters: string, valued: readonly string[] = []): boolean {
+	const args = wordsOf(line).slice(1);
+	for (let at = 0; at < args.length; at++) {
+		const word = args[at]!;
+		if (!word.startsWith("-") || word === "-") continue;
+		const name = word.split("=")[0]!;
+		if (valued.includes(name)) {
+			if (!word.includes("=")) at++;
+			continue;
+		}
+		if (valued.some((flag) => flag.length === 2 && word.startsWith(flag))) continue;
+		if (word.startsWith("--") || ![...word.slice(1)].every((letter) => letters.includes(letter))) return false;
+	}
+	return true;
+}
+
+/** grep 工具做得到的：递归、行号、忽略大小写、只列文件、扩展正则、对称的上下文、按文件名筛。 */
+const grepFlags = (line: string) => flagsWithin(line, "rRnHhiIlEs", ["-C", "--context", "--include"]);
+/** rg 的同一批（`-g` 是 glob），`-c`、`-v`、`-o`、`-t` 这些放行。 */
+const rgFlags = (line: string) => flagsWithin(line, "nHiIlS", ["-C", "--context", "-g", "--glob"]);
+
 /**
  * 命中一条就是等价调用；`[^|<>;&$]*$` 是「后面没有任何组合」。按命令名匹配行首，不试图解析 shell：
  * 这里要挡的只是最常见的那四五个字。
+ *
+ * `tail` 不在里面：read 要先知道一共几行才能从末尾读，`tail -n 50` 换成 read 是两次调用，拦它只是多花一轮。
  */
 // i18n-exempt：工具结果是发给模型的，不随界面语言变。
 const REROUTES: { pattern: RegExp; only?: (line: string) => boolean; tool: string; message: string }[] = [
 	{
-		pattern: /^\s*(?:cat|head|tail)\s+[^|<>;&\x60$]+$/,
-		// `tail -f` 是跟着文件看，read 做不到；后台跑它、交给 monitor 是正路。
-		only: (line) => !/^\s*tail\b.*\s(?:-[a-zA-Z0-9]*[fF]|--follow)/.test(line),
+		pattern: /^\s*cat\s+[^|<>;&\x60$]+$/,
+		// `cat -n` 要的行号 read 本来就有；`cat -A`、`-v` 这种看不可见字符的放行。
+		only: (line) => flagsWithin(line, "n"),
 		tool: "read",
 		message: "用 `read` 读文件——它带行号、有结构视图、大文件会给摘要，而且下一次 `edit` 会认得这份快照。`cat` 只在管道里用。",
 	},
 	{
-		pattern: /^\s*(?:rg|grep|egrep|fgrep)\s+[^|<>;&\x60$]+$/,
+		pattern: /^\s*head(?:\s+-n)?(?:\s+-?\d+)?\s+[^-|<>;&\x60$\s][^|<>;&\x60$\s]*\s*$/,
+		tool: "read",
+		message: "用 `read` 读文件开头——给 `limit` 就只看前几行；它带行号，而且下一次 `edit` 会认得这份快照。",
+	},
+	{
+		// `sed -n '120,180p' a.ts`：读一段。
+		pattern: /^\s*sed\s+-n\s+([\x22\x27]?)\d+(?:,\d+)?p\1\s+[^-|<>;&\x60$\s][^|<>;&\x60$\s]*\s*$/,
+		tool: "read",
+		message: "用 `read` 读一段——`offset` 是起始行号，`limit` 是行数；它带行号，而且下一次 `edit` 会认得这份快照。",
+	},
+	{
+		pattern: /^\s*(?:grep|egrep|fgrep)\s+[^|<>;&\x60$]+$/,
+		only: (line) => !/^\s*fgrep\b/.test(line) && grepFlags(line),
+		tool: "grep",
+		message: "用 `grep` 工具搜——它不受 shell 引号转义的折磨，结果带文件名和行号，而且会跳过 node_modules。",
+	},
+	{
+		pattern: /^\s*rg\s+[^|<>;&\x60$]+$/,
+		only: rgFlags,
 		tool: "grep",
 		message: "用 `grep` 工具搜——它不受 shell 引号转义的折磨，结果带文件名和行号，而且会跳过 node_modules。",
 	},
@@ -99,10 +150,14 @@ const REROUTES: { pattern: RegExp; only?: (line: string) => boolean; tool: strin
 	},
 	{
 		pattern: /^\s*ls\s+[^|<>;&\x60$]+$/,
+		only: (line) => flagsWithin(line, "alhAF1"),
 		tool: "ls",
 		message: "用 `ls` 工具列目录——它会标出目录和文件，而且不会把颜色转义码带进结果。",
 	},
 ];
+
+/** 开头的 `cd <目录> &&`：进了目录再 cat、sed，还是一次读，不是在组合。 */
+const CD_PREFIX = /^\s*cd\s+(?:\x22[^\x22]*\x22|\x27[^\x27]*\x27|[^\s|<>;&\x60$]+)\s*&&/;
 
 /**
  * 这条命令该不该改道，null 就是照常跑。
@@ -121,10 +176,14 @@ export function rerouteShellCommand(command: string, available: ReadonlySet<stri
 			.filter((line) => line.trim()).length > 1
 	)
 		return null;
+	const line = first.replace(CD_PREFIX, "");
+	const moved = line !== first;
 	for (const { pattern, only, tool, message } of REROUTES) {
-		if (!pattern.test(first) || (only && !only(first))) continue;
+		if (!pattern.test(line) || (only && !only(line))) continue;
 		if (!available.has(tool)) return null;
-		return { tool, message };
+		// i18n-exempt：发给模型的话，同 `REROUTES`。
+		// 工具没有「当前目录」：`cd` 进去的那一层得写进路径里，不说的话照原样搬过去的相对路径会读错地方。
+		return { tool, message: moved ? `${message}工具不认 \`cd\`，路径从工作区根写起，或者写绝对路径。` : message };
 	}
 	return null;
 }

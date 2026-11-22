@@ -9,10 +9,47 @@ import { withFiles } from "../files.ts";
 
 const ALL = new Set(["read", "grep", "glob", "ls", "bash"]);
 
-it("裸的 cat/head/tail 改道到 read", () => {
+it("裸的 cat/head、读一段的 sed -n 改道到 read", () => {
 	expect(rerouteShellCommand("cat src/a.ts", ALL)?.tool).toBe("read");
 	expect(rerouteShellCommand("head -20 README.md", ALL)?.tool).toBe("read");
-	expect(rerouteShellCommand("  tail -n 50 log.txt", ALL)?.tool).toBe("read");
+	expect(rerouteShellCommand("head -n 20 README.md", ALL)?.tool).toBe("read");
+	expect(rerouteShellCommand("sed -n '120,180p' src/a.ts", ALL)?.tool).toBe("read");
+	// head 说的是 limit，sed 说的是 offset：照着话做就是对的调用。
+	expect(rerouteShellCommand("head -20 README.md", ALL)?.message).toMatch(/`limit`/);
+	expect(rerouteShellCommand("sed -n '120,180p' src/a.ts", ALL)?.message).toMatch(/`offset`/);
+});
+
+it("开头 cd 进目录再读也改道，并说工具不认 cd", () => {
+	// 以前 `&&` 一律当成组合放行，`cd x && sed -n …` 这种最常见的读法一次都没拦住。
+	const reroute = rerouteShellCommand("cd packages/app && sed -n '1,80p' src/main.ts", ALL);
+	expect(reroute?.tool).toBe("read");
+	expect(reroute?.message).toMatch(/不认 `cd`/);
+	expect(rerouteShellCommand("cd /repo && grep -rn foo src", ALL)?.tool).toBe("grep");
+	expect(rerouteShellCommand("cd a && cat x && echo done", ALL)).toBeNull();
+	expect(rerouteShellCommand("cat src/a.ts", ALL)?.message).not.toMatch(/cd/);
+});
+
+it("工具做不到的放行：tail、数行、反选、递归列目录、按时间排", () => {
+	for (const beyond of [
+		"tail -n 50 log.txt",
+		"tail log.txt",
+		"grep -c foo src/a.ts",
+		"grep -v foo a.txt",
+		"grep -rno foo src",
+		"rg -c TODO src",
+		"rg -t ts foo",
+		"ls -R src",
+		"ls -lt src",
+		"cat -A a.txt",
+		"head -c 100 a.bin",
+		"sed -n '/start/,/end/p' a.txt",
+		"sed -i 's/a/b/' a.txt",
+	]) {
+		expect(rerouteShellCommand(beyond, ALL), beyond).toBeNull();
+	}
+	for (const same of ["grep -rni foo src", "grep -C 3 foo a.ts", "grep -rn --include=*.ts foo .", "rg -n -g '*.ts' foo", "ls -lah src", "cat -n a.ts"]) {
+		expect(rerouteShellCommand(same, ALL), same).not.toBeNull();
+	}
 });
 
 it("跟着文件看的 tail 放行：read 跟不了", () => {
