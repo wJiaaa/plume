@@ -218,7 +218,8 @@ describe("拼进系统提示词", () => {
 		expect(coding.filter((line) => !general.includes(line)).map((line) => line.slice(0, 20))).toEqual([
 			"- Match the surround",
 			"- Fix the cause, not",
-			"- Reproduce a bug be",
+			"- Add only what the ",
+			"- When a bug can be ",
 		]);
 		expect(general.every((line) => coding.includes(line))).toBe(true);
 	});

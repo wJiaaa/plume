@@ -11,7 +11,7 @@ const zhCN = {
 	general: "通用",
 	generalDetail: "默认。适合各种事，不假定你在写代码。",
 	coding: "编程",
-	codingDetail: "在通用的基础上，加上照着周围代码的写法改、修根因不绕过、能验证就验证。",
+	codingDetail: "在通用的基础上，加上照着周围代码的写法改、修根因不绕过、只加任务要的东西、能验证就验证。",
 	custom: "自己写的",
 	builtinBadge: "内置",
 	modified: "已修改",
@@ -60,7 +60,8 @@ const en: typeof zhCN = {
 	general: "General",
 	generalDetail: "Default. Suits any kind of work and does not assume you are writing code.",
 	coding: "Coding",
-	codingDetail: "General, plus: match the surrounding code, fix the cause instead of working around it, verify when a cheap check exists.",
+	codingDetail:
+		"General, plus: match the surrounding code, fix the cause instead of working around it, add only what the task needs, verify when a cheap check exists.",
 	custom: "Your own",
 	builtinBadge: "Built-in",
 	modified: "Modified",
