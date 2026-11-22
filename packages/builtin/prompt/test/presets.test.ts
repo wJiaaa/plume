@@ -217,8 +217,8 @@ describe("拼进系统提示词", () => {
 		const coding = guidelines(BUILTIN_PERSONAS.coding).split("\n");
 		expect(coding.filter((line) => !general.includes(line)).map((line) => line.slice(0, 20))).toEqual([
 			"- Match the surround",
-			"- Make the simplest ",
-			"- Verify your work w",
+			"- Fix the cause, not",
+			"- Reproduce a bug be",
 		]);
 		expect(general.every((line) => coding.includes(line))).toBe(true);
 	});
