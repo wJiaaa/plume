@@ -1,5 +1,5 @@
 /**
- * 工具经资源地址读写：read、ls 经本体（`ToolRun.files.read`）认地址，write、edit 只认 `scratch://`。
+ * 工具经资源地址读写：read、ls、grep、glob 经本体（`ToolRun.files.read`）认地址，write、edit 只认 `scratch://`。
  * 地址本身的解析、路由和各个 scheme 的边界在本体 `packages/core/workspace/test/resources.test.ts` 里测。
  */
 
@@ -9,6 +9,8 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { ResourceHandler } from "@plume/contract";
 import { editTool } from "../../src/tools/edit.ts";
+import { globTool } from "../../src/tools/glob.ts";
+import { grepTool } from "../../src/tools/grep.ts";
 import { lsTool } from "../../src/tools/ls.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolResult } from "../../src/tools/types.ts";
@@ -124,6 +126,21 @@ it("ls 认地址给的位置：临时目录、别的 scheme 的目录；经软�
 		await rm(join(scratchDir, "ls-out"), { force: true });
 		await rm(target, { recursive: true, force: true });
 	}
+});
+
+it("grep、glob 在地址给的位置里搜：临时目录里命令写的日志搜得到", async () => {
+	// 以前地址按路径拼成 `<cwd>/scratch:/…`，答「找不到」；模型只好改用 bash 的 grep 去临时目录里找。
+	const c = toolCtx();
+	await mkdir(join(scratchDir, "logs"), { recursive: true });
+	await writeFile(join(scratchDir, "logs", "build.log"), "ok\nERROR: missing module foo\n");
+	const inDir = await grepTool.execute({ pattern: "ERROR", path: "scratch://logs" }, c);
+	expect(inDir.isError, textOf(inDir)).toBeUndefined();
+	expect(textOf(inDir)).toMatch(/build\.log:2:ERROR: missing module foo/);
+	const inFile = await grepTool.execute({ pattern: "missing", path: "scratch://logs/build.log" }, c);
+	expect(textOf(inFile)).toMatch(/:2:ERROR: missing module foo/);
+	const found = await globTool.execute({ pattern: "**/*.log", path: "scratch://" }, c);
+	expect(found.isError, textOf(found)).toBeUndefined();
+	expect(textOf(found)).toMatch(/build\.log/);
 });
 
 it("没有登记表的环境（直接调工具）把地址当普通路径", async () => {

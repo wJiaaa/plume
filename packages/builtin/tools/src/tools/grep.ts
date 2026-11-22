@@ -112,8 +112,11 @@ export const grepTool: Tool<GrepArgs> = {
 
 		let root = ctx.cwd;
 		if (normalizedArgs.path) {
-			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
-			const authorized = await ctx.files.read(ctx.files.resolve(normalizedArgs.path));
+			/*
+			 * 同 ls：要的是搜的地方（目录或文件），地址（`scratch://`）换成 scheme 给的磁盘位置，不要读到的内容；不换的话它被拼成
+			 * `<cwd>/scratch:/`，答的是「找不到」。路径照常过读边界。
+			 */
+			const authorized = await ctx.files.read(normalizedArgs.path, { directory: true });
 			if (!authorized.ok) return errorResult(authorized.message);
 			if (authorized.path) root = authorized.path;
 			/*
@@ -477,7 +480,8 @@ async function runFallback(args: GrepArgs, root: string, ctx: ToolContext): Prom
 	if ((await stat(root).catch(() => null))?.isFile()) await scanFile(root);
 	else {
 		const listed = await ctx.projectFiles(root);
-		if (!listed) await walk(root);
+		// 同 glob：被忽略的目录（点名搜 `dist`）git 一个都不列，不能因此答「没有匹配」。
+		if (!listed?.length) await walk(root);
 		else
 			for (const full of listed) {
 				if (lines.length >= limit || ctx.signal?.aborted) break;

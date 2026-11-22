@@ -1,6 +1,6 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { SEARCH_ALIASES } from "./args.ts";
 import { errorResult } from "./result.ts";
 import type { Tool, ToolResult } from "./types.ts";
@@ -29,7 +29,7 @@ export const globTool: Tool<GlobArgs> = {
 	aliases: SEARCH_ALIASES,
 	description:
 		"Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. " +
-		"Skips files git ignores (outside a git repository: build and dependency directories). " +
+		"Skips files git ignores (outside a git repository: build and dependency directories) unless you pass the ignored directory as `path`. " +
 		"Files that share a directory come under one line ending in `/`, indented by their names alone: the path of each is that line plus the name. " +
 		"Several patterns worth trying go out together in one reply.",
 	parameters: {
@@ -44,19 +44,21 @@ export const globTool: Tool<GlobArgs> = {
 	},
 
 	async execute(args, ctx): Promise<ToolResult> {
-		const pattern = typeof args.pattern === "string" ? args.pattern : "";
-		const path = typeof args.path === "string" ? args.path : "";
+		const written = typeof args.pattern === "string" ? args.pattern : "";
+		const located = locatePattern(written);
+		const pattern = located.pattern;
+		const path = located.dir ?? (typeof args.path === "string" ? args.path : "");
 
 		let root = ctx.cwd;
 		if (path) {
-			// 只认路径，地址也按路径判：先换成绝对路径，本体就不会把它当地址。
-			const authorized = await ctx.files.read(ctx.files.resolve(path));
+			// 同 ls：要的是搜的地方，地址（`scratch://`）换成 scheme 给的磁盘位置；不换的话它被拼成 `<cwd>/scratch:/`，答的是「找不到」。
+			const authorized = await ctx.files.read(path, { directory: true });
 			if (!authorized.ok) return errorResult(authorized.message);
 			if (authorized.path) root = authorized.path;
 			// 同 grep：目录不存在时读不出东西，答「没有匹配」会让模型以为搜过了。
 			if (!(await stat(root).catch(() => null))) return errorResult(`Path not found: ${path}. Nothing was searched.`);
 		}
-		if (!pattern)
+		if (!written)
 			return errorResult(
 				'`pattern` is required (`description` is only shown to the user, never searched). Please specify the glob pattern to search for in the `pattern` parameter, e.g. {"pattern": "**/*.ts"}.',
 			);
@@ -95,7 +97,11 @@ export const globTool: Tool<GlobArgs> = {
 		};
 
 		const listed = await ctx.projectFiles(root);
-		if (listed) for (const full of listed) consider(full);
+		/*
+		 * git 一个都不列也自己走：点名搜 `node_modules/foo`、`dist` 这种被忽略的目录时清单是空的，答「没有匹配」就成了假话，
+		 * 而 `find` 正被改道到这里。真是空目录的话走一遍也不费什么。
+		 */
+		if (listed?.length) for (const full of listed) consider(full);
 		else await walk(root);
 		const matches: { path: string; mtime: number }[] = [];
 		for (let at = 0; at < found.length; at += 64) {
@@ -107,8 +113,10 @@ export const globTool: Tool<GlobArgs> = {
 		const shown = matches.slice(0, limit);
 
 		if (shown.length === 0) {
+			// 照 git 的清单搜的，被忽略的没看：模式里点名了 `node_modules/…` 也一样，得说出来，不然读着像那里没有。
+			const skipped = listed?.length ? " Files git ignores were not searched; to look inside an ignored directory, pass it as `path`." : "";
 			return {
-				content: [{ type: "text", text: `No files match ${pattern}.` }],
+				content: [{ type: "text", text: `No files match ${written}.${skipped}` }],
 				details: { kind: "glob", count: 0 },
 				uneventful: true,
 			};
@@ -122,10 +130,25 @@ export const globTool: Tool<GlobArgs> = {
 					: "";
 		return {
 			content: [{ type: "text", text: byDirectory(shown.map((m) => m.path)) + footer }],
-			details: { kind: "glob", pattern, count: total, files: shown.map((m) => m.path) },
+			details: { kind: "glob", pattern: written, count: total, files: shown.map((m) => m.path) },
 		};
 	},
 };
+
+/**
+ * 模式按搜索目录的相对路径比，模型却常写成 `./src/*.ts` 或者带着绝对路径：以前这两种一个都匹配不上，答的是「没有匹配」。
+ * 开头的 `./` 去掉；绝对路径的模式拆成开头不带通配符的那几段（作为搜索目录，盖过 `path`）和其余的模式。整条都没有通配符时，
+ * 搜它所在的目录、比它的名字。
+ */
+export function locatePattern(pattern: string): { dir?: string; pattern: string } {
+	let rest = pattern;
+	while (rest.startsWith("./")) rest = rest.slice(2);
+	if (!isAbsolute(rest)) return { pattern: rest };
+	const segments = rest.split("/");
+	const wild = segments.findIndex((segment) => /[*?[{]/.test(segment));
+	const at = wild === -1 ? segments.length - 1 : wild;
+	return { dir: segments.slice(0, at).join("/") || "/", pattern: segments.slice(at).join("/") };
+}
 
 /**
  * 同一个目录只写一次的路径列表。

@@ -81,7 +81,7 @@ List the contents of a directory, with directories first and file sizes shown.
 
 ## glob
 
-Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. Skips files git ignores (outside a git repository: build and dependency directories). Files that share a directory come under one line ending in `/`, indented by their names alone: the path of each is that line plus the name. Several patterns worth trying go out together in one reply.
+Find files by name, newest first; to search contents, use grep. Supports `*`, `?`, `**` and `{a,b}`, e.g. `src/**/*.{ts,tsx}`. Skips files git ignores (outside a git repository: build and dependency directories) unless you pass the ignored directory as `path`. Files that share a directory come under one line ending in `/`, indented by their names alone: the path of each is that line plus the name. Several patterns worth trying go out together in one reply.
 
 {"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern, relative to the search root."},"description":{"type":"string","description":"5-10 word description shown to the user, in plain words and the user's language — not the pattern."},"path":{"type":"string","description":"Directory to search. Defaults to the workspace root."},"limit":{"type":"number","description":"Maximum number of matches. Default 500."}},"additionalProperties":true}
 

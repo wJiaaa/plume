@@ -1,12 +1,12 @@
 /**
- * glob 的字符类 `[...]`：成员、范围、取反，以及几种边界写法。
+ * glob 的字符类 `[...]`：成员、范围、取反，以及几种边界写法；`./` 开头和带绝对路径的模式。
  */
 
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
-import { globToRegExp, globTool } from "../../src/tools/glob.ts";
+import { globToRegExp, globTool, locatePattern } from "../../src/tools/glob.ts";
 import { withFiles } from "../files.ts";
 
 it("字符类匹配其中一个成员、一个范围，或除它们以外的任意字符", () => {
@@ -56,4 +56,21 @@ it("不存在的目录说不存在，不是搜了但为空", async () => {
 	const res = await globTool.execute({ pattern: "**/*.ts", path: "nope" }, withFiles({ cwd: dir, state: new Map() }));
 	expect(res.isError).toBe(true);
 	expect(res.content.map((part) => part.text).join("")).toMatch(/^Path not found: nope\./);
+});
+
+it("`./` 开头和绝对路径的模式找得到：以前按相对搜索目录的路径比，一个都匹配不上", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "plume-glob-located-"));
+	onTestFinished(() => rm(dir, { recursive: true, force: true }));
+	await mkdir(join(dir, "src", "deep"), { recursive: true });
+	await writeFile(join(dir, "src", "a.ts"), "");
+	await writeFile(join(dir, "src", "deep", "b.ts"), "");
+	const ctx = withFiles({ cwd: dir, state: new Map() });
+	const text = async (pattern: string) => (await globTool.execute({ pattern }, ctx)).content.map((part) => part.text).join("");
+	expect(await text("./src/*.ts")).toBe("src/a.ts");
+	expect(await text(`${dir}/src/**/*.ts`)).toMatch(/src\/deep\/b\.ts/);
+	expect(await text(`${dir}/src/a.ts`)).toBe("src/a.ts");
+
+	expect(locatePattern("./././x/*.md")).toEqual({ pattern: "x/*.md" });
+	expect(locatePattern("/repo/src/**/*.ts")).toEqual({ dir: "/repo/src", pattern: "**/*.ts" });
+	expect(locatePattern("/*.ts")).toEqual({ dir: "/", pattern: "*.ts" });
 });
