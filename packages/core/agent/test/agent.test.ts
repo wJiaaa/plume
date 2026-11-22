@@ -2479,6 +2479,27 @@ it("prompt.submit：放行时带的话以 synthetic 用户消息跟在后面，�
 	expect(view.summary.title).toBe("开始");
 });
 
+it("prompt.submit 拖了一阵：人的这条消息的时间戳是写进会话那一刻，界面据此认得出刚发出去", async () => {
+	let released = 0;
+	const slow: Plugin = {
+		name: "test.slow",
+		apply: (ctx) =>
+			ctx.hook("prompt.submit", async (input, next) => {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				released = Date.now();
+				return next(input);
+			}),
+	};
+	const { service, session, idle } = await start([{ text: "好的" }], [slow]);
+	const done = idle();
+	const sent = Date.now();
+	service.send(session.id, { content: [{ type: "text", text: "你好" }] });
+	await done;
+	const [prompt] = (await service.getSession(session.id)).messages;
+	expect(released - sent).toBeGreaterThanOrEqual(50);
+	expect(prompt?.timestamp).toBeGreaterThanOrEqual(released);
+});
+
 it("prompt.submit：放行时给了 cwd，这一轮起在那个目录里跑；不是已有目录就不换", async () => {
 	const copy = join(dir, "copy");
 	await mkdir(copy);

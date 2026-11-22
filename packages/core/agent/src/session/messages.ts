@@ -135,6 +135,9 @@ export function createMessages(deps: MessagesDeps): Messages {
 
 	/** 写进人的这条；插件放行时带了话，紧跟着以用户身份（synthetic）写进去，模型读得到，界面不画成人的消息。 */
 	async function commitPrompt(session: Session, prompt: UserMessage, context: string | undefined, allowed: () => boolean): Promise<boolean> {
+		// 时间戳记成写进会话的这一刻，不是建这条消息时：中间隔着等上一轮收场、`prompt.submit`（开工作树能有好几秒）、换目录，
+		// 界面按它离现在多近认「刚发出去」、演气泡入场（`UserBubble`），按建的时刻算，钩子一慢就不演了。
+		prompt.timestamp = Date.now();
 		if (!(await commit(session, prompt, allowed))) return false;
 		if (context) await commit(session, { role: "user", content: [{ type: "text", text: context }], timestamp: Date.now(), synthetic: true }, allowed);
 		return true;
