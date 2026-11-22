@@ -14,7 +14,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { basename, delimiter } from "node:path";
+import { basename, delimiter, dirname, isAbsolute } from "node:path";
 import { loginShell } from "@plume/platform";
 import { homedir } from "node:os";
 
@@ -240,5 +240,12 @@ export function commandEnv(inherited: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	if (resolvedEnv) Object.assign(env, resolvedEnv);
 	const repaired = commandPath(inherited.PATH);
 	if (repaired !== undefined && repaired !== env.PATH) env.PATH = repaired;
+	/*
+	 * 随包的 ripgrep（桌面端写在 `PLUME_RIPGREP`，见 `apps/desktop/src/main/ripgrep.ts`）命令里也找得到：模型照样会在 bash 里敲 `rg`，
+	 * 没装的机器上答 `command not found`，它就退到慢得多的 `grep -r`。接在末尾，用户自己装的那份先被找到。
+	 * 只认绝对路径：`PLUME_RIPGREP=rg` 的目录是 `.`，把当前目录放进 `PATH` 等于让工作区里同名的文件冒充命令。
+	 */
+	const ripgrep = inherited.PLUME_RIPGREP?.trim();
+	if (ripgrep && isAbsolute(ripgrep)) env.PATH = extend(env.PATH ?? "", [dirname(ripgrep)]);
 	return env;
 }
