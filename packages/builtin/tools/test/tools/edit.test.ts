@@ -118,7 +118,8 @@ it("没先读就编辑被拒", async () => {
 	const { file, ctx } = await fixture();
 	const res = await editTool.execute({ path: file, old_string: "bravo", new_string: "x" }, ctx);
 	expect(res.isError).toBe(true);
-	expect(textOf(res)).toMatch(/Read .* before editing/);
+	// 说清经 grep、bash 看过不算，读完原样重发：被拒的编辑多半是以为那些算读过。
+	expect(textOf(res)).toMatch(/has not been read[\s\S]*grep, bash[\s\S]*send the same edit again/);
 });
 
 it("没给 old_string 的编辑被拒，不去猜", async () => {

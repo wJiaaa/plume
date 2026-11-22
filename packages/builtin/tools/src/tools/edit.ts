@@ -70,12 +70,29 @@ export const editTool: Tool<EditArgs> = {
 				written,
 			} = await ctx.files.change<ToolResult>(file ?? args.path, async ({ path: absolute, text: raw, stamp }) => {
 				const record = readRecord(ctx, absolute);
-				if (!record?.stamp) return fail(`Read ${args.path} as text before editing it.`);
+				/*
+				 * 被拒的编辑多半是这几种：没读就一口气改好几个文件，或者只经 grep、bash（`git diff`、`sed -n`）看过。只说「先读」的话，
+				 * 模型会以为那些算读过、或者不知道读完该重发什么，所以说清哪些不算、读完原样再发。
+				 */
+				if (!record) {
+					return fail(
+						`${args.path} has not been read in this session, so this edit was not applied; seeing it through grep, bash (cat, sed, git diff) or a failed edit does not count. ` +
+							"Read it with read (the lines you are changing are enough, with offset and limit), then send the same edit again. Reading several files? Read them all in one reply first.",
+					);
+				}
+				if (!record.stamp) return fail(`${args.path} was not read as text (it came back as an image or extracted document text), so edit cannot change it.`);
 				if (record.partial) {
-					return fail(`Your last read of ${args.path} did not show the whole file. Read the part you are changing with offset and limit before editing it.`);
+					return fail(
+						`Your last read of ${args.path} did not show the whole file, so this edit was not applied. Read the part you are changing with offset and limit, then send the same edit again.`,
+					);
 				}
 				if (raw === null || !stamp) return fail(`File not found: ${args.path}`);
-				if (changedSince(record, stamp)) return fail(`The file changed since you read it. Re-read ${args.path} before editing.`);
+				if (changedSince(record, stamp)) {
+					return fail(
+						`${args.path} changed since you read it (a command, the person or another tool wrote to it), so this edit was not applied. ` +
+							"Read the part you are changing again and redo the edit against what is there now.",
+					);
+				}
 
 				const { text: before, layout } = decodeText(raw);
 				if (args.old_string === "") return fail("`old_string` is empty. To fill an empty file or replace a whole file, use `write`.");

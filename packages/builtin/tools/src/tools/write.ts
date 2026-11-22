@@ -66,8 +66,21 @@ export const writeTool: Tool<WriteArgs> = {
 				const alreadyExists = before !== null;
 				const previous = alreadyExists ? decodeText(before) : null;
 				const record = readRecord(ctx, absolute);
-				if (stamp && (!record || changedSince(record, stamp) || record.partial)) {
-					return { value: errorResult(`Read the current text of ${args.path} before overwriting it.`) };
+				/*
+				 * 三种情况各说各的，和 edit 一样：只说「先读」的话，读出大纲的模型照原样再读一次，又是大纲，又被拒，一轮轮白跑。
+				 * 指明窗口的读（`offset`/`limit`）不算只看了一部分，见 `read.ts`。
+				 */
+				if (stamp && !record) return { value: errorResult(`Read the current text of ${args.path} before overwriting it.`) };
+				if (stamp && record?.partial) {
+					return {
+						value: errorResult(
+							`Your last read of ${args.path} showed only part of it (an outline, or cut off at a limit). ` +
+								"Read it again with offset and limit before overwriting it, or change just the part you need with edit.",
+						),
+					};
+				}
+				if (stamp && record && changedSince(record, stamp)) {
+					return { value: errorResult(`${args.path} changed since you read it. Read it again before overwriting it.`) };
 				}
 				const content = previous ? decodeInput(args.content.replace(/^\uFEFF/, ""), previous.layout) : args.content;
 				const written = previous ? encodeText(content, previous.layout) : content;

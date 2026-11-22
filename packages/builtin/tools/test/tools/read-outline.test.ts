@@ -14,6 +14,7 @@ import { editTool } from "../../src/tools/edit.ts";
 import { outline, outlineFooter } from "../../src/tools/outline.ts";
 import { readTool } from "../../src/tools/read.ts";
 import type { ToolContext, ToolResult } from "../../src/tools/types.ts";
+import { writeTool } from "../../src/tools/write.ts";
 import { withFiles } from "../files.ts";
 
 /** 有真实结构的文件：声明、文档注释、值得折叠的函数体。 */
@@ -180,6 +181,21 @@ it("大纲之后读一段范围，才放宽能编辑的范围", async () => {
 	await readTool.execute({ path: file, offset: from, limit: to - from + 1 } as never, ctx);
 	const after = await editTool.execute({ path: file, old_string: target, new_string: "\tconst ok = 1;" }, ctx);
 	expect(after.isError, textOf(after)).toBeUndefined();
+});
+
+it("出过大纲之后整个重写被拒，报错说清要带 offset/limit 再读，照做就放行", async () => {
+	// 以前只说「先读」：模型照原样再读一次，又是大纲，又被拒，一轮轮白跑。
+	const content = sourceFile();
+	const { file, ctx } = await fixture("mod.ts", content);
+	await readTool.execute({ path: file } as never, ctx);
+	const refused = await writeTool.execute({ path: file, content: "export const replaced = true;\n" }, ctx);
+	expect(refused.isError).toBe(true);
+	expect(textOf(refused)).toMatch(/showed only part of it[\s\S]*offset and limit/);
+	expect(await readFile(file, "utf8")).toBe(content);
+
+	await readTool.execute({ path: file, offset: 1, limit: 400 } as never, ctx);
+	const written = await writeTool.execute({ path: file, content: "export const replaced = true;\n" }, ctx);
+	expect(written.isError, textOf(written)).toBeUndefined();
 });
 
 // ---------------------------------------------------------------------------
