@@ -19,12 +19,7 @@
 
 ## 怎么加载
 
-1. 先读 `safety.md`。
-2. 根据需求、涉及文件和 diff，按 `index.md` 选择命中的 rule。
-3. 做计划、实现或交付检查时，读 `loop.md` 对应章节。
-4. 只读命中的 rule；没有命中的目录不要全量加载。
-
-一次任务可以同时命中多类 rule。例如“给某个工具加一张插件卡片”通常要读：
+顺序见 [`AGENTS.md`](../AGENTS.md)「动手前」，怎么判断命中见 [`index.md`](./index.md)。一次任务可以同时命中多类 rule，例如“给某个工具加一张插件卡片”通常要读：
 
 - `scenario/tool-card.md`
 - `tech/components.md`

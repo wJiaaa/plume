@@ -57,7 +57,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 			}));
 	const problems = targets.flatMap(({ tag, changelog }) => releaseNotesProblems(changelog, tag.replace(/^v/, "")));
 	if (problems.length > 0) {
-		console.error(`发版文案没写完（见 AGENTS.md 的 pnpm release 一行）：\n${problems.map((problem) => `  ${problem}`).join("\n")}`);
+		console.error(`发版文案没写完（见 docs/release.md「发版」）：\n${problems.map((problem) => `  ${problem}`).join("\n")}`);
 		process.exit(1);
 	}
 }

@@ -149,7 +149,7 @@ async function main() {
 			[
 				"",
 				...(push ? [`发版文案还没写，停在推送前：\n${missing.map((problem) => `  ${problem}`).join("\n")}`, ""] : []),
-				"没有推送。CHANGELOG 里生成的是提交列表，发版文案要手写（见 AGENTS.md 的 pnpm release 一行）；改完重新提交、重打 tag：",
+				"没有推送。CHANGELOG 里生成的是提交列表，发版文案要手写（见 docs/release.md「发版」）；改完重新提交、重打 tag：",
 				`  git commit --amend --no-edit -- ${CHANGELOG} && git tag -f -a ${tag} -m "$(node scripts/changelog-section.mjs ${tag})"`,
 				"推送：",
 				`  git push origin HEAD && git push origin ${tag}`,
