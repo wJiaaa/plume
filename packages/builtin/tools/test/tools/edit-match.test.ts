@@ -59,6 +59,26 @@ it("行尾空格不挡匹配，换行被替换而不是重复", async () => {
 	expect(text).toBe("ONE\nTWO\nthree\n");
 });
 
+it("old_string 和 new_string 缩进抄错得一样：new_string 按文件的缩进写，Python 不被写坏", async () => {
+	const file = "class A:\n    def f(self):\n        if x:\n            y = 1\n        return y\n";
+	// 模型少抄了一层缩进，两边错得一样，new_string 还多了一层更深的行。
+	const { result, text } = await edited(file, "    if x:\n        y = 1", "    if x:\n        y = 2\n        if y:\n            z = 3");
+	expect(result.isError, textOf(result)).toBeUndefined();
+	expect(text).toBe("class A:\n    def f(self):\n        if x:\n            y = 2\n            if y:\n                z = 3\n        return y\n");
+});
+
+it("模型用空格写、文件用 Tab：new_string 换成 Tab", async () => {
+	const { result, text } = await edited("\tif (x) {\n\t\ty();\n\t}\n", "  if (x) {\n    y();\n  }", "  if (x) {\n    z();\n  }");
+	expect(result.isError, textOf(result)).toBeUndefined();
+	expect(text).toBe("\tif (x) {\n\t\tz();\n\t}\n");
+});
+
+it("old_string 写出来的 \\u 转义匹配上了，new_string 里的也还原成字", async () => {
+	const { result, text } = await edited("Le café au lait\n", "caf\\u00e9 au lait", "caf\\u00e9 noir");
+	expect(result.isError, textOf(result)).toBeUndefined();
+	expect(text).toBe("Le café noir\n");
+});
+
 it("缩进不同的一块找得到", () => {
 	const match = findEditMatch("\tif (x) {\n\t\ty();\n\t}\n", "if (x) {\n\ty();\n}", false);
 	expect(match).toEqual({ status: "matched", actual: "\tif (x) {\n\t\ty();\n\t}", strategy: "line_trimmed" });

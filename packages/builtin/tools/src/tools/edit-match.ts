@@ -50,10 +50,13 @@ export function findEditMatch(content: string, search: string, replaceAll: boole
 	return { status: "not_found" };
 }
 
-/** 按找到匹配的方式改写 `new_string`：去掉转义、去掉行号前缀、换成文件里的引号。 */
+/** 按找到匹配的方式改写 `new_string`：去掉转义、去掉行号前缀、换成文件里的缩进和引号。 */
 export function replacementFor(strategy: MatchStrategy, search: string, actual: string, replacement: string): string {
 	let result = replacement;
 	if (strategy === "escape_normalized") result = unescapeVisible(result);
+	// 和 `escape_normalized` 同理：`old_string` 把 é 写成了 `\u00e9`，`new_string` 里的也是，不还原就把六个字写进文件。
+	if (strategy === "unicode_escape_normalized") result = unescapeUnicode(result);
+	if (BROAD.has(strategy)) result = reindented(search, actual, result);
 	// 把行号前缀抄进 `old_string` 的模型，`new_string` 里多半也写了；不去掉就会写进文件。
 	if (strategy === "line_number_prefix_stripped") result = stripLineNumberPrefixes(result) ?? result;
 	// 只有引号本身对不上时才换：别的读法下模型抄对了引号，文件里别处（比如中文注释）的弯引号不该改写代码里的直引号。
@@ -157,6 +160,47 @@ function unescapeUnicode(text: string): string {
 	return text.replace(/(\\\\)|\\u([0-9a-fA-F]{4})/g, (match, escapedBackslash: string | undefined, hex: string) =>
 		escapedBackslash === undefined ? String.fromCharCode(Number.parseInt(hex, 16)) : match,
 	);
+}
+
+const indentOf = (line: string): string => /^[\t ]*/.exec(line)![0];
+const firstFilled = (lines: string[]): string | undefined => lines.find((line) => line.trim().length > 0);
+
+/**
+ * 按行形状找到的一块，`new_string` 换成文件里的缩进。
+ *
+ * 模型抄错缩进时，`new_string` 多半和 `old_string` 错得一样（四个空格写成两个、Tab 写成空格）；原样写进去，Python 这类靠缩进的代码就坏了。
+ * 每一行 `old_string` 的缩进对应文件里那一行的缩进，`new_string` 的每一行按这张表换；比表里都深的行，按最长的那个前缀换掉开头。
+ * 只在 `new_string` 跟 `old_string` 是同一套缩进时换（看第一行有字的）：模型 `old_string` 抄得随便、`new_string` 照文件写对了的也常见，
+ * 那种原样写。表自相矛盾（同一个缩进对应文件里两种）时不知道该换成哪种，原样写。
+ */
+function reindented(search: string, actual: string, replacement: string): string {
+	const searchLines = search.split("\n");
+	const actualLines = actual.split("\n");
+	const first = firstFilled(searchLines);
+	const firstNew = firstFilled(replacement.split("\n"));
+	if (first === undefined || firstNew === undefined || indentOf(firstNew) !== indentOf(first)) return replacement;
+
+	const table = new Map<string, string>();
+	for (const [i, line] of searchLines.entries()) {
+		const matched = actualLines[i];
+		if (matched === undefined || line.trim().length === 0 || matched.trim().length === 0) continue;
+		const from = indentOf(line);
+		const to = indentOf(matched);
+		if (table.has(from) && table.get(from) !== to) return replacement;
+		table.set(from, to);
+	}
+	if ([...table].every(([from, to]) => from === to)) return replacement;
+
+	const keys = [...table.keys()].sort((a, b) => b.length - a.length);
+	return replacement
+		.split("\n")
+		.map((line) => {
+			if (line.trim().length === 0) return line;
+			const indent = indentOf(line);
+			const key = keys.find((one) => indent.startsWith(one));
+			return key === undefined ? line : table.get(key)! + line.slice(key.length);
+		})
+		.join("\n");
 }
 
 function removeCommonIndent(lines: string[]): string {
