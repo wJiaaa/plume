@@ -16,8 +16,11 @@ import { revealLabel } from "../files/open-targets.ts";
 import { groupNotices, schedule, TOAST_Z, visibleToasts, type Deadline, type ToastGroup } from "./stack.ts";
 import { currentNotices, dismissNotice, subscribeNotices } from "./store.ts";
 
-/** 和 styles.css 里 `.plume-toast-out` 的时长一致：动画放完再把卡片拿掉。 */
-const LEAVE_MS = 170;
+/**
+ * 退场最多等多久，之后不等 `animationend` 就把卡片拿掉。拿掉它的是 `.plume-toast-out` 自己的结束：一个和动画一样长的
+ * 计时器常常抢先到，淡出的最后几帧没画出来卡片就没了。这里只兜事件一直不来的情况（窗口在那几帧画出来之前被藏起）。
+ */
+const LEAVE_FALLBACK_MS = 600;
 
 /** 卡片换位置时那一段滑动的名字：再变一次时找到它、从它画到的地方接着滑。 */
 const SHIFT = "toast-shift";
@@ -77,6 +80,8 @@ export function Toaster({
 	 * 动画才有东西可放。
 	 */
 	const [leaving, setLeaving] = useState<string[]>([]);
+	/** 正在退场的那几组，各自退场放完时要做的事。 */
+	const finishing = useRef(new Map<string, () => void>());
 
 	const dismiss = useCallback(
 		(group: ToastGroup) => {
@@ -85,12 +90,18 @@ export function Toaster({
 			 * 滑上来停到指针底下的那张会自己再停住它。
 			 */
 			release();
-			setLeaving((current) => (current.includes(group.key) ? current : [...current, group.key]));
+			if (finishing.current.has(group.key)) return;
+			setLeaving((current) => [...current, group.key]);
 			const ids = [...group.ids];
-			setTimeout(() => {
+			const finish = () => {
+				clearTimeout(timer);
+				if (finishing.current.get(group.key) !== finish) return;
+				finishing.current.delete(group.key);
 				for (const id of ids) dismissNotice(id);
 				setLeaving((current) => current.filter((key) => key !== group.key));
-			}, LEAVE_MS);
+			};
+			const timer = setTimeout(finish, LEAVE_FALLBACK_MS);
+			finishing.current.set(group.key, finish);
 		},
 		[release],
 	);
@@ -171,6 +182,10 @@ export function Toaster({
 						onMouseLeave={release}
 						onFocusCapture={hold}
 						onBlurCapture={release}
+						// 只认卡片自己的退场：里面的按钮悬停也有动画，结束事件会冒泡上来。
+						onAnimationEnd={(event) => {
+							if (event.target === event.currentTarget && event.animationName === "plume-toast-out") finishing.current.get(group.key)?.();
+						}}
 						/*
 						 * 不透明的浮层底，浅色深色都由主题自己的 token 算出来，不是叠在背后东西上的一层色。行高定在 18px：
 						 * 图标和按钮都按这一行对齐，换行时也对第一行。右边总有关闭按钮，右内边距收窄，按钮自带的留白补上那一截。

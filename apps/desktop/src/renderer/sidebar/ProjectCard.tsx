@@ -9,6 +9,7 @@ export function ProjectCard({
 	count,
 	anchor,
 	leaving,
+	onLeft,
 }: {
 	folders?: readonly string[];
 	name: string;
@@ -18,6 +19,8 @@ export function ProjectCard({
 
 	anchor: DOMRect;
 	leaving?: boolean;
+	/** 退场放完了，交给 `useSessionCard` 的 `dismiss`。 */
+	onLeft?: () => void;
 }) {
 	const { card, at } = useCardPlacement(anchor);
 
@@ -26,6 +29,9 @@ export function ProjectCard({
 			ref={card}
 			role="tooltip"
 			data-plume-project-card=""
+			onAnimationEnd={(event) => {
+				if (event.target === event.currentTarget && event.animationName === "sidebar-card-out") onLeft?.();
+			}}
 			style={{ zIndex: CARD_Z, left: at?.left ?? -9999, top: at?.top ?? -9999, opacity: at ? undefined : 0 }}
 			className={`bg-float shadow-menu pointer-events-none fixed w-max max-w-[340px] min-w-[220px] overflow-hidden rounded-xl border border-line-float px-3 py-2.5 ${
 				leaving ? "sidebar-card-out" : "sidebar-card-in"

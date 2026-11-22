@@ -13,7 +13,7 @@
 - 颜色只取 `var(--plume-*)`，不写色值（`#fff`、`rgb()`、`oklch()`）。确实只能写色值的文件（canvas 只认字面色值）在文件里写一行带 `color-exempt` 的注释写明原因，整个文件不查色值。
 - 行内 `style` 的颜色、圆角、字号、行高、字距、字体、阴影、过渡只取 `var(--plume-*)`，或 `transparent`、`inherit`、`currentColor`、`none`；间距、尺寸这些布局值可以写数字。
 - CSS 里的字号、行高、字距、字体、字重、圆角、阴影只能写单个 `var(--plume-*)` 或 `inherit` 这类关键字，`calc()` 照着拼一份档位也不行：文字交给 `Text`。原生 `<input>` 会继承外层的字号，外面包一层 `Text` 就行。
-- 过渡时长用 `var(--plume-t-quick)`、`var(--plume-t-base)`、`var(--plume-t-slow)`，不写 `200ms`。
+- 过渡时长用 `var(--plume-t-quick)`、`var(--plume-t-base)`、`var(--plume-t-slow)`，浮层离开用 `var(--plume-t-leave)`，不写 `200ms`。
 
 常用 token：面 `--plume-shell`、`--plume-card`、`--plume-card-hover`、`--plume-elevated`；线 `--plume-line`、`--plume-line-soft`；字 `--plume-ink`、`--plume-ink-muted`、`--plume-ink-faint`；状态 `--plume-ok`、`--plume-danger`、`--plume-warning`；强调 `--plume-accent`；字体 `--plume-font-sans`、`--plume-font-mono`；圆角 `--plume-radius-panel`、`--plume-radius-field`、`--plume-radius-item`。浅色、深色跟随系统，token 自动切换，不用自己判断主题。
 

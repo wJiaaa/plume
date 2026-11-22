@@ -236,7 +236,7 @@ export function Popover({
 	/**
 	 * 退场动画播放时为真，在通知调用方卸载之前。
 	 *
-	 * 在点外面的那一帧就直接消失的菜单读起来像故障；眼睛在离开时也需要进来时那样的 120ms。
+	 * 在点外面的那一帧就直接消失的菜单读起来像故障；眼睛在离开时也需要一段看得见的退场（`--plume-t-leave`）。
 	 */
 	const [leaving, setLeaving] = useState(false);
 	/**

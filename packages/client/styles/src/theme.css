@@ -170,6 +170,8 @@
 	--plume-t-base: 220ms;
 	--plume-t-reveal: 260ms;
 	--plume-t-slow: 340ms;
+	/* 浮层（菜单、提示、悬停卡、对话框、提示条）离开：比它们到达快一档，用完的东西让开，但慢到看得见它走。 */
+	--plume-t-leave: 120ms;
 	/* 启动页沿用原版的节奏，不跟控件的过渡时长走。 */
 	--plume-t-boot-quiet: 120ms;
 	--plume-t-boot-fade: 520ms;

@@ -12,8 +12,13 @@ import { shortcutLabel } from "../keyboard.ts";
 import { hoverLayersSuppressed, onHoverLayersDismissed } from "./hover-layers.ts";
 
 const DELAY_MS = 420;
-/** 长到看得见它离开，短到不拖在指针后面。和 `plume-tip-out` 一致。 */
-const EXIT_MS = 110;
+/**
+ * 退场最多等多久，之后不等 `animationend` 就藏起气泡。
+ *
+ * 藏起它的是 `plume-tip-out` 自己的结束，不是一个和它一样长的计时器：两者赛跑时计时器常常先到，淡出的
+ * 最后几帧没画出来就没了（同样的事 `Popover` 的 `EXIT_FALLBACK_MS` 量过）。这里只兜事件一直不来的情况。
+ */
+const EXIT_FALLBACK_MS = 600;
 const GAP = 6;
 const MARGIN = 6;
 /**
@@ -52,6 +57,9 @@ function ensureHost(): HTMLElement {
 	host.style.zIndex = String(TIP_Z);
 	host.style.pointerEvents = "none";
 	host.hidden = true;
+	host.addEventListener("animationend", (event) => {
+		if (event.target === host && event.animationName === "plume-tip-out") finishLeave();
+	});
 	document.body.appendChild(host);
 	return host;
 }
@@ -234,11 +242,14 @@ function hide() {
 	if (!host || host.hidden || host.dataset.leaving !== undefined) return;
 	host.dataset.leaving = "";
 	window.clearTimeout(leaving);
-	leaving = window.setTimeout(() => {
-		if (!host) return;
-		host.hidden = true;
-		delete host.dataset.leaving;
-	}, EXIT_MS);
+	leaving = window.setTimeout(finishLeave, EXIT_FALLBACK_MS);
+}
+
+function finishLeave() {
+	window.clearTimeout(leaving);
+	if (!host || host.dataset.leaving === undefined) return;
+	host.hidden = true;
+	delete host.dataset.leaving;
 }
 
 /** 立刻隐藏提示，不播退场动画。 */

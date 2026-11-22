@@ -282,7 +282,7 @@
 		justify-content: center;
 		pointer-events: none;
 		background: color-mix(in srgb, var(--plume-accent) 12%, color-mix(in srgb, var(--plume-shade) 38%, transparent));
-		animation: plume-scrim-in var(--plume-t-quick) ease-out;
+		animation: plume-scrim-in var(--plume-t-quick) var(--plume-e-out);
 	}
 
 	.plume-drop-overlay-label {

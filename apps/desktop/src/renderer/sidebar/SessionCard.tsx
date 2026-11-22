@@ -20,7 +20,11 @@ const EMPTY: SessionUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, 
 
 const OPEN_DELAY_MS = 420;
 
-const LEAVE_MS = 150;
+/**
+ * 退场最多等多久，之后不等 `animationend` 就收起卡片。收起它的是 `.sidebar-card-out` 自己的结束（卡片的 `onLeft`）：
+ * 一个和动画一样长的计时器常常抢先到，淡出的最后几帧没画出来卡片就没了。这里只兜事件一直不来的情况。
+ */
+const LEAVE_FALLBACK_MS = 600;
 
 const GAP = 8;
 
@@ -119,6 +123,7 @@ export function SessionCard({
 	anchor,
 	project,
 	leaving,
+	onLeft,
 }: {
 	session: SessionSummary;
 	load: (id: string) => Promise<SessionStats>;
@@ -128,6 +133,8 @@ export function SessionCard({
 	project?: string;
 
 	leaving?: boolean;
+	/** 退场放完了，交给 `useSessionCard` 的 `dismiss`。 */
+	onLeft?: () => void;
 }) {
 	const { resolvedLocale } = useI18n();
 	const { card, at } = useCardPlacement(anchor);
@@ -162,6 +169,9 @@ export function SessionCard({
 			ref={card}
 			role="tooltip"
 			data-plume-session-card=""
+			onAnimationEnd={(event) => {
+				if (event.target === event.currentTarget && event.animationName === "sidebar-card-out") onLeft?.();
+			}}
 			style={{ zIndex: CARD_Z, left: at?.left ?? -9999, top: at?.top ?? -9999, opacity: at ? undefined : 0 }}
 			className={`bg-float shadow-menu pointer-events-none fixed w-[248px] overflow-hidden rounded-xl border border-line-float ${
 				leaving ? "sidebar-card-out" : "sidebar-card-in"
@@ -281,12 +291,14 @@ export function useSessionCard(): {
 			},
 			onMouseLeave: () => {
 				window.clearTimeout(open.current);
+				// 卡片还没出来（停得不够久）就没有退场可等。
+				if (!anchor) {
+					dismiss();
+					return;
+				}
 				setLeaving(true);
-				close.current = window.setTimeout(() => {
-					setAnchor(null);
-					setLeaving(false);
-					setEngaged(false);
-				}, LEAVE_MS);
+				window.clearTimeout(close.current);
+				close.current = window.setTimeout(dismiss, LEAVE_FALLBACK_MS);
 			},
 			onClick: () => {
 				dismiss();

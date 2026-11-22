@@ -34,11 +34,11 @@
 }
 
 .plume-scrim-in {
-	animation: plume-scrim-in 150ms ease-out;
+	animation: plume-scrim-in var(--plume-t-base) var(--plume-e-out);
 }
 
 .plume-scrim-out {
-	animation: plume-scrim-out 100ms ease-in forwards;
+	animation: plume-scrim-out var(--plume-t-leave) var(--plume-e-in) forwards;
 }
 
 /*
@@ -50,12 +50,12 @@
  * 任何 `position: fixed` 元素的包含块。
  */
 .plume-dialog-in {
-	animation: plume-dialog-in 150ms var(--plume-e-out);
+	animation: plume-dialog-in var(--plume-t-base) var(--plume-e-out);
 	will-change: opacity;
 }
 
 .plume-dialog-out {
-	animation: plume-dialog-out 100ms ease-in forwards;
+	animation: plume-dialog-out var(--plume-t-leave) var(--plume-e-in) forwards;
 }
 
 @keyframes plume-scrim-in {
@@ -165,7 +165,7 @@
 
 .plume-pop-in {
 	transform-origin: top center;
-	animation: plume-pop-in 130ms cubic-bezier(0.2, 0.9, 0.3, 1);
+	animation: plume-pop-in var(--plume-t-quick) var(--plume-e-out);
 }
 
 /*
@@ -180,7 +180,7 @@
 }
 
 .plume-pop-out {
-	animation: plume-pop-out 120ms ease-in forwards;
+	animation: plume-pop-out var(--plume-t-leave) var(--plume-e-in) forwards;
 	pointer-events: none;
 }
 
@@ -335,15 +335,15 @@
 	/*
 	 * 两个动画，因为离开不是把进来倒着放。
 	 *
-	 * 到达时从无到有、轻微过冲再落定——这条曲线是应用里其他在指针下出现的东西用的那条。离开更快、不缩放：
+	 * 到达时和菜单、悬停卡同一个节奏：quick 加 `e-out`，减速落定、不过冲——指针底下冒出来的小东西一回弹就成了抖。离开更快、不缩放：
 	 * 一个在离开时缩小的气泡，恰好在它已经不相关的那一刻把注意力引到自己身上。
 	 */
-	animation: plume-tip-in 150ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+	animation: plume-tip-in var(--plume-t-quick) var(--plume-e-out);
 	will-change: opacity, transform;
 }
 
 .plume-tooltip[data-leaving] {
-	animation: plume-tip-out 110ms ease-in forwards;
+	animation: plume-tip-out var(--plume-t-leave) var(--plume-e-in) forwards;
 	pointer-events: none;
 }
 

@@ -343,9 +343,9 @@
 		animation: plume-toast-in var(--plume-t-base) var(--plume-e-out);
 	}
 
-	/* 时长和 Toaster.tsx 的 LEAVE_MS 一致。 */
+	/* 播完由 Toaster.tsx 在 `animationend` 时拿掉卡片。 */
 	.plume-toast-out {
-		animation: plume-toast-out 170ms ease-in forwards;
+		animation: plume-toast-out var(--plume-t-leave) var(--plume-e-in) forwards;
 		pointer-events: none;
 	}
 
@@ -414,10 +414,10 @@
 		}
 	}
 	.sidebar-card-in {
-		animation: sidebar-card-in var(--plume-t-quick) ease-out;
+		animation: sidebar-card-in var(--plume-t-quick) var(--plume-e-out);
 	}
 	.sidebar-card-out {
-		animation: sidebar-card-out var(--plume-t-quick) ease-in forwards;
+		animation: sidebar-card-out var(--plume-t-leave) var(--plume-e-in) forwards;
 	}
 }
 

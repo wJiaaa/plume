@@ -82,6 +82,7 @@ export const SessionRow = memo(function SessionRow({
 					load={loadStats}
 					anchor={hover.anchor}
 					leaving={hover.leaving}
+					onLeft={hover.dismiss}
 					project={session.pinned ? projects.find((entry) => entry.id === session.project)?.name : undefined}
 				/>
 			)}

@@ -486,7 +486,15 @@ function ProjectHead({
 		>
 			{placement && <DropLineIndicator placement={placement} />}
 			{hover.anchor && !dragging && (
-				<ProjectCard name={group.name} path={group.path} folders={group.folders} count={group.sessions.length} anchor={hover.anchor} leaving={hover.leaving} />
+				<ProjectCard
+					name={group.name}
+					path={group.path}
+					folders={group.folders}
+					count={group.sessions.length}
+					anchor={hover.anchor}
+					leaving={hover.leaving}
+					onLeft={hover.dismiss}
+				/>
 			)}
 			<button
 				type="button"
