@@ -31,8 +31,8 @@ export function AgentsSettings({ onOpenModelSettings }: { onOpenModelSettings: (
 						<entry.component />
 					</ErrorBoundary>
 				))}
-				<section className={sections.length > 0 ? "mt-6" : ""}>
-					<div className="mb-3 flex items-center justify-between gap-3">
+				<section className={sections.length > 0 ? "mt-8" : ""}>
+					<div className="mb-2.5 flex items-center justify-between gap-3">
 						<h2 className="flex h-7 items-center gap-1.5 text-body font-semibold text-ink">{t("common.session")}</h2>
 					</div>
 					<Card className="@container">
@@ -76,8 +76,8 @@ function SessionModelRow({ id, name, detail, children }: { id: string; name: str
 	return (
 		<div data-session-model={id} data-settings-item="" className="plume-settings-row grid grid-cols-1 items-center gap-3 @2xl:grid-cols-[minmax(0,1fr)_auto]">
 			<div className="min-w-0">
-				<div className="truncate text-label text-ink">{name}</div>
-				{detail && <p className="mt-1 text-label text-ink-muted">{detail}</p>}
+				<div className="truncate text-label font-medium text-ink">{name}</div>
+				{detail && <p className="mt-1 text-caption text-ink-muted">{detail}</p>}
 			</div>
 			<div className="flex min-w-0 justify-end">{children}</div>
 		</div>

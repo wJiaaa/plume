@@ -11,11 +11,11 @@ import { Text } from "../primitives/Text.tsx";
 /**
  * 一组设置上面的分组标题。
  *
- * 只比行里的名字大一号、加粗：设置页是一列一列的开关，不是文档，标题大了一页读下来全是标题。
+ * 只比行里的名字大一号、加粗，与下方卡片左沿对齐；标题下留 10px 接住卡片。
  */
 export function SettingsSectionTitle({ children }: { children: React.ReactNode }) {
 	return (
-		<Text as="h2" size="body" weight="semibold" className="mb-3">
+		<Text as="h2" size="body" weight="semibold" className="mb-2.5">
 			{children}
 		</Text>
 	);
@@ -24,9 +24,8 @@ export function SettingsSectionTitle({ children }: { children: React.ReactNode }
 /**
  * 一组设置。其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。自己画的一行带上 `data-settings-item`，就和 `SettingsRow` 算同一组的行。
  *
- * 里面全是 `SettingsRow` 时它是一列平铺的行，行与行之间一道细线，没有框：一页设置读下来是一张清单，每组套一个框的话
- * 满页都是框，名字反倒不显眼。里面放了别的（预览、文本框、左右两栏）时，那些东西没有行来划边界，才画一圈细线框住。
- * 两种样子都在 `controls.css` 的 `.plume-settings-card`，按里面装的是什么自己选，调用方不用传参数。
+ * 装在一张圆角、细边、带 `card` 底色的卡片里，行与行之间一道细线（见 `controls.css` 的 `.plume-settings-card`），
+ * 产品和插件画的设置分区共用这一种卡片。
  */
 export function SettingsCard({ children, className = "", ...rest }: React.ComponentProps<"div">) {
 	return (
@@ -37,9 +36,9 @@ export function SettingsCard({ children, className = "", ...rest }: React.Compon
 }
 
 /**
- * 一组里带标签的一行，控件靠右。说明比名字小两档（`caption`）、用次要色：一页设置读下来先看到的是一列名字。
+ * 一组里带标签的一行，控件靠右。名字用中等字重，说明比名字小两档（`caption`）、用次要色：一页设置读下来先看到的是一列名字。
  *
- * 行的内边距、分隔线在 `controls.css`（`.plume-settings-row`）：平铺时行贴着两边，框里的行离框边 16px，要按装它的那一组定。
+ * 行的内边距、分隔线在 `controls.css`（`.plume-settings-row`）：行离卡片边 16px，上下 12px。
  * 自己画一行的地方（模型页的连接设置、智能体页的模型行）带上 `data-settings-item` 和这个类，就和这里排在同一组里。
  */
 export function SettingsRow({
@@ -63,13 +62,13 @@ export function SettingsRow({
 			 * 控件落在这一行的中线上，不是贴着标题那一行：带说明文字的行占大多数，贴着标题的话一整组右边那列全体偏上。
 			 * 只在同一行并排时才居中；窄窗口下控件掉到文字下面，是另一种排法。
 			 */}
-			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-4">
+			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-8">
 				<div className="min-w-0 flex-1">
-					<Text as="div" size="label">
+					<Text as="div" size="label" weight="medium">
 						{title}
 					</Text>
 					{detail && (
-						<Text as="div" size="caption" tone="muted" className="mt-0.5 leading-relaxed">
+						<Text as="div" size="caption" tone="muted" className="mt-1 max-w-2xl leading-normal">
 							{detail}
 						</Text>
 					)}

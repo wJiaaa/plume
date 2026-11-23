@@ -61,7 +61,7 @@ export function CodeAppearanceSettings({ appearance, patch }: { appearance: Appe
 				<Button
 					size="xs"
 					variant="subtle"
-					className="mb-3"
+					className="mb-2.5"
 					onClick={() => {
 						setCustomFont(false);
 						setFontDraft(null);
@@ -302,7 +302,7 @@ function CodeRow({ title, detail, control }: { title: ReactNode; detail: ReactNo
 			className="flex flex-col gap-3 border-t border-line-soft pt-3 first:border-t-0 first:pt-0 @md:flex-row @md:items-center @md:justify-between"
 		>
 			<div className="min-w-0 flex-1">
-				<Text as="div" size="label">
+				<Text as="div" size="label" weight="medium">
 					{title}
 				</Text>
 				<Text as="div" size="caption" tone="muted">

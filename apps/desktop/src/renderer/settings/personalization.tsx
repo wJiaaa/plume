@@ -64,12 +64,12 @@ export function PersonalizationSettings() {
 	return (
 		<>
 			<PageHeader title={t("settings.personalization")} />
-			<div className="flex flex-col gap-6">
+			<div className="flex flex-col gap-8">
 				<div>
-					<div className="mb-3 flex items-center justify-between">
+					<div className="mb-2.5 flex items-center justify-between">
 						<div>
 							<SectionTitle>{t("tone.customInstructions")}</SectionTitle>
-							<p className="mt-0.5 text-caption text-ink-muted">{t("personalization.globalRules")}</p>
+							<p className="-mt-1.5 text-caption text-ink-muted">{t("personalization.globalRules")}</p>
 						</div>
 						{/* 存完那一下变成勾加「已保存」，过两秒变回去。 */}
 						<DialogAction
@@ -110,9 +110,9 @@ export function PersonalizationSettings() {
 				))}
 
 				<div>
-					<div className="mb-3">
+					<div className="mb-2.5">
 						<SectionTitle>{t("tone.section")}</SectionTitle>
-						<p className="mt-0.5 text-caption text-ink-muted">{t("personalization.toneIntro")}</p>
+						<p className="-mt-1.5 text-caption text-ink-muted">{t("personalization.toneIntro")}</p>
 					</div>
 					<Card>
 						<Row

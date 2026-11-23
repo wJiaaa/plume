@@ -6,7 +6,7 @@
 
 ### 版式
 
-- 设置页用 `apps/desktop/src/renderer/settings/controls.tsx` 的版式：`PageHeader`（介绍和右上角的按钮；章名看左边选中的章节，这里只留给读屏）→ 一组设置（`Card`）→ 组里一行一个设置（`Row`：名字和说明在左，控件在右）。组里全是 `Row`（或带 `data-settings-item` 的自绘行）时平铺、行间一道细线；放了别的东西才画一圈细线框，判断在 `controls.css` 的 `.plume-settings-card`，不传参数；要整行宽的输入框用 `Field`（标签在上、控件在下，可带 `hint`）。介绍的位置、行宽都由它定，章节里不另写，也不另画一个大标题。
+- 设置页用 `apps/desktop/src/renderer/settings/controls.tsx` 的版式：`PageHeader`（介绍和右上角的按钮；章名在设置浮层顶上的面包屑里，这里只留给读屏）→ 一组设置（`Card`，圆角细边加 `card` 底色，定义在 `controls.css` 的 `.plume-settings-card`）→ 组里一行一个设置（`Row`：名字和说明在左，控件在右；自己画的行带 `data-settings-item`，行间由宿主画一道细线）；要整行宽的输入框用 `Field`（标签在上、控件在下，可带 `hint`）。介绍的位置、行宽都由它定，章节里不另写，也不另画一个大标题。
 - 代码外观是一张带实时预览的连续卡片：统一 `p-4 space-y-4`，项目标题和说明都用 `label`（说明次要色、隔 4px），项目顶部细线下留 `pt-3`；描边和紧接的行内代码示例之间不插分割线，不套普通 `Row` 的整行内边距。
 - 布尔设置用 `Toggle`，两三个互斥选项用 `Segmented`，选项多的用 `InlineSelect`。
 

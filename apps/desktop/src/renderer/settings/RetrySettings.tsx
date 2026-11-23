@@ -55,7 +55,7 @@ export function RetrySettings({ policy: stored }: { policy: unknown }) {
 		<section data-retry-settings="">
 			<SectionTitle>{t("retry.title")}</SectionTitle>
 			{/* 说一次，放在两条规则上面，而不是在两条里各说一遍。 */}
-			<p className="-mt-1 mb-3 text-label leading-relaxed text-ink-muted">{t("retry.intro")}</p>
+			<p className="-mt-1.5 mb-2.5 text-caption leading-relaxed text-ink-muted">{t("retry.intro")}</p>
 			<Card className="px-4">
 				{FAULTS.map((fault) => {
 					const rule = policy[fault.kind];

@@ -1,40 +1,25 @@
 /* plume.web 设置分区的布局。文字交给 Text，这里只管排版和颜色。 */
 
 .web-card {
-	margin-bottom: 24px;
+	margin-bottom: 32px;
 }
 
-/*
- * 「用哪一个」的一条：整条是一个按钮，圈和文字并排。带 `data-settings-item`，所在的组按宿主的规则平铺：行贴着两边、
- * 行间的细线由宿主画。悬停底色铺在 `::before` 上、往两边各多出 8px，圈和字仍和分组标题对齐；`isolation` 让垫在
- * `z-index: -1` 的底色留在这一条里、压在字下面。
- */
+/* 「用哪一个」的一条：整条是一个按钮，圈和文字并排。带 `data-settings-item`，行间的细线由宿主卡片画。 */
 .web-choice {
-	position: relative;
-	isolation: isolate;
 	display: flex;
 	width: 100%;
 	align-items: center;
 	gap: 12px;
-	padding: 12px 0;
+	padding: 12px 16px;
 	border: 0;
 	background: transparent;
 	color: inherit;
 	text-align: left;
 	cursor: pointer;
-}
-
-.web-choice::before {
-	content: "";
-	position: absolute;
-	z-index: -1;
-	inset: 0 -8px;
-	border-radius: var(--plume-radius-field);
-	pointer-events: none;
 	transition: background-color var(--plume-t-quick);
 }
 
-.web-choice:hover::before {
+.web-choice:hover {
 	background: var(--plume-card-hover);
 }
 
@@ -87,7 +72,7 @@
 
 /* 「API key」的一行：名字和申请链接在上，输入框在下。 */
 .web-key-row {
-	padding: 12px 0;
+	padding: 14px 16px;
 }
 
 .web-key-head {

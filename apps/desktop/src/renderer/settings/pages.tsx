@@ -88,6 +88,13 @@ function useSettingsGroups() {
 	}).filter((group) => group.items.length > 0);
 }
 
+/** 这一章在章节列表里叫什么，设置浮层顶上的面包屑用它；插件的分区刚撤下时没有。 */
+export function useSettingsSectionName(section: SettingsSection): string | undefined {
+	return useSettingsGroups()
+		.flatMap((group) => group.items)
+		.find((item) => item.id === section)?.text;
+}
+
 /**
  * 章节列表：每组上面一行组名（小一号、次要色，和条目的底色左沿对齐），条目一律正文色、图标次要色，选中和悬停同一层底，
  * 选中不加粗——底色已经说了是哪一项。`compact`（窄窗口）时只剩图标，组名只留给读屏，名字放进悬停提示。
@@ -125,7 +132,7 @@ export function SettingsNav({ section, compact, onPick }: { section: SettingsSec
 	);
 }
 
-function Page({ title, intro, children, className = "gap-6" }: { title: string; intro?: string; children: ReactNode; className?: string }) {
+function Page({ title, intro, children, className = "gap-8" }: { title: string; intro?: string; children: ReactNode; className?: string }) {
 	return (
 		<>
 			<PageHeader title={title} intro={intro} />
@@ -602,7 +609,7 @@ export function AboutSettings() {
 				? { tone: "text-ok", icon: <CircleCheck size={13} strokeWidth={2} aria-hidden />, text: t("about.latest") }
 				: { tone: "text-ink-faint", icon: <WifiOff size={13} strokeWidth={2} aria-hidden />, text: t("about.offline") };
 	return (
-		<Page title={t("about.title")} intro={t("about.intro")} className="gap-6">
+		<Page title={t("about.title")} intro={t("about.intro")} className="gap-8">
 			{/* 头图：应用图标、名字、版本和是不是最新，检查更新在右边，发布页在下面。 */}
 			<section data-plume-about="" className="about-hero relative overflow-hidden rounded-lg px-6 pt-6 pb-5">
 				<div className="flex flex-wrap items-center gap-5">

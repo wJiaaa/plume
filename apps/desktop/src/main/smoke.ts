@@ -2131,8 +2131,8 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				};
 			})()`)) as Record<string, number>;
 			const expected = {
-				sectionGap: 24,
-				headingGap: 12,
+				sectionGap: 32,
+				headingGap: 10,
 				padding: 16,
 				titleSize: uiSize,
 				detailSize: uiSize - 2,
