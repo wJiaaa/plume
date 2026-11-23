@@ -18,7 +18,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { cancelTick, motionReduced, requestTick } from "@plume/ui";
-import { FADE, holdsWord, Pace, wordCut } from "./stream-pace.ts";
+import { FADE, holdsWord, Pace, RUSH, wordCut } from "./stream-pace.ts";
 
 /**
  * 挂上时就有这么多字以上，当作打开了一个写到一半的会话：直接画出来，不重放。再少的按刚到的放。
@@ -104,6 +104,8 @@ interface State {
 	active: boolean;
 	frame: number;
 	linger: number;
+	/** 写完、最后一个字放出来的时刻（见 `FadeScope.end`），还没到是正无穷。 */
+	ending: number;
 }
 
 export function useSmoothText(
@@ -114,6 +116,8 @@ export function useSmoothText(
 	active: boolean;
 	/** 最近 `FADE` 毫秒内放出来的字数（UTF-16 单元）：新挂上的 `FadeText` 据此分辨哪些字是刚到的。 */
 	recent: number;
+	/** 写完、最后一个字放出来的时刻，还没到是正无穷。现取，交给 `FadeScope.end`。 */
+	ending: () => number;
 } {
 	const motion = !motionReduced();
 	const arrival = useContext(Arrival);
@@ -132,25 +136,33 @@ export function useSmoothText(
 			else pace.present(text.length, now);
 		}
 		const active = motion && (live || pace.cut(now) < text.length || pace.done + FADE > now);
-		state.current = { pace, target: text, cut: active ? pace.cut(now) : text.length, live, active, frame: 0, linger: 0 };
+		state.current = { pace, target: text, cut: active ? pace.cut(now) : text.length, live, active, frame: 0, linger: 0, ending: Number.POSITIVE_INFINITY };
 	}
 	const here = state.current;
 	const [shown, setShown] = useState(() => here.target.slice(0, here.cut));
 	const [active, setActive] = useState(here.active);
+	const [ending] = useState(() => () => here.ending);
 
 	useEffect(() => {
 		const now = performance.now();
 		here.live = live;
 		clearTimeout(here.linger);
+		// 还在写、或者又长了：收尾时刻作废，等放完再定。
+		if (live || text !== here.target) here.ending = Number.POSITIVE_INFINITY;
 
+		/*
+		 * 放完了：从这一刻起还在淡的字加快，`RUSH` 内淡完（见 `FadeText`），之后交出 `active: false`。
+		 * 多等 40ms 是给最后那一拍重画留的。
+		 */
 		const settle = () => {
+			here.ending = Math.max(performance.now(), here.pace.done);
 			here.linger = window.setTimeout(
 				() => {
 					here.active = false;
 					setActive(false);
 					playing.delete(here.pace);
 				},
-				Math.max(0, here.pace.done - performance.now()) + FADE + 40,
+				here.ending - performance.now() + RUSH + 40,
 			);
 		};
 
@@ -226,6 +238,6 @@ export function useSmoothText(
 	);
 
 	// 被接上的那一次渲染就给全文，不等 effect：下一句问话和补齐的字在同一帧里出现。
-	if (!active || superseded) return { text, active: false, recent: 0 };
-	return { text: shown, active, recent: here.pace.recentCount(performance.now(), FADE) };
+	if (!active || superseded) return { text, active: false, recent: 0, ending };
+	return { text: shown, active, recent: here.pace.recentCount(performance.now(), FADE), ending };
 }

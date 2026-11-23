@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { FakeReply } from "@plume/agent/testing";
 import type { BrowserWindow } from "electron";
 import { clickVisible } from "./smoke-kit.ts";
+import { checkMarkdownWidths } from "./smoke-markdown-width.ts";
 
 const PROMPT = "列一下目录，然后长篇说明";
 const CALLS = Array.from({ length: 6 }, (_, index) => `toolu_scroll_${index + 1}`);
@@ -574,6 +575,7 @@ export async function checkTranscriptScroll(options: {
 				(one.name === "live-rows-following" && (one.kicks > 2 || one.maxJolt > 12 || (one.minRunning ?? -1) < 0)),
 		);
 		if (bad.length) throw new Error(`转录滚动不稳：${JSON.stringify(bad)}`);
+		await checkMarkdownWidths({ window, outDir, setModel });
 	} catch (error) {
 		// 失败时也把已经记下的帧留下，好看是哪一步、哪一帧出的事。
 		const phases = await page<Phase[]>(`window.__scroll?.phases.map(p => ({ name: p.name, frames: p.frames })) ?? []`).catch(() => []);

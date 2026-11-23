@@ -188,10 +188,11 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 					onOpen={(index, event) => openFromEvent(event, viewerImages(), index)}
 				/>
 			)}
+			{/* 浅色用正文色的薄底，不随皮肤的白色卡片底融进页面；深色仍取卡片底。 */}
 			{said && (
-				<div className="plume-user-bubble max-w-[85%] rounded-2xl bg-card px-4 py-2.5 sm:max-w-[75%]">
+				<div className="plume-user-bubble max-w-[85%] rounded-2xl bg-ink/5 px-4 py-2.5 sm:max-w-[75%] dark:bg-card">
 					{/* 认不出的 `【…】` 原样留着：中文里方括号是普通标点。 */}
-					<BubbleText text={text} files={files} className="text-label leading-6 text-ink" renderFile={renderFile} />
+					<BubbleText text={text} files={files} className="text-body leading-6 text-ink" renderFile={renderFile} />
 				</div>
 			)}
 			<AttachmentMenu

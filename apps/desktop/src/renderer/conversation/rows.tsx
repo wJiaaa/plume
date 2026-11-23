@@ -148,6 +148,7 @@ function AssistantRow({
 					return (
 						<div key={`prose-${position}`}>
 							<Markdown
+								layoutOwner={block}
 								text={text}
 								localImages
 								streaming={pending && at === message.content.length - 1}

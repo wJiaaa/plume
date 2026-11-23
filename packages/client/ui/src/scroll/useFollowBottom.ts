@@ -49,13 +49,21 @@ const HOLD_MS = 900;
  */
 const CHASE_MAX = 200;
 /**
- * 追的时候最多落后底部多少；超出的部分在长高的同一帧写掉。
+ * 释放层里攒下的缓冲最迟多少毫秒放空（见 `pin` 的 `step`）。
  *
- * 不能没有：整块到的工具卡片整段慢慢追时，量到运行行被压到视口下沿以下 129px、21 帧。也不能小：正文
- * 换段、起标题一次就长 35–70px，截在 40px 时每次都是单帧 20–30px 的跳。落后的那一截里是刚放出来、
- * 还在淡入的字。
+ * 排空项不只是兜底，它把估速偏差吃掉：估速绕真实值摆 ±0.3px/ms（`FLOW_TAU` 窗对一阵一阵的长高反应
+ * 慢），摆的半周几百毫秒，攒下的缓冲就是偏差 × 半周。排空项按 `缓冲 / RELEASE_MS` 收，缓冲的平衡点
+ * 在「偏差 × RELEASE_MS」，40ms 时只摆十来个像素。
+ * 上游停了也靠它把尾巴放空，不拖住最后一截字。
  */
-const LAG_MAX = 120;
+const RELEASE_MS = 40;
+/**
+ * 输出速度低于这么多（像素/毫秒）不走释放层（见 `pin` 的 `step`）。
+ *
+ * 一行一行流的速率约 0.12px/ms，快输出在 3px/ms 以上。分界放在 0.5：慢的那头是原设计管好的——
+ * 台阶间隔比弹簧的时间常数长，台阶各自被抹成小坡，行间还在缓动；快的那个才需要把台阶摊成连续的斜坡。
+ */
+const RELEASE_MIN_RATE = 0.5;
 /**
  * 追的方式：两个临界阻尼的弹簧串起来，前一个把台阶状的目标抹成斜坡，后一个跟着斜坡走。
  *
@@ -67,7 +75,9 @@ const LAG_MAX = 120;
  * 速度变长。参数是拿真窗口录下的逐帧版面离线比出来的。
  */
 const CHASE_LAG = 36;
-/** 刚度的上下限，按时间常数（毫秒）记。上限管写完以后最后一行多久追平：一行约 0.4s。 */
+/**
+ * 刚度的上下限，按时间常数（毫秒）记。上限管写完以后最后一行多久追平：一行约 0.4s。
+ */
 const TAU_MIN = 12;
 const TAU_MAX = 60;
 /** 落后超出 `CHASE_LAG` 越多弹簧越硬，多出 70px 时时间常数 20ms：整块到的一截靠它很快追完。 */
@@ -212,9 +222,11 @@ export function useFollowBottom({
 	const chase = useRef(0);
 	const size = useRef({ content: 0, view: 0 });
 	const flow = useRef<Flow>({ amount: 0, at: 0, since: 0 });
+	/** 释放层的状态（见 `pin` 的 `step`）：`at` 是已经放出来的目标。 */
+	const release = useRef({ at: 0 });
 	/**
 	 * 追赶的两级弹簧（见 `CHASE_LAG`）。放在 ref 里而不是追赶那一帧的闭包里：`pin` 在追的途中还会替它挪位置
-	 * （平滑长高跟着挪、`LAG_MAX` 那一刀），挪的时候要连弹簧一起挪。只挪 `scrollTop` 的话，下一帧弹簧照着自己
+	 * （平滑长高跟着挪），挪的时候要连弹簧一起挪。只挪 `scrollTop` 的话，下一帧弹簧照着自己
 	 * 记的旧位置写回去，把刚挪的那一截又拽回来：量到过整段输出里一帧往回 0.5px、下一帧再往前，落后越攒越多。
 	 */
 	const springs = useRef({ view: { at: 0, speed: 0 } as Spring, ramp: { at: 0, speed: 0 } as Spring });
@@ -397,7 +409,7 @@ export function useFollowBottom({
 	}, []);
 
 	/**
-	 * 跟随底部时把位置送到底：一屏以内的长高用弹簧追、最多落后 `LAG_MAX`，其余一步到位——见 `CHASE_MAX`。
+	 * 跟随底部时把位置送到底：一屏以内的长高用弹簧追，其余一步到位——见 `CHASE_MAX`。
 	 *
 	 * 两个入口共用它：内容签名变了（布局 effect）和尺寸变了（`onResize`），流式输出时两者每帧
 	 * 都会来，所以「已经在追」本身就是继续追的理由，第二个入口不能把它打断成一步到位。
@@ -450,19 +462,16 @@ export function useFollowBottom({
 			// 读回来原地不动，拿读回来的值接着算就永远差那一点。`view` 是视口，`ramp` 是前一级：抹平了的目标。
 			const { view, ramp } = springs.current;
 			if (!moving) {
-				view.at = ramp.at = reading.scrollTop;
+				view.at = ramp.at = release.current.at = reading.scrollTop;
 				view.speed = ramp.speed = 0;
 			}
 			// 这里跑在布局之后、绘制之前（布局 effect 或 `ResizeObserver` 回调），下面这次写当帧生效。
-			// 平滑长出来的这一截跟着挪（见 `smooth`），落后超出 `LAG_MAX` 的那截当帧写掉；两样都连弹簧一起挪，见 `springs`。
+			// 平滑长出来的这一截跟着挪（见 `smooth`）；两样都连弹簧一起挪，见 `springs`。
 			let shifted = false;
 			if (smooth > 0) {
 				view.at += smooth;
 				ramp.at += smooth;
-				shifted = true;
-			}
-			if (target - view.at > LAG_MAX) {
-				view.at = target - LAG_MAX;
+				release.current.at += smooth;
 				shifted = true;
 			}
 			if (ramp.at < view.at) ramp.at = view.at;
@@ -484,8 +493,31 @@ export function useFollowBottom({
 				const dt = last ? Math.min(50, Math.max(0, now - last)) : 16;
 				last = now;
 				const end = visualBottom(here);
-				const omega = stiffness(outputRate(flow.current, now), end - view.at);
-				advance(ramp, end, omega, dt);
+				const rate = outputRate(flow.current, now);
+				const omega = stiffness(rate, end - view.at);
+				/*
+				 * 目标经过一层释放：这一帧的长高不直接进弹簧的目标，先记进缓冲，按输出速度一点点放给
+				 * `ramp`。长高是一批一批来的（最快的上游 16ms 一批几十像素），直接当目标是台阶，弹簧
+				 * 对每个台阶先冲后缓，视口的速度就跟着每一批起伏——快速输出时量到相邻帧的速度差 p99
+				 * 到 72px。摊开之后目标是连续的斜坡，两级弹簧都只在斜率的小纹波上工作，速度差 p99 到
+				 * 十几像素以内。
+				 * 放的速率 = 估出来的输出速度 + 缓冲 / `RELEASE_MS`：后者把估速偏差和一阵大长高攒下的
+				 * 缓冲在几十毫秒里摊掉（改之前落后超出限额时当帧硬写，大长高的那帧视口单帧多走 50px）。
+				 * 上游停了缓冲照样放空，不拖住最后一截字。
+				 *
+				 * 慢速不走这层（`RELEASE_MIN_RATE`）：一行一行的速率本来就在弹簧的拿手范围里，经过释放
+				 * 反而把行间空隙里的余速放干净、每来一行都从静止起步（冒烟量到「停住后猛顶」多了）。
+				 */
+				if (rate >= RELEASE_MIN_RATE) {
+					if (end > release.current.at) {
+						const pending = end - release.current.at;
+						release.current.at += Math.min(pending, (rate + pending / RELEASE_MS) * dt);
+					} else release.current.at = end;
+					if (release.current.at > ramp.at) advance(ramp, release.current.at, omega, dt);
+				} else {
+					advance(ramp, end, omega, dt);
+					release.current.at = end;
+				}
 				advance(view, ramp.at, 2 * omega, dt);
 				if (end - view.at < 0.5 && end - ramp.at < 0.5) {
 					// 多写一个像素让浏览器夹到真正的底，理由见 `targetScrollTop`。
@@ -845,9 +877,17 @@ export function useFollowBottom({
 		size.current = { content: 0, view: 0 };
 		const arrival = arriving.current;
 		arrival.on = true;
+		/*
+		 * 露面这两帧里关掉浏览器的滚动锚定，位置全归 `pin` / `restoreOnce`。补账那一截进来、屏幕外的轮换上真高度时，锚定
+		 * 按它挑的那一行把刚写好的位置往回挪：切回一个正在写的会话，录屏量到先到底、再往回 24–264px 停一到四帧、再跳回底部。
+		 * 只关这两帧：平时它有用，跟着底部时点「显示更早」，正是它让挂到上面的几轮不把眼前这一屏顶走。
+		 */
+		const surface = scrollRef.current;
+		surface?.style.setProperty("overflow-anchor", "none");
 		arrival.frame = requestAnimationFrame(() => {
 			arrival.frame = requestAnimationFrame(() => {
 				arrival.on = false;
+				surface?.style.removeProperty("overflow-anchor");
 			});
 		});
 		written.current = null;
@@ -875,6 +915,7 @@ export function useFollowBottom({
 			chase.current = 0;
 			cancelAnimationFrame(clearWritten.current);
 			cancelAnimationFrame(arrival.frame);
+			surface?.style.removeProperty("overflow-anchor");
 			/*
 			 * 位置取自 `lastTop`，不取自元素。
 			 *
@@ -998,8 +1039,8 @@ interface Flow {
 }
 
 /**
- * 输出速度（像素/毫秒）。一阵输出刚开始时衰减的总量还没攒满，按它实际跑了多久归一，不然头几行
- * 估得极慢、落后一大截；最少按 150ms 算，不然头一行会被当成一瞬间到的。
+ * 内容长高的速度（像素/毫秒）。一阵输出刚开始时衰减的总量还没攒满，按它实际跑了多久归一，
+ * 不然头几行估得极慢、落后一大截；最少按 150ms 算，不然头一行会被当成一瞬间到的。
  */
 function outputRate(flow: Flow, now: number): number {
 	const window = FLOW_TAU * (1 - Math.exp(-Math.max(150, now - flow.since) / FLOW_TAU));

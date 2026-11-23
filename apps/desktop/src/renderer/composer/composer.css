@@ -279,6 +279,16 @@
  * （`.ͼ1 .cm-line` 这样两级）多一级。只管 `.plume-composer-field` 里面，碰不到别的界面。
  */
 
+/*
+ * 首帧就位。编辑器是挂上之后在 effect 里建立的（`MarkdownField`），挂上那一拍这个容器还没有内容、高 0，
+ * 整张输入框矮一截；贴底跟随在同一个布局副作用里读到的视口比真实的高，把位置写到假的底部，下一帧才纠正——
+ * 切回一个还在输出的会话时，转录整页跳一下。min-height 和空编辑器的 cm-content（见 `.cm-content` 的 min-height）一样高，
+ * 编辑器立起来之后它不低于内容，不改变任何一拍的高度。
+ */
+.plume-composer-field {
+	min-height: calc(40px + var(--plume-composer-in) * 2);
+}
+
 .plume-composer-field .cm-editor {
 	/* 到八行（160px 的字）或窗口的三分之一为止，再多就在框里滚。 */
 	max-height: min(calc(160px + var(--plume-composer-in) * 2), 34vh);

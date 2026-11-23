@@ -30,6 +30,7 @@ import { useLocatedVersion } from "./located-path.ts";
 import { completeTailHeld, type TailWait } from "./stream-tail.ts";
 import { stripEmoji } from "./strip-emoji.ts";
 import { useSmoothText } from "./useSmoothText.ts";
+import { MarkdownLayout, useRememberedMarkdown } from "./remembered-layout.ts";
 
 /**
  * 正文按 props memo，解析另按文本缓存；回复元信息只用于代码块扩展。
@@ -64,7 +65,10 @@ function MarkdownView({
 	sessionId,
 	localImages = false,
 	remoteImages = false,
+	layoutOwner,
 }: {
+	/** 会话中现有的文本块对象，让排版记忆随消息回收；文档预览不用另造对象。 */
+	layoutOwner?: object;
 	/** 文档自己的目录和读取会话；图片不能借当前会话跨目录读取。 */
 	baseDir?: string;
 	sessionId?: string;
@@ -83,7 +87,7 @@ function MarkdownView({
 	streaming?: boolean;
 }) {
 	// 写完之后还要演完：没放出来的字放完、最后一个字淡完，`active` 才落下。见 `useSmoothText`。
-	const { text: shown, active, recent } = useSmoothText(text, streaming);
+	const { text: shown, active, recent, ending } = useSmoothText(text, streaming);
 	/*
 	 * 指着本机的链接、像路径的行内代码，找完了才放出来：先放成字、找到了再换成文件签，字会跳一下。见
 	 * `awaitingLink`。只在对话里（有 `FileScope`）、正在输出时这样；`located` 变了就再看一遍停在哪。
@@ -124,8 +128,11 @@ function MarkdownView({
 	 * 放出来的。改同一个对象，不换引用，否则每个 `FadeText` 每帧都跟着重画。补尾巴、去表情让 `clean`
 	 * 和放出来的原文差几个字，边界也就差几个字——肉眼看不出。
 	 */
-	const scope = useRef({ from: Number.POSITIVE_INFINITY }).current;
+	const scope = useRef({ from: Number.POSITIVE_INFINITY, phrase: Number.NEGATIVE_INFINITY, end: ending }).current;
 	scope.from = active ? Math.max(0, clean.length - recent) : Number.POSITIVE_INFINITY;
+	scope.end = ending;
+	const root = useRef<HTMLDivElement>(null);
+	const layout = useRememberedMarkdown(root, layoutOwner, clean, active);
 	const blocks = useMemo(() => {
 		// 每一块的原文在 `clean` 里从哪开始：块的原文就是源文的一段，依次找过去。
 		let cursor = 0;
@@ -157,10 +164,12 @@ function MarkdownView({
 		<ReplyCodeScope.Provider value={replyScope}>
 			<ImageDocument.Provider value={doc}>
 				<FadeScope.Provider value={scope}>
-					<div className={`markdown min-w-0 ${className}`}>
-						{blocks}
-						{heldImage && localImages && <MarkdownImage src={null} alt="" fallback={null} />}
-					</div>
+					<MarkdownLayout.Provider value={layout}>
+						<div ref={root} className={`markdown min-w-0 ${className}`}>
+							{blocks}
+							{heldImage && localImages && <MarkdownImage src={null} alt="" fallback={null} />}
+						</div>
+					</MarkdownLayout.Provider>
 				</FadeScope.Provider>
 			</ImageDocument.Provider>
 		</ReplyCodeScope.Provider>
@@ -215,7 +224,7 @@ function renderBlock(block: Block, fade = false, path = ""): ReactNode {
 			if (block.text.length > HUGE_BLOCK) return <HugeParagraph text={block.text} />;
 			return <p>{inline(block.text, fade)}</p>;
 		case "code": {
-			const code = <MarkdownCode lang={block.lang} code={block.code} fade={fade} />;
+			const code = <MarkdownCode lang={block.lang} code={block.code} fade={fade} layoutPath={path} />;
 			const fallback = isMermaid(block.lang) ? <MermaidBlock code={block.code} fallback={code} /> : code;
 			return <ReplyCode language={block.lang} code={block.code} open={block.open === true} path={path} fallback={code} unregistered={fallback} />;
 		}
@@ -238,7 +247,7 @@ function renderBlock(block: Block, fade = false, path = ""): ReactNode {
 			);
 		}
 		case "table":
-			return <MarkdownTable block={block} inline={fade ? fadingInline : inline} />;
+			return <MarkdownTable block={block} inline={fade ? fadingInline : inline} streaming={fade} layoutPath={path} />;
 		default:
 			return null;
 	}
@@ -330,7 +339,7 @@ function InlineMath({ tex, fade }: { tex: string; fade: boolean }) {
 	if (!html) return `$${tex}$`;
 	// KaTeX 自己的输出，由它转义过的解析树生成。
 	return fade ? (
-		<FadeIn as="span" className="markdown-math" dangerouslySetInnerHTML={{ __html: html }} />
+		<FadeIn as="span" text={tex} className="markdown-math" dangerouslySetInnerHTML={{ __html: html }} />
 	) : (
 		<span className="markdown-math" dangerouslySetInnerHTML={{ __html: html }} />
 	);
@@ -356,7 +365,13 @@ function renderToken(token: Inline, fade: boolean): ReactNode {
 		}
 		case "code": {
 			// 行内代码写完才出现（见 `completeTail`），整枚一起淡入。
-			const code = fade ? <FadeIn as="code">{token.text}</FadeIn> : <code>{token.text}</code>;
+			const code = fade ? (
+				<FadeIn as="code" text={token.text}>
+					{token.text}
+				</FadeIn>
+			) : (
+				<code>{token.text}</code>
+			);
 			// 模型常把路径写成 `path/to/file.ts:42`；解析不到本机路径、或找遍了也没有这个文件时，`Link` 原样还给这枚代码。
 			const path = filePathInCode(token.text);
 			return path ? <Link href={path}>{code}</Link> : code;

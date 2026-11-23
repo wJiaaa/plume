@@ -102,8 +102,19 @@ export async function checkConversations(options: {
 		await page(`document.querySelector('.cm-content').focus()`);
 		await window.webContents.insertText("项目里的会话");
 		await until(`document.querySelector('[data-composer-send=send]')?.disabled === false`, "项目会话可发送");
+		// 同一个项目的欢迎页交给首条消息：已有的插件签不应因创建会话暂时失去工作目录。
+		await until(`document.querySelector('.git-chip') !== null`, "项目分支签就绪");
+		await page(`(() => {
+			const changes = Boolean(document.querySelector('.git-changes'));
+			const probe = window.__firstSend = { stop: false, missing: 0, samples: 0 };
+			const tick = () => { if (probe.stop) return; probe.samples++; if (!document.querySelector('.git-chip') || (changes && !document.querySelector('.git-changes'))) probe.missing++; requestAnimationFrame(tick); };
+			requestAnimationFrame(tick);
+		})()`);
 		await clickReal(window, "[data-composer-send=send]");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes('项目里答了一句。')`, "项目会话有回答");
+		const firstSend = await page<{ missing: number; samples: number }>(`(window.__firstSend.stop = true, window.__firstSend)`);
+		if (firstSend.missing || !firstSend.samples) throw new Error(`首发消息时分支签消失：${JSON.stringify(firstSend)}`);
+		console.log("PLUME_SMOKE_FIRST_SEND", JSON.stringify(firstSend));
 
 		const group = '[data-plume-project="冒烟项目"]';
 		await click(`${group} button[aria-expanded=true]`);

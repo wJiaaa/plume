@@ -1,39 +1,22 @@
 /**
- * 回复里的围栏代码块：标题栏（语言图标、语言名、换行、复制）和配色过的代码在同一个框里。
+ * 回复里的围栏代码块：配色过的代码，右上角收着语言名和换行、复制（shell 还有在终端运行）。
  *
  * 和 `@plume/ui` 的 `CodeBlock` 不是一回事：那个画工具输出这种原样的文本，这个画模型写的代码，要配色，
  * 还要在输出时跟着正文一起淡入。
  */
 
 import type { Language } from "@codemirror/language";
-import { IconButton, iconColour, lookFor, OverlayScrollbar, translate, useCopied } from "@plume/ui";
+import { IconButton, OverlayScrollbar, translate, useCopied } from "@plume/ui";
 import { Check, Copy, Play, WrapText } from "@plume/ui/icons";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { useFileScope } from "../files/scope.ts";
 import { runInTerminal } from "../files/open-terminal.ts";
-import { loadFenceLanguage, sharedHighlightStyle, tokenize, tokenizeGrowing, type Grown, type Token } from "./highlight.ts";
+import { loadedFenceLanguage, loadFenceLanguage, sharedHighlightStyle, tokenize, tokenizeGrowing, type Grown, type Token } from "./highlight.ts";
 import { useFade } from "./FadeText.tsx";
+import { useGrowingWidth } from "./growing-width.ts";
+import { useRememberedBlock } from "./remembered-layout.ts";
 import { commandFrom, isShellFence } from "./shell-command.ts";
-
-/** 围栏语言名到扩展名，只为给标题栏挑一个和文件树同款的图标；不在表里的按原样当扩展名。 */
-const LANG_EXTENSION: Record<string, string> = {
-	typescript: "ts",
-	javascript: "js",
-	python: "py",
-	rust: "rs",
-	golang: "go",
-	ruby: "rb",
-	kotlin: "kt",
-	csharp: "cs",
-	"c++": "cpp",
-	markdown: "md",
-	shell: "sh",
-	console: "sh",
-	terminal: "sh",
-	text: "txt",
-	plaintext: "txt",
-};
 
 /**
  * 超过这么多字符就不高亮了。
@@ -42,12 +25,15 @@ const LANG_EXTENSION: Record<string, string> = {
  */
 const HIGHLIGHT_LIMIT = 60_000;
 
-export function MarkdownCode({ lang, code, fade = false }: { lang: string; code: string; fade?: boolean }) {
+export function MarkdownCode({ lang, code, fade = false, layoutPath = "" }: { lang: string; code: string; fade?: boolean; layoutPath?: string }) {
 	const { copied, mark } = useCopied();
+	const box = useRef<HTMLDivElement>(null);
 	const [wrap, setWrap] = useState(false);
+	useGrowingWidth(box, code, fade, wrap);
+	const layoutStyle = useRememberedBlock(box, layoutPath, !fade && !wrap);
 	const label = lang.toLowerCase() || "text";
-	const look = lookFor(`code.${LANG_EXTENSION[label] ?? label}`, false);
-	const [language, setLanguage] = useState<Language | null>(null);
+	const [loaded, setLoaded] = useState<{ lang: string; language: Language | null } | null>(null);
+	const language = loadedFenceLanguage(lang) ?? (loaded?.lang === lang ? loaded.language : null);
 	/** 命令交给这个会话的终端：块画在哪个会话里，就在哪个会话旁边开终端、在那里执行。 */
 	const scope = useFileScope();
 	const command = scope && isShellFence(label) ? commandFrom(code) : "";
@@ -59,10 +45,10 @@ export function MarkdownCode({ lang, code, fade = false }: { lang: string; code:
 	 * 按纯文本画，这也正是一段还在输出、围栏没收口的代码的样子。
 	 */
 	useEffect(() => {
-		if (!lang) return;
+		if (loadedFenceLanguage(lang) !== undefined) return;
 		let cancelled = false;
 		void loadFenceLanguage(lang).then((result) => {
-			if (!cancelled) setLanguage(result);
+			if (!cancelled) setLoaded({ lang, language: result });
 		});
 		return () => {
 			cancelled = true;
@@ -111,10 +97,15 @@ export function MarkdownCode({ lang, code, fade = false }: { lang: string; code:
 	const viewport = useRef<HTMLPreElement>(null);
 
 	return (
-		<div className="markdown-code plume-hscroll-own" data-wrap={wrap || undefined}>
+		<div
+			ref={box}
+			className="markdown-code plume-hscroll-own"
+			data-wrap={wrap || undefined}
+			style={layoutStyle}
+			data-markdown-measured={layoutStyle ? "" : undefined}
+		>
 			<div className="markdown-code-head">
-				<look.Icon size={14} strokeWidth={1.9} className="shrink-0" style={{ color: iconColour(look) }} />
-				<span className="min-w-0 flex-1 truncate">{label}</span>
+				<span className="max-w-[20ch] truncate pe-0.5">{label}</span>
 				{scope && command && (
 					<IconButton
 						size="sm"

@@ -77,7 +77,8 @@ export async function checkSplit(options: {
 	await capture(window, join(outDir, "smoke-split.png"));
 
 	// 换焦点：点右屏的对话，两个终端都不重挂。
-	await clickReal(window, `${pane("right")} [data-screen=chat] [data-plume-quote=assistant]`, "右屏的回复");
+	// 点正文，不点整条回复：回复块里还包着悬停才出的操作行，一行字的回复整块的中心会落在「从这里分叉」上。
+	await clickReal(window, `${pane("right")} [data-screen=chat] [data-plume-quote=assistant] .markdown`, "右屏的回复");
 	await until(`document.querySelector('${pane("right")}')?.hasAttribute('data-screen-focused')`, "焦点回到右屏");
 	assert.equal(await terminalId("left"), left, "换焦点后左屏终端还是原来那个");
 	assert.equal(await terminalId("right"), right, "换焦点后右屏终端还是原来那个");

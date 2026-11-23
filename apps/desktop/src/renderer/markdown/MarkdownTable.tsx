@@ -14,14 +14,20 @@ import { IconButton, OverlayScrollbar, useI18n } from "@plume/ui";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import type { Block } from "./blocks.ts";
+import { useGrowingWidth } from "./growing-width.ts";
+import { useRememberedBlock } from "./remembered-layout.ts";
 
 type TableBlock = Extract<Block, { kind: "table" }>;
 
 export function MarkdownTable({
 	block,
 	inline,
+	streaming = false,
+	layoutPath = "",
 }: {
 	block: TableBlock;
+	streaming?: boolean;
+	layoutPath?: string;
 	/**
 	 * 单元格的字怎么画成元素，由调用方传进来而不是在这里 import。
 	 *
@@ -33,6 +39,10 @@ export function MarkdownTable({
 	const { t } = useI18n();
 	const viewport = useRef<HTMLDivElement>(null);
 	const [wrap, setWrap] = useState(false);
+	const box = useRef<HTMLDivElement>(null);
+	const layoutStyle = useRememberedBlock(box, layoutPath, !streaming && !wrap);
+	const table = useRef<HTMLTableElement>(null);
+	useGrowingWidth(table, block, streaming, wrap, true);
 	const [overflow, setOverflow] = useState(false);
 
 	/*
@@ -44,7 +54,9 @@ export function MarkdownTable({
 	useLayoutEffect(() => {
 		const el = viewport.current;
 		if (!el) return;
-		const measure = () => setOverflow(el.scrollWidth - el.clientWidth > 1);
+		const measure = () => {
+			if (el.checkVisibility({ contentVisibilityAuto: true })) setOverflow(el.scrollWidth - el.clientWidth > 1);
+		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(el);
@@ -56,7 +68,14 @@ export function MarkdownTable({
 	const label = t(wrap ? "markdown.tableNowrap" : "markdown.tableWrap");
 
 	return (
-		<div className="markdown-table plume-hscroll-own group relative" data-wrap={wrap ? "true" : "false"} data-control={control ? "true" : undefined}>
+		<div
+			ref={box}
+			style={layoutStyle}
+			data-markdown-measured={layoutStyle ? "" : undefined}
+			className="markdown-table plume-hscroll-own group relative"
+			data-wrap={wrap ? "true" : "false"}
+			data-control={control ? "true" : undefined}
+		>
 			{/*
 			 * 和代码块的复制按钮坐同一个位置：框的右上角，不占版面。单独留一条、或者在旁边加一列，都会改变
 			 * 表的比例。角上那块渐变底让表头的字不会压在图标底下。
@@ -74,7 +93,12 @@ export function MarkdownTable({
 				</span>
 			)}
 			<div ref={viewport} className="markdown-table-scroll">
-				<table>
+				<table ref={table}>
+					<colgroup>
+						{block.header.map((_, index) => (
+							<col key={index} />
+						))}
+					</colgroup>
 					<thead>
 						<tr>
 							{block.header.map((cell, index) => (

@@ -360,20 +360,43 @@ const FENCE_ALIASES: Record<string, string> = {
 	yml: "yaml",
 };
 
-/** 加载围栏语言的语法。认不出来（shell 会话、没写语言）给 null，调用方画纯文本，不去猜。 */
-export async function loadFenceLanguage(info: string): Promise<Language | null> {
+function fenceKey(info: string): string | null {
 	const name = info
 		.toLowerCase()
 		.trim()
 		.split(/[\s:,]/)[0];
 	if (!name) return null;
-	const load = GRAMMARS[FENCE_ALIASES[name] ?? name];
-	if (!load) return null;
-	try {
-		return asLanguage(await load());
-	} catch {
-		return null;
-	}
+	const key = FENCE_ALIASES[name] ?? name;
+	return Object.hasOwn(GRAMMARS, key) ? key : null;
+}
+
+// 只按有限的语法表存，不缓存代码或会话。切回时首帧就能上色，不先挂纯文本、下一拍再拆掉换成高亮节点。
+const fenceLanguages = new Map<string, Language | null>();
+const loadingFences = new Map<string, Promise<Language | null>>();
+
+/** 已加载的围栏语法；undefined 表示还没加载，null 表示认不出语言。 */
+export function loadedFenceLanguage(info: string): Language | null | undefined {
+	const key = fenceKey(info);
+	return key ? fenceLanguages.get(key) : null;
+}
+
+/** 加载围栏语言的语法。认不出来（shell 会话、没写语言）给 null，调用方画纯文本，不去猜。并发的同种语法只加载一次。 */
+export async function loadFenceLanguage(info: string): Promise<Language | null> {
+	const key = fenceKey(info);
+	if (!key) return null;
+	if (fenceLanguages.has(key)) return fenceLanguages.get(key)!;
+	const loading = loadingFences.get(key);
+	if (loading) return loading;
+	const flight = GRAMMARS[key]!()
+		.then((extension) => {
+			const language = asLanguage(extension);
+			fenceLanguages.set(key, language);
+			return language;
+		})
+		.catch(() => null)
+		.finally(() => loadingFences.delete(key));
+	loadingFences.set(key, flight);
+	return flight;
 }
 
 /**

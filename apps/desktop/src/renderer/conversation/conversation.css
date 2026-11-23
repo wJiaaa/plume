@@ -20,18 +20,18 @@
 	}
 
 	/*
-	 * 刚发出去的一条从右下角长出来：气泡贴着右边落下，从它落下的那个角长开，读起来是输入框里那句被放了上去。
-	 * 只动 transform 和透明度，版面一开始就是最终的样子，跟随底部不受影响。只在发出的那一下演，见 `UserBubble`。
+	 * 刚发出去的一条从右边长出来，略过头再回到原位：气泡贴着右边落下，读起来是输入框里那句被放了上去。和 Claude
+	 * 桌面版会话窗同一个动作。不淡入：字从第一帧就是实的，那一句本来就是人刚写的，不是新出现的东西。
+	 * 只动 transform，版面一开始就是最终的样子，跟随底部不受影响。只在发出的那一下演，见 `UserBubble`。
 	 */
 	.plume-user-arrive {
-		transform-origin: 100% 100%;
-		animation: plume-user-arrive var(--plume-t-slow) var(--plume-e-out) backwards;
+		transform-origin: 100% 50%;
+		animation: plume-user-arrive var(--plume-t-arrive) var(--plume-e-overshoot) backwards;
 	}
 
 	@keyframes plume-user-arrive {
 		from {
-			opacity: 0;
-			transform: translateY(5px) scale(0.9);
+			transform: translateY(6px) scale(0.92);
 		}
 	}
 
