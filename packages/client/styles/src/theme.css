@@ -306,7 +306,7 @@
 	--font-mono: var(--plume-font-mono);
 
 	/*
-	 * 字号八档加代码一档，都是界面字号的 calc，改一个数整套一起动。档与档至少差 1px，各自带行高和字距：
+	 * 字号八档加代码一档，都由界面字号算出，改一个数整套一起动。各自带行高和字距：
 	 * 字越大字距越紧。字重不放进档里，和字号配对写在用的地方（title 用 medium，heading、display 用 semibold）。
 	 */
 	--text-caption: calc(var(--plume-ui-size) - 2px);
@@ -316,8 +316,8 @@
 	/* 工作字号：行、控件、表格，大部分界面。 */
 	--text-label: var(--plume-ui-size);
 	--text-label--line-height: 1.5;
-	/* 正文：比控件松，句子是顺着读的。 */
-	--text-body: calc(var(--plume-ui-size) + 1px);
+	/* 正文：与基准同号，行高比控件松，句子是顺着读的。 */
+	--text-body: var(--plume-ui-size);
 	--text-body--line-height: 1.7;
 	--text-title: calc(var(--plume-ui-size) + 3px);
 	--text-title--line-height: 1.4;
