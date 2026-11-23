@@ -91,12 +91,13 @@ export default {
 
 ### 模型供应商
 
-给 Plume 之外管着模型网关的应用（比如 Magpie）用：网关存在你自己的数据目录里，经 `ctx.providers.provide({ list, save, remove })` 交给模型设置。
+给 Plume 之外管着模型网关的应用（比如 Magpie）用：网关存在你自己的数据目录里，经 `ctx.providers.provide({ list, save, remove, failed? })` 交给模型设置。
 
 - `list()` 同步交回当前的供应商（`PluginProvider`：模型设置里供应商的字段加明文 `apiKey`），每次读模型设置都调，所以读文件、盯文件变化放在别处，这里只交缓存的那份。不合格的、和已有供应商重名的跳过（保留已有的），记一句诊断。
 - 它们接在人自己的供应商后面，设置页上标着由你的插件提供；和人自己的一样能选、能测、能设默认，花销照记。价格（`pricing`）不是本体认的形状（按百万 token 的美元数）时不用，按模型目录补参考价；本体不把它们写进 `settings.json`、不加密存 key、不导出，所以 key 由你存（文件给 0600）。
 - 本体不会自己去问 `list()` 变没变：你的供应商在 Plume 之外变了（外部应用改了网关、模型列表），交新的那份之前调一下 `ctx.providers.changed()`，设置页和模型菜单当场重取；没变就别调。登记、撤下来源和 `setDefaultModel` 本体自己会通知界面。
 - 人在设置页改、删时调 `save(provider)`（key 没改时是原来的）、`remove(providerId)`，你写回自己的数据，下次 `list()` 交新的。抛错时设置页显示原因。
+- 地址和普通 API 一样、请求体却要守另一套规矩的通道，在供应商上声明 `route`，本体按它组请求。认的只有 `"chatgpt-plan"`：必须同时是 `api: "openai-responses"`、`baseUrl: "https://api.openai.com/v1"`，`apiKey` 是 Sign in with ChatGPT 拿到的令牌；连接地址、协议和凭据在设置页只读，`save` 收到的仍是原值。本体不发 `max_output_tokens`、`temperature` 和采样参数，函数工具包进一个 `namespace` 工具。带 `route` 的来源还必须实现 `failed(providerId, failure)`：套餐额度用完或账号 / 工作区不适用时，本体在终局回复后叫它一次；你要持久化停用供应商并调 `ctx.providers.changed()`，恢复后由人在模型设置重新启用。通道不合规、来源没实现 `failed` 或本体不认 `route` 时，整个供应商跳过、记一句诊断。令牌的刷新由你做：到期前换好，`list()` 交的永远是能用的那份。
 - 停用插件时它们跟着消失；默认模型指着它们的话按本体的规则落到第一个可用的。
 - `defaultModel()` 读默认模型（`供应商/模型`，没设是 `undefined`），`setDefaultModel(model)` 设它，校验和设置页一样，没有这个模型时抛错。外部应用替人选了模型时用；要在它撤回时换回原来的，自己记下原来的那个，并且只在外部应用改了选择时才设，别在每次启动时盖掉人后来在 Plume 里选的。
 

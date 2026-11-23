@@ -62,6 +62,7 @@ const BUILTIN_MARKS = {
 
 /** 插件仓库 plume-plugins 里的市场插件。 */
 const MARKET_PLUGINS = [
+	"plume.chatgpt",
 	"plume.followups",
 	"plume.hooks",
 	"plume.image",

@@ -3,12 +3,15 @@
  * 标上 `managedBy`。写盘、加密 key、导出都只碰人自己的（`fileSettings` 按 `managedBy` 拿掉它们），设置页的改和删交回插件。
  */
 
-import type { ModelEntry, PluginProvider, ProviderSource } from "@plume/contract";
+import type { ModelEntry, PluginProvider, ProviderFailure, ProviderRoute, ProviderSource } from "@plume/contract";
 import type { ModelPricing } from "@plume/llm/types";
 import { catalogModelFor, catalogPricing } from "@plume/llm/model-catalog";
 import { errorText } from "@plume/loop";
 import { text } from "./i18n.ts";
 import { checkProvider, type StoredProvider } from "./models.ts";
+
+/** 本体认得、会按它组请求的通道（`ProviderRoute`）。 */
+const ROUTES: ReadonlySet<string> = new Set<ProviderRoute>(["chatgpt-plan"]);
 
 export class PluginProviderSources {
 	private sources: { plugin: string; source: ProviderSource }[] = [];
@@ -44,6 +47,19 @@ export class PluginProviderSources {
 				continue;
 			}
 			for (const raw of Array.isArray(listed) ? (listed as PluginProvider[]) : []) {
+				// 认不得的通道不当普通的发：那条通道的规矩照不到，请求注定被拒，不如在这里说清楚。
+				if (raw?.route !== undefined && !ROUTES.has(raw.route)) {
+					this.log(`插件 ${plugin} 的供应商 ${String(raw.id)} 用了不认识的通道 ${String(raw.route)}，已跳过`);
+					continue;
+				}
+				if (raw?.route !== undefined && !validRoute(raw)) {
+					this.log(`插件 ${plugin} 的供应商 ${String(raw.id)} 的通道 ${raw.route} 与接口地址或协议不匹配，已跳过`);
+					continue;
+				}
+				if (raw?.route !== undefined && !source.failed) {
+					this.log(`插件 ${plugin} 的供应商 ${String(raw.id)} 没有处理专用通道的终局失败，已跳过`);
+					continue;
+				}
 				let provider: StoredProvider;
 				try {
 					provider = checkProvider({ ...raw, models: raw.models.map((model) => withPricing(model, raw.baseUrl)) });
@@ -55,7 +71,7 @@ export class PluginProviderSources {
 					this.log(`插件 ${plugin} 的供应商 ${provider.id} 和已有的供应商重名，保留已有的`);
 					continue;
 				}
-				out.push({ ...provider, managedBy: plugin });
+				out.push({ ...provider, managedBy: plugin, ...(raw.route ? { route: raw.route } : {}) });
 			}
 		}
 		return out;
@@ -67,6 +83,17 @@ export class PluginProviderSources {
 
 	async remove(plugin: string, providerId: string): Promise<void> {
 		await this.sourceOf(plugin, providerId).remove(providerId);
+	}
+
+	/** 专用通道撞上必须暂停的终局失败：交回提供它的插件，让下一次 `list()` 当场反映。 */
+	async failed(plugin: string, providerId: string, failure: ProviderFailure): Promise<void> {
+		const source = this.sourceOf(plugin, providerId);
+		if (!source.failed) return;
+		try {
+			await source.failed(providerId, failure);
+		} catch (error) {
+			this.log(`插件 ${plugin} 处理供应商 ${providerId} 的终局失败时出错：${errorText(error)}`);
+		}
 	}
 
 	private sourceOf(plugin: string, providerId: string): ProviderSource {
@@ -94,6 +121,14 @@ function withPricing(model: ModelEntry, baseUrl: string): ModelEntry {
 	const found = catalogModelFor({ baseUrl }, model.modelId);
 	const reference = found ? catalogPricing(found.model) : undefined;
 	return reference ? { ...rest, pricing: reference } : rest;
+}
+
+/** 每条专用通道把协议和官方端点一起钉住，OAuth token 不会被插件配置带去别的地址。 */
+function validRoute(provider: PluginProvider): boolean {
+	if (provider.route === "chatgpt-plan") {
+		return provider.api === "openai-responses" && provider.baseUrl.trim().replace(/\/+$/, "") === "https://api.openai.com/v1";
+	}
+	return provider.route === undefined;
 }
 
 function usablePricing(pricing: unknown): pricing is ModelPricing {

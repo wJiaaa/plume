@@ -5,7 +5,18 @@
  * 插件提供的供应商读入时接在后面、标上 `managedBy`，写盘时再拿掉（见 plugin-providers.ts）。
  */
 
-import type { AlwaysAllow, Message, ModelEntry, ModelRef, PermissionMode, Personalization, ProviderSettings, SettingsView, Tone } from "@plume/contract";
+import type {
+	AlwaysAllow,
+	Message,
+	ModelEntry,
+	ModelRef,
+	PermissionMode,
+	Personalization,
+	ProviderRoute,
+	ProviderSettings,
+	SettingsView,
+	Tone,
+} from "@plume/contract";
 import { isImageModel } from "@plume/llm/image-models";
 import { normalizeRetryPolicy, type RetryPolicy } from "@plume/llm/retry-policy";
 import { resolveModelThinkingOptions, resolveThinkingOption, THINKING_LEVELS } from "@plume/llm/thinking-options";
@@ -16,6 +27,8 @@ export interface StoredProvider extends ProviderSettings {
 	apiKey?: string;
 	/** 由插件提供时是那个插件的名字，见 `PluginProviderSources`；这样的不写盘。 */
 	managedBy?: string;
+	/** 只有插件提供的供应商会带（`PluginProvider.route`），`providerConfig` 原样交给 `@plume/llm`。 */
+	route?: ProviderRoute;
 }
 
 export interface StoredSettings {
@@ -164,7 +177,10 @@ export function settingsView(settings: StoredSettings): SettingsView {
 }
 
 /** 一轮用哪个模型：会话选的还可用就用它，否则用默认模型。 */
-export function resolveModel(settings: StoredSettings, sessionModel: ModelRef | undefined): { provider: ProviderConfig; model: ModelConfig } {
+export function resolveModel(
+	settings: StoredSettings,
+	sessionModel: ModelRef | undefined,
+): { provider: ProviderConfig & Pick<StoredProvider, "managedBy">; model: ModelConfig } {
 	const found = lookup(settings, sessionModel) ?? lookup(settings, defaultModelOf(settings));
 	if (!found) throw new Error(text("model.none"));
 	const { provider, model } = found;

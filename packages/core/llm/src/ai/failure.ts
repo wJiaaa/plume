@@ -46,7 +46,7 @@ type FailureHint = "check-key" | "check-model" | "check-billing" | "check-reques
  * `hint` 是给界面挂动作的，粒度按「人该去改哪儿」分；这里按「循环能做什么」分，两者不重合：
  * 上下文超长和请求体格式错误在界面上都是 `check-request`，而只有前者压缩一次历史就可能过。
  */
-type FailureCode = "context-overflow";
+type FailureCode = "context-overflow" | "provider-usage-limit" | "provider-not-eligible";
 
 export interface Failure {
 	kind: FailureKind;
@@ -589,6 +589,17 @@ function fromTransport(error: unknown, sending: boolean): Failure {
 function fromStatus(status: number, body?: string): Failure {
 	const said = messageFromBody(body);
 	const detail = truncateDetail(body ?? "");
+	const coded = codedReason(body);
+	if (coded) {
+		return {
+			kind: "fatal",
+			summary: coded.summary,
+			detail,
+			hint: coded.hint,
+			...(coded.code ? { code: coded.code } : {}),
+			fingerprint: fingerprintOf("fatal", `${status}:${coded.summary}`),
+		};
+	}
 	const fatal = FATAL_STATUS.get(status);
 
 	if (fatal) {
@@ -651,7 +662,7 @@ function fromStream(message: string | undefined, raw: string | undefined, spent:
 	 * 超长另看整帧原文，同 `fromStatus`：只在 `error.code` 里写 `context_length_exceeded` 的错误帧，挑出来的
 	 * 那句话不带它，不认就当临时故障重试，轮不到压缩。
 	 */
-	const phrase = matchFatalPhrase(said || raw || "") ?? (raw && isOverflowText(raw) ? OVERFLOW_REASON : undefined);
+	const phrase = codedReason(raw) ?? matchFatalPhrase(said || raw || "") ?? (raw && isOverflowText(raw) ? OVERFLOW_REASON : undefined);
 	if (phrase) {
 		return {
 			kind: "fatal",
@@ -803,11 +814,61 @@ export function spokenSoFar(content: readonly { type: string; text?: string }[])
 	return content.flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : [])).join("");
 }
 
+/**
+ * 只写在错误码里（`error.code`，流里是 `response.error.code`）的终局理由。
+ *
+ * 和 `FATAL_PHRASES` 分开，是因为那张表读的是挑出来的那句话（`messageFromBody`），码不一定在那句里；这张表按码的原值认，
+ * 只收服务商文档点了名、说了不该重试的码。
+ *
+ * - `subscription_sharing_usage_limit_exceeded`（429）：ChatGPT 套餐通道的用量到顶。官方说法是停下新的请求、让人去
+ *   chatgpt.com/settings/usage 看；当成限流重试只会一直撞（developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery）。
+ *   同页的 `subscription_sharing_usage_unavailable`（503）要的是有限次退避，照常重试，不在这里。
+ */
+const FATAL_CODES = new Map<string, FatalReason>([
+	[
+		"subscription_sharing_user_not_eligible",
+		{ summary: "所选账号或工作区不能使用 ChatGPT 套餐额度", hint: "check-billing", code: "provider-not-eligible" },
+	],
+	[
+		"subscription_sharing_usage_limit_exceeded",
+		{ summary: "ChatGPT 套餐额度已用完", hint: "check-billing", code: "provider-usage-limit" },
+	],
+	[
+		"subscription_sharing_unsupported_capability",
+		{ summary: "ChatGPT 套餐通道不支持这项请求能力", hint: "check-request" },
+	],
+	[
+		"subscription_sharing_route_not_supported",
+		{ summary: "ChatGPT 套餐通道的请求地址或方法不受支持", hint: "check-request" },
+	],
+	["subscription_sharing_invalid_user", { summary: "ChatGPT 账号身份无法核实", hint: "check-key" }],
+	[
+		"chatpass_v2_scope_not_authorized",
+		{ summary: "ChatGPT 授权范围不允许这项操作", hint: "check-request" },
+	],
+	[
+		"chatpass_v2_invalid_authorization_context",
+		{ summary: "ChatGPT 授权上下文无效", hint: "check-request" },
+	],
+]);
+
+/** 认出来的终局理由，错误码表和说法表给的是同一个形状。 */
+type FatalReason = { summary: string; hint: FailureHint; code?: FailureCode };
+
+function codedReason(body: string | undefined): FatalReason | undefined {
+	if (!body) return undefined;
+	for (const found of body.matchAll(/\\?"code\\?"\s*:\s*\\?"([a-z0-9_.-]+)\\?"/gi)) {
+		const reason = FATAL_CODES.get(found[1].toLowerCase());
+		if (reason) return reason;
+	}
+	return undefined;
+}
+
 /** 只看整段原文认出的超长，和 `FATAL_PHRASES` 里那条给一样的结论。 */
 const OVERFLOW_REASON = { summary: "上下文超出模型上限", hint: "check-request", code: "context-overflow" } as const;
 
 /** `rateLimitedBody`：状态码是 429 时的整个正文，只有 429 才给。 */
-function matchFatalPhrase(text: string, rateLimitedBody?: string): { summary: string; hint: FailureHint; code?: FailureCode } | undefined {
+function matchFatalPhrase(text: string, rateLimitedBody?: string): FatalReason | undefined {
 	if (!text) return undefined;
 	for (const rule of FATAL_PHRASES) {
 		if (rateLimitedBody !== undefined && (rule.notOnRateLimit || rule.passOnRateLimit?.(rateLimitedBody))) continue;

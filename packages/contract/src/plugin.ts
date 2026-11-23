@@ -6,7 +6,17 @@
 import type { PluginChanges } from "./changes.ts";
 import type { BackgroundJobInfo, BackgroundJobOutput, SessionObservation, SessionWakeup } from "./diagnostics.ts";
 import type { PluginResources, Resource } from "./resources.ts";
-import type { AssistantMessage, DeliveredReport, FileChanges, Message, PeerLetter, ThinkingOption, ToolResultMessage, ToolSpec } from "@plume/llm/types";
+import type {
+	AssistantMessage,
+	DeliveredReport,
+	FileChanges,
+	Message,
+	PeerLetter,
+	ProviderRoute,
+	ThinkingOption,
+	ToolResultMessage,
+	ToolSpec,
+} from "@plume/llm/types";
 import type {
 	ApprovalDecision,
 	ApprovalRequest,
@@ -1807,7 +1817,16 @@ export interface PluginContext {
  */
 export interface PluginProvider extends ProviderSettings {
 	apiKey: string;
+	/**
+	 * key 的来历决定了请求要守另一套规矩、而地址分不出来时写（`ProviderRoute`）：`chatgpt-plan` 是用 ChatGPT 账号登录拿到的
+	 * OAuth token 花套餐额度，本体按那条通道的限制组请求。不写是普通的 API key。只有插件提供的供应商能带，设置页改完交回
+	 * `save` 时原样带着。
+	 */
+	route?: ProviderRoute;
 }
+
+/** 专用供应商通道需要插件处理的终局失败。 */
+export type ProviderFailure = "usage-limit" | "not-eligible";
 
 /** 一个插件的供应商来源。插件停用时撤下，它的供应商随之从模型设置里消失。 */
 export interface ProviderSource {
@@ -1817,6 +1836,11 @@ export interface ProviderSource {
 	save(provider: PluginProvider): Promise<void>;
 	/** 人在设置页删除了这个供应商。 */
 	remove(providerId: string): Promise<void>;
+	/**
+	 * 专用通道遇到必须暂停后续请求的终局失败时，本体叫一次；普通供应商不用实现。带 `route` 的供应商必须实现，
+	 * 否则本体不会接入它。实现应让 `list()` 随后交回停用的供应商，并调用 `ctx.providers.changed()`。
+	 */
+	failed?(providerId: string, failure: ProviderFailure): Promise<void>;
 }
 
 export interface PluginProviders {

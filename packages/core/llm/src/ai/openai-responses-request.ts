@@ -42,6 +42,12 @@ export interface ResponsesHome {
 	 * 「不要」——补出来的那一项在官方 OpenAI 上是一次必然的 400（`maximum length 0`）。
 	 */
 	leadingReasoning?: boolean;
+	/**
+	 * 工具放在这个 namespace 里发（`toResponsesTools` 的第二个参数）时写：回放的每个 `function_call` 都带上它。
+	 * 模型调 namespace 里的工具时回来的调用项带 `namespace`（OpenAI SDK 的 `ResponseFunctionToolCall.namespace`），
+	 * 原样还回去才对得上那件工具。省略是不分 namespace。
+	 */
+	toolNamespace?: string;
 }
 
 /**
@@ -386,6 +392,7 @@ export function toResponsesInput(
 						type: "function_call",
 						call_id: c.id,
 						name: toolNameForReplay(c.name),
+						...(home?.toolNamespace ? { namespace: home.toolNamespace } : {}),
 						arguments: replayArguments(c),
 					});
 					const answer = answers.get(c.id);
@@ -481,12 +488,14 @@ export function toResponsesInput(
 	return input;
 }
 
-export function toResponsesTools(tools: ToolSpec[]): unknown[] {
-	return tools.map((tool) => ({
+/** 给了 `namespace` 时整张表包成一个 namespace 工具（`{type: "namespace", name, description, tools}`），否则是平铺的函数。 */
+export function toResponsesTools(tools: ToolSpec[], namespace?: { name: string; description: string }): unknown[] {
+	const functions = tools.map((tool) => ({
 		type: "function",
 		name: tool.name,
 		description: tool.description,
 		parameters: hoistLocalRefs(tool.parameters),
 		strict: false,
 	}));
+	return namespace ? [{ type: "namespace", name: namespace.name, description: namespace.description, tools: functions }] : functions;
 }

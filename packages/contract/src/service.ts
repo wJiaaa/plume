@@ -4,7 +4,17 @@
 
 import type { ModelCatalogDocument } from "@plume/llm/model-catalog-format";
 import type { RetryPolicy } from "@plume/llm/retry-policy";
-import type { ApiFormat, AssistantMessage, Message, MessageAttachment, ModelPricing, ThinkingLevel, ThinkingOption, UserContent } from "@plume/llm/types";
+import type {
+	ApiFormat,
+	AssistantMessage,
+	Message,
+	MessageAttachment,
+	ModelPricing,
+	ProviderRoute,
+	ThinkingLevel,
+	ThinkingOption,
+	UserContent,
+} from "@plume/llm/types";
 import type { CallContext } from "@plume/rpc";
 import type { RevertPlan } from "./changes.ts";
 import type { BackgroundCallState } from "./diagnostics.ts";
@@ -48,6 +58,8 @@ export interface ProviderSettings {
 }
 
 export interface ProviderView extends ProviderSettings {
+	/** 插件声明的专用请求通道；带着时连接地址、协议和凭据由插件管理，设置页只读。 */
+	route?: ProviderRoute;
 	/** 已经存了 API key。key 本身不出 agent 进程。 */
 	hasKey: boolean;
 	/** 由插件提供（`PluginContext.providers`）时是那个插件的名字：改动交给它保存，不参与导出。 */

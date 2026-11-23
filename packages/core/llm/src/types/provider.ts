@@ -81,6 +81,15 @@ export interface ModelConfig {
 	imageOutput?: boolean;
 }
 
+/**
+ * 同一个地址上另走一条有自己规矩的通道，凭的是 key 的来历，地址分不出来，只能由供应商声明。
+ *
+ * `chatgpt-plan`：用 ChatGPT 账号登录拿到的 OAuth token 花套餐额度（Sign in with ChatGPT），地址和 API key 一样是
+ * `https://api.openai.com/v1`。它拒收 `max_output_tokens`、`temperature`、`top_p` 等字段，函数工具要放进 namespace，
+ * 见 `openai-responses.ts` 里按它分支的地方。官方原话：developers.openai.com/siwc/token-sharing-open-source/preview-limitations。
+ */
+export type ProviderRoute = "chatgpt-plan";
+
 export interface ProviderConfig {
 	id: string;
 	name: string;
@@ -89,6 +98,8 @@ export interface ProviderConfig {
 	apiKey: string;
 	enabled: boolean;
 	models: ModelConfig[];
+	/** 不写是普通的 API key 通道。见 `ProviderRoute`。 */
+	route?: ProviderRoute;
 }
 
 export interface RequestOptions {

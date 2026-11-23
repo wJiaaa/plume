@@ -8,6 +8,7 @@ import type {
 	Message,
 	ModelCompletion,
 	ModelContext,
+	ProviderFailure,
 	SessionObservation,
 	UserMessage,
 } from "@plume/contract";
@@ -46,6 +47,7 @@ import type { Session } from "./session.ts";
 export interface ModelRequestsDeps {
 	retryPolicy: RequestOptions["retryPolicy"] | undefined;
 	modelSettings: Pick<ModelSettings, "read" | "retryPolicy">;
+	providerFailed(plugin: string, providerId: string, failure: ProviderFailure): Promise<void>;
 	readSessionSettings(session: Session): Promise<StoredSettings>;
 	modelOf(session: Session): string | undefined;
 	thinkingOf(session: Session): Session["summary"]["thinking"];
@@ -91,6 +93,7 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 	const {
 		retryPolicy,
 		modelSettings,
+		providerFailed,
 		readSessionSettings,
 		modelOf,
 		thinkingOf,
@@ -199,7 +202,10 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 			{ systemPrompt, messages: asked, tools: [] },
 			{ ...(signal ? { signal } : {}), maxTokens: maxTokens ?? model.maxOutputTokens, thinking: "off", retryPolicy: retryPolicyFor(session), ...retried },
 		);
-		return replyText(await settleOnce(session, requestId, stream, signal, request.requireComplete === true));
+		const reply = await settleOnce(session, requestId, stream, signal, request.requireComplete === true);
+		await reportProviderFailure(provider, reply);
+		if (reply.stopReason === "error") throw new Error(reply.errorMessage || text("model.failed"));
+		return replyText(reply);
 	}
 
 	/**
@@ -221,8 +227,9 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 		store.spend(session?.summary.id ?? null, reply);
 		signal?.throwIfAborted();
 		before?.();
-		if (reply.stopReason === "error" || reply.stopReason === "aborted") throw new Error(reply.errorMessage || text("model.failed"));
-		if (requireComplete && reply.stopReason !== "stop") throw new Error(text("model.incomplete"));
+		// 终局失败先交给调用方：专用供应商要据此暂停后续请求；调用方随后仍按原来的错误抛出。
+		if (reply.stopReason === "aborted") throw new Error(reply.errorMessage || text("model.failed"));
+		if (reply.stopReason !== "error" && requireComplete && reply.stopReason !== "stop") throw new Error(text("model.incomplete"));
 		return reply;
 	}
 
@@ -280,6 +287,8 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 			log("agent", "warn", `会话 ${session.summary.id} 的分叉请求和上一次主请求的前缀在 ${changed} 处对不上，没有发出去`);
 			throw new Error(text("model.forkMismatch", { segment: changed }));
 		});
+		await reportProviderFailure(provider, reply);
+		if (reply.stopReason === "error") throw new Error(reply.errorMessage || text("model.failed"));
 		// 说了不要调工具还是调了：这次回复不是要的那段字。
 		if (reply.content.some((block) => block.type === "toolCall")) throw new Error(text("model.forkToolCall"));
 		return replyText(reply);
@@ -362,11 +371,20 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 			observeDraft(session, requestId, undefined);
 			return "switched";
 		}
+		await reportProviderFailure(provider, reply);
 		// 和上一次主请求比前缀从哪变了：缓存未命中的归因证据，随回复存下。重开应用后的第一次没得比。
 		if (previous && sent.segments) reply.prefix = comparePrefix(previous, sent.segments);
 		requestParts.set(reply, estimateParts(context));
 		observe(sessionId, { type: "response", id: requestId, reply });
 		return reply;
+	}
+
+	/** 专用通道的额度和资格失败要回到提供供应商的插件；它停用后，下一轮不会再撞同一个终局错误。 */
+	async function reportProviderFailure(provider: ProviderConfig & { managedBy?: string }, reply: AssistantMessage): Promise<void> {
+		if (!provider.managedBy) return;
+		const failure: ProviderFailure | undefined =
+			reply.failure?.code === "provider-usage-limit" ? "usage-limit" : reply.failure?.code === "provider-not-eligible" ? "not-eligible" : undefined;
+		if (failure) await providerFailed(provider.managedBy, provider.id, failure);
 	}
 
 	return { buildContext, completeOnce, request, partsOf: (message) => requestParts.get(message) };

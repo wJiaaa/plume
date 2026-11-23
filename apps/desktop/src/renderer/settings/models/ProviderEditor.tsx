@@ -100,41 +100,58 @@ export function ProviderEditor({
 					<SectionTitle>{t("provider.connection")}</SectionTitle>
 					<Card data-provider-connection="">
 						<FieldRow label="Base URL">
-							<TextInput
-								mono
-								value={baseUrl}
-								onChange={(value) => {
-									setBaseUrl(value);
-									onChange({ baseUrl: value.trim() });
-								}}
-								placeholder="https://api.example.com/v1"
-								spellCheck={false}
-								data-provider-url=""
-							/>
+							{provider.route ? (
+								<span className="min-w-0 break-all font-mono text-detail text-ink-muted">{provider.baseUrl}</span>
+							) : (
+								<TextInput
+									mono
+									value={baseUrl}
+									onChange={(value) => {
+										setBaseUrl(value);
+										onChange({ baseUrl: value.trim() });
+									}}
+									placeholder="https://api.example.com/v1"
+									spellCheck={false}
+									data-provider-url=""
+								/>
+							)}
 						</FieldRow>
 
 						<FieldRow label={t("provider.apiFormat")}>
-							<Segmented value={provider.api} onChange={(api) => onChange({ api })} options={API_OPTIONS} />
-							<span role="img" aria-label={t("provider.apiFormatDetail")} data-plume-tip={t("provider.apiFormatDetail")} className="shrink-0 text-ink-faint">
-								<CircleHelp size={14} strokeWidth={1.8} />
-							</span>
+							{provider.route ? (
+								<span className="text-label text-ink-muted">{API_OPTIONS.find((option) => option.value === provider.api)?.label ?? provider.api}</span>
+							) : (
+								<>
+									<Segmented value={provider.api} onChange={(api) => onChange({ api })} options={API_OPTIONS} />
+									<span
+										role="img"
+										aria-label={t("provider.apiFormatDetail")}
+										data-plume-tip={t("provider.apiFormatDetail")}
+										className="shrink-0 text-ink-faint"
+									>
+										<CircleHelp size={14} strokeWidth={1.8} />
+									</span>
+								</>
+							)}
 						</FieldRow>
 
-						{/* 测试放在 key 旁边，因为它测的主要就是 key：key 错是最常见的失败，答案落在刚按的那颗按钮上。 */}
+						{/* 专用通道的凭据只在插件逻辑入口，界面不提供一个实际不会生效的密钥框。 */}
 						<FieldRow
-							label="API Key"
+							label={provider.route ? t("modelSettings.testConnection") : "API Key"}
 							// 只有失败的话要紧：有东西要修，而只有端点知道是什么。
 							note={testResult && !testResult.ok ? <p className="text-detail break-words text-danger">{testResult.message}</p> : null}
 						>
-							<SecretInput
-								value={apiKey}
-								saved={provider.hasKey}
-								onChange={(value) => {
-									setApiKey(value);
-									if (value.trim()) onChange({ apiKey: value });
-								}}
-								placeholder="sk-…"
-							/>
+							{provider.route ? null : (
+								<SecretInput
+									value={apiKey}
+									saved={provider.hasKey}
+									onChange={(value) => {
+										setApiKey(value);
+										if (value.trim()) onChange({ apiKey: value });
+									}}
+									placeholder="sk-…"
+								/>
+							)}
 							<TestButton result={testResult} testing={testing} onTest={onTest} />
 						</FieldRow>
 					</Card>
@@ -163,8 +180,8 @@ export function ProviderEditor({
 /** 标签和控件在一行；窗格窄到放不下两样时标签放到上面。内边距和分隔线同 Row，这张卡片和别的页面是同一种卡片。 */
 function FieldRow({ label, note, children }: { label: string; note?: ReactNode; children: ReactNode }) {
 	return (
-		<div className="grid grid-cols-1 gap-x-3 gap-y-1.5 border-b border-line-soft px-4 py-3 last:border-b-0 @md:grid-cols-[84px_minmax(0,1fr)] @md:items-center">
-			<span className="text-label font-medium text-ink">{label}</span>
+		<div data-settings-item="" className="plume-settings-row grid grid-cols-1 gap-x-3 gap-y-1.5 @md:grid-cols-[84px_minmax(0,1fr)] @md:items-center">
+			<span className="text-label text-ink">{label}</span>
 			<div className="flex min-w-0 items-center gap-2">{children}</div>
 			{note && <div className="@md:col-start-2">{note}</div>}
 		</div>

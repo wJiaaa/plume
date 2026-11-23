@@ -152,6 +152,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 	const { commit } = messages;
 	const modelRequests = createModelRequests({
 		...{ retryPolicy: options.retryPolicy, modelSettings, readSessionSettings, modelOf, thinkingOf },
+		providerFailed: (plugin, providerId, failure) => pluginProviders.failed(plugin, providerId, failure),
 		projects: { list: () => projects.list() },
 		...{ scratchDir, messagesOf, recordOf },
 		host: {

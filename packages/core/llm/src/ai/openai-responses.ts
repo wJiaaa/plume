@@ -53,6 +53,12 @@ export const openaiResponsesProvider: Provider = {
 const leadsWithReasoning = new Set<string>();
 const MUST_PASS_BACK = /reasoning_text.{0,40}must be passed back/i;
 
+/**
+ * ChatGPT 套餐通道（`ProviderRoute` 的 `chatgpt-plan`）上工具放进的 namespace。官方原话：「Group function/custom tools in
+ * namespaces or supply them through `additional_tools` input items.」只有一组工具，所以只用一个，名字和说明给模型看。
+ */
+const PLAN_TOOLS = { name: "plume", description: "Tools available in this Plume session." };
+
 /** message 项的 `phase`。只认这两个值：中转塞进来的别的什么，回放时原样送回去只会换来一个 400。 */
 function messagePhase(value: unknown): TextContent["phase"] {
 	return value === "commentary" || value === "final_answer" ? value : undefined;
@@ -76,6 +82,12 @@ async function* streamResponses(
 		timestamp: startTime,
 	};
 
+	/**
+	 * ChatGPT 套餐通道：拒收 `max_output_tokens`、`temperature`、`top_p` 等字段（官方「Preview limitations」页列的那张表），
+	 * 撞了也不像别的端点那样能学（`request-params-compat.ts` 认的是撞出来的原话，这里是文档定死的），所以按声明直接不发。
+	 * 输出不设上限，截断交给模型自己的上限；用户在模型设置里配的采样参数这条通道一个都收不了，一起不带。
+	 */
+	const plan = provider.route === "chatgpt-plan";
 	const reasoningEffort = resolveReasoningEffort(options.thinking, model);
 	const thinkingEnabled = reasoningEffort !== undefined;
 	/** 学和查都用这一对 id，见 `compat-key.ts`。排列这一轴曾经查用 `modelId`、学用 `id`，学到的永远查不到。 */
@@ -108,6 +120,7 @@ async function* streamResponses(
 					supportsImages: model.supportsImages,
 					toolImages: toolResultImages(scope.providerId, scope.modelId),
 					leadingReasoning: leadingReasoning(),
+					...(plan ? { toolNamespace: PLAN_TOOLS.name } : {}),
 				},
 				replay,
 				toolPairing(scope.providerId, scope.modelId),
@@ -115,7 +128,7 @@ async function* streamResponses(
 			stream: true,
 			// Sessions live in our own store, not on the provider.
 			store: false,
-			max_output_tokens: options.maxTokens ?? model.maxOutputTokens,
+			...(plan ? {} : { max_output_tokens: options.maxTokens ?? model.maxOutputTokens }),
 			...(context.systemPrompt ? { instructions: context.systemPrompt } : {}),
 			/*
 			 * `tool_choice: "auto"` 是服务端默认值，发它零收益——但撞过一次的端点上要连它一起省掉。
@@ -125,7 +138,7 @@ async function* streamResponses(
 			 */
 			...(context.tools.length > 0
 				? {
-						tools: toResponsesTools(context.tools),
+						tools: toResponsesTools(context.tools, plan ? PLAN_TOOLS : undefined),
 						...(dropped.has("tool-choice") ? {} : { tool_choice: "auto" }),
 					}
 				: {}),
@@ -135,7 +148,7 @@ async function* streamResponses(
 			// endpoint that refuses it is learnt by `request-params-compat.ts`, and either way the whole
 			// `reasoning` is left out.
 			...responsesThinkingFields(dialect, { effort: thinkingEnabled ? reasoningEffort : undefined, supportsThinking: model.supportsThinking, dropped }),
-			...(options.temperature !== undefined && !thinkingEnabled && !dropped.has("sampling")
+			...(options.temperature !== undefined && !thinkingEnabled && !dropped.has("sampling") && !plan
 				? { temperature: options.temperature }
 				: {}),
 			// 缓存路由键，被拒过就不再带。见 `cache-routing.ts`。
@@ -147,7 +160,7 @@ async function* streamResponses(
 			 * gpt-5.x 对显式采样参数一律 400。用户配出来的东西
 			 * 让整个会话发不出请求，拦一下比原样转发更有用。
 			 */
-			...(dropped.has("sampling") ? {} : { ...model.samplingParams, ...options.samplingParams }),
+			...(dropped.has("sampling") || plan ? {} : { ...model.samplingParams, ...options.samplingParams }),
 		};
 	};
 	/*

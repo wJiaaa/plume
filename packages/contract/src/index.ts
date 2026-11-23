@@ -17,6 +17,7 @@ export type {
 	Message,
 	MessageAttachment,
 	PeerLetter,
+	ProviderRoute,
 	TextContent,
 	ToolResultMessage,
 	ToolSpec,

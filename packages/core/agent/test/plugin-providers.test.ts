@@ -6,7 +6,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, ModelEntry, Plugin, PluginContext, PluginProvider } from "@plume/contract";
+import type { AgentEvent, ModelEntry, Plugin, PluginContext, PluginProvider, ProviderFailure } from "@plume/contract";
 import { catalogModelFor, catalogPricing } from "@plume/llm/model-catalog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Agent, createAgent } from "../src/index.ts";
@@ -31,14 +31,17 @@ let agent: Agent | undefined;
 let ctx: PluginContext;
 /** 插件那边存着的供应商，`save`、`remove` 改的就是它。 */
 let listed: PluginProvider[];
+let failures: Array<{ providerId: string; failure: ProviderFailure }>;
 
 beforeEach(async () => {
 	dir = await mkdtemp(join(tmpdir(), "plume-plugin-providers-"));
+	failures = [];
 });
 
 afterEach(async () => {
 	await agent?.shutdown();
 	agent = undefined;
+	vi.unstubAllGlobals();
 	await rm(dir, { recursive: true, force: true });
 });
 
@@ -50,7 +53,7 @@ async function withStoredKeys(file: unknown): Promise<unknown> {
 	return { ...(file as object), providers: stored.providers };
 }
 
-async function start(providers: PluginProvider[], file: unknown = { providers: [own] }) {
+async function start(providers: PluginProvider[], file: unknown = { providers: [own] }, handlesFailure = true) {
 	listed = providers;
 	await writeFile(join(dir, "settings.json"), JSON.stringify(await withStoredKeys(file)));
 	const plugin: Plugin = {
@@ -65,6 +68,15 @@ async function start(providers: PluginProvider[], file: unknown = { providers: [
 				remove: async (providerId) => {
 					listed = listed.filter((item) => item.id !== providerId);
 				},
+				...(handlesFailure
+					? {
+							failed: async (providerId: string, failure: ProviderFailure) => {
+								failures.push({ providerId, failure });
+								listed = listed.map((item) => (item.id === providerId ? { ...item, enabled: false } : item));
+								context.providers.changed();
+							},
+						}
+					: {}),
 			});
 		},
 	};
@@ -148,6 +160,64 @@ describe("插件提供的供应商", () => {
 		} finally {
 			await fake.close();
 		}
+	});
+
+	it("带通道的供应商：只接官方协议和地址；按通道组请求体；设置页不能改连接不变量", async () => {
+		const bodies: Record<string, unknown>[] = [];
+		const frames = [
+			{ type: "response.output_item.added", output_index: 0, item: { type: "message", id: "m1", content: [] } },
+			{ type: "response.output_text.delta", output_index: 0, delta: "好" },
+			{ type: "response.completed", response: { id: "r1", usage: { input_tokens: 1, output_tokens: 1 } } },
+		];
+		vi.stubGlobal("fetch", async (_input: string | URL | Request, init?: RequestInit) => {
+			bodies.push(JSON.parse(String(init?.body)));
+			return new Response(frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		});
+		const plan = gateway({ api: "openai-responses", baseUrl: "https://api.openai.com/v1", route: "chatgpt-plan" });
+		const wrongApi = gateway({ id: "wrong-api", baseUrl: "https://api.openai.com/v1", route: "chatgpt-plan" });
+		const wrongUrl = gateway({ id: "wrong-url", api: "openai-responses", route: "chatgpt-plan" });
+		const unknown = gateway({ id: "unknown", route: "elsewhere" as never });
+		const service = await start([plan, wrongApi, wrongUrl, unknown], { providers: [] });
+		expect((await service.getSettings()).providers.map((provider) => provider.id)).toEqual(["gw"]);
+		expect((await service.getSettings()).providers[0]?.route).toBe("chatgpt-plan");
+		expect(await ctx.model.complete({ systemPrompt: "", prompt: "嗨", maxTokens: 100 })).toBe("好");
+		expect(bodies[0]).not.toHaveProperty("max_output_tokens");
+		const view = (await service.getSettings()).providers[0]!;
+		await service.saveProvider({ ...view, name: "改过的", api: "anthropic-messages", baseUrl: "https://evil.invalid", apiKey: "attacker" });
+		expect(listed[0]).toMatchObject({
+			name: "改过的",
+			route: "chatgpt-plan",
+			api: "openai-responses",
+			baseUrl: "https://api.openai.com/v1",
+			apiKey: "gw-key",
+		});
+	});
+
+	it("带通道的供应商没有终局失败回调时不接入", async () => {
+		const plan = gateway({ api: "openai-responses", baseUrl: "https://api.openai.com/v1", route: "chatgpt-plan" });
+		const service = await start([plan], { providers: [] }, false);
+		expect((await service.getSettings()).providers).toEqual([]);
+	});
+
+	it("套餐额度终局失败回报插件并停用供应商，下一次设置读取当场反映", async () => {
+		const error = { code: "subscription_sharing_usage_limit_exceeded", message: "You've reached the usage limit for this app." };
+		const frame = { type: "response.failed", response: { error } };
+		vi.stubGlobal(
+			"fetch",
+			async () =>
+				new Response(`event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				}),
+		);
+		const plan = gateway({ api: "openai-responses", baseUrl: "https://api.openai.com/v1", route: "chatgpt-plan" });
+		const service = await start([plan], { providers: [] });
+		await expect(ctx.model.complete({ systemPrompt: "", prompt: "嗨" })).rejects.toThrow("ChatGPT 套餐额度已用完");
+		expect(failures).toEqual([{ providerId: "gw", failure: "usage-limit" }]);
+		expect((await service.getSettings()).providers[0]?.enabled).toBe(false);
 	});
 
 	it("插件说供应商变了、设了默认模型、停用时，告诉界面重取模型设置；一个插件加载时的几次只说一次", async () => {

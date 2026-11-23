@@ -113,8 +113,13 @@ export function createModelSettings(options: {
 		async saveProvider({ apiKey, ...provider }) {
 			const managed = provider.id ? (await read()).providers.find((candidate) => candidate.id === provider.id && candidate.managedBy) : undefined;
 			if (managed?.managedBy) {
-				const saved = checkProvider({ ...provider, apiKey: apiKey?.trim() || managed.apiKey });
-				await pluginProviders.save(managed.managedBy, { ...saved, apiKey: saved.apiKey ?? "" });
+				// 专用通道的协议、地址和凭据是一组安全不变量：界面只改名字、启停和模型，不能把 OAuth token 带去别的地址。
+				const connection = managed.route
+					? { api: managed.api, baseUrl: managed.baseUrl, apiKey: managed.apiKey }
+					: { apiKey: apiKey?.trim() || managed.apiKey };
+				const saved = checkProvider({ ...provider, ...connection });
+				// 通道不经设置页，交回时带上原来的：`save` 收到的是改完的整份。
+				await pluginProviders.save(managed.managedBy, { ...saved, apiKey: saved.apiKey ?? "", ...(managed.route ? { route: managed.route } : {}) });
 				return managed.id;
 			}
 			return changeSettings((settings) => {
