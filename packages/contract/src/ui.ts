@@ -4,7 +4,7 @@
 
 import type { Remote } from "@plume/rpc";
 import type { ComponentType, MouseEvent, ReactNode } from "react";
-import type { ChangeHunk } from "./changes.ts";
+import type { ChangeHunk, ChangeLine } from "./changes.ts";
 import type { Locale, ProjectInfo, SlashCommand, ToolCall, ToolOutput } from "./plugin.ts";
 import type {
 	ChildTask,
@@ -839,11 +839,35 @@ export interface ReplyActionProps {
 	to: number;
 }
 
+export type FileDiffLayout = "unified" | "split";
+
+export interface FileDiffLineMark {
+	/** 落在这一行行号位置的序号标（例如逐行评论序号）；缺省时继续显示行号。 */
+	badge?: number;
+	/** 行的标记态：草稿选区或已保存的标注。 */
+	state: "draft" | "saved";
+}
+
+export interface FileDiffLineTarget {
+	hunk: ChangeHunk;
+	lineIndex: number;
+}
+
 export interface FileDiffProps {
 	hunks: ChangeHunk[];
 	path?: string;
 	showPath?: boolean;
 	maxLines?: number;
+	layout?: FileDiffLayout;
+	wrap?: boolean;
+	/** 给特定行标出状态和序号（如逐行评论）。 */
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	/** 可交互行号按钮的无障碍标签。 */
+	lineLabel?: (lineNumber: number | string) => string;
+	/** 在行号上按下左键（`extend` 为按住 Shift 扩展选区）。给了它时行号可点选。 */
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	/** 按住拖拽经过另一行的行号。 */
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
 }
 
 export interface FilePreviewProps {

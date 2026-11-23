@@ -34,51 +34,178 @@
 	}
 
 	/*
-	 * diff 铺在代码底色上，和别处读代码一样。行号栏和竖条钉在左边、代码从它们底下横滚过去，所以要不透明：各档是行的底色
-	 * 先和代码底色混好的结果，看着一样，又挡得住。
+	 * diff 铺在代码底色上，和别处读代码一样。最左缘的增删色条和行号栏钉在左侧、代码从它们底下横滚过去，
+	 * 所以行号栏和色条要不透明：各档是和代码底色混好的结果，看着通透，横滚时也挡得住代码。
 	 */
 	.tool-diff-scroll {
 		background: var(--plume-code-bg);
 		color: var(--plume-code-fg);
 	}
 
+	.tool-diff-sheet {
+		padding-bottom: 6px;
+	}
+
+	.tool-diff-scroll[data-hscroll="on"] > .tool-diff-sheet,
+	.tool-diff-split-pane[data-hscroll="on"] > * {
+		padding-bottom: 12px;
+	}
+
+	.tool-diff-hunk + .tool-diff-hunk {
+		border-top: 1px solid var(--plume-line-soft);
+	}
+
+	.tool-diff-hunk-head {
+		display: flex;
+		min-height: 24px;
+		align-items: center;
+		border-bottom: 1px solid var(--plume-line-soft);
+		background: color-mix(in srgb, var(--plume-code-fg) 3.5%, var(--plume-code-bg));
+	}
+
+	.tool-diff-line:hover {
+		background: color-mix(in srgb, var(--plume-code-fg) 3.5%, transparent);
+	}
+
 	.tool-diff-add {
-		background: color-mix(in srgb, var(--plume-ok) 8%, transparent);
+		background: var(--plume-diff-add);
+	}
+
+	.tool-diff-line.tool-diff-add:hover {
+		background: color-mix(in srgb, var(--plume-ok) 18%, var(--plume-code-bg));
 	}
 
 	.tool-diff-remove {
-		background: color-mix(in srgb, var(--plume-danger) 8%, transparent);
+		background: var(--plume-diff-remove);
 	}
 
-	.tool-diff-gutter {
-		background: var(--plume-code-bg);
-		color: color-mix(in srgb, var(--plume-ink-faint) 70%, transparent);
+	.tool-diff-line.tool-diff-remove:hover {
+		background: color-mix(in srgb, var(--plume-danger) 18%, var(--plume-code-bg));
 	}
 
-	.tool-diff-add .tool-diff-gutter {
-		background: color-mix(in srgb, var(--plume-ok) 8%, var(--plume-code-bg));
-	}
-
-	.tool-diff-remove .tool-diff-gutter {
-		background: color-mix(in srgb, var(--plume-danger) 8%, var(--plume-code-bg));
-	}
-
-	/* 加的行一条绿色竖条，删的行一条红色，没改的行是代码底色。 */
-	.tool-diff-rail {
+	/* 左缘 3px 增删色条放在行号外侧，呼应 T3 Code / Pierre Diff 的视觉锚点。 */
+	.tool-diff-rail,
+	.tool-diff-split-rail {
 		background: var(--plume-code-bg);
 	}
 
-	.tool-diff-add .tool-diff-rail {
-		background: color-mix(in srgb, var(--plume-ok) 70%, transparent);
+	.tool-diff-add .tool-diff-rail,
+	.tool-diff-add .tool-diff-split-rail {
+		background: var(--plume-ok);
 	}
 
-	.tool-diff-remove .tool-diff-rail {
-		background: color-mix(in srgb, var(--plume-danger) 70%, transparent);
+	.tool-diff-remove .tool-diff-rail,
+	.tool-diff-remove .tool-diff-split-rail {
+		background: var(--plume-danger);
+	}
+
+	/* 行号栏不画竖线隔断，靠略深半档的底色和带语义色相的行号数字与代码自然分层。 */
+	.tool-diff-gutter,
+	.tool-diff-split-gutter {
+		background: var(--plume-code-bg);
+		color: color-mix(in srgb, var(--plume-ink-faint) 75%, transparent);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.tool-diff-add .tool-diff-gutter,
+	.tool-diff-add .tool-diff-split-gutter {
+		background: color-mix(in srgb, var(--plume-ok) 15%, var(--plume-code-bg));
+		color: color-mix(in srgb, var(--plume-ok) 92%, var(--plume-code-fg));
+	}
+
+	.tool-diff-remove .tool-diff-gutter,
+	.tool-diff-remove .tool-diff-split-gutter {
+		background: color-mix(in srgb, var(--plume-danger) 15%, var(--plume-code-bg));
+		color: color-mix(in srgb, var(--plume-danger) 92%, var(--plume-code-fg));
+	}
+
+	.tool-diff-code {
+		min-width: 0;
+		color: var(--plume-code-fg);
+	}
+
+	.tool-diff-wrap .tool-diff-code {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+	}
+
+	/* 成对修改的行内强调：叠在行底色上，保持内部语法高亮色不变。 */
+	.tool-diff-inline-add {
+		border-radius: var(--plume-radius-item);
+		background: color-mix(in srgb, var(--plume-ok) 25%, transparent);
+		color: inherit;
+	}
+
+	.tool-diff-inline-remove {
+		border-radius: var(--plume-radius-item);
+		background: color-mix(in srgb, var(--plume-danger) 25%, transparent);
+		color: inherit;
+	}
+
+	/* 可点选的行号栏（如逐行评论）。 */
+	.tool-diff-pick {
+		cursor: pointer;
+		transition:
+			color var(--plume-t-quick) var(--plume-e-soft),
+			background-color var(--plume-t-quick) var(--plume-e-soft);
+	}
+
+	.tool-diff-pick:hover {
+		background: color-mix(in srgb, var(--plume-accent) 12%, var(--plume-code-bg));
+		color: var(--plume-accent);
+	}
+
+	.tool-diff-gutter[data-diff-note="saved"],
+	.tool-diff-split-gutter[data-diff-note="saved"] {
+		background: color-mix(in srgb, var(--plume-accent) 18%, var(--plume-code-bg));
+		color: var(--plume-accent);
+	}
+
+	.tool-diff-gutter[data-diff-note="draft"],
+	.tool-diff-split-gutter[data-diff-note="draft"] {
+		background: color-mix(in srgb, var(--plume-accent) 32%, var(--plume-code-bg));
+		color: var(--plume-ink);
+	}
+
+	/* ── 分栏 diff（左旧右新） ─────────────────────────────── */
+
+	.tool-diff-split {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.tool-diff-split-panes {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+
+	.tool-diff-split-pane {
+		min-width: 0;
+	}
+
+	.tool-diff-split-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+
+	.tool-diff-split-cell {
+		display: flex;
+		min-width: 0;
+		align-items: stretch;
+	}
+
+	.tool-diff-split-left {
+		border-right: 1px solid var(--plume-line-soft);
+	}
+
+	.tool-diff-split-empty {
+		background: color-mix(in srgb, var(--plume-code-fg) 3.5%, var(--plume-code-bg));
 	}
 
 	/*
-	 * 外观里选了「+/-」（分不清红绿的人用），和 Git 面板的改动视图同一个做法：行和行号栏不铺底色，代码前面标 +、-，没改的行
-	 * 垫一个空格，等宽字体下三种行的代码对齐。标在代码那一格里，复制时不带上。竖条留着：它说的是哪几行改了，不靠颜色也读得出。
+	 * 外观里选了「+/-」（分不清红绿的人用）：行和行号栏不铺底色，代码前面标 +、-，没改的行垫一个空格，
+	 * 等宽字体下三种行的代码对齐。标在代码那一格里，复制时不带上。竖条留着：它说的是哪几行改了，不靠颜色也读得出。
 	 */
 	:root[data-diff-markers="symbols"] .tool-diff-add,
 	:root[data-diff-markers="symbols"] .tool-diff-remove {
@@ -86,8 +213,16 @@
 	}
 
 	:root[data-diff-markers="symbols"] .tool-diff-add .tool-diff-gutter,
-	:root[data-diff-markers="symbols"] .tool-diff-remove .tool-diff-gutter {
+	:root[data-diff-markers="symbols"] .tool-diff-remove .tool-diff-gutter,
+	:root[data-diff-markers="symbols"] .tool-diff-add .tool-diff-split-gutter,
+	:root[data-diff-markers="symbols"] .tool-diff-remove .tool-diff-split-gutter {
 		background: var(--plume-code-bg);
+		color: color-mix(in srgb, var(--plume-ink-faint) 75%, transparent);
+	}
+
+	:root[data-diff-markers="symbols"] .tool-diff-inline-add,
+	:root[data-diff-markers="symbols"] .tool-diff-inline-remove {
+		background: color-mix(in srgb, var(--plume-fg) 12%, transparent);
 	}
 
 	:root[data-diff-markers="symbols"] .tool-diff-code::before {

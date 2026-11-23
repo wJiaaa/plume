@@ -109,14 +109,81 @@
 }
 
 .git-list-pad {
-	padding: 0 6px 8px;
+	padding: 4px 6px 10px;
 }
 
-.git-list-pad-wide {
-	padding: 0 8px 8px;
+.git-changes-host {
+	display: flex;
+	min-height: 0;
+	min-width: 0;
+	flex: 1 1 0%;
+	flex-direction: column;
 }
 
-/* ── 面板外框、同步那一行、视图那一排 ─────────────────── */
+/* 固定在改动视图顶部的 diff 工具条：总览、全部展开/折叠、统一/分栏分段开关、换行、树切换始终可见。 */
+.git-changes-bar {
+	display: flex;
+	height: 34px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	background: var(--plume-shell);
+	padding: 0 10px 0 12px;
+}
+
+.git-changes-summary {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.git-changes-controls {
+	margin-left: auto;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* T3 Code 风格的统一/分栏分段切换：一眼看出当前模式，点另一格立即切过去。 */
+.git-seg-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-item);
+	background: color-mix(in srgb, var(--plume-fg) 3.5%, transparent);
+	padding: 2px;
+}
+
+.git-seg-btn {
+	display: inline-flex;
+	width: 22px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--plume-radius-item);
+	color: var(--plume-ink-faint);
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-seg-btn:hover {
+	color: var(--plume-ink);
+}
+
+.git-seg-btn[aria-pressed="true"] {
+	background: var(--plume-elevated);
+	color: var(--plume-ink);
+}
+
+/* 改动视图通栏铺开：分区头、文件头和 diff 表面从左缘对齐到右缘，不再悬浮在留白里。 */
+.git-changes-list {
+	padding: 0 0 12px;
+}
+
+/* ── 面板外框、顶栏、同步行、视图排 ───────────────────── */
 
 .git-panel {
 	display: flex;
@@ -126,13 +193,19 @@
 	flex-direction: column;
 }
 
+.git-header {
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--plume-line-soft);
+	background: var(--plume-shell);
+}
+
 .git-sync-row {
 	display: flex;
-	height: 32px;
+	height: 34px;
 	flex-shrink: 0;
 	align-items: center;
 	gap: 6px;
-	padding: 0 10px;
+	padding: 0 10px 0 12px;
 }
 
 .git-sync-detail {
@@ -170,7 +243,7 @@
 	flex-shrink: 0;
 	align-items: center;
 	gap: 2px;
-	padding: 0 6px 6px;
+	padding: 0 12px 8px 10px;
 }
 
 /* ── 空状态 ───────────────────────────────────────────── */
@@ -207,7 +280,39 @@
 	gap: 8px;
 }
 
-/* ── 分组标题和行 ─────────────────────────────────────── */
+/* ── 分组标题和改动分区头 ─────────────────────────────── */
+
+.git-section + .git-section {
+	margin-top: 8px;
+	border-top: 1px solid var(--plume-line-soft);
+}
+
+.git-section-bar {
+	display: flex;
+	height: 32px;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	background: color-mix(in srgb, var(--plume-card) 55%, var(--plume-shell));
+	padding: 0 10px 0 12px;
+}
+
+.git-count-pill {
+	display: inline-flex;
+	height: 18px;
+	min-width: 18px;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--plume-radius-item);
+	background: color-mix(in srgb, var(--plume-fg) 6%, transparent);
+	padding: 0 5px;
+	font-variant-numeric: tabular-nums;
+}
+
+.git-section-stat {
+	margin-left: 2px;
+}
 
 .git-group-header {
 	display: flex;
@@ -234,10 +339,13 @@
 	padding: 4px 6px;
 	text-align: left;
 	color: var(--plume-ink-muted);
-	transition: color var(--plume-t-quick) var(--plume-e-soft);
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft);
 }
 
 .git-checkout-row:hover {
+	background: var(--plume-card-hover);
 	color: var(--plume-ink);
 }
 
@@ -303,7 +411,9 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 6px 4px;
+	margin-bottom: 4px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	padding: 6px 4px 8px;
 }
 
 .git-arrow {
@@ -360,17 +470,21 @@
 	white-space: nowrap;
 	border: 1px solid var(--plume-line);
 	border-radius: var(--plume-radius-item);
-	padding: 1px 4px;
+	background: color-mix(in srgb, var(--plume-card) 70%, var(--plume-shell));
+	padding: 1px 5px;
 }
 
 .git-commit-body {
 	min-width: 0;
 	flex: 1 1 0%;
-	padding: 0 4px 6px 8px;
+	margin: 2px 4px 8px 6px;
+	overflow: hidden;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
 }
 
 .git-commit-skeleton {
-	padding: 10px 8px 10px 0;
+	padding: 10px 12px;
 }
 
 .git-commit-skeleton > * + * {

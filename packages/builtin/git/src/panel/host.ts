@@ -2,12 +2,17 @@
  * 界面入口用到的宿主能力：报一声（toast）、开自己的面板、往输入框里写一段草稿、把一段话交给会话。`apply` 时把 `ui` 存下来。
  */
 
-import type { UiContext } from "@plume/contract/ui";
+import type { FileDiffProps, UiContext } from "@plume/contract/ui";
+import { createElement, type ReactNode } from "react";
 
 let current: UiContext | null = null;
 
 export function setHost(ui: UiContext): void {
 	current = ui;
+}
+
+export function renderFileDiff(props: FileDiffProps): ReactNode {
+	return current ? createElement(current.FileDiff, props) : null;
 }
 
 export function notify(message: string, level: "info" | "warn" | "error" = "info"): void {

@@ -1,9 +1,11 @@
-import { iconColour, lookFor, ScrollText, SkeletonBar, Text } from "@plume/ui";
+import { iconColour, lookFor, SkeletonBar, Text } from "@plume/ui";
 import { ChevronRight } from "@plume/ui/icons";
 import { useState } from "react";
 import type { DiffFile } from "../api.ts";
 import { BinaryDiff } from "./BinaryDiff.tsx";
-import { DiffView } from "./DiffView.tsx";
+import { DiffView, type DiffLayout } from "./DiffView.tsx";
+import { splitPath } from "./diff-layout.ts";
+import { CopyPathButton, DiffStat, FileStatusBadge } from "./file-row.tsx";
 import { useT } from "./i18n.ts";
 import { baseName } from "./remote.ts";
 
@@ -25,6 +27,10 @@ export function FileDiffList({
 	initiallyOpen,
 	cwd = null,
 	loadingContent = false,
+	openPaths,
+	onTogglePath,
+	diffLayout = "unified",
+	wrapLines = false,
 }: {
 	files: DiffFile[];
 	/** 文件在这台机器上的哪个仓库；为空时二进制文件只写名字和大小，画不出图。 */
@@ -34,12 +40,22 @@ export function FileDiffList({
 	initiallyOpen?: boolean;
 	/** 行是真的，diff 还在读：展开的文件没有 hunk 时画占位，而不是说「没有可以按行比的内容」。 */
 	loadingContent?: boolean;
+	/** 外部受控展开集合；省略时由列表自己记。 */
+	openPaths?: ReadonlySet<string>;
+	onTogglePath?: (path: string) => void;
+	diffLayout?: DiffLayout;
+	wrapLines?: boolean;
 }) {
 	const t = useT();
-	const [open, setOpen] = useState<Set<string>>(() => (initiallyOpen ? new Set(files.map((file) => file.path)) : new Set()));
+	const [localOpen, setLocalOpen] = useState<Set<string>>(() => (initiallyOpen ? new Set(files.map((file) => file.path)) : new Set()));
+	const open = openPaths ?? localOpen;
 
 	function toggle(path: string) {
-		setOpen((current) => {
+		if (onTogglePath) {
+			onTogglePath(path);
+			return;
+		}
+		setLocalOpen((current) => {
 			const next = new Set(current);
 			if (!next.delete(path)) next.add(path);
 			return next;
@@ -55,42 +71,53 @@ export function FileDiffList({
 	}
 
 	return (
-		<>
+		<div className="git-file-list">
 			{files.map((file) => {
 				const expanded = open.has(file.path);
 				const look = lookFor(baseName(file.path), isDirectory(file.path));
+				const { dir, name } = splitPath(file.path);
 				return (
-					<div key={file.path} className="git-file">
+					<div key={file.path} className="git-file" data-expanded={expanded ? "true" : undefined}>
 						{/*
 						 * 滚进这个文件的 diff 时文件名钉在顶上：读到三百行深处，问题变成「我在哪个文件里」。
 						 * 每个头只在自己的文件里钉，下一个经过时把它推走。不透明的底放在方的外层，圆角压在滚动的 diff 上会露出角。
 						 */}
 						<div className="git-file-pin">
-							<div className="plume-scroll git-file-head">
+							<div className="git-file-head">
 								<button type="button" data-plume-tip={file.path} onClick={() => toggle(file.path)} aria-expanded={expanded} className="git-file-toggle">
-									<ChevronRight size={11} strokeWidth={2.2} className="git-chevron" style={expanded ? { transform: "rotate(90deg)" } : undefined} />
-									<look.Icon size={12.5} strokeWidth={1.75} className="git-icon" style={{ color: iconColour(look) }} />
-									{/* 目录是分辨两个 `index.ts` 的东西，留着。 */}
-									<Text size="detail" tone="muted" className="git-file-path">
-										<ScrollText text={file.path} className="git-diff-fill" />
-									</Text>
-									{/*
-									 * 按钮出现时，数字让出行尾，两样错开淡入淡出，见 diff.css 的 `.git-file-stat`。
-									 */}
-									<Text size="caption" mono numeric className="git-file-stat">
-										{file.added > 0 && <span className="git-add">+{file.added}</span>}
-										{file.added > 0 && file.removed > 0 && " "}
-										{file.removed > 0 && <span className="git-remove">−{file.removed}</span>}
-									</Text>
+									<ChevronRight size={12} strokeWidth={2} className="git-chevron" style={expanded ? { transform: "rotate(90deg)" } : undefined} />
+									<look.Icon size={13} strokeWidth={1.75} className="git-icon" style={{ color: iconColour(look) }} />
+									{/* 文件名排在前面且满色加微重，目录淡一档跟在后面并先缩：宽窄面板下文件名都对齐同一条左缘。 */}
+									<span className="git-file-path">
+										<Text
+											size="detail"
+											tone={file.status === "deleted" ? "muted" : "default"}
+											weight="medium"
+											className={`git-file-base${file.status === "deleted" ? " git-file-deleted" : ""}`}
+										>
+											{name}
+										</Text>
+										{dir && (
+											<Text size="caption" tone="faint" className="git-file-dir">
+												{dir.endsWith("/") ? dir.slice(0, -1) : dir}
+											</Text>
+										)}
+									</span>
 								</button>
-								{actions && (
-									/* 盖在数字上而不占位置，见 diff.css 的 `.git-file-actions`。 */
-									<div className="git-file-actions">{actions(file)}</div>
-								)}
+
+								{/* 行内悬停动作放在路径和统计之间：不再用一层半透明灰块把行尾的增删数糊住。 */}
+								<div className="git-file-actions">
+									<CopyPathButton path={file.path} />
+									{actions?.(file)}
+								</div>
+
+								<div className="git-file-meta">
+									<DiffStat added={file.added} removed={file.removed} />
+									<FileStatusBadge status={file.status} />
+								</div>
 							</div>
 						</div>
 
-						{/* 不套卡片：每行自己有底色，名字在不透明的条上，再加一圈边是在分开两样本来就分得开的东西。 */}
 						{expanded && (
 							<div className="git-enter git-file-body">
 								{isDirectory(file.path) ? (
@@ -110,13 +137,13 @@ export function FileDiffList({
 										{t("diffList.noLineDiff")}
 									</Text>
 								) : (
-									<DiffView hunks={file.hunks} path={file.path} />
+									<DiffView hunks={file.hunks} path={file.path} layout={diffLayout} wrap={wrapLines} />
 								)}
 							</div>
 						)}
 					</div>
 				);
 			})}
-		</>
+		</div>
 	);
 }

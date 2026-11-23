@@ -25,28 +25,27 @@ function highlightStyle(): HighlightStyle {
 		 * 键就是键，不管语法怎么叫它。
 		 *
 		 * JSON 把键标成 `propertyName`，YAML 和 JavaScript 的对象字面量标成 `definition(propertyName)`。
-		 * 后者要是跟着 `definition(variableName)` 走成正文色，一个 YAML 文件就是一面平墙：键和值一样重，
-		 * 只有带引号的字符串有颜色。
+		 * 落到 `attribute` 色槽，和函数调用、变量区分开，JSON / YAML 也不会变成一面平墙。
 		 */
-		{ tag: [t.definition(t.propertyName)], color: c("function") },
+		{ tag: [t.definition(t.propertyName)], color: c("attribute") },
 		/*
-		 * 正在被定义的名字上色，被使用的不上。
+		 * 正在被定义的名字上色，被使用的走变量色。
 		 *
 		 * `func Greet(...)`、`const answer = 42` 里最有信息量的就是这一行要引入的那个词；普通代码里大多数
-		 * 标识符都出现在定义处，它们是正文色的话，深色主题下看上去就是白字偶尔点缀几处颜色。
+		 * 标识符都出现在定义处，函数定义和导入名跟着 `function` 色走，读起来层次更清。
 		 */
 		{ tag: [t.definition(t.variableName)], color: c("function") },
 		/*
 		 * 不带引号的标量，YAML 右边大多是它。
 		 *
 		 * 语法分不清 `true`、`1.2.3` 和一个裸词——都是 `Literal`——所以没法像有类型的语言那样分成布尔和数字。
-		 * 照实画：键带颜色，值是正文。
+		 * 照实画：键带颜色，值是代码默认前景色。
 		 */
-		{ tag: [t.content], color: c("variable") },
+		{ tag: [t.content], color: "var(--plume-code-fg)" },
 		// 锚点和别名（&name、*name）是引用，和其他标签一样读。
 		{ tag: [t.labelName], color: c("keyword") },
 		{ tag: [t.typeName, t.className, t.namespace, t.constant(t.variableName), t.standard(t.variableName), t.special(t.variableName)], color: c("type") },
-		{ tag: [t.propertyName], color: c("function") },
+		{ tag: [t.propertyName], color: c("attribute") },
 		{ tag: [t.variableName], color: c("variable") },
 		{ tag: [t.operator], color: c("operator") },
 		{ tag: [t.punctuation, t.separator, t.bracket], color: c("punctuation") },

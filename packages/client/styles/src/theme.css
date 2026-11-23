@@ -102,23 +102,23 @@
 	--plume-inline-code-bg: color-mix(in srgb, var(--plume-fg) 7.5%, transparent);
 	--plume-inline-code-fg: var(--plume-ink);
 	--plume-inline-code-ring: transparent;
-	--plume-diff-add: rgb(51 128 63 / 0.12);
-	--plume-diff-remove: rgb(200 64 47 / 0.1);
+	--plume-diff-add: rgb(16 185 129 / 0.13);
+	--plume-diff-remove: rgb(239 68 68 / 0.12);
 	/*
 	 * 语法配色：回复里代码块的关键字、字符串这些，只经 var() 用在高亮样式里。按读代码时最常找的东西分档：
 	 * 被定义的名字（function）、类型（type）、字面量（string、number），注释最淡。变量名和没有规则认领的字是正文色。
 	 */
-	--plume-syntax-keyword: #2b62c6;
-	--plume-syntax-string: #0f7d78;
-	--plume-syntax-number: #9a6a00;
-	--plume-syntax-comment: #8a8a8a;
-	--plume-syntax-function: #8a45a5;
-	--plume-syntax-type: #33803f;
+	--plume-syntax-keyword: #d6285a;
+	--plume-syntax-string: #16803c;
+	--plume-syntax-number: #0369a1;
+	--plume-syntax-comment: #6b7280;
+	--plume-syntax-function: #6d28d9;
+	--plume-syntax-type: #0e7490;
 	--plume-syntax-variable: var(--plume-ink);
-	--plume-syntax-operator: var(--plume-syntax-punctuation);
-	--plume-syntax-punctuation: #5f5f5f;
-	--plume-syntax-tag: #2b62c6;
-	--plume-syntax-attribute: #9a6a00;
+	--plume-syntax-operator: #6d28d9;
+	--plume-syntax-punctuation: #6b7280;
+	--plume-syntax-tag: #a21caf;
+	--plume-syntax-attribute: #b45309;
 
 	/*
 	 * ── 圆角 ── 其余用 Tailwind 的刻度（lg 8、2xl 16、full……），落在两档中间的往小取。这里是有语义的几档。
@@ -228,19 +228,21 @@
 		--plume-chart-5: #fb7185;
 		--plume-chart-6: #a3e635;
 
-		--plume-diff-add: rgb(127 201 138 / 0.14);
-		--plume-diff-remove: rgb(240 113 113 / 0.13);
+		--plume-diff-add: rgb(8 196 128 / 0.13);
+		--plume-diff-remove: rgb(242 85 90 / 0.14);
 		--plume-inline-code-bg: color-mix(in srgb, var(--plume-fg) 10%, transparent);
 
-		--plume-syntax-keyword: #79b8ff;
-		--plume-syntax-string: #6fd2c8;
-		--plume-syntax-number: #e3c07b;
-		--plume-syntax-comment: #6b6b6b;
-		--plume-syntax-function: #c39ac9;
-		--plume-syntax-type: #7fc98a;
-		--plume-syntax-punctuation: #a0a0a0;
-		--plume-syntax-tag: #79b8ff;
-		--plume-syntax-attribute: #e3c07b;
+		--plume-syntax-keyword: #ff678d;
+		--plume-syntax-string: #5dcd70;
+		--plume-syntax-number: #68cdf2;
+		--plume-syntax-comment: #787c82;
+		--plume-syntax-function: #a77bfa;
+		--plume-syntax-type: #38c6f4;
+		--plume-syntax-variable: #ffa35a;
+		--plume-syntax-operator: #b388ff;
+		--plume-syntax-punctuation: #7d8288;
+		--plume-syntax-tag: #d568ea;
+		--plume-syntax-attribute: #ffa35a;
 
 		/* 深底上同样的投影看不见，旋钮像贴在轨道上；玻璃不要顶边内高光，压暗了也会叠在描边上、让顶边看着比另外三边粗。 */
 		/* 影子压在暗底上要重得多才看得出。 */

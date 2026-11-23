@@ -99,9 +99,9 @@ export async function checkDocumentPlugins({
 	const commentFile = `[...document.querySelectorAll('${shown} .git-file')].find((row) => row.querySelector('.git-tree-file-name')?.textContent === 'comment.txt')`;
 	await until(commentFile, "Git 列出新写的文件");
 	await clickVisibleIn(page, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
-	await until(`${commentFile}?.querySelector('.git-diff-pick')`, "改动视图的行号可以评论");
+	await until(`${commentFile}?.querySelector('[data-diff-pick]')`, "改动视图的行号可以评论");
 	await page(`(() => {
-		${commentFile}.querySelector('.git-diff-pick').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+		${commentFile}.querySelector('[data-diff-pick]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
 		window.dispatchEvent(new MouseEvent('mouseup'));
 	})()`);
 	await until("document.querySelector('[data-diff-comment-input]')", "松手后弹出评论框");
@@ -153,11 +153,11 @@ export async function checkDocumentPlugins({
 			"Promise.all(document.getAnimations().filter(a => Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a => a.finished.catch(() => {})))",
 		);
 		await writeFile(join(outDir, "smoke-panel-window-git.png"), (await detached.webContents.capturePage()).toPNG());
-		if (!(await detachedPage(`Boolean(${commentFile}.querySelector('.git-diff-pick'))`)))
+		if (!(await detachedPage(`Boolean(${commentFile}.querySelector('[data-diff-pick]'))`)))
 			await clickVisibleIn(detachedPage, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
-		await inDetached(`${commentFile}?.querySelector('.git-diff-pick')`, "改动视图的行号可以评论");
+		await inDetached(`${commentFile}?.querySelector('[data-diff-pick]')`, "改动视图的行号可以评论");
 		await detached.webContents.executeJavaScript(`(() => {
-			${commentFile}.querySelector('.git-diff-pick').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+			${commentFile}.querySelector('[data-diff-pick]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
 			window.dispatchEvent(new MouseEvent('mouseup'));
 		})()`);
 		await inDetached("document.querySelector('[data-diff-comment-input]')", "松手后弹出评论框");

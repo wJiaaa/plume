@@ -444,135 +444,137 @@ export function GitPanel({ session, cwd: projectDir, shown }: PanelProps) {
 
 	return (
 		<div className="git-panel">
-			{/* 下面说的是哪个检出。只有能选时才有这一行：一个仓库、没有工作树是常态，下面的分支那一行已经说了在哪。 */}
-			{(repos.length > 1 || Object.values(trees).some((list) => list.length > 0)) && (
-				<RepoPicker repos={repos} trees={trees} selected={cwd} onSelect={setSelected} />
-			)}
+			<div className="git-header">
+				{/* 下面说的是哪个检出。只有能选时才有这一行：一个仓库、没有工作树是常态，下面的分支那一行已经说了在哪。 */}
+				{(repos.length > 1 || Object.values(trees).some((list) => list.length > 0)) && (
+					<RepoPicker repos={repos} trees={trees} selected={cwd} onSelect={setSelected} />
+				)}
 
-			{/* 在哪，以及和远端之间的三件事。每颗按钮说什么都来自 `syncPlan`，这里不做判断。 */}
-			<div ref={syncRowRef} className="git-sync-row" data-plume-sync={status?.remoteState ?? "none"}>
-				<GitBranch size={12.5} strokeWidth={1.8} className="git-shrink-0 git-faint" />
-				<Text size="label" tone="muted" className="git-truncate">
-					<span className="git-ink">{plan.branch}</span>
-					{plan.detail && <span className="git-sync-detail">{plan.detail}</span>}
-				</Text>
-				<div className="git-spacer" />
-				{view === "changes" && (
-					<>
-						<SyncControl
-							icon={<ArrowDownToLine size={12} strokeWidth={1.9} />}
-							word={t("common.pull")}
-							state={plan.pull}
-							running={sync === "pull"}
-							// 只有在跑的那一颗还能按，再按一次是取消。
-							disabled={plan.pull.disabled || busy || (sync !== null && sync !== "pull")}
-							roomForWords={roomForWords}
-							onClick={() => void remote("pull", () => git().pull(cwd))}
-						/>
-						{/*
-						 * 提交的入口，也是提交这件事唯一的进度条。
-						 *
-						 * 它转圈的理由有两个，意思正相反：推送在跑，按一下是取消；提交或生成在跑，按一下是打开弹窗。
-						 * `busy` 也要让开：提交走 `act`，它自己会置上 `busy`，照旧禁用的话人刚按下提交，通往它的唯一入口就灰了。
-						 */}
-						<SyncControl
-							icon={<ArrowUpFromLine size={12} strokeWidth={1.9} />}
-							word={neverPublished ? t("git.publish") : t("common.push")}
-							state={plan.push}
-							running={sync === "push" || commitWork.active}
-							cancellable={sync === "push"}
-							busyLabel={commitWork.generating ? t("commit.generating") : t("commit.committing")}
-							disabled={(busy && !commitWork.active) || (sync !== null && sync !== "push")}
-							roomForWords={roomForWords}
-							onClick={(event) => {
-								if (sync === "push") {
-									call.current?.cancel();
-									return;
-								}
-								pushPopover.toggle(event);
-							}}
-						/>
-						{pushPopover.open && (
-							<CommitPushDialog
-								cwd={cwd}
-								branch={status?.branch ?? plan.branch}
-								stagedCount={status?.staged.length ?? 0}
-								unstagedCount={status?.unstaged.length ?? 0}
-								addedCount={status?.unstaged.reduce((sum, file) => sum + file.added, 0) ?? 0}
-								removedCount={status?.unstaged.reduce((sum, file) => sum + file.removed, 0) ?? 0}
-								busy={busy}
-								running={sync !== null}
-								work={commitWork}
-								// 和工具条上那颗推送按钮读同一处，两边不各算各的。
-								unpushed={plan.push.count ?? 0}
-								publish={neverPublished && !plan.push.disabled}
-								pushTip={plan.push.tip}
-								onClose={pushPopover.close}
-								// 分支换了，这一层的状态和同步计划都要重读，否则弹窗关上后面板还写着旧分支。
-								onBranchChanged={() => void read()}
-								onCommit={(message) => act(() => git().commitStaged(cwd, message))}
-								// 走到这里 `message` 一定不空：留空时的生成发生在弹窗里，那里才画得出「正在生成」。
-								onCommitAndPush={async (message, includeUnstaged) => {
-									if (includeUnstaged) {
-										const current = await git().status(cwd);
-										const paths = current.unstaged.map((file) => file.path);
-										if (paths.length > 0) await git().stage(cwd, paths);
+				{/* 在哪，以及和远端之间的三件事。每颗按钮说什么都来自 `syncPlan`，这里不做判断。 */}
+				<div ref={syncRowRef} className="git-sync-row" data-plume-sync={status?.remoteState ?? "none"}>
+					<GitBranch size={12.5} strokeWidth={1.8} className="git-shrink-0 git-faint" />
+					<Text size="label" tone="muted" className="git-truncate">
+						<span className="git-ink">{plan.branch}</span>
+						{plan.detail && <span className="git-sync-detail">{plan.detail}</span>}
+					</Text>
+					<div className="git-spacer" />
+					{view === "changes" && (
+						<>
+							<SyncControl
+								icon={<ArrowDownToLine size={12} strokeWidth={1.9} />}
+								word={t("common.pull")}
+								state={plan.pull}
+								running={sync === "pull"}
+								// 只有在跑的那一颗还能按，再按一次是取消。
+								disabled={plan.pull.disabled || busy || (sync !== null && sync !== "pull")}
+								roomForWords={roomForWords}
+								onClick={() => void remote("pull", () => git().pull(cwd))}
+							/>
+							{/*
+							 * 提交的入口，也是提交这件事唯一的进度条。
+							 *
+							 * 它转圈的理由有两个，意思正相反：推送在跑，按一下是取消；提交或生成在跑，按一下是打开弹窗。
+							 * `busy` 也要让开：提交走 `act`，它自己会置上 `busy`，照旧禁用的话人刚按下提交，通往它的唯一入口就灰了。
+							 */}
+							<SyncControl
+								icon={<ArrowUpFromLine size={12} strokeWidth={1.9} />}
+								word={neverPublished ? t("git.publish") : t("common.push")}
+								state={plan.push}
+								running={sync === "push" || commitWork.active}
+								cancellable={sync === "push"}
+								busyLabel={commitWork.generating ? t("commit.generating") : t("commit.committing")}
+								disabled={(busy && !commitWork.active) || (sync !== null && sync !== "push")}
+								roomForWords={roomForWords}
+								onClick={(event) => {
+									if (sync === "push") {
+										call.current?.cancel();
+										return;
 									}
-									if (!(await act(() => git().commitStaged(cwd, message)))) return false;
-									void remote("push", () => git().push(cwd));
-									return true;
-								}}
-								onPush={async () => {
-									void remote("push", () => git().push(cwd));
+									pushPopover.toggle(event);
 								}}
 							/>
-						)}
-					</>
-				)}
-				{/*
-				 * 两件事一起做，而且两件都要：问远端（不获取的话 ahead、behind 说的是很久以前），再重读本地
-				 * （实时刷新只在一轮在跑时轮询，别的编辑器里改的东西没人问就看不见）。
-				 */}
-				<IconButton
-					icon={sync === "fetch" ? <ActionSpinner size={12} /> : <RefreshCw size={12} strokeWidth={1.9} />}
-					label={sync === "fetch" ? t("git.cancelRefresh") : t("git.refresh")}
-					size="sm"
-					disabled={busy || (sync !== null && sync !== "fetch")}
-					onClick={() => void remote("fetch", () => git().fetch(cwd, false))}
-				/>
-			</div>
+							{pushPopover.open && (
+								<CommitPushDialog
+									cwd={cwd}
+									branch={status?.branch ?? plan.branch}
+									stagedCount={status?.staged.length ?? 0}
+									unstagedCount={status?.unstaged.length ?? 0}
+									addedCount={status?.unstaged.reduce((sum, file) => sum + file.added, 0) ?? 0}
+									removedCount={status?.unstaged.reduce((sum, file) => sum + file.removed, 0) ?? 0}
+									busy={busy}
+									running={sync !== null}
+									work={commitWork}
+									// 和工具条上那颗推送按钮读同一处，两边不各算各的。
+									unpushed={plan.push.count ?? 0}
+									publish={neverPublished && !plan.push.disabled}
+									pushTip={plan.push.tip}
+									onClose={pushPopover.close}
+									// 分支换了，这一层的状态和同步计划都要重读，否则弹窗关上后面板还写着旧分支。
+									onBranchChanged={() => void read()}
+									onCommit={(message) => act(() => git().commitStaged(cwd, message))}
+									// 走到这里 `message` 一定不空：留空时的生成发生在弹窗里，那里才画得出「正在生成」。
+									onCommitAndPush={async (message, includeUnstaged) => {
+										if (includeUnstaged) {
+											const current = await git().status(cwd);
+											const paths = current.unstaged.map((file) => file.path);
+											if (paths.length > 0) await git().stage(cwd, paths);
+										}
+										if (!(await act(() => git().commitStaged(cwd, message)))) return false;
+										void remote("push", () => git().push(cwd));
+										return true;
+									}}
+									onPush={async () => {
+										void remote("push", () => git().push(cwd));
+									}}
+								/>
+							)}
+						</>
+					)}
+					{/*
+					 * 两件事一起做，而且两件都要：问远端（不获取的话 ahead、behind 说的是很久以前），再重读本地
+					 * （实时刷新只在一轮在跑时轮询，别的编辑器里改的东西没人问就看不见）。
+					 */}
+					<IconButton
+						icon={sync === "fetch" ? <ActionSpinner size={12} /> : <RefreshCw size={12} strokeWidth={1.9} />}
+						label={sync === "fetch" ? t("git.cancelRefresh") : t("git.refresh")}
+						size="sm"
+						disabled={busy || (sync !== null && sync !== "fetch")}
+						onClick={() => void remote("fetch", () => git().fetch(cwd, false))}
+					/>
+				</div>
 
-			{/* 一排视图，有意义的地方带个数。 */}
-			<div ref={navRef} className="git-views">
-				{VIEWS.map((entry) => {
-					const count = entry.id === "changes" && changeCount > 0 ? changeCount : null;
-					const icon = <entry.icon size={12.5} strokeWidth={1.8} className="git-shrink-0" />;
-					// 窄的时候字进悬停提示、数进角标，三个视图照样放得下。
-					return narrowNav ? (
-						<IconButton
-							key={entry.id}
-							label={`${t(entry.labelKey)}${count ? ` (${count})` : ""}`}
-							ariaLabel={t(entry.labelKey)}
-							active={view === entry.id}
-							badge={count}
-							onClick={() => setView(entry.id)}
-							icon={icon}
-						/>
-					) : (
-						<Button
-							key={entry.id}
-							variant="subtle"
-							size="sm"
-							ariaLabel={t(entry.labelKey)}
-							pressed={view === entry.id}
-							onClick={() => setView(entry.id)}
-							icon={icon}
-						>
-							<span className="git-truncate">{t(entry.labelKey)}</span>
-							{count && <CountUp value={count} className="git-count" />}
-						</Button>
-					);
-				})}
+				{/* 一排视图，有意义的地方带个数。 */}
+				<div ref={navRef} className="git-views">
+					{VIEWS.map((entry) => {
+						const count = entry.id === "changes" && changeCount > 0 ? changeCount : null;
+						const icon = <entry.icon size={12.5} strokeWidth={1.8} className="git-shrink-0" />;
+						// 窄的时候字进悬停提示、数进角标，三个视图照样放得下。
+						return narrowNav ? (
+							<IconButton
+								key={entry.id}
+								label={`${t(entry.labelKey)}${count ? ` (${count})` : ""}`}
+								ariaLabel={t(entry.labelKey)}
+								active={view === entry.id}
+								badge={count}
+								onClick={() => setView(entry.id)}
+								icon={icon}
+							/>
+						) : (
+							<Button
+								key={entry.id}
+								variant="subtle"
+								size="sm"
+								ariaLabel={t(entry.labelKey)}
+								pressed={view === entry.id}
+								onClick={() => setView(entry.id)}
+								icon={icon}
+							>
+								<span className="git-truncate">{t(entry.labelKey)}</span>
+								{count && <CountUp value={count} className="git-count" />}
+							</Button>
+						);
+					})}
+				</div>
 			</div>
 
 			<RetainedViews

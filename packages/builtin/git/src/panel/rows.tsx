@@ -5,18 +5,32 @@
 import { hoverSlot, HoverRow, HoverRowMark, HoverRowReveal, IconButton, ScrollText, Text } from "@plume/ui";
 import { ArrowRightLeft, FolderGit2, GitBranch, GitBranchPlus, GitCompare, GitPullRequestArrow, Trash2 } from "@plume/ui/icons";
 import type { RepoRef } from "../api.ts";
+import { DiffStat } from "./file-row.tsx";
 import { useT } from "./i18n.ts";
 
-/** 两组行之间带名字的分隔。 */
-export function GroupHeader({ label, count, actions }: { label: string; count: number; actions?: React.ReactNode }) {
+/** 两组行之间带名字的分隔。`surface="bar"` 用于改动视图的通栏分区头。 */
+export function GroupHeader({
+	label,
+	count,
+	stat,
+	actions,
+	surface = "plain",
+}: {
+	label: string;
+	count: number;
+	stat?: { added: number; removed: number };
+	actions?: React.ReactNode;
+	surface?: "plain" | "bar";
+}) {
 	return (
-		<div className="git-group-header">
-			<Text size="caption" tone="faint" weight="medium" className="git-fixed">
+		<div className={surface === "bar" ? "git-section-bar" : "git-group-header"}>
+			<Text size="caption" tone={surface === "bar" ? "muted" : "faint"} weight="medium" className="git-fixed">
 				{label}
 			</Text>
-			<Text size="caption" tone="faint" numeric className="git-fixed">
+			<Text size="caption" tone="faint" numeric className={surface === "bar" ? "git-count-pill git-fixed" : "git-fixed"}>
 				{count}
 			</Text>
+			{stat && <DiffStat added={stat.added} removed={stat.removed} inline className="git-section-stat" />}
 			{actions && <div className="git-group-actions">{actions}</div>}
 		</div>
 	);

@@ -5,53 +5,95 @@
 
 /* ── 文件行：列表和树共用 ─────────────────────────────── */
 
+.git-file-list {
+	display: flex;
+	flex-direction: column;
+}
+
 .git-file {
-	margin-bottom: 0.125rem;
+	border-bottom: 1px solid var(--plume-line-soft);
+}
+
+.git-file[data-expanded="true"] {
+	border-bottom-color: var(--plume-line);
 }
 
 /*
- * 滚进这个文件的 diff 时文件名钉在顶上。不透明的底放在方的外层，圆角压在滚动的 diff 上会露出角。
+ * 滚进这个文件的 diff 时文件名钉在顶上。不透明的底放在外层，滚过去的 diff 不会透出角。
  */
 .git-file-pin {
 	position: sticky;
 	top: 0;
 	z-index: 10;
-	background: var(--plume-shell);
+	--git-row-bg: var(--plume-shell);
+	--git-row-hover: color-mix(in srgb, var(--plume-fg) 5.5%, var(--git-row-bg));
+	background: var(--git-row-bg);
+}
+
+.git-file[data-expanded="true"] > .git-file-pin {
+	--git-row-bg: var(--plume-code-bg);
+	border-bottom: 1px solid var(--plume-line-soft);
 }
 
 .git-file-head {
+	container-type: inline-size;
 	position: relative;
 	display: flex;
+	height: 32px;
 	align-items: center;
-	gap: 0.25rem;
-	padding-right: 0.25rem;
-	border-radius: var(--plume-radius-item);
+	gap: 6px;
+	padding: 0 12px 0 10px;
 	transition:
 		color var(--plume-t-quick) var(--plume-e-soft),
 		background-color var(--plume-t-quick) var(--plume-e-soft);
 }
 
-.git-file-head:hover {
-	background: var(--plume-card-hover);
+/* T3 Code 风格的左缘细边提示：悬停轻亮，展开着时落成强调色，不再用灰块遮住行尾。 */
+.git-file-head::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	width: 2px;
+	background: transparent;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.git-file-head:hover,
+.git-file-head:focus-within {
+	background: var(--git-row-hover);
+}
+
+.git-file-head:hover::before {
+	background: color-mix(in srgb, var(--plume-fg) 26%, transparent);
+}
+
+.git-file[data-expanded="true"] > .git-file-pin > .git-file-head::before {
+	background: var(--plume-accent);
+}
+
+.git-tree-file-head {
+	padding-right: 12px;
 }
 
 .git-file-toggle {
 	display: flex;
 	min-width: 0;
-	flex: 1;
+	flex: 1 1 0%;
+	height: 100%;
 	align-items: center;
-	gap: 0.375rem;
-	padding: 0.375rem 0 0.375rem 0.25rem;
+	gap: 6px;
 	text-align: left;
 }
 
 .git-tree-toggle {
 	display: flex;
 	min-width: 0;
-	flex: 1;
+	flex: 1 1 0%;
+	height: 100%;
 	align-items: center;
-	gap: 0.375rem;
-	padding: 0.25rem 0;
+	gap: 6px;
 	text-align: left;
 }
 
@@ -61,30 +103,127 @@
 	transition: transform var(--plume-t-quick) var(--plume-e-soft);
 }
 
+.git-file-head:hover .git-chevron,
+.git-file[data-expanded="true"] .git-chevron {
+	color: var(--plume-ink-muted);
+}
+
 .git-icon {
 	flex-shrink: 0;
 }
 
-/* 列表里的路径：外层给字号和颜色，里面的 ScrollText 占满剩下的宽度。 */
+/* 路径：文件名在前、目录淡一档在后并先缩，宽窄面板下文件名都清楚。 */
 .git-file-path {
 	display: flex;
 	min-width: 0;
-	flex: 1;
-	text-align: left;
+	flex: 1 1 0%;
+	align-items: baseline;
+	gap: 6px;
+	overflow: hidden;
 }
 
-.git-diff-fill {
+.git-file-base {
+	flex: 0 1 auto;
 	min-width: 0;
-	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.git-file-dir {
+	min-width: 0;
+	flex: 0 9999 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.git-file-deleted {
+	text-decoration: line-through;
 }
 
 .git-tree-file-name {
 	min-width: 0;
-	flex: 1;
+	flex: 1 1 0%;
 	overflow: hidden;
 	text-align: left;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/*
+ * 悬停动作条：
+ * - 窄面板下平时不占行宽，悬停时用实色底和左缘渐隐盖住行尾统计，不挤文件名；
+ * - 宽面板（≥ 380px）下直接排在统计左侧淡入，行尾增删数与状态标始终可见、不闪不跳。
+ */
+.git-file-actions {
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 12px;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding-left: 16px;
+	background: linear-gradient(to right, transparent, var(--git-row-hover) 14px);
+	opacity: 0;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+
+.git-file-head:hover .git-file-actions,
+.git-file-head:focus-within .git-file-actions {
+	pointer-events: auto;
+	opacity: 1;
+}
+
+/* 行尾元信息：对齐的增删数 + git 状态字母标。 */
+.git-file-meta {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+
+.git-file-head:hover .git-file-meta,
+.git-file-head:focus-within .git-file-meta {
+	opacity: 0;
+}
+
+@container (min-width: 380px) {
+	.git-file-actions {
+		position: static;
+		padding-left: 0;
+		background: none;
+	}
+
+	.git-file-head:hover .git-file-meta,
+	.git-file-head:focus-within .git-file-meta {
+		opacity: 1;
+	}
+}
+
+.git-status-spacer {
+	width: 18px;
+	flex-shrink: 0;
+}
+
+.git-stat {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	min-width: 44px;
+	text-align: right;
+}
+
+.git-stat-inline {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 5px;
 }
 
 .git-add {
@@ -95,85 +234,79 @@
 	color: var(--plume-danger);
 }
 
-/*
- * 按钮出现时，数字让出行尾。两样东西占同一个位置，同时淡入淡出会有一段半透明地叠着，像画糊了，
- * 所以错开：指针进来数字立刻走，按钮 90ms 后才来；离开时反过来。
- */
-.git-file-stat {
+.git-status-badge {
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
 	flex-shrink: 0;
-	transition-property: opacity;
-	transition-duration: var(--plume-t-quick);
-	transition-timing-function: var(--plume-e-out);
-	transition-delay: 90ms;
-}
-
-.git-file:hover .git-file-stat,
-.git-file:focus-within .git-file-stat {
-	opacity: 0;
-	transition-delay: 0s;
-}
-
-/* 盖在数字上而不占位置；透明时不接点击，否则会吃掉本该落在行上的点击。 */
-.git-file-actions {
-	pointer-events: none;
-	position: absolute;
-	right: 0.25rem;
-	display: flex;
 	align-items: center;
+	justify-content: center;
 	border-radius: var(--plume-radius-item);
-	background: var(--plume-card-hover);
-	opacity: 0;
-	transition-property: opacity;
-	transition-duration: var(--plume-t-quick);
-	transition-timing-function: var(--plume-e-out);
-	transition-delay: 0s;
+	text-align: center;
+	user-select: none;
 }
 
-.git-file:hover .git-file-actions,
-.git-file:focus-within .git-file-actions {
-	pointer-events: auto;
-	opacity: 1;
-	transition-delay: 90ms;
+.git-status-badge[data-git-status="added"],
+.git-status-badge[data-git-status="untracked"] {
+	background: color-mix(in srgb, var(--plume-ok) 12%, transparent);
+	color: var(--plume-ok);
 }
 
-/* 展开的那一块不套卡片：每行自己有底色，名字在不透明的条上。 */
+.git-status-badge[data-git-status="modified"] {
+	background: color-mix(in srgb, var(--plume-accent) 12%, transparent);
+	color: var(--plume-accent);
+}
+
+.git-status-badge[data-git-status="deleted"] {
+	background: color-mix(in srgb, var(--plume-danger) 12%, transparent);
+	color: var(--plume-danger);
+}
+
+.git-status-badge[data-git-status="renamed"] {
+	background: color-mix(in srgb, var(--plume-violet) 14%, transparent);
+	color: var(--plume-violet);
+}
+
 .git-file-body {
-	margin-top: 0.125rem;
-	margin-bottom: 0.375rem;
-	border-top: 1px solid var(--plume-line-soft);
-	border-bottom: 1px solid var(--plume-line-soft);
+	background: var(--plume-code-bg);
 }
 
 .git-file-note {
-	padding: 1rem 0.75rem;
+	padding: 14px 12px;
 	text-align: center;
 }
 
 .git-file-skeleton {
 	display: flex;
 	flex-direction: column;
-	gap: 0.5rem;
-	padding: 0.75rem;
+	gap: 8px;
+	padding: 12px;
 }
 
 .git-files-empty {
-	padding: 1.5rem 0.5rem;
+	padding: 24px 12px;
 	text-align: center;
 }
 
-/* ── 树：目录行 ─────────────────────────────── */
+/* ── 树：目录行与层级细线 ─────────────────────────────── */
 
 .git-tree {
-	padding: 0.125rem 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.git-tree-group {
+	position: relative;
 }
 
 .git-tree-folder {
 	display: flex;
+	height: 30px;
 	width: 100%;
 	align-items: center;
-	gap: 0.375rem;
-	padding: 0.25rem 0.25rem 0.25rem 0;
-	border-radius: var(--plume-radius-field);
+	gap: 6px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	padding-right: 12px;
 	text-align: left;
 	transition:
 		color var(--plume-t-quick) var(--plume-e-soft),
@@ -189,9 +322,15 @@
 }
 
 .git-tree-folder-name {
+	min-width: 0;
+	flex: 1 1 0%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.git-tree-children {
+	position: relative;
 }
 
 .git-folder-open {
@@ -204,179 +343,16 @@
 	color: var(--plume-ink-faint);
 }
 
-/* ── 一个文件的 diff ─────────────────────────────── */
-
-.git-diff-host {
-	position: relative;
-}
-
-/*
- * diff 铺在代码主题的底上，和别处读代码一样；字体、字号、行高、字距跟着「代码」外观走，不是界面字号。
- *
- * 行号栏和左边那条色条钉在左侧，代码从它们底下横着滚过去，所以它们要有不透明的底：行的底色是半透明的，
- * 透明的行号栏会让代码从数字中间穿过去。各档是行的底色先和代码底色混好的结果，看着一样，又挡得住。
- */
-.git-diff-scroll {
-	overflow-x: auto;
-	background: var(--plume-code-bg);
-	color: var(--plume-code-fg);
-	font-family: var(--plume-font-mono);
-	font-size: var(--plume-code-size);
-	line-height: var(--plume-code-line-height);
-	letter-spacing: var(--plume-code-tracking);
-}
-
-/* 行铺在和最长那行一样宽的一层上，底色和分隔线跟着整行走，不在折叠处断掉。 */
-.git-diff-sheet {
-	width: max-content;
-	min-width: 100%;
-}
-
-/* 横向滑块是画出来的，最后一行给它留出位置，不压在代码上。 */
-.git-diff-scroll[data-hscroll="on"] > * {
-	padding-bottom: 10px;
-}
-
-/* 文件名、hunk 头、截断提示不是代码，也钉在左边，不跟着横滚走。 */
-.git-diff-note {
-	position: sticky;
-	left: 0;
-	width: max-content;
-	padding: 0.375rem 0.75rem;
-}
-
-.git-diff-path {
-	border-bottom: 1px solid var(--plume-line-soft);
-}
-
-.git-diff-hunk-head {
-	position: sticky;
-	left: 0;
-	width: max-content;
-	padding: 0.125rem 0.75rem;
-	background: color-mix(in srgb, var(--plume-shell) 60%, transparent);
-}
-
-.git-diff-hunk {
-	border-bottom: 1px solid var(--plume-line-soft);
-}
-
-.git-diff-hunk:last-child {
-	border-bottom: 0;
-}
-
-.git-diff-line {
-	display: flex;
-}
-
-.git-diff-line.git-diff-add {
-	background: color-mix(in srgb, var(--plume-ok) 8%, transparent);
-}
-
-.git-diff-line.git-diff-remove {
-	background: color-mix(in srgb, var(--plume-danger) 8%, transparent);
-}
-
-.git-diff-gutter {
-	position: sticky;
-	left: 0;
-	z-index: 1;
-	width: 42px;
-	flex-shrink: 0;
-	padding-right: 0.5rem;
-	background: var(--plume-code-bg);
-	color: color-mix(in srgb, var(--plume-ink-faint) 70%, transparent);
-	text-align: right;
-	user-select: none;
-}
-
-.git-diff-add .git-diff-gutter {
-	background: color-mix(in srgb, var(--plume-ok) 8%, var(--plume-code-bg));
-}
-
-.git-diff-remove .git-diff-gutter {
-	background: color-mix(in srgb, var(--plume-danger) 8%, var(--plume-code-bg));
-}
-
-/* 加的行一条绿色竖条，删的行一条红色，没改的行是代码底色。 */
-.git-diff-rail {
-	position: sticky;
-	left: 42px;
-	z-index: 1;
-	width: 3px;
-	flex-shrink: 0;
-	background: var(--plume-code-bg);
-}
-
-.git-diff-add .git-diff-rail {
-	background: color-mix(in srgb, var(--plume-ok) 70%, transparent);
-}
-
-.git-diff-remove .git-diff-rail {
-	background: color-mix(in srgb, var(--plume-danger) 70%, transparent);
-}
-
-.git-diff-code {
-	flex-shrink: 0;
-	padding: 0 0.625rem;
-	color: var(--plume-ink);
-	white-space: pre;
-}
-
-/*
- * 外观里选了「+/-」（分不清红绿的人用）：整行不铺底色，代码前面标 +、-。没改的行垫一个空格，等宽字体下三种行的代码对齐。
- * 标在代码那一格里，不在行首：行首前面是钉住的行号，多出一格会把改过的行的行号挤歪。
- */
-:root[data-diff-markers="symbols"] .git-diff-line.git-diff-add,
-:root[data-diff-markers="symbols"] .git-diff-line.git-diff-remove {
-	background: transparent;
-}
-
-:root[data-diff-markers="symbols"] .git-diff-code::before {
-	content: " ";
-}
-
-:root[data-diff-markers="symbols"] .git-diff-add .git-diff-code::before {
-	content: "+";
-}
-
-:root[data-diff-markers="symbols"] .git-diff-remove .git-diff-code::before {
-	content: "-";
-}
-
-/* ── diff 评论：改动视图里的行号、评论框、底下那一条 ─────────────────────────────── */
-
-/*
- * 改动视图里行号是留评论的地方，见 `DiffCommentsProvider`。
- *
- * 只标行号那一格，不铺整行：整行的底色已经在说「加了」「删了」，再铺一层就分不出是哪一种。正在评的
- * 那几行照选区的浓度，评过的淡一档；混的还是代码底色，因为这一格是钉住的，得不透明。
- */
-.git-diff-pick:hover {
-	color: var(--plume-accent);
-}
-
-.git-diff-gutter[data-diff-note="saved"] {
-	background: color-mix(in srgb, var(--plume-accent) 14%, var(--plume-code-bg));
-	color: var(--plume-accent);
-}
-
-.git-diff-gutter[data-diff-note="draft"] {
-	background: color-mix(in srgb, var(--plume-accent) 35%, var(--plume-code-bg));
-	color: var(--plume-ink);
-}
-
-.git-diff-mark {
-	vertical-align: middle;
-}
+/* ── diff 评论：评论框、底下那一条（行号样式由宿主 `ui.FileDiff` 负责） ─────────────────────────────── */
 
 .git-comment-bar {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
-	gap: 0.25rem;
-	padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+	gap: 4px;
+	padding: 6px 10px 6px 12px;
 	border-top: 1px solid var(--plume-line-soft);
+	background: color-mix(in srgb, var(--plume-card) 60%, var(--plume-shell));
 }
 
 .git-comment-bar-icon {
@@ -387,7 +363,7 @@
 .git-comment-bar-count {
 	min-width: 0;
 	flex: 1;
-	margin-left: 0.25rem;
+	margin-left: 4px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -396,13 +372,13 @@
 .git-comment-form {
 	display: flex;
 	flex-direction: column;
-	gap: 0.25rem;
-	padding: 0.5rem;
+	gap: 4px;
+	padding: 8px;
 }
 
 .git-comment-place {
 	overflow: hidden;
-	padding: 0 0.375rem;
+	padding: 0 6px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -410,12 +386,12 @@
 .git-comment-row {
 	display: flex;
 	align-items: flex-end;
-	gap: 0.25rem;
+	gap: 4px;
 }
 
 .git-comment-input {
 	flex: 1;
-	padding: 0.25rem 0.375rem;
+	padding: 4px 6px;
 }
 
 /* ── 二进制文件 ─────────────────────────────── */
@@ -430,8 +406,8 @@
 	flex-wrap: wrap;
 	align-items: flex-start;
 	justify-content: center;
-	gap: 1rem;
-	padding: 1rem 0.75rem;
+	gap: 16px;
+	padding: 16px 12px;
 }
 
 .git-binary-side {
@@ -439,12 +415,12 @@
 	min-width: 0;
 	flex-direction: column;
 	align-items: center;
-	gap: 0.375rem;
+	gap: 6px;
 	margin: 0;
 }
 
 .git-binary-frame {
-	padding: 0.5rem;
+	padding: 8px;
 	border: 1px solid var(--plume-line);
 	border-radius: var(--plume-radius-field);
 }
@@ -459,8 +435,8 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 0.5rem;
-	padding: 1.5rem 0.75rem;
+	gap: 8px;
+	padding: 24px 12px;
 }
 
 .git-binary-name {

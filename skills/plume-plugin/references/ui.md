@@ -80,7 +80,7 @@ export default {
 | `ui.findFile(path, sessionId)` | 认出纯文字里印出来的路径指的那个文件，同上 |
 | `ui.droppedPaths(transfer)` | 拖放带着的本机绝对路径，同上 |
 | `ui.useFileMenu(root)` | 组件内调用的 hook，复用打开方式、在访达中显示和复制路径菜单，同上 |
-| `ui.FileDiff` | `{ hunks, path?, showPath?, maxLines? }`，按文件语言高亮的差异视图，行号和横向滚动复用产品实现 |
+| `ui.FileDiff` | `{ hunks, path?, showPath?, maxLines?, layout?, wrap?, lineMark?, lineLabel?, onLinePress?, onLineEnter? }`，按文件语言高亮的差异视图，支持统一/分栏切换、自动换行、行内变动强调和行号交互，行号和横向滚动复用产品实现 |
 | `ui.FilePreview` | `{ sessionId, path, contents }`，文件标题栏和只读预览；`contents` 是插件经 remote 读取的 `FileContents`，不授予额外文件读取权限 |
 | `ui.documentViewer(extensions, Component)` | 注册只读文档预览，见「文件、终端和系统打开」 |
 | `ui.DocumentPreview` | 文件面板和插件共用的文档展示，同上 |

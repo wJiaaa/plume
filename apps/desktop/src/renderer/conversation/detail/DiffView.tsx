@@ -1,43 +1,114 @@
-import type { ChangeHunk } from "@plume/contract";
-import { OverlayScrollbar, useI18n } from "@plume/ui";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeHunk, ChangeLine } from "@plume/contract";
+import type { FileDiffLineMark, FileDiffLineTarget, FileDiffProps } from "@plume/contract/ui";
+import { MarkNumber, OverlayScrollbar, useI18n } from "@plume/ui";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "../../markdown/highlight.ts";
 import { useDiffHighlight } from "./diff-highlight.ts";
+import { computeUnifiedInlineDiffs, isSingleSidedDiff, mergeInlineTokens, pairSplitHunk, type InlinePart, type SplitCell } from "./diff-layout.ts";
 
 /** 一屏代码约十几行。整段保留原文、行号和滚动尺寸，只给眼前的一两页铺配色片段。 */
 const PAGE = 24;
 
+function hunkCounts(hunk: ChangeHunk): { oldCount: number; newCount: number } {
+	let oldCount = 0;
+	let newCount = 0;
+	for (const line of hunk.lines) {
+		if (line.type !== "add") oldCount += 1;
+		if (line.type !== "remove") newCount += 1;
+	}
+	return { oldCount, newCount };
+}
+
+function formatHunkHeader(hunk: ChangeHunk): string {
+	const { oldCount, newCount } = hunkCounts(hunk);
+	return `@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`;
+}
+
+function renderCode(text: string, tokens: Token[] | undefined, parts: InlinePart[] | undefined, type: ChangeLine["type"]) {
+	const markClass = type === "add" ? "tool-diff-inline-add" : "tool-diff-inline-remove";
+	if (tokens?.length && parts?.length) {
+		const runs = mergeInlineTokens(tokens, parts);
+		return runs.map((run, index) => {
+			const nodes = run.tokens.map((token, j) => (
+				<span key={j} className={token.className}>
+					{token.text}
+				</span>
+			));
+			return run.changed ? (
+				<mark key={index} className={markClass}>
+					{nodes}
+				</mark>
+			) : (
+				<Fragment key={index}>{nodes}</Fragment>
+			);
+		});
+	}
+	if (tokens?.length) {
+		return tokens.map((token, j) => (
+			<span key={j} className={token.className}>
+				{token.text}
+			</span>
+		));
+	}
+	if (parts?.length) {
+		return parts.map((part, index) =>
+			part.changed ? (
+				<mark key={index} className={markClass}>
+					{part.text}
+				</mark>
+			) : (
+				<Fragment key={index}>{part.text}</Fragment>
+			),
+		);
+	}
+	return text || " ";
+}
+
 /**
- * 统一 diff：左边一栏行号，加的行一条绿色竖条、删的行一条红色，代码在底下照语法上色。
- * 行铺在和最长那行一样宽的一层上，行号和竖条钉在左边，横滚时仍能看见。
+ * 统一 / 分栏 diff：最左缘是增删色条，紧挨着行号栏，代码按文件语法着色并叠成对改动的行内强调。
+ *
+ * - 纯新增或纯删除文件在分栏模式下自动退回通栏单列，不留半边空白、不无故挤出横滚条；
+ * - 真实双侧改动在分栏不换行时拆成左右两个独立横滚窗格，长行不再把对侧推出视野；
+ * - 统一模式不换行时行铺在和最长那行一样宽的一层上，左缘色条和行号钉在左侧，横滚时仍能看见。
  */
 export const DiffView = memo(function DiffView({
 	hunks,
 	path,
 	showPath = false,
 	maxLines = 600,
-}: {
-	hunks: ChangeHunk[];
-	path?: string;
-	showPath?: boolean;
-	maxLines?: number;
-}) {
+	layout = "unified",
+	wrap = false,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: FileDiffProps) {
 	const { t } = useI18n();
 	const scroller = useRef<HTMLDivElement>(null);
 	// 显示上限也约束解析：末尾根本不画的代码，不参与两边的语法分析。
+	// 同时保留原始 `source` 引用，行号回调拿到的 `hunk` 和调用方传入的是同一个对象。
 	const shown = useMemo(() => {
-		const visible: ChangeHunk[] = [];
+		const entries: { source: ChangeHunk; view: ChangeHunk }[] = [];
 		let remaining = maxLines;
+		let truncated = false;
 		for (const hunk of hunks) {
-			if (remaining <= 0) break;
-			visible.push(hunk.lines.length <= remaining ? hunk : { ...hunk, lines: hunk.lines.slice(0, remaining) });
-			remaining -= hunk.lines.length;
+			if (remaining <= 0) {
+				truncated = true;
+				break;
+			}
+			const take = Math.min(hunk.lines.length, remaining);
+			if (take < hunk.lines.length) truncated = true;
+			const view = take === hunk.lines.length ? hunk : { ...hunk, lines: hunk.lines.slice(0, take) };
+			entries.push({ source: hunk, view });
+			remaining -= take;
 		}
-		return { hunks: visible, paged: maxLines - remaining > PAGE, truncated: remaining < 0 || visible.length < hunks.length };
-	}, [hunks, maxLines]);
+		const views = entries.map((entry) => entry.view);
+		const effectiveLayout = layout === "split" && !isSingleSidedDiff(views) ? "split" : "unified";
+		return { entries, views, effectiveLayout, paged: effectiveLayout === "unified" && maxLines - remaining > PAGE, truncated };
+	}, [hunks, maxLines, layout]);
 	const [pages, setPages] = useState<ReadonlySet<number> | null>(null);
 	// 等第一屏原文已排版、确实露出来才启动长段的整段解析，不让语法加载抢点击那一帧。
-	const coloured = useDiffHighlight(shown.hunks, !shown.paged || pages !== null ? path : undefined);
+	const coloured = useDiffHighlight(shown.views, !shown.paged || pages !== null ? path : undefined);
 	useEffect(() => {
 		if (!shown.paged || !scroller.current) return;
 		const observer = new IntersectionObserver((entries) => {
@@ -54,70 +125,418 @@ export const DiffView = memo(function DiffView({
 		for (const page of scroller.current.querySelectorAll("[data-diff-page]")) observer.observe(page);
 		return () => observer.disconnect();
 	}, [shown]);
+
+	const splitScrollPanes = shown.effectiveLayout === "split" && !wrap;
+	const outerScrolls = !wrap && !splitScrollPanes;
+
 	let offset = 0;
 	return (
-		<div className="plume-scroll-host relative">
-			<div ref={scroller} className="tool-diff-scroll overflow-x-auto font-mono text-code">
-				<div className="w-max min-w-full">
+		<div className="plume-scroll-host relative" data-diff-layout={shown.effectiveLayout}>
+			<div
+				ref={scroller}
+				className={`tool-diff-scroll font-mono text-code ${wrap ? "tool-diff-wrap" : ""} ${outerScrolls ? "overflow-x-auto" : "overflow-x-hidden"}`}
+			>
+				<div className={`tool-diff-sheet ${outerScrolls ? "w-max min-w-full" : "w-full min-w-0"}`}>
 					{showPath && path && <div className="sticky left-0 w-max border-b border-line-soft px-3 py-1.5 text-caption text-ink-faint">{path}</div>}
-					{shown.hunks.map((hunk, hunkIndex) => {
+					{shown.entries.map(({ source, view }, hunkIndex) => {
 						const start = offset;
-						offset += hunk.lines.length;
+						offset += view.lines.length;
+						const showHeader = hunkIndex > 0 || view.oldStart > 1 || view.newStart > 1;
 						return (
-							<div key={hunkIndex} className="border-b border-line-soft last:border-b-0">
-								{hunkIndex > 0 && (
-									<div className="sticky left-0 w-max bg-shell/60 px-3 py-0.5 text-caption text-ink-faint">
-										@@ -{hunk.oldStart} +{hunk.newStart} @@
+							<div key={hunkIndex} className="tool-diff-hunk">
+								{showHeader && (
+									<div className="tool-diff-hunk-head">
+										<span className="tool-diff-hunk-label sticky left-0 px-3 py-0.5 text-caption text-ink-faint select-none">{formatHunkHeader(source)}</span>
 									</div>
 								)}
-								{Array.from({ length: Math.ceil(hunk.lines.length / PAGE) }, (_, i) => {
-									const first = i * PAGE;
-									const page = start + first;
-									return <DiffPage key={page} lines={hunk.lines} first={first} page={page} colours={!shown.paged || pages?.has(page) ? coloured : null} />;
-								})}
+								{shown.effectiveLayout === "split" ? (
+									<SplitHunk
+										source={source}
+										lines={view.lines}
+										offset={start}
+										wrap={wrap}
+										colours={coloured}
+										lineMark={lineMark}
+										lineLabel={lineLabel}
+										onLinePress={onLinePress}
+										onLineEnter={onLineEnter}
+									/>
+								) : (
+									<UnifiedHunk
+										source={source}
+										lines={view.lines}
+										start={start}
+										paged={shown.paged}
+										pages={pages}
+										colours={coloured}
+										lineMark={lineMark}
+										lineLabel={lineLabel}
+										onLinePress={onLinePress}
+										onLineEnter={onLineEnter}
+									/>
+								)}
 							</div>
 						);
 					})}
 					{shown.truncated && <div className="sticky left-0 w-max px-3 py-1.5 text-caption text-ink-faint">{t("diffView.truncated")}</div>}
 				</div>
 			</div>
-			<OverlayScrollbar viewport={scroller} orientation="horizontal" placement="sticky" />
+			{outerScrolls && <OverlayScrollbar viewport={scroller} orientation="horizontal" placement="sticky" />}
 		</div>
 	);
 });
 
+const UnifiedHunk = memo(function UnifiedHunk({
+	source,
+	lines,
+	start,
+	paged,
+	pages,
+	colours,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: {
+	source: ChangeHunk;
+	lines: readonly ChangeLine[];
+	start: number;
+	paged: boolean;
+	pages: ReadonlySet<number> | null;
+	colours: Token[][] | null;
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
+}) {
+	const inlineDiffs = useMemo(() => computeUnifiedInlineDiffs(lines), [lines]);
+	return (
+		<>
+			{Array.from({ length: Math.ceil(lines.length / PAGE) }, (_, i) => {
+				const first = i * PAGE;
+				const page = start + first;
+				return (
+					<DiffPage
+						key={page}
+						source={source}
+						lines={lines}
+						first={first}
+						page={page}
+						colours={!paged || pages?.has(page) ? colours : null}
+						inlineDiffs={inlineDiffs}
+						lineMark={lineMark}
+						lineLabel={lineLabel}
+						onLinePress={onLinePress}
+						onLineEnter={onLineEnter}
+					/>
+				);
+			})}
+		</>
+	);
+});
+
 const DiffPage = memo(function DiffPage({
+	source,
 	lines,
 	first,
 	page,
 	colours,
+	inlineDiffs,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
 }: {
-	lines: ChangeHunk["lines"];
+	source: ChangeHunk;
+	lines: readonly ChangeLine[];
 	first: number;
 	page: number;
 	colours: Token[][] | null;
+	inlineDiffs: Map<number, InlinePart[]>;
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
 }) {
 	return (
 		<div data-diff-page={page}>
 			{lines.slice(first, first + PAGE).map((line, i) => {
+				const lineIndex = first + i;
 				const tokens = colours?.[page + i];
+				const parts = inlineDiffs.get(lineIndex);
 				const kind = line.type === "add" ? "tool-diff-add" : line.type === "remove" ? "tool-diff-remove" : "";
+				const number = line.newLine ?? line.oldLine ?? "";
+				const mark = lineMark?.(line) ?? null;
 				return (
-					<div key={i} className={`flex ${kind}`}>
-						<span className="tool-diff-gutter sticky left-0 z-[1] w-[42px] shrink-0 pr-2 text-right select-none">{line.newLine ?? line.oldLine ?? ""}</span>
-						<span className="tool-diff-rail sticky left-[42px] z-[1] w-[3px] shrink-0" />
-						<span className="tool-diff-code shrink-0 px-2.5 whitespace-pre text-ink">
-							{tokens?.length
-								? tokens.map((token, j) => (
-										<span key={j} className={token.className}>
-											{token.text}
-										</span>
-									))
-								: line.text || " "}
-						</span>
+					<div key={i} className={`tool-diff-line flex ${kind}`}>
+						<span className="tool-diff-rail sticky left-0 z-[1] w-[3px] shrink-0" />
+						<DiffGutter
+							className="tool-diff-gutter sticky left-[3px] z-[1] w-[46px] shrink-0 pr-3 pl-2 text-right select-none"
+							number={number}
+							mark={mark}
+							source={source}
+							lineIndex={lineIndex}
+							lineLabel={lineLabel}
+							onLinePress={onLinePress}
+							onLineEnter={onLineEnter}
+						/>
+						<span className="tool-diff-code flex-1 pr-3.5 pl-2 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
 					</div>
 				);
 			})}
 		</div>
 	);
 });
+
+const SplitHunk = memo(function SplitHunk({
+	source,
+	lines,
+	offset,
+	wrap,
+	colours,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: {
+	source: ChangeHunk;
+	lines: readonly ChangeLine[];
+	offset: number;
+	wrap: boolean;
+	colours: Token[][] | null;
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
+}) {
+	const rows = useMemo(() => pairSplitHunk(lines), [lines]);
+	const leftRef = useRef<HTMLDivElement>(null);
+	const rightRef = useRef<HTMLDivElement>(null);
+
+	if (wrap) {
+		return (
+			<div className="tool-diff-split">
+				{rows.map((row, rowIndex) => (
+					<div key={rowIndex} className="tool-diff-split-row">
+						<SplitSideCell
+							side="left"
+							cell={row.left}
+							source={source}
+							offset={offset}
+							colours={colours}
+							lineMark={lineMark}
+							lineLabel={lineLabel}
+							onLinePress={onLinePress}
+							onLineEnter={onLineEnter}
+						/>
+						<SplitSideCell
+							side="right"
+							cell={row.right}
+							source={source}
+							offset={offset}
+							colours={colours}
+							lineMark={lineMark}
+							lineLabel={lineLabel}
+							onLinePress={onLinePress}
+							onLineEnter={onLineEnter}
+						/>
+					</div>
+				))}
+			</div>
+		);
+	}
+
+	// 不换行时每行严格同高，左右各占 50% 独立横滚，长行互不挤压、且行与行严格对齐。
+	return (
+		<div className="tool-diff-split-panes">
+			<div className="plume-scroll-host tool-diff-split-left relative min-w-0">
+				<div ref={leftRef} className="tool-diff-split-pane overflow-x-auto">
+					<div className="w-max min-w-full">
+						{rows.map((row, rowIndex) => (
+							<SplitPaneLine
+								key={rowIndex}
+								side="left"
+								cell={row.left}
+								source={source}
+								offset={offset}
+								colours={colours}
+								lineMark={lineMark}
+								lineLabel={lineLabel}
+								onLinePress={onLinePress}
+								onLineEnter={onLineEnter}
+							/>
+						))}
+					</div>
+				</div>
+				<OverlayScrollbar viewport={leftRef} orientation="horizontal" placement="sticky" />
+			</div>
+			<div className="plume-scroll-host relative min-w-0">
+				<div ref={rightRef} className="tool-diff-split-pane overflow-x-auto">
+					<div className="w-max min-w-full">
+						{rows.map((row, rowIndex) => (
+							<SplitPaneLine
+								key={rowIndex}
+								side="right"
+								cell={row.right}
+								source={source}
+								offset={offset}
+								colours={colours}
+								lineMark={lineMark}
+								lineLabel={lineLabel}
+								onLinePress={onLinePress}
+								onLineEnter={onLineEnter}
+							/>
+						))}
+					</div>
+				</div>
+				<OverlayScrollbar viewport={rightRef} orientation="horizontal" placement="sticky" />
+			</div>
+		</div>
+	);
+});
+
+function SplitPaneLine({
+	side,
+	cell,
+	source,
+	offset,
+	colours,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: {
+	side: "left" | "right";
+	cell: SplitCell | null;
+	source: ChangeHunk;
+	offset: number;
+	colours: Token[][] | null;
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
+}) {
+	if (!cell) {
+		return (
+			<div className="tool-diff-split-cell tool-diff-split-empty" aria-hidden>
+				<span className="whitespace-pre">{"\u00A0"}</span>
+			</div>
+		);
+	}
+	const { line, lineIndex, parts } = cell;
+	const tokens = colours?.[offset + lineIndex];
+	const kind = line.type === "add" ? "tool-diff-add" : line.type === "remove" ? "tool-diff-remove" : "";
+	const number = side === "left" ? (line.oldLine ?? "") : (line.newLine ?? "");
+	const mark = lineMark?.(line) ?? null;
+	return (
+		<div className={`tool-diff-line tool-diff-split-cell ${kind}`.trim()}>
+			<span className="tool-diff-split-rail sticky left-0 z-[1] w-[3px] shrink-0" />
+			<DiffGutter
+				className="tool-diff-split-gutter sticky left-[3px] z-[1] w-[44px] shrink-0 pr-2.5 pl-1.5 text-right select-none"
+				number={number}
+				mark={mark}
+				source={source}
+				lineIndex={lineIndex}
+				lineLabel={lineLabel}
+				onLinePress={onLinePress}
+				onLineEnter={onLineEnter}
+			/>
+			<span className="tool-diff-code flex-1 pr-3 pl-1.5 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
+		</div>
+	);
+}
+
+function SplitSideCell({
+	side,
+	cell,
+	source,
+	offset,
+	colours,
+	lineMark,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: {
+	side: "left" | "right";
+	cell: SplitCell | null;
+	source: ChangeHunk;
+	offset: number;
+	colours: Token[][] | null;
+	lineMark?: (line: ChangeLine) => FileDiffLineMark | null;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
+}) {
+	if (!cell) {
+		return <div className={`tool-diff-split-cell tool-diff-split-empty${side === "left" ? " tool-diff-split-left" : ""}`} aria-hidden />;
+	}
+	const { line, lineIndex, parts } = cell;
+	const tokens = colours?.[offset + lineIndex];
+	const kind = line.type === "add" ? "tool-diff-add" : line.type === "remove" ? "tool-diff-remove" : "";
+	const number = side === "left" ? (line.oldLine ?? "") : (line.newLine ?? "");
+	const mark = lineMark?.(line) ?? null;
+	return (
+		<div className={`tool-diff-line tool-diff-split-cell ${side === "left" ? "tool-diff-split-left" : ""} ${kind}`.trim()}>
+			<span className="tool-diff-split-rail w-[3px] shrink-0" />
+			<DiffGutter
+				className="tool-diff-split-gutter w-[44px] shrink-0 pr-2.5 pl-1.5 text-right select-none"
+				number={number}
+				mark={mark}
+				source={source}
+				lineIndex={lineIndex}
+				lineLabel={lineLabel}
+				onLinePress={onLinePress}
+				onLineEnter={onLineEnter}
+			/>
+			<span className="tool-diff-code flex-1 pr-3 pl-1.5 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
+		</div>
+	);
+}
+
+function DiffGutter({
+	className,
+	number,
+	mark,
+	source,
+	lineIndex,
+	lineLabel,
+	onLinePress,
+	onLineEnter,
+}: {
+	className: string;
+	number: number | string;
+	mark: FileDiffLineMark | null;
+	source: ChangeHunk;
+	lineIndex: number;
+	lineLabel?: (lineNumber: number | string) => string;
+	onLinePress?: (target: FileDiffLineTarget, anchor: HTMLElement, extend: boolean) => void;
+	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
+}) {
+	const content = mark?.badge !== undefined ? <MarkNumber n={mark.badge} className="align-middle" /> : number;
+	if (!onLinePress) {
+		return (
+			<span className={className} data-diff-note={mark?.state}>
+				{content}
+			</span>
+		);
+	}
+	return (
+		<button
+			type="button"
+			tabIndex={-1}
+			aria-label={lineLabel?.(number)}
+			data-diff-pick=""
+			data-diff-note={mark?.state}
+			className={`${className} tool-diff-pick`}
+			onMouseDown={(event) => {
+				if (event.button !== 0) return;
+				// 在行号上拖或 Shift 点是在挑行，不拦的话旁边的代码也会被选上。
+				event.preventDefault();
+				onLinePress({ hunk: source, lineIndex }, event.currentTarget, event.shiftKey);
+			}}
+			onMouseEnter={(event) => onLineEnter?.({ hunk: source, lineIndex }, event.currentTarget)}
+		>
+			{content}
+		</button>
+	);
+}
