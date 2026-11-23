@@ -642,8 +642,13 @@ export default {
 		context.toolCard("task", TaskCard);
 		context.toolLine("stop_subagent", { verb: (locale) => MESSAGES[locale].stopVerb, icon: UserX });
 		context.agentDelivery(AgentDelivery);
-		// i18n-exempt：`yield` 那一行在两种界面语言下都写这句英文，和它交给模型的工具说明是同一种说法。
-		context.toolLine("yield", { verb: "Submitting result", callOnly: true });
+		// 和回报给主 Agent 的标题用同一枚图标。
+		context.toolLine("yield", {
+			verb: (locale) => MESSAGES[locale].yieldVerb,
+			verbFor: ({ live }, locale) => MESSAGES[locale][live ? "yieldNow" : "yieldVerb"],
+			callOnly: true,
+			icon: CornerLeftUp,
+		});
 		context.composerAbove("agents", AgentsBar);
 		context.turnFooter("report", AgentTurnFooter);
 		// 后台任务面板经它把子 Agent 和后台命令列在一起，点了打开这里的面板、选中那个子 Agent。
