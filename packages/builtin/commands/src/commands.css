@@ -5,7 +5,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	margin: 20px 0 12px;
+	margin: 24px 0 12px;
 }
 
 .cmd-head-title {
@@ -29,25 +29,33 @@
 	text-align: center;
 }
 
+/*
+ * 行带 `data-settings-item`，所在的组按宿主的规则平铺：行贴着两边、行间的细线由宿主画。悬停底色铺在 `::before` 上、
+ * 往两边各多出 8px，字和线仍和分组标题对齐。`isolation` 让垫在 `z-index: -1` 的底色留在这一行里、压在字下面。
+ */
 .cmd-row {
+	position: relative;
+	isolation: isolate;
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	padding: 10px 14px;
+	padding: 12px 0;
 	cursor: default;
 }
 
-.cmd-row + .cmd-row {
-	border-top: 1px solid var(--plume-line-soft);
-}
-
-.cmd-row:hover {
-	background: var(--plume-card-hover);
+.cmd-row::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: 0 -8px;
+	border-radius: var(--plume-radius-field);
+	pointer-events: none;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
 }
 
 /* 内置命令那几行点不开，悬停不铺底色。 */
-.cmd-row-static:hover {
-	background: transparent;
+.cmd-row:not(.cmd-row-static):hover::before {
+	background: var(--plume-card-hover);
 }
 
 .cmd-row-mark {

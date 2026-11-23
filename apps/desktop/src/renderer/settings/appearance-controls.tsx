@@ -14,7 +14,7 @@ import type { AppearancePatch } from "../../shared/appearance.ts";
 
 /** 配色预设：只给强调色和深色的一对底色、字色，浅色那一对不动。第一个就是默认配色。 */
 export const PRESETS: { id: string; label: string; patch: AppearancePatch }[] = [
-	{ id: "plume", label: "Plume", patch: { accent: "#339CFF", darkBackground: "#171717", darkForeground: "#D4D4D4" } },
+	{ id: "plume", label: "Plume", patch: { accent: "#339CFF", darkBackground: "#191919", darkForeground: "#EEEEEE" } },
 	{ id: "graphite", label: "Graphite", patch: { accent: "#8E8E93", darkBackground: "#1C1C1E", darkForeground: "#F2F2F7" } },
 	{ id: "moss", label: "Moss", patch: { accent: "#3ECF8E", darkBackground: "#121614", darkForeground: "#E6F2EC" } },
 	{ id: "ember", label: "Ember", patch: { accent: "#FF8B3D", darkBackground: "#1A1412", darkForeground: "#F5E9E2" } },

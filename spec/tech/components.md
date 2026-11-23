@@ -64,7 +64,7 @@
 ### Input、Textarea、TextArea
 
 - 都带输入法组字守卫：组字时的按键（选词的 Enter、取消候选的 Esc）不交给 `onKeyDown`，也不冒泡到外层快捷键。所以“Enter 发送”的处理里不用再判断 `isComposing`。
-- `Input`、`Textarea` 不带样式：要输入框的样子就加 `plume-field`（另有 `plume-field-quiet`、`plume-field-compact`，`aria-invalid` 时红底），在对话框、弹层、设置卡片里会自动换成透明底加描边；其余类名只放布局。
+- `Input`、`Textarea` 不带样式：要输入框的样子就加 `plume-field`（另有 `plume-field-quiet`、`plume-field-compact`，`aria-invalid` 时红底），在对话框、弹层里会自动换成透明底加描边（设置浮层的内容区铺的是页面底色，带 `plume-page-surface`，那里照页面上的实底画）；其余类名只放布局。
 - `TextArea`（大写 A）的 `onChange` 收字符串，高度写在 `shell` 上。
 
 ### 加新组件

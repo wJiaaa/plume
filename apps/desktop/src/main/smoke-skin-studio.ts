@@ -133,8 +133,8 @@ export async function checkSkinStudio(options: {
 		const dark = nativeTheme.shouldUseDarkColors;
 		await until(`matchMedia('(prefers-color-scheme: dark)').matches === ${dark}`, "页面响应原生主题");
 		await until(`document.querySelector('[data-skin-default] button[aria-pressed=true]')?.textContent.trim() === ${JSON.stringify(label)}`, "工坊亮所选主题");
-		assert.equal((await token("bg")).toUpperCase(), dark ? "#171717" : "#F8F8F8");
-		assert.equal((await token("fg")).toUpperCase(), dark ? "#D4D4D4" : "#263748");
+		assert.equal((await token("bg")).toUpperCase(), dark ? "#191919" : "#FFF");
+		assert.equal((await token("fg")).toUpperCase(), dark ? "#EEE" : "#263748");
 		assert.equal((await token("accent")).toUpperCase(), "#336699");
 		assert.equal(await page<string>(`document.querySelector('[data-plume-head-fill]').dataset.plumeHeadFill`), "window");
 		await capture(`smoke-skin-default-${mode}.png`);

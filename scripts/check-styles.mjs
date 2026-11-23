@@ -79,8 +79,8 @@ const ALLOWED_COLORS = {
 		"#D6C300": "冒烟通过颜色输入框写入的用户自定义色，用来检查预览及存盘值",
 	},
 	"apps/desktop/src/main/index.ts": {
-		"#171717": "窗口在页面加载前的底色，主进程读不到 CSS 变量，和 theme.css 的默认深色背景同步",
-		"#f8f8f8": "同上，默认浅色背景",
+		"#191919": "窗口在页面加载前的底色，主进程读不到 CSS 变量，和 theme.css 的默认深色背景同步",
+		"#ffffff": "同上，默认浅色背景",
 		"#00000000": "毛玻璃窗口的底色必须全透明，Electron 只认色值字符串",
 	},
 	"packages/client/ui/src/overlay/Overlay.tsx": {

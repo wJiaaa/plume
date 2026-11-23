@@ -172,7 +172,7 @@
 
 /* 设置页。 */
 .worktree-card {
-	margin-bottom: 36px;
+	margin-bottom: 24px;
 }
 
 .worktree-root {
@@ -203,16 +203,13 @@
 	color: var(--plume-ink-faint);
 }
 
+/* 行带 `data-settings-item`，所在的组按宿主的规则平铺：行贴着两边、行间的细线由宿主画。 */
 .worktree-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 10px 14px;
-}
-
-.worktree-row + .worktree-row {
-	border-top: 1px solid var(--plume-line-soft);
+	padding: 12px 0;
 }
 
 .worktree-row-body {

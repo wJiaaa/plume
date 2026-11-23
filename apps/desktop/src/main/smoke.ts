@@ -668,7 +668,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 							&& label && [icon, label].every(child => getComputedStyle(child).opacity === (hovered ? '1' : '0.7'))
 							&& style.borderTopColor === color('color-mix(in srgb, var(--plume-ink) ' + (hovered ? '15%' : '10%') + ', transparent)')
 							&& style.backgroundColor === color(hovered ? 'color-mix(in srgb, var(--plume-float) 50%, transparent)' : 'transparent')
-							&& style.transitionDuration === '0.15s, 0.15s' && style.transitionTimingFunction === 'ease, ease';
+							&& style.transitionDuration === '0.12s, 0.12s' && style.transitionTimingFunction === 'ease, ease';
 					});
 				} finally { probe.remove(); }
 			})()`;
@@ -1533,7 +1533,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				const middle = opacity();
 				animations.forEach(animation => animation.finish());
 				const end = opacity();
-				return { ok: timing.every((value, index) => value.duration === 260 && value.delay === index * 65 && getComputedStyle(chips[index]).animationTimingFunction === 'cubic-bezier(0.22, 1, 0.36, 1)') && start.every(value => value === 0) && middle[0] > 0 && middle[0] < 1 && middle[3] === 0 && end.every(value => value === 1), timing, start, middle, end };
+				return { ok: timing.every((value, index) => value.duration === 260 && value.delay === index * 65 && getComputedStyle(chips[index]).animationTimingFunction === 'cubic-bezier(0.165, 0.84, 0.44, 1)') && start.every(value => value === 0) && middle[0] > 0 && middle[0] < 1 && middle[3] === 0 && end.every(value => value === 1), timing, start, middle, end };
 			} finally { animations.forEach(animation => animation.play()); }
 		})()`);
 		if (!(reveal as { ok?: boolean }).ok) throw new Error(`建议入场时序或中间帧不正确：${JSON.stringify(reveal)}`);
@@ -1585,7 +1585,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				const animation = event.target.getAnimations().find(item => item.animationName === event.animationName);
 				const timing = animation.effect.getTiming();
 				const frames = animation.effect.getKeyframes();
-				resolve({ ok: timing.duration === 220 && getComputedStyle(event.target).animationTimingFunction === 'cubic-bezier(0.22, 1, 0.36, 1)' && frames[0].transform === 'translateY(16px)' && frames[0].opacity === '0' && frames.at(-1).transform === 'none' && frames.at(-1).opacity === '1', timing, frames });
+				resolve({ ok: timing.duration === 200 && getComputedStyle(event.target).animationTimingFunction === 'cubic-bezier(0.165, 0.84, 0.44, 1)' && frames[0].transform === 'translateY(16px)' && frames[0].opacity === '0' && frames.at(-1).transform === 'none' && frames.at(-1).opacity === '1', timing, frames });
 			}
 			document.addEventListener('animationstart', started);
 			// 故意在同一段脚本里连点两下，不经 clickVisible：要的是同一帧里的双击，看首发只发一次、动画只放一遍。
@@ -2131,11 +2131,12 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				};
 			})()`)) as Record<string, number>;
 			const expected = {
-				sectionGap: 36,
+				sectionGap: 24,
 				headingGap: 12,
 				padding: 16,
 				titleSize: uiSize,
 				detailSize: uiSize - 2,
+				// 说明和名字之间不留空，靠 `caption` 的行高自己撑开。
 				detailGap: 0,
 				borderBottom: 0,
 				specimenGap: 16,
@@ -2154,7 +2155,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 					return getComputedStyle(title).fontSize === '${uiSize}px' && getComputedStyle(detail).fontSize === '${uiSize - 2}px';
 				});
 			})()`,
-				"偏好设置标题和说明按同一字号层级缩放",
+				"偏好设置标题和说明跟着界面字号缩放",
 			);
 		};
 		await checkCodeLayout(14);
@@ -2245,7 +2246,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		window.setSize(appearanceWindowSize[0]!, appearanceWindowSize[1]!);
 		await click("[data-appearance-reset]");
 		await until(
-			`document.documentElement.dataset.pointerCursor === 'false' && document.documentElement.dataset.reduceMotion === 'system' && getComputedStyle(document.body).fontSize === '14px' && getComputedStyle(document.documentElement).getPropertyValue('--plume-code-size').trim() === '12px'`,
+			`document.documentElement.dataset.pointerCursor === 'false' && document.documentElement.dataset.reduceMotion === 'system' && getComputedStyle(document.body).fontSize === '14px' && getComputedStyle(document.documentElement).getPropertyValue('--plume-code-size').trim() === '13px'`,
 			"整页恢复默认清除外观覆盖",
 		);
 		await waitFor(async () => Object.keys(JSON.parse(await readFile(join(outDir, "home", "appearance.json"), "utf8"))).length === 0, "恢复默认写入存储");

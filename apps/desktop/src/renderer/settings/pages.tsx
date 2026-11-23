@@ -88,28 +88,19 @@ function useSettingsGroups() {
 	}).filter((group) => group.items.length > 0);
 }
 
-/** 这一章在章节列表里叫什么，设置浮层顶上的面包屑用它；插件的分区刚撤下时没有。 */
-export function useSettingsSectionName(section: SettingsSection): string | undefined {
-	return useSettingsGroups()
-		.flatMap((group) => group.items)
-		.find((item) => item.id === section)?.text;
-}
-
 /**
- * 章节列表：分组标题最浅色，条目一律正文色，选中和悬停同一层底。头一组（基本）和最后一组（关于与归档）不写组名，
- * 只留给读屏：头一组不用说明，最后一组靠上面的空隙分开就够了。`compact`（窄窗口）时只剩图标，名字放进悬停提示。
+ * 章节列表：每组上面一行组名（小一号、次要色，和条目的底色左沿对齐），条目一律正文色、图标次要色，选中和悬停同一层底，
+ * 选中不加粗——底色已经说了是哪一项。`compact`（窄窗口）时只剩图标，组名只留给读屏，名字放进悬停提示。
  */
 export function SettingsNav({ section, compact, onPick }: { section: SettingsSection; compact: boolean; onPick: (section: SettingsSection) => void }) {
 	const { t } = useI18n();
 	const groups = useSettingsGroups();
 	return (
 		<nav aria-label={t("settings.sections")} className="flex min-h-0 flex-1 flex-col">
-			<Scroller className="flex-1" contentClassName="px-2 pt-2.5 pb-3">
+			<Scroller className="flex-1" contentClassName={compact ? "px-2 pt-3 pb-4" : "px-4 pt-1 pb-4"}>
 				{groups.map((group, index) => (
-					<div key={group.label} className={`flex flex-col gap-0.5 ${index > 0 ? "mt-4" : ""}`}>
-						<div className={compact || index === 0 || group.label === "settings.group.about" ? "sr-only" : "px-2 pb-1 text-caption font-medium text-ink-faint"}>
-							{t(group.label)}
-						</div>
+					<div key={group.label} className={`flex flex-col gap-px ${index > 0 ? "mt-2" : ""}`}>
+						<div className={compact ? "sr-only" : "pt-3 pb-1.5 text-caption text-ink-muted"}>{t(group.label)}</div>
 						{group.items.map((item) => (
 							<button
 								key={item.id}
@@ -120,10 +111,10 @@ export function SettingsNav({ section, compact, onPick }: { section: SettingsSec
 								onClick={() => onPick(item.id)}
 								data-plume-tip={compact ? item.text : undefined}
 								className={`flex h-8 w-full items-center gap-2 rounded-field text-left text-label text-ink transition ${compact ? "justify-center" : "px-2"} ${
-									section === item.id ? "bg-card-hover font-medium" : "hover:bg-card-hover"
+									section === item.id ? "bg-card-hover" : "hover:bg-card-hover"
 								}`}
 							>
-								<item.icon size={16} />
+								<item.icon size={16} className="shrink-0 text-ink-muted" />
 								<span className={compact ? "sr-only" : "min-w-0 truncate"}>{item.text}</span>
 							</button>
 						))}
@@ -134,7 +125,7 @@ export function SettingsNav({ section, compact, onPick }: { section: SettingsSec
 	);
 }
 
-function Page({ title, intro, children, className = "gap-9" }: { title: string; intro?: string; children: ReactNode; className?: string }) {
+function Page({ title, intro, children, className = "gap-6" }: { title: string; intro?: string; children: ReactNode; className?: string }) {
 	return (
 		<>
 			<PageHeader title={title} intro={intro} />

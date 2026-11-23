@@ -8,40 +8,50 @@
 	margin-bottom: 12px;
 }
 
-/* 一套一行：整行是选它的那块（圈、名字、一句说明），悬停时整行变底色；右边是这一套能做的事。 */
+/*
+ * 一套一行：整行是选它的那块（圈、名字、一句说明），悬停时整行变底色；右边是这一套能做的事。
+ *
+ * 单选组和末尾的「新建一套」都带 `data-settings-item`，这一组按宿主的规则平铺：行贴着两边，单选组和「新建」之间的
+ * 细线由宿主画，单选组里各套之间的线由这里画。悬停底色铺在 `::before` 上、往两边各多出 8px，字和线仍和分组标题
+ * 对齐；`isolation` 让垫在 `z-index: -1` 的底色留在这一行里、压在字下面。
+ */
 .prompt-row {
 	position: relative;
+	isolation: isolate;
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	padding: 12px 16px;
+	padding: 12px 0;
+}
+
+.prompt-row::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: 0 -8px;
+	border-radius: var(--plume-radius-field);
+	pointer-events: none;
 	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
 }
 
-.prompt-row:hover {
+/* 键盘走到「新建一套」时也一样。 */
+.prompt-row:hover::before,
+.prompt-create:focus-visible::before {
 	background: var(--plume-card-hover);
 }
 
-.prompt-row + .prompt-row,
-.prompt-create {
+.prompt-row + .prompt-row {
 	border-top: 1px solid var(--plume-line-soft);
 }
 
 /* 末尾的「新建一套」：和各套同一种行，加号对齐上面的单选圈，字色淡一档，读起来是动作而不是又一套。 */
 .prompt-create {
 	width: 100%;
-	border-right: 0;
-	border-bottom: 0;
-	border-left: 0;
+	border: 0;
 	background: transparent;
 	color: var(--plume-ink-muted);
 	text-align: left;
 	cursor: pointer;
-}
-
-/* 悬停已经由 .prompt-row 变底色；键盘走到这里时也一样。 */
-.prompt-create:focus-visible {
-	background: var(--plume-card-hover);
 }
 
 .prompt-choice {

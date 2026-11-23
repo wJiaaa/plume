@@ -31,11 +31,11 @@ export function AgentsSettings({ onOpenModelSettings }: { onOpenModelSettings: (
 						<entry.component />
 					</ErrorBoundary>
 				))}
-				<section className={sections.length > 0 ? "mt-9" : ""}>
+				<section className={sections.length > 0 ? "mt-6" : ""}>
 					<div className="mb-3 flex items-center justify-between gap-3">
-						<h2 className="flex h-7 items-center gap-1.5 text-label font-medium text-ink">{t("common.session")}</h2>
+						<h2 className="flex h-7 items-center gap-1.5 text-body font-semibold text-ink">{t("common.session")}</h2>
 					</div>
-					<Card className="@container divide-y divide-line-soft">
+					<Card className="@container">
 						{rows.map((entry) => {
 							const detail = entry.detail ? localized(entry.detail, resolvedLocale) : undefined;
 							return (
@@ -74,10 +74,10 @@ export function AgentsSettings({ onOpenModelSettings }: { onOpenModelSettings: (
 /** 「会话」卡里的一行：名字和说明在左，控件在右；窄时控件换到下一行。 */
 function SessionModelRow({ id, name, detail, children }: { id: string; name: string; detail?: string; children: ReactNode }) {
 	return (
-		<div data-session-model={id} className="grid grid-cols-1 items-center gap-3 px-4 py-3 @2xl:grid-cols-[minmax(0,1fr)_auto]">
+		<div data-session-model={id} data-settings-item="" className="plume-settings-row grid grid-cols-1 items-center gap-3 @2xl:grid-cols-[minmax(0,1fr)_auto]">
 			<div className="min-w-0">
-				<div className="truncate text-label font-medium text-ink">{name}</div>
-				{detail && <p className="mt-1 text-detail text-ink-faint">{detail}</p>}
+				<div className="truncate text-label text-ink">{name}</div>
+				{detail && <p className="mt-1 text-label text-ink-muted">{detail}</p>}
 			</div>
 			<div className="flex min-w-0 justify-end">{children}</div>
 		</div>

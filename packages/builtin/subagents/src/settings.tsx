@@ -311,7 +311,7 @@ export function AgentsSection() {
 						)}
 					</section>
 					{builtin.length > 0 && (
-						<section className="subagents-group subagents-group-next">
+						<section className="subagents-group">
 							<GroupHeader title={text.groupBuiltin} count={builtin.length} />
 							<AgentList>{builtin.map(row)}</AgentList>
 						</section>
@@ -363,7 +363,7 @@ function Banner({ children, action }: { children: React.ReactNode; action?: Reac
 function GroupHeader({ title, count, children }: { title: string; count?: number; children?: React.ReactNode }) {
 	return (
 		<div className="subagents-group-head">
-			<Text as="h2" size="label" weight="medium" className="subagents-group-title">
+			<Text as="h2" size="body" weight="semibold" className="subagents-group-title">
 				{title}
 				{count !== undefined && (
 					<Text size="detail" tone="faint" numeric>
@@ -376,9 +376,9 @@ function GroupHeader({ title, count, children }: { title: string; count?: number
 	);
 }
 
-/** 一组行：设置卡片，行与行之间一道细线。 */
+/** 一组行：设置卡片，每一行都标成设置行，所以和别的设置组一样平铺、行间一道细线。 */
 function AgentList({ children }: { children: React.ReactNode }) {
-	return <SettingsCard className="subagents-list">{children}</SettingsCard>;
+	return <SettingsCard>{children}</SettingsCard>;
 }
 
 /** 跟在名字后面、说它从哪来、能用几样工具的淡字。 */
@@ -422,6 +422,7 @@ function AgentRow({
 			data-agent-profile={name}
 			data-agent-saved={saved !== null || undefined}
 			data-plume-avatar-host=""
+			data-settings-item=""
 			className="subagents-agent"
 			data-editable={!disabled || undefined}
 		>
@@ -436,7 +437,7 @@ function AgentRow({
 			</span>
 			<div className="subagents-agent-body">
 				<div className="subagents-agent-line">
-					<Text size="label" weight="medium" className="subagents-truncate">
+					<Text size="label" className="subagents-truncate">
 						{name}
 					</Text>
 					{agent.source === "workspace" && <Meta>{text.project}</Meta>}

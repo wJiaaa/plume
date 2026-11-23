@@ -41,7 +41,7 @@ export function typography(defaults: { codeFont: string; codeFontSize: number })
  */
 export function paletteFromTheme(): Terminal["options"]["theme"] {
 	const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-	const background = readVar("--plume-code-bg") || (dark ? "#171717" : "#ffffff");
+	const background = readVar("--plume-code-bg") || (dark ? "#191919" : "#ffffff");
 	const foreground = readVar("--plume-code-fg") || (dark ? "#ededed" : "#1a1c1f");
 	return {
 		background,

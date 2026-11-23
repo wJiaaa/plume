@@ -37,7 +37,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		const middle = reveal.getBoundingClientRect().height;
 		transition.finish();
 		const end = reveal.getBoundingClientRect().height;
-		return { duration, start, middle, end, ok: duration === 340 && start < middle && middle < end && end >= 35, open: reveal.dataset.open, inert: reveal.inert };
+		return { duration, start, middle, end, ok: duration === 300 && start < middle && middle < end && end >= 35, open: reveal.dataset.open, inert: reveal.inert };
 	})()`);
 	if (!(animation as { ok?: boolean }).ok) throw new Error(`交付卡展开动画中间帧不正确：${JSON.stringify(animation)}`);
 	await until(`${visibleRows}.length === 4 && document.querySelector('${card} .plume-reveal').getBoundingClientRect().height >= 35`, "剩余文件展开到完整行高");

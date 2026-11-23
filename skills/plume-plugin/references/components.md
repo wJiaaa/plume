@@ -701,21 +701,21 @@ export function ApprovalExpiry({ at }: { at: number })
 ### `SettingsSectionTitle`
 
 ```tsx
-/** 一组卡片上面的分组标题。 */
+/** 一组设置上面的分组标题。 */
 export function SettingsSectionTitle({ children }: { children: React.ReactNode })
 ```
 
 ### `SettingsCard`
 
 ```tsx
-/** 其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。 */
+/** 一组设置。其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。自己画的一行带上 `data-settings-item`，就和 `SettingsRow` 算同一组的行。 */
 export function SettingsCard({ children, className = "", ...rest }: React.ComponentProps<"div">)
 ```
 
 ### `SettingsRow`
 
 ```tsx
-/** 卡片里带标签的一行，控件靠右。说明比名字小两档（`caption`），一张卡片读下来先看到的是一列名字。 */
+/** 一组里带标签的一行，控件靠右。说明比名字小两档（`caption`）、用次要色：一页设置读下来先看到的是一列名字。 */
 export function SettingsRow(props: {
 	title: React.ReactNode;
 	detail?: React.ReactNode;

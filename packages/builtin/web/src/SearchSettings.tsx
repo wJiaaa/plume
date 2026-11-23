@@ -109,6 +109,7 @@ export function SearchSettings({ api, notify, openExternal }: { api: Remote<WebA
 							type="button"
 							data-search-provider={choice.id}
 							data-selected={active || undefined}
+							data-settings-item=""
 							onClick={() => choose(choice.id)}
 							className="web-choice"
 						>
@@ -118,9 +119,7 @@ export function SearchSettings({ api, notify, openExternal }: { api: Remote<WebA
 							</span>
 							<span className="web-choice-body">
 								<span className="web-choice-head">
-									<Text size="label" weight="medium">
-										{nameOf(choice, text)}
-									</Text>
+									<Text size="label">{nameOf(choice, text)}</Text>
 									<Text size="caption" tone="faint">
 										{text[choice.costKey]}
 									</Text>
@@ -145,7 +144,7 @@ export function SearchSettings({ api, notify, openExternal }: { api: Remote<WebA
 				{CHOICES.filter((choice) => choice.key).map((choice) => {
 					const which = choice.key!;
 					return (
-						<div key={choice.id} className="web-key-row">
+						<div key={choice.id} data-settings-item="" className="web-key-row">
 							<div className="web-key-head">
 								<Text size="label">{nameOf(choice, text)}</Text>
 								<button type="button" className={`${textStyles.faint} web-signup`} onClick={() => void openSignup(which)}>

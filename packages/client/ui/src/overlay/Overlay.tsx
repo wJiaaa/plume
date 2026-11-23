@@ -4,10 +4,10 @@ import { portal } from "./portal.ts";
 import { holdScrim } from "./scrims.ts";
 
 /**
- * 遮罩的黑有多浓，和 `overlay.css` 里 `.plume-scrim-in` 画的一致——两者必须对上，因为遮罩在的时候，
+ * 遮罩的黑有多浓，浅色、深色各一档，和 `overlay.css` 里 `.plume-scrim-in` 画的一致——两者必须对上，因为遮罩在的时候，
  * 窗口自己的按钮就是按这个压暗的（见 `scrims.ts`）。
  */
-export const SCRIM_ALPHA = 0.22;
+const SCRIM_ALPHA = { light: 0.4, dark: 0.5 };
 /** 磨砂遮罩盖上窗口底色的浓度，浅色、深色各一档，和 `overlay.css` 里 `.plume-scrim-frost` 画的一致，理由同上。 */
 const FROST_ALPHA = { light: 0.6, dark: 0.64 };
 const DARK = "(prefers-color-scheme: dark)";
@@ -95,11 +95,13 @@ export function Overlay({
 	 * 标题栏里系统自己的按钮跟着遮罩变暗，并在遮罩开始离开时就变亮，而不是等它走完——和页面开始变亮
 	 * 是同一刻。
 	 */
-	const dark = usePrefersDark(frosted);
+	const dark = usePrefersDark();
 	useEffect(() => {
 		if (leaving) return undefined;
 		// 磨砂的颜色交 token 本身，由量颜色的一方在用的时候解开：在设置里换主题、换配色，按钮跟着这一刻的底色走。
-		return frosted ? holdScrim("var(--plume-shell)", dark ? FROST_ALPHA.dark : FROST_ALPHA.light) : holdScrim("#000000", SCRIM_ALPHA);
+		return frosted
+			? holdScrim("var(--plume-shell)", dark ? FROST_ALPHA.dark : FROST_ALPHA.light)
+			: holdScrim("#000000", dark ? SCRIM_ALPHA.dark : SCRIM_ALPHA.light);
 	}, [leaving, frosted, dark]);
 	useLayoutEffect(() => {
 		const previous = returnFocus ?? document.activeElement;
@@ -196,16 +198,12 @@ export function Overlay({
 	);
 }
 
-/** 现在是不是深色。`enabled` 为假时不订阅，恒为假：只有磨砂遮罩的浓度分深浅。 */
-function usePrefersDark(enabled: boolean): boolean {
-	const subscribe = useCallback(
-		(change: () => void) => {
-			if (!enabled) return () => {};
-			const query = matchMedia(DARK);
-			query.addEventListener("change", change);
-			return () => query.removeEventListener("change", change);
-		},
-		[enabled],
-	);
-	return useSyncExternalStore(subscribe, () => enabled && matchMedia(DARK).matches);
+/** 现在是不是深色：两种遮罩的浓度都分深浅。 */
+function usePrefersDark(): boolean {
+	const subscribe = useCallback((change: () => void) => {
+		const query = matchMedia(DARK);
+		query.addEventListener("change", change);
+		return () => query.removeEventListener("change", change);
+	}, []);
+	return useSyncExternalStore(subscribe, () => matchMedia(DARK).matches);
 }

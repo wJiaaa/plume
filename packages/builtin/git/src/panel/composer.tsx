@@ -210,6 +210,9 @@ function BranchItem({ name, current, onSelect }: { name: string; current?: boole
 	);
 }
 
+/** 各目录上次读到的改动数，`ChangeBar` 重新挂上时先画它。不存盘：工作区会变，读到新的就换掉。 */
+const lastStat = new Map<string, WorkspaceStat>();
+
 /**
  * 有多少没提交，一直在眼前。
  *
@@ -220,11 +223,17 @@ export function ChangeBar({ cwd, running }: ComposerChipProps) {
 	const t = useT();
 	const checkout = useCheckout(cwd ?? null);
 	const repo = checkout?.repo ?? false;
-	const [stat, setStat] = useState<WorkspaceStat | null>(null);
+	/*
+	 * 读数和它说的目录绑在一起；这个目录还没读回来时先画上次看到的（`lastStat`）。切会话时输入框连同这一排重新挂上，
+	 * 从空的开始的话，这一块要等 `git().stat` 回来才出现，每切一次都先消失再冒出来（录屏逐帧量到过）。
+	 */
+	const [held, setHeld] = useState<{ cwd: string; stat: WorkspaceStat } | null>(null);
+	const stat = !cwd || !repo ? null : held?.cwd === cwd ? held.stat : (lastStat.get(cwd) ?? null);
 
 	const refresh = useCallback(async () => {
 		if (!cwd || !repo) {
-			setStat(null);
+			if (cwd) lastStat.delete(cwd);
+			setHeld(null);
 			// 还不是仓库的目录也跟着问：终端里、agent、面板上的 `git init` 之后，分支签和这里才会出现。
 			if (cwd) void readCheckout(cwd);
 			return;
@@ -235,7 +244,8 @@ export function ChangeBar({ cwd, running }: ComposerChipProps) {
 		} catch {
 			return;
 		}
-		setStat(next);
+		lastStat.set(cwd, next);
+		setHeld({ cwd, stat: next });
 		// 分支签对菜单以外的检出（agent 的 `git switch -c`、终端里的切换）只能从这里听说：每次读数都顺带回答了。
 		noteBranch(cwd, next.branch);
 	}, [cwd, repo]);

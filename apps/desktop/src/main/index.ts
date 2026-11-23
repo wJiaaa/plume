@@ -477,7 +477,7 @@ function connectAgent(child: UtilityProcess) {
  */
 function windowColor(appearance: Appearance): string {
 	if (hasVibrancy(process.platform) && appearance.vibrancy !== false) return "#00000000";
-	return nativeTheme.shouldUseDarkColors ? (appearance.darkBackground ?? "#171717") : (appearance.lightBackground ?? "#f8f8f8");
+	return nativeTheme.shouldUseDarkColors ? (appearance.darkBackground ?? "#191919") : (appearance.lightBackground ?? "#ffffff");
 }
 
 function createWindow(hidden: boolean, appearance: Appearance): BrowserWindow {

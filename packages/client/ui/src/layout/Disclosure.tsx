@@ -118,7 +118,8 @@ export function Disclosure({
 
 			<div className="plume-reveal" data-open={open} aria-hidden={!open} inert={!open}>
 				<div>
-					<div className={look.body}>{children}</div>
+					{/* 稳定的钩子类：调用方的样式要给折叠内容里的块之间加间距时认它。 */}
+					<div className={`plume-disclosure-body ${look.body}`}>{children}</div>
 				</div>
 			</div>
 		</section>

@@ -18,14 +18,14 @@
 
 /** 毫秒。和 `--plume-t-*` 同一组数。 */
 export const DURATION = {
-	quick: 150,
-	base: 220,
-	slow: 340,
+	quick: 120,
+	base: 200,
+	slow: 300,
 } as const;
 
 /** 和 `--plume-e-*` 同一组字符串。 */
 export const EASING = {
-	out: "cubic-bezier(0.22, 1, 0.36, 1)",
+	out: "cubic-bezier(0.165, 0.84, 0.44, 1)",
 	in: "cubic-bezier(0.55, 0, 1, 0.45)",
 	soft: "cubic-bezier(0.4, 0, 0.2, 1)",
 } as const;

@@ -64,7 +64,7 @@ export function PersonalizationSettings() {
 	return (
 		<>
 			<PageHeader title={t("settings.personalization")} />
-			<div className="flex flex-col gap-9">
+			<div className="flex flex-col gap-6">
 				<div>
 					<div className="mb-3 flex items-center justify-between">
 						<div>

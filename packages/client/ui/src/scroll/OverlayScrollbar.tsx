@@ -66,7 +66,8 @@ export function OverlayScrollbar({
 
 	const measure = useCallback(() => {
 		const el = element;
-		if (!el) return;
+		// 屏外内容已被浏览器跳过时，读 scrollWidth 会强制把整块重新排版。露面后 ResizeObserver 会补量。
+		if (!el || !el.checkVisibility({ contentVisibilityAuto: true })) return;
 		const length = vertical ? el.clientHeight : el.clientWidth;
 		const total = vertical ? el.scrollHeight : el.scrollWidth;
 		const at = vertical ? el.scrollTop : el.scrollLeft;

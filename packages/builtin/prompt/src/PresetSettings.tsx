@@ -130,7 +130,7 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 			)}
 			<SettingsCard>
 				{/* 选哪一套是一组单选；末尾的「新建一套」不是选项，放在这一组外面。 */}
-				<div role="radiogroup" aria-label={text.title} data-prompt-presets="">
+				<div role="radiogroup" aria-label={text.title} data-prompt-presets="" data-settings-item="">
 					{view.presets.map((preset) => {
 						const selected = preset.id === view.selected;
 						return (
@@ -145,9 +145,7 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 									<ChoiceMark kind="radio" checked={selected} />
 									<span className="prompt-choice-body">
 										<span className="prompt-choice-head">
-											<Text size="label" weight="medium">
-												{nameOf(preset, text)}
-											</Text>
+											<Text size="label">{nameOf(preset, text)}</Text>
 											<Text size="caption" tone="faint">
 												{preset.builtin ? text.builtinBadge : text.custom}
 												{preset.modified ? ` · ${text.modified}` : ""}
@@ -175,7 +173,7 @@ export function PresetSettings({ api, notify }: { api: Remote<PromptApi>; notify
 					})}
 				</div>
 				{/* 列表只有几行，新建放在末尾最顺手：和各套同一种行，平常就看得见，不靠悬停才出现。 */}
-				<button type="button" className="prompt-row prompt-create" onClick={create} data-prompt-create="">
+				<button type="button" className="prompt-row prompt-create" onClick={create} data-prompt-create="" data-settings-item="">
 					<Plus size={16} aria-hidden />
 					<Text size="label" tone="muted">
 						{text.create}

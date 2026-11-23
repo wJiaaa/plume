@@ -166,10 +166,10 @@ export function WorktreesSettings({ useProjects }: { useProjects: UiContext["use
 			) : (
 				<SettingsCard>
 					{trees.map((tree) => (
-						<div key={tree.path} data-worktree-row="" className="worktree-row">
+						<div key={tree.path} data-worktree-row="" data-settings-item="" className="worktree-row">
 							<div className="worktree-row-body">
 								<div className="worktree-row-head">
-									<Text size="label" weight="medium" className="worktree-row-label">
+									<Text size="label" className="worktree-row-label">
 										{tree.label}
 									</Text>
 									{tree.branch && (

@@ -8,30 +8,40 @@
 import type { LucideIcon } from "../icons/index.ts";
 import { Text } from "../primitives/Text.tsx";
 
-/** 一组卡片上面的分组标题。 */
+/**
+ * 一组设置上面的分组标题。
+ *
+ * 只比行里的名字大一号、加粗：设置页是一列一列的开关，不是文档，标题大了一页读下来全是标题。
+ */
 export function SettingsSectionTitle({ children }: { children: React.ReactNode }) {
 	return (
-		<Text as="h2" size="title" weight="semibold" className="mb-3">
+		<Text as="h2" size="body" weight="semibold" className="mb-3">
 			{children}
 		</Text>
 	);
 }
 
 /**
- * 其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。
+ * 一组设置。其余属性原样透传，卡片可以带一个 `data-` 标记给测试量它。自己画的一行带上 `data-settings-item`，就和 `SettingsRow` 算同一组的行。
  *
- * 卡片用 `float` 那张纸：设置卡片和弹出菜单是同一个颜色，两个主题下都比页面亮一档的实底；圆角是一整块内容区那一档（`panel`）。边框随之用 `line-float`，
- * 那是给「画在自己那张纸上」的线准备的；卡片里面的线和控件怎么跟着换，见 `controls.css` 的 `.plume-settings-card`。
+ * 里面全是 `SettingsRow` 时它是一列平铺的行，行与行之间一道细线，没有框：一页设置读下来是一张清单，每组套一个框的话
+ * 满页都是框，名字反倒不显眼。里面放了别的（预览、文本框、左右两栏）时，那些东西没有行来划边界，才画一圈细线框住。
+ * 两种样子都在 `controls.css` 的 `.plume-settings-card`，按里面装的是什么自己选，调用方不用传参数。
  */
 export function SettingsCard({ children, className = "", ...rest }: React.ComponentProps<"div">) {
 	return (
-		<div {...rest} className={`plume-settings-card overflow-hidden rounded-panel border border-line-float bg-float ${className}`}>
+		<div {...rest} className={`plume-settings-card ${className}`}>
 			{children}
 		</div>
 	);
 }
 
-/** 卡片里带标签的一行，控件靠右。说明比名字小两档（`caption`），一张卡片读下来先看到的是一列名字。 */
+/**
+ * 一组里带标签的一行，控件靠右。说明比名字小两档（`caption`）、用次要色：一页设置读下来先看到的是一列名字。
+ *
+ * 行的内边距、分隔线在 `controls.css`（`.plume-settings-row`）：平铺时行贴着两边，框里的行离框边 16px，要按装它的那一组定。
+ * 自己画一行的地方（模型页的连接设置、智能体页的模型行）带上 `data-settings-item` 和这个类，就和这里排在同一组里。
+ */
 export function SettingsRow({
 	title,
 	detail,
@@ -48,14 +58,14 @@ export function SettingsRow({
 		 * 行宽不够时控件掉到文字下面。控件是 `shrink-0`（挤没了的分段选择比挪了位置的更糟），并排时说明文字只能拿剩下的，
 		 * 窄窗口下会变成两三个字宽、十几行高的一条。按这一行的宽度量（容器查询），宽窗口不受影响。
 		 */
-		<div className="@container border-b border-line-soft px-4 py-3 last:border-b-0">
+		<div data-settings-item="" className="plume-settings-row @container">
 			{/*
-			 * 控件落在这一行的中线上，不是贴着标题那一行：带说明文字的行占大多数，贴着标题的话一整张卡片右边那列全体偏上。
+			 * 控件落在这一行的中线上，不是贴着标题那一行：带说明文字的行占大多数，贴着标题的话一整组右边那列全体偏上。
 			 * 只在同一行并排时才居中；窄窗口下控件掉到文字下面，是另一种排法。
 			 */}
-			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-6">
+			<div data-settings-row className="flex flex-col gap-2 @md:flex-row @md:items-center @md:gap-4">
 				<div className="min-w-0 flex-1">
-					<Text as="div" size="label" weight="medium">
+					<Text as="div" size="label">
 						{title}
 					</Text>
 					{detail && (

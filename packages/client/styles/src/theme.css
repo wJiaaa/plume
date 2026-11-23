@@ -18,8 +18,8 @@
 :root {
 	color-scheme: light dark;
 
-	/* ── 种子 ── */
-	--plume-bg: #f8f8f8;
+	/* ── 种子 ── 浅色的面和聊天区一样是白的，深色的聊天区是 191919（Claude 的 surface-1）。 */
+	--plume-bg: #ffffff;
 	--plume-fg: #262626;
 	--plume-accent: #339cff;
 	/* 0–1，每一档推导都乘 0.5 + 它，也就是 0.5×–1.5×。 */
@@ -51,10 +51,10 @@
 	--plume-card: color-mix(in srgb, var(--plume-fg) calc(6% * var(--plume-k) * var(--plume-k-surface)), var(--plume-bg));
 	/* 悬停、选中：前景色的一层薄纱，压在什么上面都看得出来。 */
 	--plume-card-hover: color-mix(in srgb, var(--plume-fg) 5%, transparent);
-	--plume-elevated: color-mix(in srgb, var(--plume-fg) 8.5%, transparent);
-	/* 输入框像纸：浅色下比页面更亮，往白走，而不是往前景走成灰的。 */
+	--plume-elevated: color-mix(in srgb, var(--plume-fg) 10%, transparent);
+	/* 浅色下面是白的，输入框不再靠底色分层，靠自己的描边；深色下往前景走一层。 */
 	--plume-input: color-mix(in srgb, #fff 65%, var(--plume-bg));
-	/* 浮在最上面的：菜单、弹层。比它盖住的东西亮。 */
+	/* 浮在最上面的：菜单、弹层。深色下比它盖住的东西亮一层；浅色下同白，靠描边和影子分层。 */
 	--plume-float: color-mix(in srgb, #fff 80%, var(--plume-bg));
 	/* 开关的圆点。深色下也是白的：灰圆点压在打开时的强调色上像脏了一块，开关最该清楚的时候反而最不清楚。 */
 	--plume-knob: #fff;
@@ -129,14 +129,14 @@
 	--plume-radius-field: 8px;
 	/* 菜单里的行。 */
 	--plume-radius-item: 6px;
-	/* 浮起的菜单卡片。行是 item 6px，卡片 10px，中间留 menu-inset 4px。 */
-	--plume-radius-menu: 10px;
+	/* 浮起的菜单卡片 12px，中间留 menu-inset 4px，里面的行取差值 8px，和卡片同心。 */
+	--plume-radius-menu: 12px;
 
 	/* ── 尺寸 ── 输入框、下拉的高度。按钮是 32（h-8），一排里控件高度只有这两种。不给皮肤改。 */
 	--plume-control: 34px;
-	/* 菜单：卡片四边的内衬一样宽，悬停底色离左右边一样近；一行 32。 */
+	/* 菜单：卡片四边的内衬一样宽，悬停底色离左右边一样近；一行 28。 */
 	--plume-menu-inset: 4px;
-	--plume-menu-row: 32px;
+	--plume-menu-row: 28px;
 	/*
 	 * 主输入框：in 是卡片里所有上下内边距（字、附件条、工具栏底边），x 是左右内边距，
 	 * out 是卡片到窗格两边和窗口底边的外边距，control 是工具栏上每个按钮的边长。
@@ -160,16 +160,16 @@
 		"Noto Sans CJK SC", monospace;
 	/* 字号都从这两个算：界面一个，代码一个。 */
 	--plume-ui-size: 14px;
-	--plume-code-size: 12px;
+	--plume-code-size: 13px;
 
 	/*
 	 * ── 动效 ── 时长按「什么在动」分档：quick 是状态变化（悬停、按下），base 是位置和尺寸，slow 是新出现的东西。
 	 * 曲线按方向：out 减速落定，用于出现；in 是它的镜像，用于离开；soft 用于原地变化。
 	 */
-	--plume-t-quick: 150ms;
-	--plume-t-base: 220ms;
+	--plume-t-quick: 120ms;
+	--plume-t-base: 200ms;
 	--plume-t-reveal: 260ms;
-	--plume-t-slow: 340ms;
+	--plume-t-slow: 300ms;
 	/* 浮层（菜单、提示、悬停卡、对话框、提示条）离开：比它们到达快一档，用完的东西让开，但慢到看得见它走。 */
 	--plume-t-leave: 120ms;
 	/* 启动页沿用原版的节奏，不跟控件的过渡时长走。 */
@@ -177,18 +177,21 @@
 	--plume-t-boot-fade: 520ms;
 	--plume-t-boot-drift: 3.6s;
 	--plume-t-boot-sweep: 1.5s;
-	--plume-e-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--plume-e-out: cubic-bezier(0.165, 0.84, 0.44, 1);
 	--plume-e-in: cubic-bezier(0.55, 0, 1, 0.45);
 	--plume-e-soft: cubic-bezier(0.4, 0, 0.2, 1);
+	/* 刚发出的消息落进转录：比 slow 再长一点，配一条略过头再回来的曲线，读起来是被放上去、弹了一下停稳。 */
+	--plume-t-arrive: 450ms;
+	--plume-e-overshoot: cubic-bezier(0.34, 1.3, 0.64, 1);
 
 	/* ── 阴影 ── 按用途分档。rest：贴在页面上的卡片，比如主输入框。 */
 	--plume-shadow-rest: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05);
-	/* 菜单、弹层卡片。 */
-	--plume-shadow-menu: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-	/* 悬停提示。 */
-	--plume-shadow-tip: 0 4px 14px -4px rgb(0 0 0 / 0.3);
-	/* 对话框。 */
-	--plume-shadow-dialog: 0 18px 60px rgb(0 0 0 / 0.16), 0 2px 8px rgb(0 0 0 / 0.06);
+	/* 菜单、弹层卡片：一远一近两层影子托起来（边由卡片自己的 `line-float` 描边画）。深色下见下面。 */
+	--plume-shadow-menu: 0 8px 24px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.08);
+	/* 悬停提示：贴着字的一层小影子。 */
+	--plume-shadow-tip: 0 1px 2px rgb(11 11 11 / 0.06), 0 2px 8px rgb(11 11 11 / 0.08);
+	/* 对话框：近影、远影，比菜单铺得开但更淡。深色下见下面。 */
+	--plume-shadow-dialog: 0 4px 8px rgb(11 11 11 / 0.08), 0 12px 28px -2px rgb(11 11 11 / 0.08);
 	/* 压在图片上的深色浮条：底下是什么不知道，所以重。 */
 	--plume-shadow-overlay: 0 8px 32px rgb(0 0 0 / 0.45);
 	/* 开关和分段控件的旋钮。 */
@@ -201,15 +204,17 @@
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--plume-bg: #171717;
-		--plume-fg: #d4d4d4;
+		--plume-bg: #191919;
+		--plume-fg: #eeeeee;
 
 		--plume-k-surface: 1;
 		--plume-k-rule: 1;
 		--plume-k-faint: 56%;
 
-		--plume-card-hover: color-mix(in srgb, var(--plume-fg) 6.2%, transparent);
-		--plume-elevated: color-mix(in srgb, var(--plume-fg) 10%, transparent);
+		/* 悬停底、按下底在深色下各深半档：同样的透明度压在暗底上看不出来。卡片底 3% 对齐 Claude 的 fill-card（浅色由公式推出约 3%）。 */
+		--plume-card-hover: color-mix(in srgb, var(--plume-fg) 7.5%, transparent);
+		--plume-elevated: color-mix(in srgb, var(--plume-fg) 15%, transparent);
+		--plume-card: color-mix(in srgb, var(--plume-fg) 3%, var(--plume-bg));
 		/* 深色下输入框和浮层也往前景走（变亮），和其他面同一个方向。 */
 		--plume-input: color-mix(in srgb, var(--plume-fg) calc(3.5% * var(--plume-k)), var(--plume-bg));
 		--plume-float: color-mix(in srgb, var(--plume-fg) calc(10% * var(--plume-k)), var(--plume-bg));
@@ -237,6 +242,9 @@
 		--plume-syntax-attribute: #e3c07b;
 
 		/* 深底上同样的投影看不见，旋钮像贴在轨道上；玻璃不要顶边内高光，压暗了也会叠在描边上、让顶边看着比另外三边粗。 */
+		/* 影子压在暗底上要重得多才看得出。 */
+		--plume-shadow-menu: 0 8px 24px rgb(0 0 0 / 0.32), 0 2px 6px rgb(0 0 0 / 0.2);
+		--plume-shadow-dialog: 0 4px 8px rgb(0 0 0 / 0.24), 0 12px 28px -2px rgb(0 0 0 / 0.24);
 		--plume-shadow-knob: 0 1px 3px rgb(0 0 0 / 0.55);
 		--plume-shadow-glass: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 1px 6px -2px rgb(0 0 0 / 0.38);
 		/* 深底上一圈大范围的黑晕加顶边高光，提示条像悬在半空；只留一道贴边的影子，靠浮层底和描边分层。 */

@@ -171,7 +171,7 @@ function CommandsSettings({
 
 			<div className="cmd-head">
 				<div className="cmd-head-title">
-					<Text size="label" weight="medium">
+					<Text as="h2" size="body" weight="semibold">
 						{text.installed}
 					</Text>
 					<Text size="detail" tone="faint" numeric>
@@ -213,6 +213,7 @@ function CommandsSettings({
 						{commands.map((command) => (
 							<div
 								key={command.path}
+								data-settings-item=""
 								className="cmd-row"
 								role="button"
 								tabIndex={0}
@@ -271,7 +272,7 @@ function CommandsSettings({
 				<>
 					<div className="cmd-head">
 						<div className="cmd-head-title">
-							<Text size="label" weight="medium">
+							<Text as="h2" size="body" weight="semibold">
 								{text.builtin}
 							</Text>
 							<Text size="detail" tone="faint" numeric>
@@ -281,7 +282,7 @@ function CommandsSettings({
 					</div>
 					<SettingsCard>
 						{builtins.map((command) => (
-							<div key={command.name} className="cmd-row cmd-row-static" data-builtin-command={command.name}>
+							<div key={command.name} data-settings-item="" className="cmd-row cmd-row-static" data-builtin-command={command.name}>
 								<span className="cmd-row-mark" aria-hidden>
 									<SquareTerminal size={16} strokeWidth={1.8} />
 								</span>

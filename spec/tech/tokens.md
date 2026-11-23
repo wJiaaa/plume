@@ -19,8 +19,8 @@
 | | `shell` | 正文区 |
 | | `sidebar` | 侧栏一栏和窄窗口的抽屉取 `shell` 与它六四开（`.sidebar-surface`，styles.css，oklab 里混）；Windows、Linux 顶上那条带子的底色。不透明窗口的外圈是 `shell` |
 | | `card` | 卡片：工具卡片、用户消息；输入框（field）的底 |
-| | `card-hover` | 悬停、选中（侧栏的会话、设置导航、列表里选中的行）、输入框聚焦：前景色的薄纱，压在什么面上都看得出来 |
-| | `elevated` | 按下，比 card-hover 再深一档 |
+| | `card-hover` | 悬停、选中（侧栏的会话、设置导航、列表里选中的行）、输入框聚焦：前景色的薄纱（浅色 5%、深色 7.5%），压在什么面上都看得出来 |
+| | `elevated` | 按下，比 card-hover 再深一档（浅色 10%、深色 15%） |
 | | `input` | 主输入框 |
 | | `float` | 浮在最上面的：菜单、弹层、设置卡片、审批卡 |
 | | `knob` | 开关的圆点，深浅色都是白的 |
@@ -49,7 +49,7 @@
 ### 圆角、尺寸、字号
 
 - 圆角：`rounded-panel` 12（一整块内容区、设置卡片）、`rounded-field` 8（输入框、提示框、侧栏和列表里的行）、`rounded-item` 6（菜单里的行、分段控件里的一段）。按钮用 Tailwind 刻度：≥ 22px 的按钮 `rounded-lg`（8），≤ 20px 的 `rounded-md`（6）；大卡片、气泡用 `rounded-2xl`。落在两档之间的往小取。
-- 菜单外框 `rounded-menu` 10px，内衬 `menu-inset` 4px、行高 `menu-row` 32px。输入框 `composer-in/x/out/control` 分别是 12/16/24/28px；对话列最宽 `content` 864px（外观设置的宽档按窗口宽度覆盖它，见 `apps/desktop/src/renderer/appearance-settings.ts`）；窗格 `pane-chrome` 是 5px。这些尺寸不开放给皮肤。
+- 菜单外框 `rounded-menu` 12px，内衬 `menu-inset` 4px、行高 `menu-row` 28px，菜单行圆角取两者之差 8px（`.plume-item`），和外框同心。输入框 `composer-in/x/out/control` 分别是 12/16/24/28px；对话列最宽 `content` 864px（外观设置的宽档按窗口宽度覆盖它，见 `apps/desktop/src/renderer/appearance-settings.ts`）；窗格 `pane-chrome` 是 5px。这些尺寸不开放给皮肤。
 - 高度：输入框和下拉只有 `h-control`（34）；按钮 32 / 26 / 20 三档，见 [`components.md`](./components.md)。
 - 正文字号档：`text-caption`、`text-detail`、`text-label`（工作字号，默认）、`text-body`（正文，顺着读的句子）、`text-title`、`text-heading`、`text-display`、`text-hero`（只给欢迎页的问候）、`text-code`。都由 `--plume-ui-size`、`--plume-code-size` 算出，自带行高和字距。字重不在档里：title 配 `font-medium`，heading、display 配 `font-semibold`，hero 配 `font-medium`。
 
@@ -57,15 +57,15 @@
 
 ### 动效
 
-- 时长按“什么在动”选：`--plume-t-quick` 150（悬停、按下，`transition-*` 的默认值就是它）、`--plume-t-base` 220（位置、尺寸）、`--plume-t-reveal` 260（建议逐个展开，四分之一时长为 65ms 错峰间隔）、`--plume-t-slow` 340（新出现的东西）、`--plume-t-leave` 120（浮层离开）。
+- 时长按“什么在动”选：`--plume-t-quick` 120（悬停、按下，`transition-*` 的默认值就是它）、`--plume-t-base` 200（位置、尺寸）、`--plume-t-reveal` 260（建议逐个展开，四分之一时长为 65ms 错峰间隔）、`--plume-t-slow` 300（新出现的东西）、`--plume-t-leave` 120（浮层离开）、`--plume-t-arrive` 450（刚发出的消息落进转录，配 `--plume-e-overshoot`）。
 - 主窗口启动页沿用原版节奏：`--plume-t-boot-quiet` 延迟 120ms、`--plume-t-boot-fade` 淡入 520ms、`--plume-t-boot-drift` 标志浮动周期 3.6s、`--plume-t-boot-sweep` 加载条扫过周期 1.5s。这些时长不开放给皮肤。
-- 曲线按方向选：`ease-out` 出现、`ease-in` 离开、`ease-soft` 原地变化（默认）。过渡和浮层进出在 CSS 里写 `var(--plume-e-*)`，不写 CSS 自带的 `ease-out`、`ease-in`：那是另外两条曲线。循环的记号（加载、呼吸、头像）各有自己的曲线，不在此列。
+- 曲线按方向选：`ease-out` 出现、`ease-in` 离开、`ease-soft` 原地变化（默认）；`--plume-e-overshoot` 略过头再回来，只给刚发出的消息落下那一下。过渡和浮层进出在 CSS 里写 `var(--plume-e-*)`，不写 CSS 自带的 `ease-out`、`ease-in`：那是另外两条曲线。循环的记号（加载、呼吸、头像）各有自己的曲线，不在此列。
 - 浮层同一个节奏：菜单、提示、悬停卡到达用 quick + out，对话框和遮罩、提示条到达用 base + out，离开一律 leave + in，不过冲。退场放完再卸载：等退场动画的 `animationend`，计时器只兜事件一直不来的情况，不写一个和动画一样长的计时器（会抢在最后几帧前面）。
 - 减少动态效果由全局一条规则统一处理，组件不用各自判断（见 [`styling.md`](./styling.md)）。
 
 ### 阴影
 
-按用途选八档：`shadow-rest` 主输入框、`shadow-menu` 菜单浮层、`shadow-tip` 提示、`shadow-dialog` 对话框、`shadow-overlay` 图片上的浮条、`shadow-knob` 旋钮、`shadow-glass` 半透明浮层（浅色下带顶边内高光）、`shadow-toast` 提示条。深色的旋钮和玻璃阴影单独加深，深色的玻璃不带内高光，深色的提示条只留一道贴边的影子；抽屉靠底色和线分层，不额外投影。
+按用途选八档：`shadow-rest` 主输入框、`shadow-menu` 菜单浮层、`shadow-tip` 提示、`shadow-dialog` 对话框、`shadow-overlay` 图片上的浮条、`shadow-knob` 旋钮、`shadow-glass` 半透明浮层（浅色下带顶边内高光）、`shadow-toast` 提示条。菜单和对话框的阴影只管投影，边由卡片自己的 `line-float` 描边画，用了这两档阴影又自带边框的面不会出现双层边。深色的菜单、对话框、旋钮和玻璃阴影单独加深，深色的玻璃不带内高光，深色的提示条只留一道贴边的影子；抽屉靠底色和线分层，不额外投影。
 
 ### 加 token、皮肤
 

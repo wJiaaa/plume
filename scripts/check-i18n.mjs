@@ -78,6 +78,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-native-ui.ts",
 	// Markdown 图片冒烟的中文样例、选择器和开发者断言。
 	"apps/desktop/src/main/smoke-markdown-images.ts",
+	// Markdown 尺寸冒烟的模型样例、中文选择器和开发者断言。
+	"apps/desktop/src/main/smoke-markdown-width.ts",
 	// 网页预览冒烟的页面样例、中文选择器和断言。
 	"apps/desktop/src/main/smoke-preview.ts",
 	// 换肤工坊冒烟的中文选择器、假模型回答和开发者断言。

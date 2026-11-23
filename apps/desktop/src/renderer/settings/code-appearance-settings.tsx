@@ -294,7 +294,7 @@ export function CodeAppearanceSettings({ appearance, patch }: { appearance: Appe
 	);
 }
 
-// 代码设置共用卡片内边距，行间用顶部细线；说明比控件字号小一档，不套普通设置行的整行留白。
+// 代码设置共用卡片内边距，行间用顶部细线；说明比名字小两档，不套普通设置行的整行留白。
 function CodeRow({ title, detail, control }: { title: ReactNode; detail: ReactNode; control: ReactNode }) {
 	return (
 		<div
@@ -302,7 +302,7 @@ function CodeRow({ title, detail, control }: { title: ReactNode; detail: ReactNo
 			className="flex flex-col gap-3 border-t border-line-soft pt-3 first:border-t-0 first:pt-0 @md:flex-row @md:items-center @md:justify-between"
 		>
 			<div className="min-w-0 flex-1">
-				<Text as="div" size="label" weight="medium">
+				<Text as="div" size="label">
 					{title}
 				</Text>
 				<Text as="div" size="caption" tone="muted">

@@ -14,8 +14,18 @@
  */
 .plume-scrim-in,
 .plume-scrim-out {
-	/* 浓度和 Overlay.tsx 的 SCRIM_ALPHA 一致：窗口自己的按钮按那个数跟着压暗。 */
-	background: color-mix(in srgb, var(--plume-shade) 22%, transparent);
+	/*
+	 * 压到底下的界面明显退后，对话框成了唯一要看的东西；深色底本来就暗，多压一成才看得出。浓度和 Overlay.tsx 的
+	 * SCRIM_ALPHA 一致：窗口自己的按钮按那个数跟着压暗。
+	 */
+	background: color-mix(in srgb, var(--plume-shade) 40%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+	.plume-scrim-in,
+	.plume-scrim-out {
+		background: color-mix(in srgb, var(--plume-shade) 50%, transparent);
+	}
 }
 
 /*
@@ -77,10 +87,11 @@
 	}
 }
 
+/* 只缩 2%：够让卡片读起来是「长出来」的，又小到不像在动。 */
 @keyframes plume-dialog-in {
 	from {
 		opacity: 0;
-		transform: scale(0.95);
+		transform: scale(0.98);
 	}
 	to {
 		opacity: 1;
@@ -91,7 +102,7 @@
 @keyframes plume-dialog-out {
 	to {
 		opacity: 0;
-		transform: scale(0.95);
+		transform: scale(0.98);
 	}
 }
 
@@ -155,7 +166,7 @@
 @keyframes plume-pop-in {
 	from {
 		opacity: 0;
-		transform: scale(0.95);
+		transform: scale(0.98);
 	}
 	to {
 		opacity: 1;
@@ -175,7 +186,7 @@
 @keyframes plume-pop-out {
 	to {
 		opacity: 0;
-		transform: scale(0.97);
+		transform: scale(0.98);
 	}
 }
 
@@ -188,10 +199,11 @@
  * 菜单行共用的状态。
  *
  * 写成一个类而不是重复的一串工具类，应用里每个菜单的高亮才一模一样——形状不标准的行也能拿到同样的状态。
- * 圆角 6px：菜单里的行（`.plume-menu-card` 里，包括钉在底部、不在滚动区里的那几行）和列表里的行是同一档。
+ * 圆角取卡片圆角减去内衬，和卡片同心（12 − 4 = 8）：菜单里的行（`.plume-menu-card` 里，包括钉在底部、不在滚动区
+ * 里的那几行）和列表里的行是同一档。
  */
 .plume-item {
-	border-radius: var(--plume-radius-item);
+	border-radius: calc(var(--plume-radius-menu) - var(--plume-menu-inset));
 	color: var(--plume-ink);
 	transition:
 		background-color var(--plume-t-quick) var(--plume-e-out),
@@ -313,8 +325,8 @@
 	overflow-wrap: anywhere;
 	padding: 4px 8px;
 	border-radius: var(--plume-radius-item);
-	font-size: calc(var(--plume-ui-size) - 2px);
-	line-height: 1.45;
+	font-size: calc(var(--plume-ui-size) - 1px);
+	line-height: 1.385;
 	/*
 	 * 换行，而不是 `nowrap`，否则上面的 max-width 毫无意义：一句话长的提示会作为一行铺满整个窗口。短标签
 	 * 仍然是一行，因为气泡是定位出来的，而不是排在一个能挤它的列里。
@@ -327,10 +339,13 @@
 	 * 没有这个，它们会折叠掉换行，成一整句连着的话。`pre-line` 保留调用方写的换行，太长的仍会折行，`pre` 不会。
 	 */
 	white-space: pre-line;
-	/* 不反色：跟随主题的浮层底色，加一圈细边。 */
-	border: 1px solid var(--plume-line-float);
-	background: var(--plume-float);
-	color: var(--plume-ink);
+	/*
+	 * 浅色下反色（前景色的底、背景色的字）：一小块深色压在浅色界面上，不用边框也一眼和底下的东西分开，读起来是
+	 * 临时的注记而不是又一张卡片。深色下反色会是一块刺眼的白，改用浮层底色加细边，见下面。
+	 */
+	border: 1px solid transparent;
+	background: var(--plume-fg);
+	color: var(--plume-bg);
 	box-shadow: var(--plume-shadow-tip);
 	/*
 	 * 两个动画，因为离开不是把进来倒着放。
@@ -347,10 +362,19 @@
 	pointer-events: none;
 }
 
+@media (prefers-color-scheme: dark) {
+	.plume-tooltip {
+		border-color: var(--plume-line-float);
+		background: var(--plume-float);
+		color: var(--plume-ink);
+	}
+}
+
+/* 原地淡入、只缩 2%，不位移：位移让气泡读起来是从别处飘来的。 */
 @keyframes plume-tip-in {
 	from {
 		opacity: 0;
-		transform: translateY(-3px) scale(0.94);
+		transform: scale(0.98);
 	}
 	to {
 		opacity: 1;
@@ -365,7 +389,7 @@
 	}
 	to {
 		opacity: 0;
-		transform: translateY(-2px);
+		transform: scale(0.98);
 	}
 }
 
