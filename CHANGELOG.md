@@ -2,6 +2,70 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.8.0] - 2026-11-23
+
+<!-- plume:notes en -->
+### Changes
+
+- **Use your ChatGPT plan in Plume.** Install the new ChatGPT plugin, sign in with your ChatGPT account and its available models appear as a provider without an API key. Requests follow OpenAI's plan-specific Responses API rules. When the plan limit is reached or the account is not eligible, Plume stops retrying and pauses the provider instead of failing again on every message.
+- **Streaming replies are easier to read and stay visually stable.** Text now fades in by phrase, while code blocks and tables grow smoothly as content arrives. Completed blocks remember their real layout while off screen, so returning to a long chat no longer causes a full-page reflow. Syntax highlighting is ready on the first frame when you switch back.
+- **Fast replies no longer make the page lurch.** Bottom-following now spreads bursty layout changes into a continuous movement, keeps the final lines in view and avoids the jump that could happen when returning to a reply still in progress.
+- **Settings is denser and more consistent.** The settings window now has a shared header, grouped navigation and full-width content. Built-in and plugin settings use the same rows, inputs, spacing and section hierarchy. Menus, dialogs, tooltips and overlays share the same motion and visual states in light and dark themes.
+- **Agent instructions are safer and more decisive.** Plume now states exactly which instruction wins when user, project and global guidance conflict. It stops reopening settled decisions, checks before overwriting or deleting, and does not put personal details or private project content into outside search or fetch requests unless you asked for it.
+- **Conversation controls are easier to reach.** A single “…” button on each session row opens the session menu, including delete for active sessions. Persona settings also have a direct “Create new” entry instead of requiring you to duplicate an existing preset first.
+- **Tool use is more reliable.** File search handles ignored folders, scratch resources and path variants more accurately; reads and edits give clearer recovery instructions; compressed or single-line files can be inspected in smaller windows; and background-output delivery no longer floods the conversation.
+- **Prompt caching survives more mid-turn work.** Steering a running turn no longer needlessly changes the prompt prefix or tool table, and request recovery trims only results added after the last request that model accepted.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **ChatGPT 套餐额度可以直接给 Plume 用。** 安装新的 ChatGPT 插件，用 ChatGPT 账号登录后，账号能用的模型直接出现在供应商列表里，不需要 API key。请求按 OpenAI 套餐通道的 Responses API 规则发送；额度用完或账号不适用时不再反复重试，而是暂停供应商，避免之后每条消息都撞同一个错误。
+- **流式回复更好读，版面也更稳。** 文字按句段淡入，代码块和表格随着内容平滑长宽；写完的块在屏幕外记住真实布局，切回长对话不会整页重新排版，语法高亮首帧就有，不先闪一下纯文本。
+- **快速回复时页面不再一顿一顿地追。** 贴底滚动会把一批批到达的版面变化摊成连续移动，最后几行一直留在视野里；切回仍在输出的会话，也不会先到底、再往回跳一下。
+- **设置页更紧凑，也更统一。** 设置窗口改成共用标题栏、分组导航和铺满右栏的内容；本体和插件设置使用同一套行、输入框、间距与章节层级。菜单、对话框、悬停提示和浮层在浅色、深色下也统一了动效和状态。
+- **Agent 的指令更安全，也更果断。** 现在明确用户当次要求、近处项目指令、远处项目指令、全局指令和内置准则冲突时听谁的；已经定下来的事不再反复讨论，覆盖或删除前先看现状，未经要求也不会把个人信息、私有项目名或代码带进搜索词和抓取网址。
+- **会话操作更顺手。** 每条会话行用一个「⋯」打开完整菜单，未归档会话也能直接删除；身份与准则设置里新增「新建一套」，不必先复制已有预设。
+- **文件工具更可靠。** 搜索能正确处理忽略目录、scratch 资源和不同路径写法；读写失败时会说明该怎么恢复；压成一行的文件也能按命中或字符窗口分段查看；后台输出送达不再把刷屏内容原样塞进历史。
+- **一轮中间继续交代事情时，提示词缓存不再无故作废。** 插话不再改掉提示词前缀和工具表；请求恢复也只裁掉同一模型最后一次接受请求后新增的大结果。
+
+### 新功能
+
+- **core**: 接入 ChatGPT 套餐专用模型通道 (`cff2f07`)
+- **ui**: 重做流式 Markdown 排版与跟随滚动 (`8ded5f0`)
+- **ui**: 统一设置页与浮层的视觉层级 (`407c3d2`)
+- **desktop**: 会话行悬停改成一个「⋯」打开会话菜单，未归档的会话也能直接删除 (`6707d7c`)
+- **core**: 身份与准则列表末尾多一行「新建一套」，不用先复制一套再改 (`611127e`)
+
+### 修复
+
+- **agent**: 明确指令优先级并保护私密上下文 (`50a165a`)
+- **core**: 连续 20 步没说话时的进度提醒改成要发现，不再要模型播报下一步 (`c85503d`)
+- **core**: 内置准则补回 a22d9d1 合并时丢掉的防过度设计、答复自足和不以预告收尾 (`c3c8caa`)
+- **core**: 内置准则不再教「最小的改动」，改成修根因、先复现再修 (`a22d9d1`)
+- **ui**: 菜单、提示、悬停卡、对话框和提示条进出同一个节奏，淡出放完才消失 (`c4afb87`)
+- **core**: ls 把指向目录的软链列成目录，模型不再去 read 一个目录 (`457688c`)
+- **core**: read 的大纲按文件自己的缩进认声明，两个空格缩进的文件照样折 (`dbad259`)
+- **core**: bash 里跑的命令也找得到随包的 rg，不再退到慢得多的 grep -r (`420ff8e`)
+- **core**: bash 改道到工具只拦工具做得到的，并认出 cd 前缀和 sed -n 读一段 (`ff176fc`)
+- **core**: write、edit 被拒时说清是没读过、只读了一部分还是读后被改了，以及该怎么重发 (`a441610`)
+- **core**: grep、glob 在 scratch:// 地址、被忽略的目录、./ 与绝对路径的模式上不再答「没有匹配」 (`8065ea8`)
+- **core**: monitor 的命令自己结束时，那次送达也照 4000 字上限和清洗，不再把刷屏的输出原样送进历史 (`9bfbb97`)
+- **core**: 请求被拒收后只剪同一个模型最后一次接受之后进来的大结果 (`a33e054`)
+- **core**: 压缩只给留下的尾部里剪过的结果存原文，不再挤掉还在被指着的原文 (`50972f0`)
+- **core**: edit 按缩进宽松匹配上之后，new_string 换成文件里的缩进，\u 转义也还原成字 (`6e0fbe7`)
+- **core**: 压缩成一行的文件里，grep 每处命中各给一段，read 能用 char_limit 一次读宽一段 (`8648925`)
+- **desktop**: 大文本附件超过 3 万字时只带开头并给出路径，不再整份跟着每一轮重发 (`aa4250f`)
+- **core**: prompt.submit 钩子慢时，刚发出去的消息照样演气泡入场 (`63381d5`)
+
+### 性能
+
+- **core**: 循环在一轮中间补的话不再触发提示词增量和换工具表，缓存不从中间作废 (`962840c`)
+
+### 文档
+
+- 打包、发版和冒烟怎么跑从 AGENTS.md 搬进 docs/，命令表只留一行 (`61ebb50`)
+- docs/features 跟上这一批工具、压缩和附件的行为 (`7a7ea97`)
+
 ## [0.7.8] - 2026-11-21
 
 <!-- plume:notes en -->
