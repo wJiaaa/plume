@@ -431,7 +431,7 @@ export function Transcript({
 											</Button>
 										</div>
 									)}
-									<div ref={rowsRef} className="flex flex-col gap-2.5" data-plume-transcript-rows="">
+									<div ref={rowsRef} className="flex flex-col gap-4" data-plume-transcript-rows="">
 										{turnsOf(blocks).map(({ turn, from, count }) => (
 											<TurnFrame key={`turn:${turn}`} settled={turn !== allBlocks[allBlocks.length - 1]?.turn}>
 												{blocks.slice(from, from + count).map((block, offset) => {
@@ -500,7 +500,7 @@ export function Transcript({
 									follow.returnToBottom();
 								}}
 							/>
-							{view.summary.kind === "top" && <QuoteMenu scrollRef={follow.scrollRef} onQuote={onQuote} sessionId={id} actions={quoteActions} />}
+							{view.summary.kind === "top" && <QuoteMenu key={id} scrollRef={follow.scrollRef} onQuote={onQuote} sessionId={id} actions={quoteActions} />}
 							{questions.length > 1 && <QuestionNav key={id} questions={questions} viewport={follow.scrollRef} onSelect={jumpToQuestion} />}
 						</div>
 					</TranscriptLive.Provider>

@@ -7,10 +7,10 @@
 
 import type { QuoteAction } from "@plume/contract/ui";
 import { Popover, useI18n } from "@plume/ui";
-import { Fragment, memo, type RefObject, useEffect, useState } from "react";
+import { Fragment, memo, type RefObject, useEffect, useRef, useState } from "react";
 import { localized } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
-import { type DraftQuote, quotedIn, selectedBounds } from "./quote.ts";
+import { type DraftQuote, quoteAnchor, quotedIn } from "./quote.ts";
 
 /** 双击之后等第三下的时间：macOS 默认的双击间隔上下。浏览器读不到系统的实际设置。 */
 const DOUBLE_CLICK_WAIT = 400;
@@ -24,11 +24,6 @@ interface Picked {
 	 * 菜单会落在两个地方。上面放不下时 `Popover` 自己翻到下面去。
 	 */
 	at: { x: number; y: number };
-}
-
-function atOf(range: Range): Picked["at"] {
-	const rect = selectedBounds(range);
-	return { x: rect.left + rect.width / 2, y: rect.top };
 }
 
 // 按 props 记住：它和转录挂在同一个组件里，转录流式输出时每一拍都重画。`onQuote` 要稳定。
@@ -45,6 +40,7 @@ export const QuoteMenu = memo(function QuoteMenu({
 }) {
 	const { t, resolvedLocale } = useI18n();
 	const [picked, setPicked] = useState<Picked | null>(null);
+	const menuRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		const box = scrollRef.current;
@@ -54,39 +50,62 @@ export const QuoteMenu = memo(function QuoteMenu({
 		 * 一次三击闪两回。所以双击先等一个双击间隔，期间再按下就作废，由那一下的松开来定。
 		 */
 		let waiting = 0;
-		const onDown = () => window.clearTimeout(waiting);
+		let pickFrame = 0;
+		const cancelPending = () => {
+			window.clearTimeout(waiting);
+			waiting = 0;
+			cancelAnimationFrame(pickFrame);
+			pickFrame = 0;
+		};
+		const onWindowDown = (event: MouseEvent) => {
+			cancelPending();
+			/*
+			 * 点在菜单外面（包括点侧栏切会话）当下就收，不等 `Popover` 退场播完：退场这 120ms 里转录一滚（切会话恢复滚动、
+			 * 流式输出），`onScroll` 换上新坐标会触发 `Popover` 重开逻辑，把正在退场的菜单拉回来——旧选区节点已摘出时还会
+			 * 量出 0×0，菜单就甩到窗口左上角。
+			 */
+			const target = event.target as Node | null;
+			const menu = menuRef.current;
+			const card = menu?.closest("[data-plume-popover]") ?? menu;
+			if (target && card?.contains(target)) return;
+			setPicked((was) => (was ? null : was));
+		};
 		const onUp = (event: MouseEvent) => {
 			if (event.button !== 0) return;
-			window.clearTimeout(waiting);
+			cancelPending();
 			// 双击、三击选词选段，选区要等这一下松开之后才定。
-			const pick = () =>
-				requestAnimationFrame(() => {
+			const pick = () => {
+				pickFrame = requestAnimationFrame(() => {
+					pickFrame = 0;
 					const quoted = quotedIn(window.getSelection(), box);
-					setPicked(quoted ? { ...quoted, at: atOf(quoted.range) } : null);
+					const at = quoted ? quoteAnchor(quoted.range, box) : null;
+					setPicked(quoted && at ? { ...quoted, at } : null);
 				});
+			};
 			if (event.detail === 2) waiting = window.setTimeout(pick, DOUBLE_CLICK_WAIT);
 			else pick();
 		};
 		// 跟着字走，不是滚一下就收：贴着底部时回复每长一截转录就滚一次，滚就收的话，菜单在正在写的那条回复上一出来就没了。
-		let frame = 0;
+		let scrollFrame = 0;
 		const onScroll = () => {
-			if (frame) return;
-			frame = requestAnimationFrame(() => {
-				frame = 0;
+			if (scrollFrame) return;
+			scrollFrame = requestAnimationFrame(() => {
+				scrollFrame = 0;
 				setPicked((was) => {
 					if (!was) return was;
-					const now = atOf(was.range);
+					const now = quoteAnchor(was.range, box);
+					if (!now) return null;
 					return now.x === was.at.x && now.y === was.at.y ? was : { ...was, at: now };
 				});
 			});
 		};
-		box.addEventListener("mousedown", onDown);
+		window.addEventListener("mousedown", onWindowDown, true);
 		box.addEventListener("mouseup", onUp);
 		box.addEventListener("scroll", onScroll, { passive: true });
 		return () => {
-			cancelAnimationFrame(frame);
-			window.clearTimeout(waiting);
-			box.removeEventListener("mousedown", onDown);
+			cancelPending();
+			cancelAnimationFrame(scrollFrame);
+			window.removeEventListener("mousedown", onWindowDown, true);
 			box.removeEventListener("mouseup", onUp);
 			box.removeEventListener("scroll", onScroll);
 		};
@@ -110,7 +129,7 @@ export const QuoteMenu = memo(function QuoteMenu({
 	return (
 		<Popover anchor={picked.at} onClose={close} placement="top" align="center" width="hug" surface="panel" className="w-max" role="menu">
 			{/* 按下去不能动选区：一动，`selectionchange` 先把菜单收了，点击就落了空。 */}
-			<div className="flex text-caption text-ink" onMouseDown={(event) => event.preventDefault()}>
+			<div ref={menuRef} className="flex text-caption text-ink" onMouseDown={(event) => event.preventDefault()}>
 				{sessionId &&
 					actions?.map((action, index) => (
 						<Fragment key={index}>

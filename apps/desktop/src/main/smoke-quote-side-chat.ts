@@ -262,11 +262,86 @@ export async function checkQuoteSideChat(options: {
 		const sent = JSON.stringify(requests.at(-1)?.messages);
 		for (const text of [first, second, question, "引文附件正文"]) assert.ok(sent.includes(text), `发送包含：${text}`);
 		assert.equal(await page(`localStorage.getItem(${JSON.stringify(`plume.child-draft:${tab}`)})`), null, "发送清空整份草稿");
+		await checkQuoteSwitchSession(options);
 		console.log(
 			"PLUME_QUOTE_SIDE_CHAT_SMOKE",
-			JSON.stringify({ menu: true, reuse: true, collapsed: true, otherPanel: true, detached: true, preserved: true, manualSend: true }),
+			JSON.stringify({ menu: true, reuse: true, collapsed: true, otherPanel: true, detached: true, preserved: true, manualSend: true, switchSession: true }),
 		);
 	} finally {
 		setModel(undefined);
 	}
+}
+
+/**
+ * A 会话双击弹起划词菜单后切到 B 会话：菜单应立即收起，不因切会话滚动重算旧选区而甩到窗口左上角；
+ * 双击等待（400ms）期间切会话也不会延迟弹出。
+ */
+async function checkQuoteSwitchSession(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
+	const { window, page, until, click, setModel } = options;
+	const sessionA = (await page(`document.querySelector('[data-plume-row]')?.dataset.plumeRow`)) as string;
+	assert.ok(sessionA, "已有会话 A");
+	const longReply = Array.from({ length: 40 }, (_, index) => `会话 B 第 ${index + 1} 行，用于触发切换会话后的滚动恢复。`).join("\n\n");
+	setModel(() => ({ text: longReply }));
+	await click("button", "新对话");
+	await until("document.querySelector('[data-screen=empty]') !== null", "打开新对话准备会话 B");
+	await page("document.querySelector('[data-screen=empty] .cm-content').focus()");
+	await window.webContents.insertText("准备会话 B");
+	await until("document.querySelector('[data-composer-send=send]')?.disabled === false", "会话 B 可发送");
+	await click("[data-composer-send=send]");
+	await until(
+		"document.querySelector('[data-screen=chat]')?.textContent.includes('会话 B 第 40 行') && document.querySelector('[data-composer-send=stop]') === null",
+		"会话 B 回复完成",
+	);
+	const sessionB = (await page(
+		`Array.from(document.querySelectorAll('[data-plume-row]'), row => row.dataset.plumeRow).find(id => id !== ${JSON.stringify(sessionA)})`,
+	)) as string;
+	assert.ok(sessionB, "已有会话 B");
+
+	await click(`[data-plume-row="${sessionA}"] > button`);
+	await until("document.querySelector('[data-screen=chat]')?.textContent.includes('划词主会话准备好了。')", "切回会话 A");
+
+	const doubleClickQuote = async () => {
+		await page("new Promise(resolve => { document.activeElement?.blur(); requestAnimationFrame(resolve); })");
+		await page(`(() => {
+			const holder = [...document.querySelectorAll('[data-screen=chat] [data-plume-quote=assistant]')].at(-1);
+			const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
+			let node;
+			while ((node = walker.nextNode())) {
+				if (node.data.trim().length < 4 || node.parentElement.closest('button')) continue;
+				node.parentElement.scrollIntoView({ block: 'center' });
+				const range = document.createRange();
+				range.setStart(node, 0);
+				range.setEnd(node, Math.min(node.length, 10));
+				const selection = window.getSelection();
+				selection.removeAllRanges();
+				selection.addRange(range);
+				holder.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, detail: 2 }));
+				return;
+			}
+			throw new Error('没有可双击划选的消息');
+		})()`);
+	};
+	const menuVisible = `Array.from(document.querySelectorAll('[role=menuitem]')).some(item => item.textContent === '引用到输入框')`;
+
+	// 1. A 会话双击弹出划词菜单后切到 B 会话：菜单应彻底消失，不甩到左上角。
+	await doubleClickQuote();
+	await until(menuVisible, "会话 A 双击弹出划词菜单");
+	const beforeRect = (await page(
+		`(() => { const r = document.querySelector('[data-plume-popover]')?.getBoundingClientRect(); return r && { left: r.left, top: r.top }; })()`,
+	)) as { left: number; top: number } | null;
+	assert.ok(beforeRect && beforeRect.left > 40 && beforeRect.top > 40, `会话 A 划词菜单应在正文附近：${JSON.stringify(beforeRect)}`);
+	await click(`[data-plume-row="${sessionB}"] > button`);
+	await until("document.querySelector('[data-screen=chat]')?.textContent.includes('会话 B 第 40 行')", "切到会话 B");
+	await new Promise((resolve) => setTimeout(resolve, 300));
+	await page("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+	assert.equal(await page(menuVisible), false, "切到会话 B 后划词菜单不该残留在左上角");
+	assert.equal(await page("document.querySelector('[data-plume-popover]') !== null"), false, "切到会话 B 后不应有残留弹层");
+
+	// 2. 双击等待（400ms）期间切回会话 A：延迟回调不该在会话 A 弹出菜单。
+	await doubleClickQuote();
+	await click(`[data-plume-row="${sessionA}"] > button`);
+	await until("document.querySelector('[data-screen=chat]')?.textContent.includes('划词主会话准备好了。')", "双击等待期间切回会话 A");
+	await new Promise((resolve) => setTimeout(resolve, 550));
+	await page("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+	assert.equal(await page(menuVisible), false, "双击等待期间切会话后不应延迟弹出划词菜单");
 }

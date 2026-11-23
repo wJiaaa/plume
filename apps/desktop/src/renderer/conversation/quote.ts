@@ -71,7 +71,7 @@ function selectedText(range: Range): Range {
  * 选中的字在屏幕上占的外框，只并字的行框。两端收得了，中间收不了：跨三条列表项划选，中间那条 `<li>` 整个落在范围里，
  * 整个范围的外框会把它整栏宽的边框盒并进来，菜单就挂到了栏的右半边。
  */
-export function selectedBounds(range: Range): DOMRect {
+function selectedBounds(range: Range): DOMRect {
 	const root = range.commonAncestorContainer;
 	if (root.nodeType === Node.TEXT_NODE) return range.getBoundingClientRect();
 	const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -91,6 +91,26 @@ export function selectedBounds(range: Range): DOMRect {
 		}
 	}
 	return left === Infinity ? range.getBoundingClientRect() : new DOMRect(left, top, right - left, bottom - top);
+}
+
+/**
+ * 划词菜单该挂在哪个点：选区的横中线和上沿。
+ *
+ * 选区对应的节点已经离开转录（切会话、撤回、裁剪）、跳过排版量出空框，或者滚出了转录视口，都返回 `null`——不能把 0×0 交给
+ * `Popover`，否则菜单会甩到窗口左上角。选区上沿滚出顶边、下半截还在视口里时，纵坐标贴住视口上沿，不往上跑进标题栏。
+ */
+export function quoteAnchor(range: Range, within: HTMLElement): { x: number; y: number } | null {
+	if (!range.startContainer.isConnected || !range.endContainer.isConnected) return null;
+	if (!within.contains(range.startContainer) || !within.contains(range.endContainer)) return null;
+	const rect = selectedBounds(range);
+	if (rect.width <= 0 || rect.height <= 0) return null;
+	const box = within.getBoundingClientRect();
+	if (box.width <= 0 || box.height <= 0) return null;
+	if (rect.bottom <= box.top || rect.top >= box.bottom || rect.right <= box.left || rect.left >= box.right) return null;
+	return {
+		x: Math.min(Math.max(rect.left + rect.width / 2, box.left), box.right),
+		y: Math.max(rect.top, box.top),
+	};
 }
 
 /** 这段字在选区里有没有选中的可见内容：只选到一个换行、或者标题栏那种选不中的字，都不算。 */
