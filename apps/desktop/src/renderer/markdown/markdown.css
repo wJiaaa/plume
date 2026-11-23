@@ -1,20 +1,26 @@
 /*
  * 回复里的 Markdown（`.markdown`）：标题、列表、表格、代码块、任务框、折叠段、文件签。
  *
- * 排版对齐 Claude 桌面版的回复：正文 15px（阅读字号）、行高 1.6，段与段隔 0.75em；标题、列表、引用、表格的尺寸
- * 都按正文的 em 算，调用方压回工作字号（设置页、思考、来信传 `text-label`）时整套跟着缩。取值只用 token。
+ * 块与块之间是一条统一的间隙（正文的 0.65 倍字号，15px 时约 10px）；正文墨色略柔，标题用满色与
+ * 四级克制字号阶梯（1.333 / 1.2 / 1.067 / 1 倍）锚定章节。调用方压回工作字号（设置页、思考、
+ * 来信传 `text-label`）时，em 计的间隙和标题整套跟着缩。
  */
 @layer components {
 	/*
 	 * 回复正文的字号、行高、字距和各元素字重。
 	 *
-	 * 行高 1.6：会话里多是中文，汉字没有升部降部，行高给少了行与行就挤成一片（Claude 对中日韩文同样从 1.4 提到 1.6）。
+	 * 行高 1.6：会话里多是中文，汉字没有升部降部，行高给少了行与行就挤成一片。
+	 * 字距 0.012em：给汉字留一点透气感，又不把英文词和标点拉散。
+	 * 墨色略柔（88% 混底色，浅深色对比度都在 10:1 以上）：长回复读久了不刺眼，把 100% 墨色留给标题和强调。
 	 */
 	.markdown {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65em;
 		font-size: var(--text-body);
 		line-height: 1.6;
-		letter-spacing: 0.025em;
-		color: var(--plume-ink);
+		letter-spacing: 0.012em;
+		color: color-mix(in srgb, var(--plume-ink) 88%, var(--plume-bg));
 		/*
 		 * 没有空格的长串（URL、base64、贴进来的 JSON）找不到断点，会顶出容器、被外层裁掉，裁掉的字就没了。
 		 * 用 `break-word` 不用 `anywhere`：后者把表格单元格的最小宽度压到一个字，自动布局的表格列会被挤窄。
@@ -22,13 +28,9 @@
 		overflow-wrap: break-word;
 	}
 
-	.markdown > * + * {
-		margin-top: 0.75em;
-	}
-
 	/*
-	 * 第一个元素不带上边距。标题的 `margin-top` 是给「正文之后又起一节」准备的；一段回答以标题开头时，
-	 * 上方的空隙本来就归容器管，再加一次就比以句子开头的回复矮一截地飘在下面。
+	 * 头尾清边：第一个元素和最后一个元素的额外上下边距不该作用在容器边上，
+	 * 上下的空隙归容器的内边距管。
 	 */
 	.markdown > :first-child {
 		margin-top: 0;
@@ -39,77 +41,85 @@
 	}
 
 	/*
-	 * 标题四级：字号 1.75 / 1.375 / 1.125 / 1 倍正文，离上一节分别是段距的 3、2.5、2、1.667 倍，
-	 * 越大的标题前面空得越多，一眼看出是新的一大节。段距是正文的 0.75em，跟着正文走、不跟标题放大：
-	 * 外边距按标题自己的字号算，除回字号倍数换回正文 em。
+	 * 标题四级：拉开与正文、加粗的区分（15px 正文下对应 20 / 18 / 16 / 15px），用 100% 墨色与 600 字重锚定章节；
+	 * 上方按级加大留白（约 23 / 21 / 19 / 15px），下方保留约 10.5px 舒展间距（与 t3code 一致），既归属下文又不挤。
 	 */
 	.markdown h1,
 	.markdown h2,
 	.markdown h3,
 	.markdown h4 {
 		font-weight: 600;
+		color: var(--plume-ink);
 	}
 
 	.markdown h1 {
-		font-size: 1.75em;
+		font-size: 1.33333em;
 		line-height: 1.25;
-		margin-top: calc(0.75em * 3 / 1.75);
+		letter-spacing: -0.015em;
+		margin-block: 0.65em 0.05em;
 	}
 
 	.markdown h2 {
-		font-size: 1.375em;
-		line-height: 1.25;
-		margin-top: calc(0.75em * 2.5 / 1.375);
+		font-size: 1.2em;
+		line-height: 1.3;
+		letter-spacing: -0.012em;
+		margin-block: 0.6em 0.05em;
 	}
 
 	.markdown h3 {
-		font-size: 1.125em;
-		line-height: 1.3;
-		margin-top: calc(0.75em * 2 / 1.125);
+		font-size: 1.06667em;
+		line-height: 1.35;
+		letter-spacing: -0.01em;
+		margin-block: 0.55em 0.05em;
 	}
 
 	.markdown h4 {
 		font-size: 1em;
-		line-height: 1.3;
-		margin-top: 1.25em;
+		line-height: 1.4;
+		letter-spacing: -0.005em;
+		margin-block: 0.35em 0;
 	}
 
 	/*
-	 * 换节：列表、分隔线、表格后面新起一段或一列，空隙取节距（2 倍段距），不是普通段距——Claude 的「断行」系数。
-	 * 表格拆成单独一条：合在同一个 `:is()` 里会把这条的特异性抬到高于框内换节那条，框里的收紧就落不下来。
-	 * 后面是标题时取节距和标题系数里的大者：h1–h3 的系数不小于 2，取不到；只有 h4 的 1.667 比 2 小，这里补上。
+	 * 列表项里的标题不放大：它是一项里的小节标签，跟着整级放大会把项撑高、和圆点的节奏打架；
+	 * 字重照旧（600），位置就是普通的一块。
 	 */
-	.markdown :is(ul, ol, dl, hr) + :is(p, ul, ol, dl),
-	.markdown :is(ul, ol, dl, hr) + h4,
-	.markdown .markdown-table + :is(p, ul, ol, dl),
-	.markdown .markdown-table + h4 {
-		margin-top: calc(0.75em * 2);
+	.markdown li :is(h1, h2, h3, h4) {
+		font-size: 1em;
+		line-height: inherit;
+		letter-spacing: inherit;
+		margin-block: 0;
 	}
 
 	/*
-	 * 标题贴着它引出的内容，离上一节远：两边一样远的话，标题读起来像夹在两段中间的一句，而不是下面这节的开头。
-	 * 和段落之间的 0.75em 是同一条规则在管（标题自己的 `margin-bottom` 会被外边距折叠吞掉），只能在这里收紧到段距的三分之二。
-	 * 紧跟的另一个标题不算「内容」：它带着自己的大间距（新的一大节），不在这里收紧。
-	 */
-	.markdown :is(h1, h2, h3, h4) + :not(:is(h1, h2, h3, h4, h5, h6)) {
-		margin-top: 0.5em;
-	}
-
-	/*
-	 * 加粗用粗体（600）。`**加粗**` 除了字重什么都没有：标签还有字号、颜色分高低，它没有。中等字重（500）在
-	 * 苹方上和常规体只差一线，微软雅黑干脆没有这一档、落回常规，两边都等于没加。
+	 * 加粗：比 88% 的正文更深一档，强调清楚而不抢标题风头。
+	 * Windows 微软雅黑没有 500 档，默认用 600 稍微柔化墨色；macOS 的苹方和 SF Pro 都有真 500（Medium），
+	 * 叠加 100% 墨色，在未开启灰度抗锯齿时也不会显得发肥发黑；标题里的加粗仍跟标题字重走。
 	 */
 	.markdown strong {
 		font-weight: 600;
+		color: color-mix(in srgb, var(--plume-ink) 95%, var(--plume-bg));
+	}
+
+	:root[data-platform="darwin"] .markdown strong {
+		font-weight: 500;
+		color: var(--plume-ink);
+	}
+
+	:root[data-platform="darwin"] .markdown :is(h1, h2, h3, h4) strong {
+		font-weight: inherit;
 	}
 
 	/*
-	 * 列表：缩进 2em，每项再往里 0.5em。圆点挂在项的边框外，项的内边距把字往右推开，圆点和字之间留出一个
-	 * 字宽的空，一列圆点和一列字各自成线。项与项只隔段距的三分之一：项靠圆点分开，再空就散成一段段。
+	 * 列表：缩进 20px，项与项隔约 5px（0.3333em）：紧凑成组，不散成一段段。
+	 * 圆点挂在项的边框外，一列圆点和一列字各自成线。
 	 */
 	.markdown ul,
 	.markdown ol {
-		padding-left: 2em;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3333em;
+		padding-left: 1.3333em;
 	}
 
 	.markdown ul {
@@ -136,11 +146,6 @@
 		list-style: lower-roman;
 	}
 
-	.markdown li {
-		margin-top: 0.25em;
-		padding-left: 0.5em;
-	}
-
 	/* 圆点和序号用次要字色：比正文退一步，又不淡到看不见。等宽数字让 9 和 10 的点对齐在同一条竖线上。 */
 	.markdown li::marker {
 		color: var(--plume-ink-muted);
@@ -148,17 +153,18 @@
 	}
 
 	/*
-	 * 列表项里的块统一离引出它的话三分之一段距（嵌套列表、表格、代码块、引用同一档）；下边距清零，间隔
-	 * 交给后面那一项自己的间距。
+	 * 列表项里的子块（嵌套列表、段落、表格、代码块、引用）与项间距同档（约 5px）；下边距清零，
+	 * 间隔交给后面那一项自己的间距。
 	 */
 	.markdown li > ul,
 	.markdown li > ol,
 	.markdown li > p,
+	.markdown li > :is(h1, h2, h3, h4),
 	.markdown li > .markdown-table,
 	.markdown li > .markdown-code,
 	.markdown li > pre,
 	.markdown li > blockquote {
-		margin-top: 0.25em;
+		margin-top: 0.3333em;
 	}
 
 	.markdown li > *:last-child {
@@ -229,6 +235,8 @@
 	.markdown .markdown-code {
 		/* 横向滑块的定位框，见 `MarkdownCode`。 */
 		position: relative;
+		/* 代码块在统一间隙外再留 3px：一块贴进来的东西比一段话略多一点呼吸空间。 */
+		margin-block: 0.2em;
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: start;
@@ -290,16 +298,27 @@
 
 	.markdown code {
 		font-family: var(--plume-font-mono);
-		font-size: var(--text-code);
+		font-size: calc(var(--text-code) * 0.92);
 		background: var(--plume-inline-code-bg);
 		color: var(--plume-inline-code-fg);
 		box-shadow: inset 0 0 0 1px var(--plume-inline-code-ring);
 		border-radius: var(--plume-radius-item);
-		padding: 1px 4px;
+		padding: 1px 5px;
 		box-decoration-break: clone;
 		-webkit-box-decoration-break: clone;
 		/* 先在空格处换行，一整串放不下才从中间拆：`inline code` 不该在行尾被拆成 `inl` 和 `ine code`。 */
 		overflow-wrap: anywhere;
+	}
+
+	/* 加粗里的行内代码保持常规字重，靠胶囊底色和等宽区分，不继承成一整条粗黑块。 */
+	.markdown strong code {
+		font-weight: 400;
+	}
+
+	/* 标题里的行内代码按标题字号比例缩放，字重略轻于标题。 */
+	.markdown :is(h1, h2, h3, h4) code {
+		font-size: 0.85em;
+		font-weight: 500;
 	}
 
 	/*
@@ -319,26 +338,22 @@
 		text-decoration-color: currentColor;
 	}
 
-	/* 引用：一条 4px 的竖线、往里缩半个字，字退到次要色，读起来是别人的话而不是正文的一段。 */
+	/* 引用：一条 2px 的细竖线、往里缩 12px，字退到次要色，读起来是别人的话而不是正文的一段；里面的块之间还是统一间隙。 */
 	.markdown blockquote {
-		margin-left: 0.5em;
-		border-left: 4px solid var(--plume-line);
-		padding-left: 1em;
+		border-left: 2px solid var(--plume-line-soft);
+		padding-left: 0.8em;
 		color: var(--plume-ink-muted);
+		display: flex;
+		flex-direction: column;
+		gap: 0.65em;
 	}
 
 	/*
-	 * 引用、折叠框（`<details>` 画成的 Disclosure）内部的块也要有段距：基础样式把段落边距清零了，不补的话
-	 * 两段引文贴成一块。框里把节奏收紧一档：换节取 1.5 倍段距（外面是 2 倍），这是 Claude 对框内内容的规定。
+	 * 折叠框（`<details>` 画成的 Disclosure）内部的块也要有段距：基础样式把段落边距清零了，不补的话
+	 * 两段话贴成一块。框里的节奏和外面一致。
 	 */
-	.markdown blockquote > * + *,
 	.markdown .plume-disclosure-body > * + * {
-		margin-top: 0.75em;
-	}
-
-	.markdown blockquote > :is(ul, ol, dl) + :is(p, ul, ol, dl),
-	.markdown .plume-disclosure-body > :is(ul, ol, dl) + :is(p, ul, ol, dl) {
-		margin-top: calc(0.75em * 1.5);
+		margin-top: 0.65em;
 	}
 
 	/*
@@ -433,7 +448,7 @@
 		/* 表头是一列的名字：粗体、正文色，底下垫一层底和数据分开。 */
 		font-weight: 600;
 		color: var(--plume-ink);
-		/* 表头下面这条是唯一值得留的线：它把标签和数据分开。Claude 的表格行与行之间不画线，行距和内衬已经够读。 */
+		/* 表头下面这条是唯一值得留的线：它把标签和数据分开。行与行之间不画线，行距和内衬已经够读。 */
 		border-bottom: 1px solid var(--plume-line);
 	}
 
@@ -442,12 +457,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* 分隔线是半像素的细线：它只说「这里换一件事」，比一节的标题轻。上面空两个段距，下面让给后面内容自己
-	 * 的间距（换节那条管着）；两头各缩 0.375em，不满到栏边。 */
+	/* 分隔线是半像素的细线（按前景 20%）：它只说「这里换一件事」，比一节的标题轻。上下的空隙就是统一间隙。 */
 	.markdown hr {
 		border: 0;
-		border-top: 0.5px solid var(--plume-line);
-		margin: 1.5em 0.375em 0;
+		border-top: 0.5px solid color-mix(in srgb, var(--plume-fg) 20%, transparent);
+		margin: 0;
 	}
 
 	/*
@@ -460,8 +474,8 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.5em;
-		/* 抵掉项的内边距和框自己的宽，字和别的项从同一条竖线开始。 */
-		margin-left: calc(-0.5em - 13px);
+		/* 框占的是圆点的位置（缩进 20px 减去框自己的宽和半档空），字和别的项从同一条竖线开始。 */
+		margin-left: calc(-13px - 0.5em);
 	}
 
 	.markdown-task-box {
@@ -515,9 +529,13 @@
 		line-height: 0;
 	}
 
+	/* 上标是附注（脚注号这种），退到次要色。 */
+	.markdown sup {
+		color: var(--plume-ink-muted);
+	}
+
 	/*
-	 * 荧光笔：黄底小圆角，是「用笔划过」的意思，不是强调色的高亮。Claude 的是琥珀 33%，拿警示色（同一族
-	 * 的琥珀）混出来。
+	 * 荧光笔：黄底小圆角，是「用笔划过」的意思，不是强调色的高亮，拿警示色（琥珀 33%）混出来。
 	 */
 	.markdown mark {
 		padding: 0 0.125em;
@@ -565,7 +583,7 @@
 	 * 不补这一条的话 `<div>` 里的段落会紧贴在一起，外面的却松着。
 	 */
 	.markdown .markdown-html > * + * {
-		margin-top: 0.75em;
+		margin-top: 0.7em;
 	}
 
 	/* 居中的盒子不让列表、代码、表格也居中：`text-align` 会继承，圆点却还挂在左边。 */

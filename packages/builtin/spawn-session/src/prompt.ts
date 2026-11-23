@@ -162,7 +162,7 @@ export function childSection(parentId: string, name: string | undefined): string
 	].join("\n");
 }
 
-/** `fresh` 时新会话的第一句话：背景在前、任务在后，和 Claude 的拼法一样。 */
+/** `fresh` 时新会话的第一句话：背景在前、任务在后。 */
 export function freshMessage(background: string, task: string): string {
 	return `Background (from the session that started this one):\n${background}\n\nTask:\n${task}`;
 }

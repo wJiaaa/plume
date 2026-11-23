@@ -18,7 +18,7 @@
 :root {
 	color-scheme: light dark;
 
-	/* ── 种子 ── 浅色的面和聊天区一样是白的，深色的聊天区是 191919（Claude 的 surface-1）。 */
+	/* ── 种子 ── 浅色的面和聊天区一样是白的，深色的聊天区是 191919。 */
 	--plume-bg: #ffffff;
 	--plume-fg: #262626;
 	--plume-accent: #339cff;
@@ -99,7 +99,7 @@
 	--plume-code-fg: var(--plume-ink);
 	--plume-code-line-height: 1.6;
 	--plume-code-tracking: 0em;
-	--plume-inline-code-bg: var(--plume-card-hover);
+	--plume-inline-code-bg: color-mix(in srgb, var(--plume-fg) 7.5%, transparent);
 	--plume-inline-code-fg: var(--plume-ink);
 	--plume-inline-code-ring: transparent;
 	--plume-diff-add: rgb(51 128 63 / 0.12);
@@ -211,7 +211,7 @@
 		--plume-k-rule: 1;
 		--plume-k-faint: 56%;
 
-		/* 悬停底、按下底在深色下各深半档：同样的透明度压在暗底上看不出来。卡片底 3% 对齐 Claude 的 fill-card（浅色由公式推出约 3%）。 */
+		/* 悬停底、按下底在深色下各深半档：同样的透明度压在暗底上看不出来。卡片底 3%（浅色由公式推出约 3%）。 */
 		--plume-card-hover: color-mix(in srgb, var(--plume-fg) 7.5%, transparent);
 		--plume-elevated: color-mix(in srgb, var(--plume-fg) 15%, transparent);
 		--plume-card: color-mix(in srgb, var(--plume-fg) 3%, var(--plume-bg));
@@ -230,6 +230,7 @@
 
 		--plume-diff-add: rgb(127 201 138 / 0.14);
 		--plume-diff-remove: rgb(240 113 113 / 0.13);
+		--plume-inline-code-bg: color-mix(in srgb, var(--plume-fg) 10%, transparent);
 
 		--plume-syntax-keyword: #79b8ff;
 		--plume-syntax-string: #6fd2c8;

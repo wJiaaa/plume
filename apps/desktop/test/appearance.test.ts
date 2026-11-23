@@ -93,7 +93,8 @@ test("未选择主题不压过皮肤，指定主题覆盖底色字色和语法",
 
 test("行内代码三档、深浅自定义颜色与描边互相独立", () => {
 	const theme = findCodeTheme(undefined, "dark");
-	assert.equal(codePalette({ inlineCode: "app" }, theme, true)["inline-code-bg"], "var(--plume-card-hover)");
+	assert.equal(codePalette({ inlineCode: "app" }, theme, true)["inline-code-bg"], "color-mix(in srgb, var(--plume-fg) 10%, transparent)");
+	assert.equal(codePalette({ inlineCode: "app" }, theme, false)["inline-code-bg"], "color-mix(in srgb, var(--plume-fg) 7.5%, transparent)");
 	assert.equal(codePalette({ inlineCode: "syntax" }, theme, true)["inline-code-fg"], "var(--plume-code-fg)");
 	const appearance: Appearance = { inlineCode: "custom", inlineCodeDarkBg: "#112233", inlineCodeLightBg: "#FFEEDD", inlineCodeBorder: true };
 	assert.equal(codePalette(appearance, theme, true)["inline-code-bg"], "#112233");

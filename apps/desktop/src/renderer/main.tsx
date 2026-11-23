@@ -267,6 +267,7 @@ function LocaleSync({ agent }: { agent: Remote<AgentService> }) {
 }
 
 // 外观偏好先于连 agent 进程生效，界面一画出来就是对的。
+document.documentElement.dataset.platform = window.plume.platform;
 applyFontSmoothing(readFontSmoothing());
 applyAppearance();
 // 悬停提示认 data-plume-tip，整个文档装一次；最小化时 JS 驱动的动画放慢、停住。

@@ -22,7 +22,7 @@ export function codePalette(appearance: Appearance, theme: CodeThemeSpec, dark: 
 		values["inline-code-bg"] = "color-mix(in srgb, var(--plume-code-fg) 8%, var(--plume-code-bg))";
 		values["inline-code-fg"] = "var(--plume-code-fg)";
 	} else if (appearance.inlineCode === "app") {
-		values["inline-code-bg"] = "var(--plume-card-hover)";
+		values["inline-code-bg"] = `color-mix(in srgb, var(--plume-fg) ${dark ? "10%" : "7.5%"}, transparent)`;
 		values["inline-code-fg"] = "var(--plume-ink)";
 	}
 	if (appearance.inlineCodeBorder !== undefined) {
