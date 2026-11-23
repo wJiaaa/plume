@@ -1,6 +1,6 @@
 /**
  * plume.skills 的逻辑入口，跑在 agent 进程：系统提示词里列出技能（`model.context` 加一段），模型调 `skill` 工具时把那个技能的
- * 正文交回去；技能也进输入框的 `/` 菜单，人点了、或在话里写 `/skill:名字` 就让模型用它。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
+ * 正文交回去；技能进输入框的 `$` 菜单，人点了、或在话里写 `$名字` 就让模型用它。别的插件随包带的 `skills/` 也读（`ctx.plugins.list()`）。「插件市场 › 技能」经 `ctx.serve`
  * 列选中项目的、个人的和插件带来的技能、开关、打开、删除、处理同名的。经 `ctx.resources` 登记 `skill://` 地址，read、ls 能读技能的正文和目录。
  */
 
@@ -17,8 +17,25 @@ import { skillResource } from "./resource.ts";
 
 const TOOL = "skill";
 
-/** 话里点名一个技能：「帮我 /skill:pdf 处理一下这个文件」。 */
-const MENTION = /(^|\s)\/skill:([a-z0-9:-]+)(?=\s|$)/i;
+/** 话里点名技能：「帮我用 $pdf 处理一下这个文件」。跳过围栏代码块和行内代码里的 `$...`。 */
+const FENCE = /```[\s\S]*?```/g;
+const INLINE_CODE = /`[^`\n]*`/g;
+const MENTION = /(?:^|\s)\$([a-z0-9-]+)(?=$|[\s,.!?;:，。！？；：、)）】」』])/gi;
+
+/** 抽出话里所有形如 `$技能名` 的点名，按出现先后去重。 */
+export function mentionedSkills(text: string): string[] {
+	const plain = text.replace(FENCE, " ").replace(INLINE_CODE, " ");
+	const names: string[] = [];
+	const seen = new Set<string>();
+	for (const match of plain.matchAll(MENTION)) {
+		const name = match[1]?.toLowerCase();
+		if (name && !seen.has(name)) {
+			seen.add(name);
+			names.push(name);
+		}
+	}
+	return names;
+}
 
 /** 给人看的目录：家目录写成 `~`。 */
 function tilde(path: string): string {
@@ -209,12 +226,17 @@ export default {
 
 		ctx.hook("prompt.submit", async (input, next) => {
 			const verdict = await next(input);
-			// 话以命令开头时，里面的 `/skill:x` 是那条命令的参数，不是又点了一个技能。
-			const match = verdict.block || input.text.trimStart().startsWith("/") ? null : MENTION.exec(input.text);
-			const name = match?.[2]?.toLowerCase();
-			if (verdict.block || !name || !(await enabledSkills(input.cwd)).some((skill) => skill.name === name)) return verdict;
-			// i18n-exempt：写给模型的话，不随界面语言变。
-			const ask = `Use the \`${name}\` skill.`;
+			if (verdict.block) return verdict;
+			const names = mentionedSkills(input.text);
+			if (names.length === 0) return verdict;
+			const available = new Set((await enabledSkills(input.cwd)).map((skill) => skill.name));
+			// 行首 `$name` 经 `expand` 展开时正文开头已写好 `Use the \`name\` skill.`，这里不再重复加。
+			const asks = names
+				.filter((name) => available.has(name) && !input.text.includes(`Use the \`${name}\` skill.`))
+				// i18n-exempt：写给模型的话，不随界面语言变。
+				.map((name) => `Use the \`${name}\` skill.`);
+			if (asks.length === 0) return verdict;
+			const ask = asks.join("\n");
 			return { ...verdict, context: verdict.context ? `${verdict.context}\n\n${ask}` : ask };
 		});
 
@@ -225,6 +247,7 @@ export default {
 					name: skill.name,
 					description: skill.description,
 					source: skill.plugin ? messages.pluginSkill(skill.plugin.label) : skill.scope === "workspace" ? messages.projectSkill : messages.personalSkill,
+					trigger: "$",
 				}));
 			},
 			/**
@@ -236,7 +259,7 @@ export default {
 				if (!skill) throw new Error(text().notFound(name));
 				// i18n-exempt：写给模型的话，不随界面语言变。
 				const ask = `Use the \`${skill.name}\` skill.`;
-				return { text: rest ? `${ask}\n\n${rest}` : ask, displayText: rest ? `/${name} ${rest}` : `/${name}` };
+				return { text: rest ? `${ask}\n\n${rest}` : ask, displayText: rest ? `$${name} ${rest}` : `$${name}` };
 			},
 		});
 

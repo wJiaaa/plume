@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 import { formatCatalogue, formatInvocation, loadSkills, parseFrontmatter, personalDir, skillSources } from "../src/loader.ts";
+import { mentionedSkills } from "../src/index.ts";
 
 const DESCRIPTION = "Fill in PDF forms and extract their text when the user hands you a PDF file.";
 
@@ -101,4 +102,11 @@ test("插件带来的技能：排在个人的后面、共用目录的前面，�
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+});
+
+test("话里用 $ 点名技能：行首、句中、多个都认，去重并跳过代码里的 $", () => {
+	assert.deepEqual(mentionedSkills("帮我用 $pdf 和 $plume-plugin，再看下 $pdf。"), ["pdf", "plume-plugin"]);
+	assert.deepEqual(mentionedSkills("$PDF 填表"), ["pdf"]);
+	assert.deepEqual(mentionedSkills("行内 `$pdf` 和代码块\n```\n$docx\n```\n不算，外面的 $xlsx 算"), ["xlsx"]);
+	assert.deepEqual(mentionedSkills("旧写法 /skill:pdf 不再认，价格 $100 留给存在性过滤"), ["100"]);
 });

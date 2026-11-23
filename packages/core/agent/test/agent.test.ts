@@ -2579,6 +2579,7 @@ it("命令：按插件加载先后列出、同名留第一条，展开交给供�
 			ctx.commands.provide({
 				list: () => [
 					{ name: "review", description: "被盖住" },
+					{ name: "review", description: "同名技能不冲突", trigger: "$" as const },
 					{ name: "git:commit", description: "提交", source: "项目" },
 					{ name: "aside", description: "自己办掉" },
 					{ name: "manage", description: "打开设置" },
@@ -2605,6 +2606,7 @@ it("命令：按插件加载先后列出、同名留第一条，展开交给供�
 		{ name: "compact", description: "压缩上下文", argumentHint: "可选：希望摘要保留的内容", plugin: "plume.compaction" },
 		{ name: "review", description: "审查", argumentHint: "[路径]", plugin: "test.first" },
 		{ name: "where", description: "/work", plugin: "test.first" },
+		{ name: "review", description: "同名技能不冲突", trigger: "$", plugin: "test.second" },
 		{ name: "git:commit", description: "提交", source: "项目", plugin: "test.second" },
 		{ name: "aside", description: "自己办掉", plugin: "test.second" },
 		{ name: "manage", description: "打开设置", plugin: "test.second" },
@@ -2615,12 +2617,13 @@ it("命令：按插件加载先后列出、同名留第一条，展开交给供�
 	expect(await service.expandCommand("test.second", "aside", "", {})).toEqual({ handled: true, openPanel: "chat" });
 	expect(await service.expandCommand("test.second", "manage", "", {})).toEqual({ handled: true, openSettings: "commands" });
 	await service.setPluginEnabled("test.first", false);
-	expect((await service.listCommands({})).map((command) => `${command.plugin}/${command.name}`)).toEqual([
-		"plume.compaction/compact",
-		"test.second/review",
-		"test.second/git:commit",
-		"test.second/aside",
-		"test.second/manage",
+	expect((await service.listCommands({})).map((command) => `${command.plugin}/${command.trigger ?? "/"}${command.name}`)).toEqual([
+		"plume.compaction//compact",
+		"test.second//review",
+		"test.second/$review",
+		"test.second//git:commit",
+		"test.second//aside",
+		"test.second//manage",
 	]);
 });
 

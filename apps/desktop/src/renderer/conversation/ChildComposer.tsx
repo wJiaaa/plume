@@ -135,7 +135,7 @@ export function ChildComposer({
 		...(sessionId ? { sessionId } : {}),
 		list: async (context) => {
 			const entries = await modelsAgent().listCommands(context);
-			return menu ? entries : entries.filter((entry) => entry.name === "compact");
+			return menu ? entries : entries.filter((entry) => entry.trigger !== "$" && entry.name === "compact");
 		},
 		onSubmit: () => void send(),
 		onError: (message) => notify(message, "error"),
@@ -178,7 +178,7 @@ export function ChildComposer({
 	const runCommand = async (kept: ChildDraft): Promise<CommandExpansion | null | undefined> => {
 		const invocation = parseInvocation(kept.text.trim());
 		if (!invocation) return undefined;
-		const command = resolveCommand(await commands.fresh(), invocation.name);
+		const command = resolveCommand(await commands.fresh(), invocation.name, invocation.trigger);
 		if (!command?.plugin) return undefined;
 		if (command.name === "compact" && (kept.attachments.length || kept.quotes.length || kept.sessionRefs?.length)) throw new Error(t("command.noFiles"));
 		const result = await modelsAgent().expandCommand(command.plugin, command.name, invocation.rest, {

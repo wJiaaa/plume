@@ -1,14 +1,17 @@
+import type { CommandTrigger } from "@plume/contract";
 import { ScrollText, useI18n } from "@plume/ui";
-import { Eraser, SquareTerminal } from "@plume/ui/icons";
+import { Eraser, Sparkles, SquareTerminal } from "@plume/ui/icons";
 import type { MenuCommand } from "./commands.ts";
 import { CompletionPopup } from "./CompletionPopup.tsx";
 
 export function CommandMenu({
 	commands,
+	trigger,
 	...props
 }: {
 	id: string;
 	commands: MenuCommand[];
+	trigger: CommandTrigger;
 	term: string;
 	active: number;
 	keyboardSelection: boolean;
@@ -16,20 +19,21 @@ export function CommandMenu({
 	onHover: (index: number) => void;
 }) {
 	const { t } = useI18n();
+	const dollar = trigger === "$";
 	return (
 		<CompletionPopup
 			{...props}
 			items={commands}
-			label={t("command.slash")}
-			keyOf={(item) => `${item.plugin ?? ""}:${item.name}`}
-			groupOf={(item) => (item.action ? "builtin" : "custom")}
-			heading={(item) => t(item.action ? "command.builtin" : "command.custom")}
+			label={t(dollar ? "command.skill" : "command.slash")}
+			keyOf={(item) => `${item.trigger ?? "/"}:${item.plugin ?? ""}:${item.name}`}
+			groupOf={(item) => (dollar ? "dollar" : item.action ? "builtin" : "custom")}
+			heading={(item) => t(dollar ? "command.skill" : item.action ? "command.builtin" : "command.custom")}
 			row={(item) => {
-				const Icon = item.action === "clear" ? Eraser : SquareTerminal;
+				const Icon = dollar ? Sparkles : item.action === "clear" ? Eraser : SquareTerminal;
 				const source = item.source ?? (item.action ? t("common.builtin") : "");
 				return {
 					label: [item.name, item.description, source].filter(Boolean).join(t("common.comma")),
-					data: { "data-command": item.name },
+					data: { "data-command": item.name, "data-command-trigger": item.trigger ?? "/" },
 					content: (
 						<>
 							<Icon size={16} strokeWidth={1.8} className="shrink-0 text-ink-muted" />

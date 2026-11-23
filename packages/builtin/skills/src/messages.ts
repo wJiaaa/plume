@@ -12,7 +12,7 @@ const BIN = { zh: DESK === "mac" ? "废纸篓" : "回收站", en: DESK === "wind
 const zhCN = {
 	settingsTitle: "技能",
 	toolVerb: "使用技能",
-	intro: "技能是一份做某类事的说明书。Agent 看到任务对得上时自己调用，也可以在输入框里敲 “/技能名” 点名用它。",
+	intro: "技能是一份做某类事的说明书。Agent 看到任务对得上时自己调用，也可以在输入框里敲 “$技能名” 点名用它。",
 	whatIsIt: "一个技能是一个目录，里面的 SKILL.md 开头写名字和描述，正文写步骤。",
 	personal: "个人",
 	project: "项目",
@@ -77,7 +77,7 @@ const zhCN = {
 	diffLegend: (added: number, removed: number) => `「+」是改用那份会多出来的：+${added} −${removed}`,
 	preferFailed: (reason: string) => `没能改用：${reason}`,
 	diffFailed: (reason: string) => `没能读出差异：${reason}`,
-	notFound: (name: string) => `没有叫 /${name} 的技能了`,
+	notFound: (name: string) => `没有叫 $${name} 的技能了`,
 	notALoadedSkill: "不是已经读到的技能",
 };
 
@@ -88,7 +88,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 	en: {
 		settingsTitle: "Skills",
 		toolVerb: "Used skill",
-		intro: "A skill is a playbook for one kind of task. The agent uses it when a task matches, or you can name it by typing “/skill-name” in the composer.",
+		intro: "A skill is a playbook for one kind of task. The agent uses it when a task matches, or you can name it by typing “$skill-name” in the composer.",
 		whatIsIt: "A skill is a folder whose SKILL.md starts with a name and description, followed by the steps.",
 		personal: "Personal",
 		project: "Project",
@@ -154,7 +154,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		diffLegend: (added, removed) => `“+” is what switching would add: +${added} −${removed}`,
 		preferFailed: (reason) => `Couldn't switch: ${reason}`,
 		diffFailed: (reason) => `Couldn't read the difference: ${reason}`,
-		notFound: (name) => `There is no longer a skill called /${name}`,
+		notFound: (name) => `There is no longer a skill called $${name}`,
 		notALoadedSkill: "Not a skill that was loaded",
 	},
 };

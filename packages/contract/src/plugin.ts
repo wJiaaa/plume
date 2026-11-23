@@ -979,9 +979,12 @@ export interface Hooks {
 	"tool.approve": [ToolApproval, ApprovalDecision];
 }
 
-/** 输入框 `/` 菜单里的一条命令。 */
+/** 输入框命令的触发符：`/` 是命令，`$` 是技能等可内嵌点名的条目。 */
+export type CommandTrigger = "/" | "$";
+
+/** 输入框 `/` 或 `$` 菜单里的一条命令。 */
 export interface SlashCommand {
-	/** 敲在 `/` 后面的名字：小写字母、数字、连字符，可以用 `:` 分段（`git:commit`）。 */
+	/** 敲在触发符后面的名字：小写字母、数字、连字符，可以用 `:` 分段（`git:commit`）。 */
 	name: string;
 	/** 菜单里名字后面那句说明。 */
 	description: string;
@@ -989,6 +992,8 @@ export interface SlashCommand {
 	argumentHint?: string;
 	/** 菜单最右边那一栏：它从哪来（「项目」「个人」）。给人看的话，按界面语言写。 */
 	source?: string;
+	/** 触发符；省略时为 `"/"`。`"$"` 进输入框的 `$` 菜单，不与 `/` 菜单混在一起。 */
+	trigger?: CommandTrigger;
 }
 
 /** 列命令、展开命令时的环境。 */

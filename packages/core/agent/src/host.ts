@@ -604,8 +604,9 @@ export class PluginHost {
 		const entries: CommandEntry[] = [];
 		providers.forEach(({ record }, index) => {
 			for (const command of lists[index] ?? []) {
-				if (seen.has(command.name)) continue;
-				seen.add(command.name);
+				const key = `${command.trigger ?? "/"}:${command.name}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
 				entries.push({ ...command, plugin: record.status.name });
 			}
 		});
@@ -654,6 +655,7 @@ export class PluginHost {
 						description: command.description,
 						...(typeof command.argumentHint === "string" ? { argumentHint: command.argumentHint } : {}),
 						...(typeof command.source === "string" ? { source: command.source } : {}),
+						...(command.trigger === "$" ? { trigger: "$" as const } : {}),
 					},
 				];
 			});

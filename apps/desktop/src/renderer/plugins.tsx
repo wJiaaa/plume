@@ -1694,11 +1694,12 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			const cwd = typeof given?.cwd === "string" && given.cwd ? given.cwd : undefined;
 			const provided = await agent.listCommands(cwd ? { cwd } : {});
 			// 只交命令本身；`action` 是输入框自己用的，插件拿去也做不了什么。
-			return menuCommands(productCommands(translate), provided).map(({ name, description, argumentHint, source, plugin }) => ({
+			return menuCommands(productCommands(translate), provided).map(({ name, description, argumentHint, source, trigger, plugin }) => ({
 				name,
 				description,
 				...(argumentHint ? { argumentHint } : {}),
 				...(source ? { source } : {}),
+				...(trigger ? { trigger } : {}),
 				...(plugin ? { plugin } : {}),
 			}));
 		},

@@ -122,10 +122,10 @@ function CommandsSettings({
 			if (currentCwd.current !== cwd) return;
 			setView(next);
 			/*
-			 * 内置的是产品和插件自己带的命令（`/clear`、`/compact`、`/btw`……），不是谁写的文件：命令文件、技能、MCP 的 prompt
-			 * 都标了来源，没有来源的就是这些。
+			 * 内置的是产品和插件自己带的 `/` 命令（`/clear`、`/compact`、`/btw`……），不是谁写的文件：命令文件、技能（`$`）、MCP 的 prompt
+			 * 都标了来源或触发符，没有来源且走 `/` 的就是这些。
 			 */
-			setBuiltins(all.filter((command) => !command.source));
+			setBuiltins(all.filter((command) => !command.source && command.trigger !== "$"));
 		})().catch((error: unknown) => notify(text.readFailed(reasonOf(error)), "error"));
 	}, [api, cwd, listAll, notify, text]);
 	useEffect(refresh, [refresh]);

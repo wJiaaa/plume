@@ -19,9 +19,9 @@
 内置插件 `plume.skills`：
 
 - 技能是一个目录，里面放 `SKILL.md` 和它要用的脚本、模板。每一轮把可用技能的名字和描述列进系统提示词，正文在 agent 调用 `skill` 工具时才给，同一份正文在上下文里只给一次（压缩后可重新给）。
-- 用法：agent 看到任务对得上时自己调用；输入框 `/技能名 补充说明` 点名使用；话里写 `/skill:名字` 也算点名；`@` 搜索技能会插入 `/skill:名字`。
+- 用法：agent 看到任务对得上时自己调用；输入框敲 `$` 弹出技能菜单，行首 `$技能名 补充说明` 或句中写 `$技能名` 都可以点名使用；`@` 搜索技能会插入 `$技能名`。
 - 读取位置（同名时靠前的生效）：`<项目>/.plume/skills`、`<项目>/.claude/skills`、`<项目>/.agents/skills`、`~/.plume/skills`、已安装插件附带的 `skills/`、`~/.agents/skills`。在设置页点过「改用那个」的按人的选择。
-- frontmatter：`name`（小写字母、数字、连字符，缺省用目录名）、`description`（必填，通常 40 字符以上，最多 1024）、`disable-model-invocation: true`（不让 agent 自己挑，只能从 `/` 菜单点名）。
+- frontmatter：`name`（小写字母、数字、连字符，缺省用目录名）、`description`（必填，通常 40 字符以上，最多 1024）、`disable-model-invocation: true`（不让 agent 自己挑，只能从 `$` 菜单点名）。
 - 正文里 `${CLAUDE_SKILL_DIR}` 换成技能目录，`${CLAUDE_PLUGIN_ROOT}` 换成带来它的插件目录。
 - agent 可以用 read 读 `skill://技能名`（正文）、`skill://技能名/`（目录）、`skill://技能名/references/x.md`，只读、出不去技能目录。
 - 没有可用技能时，`skill` 工具和目录段一起隐藏。技能每轮现读磁盘，改完下一轮生效。

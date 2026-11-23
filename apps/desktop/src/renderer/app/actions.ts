@@ -198,9 +198,9 @@ export function openSettingsSection(section?: SettingsSection): void {
 	update({ settingsOpen: true, drawerOpen: false, ...(section ? { settingsSection: section } : {}) });
 }
 
-/** 市场的「新建插件」：开一个新对话，输入框里放好点名写插件技能的 `/plume-plugin `，人接着说想要什么插件。 */
+/** 市场的「新建插件」：开一个新对话，输入框里放好点名写插件技能的 `$plume-plugin `，人接着说想要什么插件。 */
 export function createPlugin(): void {
-	tryPrompt("/plume-plugin ");
+	tryPrompt("$plume-plugin ");
 }
 
 /** 开一个新对话，输入框里放好这句话，由人来发。 */

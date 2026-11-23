@@ -1400,12 +1400,12 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await capture(window, join(outDir, "smoke-market-create.png"));
 			await createItem("从本地上传");
 			await until(`document.querySelector('[data-screen=market]')?.textContent.includes('不是构建好的插件')`, "选的文件夹不是插件时说清楚");
-			// 「新建插件」点名的技能由内置的技能插件登记：开新对话，输入框里是 /plume-plugin 命令。
+			// 「新建插件」点名的技能由内置的技能插件登记：开新对话，输入框里是 $plume-plugin。
 			await click("[data-market-create]");
 			await until(`document.querySelector('[role=menu][aria-label="创建插件"]') !== null`, "再打开创建插件菜单");
 			await createItem("新建插件");
 			await until(
-				`document.querySelector('[data-screen=empty] .plume-command-token')?.textContent === '/plume-plugin' && document.activeElement?.classList.contains('cm-content')`,
+				`document.querySelector('[data-screen=empty] .plume-command-token')?.textContent === '$plume-plugin' && document.activeElement?.classList.contains('cm-content')`,
 				"新建插件：新对话的输入框里点名 plume-plugin 技能",
 			);
 			await delay(300);
@@ -1550,7 +1550,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 菜单里有本机 ~/.agents/skills 的技能（内置的技能插件照常读它）。指针停在哪一行上，那一行很长的描述就开始滚，
 		// 一圈可能一分多钟，截图要等它播完：先把指针挪开，上一步留下的位置不该决定这一步要等多久。
 		window.webContents.sendInputEvent({ type: "mouseMove", x: 0, y: 0 });
-		// `/` 菜单：打出前缀弹出本体的 /clear，Tab 补全成命令签，再删干净。
+		// `/` 菜单：打出前缀弹出本体的 /clear，不含技能；Tab 补全成命令签，再删干净。
 		await window.webContents.insertText("/cl");
 		await until(`document.querySelector('.plume-command-menu[data-open="true"] [data-command="clear"]') !== null`, "敲 / 弹出命令菜单");
 		await capture(window, join(outDir, "smoke-commands.png"));
@@ -1567,6 +1567,22 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(
 			`document.querySelector('[data-screen=empty] .plume-command-token') === null && document.querySelector('[data-composer-send=send]')?.disabled === true`,
 			"删掉命令",
+		);
+		// `$` 菜单：打出前缀弹出技能 plume-plugin，不含 /clear；Tab 补全成 $plume-plugin 签，再删干净。
+		await window.webContents.insertText("$plume-p");
+		await until(
+			`document.querySelector('.plume-command-menu[data-open="true"] [data-command="plume-plugin"][data-command-trigger="$"]') !== null && document.querySelector('.plume-command-menu[data-open="true"] [data-command="clear"]') === null`,
+			"敲 $ 弹出技能菜单且不含斜杠命令",
+		);
+		press("Tab");
+		await until(
+			`document.querySelector('[data-screen=empty] .plume-command-token')?.textContent === '$plume-plugin' && document.querySelector('.plume-command-menu[data-open="true"]') === null`,
+			"Tab 补全成技能签、菜单收起",
+		);
+		for (let i = 0; i < "$plume-plugin ".length; i++) press("Backspace");
+		await until(
+			`document.querySelector('[data-screen=empty] .plume-command-token') === null && document.querySelector('[data-composer-send=send]')?.disabled === true`,
+			"删掉技能",
 		);
 		// 默认是「帮我批准」，项目里的 edit 不会问：切到「请求批准」，让 edit 弹出审批卡。菜单项里还有一行说明，按开头的名字找。
 		if ((await page(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip`)) !== "auto") throw new Error("权限签默认应该是「帮我批准」");

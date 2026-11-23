@@ -72,14 +72,14 @@ export function useMentions({
 				setProvided([
 					...mentions,
 					...commands
-						.filter((command) => command.name.startsWith("skill:"))
+						.filter((command) => command.trigger === "$")
 						.map((command): MentionItem => ({
 							id: `${command.plugin}/${command.name}`,
-							title: command.name.slice(6),
+							title: command.name,
 							description: command.description,
 							origin: command.source,
 							kind: "plugin",
-							token: `/${command.name}`,
+							token: `$${command.name}`,
 						})),
 				]);
 			})

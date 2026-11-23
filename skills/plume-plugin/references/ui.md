@@ -557,7 +557,7 @@ ui.queueAction({
 ## `@` 菜单、`/` 命令列表
 
 - `ui.mentions(provider)`：每次打开 `@` 时传 `{ cwd?, sessionId? }`，返回 `ComposerMention[]` 或 Promise：`id/title/kind/token` 必填，可带 description/origin/avatar；`kind` 只管画法和分组：`agent` 归「智能体」、画 `avatar` 头像（输入框里的 token 也带头像），`plugin` 归「插件和技能」、画插件图标；只插入 token，用户自行发送，停用自动撤销。
-- `ui.listCommands({ cwd? })`：输入框 `/` 菜单此刻有的命令（`ListedCommand[]`：`SlashCommand` 加 `plugin`），同名去重后的样子：产品自己的 `/clear`（没有 `plugin`）在前，再是各插件经 `ctx.commands` 供的；`cwd` 决定项目里的命令文件、技能列不列。只读，展开、发送仍走输入框；每次现问，要看时再调。命令设置页靠它列「内置」那一段（没有 `source` 的）。
+- `ui.listCommands({ cwd? })`：输入框 `/` 和 `$` 菜单此刻有的条目（`ListedCommand[]`：`SlashCommand` 加 `plugin`，`trigger` 为 `"$"` 时是 `$` 菜单条目，省略为 `/` 命令），按触发符同名去重后的样子：产品自己的 `/clear`（没有 `plugin`）在前，再是各插件经 `ctx.commands` 供的；`cwd` 决定项目里的命令文件、技能列不列。只读，展开、发送仍走输入框；每次现问，要看时再调。命令设置页靠它列「内置」那一段（没有 `source` 且走 `/` 的）。
 
 ## 画一个子会话
 

@@ -1,4 +1,4 @@
-import type { CommandContext, CommandEntry } from "@plume/contract";
+import type { CommandContext, CommandEntry, CommandTrigger } from "@plume/contract";
 import { useI18n } from "@plume/ui";
 import type { EditorView } from "@codemirror/view";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -9,10 +9,10 @@ import type { ComboboxState } from "./CompletionPopup.tsx";
 import { type CommandCompletion, commandCompletion, type MenuCommand, menuCommands, productCommands, rankCommands, resolveCommand } from "./commands.ts";
 
 /**
- * 主输入框的 `/` 命令：列命令、算光标处在不在补全、菜单的高亮和键盘、选中后把那一段换成命令名。
+ * 主输入框的 `/` 命令与 `$` 技能补全：列条目、算光标处在不在补全、菜单的高亮和键盘、选中后把那一段换成对应前缀加名字。
  *
- * 名单每次打开、收起菜单，和插件有变动时都重新问一遍 agent（命令文件改了不用重开）；问不到时只弹一句，菜单里照样有产品自己的命令。
- * 发送时用 `fresh()` 再问一遍，展开用的是那一刻磁盘上的命令。
+ * 名单每次打开、收起菜单，和插件有变动时都重新问一遍 agent（命令或技能文件改了不用重开）；问不到时只弹一句，菜单里照样有产品自己的命令。
+ * 发送时用 `fresh()` 再问一遍，展开用的是那一刻磁盘上的内容。
  */
 export function useCommands({
 	editor,
@@ -71,21 +71,26 @@ export function useCommands({
 		editor.current?.dispatch({ effects: setCommandEntries.of(entries) });
 	}, [editor, entries]);
 
+	const trigger = completion?.trigger ?? null;
 	const term = completion?.term ?? null;
+	// 收起菜单的那一帧保留刚才的触发符，避免上一份列表在隐藏前闪成另一张菜单的图标和标题。
+	const lastTrigger = useRef<CommandTrigger>("/");
+	if (trigger) lastTrigger.current = trigger;
 	useEffect(() => {
 		setActive(0);
 		setKeyboardSelection(true);
-	}, [term, key]);
-	const listening = term !== null && !dismissed && focused;
-	const matches = useMemo(() => (listening && term !== null ? rankCommands(entries, term) : []), [entries, term, listening]);
+	}, [trigger, term, key]);
+	const listening = trigger !== null && term !== null && !dismissed && focused;
+	const scoped = useMemo(() => (trigger ? entries.filter((entry) => (entry.trigger ?? "/") === trigger) : []), [entries, trigger]);
+	const matches = useMemo(() => (listening && term !== null ? rankCommands(scoped, term) : []), [scoped, term, listening]);
 	const current = Math.min(active, Math.max(0, matches.length - 1));
 
-	/** 把正在补全的那一段换成命令名，后面不是空白就补一个空格；撤销一下能回到换之前。 */
+	/** 把正在补全的那一段换成触发符和名字，后面不是空白就补一个空格；撤销一下能回到换之前。 */
 	const pick = (command: MenuCommand) => {
 		const view = editor.current;
 		if (!view || !completion) return;
 		const next = view.state.doc.sliceString(completion.end, completion.end + 1);
-		const insert = `/${command.name}${next && /\s/.test(next) ? "" : " "}`;
+		const insert = `${completion.trigger}${command.name}${next && /\s/.test(next) ? "" : " "}`;
 		view.dispatch({
 			changes: { from: completion.start, to: completion.end, insert },
 			selection: { anchor: completion.start + insert.length },
@@ -117,7 +122,7 @@ export function useCommands({
 			}
 			const chosen = matches[current];
 			if (!chosen) return false;
-			if (pressed === "Enter" && resolveCommand(entries, term ?? "")?.name === chosen.name) {
+			if (pressed === "Enter" && trigger && resolveCommand(entries, term ?? "", trigger)?.name === chosen.name) {
 				setDismissed(true);
 				onSubmit();
 			} else pick(chosen);
@@ -130,6 +135,7 @@ export function useCommands({
 		<CommandMenu
 			id={id}
 			commands={matches}
+			trigger={trigger ?? lastTrigger.current}
 			term={term ?? ""}
 			active={current}
 			keyboardSelection={keyboardSelection}

@@ -237,7 +237,7 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 		const invocation = parseInvocation(value.trim());
 		if (!invocation) return undefined;
 		const stillCurrent = () => (state.drafts[draftScope(state.view)] ?? "") === value && draftScope(state.view) === scope;
-		const command = resolveCommand(await commands.fresh(), invocation.name);
+		const command = resolveCommand(await commands.fresh(), invocation.name, invocation.trigger);
 		if (!stillCurrent()) return null;
 		if (command?.action === "clear") {
 			if (attachments.attachments.length > 0 || quoted.length > 0 || references.length > 0) notify(t("command.noFiles"), "warn");
