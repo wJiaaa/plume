@@ -225,10 +225,10 @@
 	}
 
 	/*
-	 * 围栏代码块：没有标题栏。语言名和按钮（换行、复制、在终端运行）收在右上角，代码从第一行就开始。
+	 * 围栏代码块：标题栏（图标、语言名，右边换行、复制、在终端运行）和代码同在一个框里。
 	 *
-	 * 两列的格子：左边是代码，右边是那一小簇，代码不会钻到按钮底下，也不用量按钮有多宽。框画在外层，里面的
-	 * `pre` 把自己那套底色、描边、圆角撤掉。按钮常驻：它们一块只出现一次，不会满页重复。
+	 * 框画在外层，里面的 `pre` 把自己那套底色、描边、圆角撤掉，否则标题栏和代码是两块拼起来的。
+	 * 按钮常驻：它们一块只出现一次，不会满页重复。
 	 *
 	 * 宽度跟着代码：三行短代码不必拉成一整栏宽的大框。至少 318px（窄栏里取栏宽），语言名和按钮总放得下。
 	 */
@@ -237,9 +237,6 @@
 		position: relative;
 		/* 代码块在统一间隙外再留 3px：一块贴进来的东西比一段话略多一点呼吸空间。 */
 		margin-block: 0.2em;
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		align-items: start;
 		width: fit-content;
 		min-width: min(100%, 318px);
 		background: var(--markdown-code-sunk);
@@ -262,14 +259,11 @@
 		--plume-ink: var(--plume-code-fg);
 		--plume-ink-faint: color-mix(in srgb, var(--plume-code-fg) 65%, transparent);
 		--plume-card-hover: color-mix(in srgb, var(--plume-code-fg) 8%, transparent);
-		/* 放在右边那一列；DOM 里它在代码前面，读屏和 Tab 先到语言名和按钮。 */
-		grid-column: 2;
-		grid-row: 1;
 		display: flex;
 		align-items: center;
-		gap: 3px;
-		/* 和第一行代码居中对齐：代码上内边距 12px，加上半行，减去行高（标签 24px 那行的一半）。 */
-		padding: calc(12px + (var(--text-code) * var(--plume-code-line-height) - 24px) / 2) 5px 0 0;
+		gap: 8px;
+		/* 左边和代码的左边对齐。 */
+		padding: 6px 8px 0 calc(10px + 1ch);
 		font-family: var(--plume-font-mono);
 		font-size: var(--text-code);
 		line-height: 24px;
@@ -278,12 +272,10 @@
 	}
 
 	.markdown .markdown-code > pre {
-		grid-column: 1;
-		grid-row: 1;
 		background: transparent;
 		border: 0;
 		border-radius: 0;
-		padding: 12px 1ch 12px calc(10px + 1ch);
+		padding: 6px calc(10px + 1ch) 12px;
 	}
 
 	/* 正在输出的代码块里的一段，见 `MarkdownCode` 的 `fading`：块级，浏览器才能只重排正在长的那一段。 */
