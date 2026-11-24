@@ -7,7 +7,9 @@ import type {
 	MessageAttachment,
 	OutgoingMessage,
 	PendingRequest,
+	SessionScope,
 	SessionSummary,
+	TurnCause,
 	TurnStop,
 	UserContent,
 	UserMessage,
@@ -139,6 +141,12 @@ export interface Session {
 	answeredBy?: Map<string, string>;
 	/** 经 `ctx.sessions.launch` 开出它、还在等它第一次真闲下来（`LaunchedSession.idle`）的插件：这期间它收得到这个会话的观察，见 `concerned`。 */
 	launchedBy?: string;
+	/** 这一轮（闲着时是上一轮）是谁引起的，见 `TurnCause`、`turn-cause.ts`。只在内存里：应用退出时这一轮也停了。 */
+	cause?: TurnCause;
+	/** 上一轮收尾时还在等自己派出去的事（`summary.background`）：它们回来叫起的那一轮沿用上一轮的 `cause`。 */
+	causeWaited?: boolean;
+	/** 正在跑的这一轮交给循环的那份会话信息（`TurnScope.session`）：一轮中途 `cause` 变了跟着改，之后的钩子、工具读到的是新的。 */
+	turnScope?: SessionScope;
 }
 
 /**

@@ -116,7 +116,7 @@ export const SUBMIT_PLAN_RESULTS = {
 		(checklist ? ` If it takes three or more steps, break it into a task list with \`${checklist}\` alongside your first action.` : "") +
 		(notes ? " The notes are the user's comments on this plan: follow them as you carry it out." : ""),
 	handedOff: (file: string) =>
-		`The user approved the plan and handed it to a new session, which carries it out from ${file}. Do not carry it out here. That session may message you about intent or trade-offs the plan leaves open; answer from this conversation.`,
+		`The user approved the plan and handed it to a new session, which carries it out from ${file}. Do not carry it out here. Each time a turn of that session ends, its result is reported back here; do not wait for it or poll.`,
 	handoffFailed: (file: string, reason: string) =>
 		`The user approved the plan and asked for it to run in a new session, but that session could not be started: ${reason}. The plan is saved at ${file}. Do not carry it out here; wait for the user.`,
 };

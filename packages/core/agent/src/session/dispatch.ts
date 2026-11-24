@@ -11,18 +11,18 @@ import type {
 	UserMessage,
 } from "@plume/contract";
 import { keptRecord, sessionScope, type ContextRecord } from "@plume/loop";
-import type { BackgroundRuns } from "../background.ts";
 import type { PluginHost } from "../host.ts";
 import { text } from "../i18n.ts";
 import type { SessionQueues } from "../queue.ts";
 import type { Lifecycle } from "./lifecycle.ts";
 import { userMessage, type Session } from "./session.ts";
+import type { SpawnedReports } from "./spawned-reports.ts";
 
 /** 开出来的会话的短名（`SessionLaunch.spawnedFrom.name`）。 */
 const SPAWN_NAME = /^[a-z0-9][a-z0-9-]{0,23}$/;
 
 export interface DispatchDeps {
-	host: Pick<PluginHost, "run" | "toolOwners"> & { workspace: Pick<PluginHost["workspace"], "beginPrompt"> };
+	host: Pick<PluginHost, "run"> & { workspace: Pick<PluginHost["workspace"], "beginPrompt"> };
 	messagesOf(session: Session): Promise<Message[]>;
 	observe(sessionId: string, event: SessionObservation["event"], timestamp?: number): void;
 	lifecycle: Pick<Lifecycle, "createPlain" | "plainChoice" | "stopSession">;
@@ -34,7 +34,7 @@ export interface DispatchDeps {
 	readMessages(session: Session): Message[];
 	log: Log;
 	quitting(): boolean;
-	background: Pick<BackgroundRuns, "reportBack">;
+	spawned: Pick<SpawnedReports, "callOwner">;
 	held(session: Session): boolean;
 	/** 回边：回合模块后建，在 `createAgent` 里接上。 */
 	runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel?: boolean): Promise<TurnStop>;
@@ -49,7 +49,6 @@ export interface Dispatch {
 	submitPrompt(session: Session, prompt: UserMessage, signal: AbortSignal): Promise<PromptVerdict>;
 	launchedPrompts: WeakSet<UserMessage>;
 	launchSession(owner: string, options: Parameters<SessionAccess["launch"]>[0] | undefined): ReturnType<SessionAccess["launch"]>;
-	reportBack(owner: string, sessionId: string, words: string, options: Parameters<SessionAccess["reportBack"]>[2]): boolean;
 	childMessage(message: string | SessionMessage): UserMessage;
 	sendChild(session: Session, message: string | SessionMessage, signal: AbortSignal | undefined): Promise<TurnStop>;
 	parentFor(child: Session, plugin: string): ParentSession | undefined;
@@ -69,7 +68,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		readMessages,
 		log,
 		quitting,
-		background,
+		spawned,
 		held,
 		runTurn,
 		parentStatus,
@@ -95,7 +94,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 				"prompt.submit",
 				{
 					sessionId: session.summary.id,
-					session: sessionScope(session.summary),
+					session: sessionScope(session.summary, session.cause),
 					cwd: session.summary.cwd,
 					text: words,
 					attachments: (prompt.attachments ?? []).map((item) => item.name),
@@ -135,7 +134,21 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		if (source && source.summary.kind !== "top") throw new Error(text("session.nestedChild"));
 		const name = typeof from?.name === "string" ? from.name.trim() : "";
 		if (name && !SPAWN_NAME.test(name)) throw new Error(text("session.badSpawnName", { name }));
-		const history = options?.fork === true ? await forkedHistory(source, from?.toolCallId) : undefined;
+		// 只核字段属实，不管该不该开。调用 id 要是本插件的工具在那个会话里的一次调用：插件不能把随便哪个会话填成来处、
+		// 借交回往里说话，也不能冒认别的插件的卡。要交回的（`spawned-reports.ts` 每轮交回），那次调用得在来处本身里，交回记在它名下。
+		const toolCallId = typeof from?.toolCallId === "string" ? from.toolCallId : undefined;
+		const callIn = typeof from?.callIn === "string" ? from.callIn : undefined;
+		const reportBack = from?.reportBack === true;
+		if (source) {
+			const via = callIn === undefined ? source : sessions.get(callIn);
+			if (!via || (callIn !== undefined && (toolCallId === undefined || via.summary.parentId !== source.summary.id || via.summary.kind === "top")))
+				throw new Error(text("session.badSpawnCallIn", { id: String(callIn) }));
+			if (reportBack && (toolCallId === undefined || callIn !== undefined)) throw new Error(text("session.reportNeedsCall"));
+			if (toolCallId !== undefined && spawned.callOwner(via.summary.id, toolCallId) !== owner)
+				throw new Error(text("session.badSpawnSource", { id: via.summary.id }));
+		}
+		// 带了 `callIn` 的那次调用不在来处里，`forkedHistory` 找不到它，照样抛错。
+		const history = options?.fork === true ? await forkedHistory(source, toolCallId) : undefined;
 		const summary = await createPlain(
 			target,
 			{
@@ -144,8 +157,10 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 					? {
 							spawnedFrom: {
 								sessionId: String(from.sessionId),
-								...(typeof from.toolCallId === "string" ? { toolCallId: from.toolCallId } : {}),
+								...(toolCallId !== undefined ? { toolCallId } : {}),
+								...(callIn !== undefined ? { callIn } : {}),
 								...(name ? { name } : {}),
+								...(reportBack ? { reportBack: true as const } : {}),
 							},
 						}
 					: {}),
@@ -187,28 +202,6 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		return { messages: kept, record: keptRecord(await recordOf(source), kept) };
 	}
 
-	/**
-	 * 开出来的会话把一轮的结果交回开出它的会话（`SessionAccess.reportBack`）。认的是会话摘要上的 `spawnedFrom`，重启以后也认得；
-	 * 来处只是插件当初填的一个 id：交回之前核对它真是本插件的工具在那个会话里的一次调用，插件不能借交回往随便哪个会话里说话。
-	 */
-	function reportBack(owner: string, sessionId: string, words: string, options: Parameters<SessionAccess["reportBack"]>[2]): boolean {
-		if (!options || typeof options !== "object" || !options.delivery || typeof options.delivery !== "object") throw new Error(text("session.badDelivery"));
-		if (typeof words !== "string" || !words.trim()) throw new Error(text("session.emptyMessage"));
-		const from = sessions.get(String(sessionId))?.summary.spawnedFrom;
-		const parent = from ? sessions.get(from.sessionId) : undefined;
-		if (quitting() || !parent || parent.summary.kind !== "top" || parent.summary.archived) return false;
-		if (!calledBy(parent, from?.toolCallId, owner)) throw new Error(text("session.badSpawnSource", { id: parent.summary.id }));
-		// 交回不改来处被人按停的状态：叫不叫醒由 `wakeReports` 按规矩定，不叫醒的留到它下一轮开头读。
-		background.reportBack(
-			parent.summary.id,
-			String(sessionId),
-			words,
-			{ delivery: options.delivery, ...(options.frame ? { frame: options.frame } : {}), wake: options.wake === true },
-			owner,
-		);
-		return true;
-	}
-
 	function childMessage(message: string | SessionMessage): UserMessage {
 		const input = typeof message === "string" ? { content: [{ type: "text" as const, text: message }] } : message;
 		const prompt = userMessage({ ...input, synthetic: false, interrupt: false });
@@ -246,17 +239,6 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 			if (words) return words;
 		}
 		return "";
-	}
-
-	/** `toolCallId` 是不是插件 `plugin` 注册的工具在这个会话里的一次调用（撤回截掉了的不算）。 */
-	function calledBy(session: Session, toolCallId: string | undefined, plugin: string): boolean {
-		if (typeof toolCallId !== "string") return false;
-		const history = readMessages(session);
-		const call = history
-			.flatMap((message) => (message.role === "assistant" ? message.content : []))
-			.find((block) => block.type === "toolCall" && block.id === toolCallId);
-		if (call?.type !== "toolCall") return false;
-		return host.toolOwners().some((tool) => tool.name === call.name && tool.plugin === plugin);
 	}
 
 	/**
@@ -300,5 +282,5 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		};
 	}
 
-	return { submitPrompt, launchedPrompts, launchSession, reportBack, childMessage, sendChild, parentFor };
+	return { submitPrompt, launchedPrompts, launchSession, childMessage, sendChild, parentFor };
 }

@@ -55,7 +55,7 @@ const BUILTIN_TOOLS = {
 const BUILTIN_MARKS = {
 	mcp: ["mcpDeferred"],
 	prompt: ["userInstructions", "projectInstructions"],
-	"spawn-session": ["session-report", "spawnedSession"],
+	"spawn-session": ["spawnedSession"],
 	subagents: ["subagent_result"],
 	tools: ["background_job", "monitor_events"],
 };

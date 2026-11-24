@@ -20,6 +20,7 @@ import type { SessionDb } from "../session-db.ts";
 import type { SessionWakeups } from "../wakeups.ts";
 import type { Idle } from "./idle.ts";
 import { newSession, oneLineTitle, type Session } from "./session.ts";
+import type { SpawnedReports } from "./spawned-reports.ts";
 
 type ProjectConfig = Awaited<ReturnType<typeof layerProjectSettings>>;
 
@@ -53,6 +54,7 @@ export interface LifecycleDeps {
 	queues: Pick<SessionQueues, "forget">;
 	/** 回边：队列模块的子任务状态后建，在 `createAgent` 里接上。 */
 	handed: Pick<ChildTasks, "forget">;
+	spawned: Pick<SpawnedReports, "forget">;
 	/** 回边：占用模块后建，在 `createAgent` 里接上。 */
 	held(session: Session): boolean;
 	/** 回边：服务对象后建，在 `createAgent` 里接上。 */
@@ -112,6 +114,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		host,
 		queues,
 		handed,
+		spawned,
 		held,
 		service,
 		log,
@@ -176,6 +179,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
 		void removeImages(mediaDir, released).catch((error: unknown) => log("agent", "warn", `删不掉没人用的图：${errorText(error)}`));
 		queues.forget(ids);
 		handed.forget(ids);
+		spawned.forget(ids);
 		// 等它闲下来的人不用再等了：它不在了。
 		idle.forget(ids);
 		// 草稿只为那次对话而写，跟着会话一起走；删不掉只记日志，不挡删除本身。

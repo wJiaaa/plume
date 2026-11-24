@@ -11,7 +11,7 @@
  *   拒绝带修改意见时意见回给模型、开关不动，它改完再交；什么都没说的拒绝（和到时没人答、停下）让这一轮停下，人说下一步。
  *   批准那一刻开关就地关掉，同一轮里接着做。它常驻在工具表里，不在计划模式时调用返回一句错误。
  *   批准的计划存成会话临时目录里的一个文件；人选了「在新会话里执行」时，经 `ctx.sessions.launch` 在同一个项目里开一个
- *   只带着这份计划的会话（`handoff.ts` 写它的第一句话），这个会话就此停下，留着回答那边的提问。
+ *   只带着这份计划的会话（`handoff.ts` 写它的第一句话），这个会话就此停下，留着回答那边的提问；那边每做完一轮，本体把结果交回这里。
  * - 开着时系统提示词多一段（`model.context`）；一轮查过东西、以正文收尾却没交计划时提醒一次（`step.end`）。
  * - 压缩把批准计划的那次结果折进摘要头时，计划原样接在头里（`context.compact`），执行所依据的计划不被概括掉。
  * - 提供服务 `session.plan`：一个会话照着做的那份批准过的计划，交给新会话的算新会话的。
@@ -204,7 +204,7 @@ export default {
 				if (reply.handoff) {
 					/*
 					 * 实施归新会话，这里就此停下：接着跑的话两个会话在同一份计划上各改各的。新会话开在这个会话的项目里，
-					 * 记着从这次调用开出来（`spawnedFrom`），不回报——这个会话留着只为回答那边的提问。
+					 * 记着从这次调用开出来（`spawnedFrom`），要本体每轮交回（`reportBack`）：它每结束一轮，结果交回这里。
 					 */
 					const model = reply.handoff.model;
 					const handed = { ...details, handoff: true, ...(model ? { model } : {}) } satisfies PlanDetails;
@@ -216,7 +216,7 @@ export default {
 							message: handoffPrompt(MESSAGES[ctx.locale()], { plan: renderPlan(plan, notes), file }),
 							title: [...planTitle(plan)].slice(0, 60).join(""),
 							...(model ? { model } : {}),
-							spawnedFrom: { sessionId: run.sessionId, toolCallId: run.toolCallId },
+							spawnedFrom: { sessionId: run.sessionId, toolCallId: run.toolCallId, reportBack: true },
 						});
 					} catch (error) {
 						// 没开出来：这一轮照样按「交出去了」停下，不告诉人的话这份计划就悄悄没人做了。

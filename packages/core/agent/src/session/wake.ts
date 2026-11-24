@@ -5,7 +5,7 @@ import type { Session } from "./session.ts";
 
 /** 被别的会话的信、开出来的会话的交回接连叫起这么多轮、人一句话也没说时，不再叫醒（见 `wakeReports`）。 */
 const AUTO_WAKE_LIMIT = 10;
-/** 开出来的会话一轮停下后，等它交回的那一份进了这一批再看要不要叫醒来处（见 `nudgeOrigin`）。 */
+/** 开出来的会话一轮停下后，等它交回的那一份攒进这一批（聚合窗口）再看要不要叫醒来处（见 `nudgeOrigin`）。 */
 const REPORT_SETTLE_MS = 1_000;
 /**
  * 交回的一批为了和兄弟会话的合成一次送达，最多等这么久：兄弟会话里有一个要跑一小时，先做完的那份就不该陪它等一小时。
@@ -36,7 +36,7 @@ export function createWake(deps: WakeDeps): Wake {
 
 	/**
 	 * 攒好的送达叫醒闲着的会话。别的会话的信、开出来的会话的交回（`ReadyKind` 不是 `other`）另有规矩，防几个会话原地互相叫醒，
-	 * 见 `LetterReceipt`、`ReportBackOptions.wake`：
+	 * 见 `LetterReceipt`、`spawned-reports.ts`：
 	 * - 全是交回的：来处被人按停、上一轮没以完成收场的不叫醒，留到下一轮开头读；从它开出来的会话还有在跑的先不叫，最后一个停下时再看
 	 *   （`nudgeOrigin`），可最多等到这一批攒好后 `SPAWNED_WAIT_MS`，到点还有在跑的也先送。
 	 * - 接连叫起到了上限的不叫醒，留到人开口，对话里提示一句。
@@ -89,12 +89,13 @@ export function createWake(deps: WakeDeps): Wake {
 	}
 
 	/**
-	 * 开出来的会话一轮停下了：开出它的会话可能攒着别的会话交回的、在等它停（见 `wakeReports`）。插件读到收场再交回要一会儿，
-	 * 等这一份也进了这一批再看，几份合成一次送达。
+	 * 开出来的会话一轮停下了：开出它的会话可能攒着别的会话交回的、在等它停（见 `wakeReports`）。这一份收场时就交了，
+	 * 攒进的那一批过了聚合窗口才算攒好，等一会儿再看，几份合成一次送达。
 	 */
 	function nudgeOrigin(session: Session): void {
-		const originId = session.summary.spawnedFrom?.sessionId;
-		if (!originId) return;
+		const from = session.summary.spawnedFrom;
+		if (!from?.reportBack) return;
+		const originId = from.sessionId;
 		setTimeout(() => {
 			const origin = sessions.get(originId);
 			if (origin) wakeReports(origin);
@@ -115,9 +116,12 @@ export function createWake(deps: WakeDeps): Wake {
 		spawnedWaits.set(id, timer);
 	}
 
-	/** 从 `parentId` 开出来、没归档的会话还有在跑的。 */
+	/** 从 `parentId` 开出来、要交回它（`reportBack`）、没归档的会话还有在跑的。不交回的那些停下了也没东西送来，不等它们。 */
 	function spawnedRunning(parentId: string): boolean {
-		for (const other of sessions.values()) if (other.summary.spawnedFrom?.sessionId === parentId && !other.summary.archived && held(other)) return true;
+		for (const other of sessions.values()) {
+			const from = other.summary.spawnedFrom;
+			if (from?.sessionId === parentId && from.reportBack && !other.summary.archived && held(other)) return true;
+		}
 		return false;
 	}
 

@@ -4,12 +4,14 @@
  * - `spawn_session` 按 `initiation` 分三种：`offer` 弹一张卡问人「开新会话 / 就在这里做」，调用等着人选（`run.request`）；
  *   `user_asked` 当场开；`own_initiative` 只在对话里留一张建议卡，人点了「开始」（或让模型带 `proposal_id` 开）才开。
  *   卡片本身就是同意，所以不审批。人选过「以后不再问」后 offer 不弹卡，直接答「就在这里做」。
- * - 只有人说的话引起的那一轮能开会话、能问：别的会话寄来的信、开出来的会话的第一轮（那是来处交代的）里只能提建议。
+ * - 只有人说的话引起的那一轮能开会话、能问（`session.cause`，本体定）：别的会话寄来的信、开出来的会话的第一轮（那是来处交代的）、
+ *   运行时叫起的一轮里只能提建议。
  * - 开出来的会话在提出它的对话所在的项目里（不在项目里时是它的目录），记着从哪次调用开出来（`spawnedFrom`，带短名），
  *   侧栏里挂在这个对话下面。`fresh` 只带简报（背景加任务），`fork` 带着来处在这次调用之前的整段对话。
  * - 工作树：开关开着（或模型说要）时，开之前经服务 `session.worktree` 登记这次调用，新会话第一轮就在自己的工作树里跑。
  * - `hand_off_to_session` 把做到一半的事 fork 出去，这一轮转去回答人的新话。
- * - 开出来的会话每结束一轮，把汇报交回来处（`reports.ts`），它自己的系统提示词里多一节说明来处和怎么汇报。
+ * - 开的时候要本体每轮交回（`spawnedFrom.reportBack`）：开出来的会话每结束一轮，本体把汇报交回来处。这里给要交回的会话
+ *   （不管是哪个插件开的）的系统提示词多一节，说明来处和怎么写好收尾那段（汇报取它的开头）。
  * - `archive_session` 只在人要它归档时用：经 `ToolRun.archiveAfterTurn` 交给本体，并用 `terminate` 让这一轮停在这一下。
  * - 这几件都只给侧栏里的会话：子 Agent、侧边聊天的工具表里藏起来（`model.context`），调到了也拒绝。
  *
@@ -35,7 +37,6 @@ import {
 	SPAWN_SESSION_PARAMETERS,
 	SUGGESTIONS_PER_TURN,
 } from "./prompt.ts";
-import { Reports } from "./reports.ts";
 import {
 	ARCHIVE_SESSION,
 	type Briefing,
@@ -52,7 +53,7 @@ import {
 	SPAWN_SESSION,
 	SUGGESTION_TTL_MS,
 } from "./suggestion.ts";
-import { humanTurn, suggestionsThisTurn } from "./turns.ts";
+import { suggestionsThisTurn } from "./turns.ts";
 
 const TOOLS = new Set([SPAWN_SESSION, HAND_OFF, DISMISS_TASK, ARCHIVE_SESSION]);
 
@@ -75,18 +76,10 @@ type Proposal =
 export default {
 	name: "plume.spawn-session",
 	inject: ["session.worktree"],
-	// 开出来的会话每一轮都要交回：认它们的收场要看全部会话。
-	observe: "all",
 	async apply(ctx) {
 		const worktrees = ctx.use("session.worktree");
-		const reports = new Reports({
-			get: (id) => ctx.sessions.get(id),
-			messages: (id) => ctx.sessions.messages(id),
-			reportBack: (id, text, options) => ctx.sessions.reportBack(id, text, options),
-			warn: (message) => ctx.log.warn(message),
-		});
-		ctx.sessions.observe((observation) => reports.observe(observation));
-		ctx.sessions.onDeleted((sessionId) => reports.deleted(sessionId));
+		/** 这一轮是人说的话引起的。重启后还没跑过一轮的（没有 `cause`）不算。 */
+		const human = (run: ToolRun) => run.session.cause?.by === "human";
 
 		/** 要不要先弹卡问（offer 卡上的「以后不再问」、设置 › 常规里的开关）。 */
 		const settings = await ctx.settings({ offers: true }, normalizeSettings);
@@ -95,14 +88,16 @@ export default {
 			// 子会话和插件的独立会话（比如 SSH 的运维助手）都不是侧栏里那段对话（`session.kind` 不是 `top`）：不开会话，也不归档自己。
 			if (input.session.kind !== "top") return next({ ...input, tools: input.tools.filter((tool) => !TOOLS.has(tool.name)) });
 			const origin = input.session.spawnedFrom;
-			if (origin?.toolCallId && (await reports.isOurs(input.sessionId, origin)))
+			if (origin?.reportBack)
 				return next({ ...input, sections: [...input.sections, { id: "spawnedSession", text: childSection(origin.sessionId, origin.name) }] });
 			return next(input);
 		});
 
 		/** 这条提议开出来的会话：从会话列表的 `spawnedFrom` 认，重启后也对。 */
 		async function startedFrom(parentId: string, callId: string): Promise<SessionSummary | undefined> {
-			return (await ctx.sessions.list()).find((summary) => summary.spawnedFrom?.sessionId === parentId && summary.spawnedFrom.toolCallId === callId);
+			return (await ctx.sessions.list()).find(
+				(summary) => summary.spawnedFrom?.sessionId === parentId && !summary.spawnedFrom.callIn && summary.spawnedFrom.toolCallId === callId,
+			);
 		}
 
 		/** 从记录里读一条提议，不信界面和模型交来的：开出来的会话照记录里的那段话做事。 */
@@ -149,7 +144,7 @@ export default {
 					// 能不能开在这里现问，不信界面交来的结论：卡片刚画出来、还没问到能不能开时点了「开始」，交来的只是开关的起始值。
 					const undo =
 						briefing.worktree === true && (await offersWorktree(parent)) ? worktrees.requestFor({ sessionId: parent.id, toolCallId: callId }) : undefined;
-					const spawnedFrom = { sessionId: parent.id, toolCallId: callId, ...(briefing.name ? { name: briefing.name } : {}) };
+					const spawnedFrom = { sessionId: parent.id, toolCallId: callId, ...(briefing.name ? { name: briefing.name } : {}), reportBack: true as const };
 					const options: SessionLaunch = {
 						...(parent.project ? { project: parent.project } : { cwd: parent.cwd }),
 						message: briefing.message,
@@ -161,9 +156,7 @@ export default {
 						spawnedFrom,
 					};
 					try {
-						const launched = await ctx.sessions.launch(options);
-						reports.launched(launched.session.id, spawnedFrom, briefing.title);
-						return launched.session;
+						return (await ctx.sessions.launch(options)).session;
 					} catch (error) {
 						undo?.();
 						throw error;
@@ -208,8 +201,6 @@ export default {
 				const request = checkSpawn(args);
 				if ("error" in request) return failed(request.error);
 				const messages = await ctx.sessions.messages(run.sessionId);
-				// 开出来的会话的第一轮是来处交代的：那句话看着像人说的，其实不是。
-				const human = humanTurn(messages) && !reports.inFirstTurn(run.sessionId);
 				if (request.kind === "suggest") {
 					const earlier = suggestionsThisTurn(messages);
 					for (const call of run.calls) {
@@ -225,7 +216,7 @@ export default {
 					};
 					return { output: results.suggested(details.title), details };
 				}
-				if (!human) return failed(results.notHuman);
+				if (!human(run)) return failed(results.notHuman);
 				if (request.kind === "now") return startNow(run, run.toolCallId, request.briefing);
 				if (request.kind === "offer") {
 					const title = request.title;
@@ -280,7 +271,7 @@ export default {
 				if (run.session.kind !== "top") return failed(results.onlyTop);
 				const briefing = checkHandOff(args);
 				if ("error" in briefing) return failed(briefing.error);
-				if (!humanTurn(await ctx.sessions.messages(run.sessionId)) || reports.inFirstTurn(run.sessionId)) return failed(results.notHuman);
+				if (!human(run)) return failed(results.notHuman);
 				return startNow(run, run.toolCallId, { ...briefing, message: handOffMessage(briefing.message) }, { handOff: true });
 			},
 		});
@@ -332,7 +323,8 @@ export default {
 					)
 					.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
 					.map((summary): StartedSuggestion => {
-						const callId = summary.spawnedFrom?.sessionId === target ? summary.spawnedFrom.toolCallId : undefined;
+						// 别的会话里的调用开的（`callIn`，比如侧边聊天的卡）不是这里的卡。
+						const callId = summary.spawnedFrom?.sessionId === target && !summary.spawnedFrom.callIn ? summary.spawnedFrom.toolCallId : undefined;
 						return {
 							...(callId ? { callId } : {}),
 							sessionId: summary.id,

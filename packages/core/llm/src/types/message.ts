@@ -367,7 +367,7 @@ export interface DeliveredReport {
 	status: "done" | "failed" | "aborted";
 	/** 没做完就停下了（检查点、原地打转、上游出错）——报告是阶段性的。 */
 	incomplete?: boolean;
-	/** 点了去哪个会话。只有宿主写得出：新会话交回开出它的会话时（`SessionAccess.reportBack`）填它的 id。 */
+	/** 点了去哪个会话。只有宿主写得出：开出来的会话每轮交回开出它的会话时填它的 id。 */
 	sessionId?: string;
 	/**
 	 * 插在一轮中间、并进正在做的那段活里，挨着的几份并成一行：后台命令的结果——放到后台的那次调用当场就跑完了，

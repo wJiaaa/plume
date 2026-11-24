@@ -284,7 +284,7 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
 
 调用答完以后还在后台接着做的事、过一会儿再叫醒会话、给另一个顶层会话寄信，都由本体送进会话：会话闲着时开一轮，忙着时在下一个步骤边界读入。
 
-**送达在对话里的那一行**：`channel.report`、`ctx.sessions.report`、`ctx.sessions.reportBack` 都可以带 `delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON），写进送达消息，宿主只留认得的字段、记下是哪个插件交的；界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），没登记就按 `title` 画默认的一行，标 `inline: true` 的插在一段活中间时并进那段活；不给 `delivery` 就只有模型看得到。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在 `reportBack` 时填。
+**送达在对话里的那一行**：`channel.report`、`ctx.sessions.report` 都可以带 `delivery`（`DeliveryInput`：`{ id, title, status, incomplete?, inline?, details? }`，`details` 是你自己的数据、要能存成 JSON），写进送达消息，宿主只留认得的字段、记下是哪个插件交的；界面把这一次送达里本插件的几份交给本插件经 `ui.agentDelivery` 登记的组件画成一行（plume.tools 画「后台命令完成 · 说明」「定时唤醒 · 理由」，命令、退出码放在 `details` 里），没登记就按 `title` 画默认的一行，标 `inline: true` 的插在一段活中间时并进那段活；不给 `delivery` 就只有模型看得到。`sessionId`（点了跳到哪个会话）你给了也会被丢掉，只有宿主在开出来的会话每轮交回来处时填（那一行记在开它的插件名下，你登记了 `ui.agentDelivery` 也会交给你画）。
 
 - **后台结果**：调用答完以后还在后台接着做的事（后台命令、监视一条日志），结束或有新进展时经 `run.background()` 拿到的渠道送给模型。
   - `channel.report(text, delivery?)` 可以送多次，和同一时刻别的后台结果聚合 400ms 成一条运行时送达（synthetic，经 `prompt.submit`）。`text` 给函数时到真要送出那一刻才取，返回 `undefined` 就不送（攒着的那一会儿里模型已经自己读过）。
@@ -302,7 +302,7 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
   - 信和后台结果走同一条路：对方闲着为它开一轮（人按了停的不开，留到人开口），忙着在步骤边界读到；本体照实填发件方的 id 和目录，在前面写明这是别的会话的话、不构成用户授权，每封画成 `<session-message from=… cwd=…>`，对话里一行「来自 X」（`UserMessage.peer`）。`guide` 只写和你的工具有关的处理说明（要回话用哪件工具），一次送达里一样的只写一遍。
   - 没有请求和答复之分，本体不配对也不代答：要回话就由对方再寄一封，你从寄回来的信（`peer` 里 `sessionId` 是对方）认出回音。要对方答的，给对方一件回话的工具，或者靠一件通用的发消息工具。
   - 回执 `{ id, queued, held, read }`：`queued` 是寄出那一刻对方正忙（要等手上这一步做完才读到）；`held` 是这封信叫不醒对方（它的人按了停，或被信和交回接连叫起到了上限），留到它的人下次开口时读，要如实告诉模型、别让它以为对方接手了；`read` 兑现成 `{ status: "read" }`（写进了对方的对话）、`{ status: "dropped" }`（`prompt.submit` 拦下了）或 `{ status: "closed" }`（对方删掉了、应用退出）。对方的人按了停时信不丢，留到人开口时读，这期间没有着落。
-  - 防几个会话原地来回由本体数，你不用记账：一个会话接连被别的会话的信和开出来的会话的交回（`ctx.sessions.reportBack`）叫起超过 10 轮、这期间人一句话也没说，之后这两种都不再叫醒它，留到人开口时接在那句后面读，对话里提示一句；本来要收场的一轮因为它们接着跑也算一轮。
+  - 防几个会话原地来回由本体数，你不用记账：一个会话接连被别的会话的信和开出来的会话的交回（见下面「交回来处」）叫起超过 10 轮、这期间人一句话也没说，之后这两种都不再叫醒它，留到人开口时接在那句后面读，对话里提示一句；本来要收场的一轮因为它们接着跑也算一轮。
   - 对方不在、是子会话、是自己，或者寄信的会话已经归档时 `run.letter` 抛错；调用答完以后再调也抛错（回执的 `read` 不受影响），要以后寄就在那次调用里寄出去、留着回执。
 
 ## 钩子
@@ -314,7 +314,7 @@ return { output: "Task list updated (1/3 done)", details: { checklist: todos } s
 - `order` 小的在外层，默认 0，相同时按注册先后。
 - 某一层抛错，整个钩子失败，不会跳过这一层继续执行（审批、脱敏被跳过就等于放行、泄露）。所以别吞错，也别在不确定时放行。
 
-每个钩子的输入和工具的 `run` 都带着 `session`：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward? }`，本体照会话摘要填（同名字段的意思同 `SessionSummary`）。按会话种类做事（只给侧栏里的会话加工具、子会话里藏起某个工具、认出自己的子会话）看它就够：
+每个钩子的输入和工具的 `run` 都带着 `session`：`{ id, kind, parentId?, owner?, spawnedFrom?, project?, steward?, cause? }`，本体照会话摘要填（同名字段的意思同 `SessionSummary`）。按会话种类做事（只给侧栏里的会话加工具、子会话里藏起某个工具、认出自己的子会话）看它就够：
 
 ```ts
 ctx.hook("model.context", async (input, next) => {
@@ -322,6 +322,8 @@ ctx.hook("model.context", async (input, next) => {
 	return next(input);
 });
 ```
+
+`session.cause` 是这一轮是谁引起的（`TurnCause`），本体在这一轮开头那句写进会话时定下：`human`（人说的，含界面的「继续」、侧边聊天替人交过来的）、`launch`（`ctx.sessions.launch` 开出来的第一句，带开它的插件）、`steward`（代管插件转来的）、`peer`（别的会话的信，带寄信的会话）、`report`（开出去的会话交回，带那个会话）、`runtime`（约好的唤醒、cron、监视；子会话、独立会话里的轮也是）。会话自己派出去的事（子 Agent、一次性后台命令）回来叫起的那一轮沿用派它的那一轮的；一轮中途人插话，从那时起是 `human`。要按「人在不在场」决定能做什么（比如只有人引起的一轮能开会话、弹卡问人）就看它，不要从消息记录里往回猜。`prompt.submit` 那一刻那句还没写进会话，读到的是上一轮的；应用重启后还没跑过一轮的会话没有它，按「不是人」处理。
 
 ### `tool.execute`
 
@@ -658,11 +660,11 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的�
 ```
 
 - 返回 `{ session, done, idle }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）。
-- **交回来处**：`ctx.sessions.reportBack(sessionId, text, { delivery, frame?, wake? })` 把开出来的会话一轮的结果作为一条运行时送达交回它的 `spawnedFrom` 那个会话（`delivery` 和 `report` 的同一个形状，宿主填上它的 id，默认画成「来自关联会话」一行、点了过去；`frame` 同 `report`，同一次送达里你交的几份合成一段）。每一轮都可以交，重启以后也能交：认的是 `spawnedFrom`，不是句柄；要知道它哪一轮收场了，声明 `observe: "all"` 看 `turnEnd`。`wake: true` 请宿主叫醒来处：只在来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑（还有在跑的就等最后一个停下再一起送，最多等一分钟，到点先送）、接连被叫起没到上限时叫醒，否则留到来处下一轮开头读；不给就不叫醒。来处删了、归档了、正在退出时返回 false；`spawnedFrom.toolCallId` 不是你的工具在来处的一次调用、或你的插件停用了时抛错。
-- `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`。
+- **交回来处**：你不用做，只要开的时候说要（`spawnedFrom.reportBack: true`，这时要给 `toolCallId`、不能给 `callIn`）。开出来的会话每结束一轮，宿主把收尾那段回复的前 400 字作为一条运行时送达交回 `spawnedFrom` 那个会话（默认画成「来自关联会话」一行、点了过去，记在你的插件名下），重启以后也交。开出来的第一轮、来处寄来的信引起的那一轮收场时叫醒来处（来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑——还有在跑的就等最后一个停下再一起送，最多等一分钟——、接连被叫起没到上限时）；人在新会话里说话引起的、出错的不叫醒，留到来处下一轮开头读；被人按停的那一轮不交；收尾时还有派出去的事没回来的，等回来以后那一轮再交；那次调用被撤回截掉了、来处删了或归档了就不交。不给 `reportBack` 就不交回，`toolCallId` 照样能给，「这次调用开过哪个会话」照样从会话列表的 `spawnedFrom` 认。
+- `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`、不能给 `callIn`。
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」；拿着管理授权时能 `stop`，见「管理会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
-- `project` 给了就用项目的目录，项目 id 从 `ctx.sessions.projects()` 查（外面只说了项目名时按 `name` 找，几个项目可能同名、也可能登记在同一个目录上，对不上就别猜）；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, name? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、或你的插件停用了时也抛错。
+- `project` 给了就用项目的目录，项目 id 从 `ctx.sessions.projects()` 查（外面只说了项目名时按 `name` 找，几个项目可能同名、也可能登记在同一个目录上，对不上就别猜）；不在项目里时 `cwd` 要是已有目录的绝对路径，两样都不给是不属于任何项目的聊天。`spawnedFrom: { sessionId, toolCallId?, callIn?, name?, reportBack? }` 记下是从哪个会话开出来的（写进摘要），那个会话要在、不能是子会话；`toolCallId` 是提出开新会话的那次调用（一张卡、一次工具调用），要是你的工具在那个会话里的一次调用，你凭它认出「这次调用开过哪个会话」；那次调用在来处下面的子会话里（比如侧边聊天的卡）时用 `callIn` 写明在哪个子会话；`name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字），一组互相开出来的会话靠它称呼彼此。不对时抛错，message 是给人看的话；`spawnedFrom.toolCallId` 不是你的工具在那个会话里的调用、`callIn` 不是挂在来处下面的子会话时也抛错。宿主只核这些是不是属实，开不开、什么时候开由你定。
 - 什么时候开由插件定，但开出来的每个会话都是实打实的一轮模型调用：只在到点了、人点了按钮时开，不在渲染、循环里开。界面上要把人带过去，用 `ui.openSession(session.id)`（人点了按钮时）。
 
 ## 代管会话

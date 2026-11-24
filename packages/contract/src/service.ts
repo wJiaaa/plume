@@ -209,9 +209,9 @@ export interface SessionSummary {
 	kind: SessionKind;
 	/**
 	 * 插件经 `ctx.sessions.launch` 从哪个会话开出来的（计划交出去执行的那个会话、那次调用）。会话本身独立保存，侧栏同组时嵌套在来源下面。
-	 * `name` 是开出它的一方叫它的短名（见 `SessionLaunch.spawnedFrom`）。
+	 * 字段的意思见 `SpawnedFrom`。
 	 */
-	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
+	spawnedFrom?: SpawnedFrom;
 	/** 从哪条会话的消息分叉；来源存在于同一分组时嵌套显示。 */
 	forkedFrom?: { sessionId: string };
 	/**
@@ -226,6 +226,22 @@ export interface SessionSummary {
 
 /** 会话的种类，见 `SessionSummary.kind`。 */
 export type SessionKind = "top" | "child" | "standalone";
+
+/**
+ * 开出这个会话的来处（`SessionSummary.spawnedFrom`），开的插件经 `SessionLaunch.spawnedFrom` 给，本体核过才记。
+ * - `sessionId`：来处，一个侧栏里的会话。侧栏把开出来的会话挂在它下面。
+ * - `toolCallId`：提出开这个会话的那次调用（一张卡、一次工具调用）。开的插件凭它认出「这次调用开过哪个会话」，本身不带别的意思。
+ * - `callIn`：那次调用在哪个会话里，不给就在 `sessionId` 里。只能是来处下面的侧边聊天这类子会话（`parentId` 是来处）。
+ * - `name`：开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字）。一组互相开出来的会话靠它称呼彼此。
+ * - `reportBack`：本体每结束一轮把结果交回来处（见 `SessionLaunch.spawnedFrom`）。
+ */
+export interface SpawnedFrom {
+	sessionId: string;
+	toolCallId?: string;
+	callIn?: string;
+	name?: string;
+	reportBack?: true;
+}
 
 /**
  * 一轮为什么结束：答完了（done）、人按了停（aborted）、出错（error）、用满了步数（max_turns）、

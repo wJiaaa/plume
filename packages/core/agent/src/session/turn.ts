@@ -19,6 +19,7 @@ import type {
 	PromptVerdict,
 	QueuedMessage,
 	SessionObservation,
+	TurnCause,
 	TurnStop,
 	UserMessage,
 } from "@plume/contract";
@@ -38,6 +39,8 @@ import type { SessionDb } from "../session-db.ts";
 import type { SessionWakeups } from "../wakeups.ts";
 import type { Session } from "./session.ts";
 import { userMessage } from "./session.ts";
+import type { SpawnedReports } from "./spawned-reports.ts";
+import { promptCause, reportsCause } from "./turn-cause.ts";
 
 export interface TurnDeps {
 	/** 循环要的那几样（`LoopHost`）原样交给 `@plume/loop`，自己只用 `workspace.call`。 */
@@ -73,7 +76,10 @@ export interface TurnDeps {
 	commitPrompt(session: Session, prompt: UserMessage, context: string | undefined, allowed: () => boolean): Promise<boolean>;
 	relocate(session: Session, cwd: string): Promise<void>;
 	observe(sessionId: string, event: SessionObservation["event"], timestamp?: number): void;
+	spawned: Pick<SpawnedReports, "turnEnded">;
 	handedPrompts: WeakMap<UserMessage, { childId: string; task: ChildTask }>;
+	/** 插件发的那几句（`launch` 的第一句、代管插件转来的），算这一轮是谁引起的时认它们（`promptCause`）。 */
+	launchedPrompts: { has(prompt: UserMessage): boolean };
 	handed: Pick<ChildTasks, "settle">;
 	release(session: Session): void;
 	syncBackground(session: Session): boolean;
@@ -129,7 +135,9 @@ export function createTurn(deps: TurnDeps): Turn {
 		commitPrompt,
 		relocate,
 		observe,
+		spawned,
 		handedPrompts,
+		launchedPrompts,
 		handed,
 		release,
 		syncBackground,
@@ -219,8 +227,10 @@ export function createTurn(deps: TurnDeps): Turn {
 	 * 叫醒是一回事，同样计数、到上限留到人开口（`admitWake`）。循环里最后一步的收件箱和一轮收尾后的接着读都走这里：只在其中一处数，
 	 * 两个会话的往来总赶在对方收尾前攒好，就一直接着跑、撞不到上限。人这次插了话的不数，人开口了。
 	 */
-	async function consumeBoundary(session: Session, controller: AbortController, ending = false): Promise<boolean> {
+	async function consumeBoundary(session: Session, controller: AbortController, ending = false, opening = false): Promise<boolean> {
 		let received = false;
+		/** 这次边界里人插了话：后面一并读进的送达不改这一轮是人的。 */
+		let spoke = false;
 		const sessionId = session.summary.id;
 		while (!controller.signal.aborted) {
 			// 插件经 `ctx.sessions.steer` 插给它子会话的在内存里，人插的在排队条上（`steer`）。
@@ -236,6 +246,11 @@ export function createTurn(deps: TurnDeps): Turn {
 			if (committed) {
 				received = true;
 				if (!prompt.synthetic) delete session.autoWakes;
+				// 人插话：这一轮从这里起算人的（插件插给子会话的不算）。
+				if (promptCause(prompt, causeOf(session), launchedPrompts).by === "human") {
+					setCause(session, { by: "human" });
+					spoke = true;
+				}
 			}
 			// 消息落进会话以后才从条上收走：反过来的话，条先空、气泡还没到，那句话有一阵子哪里都不在。写进去以后才被停下的照样收走，
 			// 不然停下后它成了普通的一条，又发一遍。
@@ -283,6 +298,8 @@ export function createTurn(deps: TurnDeps): Turn {
 					break;
 				}
 				if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted && reports.every((report) => report.valid()))) {
+					// 一轮开头读进的、做完前读进而接着做的，这一轮是它们引起的；做到一半顺带读进的、和人的插话一起读进的不改。
+					if ((opening || ending) && !spoke) setCause(session, reportsCause(reports, session.cause, session.causeWaited === true));
 					for (const letter of letters) letter.settle({ status: "read" });
 					received = true;
 					delivered = true;
@@ -326,6 +343,14 @@ export function createTurn(deps: TurnDeps): Turn {
 		return { id: peer.id!, queued, held: wakeHeld(to), read };
 	}
 
+	const causeOf = (session: Session) => ({ kind: session.summary.kind, launchedBy: session.launchedBy });
+
+	/** 记下这一轮是谁引起的；这一轮已经交给循环的那份会话信息跟着改，之后的钩子、工具读到新的。 */
+	function setCause(session: Session, cause: TurnCause): void {
+		session.cause = cause;
+		if (session.turnScope) session.turnScope.cause = structuredClone(cause);
+	}
+
 	async function runTurn(session: Session, prompt: UserMessage | undefined, controller: AbortController, pinModel = false): Promise<TurnStop> {
 		const sessionId = session.summary.id;
 		active.add(session);
@@ -352,7 +377,7 @@ export function createTurn(deps: TurnDeps): Turn {
 			const steps = () =>
 				runSteps({
 					sessionId,
-					session: sessionScope(session.summary),
+					session: (session.turnScope = sessionScope(session.summary, session.cause)),
 					cwd: session.summary.cwd,
 					projectRoots: projectRootsFor(projects.list(), session.summary.cwd, session.summary.project),
 					allowedPaths: () => attachedPaths(session),
@@ -432,10 +457,11 @@ export function createTurn(deps: TurnDeps): Turn {
 				else if (!controller.signal.aborted) {
 					if (verdict.cwd !== undefined) await relocate(session, verdict.cwd);
 					accepted = await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted);
+					if (accepted) setCause(session, promptCause(prompt, causeOf(session), launchedPrompts));
 					// 人按停时留下的通知、答复在这一轮开头读到，接在人这句后面。
 					if (accepted && background.hasHeld(sessionId)) await consumeBoundary(session, controller);
 				}
-			} else accepted = await consumeBoundary(session, controller);
+			} else accepted = await consumeBoundary(session, controller, false, true);
 			// 拦下的这条没写进会话，这一轮什么也没做，按完成收场：不留「已暂停 · 继续」。
 			stop = controller.signal.aborted ? { reason: "aborted" } : !accepted ? { reason: "done" } : await steps();
 			// 最后一次边界返回后、await 恢复前也可能入队；仍在原轮里串行消费，不丢插话。步骤已经做完，这时读到的是叫起了它（`ending`）。
@@ -464,9 +490,13 @@ export function createTurn(deps: TurnDeps): Turn {
 		const final: TurnStop = stop.reason === "aborted" && session.quitting ? { reason: "interrupted" } : stop;
 		session.summary.stop = final;
 		// 先把「还在不在等后台」对到此刻再说收场：后台结果叫起的这一轮开头取走那批送达时不重算它（`take`），不先对，
-		// 观察者在收场这一刻读到的还是开轮前那个「在等」，spawn-session 就会当它还有事没回来，汇报不叫醒来处。
+		// 观察者和交回（`spawned`）在收场这一刻读到的还是开轮前那个「在等」，会当它还有事没回来，汇报不叫醒来处。
 		syncBackground(session);
+		session.causeWaited = session.summary.background === true;
+		delete session.turnScope;
 		observe(sessionId, { type: "turnEnd", stop: session.summary.stop });
+		// 开出来的会话把这一轮交回来处；赶在放开会话之前，放开时叫的 `nudgeOrigin` 看得到这一份。
+		spawned.turnEnded(session, final);
 		const task = prompt && handedPrompts.get(prompt);
 		if (task) handed.settle(task.childId, task.task, session.summary.stop);
 		// 干净收尾的、人自己的会话，趁缓存还热先问一次要不要压（`compactIdle`）：控制器先不放，压完由它放开会话。

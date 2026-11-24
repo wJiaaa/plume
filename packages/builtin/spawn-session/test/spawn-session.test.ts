@@ -1,26 +1,12 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
-import type {
-	LaunchedSession,
-	Message,
-	PluginContext,
-	ReportBackOptions,
-	SessionKind,
-	SessionLaunch,
-	SessionObservation,
-	SessionSummary,
-	ToolDefinition,
-	ToolRun,
-} from "@plume/contract";
+import { expect, it } from "vitest";
+import type { LaunchedSession, Message, PluginContext, SessionKind, SessionLaunch, SessionSummary, ToolDefinition, ToolRun, TurnCause } from "@plume/contract";
 import type { SpawnSessionApi, StartedSuggestion } from "../src/api.ts";
 import { checkSpawn } from "../src/check.ts";
 import plugin from "../src/index.ts";
-import { reportTail, reportText } from "../src/prompt.ts";
-import { Reports } from "../src/reports.ts";
 import { environmentStatus } from "../src/state.ts";
-import { humanTurn } from "../src/turns.ts";
 
 const BACKGROUND =
 	"这是背景：我们在把 CLI 的参数解析换成新的库，已经定了不改对外的命令名，测试要跟着改，旧的解析代码要删干净。这一块只是整个迁移里的一步：别的会话在改文档和发版脚本，这里不要碰它们，做完在自己的分支上提交。";
@@ -65,169 +51,8 @@ it("参数校验：三种发起方式、fresh 要够长的背景、fork 不要�
 	expect(checkSpawn({ initiation: "offer", title: "字".repeat(61) })).toEqual({ error: "title is 61 characters; keep it to 60." });
 });
 
-it("汇报：标签里转义标题，没回复时说一句；结尾点名在等用户的会话", () => {
-	const text = reportText({ sessionId: "s1", name: "cli", title: 'a "b" <c>', status: "failed", reply: "" });
-	expect(text).toContain('<session-report id="s1" name="cli" title="a &quot;b&quot; &lt;c&gt;" status="failed">');
-	expect(text).toContain("（它没有留下回复。）");
-	expect(reportTail([])).not.toContain("在等用户");
-	expect(reportTail(["cli（s1）"])).toContain("cli（s1） 在等用户");
-});
-
 const user = (text: string, extra: Partial<Extract<Message, { role: "user" }>> = {}) =>
 	({ role: "user", content: [{ type: "text", text }], timestamp: 0, ...extra }) as Message;
-const reply = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] }) as unknown as Message;
-const spawnCall = (id: string, name = "spawn_session") =>
-	({ role: "assistant", content: [{ type: "toolCall", id, name, arguments: {} }] }) as unknown as Message;
-
-/** 一组会话：p 是来处，别的按 `spawnedFrom` 挂在它下面。`reportBack` 收下每一份。 */
-function family(children: Record<string, { toolCallId: string; messages: Message[]; background?: boolean; running?: boolean; name?: string }>) {
-	const sent: Array<{ sessionId: string; text: string; options: ReportBackOptions }> = [];
-	const parent = [spawnCall("c1"), spawnCall("c2"), spawnCall("other", "plan_execute")];
-	const reports = new Reports({
-		get: async (id) =>
-			children[id]
-				? ({
-						id,
-						title: `标题 ${id}`,
-						kind: "top",
-						running: children[id].running === true,
-						...(children[id].background ? { background: true } : {}),
-						spawnedFrom: { sessionId: "p", toolCallId: children[id].toolCallId, ...(children[id].name ? { name: children[id].name } : {}) },
-					} as SessionSummary)
-				: undefined,
-		messages: async (id) => (id === "p" ? parent : (children[id]?.messages ?? [])),
-		reportBack: (sessionId, text, options) => (sent.push({ sessionId, text, options }), true),
-		warn: () => undefined,
-	});
-	const end = async (sessionId: string, reason: "done" | "aborted" | "error" = "done") => {
-		reports.observe({ sessionId, at: 0, timestamp: 0, event: { type: "turnEnd", stop: { reason } } } as SessionObservation);
-		await new Promise((resolve) => setTimeout(resolve, 0));
-	};
-	return { reports, sent, end };
-}
-
-it("每轮汇报：第一轮和来处的信引起的那一轮叫醒，人说话引起的、出错的不叫醒，被停下的不交", async () => {
-	const child = { toolCallId: "c1", name: "cli", messages: [user("任务"), reply("做完了：改了 a.ts")] };
-	const { reports, sent, end } = family({ s1: child });
-	reports.launched("s1", { sessionId: "p", toolCallId: "c1", name: "cli" }, "标题");
-	expect(reports.inFirstTurn("s1")).toBe(true);
-	await end("s1");
-	expect(reports.inFirstTurn("s1")).toBe(false);
-	expect(sent).toHaveLength(1);
-	expect(sent[0]!.options).toMatchObject({ wake: true, delivery: { title: "标题 s1", status: "done" } });
-	expect(sent[0]!.text).toContain('name="cli"');
-	expect(sent[0]!.text).toContain("做完了：改了 a.ts");
-
-	child.messages.push(user("再改一下"), reply("改好了"));
-	await end("s1");
-	expect(sent[1]!.options.wake).toBe(false);
-
-	child.messages.push(user("<session-message>", { peer: [{ sessionId: "p", from: "p", text: "还有 b.ts" }] }), reply("b.ts 也改了"));
-	await end("s1");
-	expect(sent[2]!.options.wake).toBe(true);
-
-	child.messages.push(user("<session-message>", { peer: [{ sessionId: "p", from: "p", text: "再看看" }] }), reply("出错了"));
-	await end("s1", "error");
-	expect(sent[3]!.options).toMatchObject({ wake: false, delivery: { status: "failed", incomplete: true } });
-
-	await end("s1", "aborted");
-	expect(sent).toHaveLength(4);
-});
-
-it("每轮汇报：收尾时还有事没回来先不交，回来以后那一轮接着算；不是本插件开的不交；回复只取前 400 字", async () => {
-	const child = { toolCallId: "c1", background: true, messages: [user("任务"), reply("已派出子 Agent，等结果")] };
-	const { reports, sent, end } = family({ s1: child, s2: { toolCallId: "other", messages: [user("x"), reply("y")] } });
-	reports.launched("s1", { sessionId: "p", toolCallId: "c1" }, "标题");
-	await end("s1");
-	expect(sent).toEqual([]);
-	child.background = false;
-	child.messages.push(user("结果", { synthetic: true, delivery: [] }), reply("字".repeat(500)));
-	await end("s1");
-	expect(sent).toHaveLength(1);
-	expect(sent[0]!.options.wake).toBe(true);
-	expect(sent[0]!.text).toContain(`${"字".repeat(400)}…`);
-	expect(sent[0]!.text).not.toContain("字".repeat(401));
-
-	await end("s2");
-	expect(sent).toHaveLength(1);
-});
-
-it("每轮汇报：收尾时没回来的事被人停掉、没再开一轮，后台空了、会话闲着时照样交上这一轮的，不叫醒；又开了一轮就交给那一轮收场时定", async () => {
-	vi.useFakeTimers();
-	try {
-		const child = { toolCallId: "c1", background: true, running: false, messages: [user("任务"), reply("已起后台命令，等结果")] };
-		const other = {
-			toolCallId: "c2",
-			background: true,
-			running: false,
-			messages: [user("<session-message>", { peer: [{ sessionId: "p", from: "p", text: "去做" }] }), reply("等着")],
-		};
-		const { reports, sent, end } = family({ s1: child, s2: other });
-		reports.launched("s1", { sessionId: "p", toolCallId: "c1" }, "标题");
-		reports.launched("s2", { sessionId: "p", toolCallId: "c2" }, "标题");
-		for (const id of ["s1", "s2"]) {
-			const ending = end(id);
-			await vi.advanceTimersByTimeAsync(0);
-			await ending;
-		}
-		await vi.advanceTimersByTimeAsync(5_000);
-		expect(sent).toEqual([]);
-
-		// s1 的后台被人停掉了，但收尾后的压缩还占着它：在跑不等于新开了一轮，接着等，闲下来再交。
-		child.background = false;
-		child.running = true;
-		await vi.advanceTimersByTimeAsync(5_000);
-		expect(sent).toEqual([]);
-		child.running = false;
-		await vi.advanceTimersByTimeAsync(5_000);
-		expect(sent.map((one) => [one.sessionId, one.options.wake])).toEqual([["s1", false]]);
-		expect(sent[0]!.text).toContain("已起后台命令，等结果");
-
-		// s2 被回来的结果叫起了新的一轮：后台空了、在跑时不交，那一轮收场时接着算上一轮——来处的信引起的，叫醒。
-		other.background = false;
-		other.running = true;
-		await vi.advanceTimersByTimeAsync(5_000);
-		expect(sent).toHaveLength(1);
-		other.running = false;
-		other.messages.push(user("结果", { synthetic: true, delivery: [] }), reply("做完了"));
-		const ending = end("s2");
-		await vi.advanceTimersByTimeAsync(0);
-		await ending;
-		await vi.advanceTimersByTimeAsync(5_000);
-		expect(sent.map((one) => [one.sessionId, one.options.wake])).toEqual([
-			["s1", false],
-			["s2", true],
-		]);
-		expect(sent[1]!.text).toContain("做完了");
-	} finally {
-		vi.useRealTimers();
-	}
-});
-
-it("这一轮背后是不是人：开出来的会话交回的汇报叫起的不是；人开口时、一轮中途读进来的汇报不改这一轮是人的", () => {
-	const report = user("<report>", { synthetic: true, delivery: [{ id: "r", plugin: "plume.spawn-session", title: "t", status: "done", sessionId: "s1" }] });
-	const result = { role: "toolResult", toolCallId: "x", toolName: "bash", content: [], isError: false, timestamp: 0 } as unknown as Message;
-	expect(humanTurn([user("做个事"), reply("做完了"), report])).toBe(false);
-	expect(humanTurn([user("做个事"), report])).toBe(true);
-	expect(humanTurn([user("做个事"), spawnCall("t"), result, report])).toBe(true);
-	// 自己派出去的后台事回来的结果叫起的一轮，接着算那件事背后的人。
-	expect(humanTurn([user("做个事"), reply("等后台"), user("结果", { synthetic: true, delivery: [] })])).toBe(true);
-});
-
-it("汇报的结尾送出那一刻才写：那时弹着卡的会话点名在等用户", async () => {
-	const { reports, sent, end } = family({ s1: { toolCallId: "c1", name: "cli", messages: [user("任务"), reply("好了")] } });
-	reports.launched("s1", { sessionId: "p", toolCallId: "c1", name: "cli" }, "标题");
-	await end("s1");
-	const tail = sent[0]!.options.frame!.tail!;
-	expect(tail()).not.toContain("在等用户");
-	reports.observe({
-		sessionId: "s1",
-		at: 0,
-		timestamp: 0,
-		event: { type: "approval", sessionId: "s1", approval: { type: "request" } },
-	} as unknown as SessionObservation);
-	expect(tail()).toContain("cli（s1） 在等用户");
-});
 
 /** 带 spawn_session 的插件：会话列表、记录、launch、服务 session.worktree、serve、注册下来的工具。 */
 async function plugged(options: {
@@ -253,6 +78,7 @@ async function plugged(options: {
 	const events: string[] = [];
 	const tools: ToolDefinition[] = [];
 	const launched: SessionLaunch[] = [];
+	const hooks: Record<string, (input: unknown, next: (input: unknown) => unknown) => unknown> = {};
 	let api: SpawnSessionApi | undefined;
 	const ctx = {
 		name: plugin.name,
@@ -263,14 +89,12 @@ async function plugged(options: {
 		},
 		locale: () => "zh-CN",
 		log: { info() {}, warn() {}, error() {} },
-		hook() {},
+		hook: (name: string, fn: (typeof hooks)[string]) => void (hooks[name] = fn),
 		tools: { register: (tool: ToolDefinition) => void tools.push(tool) },
 		sessions: {
 			list: async () => [parent, ...(options.sessions ?? [])],
 			get: async (id: string) => (id === parent.id ? parent : undefined),
 			messages: async () => messages,
-			observe() {},
-			onDeleted() {},
 			launch: async (launch: SessionLaunch) => {
 				events.push(`launch ${launch.spawnedFrom?.sessionId}/${launch.spawnedFrom?.toolCallId}`);
 				launched.push(launch);
@@ -288,7 +112,7 @@ async function plugged(options: {
 	} as unknown as PluginContext;
 	await plugin.apply(ctx);
 	const tool = (name: string) => tools.find((one) => one.name === name)!;
-	return { api: api!, events, launched, messages, tool };
+	return { api: api!, events, launched, messages, tool, hooks };
 }
 
 function started(id: string): LaunchedSession {
@@ -330,7 +154,7 @@ it("开始：卡片上选了模型和思考档位才交给 launch；过期的、
 	await one.api.start("p1", "c1", { worktree: false });
 	await (await plugged({})).api.start("p1", "c1", { worktree: false, model: "p/strong", thinking: "high" });
 	expect(one.launched[0]).not.toHaveProperty("model");
-	expect(one.launched[0]).toMatchObject({ message: "去做", title: "拆出去", spawnedFrom: { sessionId: "p1", toolCallId: "c1" } });
+	expect(one.launched[0]).toMatchObject({ message: "去做", title: "拆出去", spawnedFrom: { sessionId: "p1", toolCallId: "c1", reportBack: true } });
 	const strong = await plugged({});
 	await strong.api.start("p1", "c1", { worktree: false, model: "p/strong", thinking: "high" });
 	expect(strong.launched[0]).toMatchObject({ model: "p/strong", thinking: "high" });
@@ -349,11 +173,12 @@ it("开始：卡片上选了模型和思考档位才交给 launch；过期的、
 	await expect(withdrawn.api.start("p1", "c1", { worktree: false })).rejects.toThrow("撤回");
 });
 
-function run(sessionId: string, toolCallId: string, answer?: unknown, calls: ToolRun["calls"] = []) {
+/** 一次调用；这一轮缺省是人说的话引起的（`cause`），`null` 是还没有（重启后还没跑过一轮）。 */
+function run(sessionId: string, toolCallId: string, answer?: unknown, calls: ToolRun["calls"] = [], cause: TurnCause | null = { by: "human" }) {
 	return {
 		sessionId,
 		toolCallId,
-		session: { id: sessionId, kind: "top" },
+		session: { id: sessionId, kind: "top", ...(cause ? { cause } : {}) },
 		calls,
 		request: async () => (answer === undefined ? { answered: false, reason: "declined" } : { answered: true, value: answer }),
 	} as unknown as ToolRun;
@@ -389,10 +214,11 @@ it("spawn_session：别的会话寄来的信引起的那一轮只能提建议；
 	const { tool } = await plugged({ messages: [letter] });
 	const spawn = tool("spawn_session");
 	const now = { initiation: "user_asked", title: "t", prompt: "p", context: "fork" };
-	expect((await spawn.execute(now, run("p1", "x1"))).output).toContain("not by the person");
-	expect((await spawn.execute({ initiation: "offer", title: "t" }, run("p1", "x2", { choice: "new" }))).isError).toBe(true);
+	const peer: TurnCause = { by: "peer", from: "q" };
+	expect((await spawn.execute(now, run("p1", "x1", undefined, [], peer))).output).toContain("not by the person");
+	expect((await spawn.execute({ initiation: "offer", title: "t" }, run("p1", "x2", { choice: "new" }, [], peer))).isError).toBe(true);
 	const suggest = { initiation: "own_initiative", title: "t", summary: "s", prompt: "p", context: "fork" };
-	const card = await spawn.execute(suggest, run("p1", "x3"));
+	const card = await spawn.execute(suggest, run("p1", "x3", undefined, [], peer));
 	expect(card.details).toMatchObject({ kind: "session_suggestion", message: "p", fork: true });
 
 	const earlier = ["a", "b"].map((id) => ({ role: "toolResult", toolCallId: id, toolName: "spawn_session", details: card.details }) as unknown as Message);
@@ -606,4 +432,36 @@ it("environmentStatus：按会话状态给出持久展示态，停止、完成�
 	expect(environmentStatus({ ...base, stopReason: "stalled" }, undefined)).toBe("failed");
 	expect(environmentStatus({ ...base, stopReason: "done", archived: true }, undefined)).toBe("archived");
 	expect(environmentStatus(base, undefined)).toBe("started");
+});
+
+it("只有人说的话引起的那一轮能开、能移交：开出来的第一轮、代管插件转来的、运行时叫起的、重启后还没跑过一轮的都不行", async () => {
+	const { tool } = await plugged({ messages: [user("去做")] });
+	const spawn = tool("spawn_session");
+	const handOff = tool("hand_off_to_session");
+	const now = { initiation: "user_asked", title: "t", prompt: "p", context: "fork" };
+	expect((await spawn.execute(now, run("p1", "x1"))).isError).toBeUndefined();
+	const others: Array<TurnCause | null> = [{ by: "launch", plugin: "test.plan" }, { by: "steward", plugin: "test.ops" }, { by: "runtime" }, null];
+	for (const cause of others) {
+		expect((await spawn.execute(now, run("s1", "y1", undefined, [], cause))).output).toContain("not by the person");
+		expect((await handOff.execute({ title: "t", plan: "p" }, run("s1", "y2", undefined, [], cause))).output).toContain("not by the person");
+	}
+});
+
+it("系统提示词：要每轮交回来处的会话（不管是哪个插件开的）多一节说明来处和汇报；不交回的（只记来处、只记那张卡）、侧栏外的不加", async () => {
+	const { hooks } = await plugged({});
+	const sections = async (session: Record<string, unknown>) => {
+		let seen: { sections: Array<{ id: string; text: string }> } | undefined;
+		await hooks["model.context"]!(
+			{ sessionId: "s", session: { id: "s", kind: "top", ...session }, sections: [], tools: [] },
+			(input) => (seen = input as typeof seen),
+		);
+		return seen!.sections;
+	};
+	const plan = await sections({ spawnedFrom: { sessionId: "p1", toolCallId: "plan_call", reportBack: true } });
+	expect(plan.map((section) => section.id)).toEqual(["spawnedSession"]);
+	expect(plan[0]!.text).toContain("Session p1 started you");
+	expect(plan[0]!.text).toContain("is reported to that session");
+	expect(await sections({ spawnedFrom: { sessionId: "p1" } })).toEqual([]);
+	expect(await sections({ spawnedFrom: { sessionId: "p1", toolCallId: "card", callIn: "side" } })).toEqual([]);
+	expect(await sections({ kind: "child", spawnedFrom: { sessionId: "p1", toolCallId: "c", reportBack: true } })).toEqual([]);
 });

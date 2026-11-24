@@ -130,7 +130,7 @@ export function createModelRequests(deps: ModelRequestsDeps): ModelRequests {
 		const { model } = resolveModel(settings, modelOf(session));
 		const input: ModelContext = {
 			sessionId: session.summary.id,
-			session: sessionScope(session.summary),
+			session: sessionScope(session.summary, session.cause),
 			...(session.summary.parentId === undefined ? {} : { parentId: session.summary.parentId }),
 			...(session.summary.owner === undefined ? {} : { owner: session.summary.owner }),
 			cwd: session.summary.cwd,

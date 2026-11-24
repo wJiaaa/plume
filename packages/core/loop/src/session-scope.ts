@@ -3,14 +3,14 @@
  * 本体里判断「是不是人的那段对话」只经这里，不在各处自己拼两个字段。
  */
 
-import type { SessionKind, SessionScope, SessionSummary } from "@plume/contract";
+import type { SessionKind, SessionScope, SessionSummary, TurnCause } from "@plume/contract";
 
 export function kindOf(summary: Pick<SessionSummary, "parentId" | "owner">): SessionKind {
 	return summary.parentId ? "child" : summary.owner ? "standalone" : "top";
 }
 
-/** 给钩子输入和 `ToolRun` 的那份：每次现拷，插件改了手上的不影响摘要。 */
-export function sessionScope(summary: SessionSummary): SessionScope {
+/** 给钩子输入和 `ToolRun` 的那份：每次现拷，插件改了手上的不影响摘要。`cause` 是本体记在内存里的这一轮是谁引起的（不在摘要上）。 */
+export function sessionScope(summary: SessionSummary, cause?: TurnCause): SessionScope {
 	return {
 		id: summary.id,
 		kind: summary.kind,
@@ -19,5 +19,6 @@ export function sessionScope(summary: SessionSummary): SessionScope {
 		...(summary.spawnedFrom ? { spawnedFrom: { ...summary.spawnedFrom } } : {}),
 		...(summary.project ? { project: summary.project } : {}),
 		...(summary.steward ? { steward: summary.steward } : {}),
+		...(cause ? { cause: structuredClone(cause) } : {}),
 	};
 }

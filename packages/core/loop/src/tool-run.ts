@@ -64,7 +64,7 @@ const ARGUMENTS_LOST_REASON =
 
 export interface ToolScope {
 	sessionId: string;
-	/** 调用所在的会话（`ToolRun.session`、各钩子输入的 `session`），这一轮里不变。 */
+	/** 调用所在的会话（`ToolRun.session`、各钩子输入的 `session`）。每次现拷；这一轮里只有 `cause` 会变（人中途插话）。 */
 	session: SessionScope;
 	cwd: string;
 	projectRoots?: readonly string[];

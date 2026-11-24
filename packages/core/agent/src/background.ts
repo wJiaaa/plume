@@ -98,7 +98,7 @@ export class BackgroundRuns {
 	private readonly channels = new Map<string, { generation: AbortController; calls: Map<string, AbortController> }>();
 	/**
 	 * 留到会话下一轮开头读的：人按停时攒着的信和开出来的会话交回的结果——丢了就谁也不知道——，一轮被打断（插话、编辑重发）时
-	 * 取出来还没写进会话的信，不叫醒会话的交回（`reportBack` 不带 `wake`），和到了上限、不再叫醒会话的那几份（`holdReady`）。
+	 * 取出来还没写进会话的信，不叫醒会话的交回（`reportBack` 不叫醒的），和到了上限、不再叫醒会话的那几份（`holdReady`）。
 	 * 不叫醒会话，也不算它在等后台（`pending`）；会话正在跑时在下一个步骤边界读到。
 	 */
 	private readonly held = new Map<string, Pending[]>();
@@ -157,7 +157,7 @@ export class BackgroundRuns {
 	}
 
 	/**
-	 * `plugin` 开出的会话 `launchedId` 把一轮的结果交回开出它的会话（`SessionAccess.reportBack`）：走同一条送达，那一行带着
+	 * `plugin` 开出的会话 `launchedId` 把一轮的结果交回开出它的会话（见 `session/spawned-reports.ts`）：走同一条送达，那一行带着
 	 * 那个会话的 id（`sessionId`，点了过去）——只有这里写得出它。不跟着来处的渠道作废：来处的人按了停，交回留到它下一轮开头读，
 	 * 删掉时才丢。`wake` 的攒进这一批、按 `readyKind` 的规矩叫醒，不叫醒的直接留到下一轮。
 	 */
@@ -391,7 +391,7 @@ function deliveryStatus(status: unknown): DeliveredReport["status"] {
 /**
  * 插件给的那一行只留通用的几个字段，拷一份：插件之后改了自己手里的对象，落进会话的不跟着变。`details` 要存进会话，
  * 存不成 JSON 的当场抛给插件。记下是哪个插件交的，界面交给它登记的那一行画，不会被别的插件的组件画出来；
- * `sessionId`（点了跳到哪个会话）插件给了也丢掉，只有 `reportBack` 由宿主填。
+ * `sessionId`（点了跳到哪个会话）插件给了也丢掉，只有开出来的会话交回时（`reportBack`）由宿主填。
  */
 function deliveryOf(delivery: DeliveryInput, plugin: string): DeliveredReport {
 	if (!delivery || typeof delivery !== "object") throw new Error(text("session.badDelivery"));

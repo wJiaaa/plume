@@ -55,7 +55,7 @@ export interface CreateHostDeps {
 	modelRequests: Pick<ModelRequests, "completeOnce">;
 	projects: Pick<Projects, "list">;
 	occupancy: Pick<Occupancy, "held" | "looping">;
-	dispatch: Pick<Dispatch, "launchSession" | "reportBack" | "childMessage" | "sendChild">;
+	dispatch: Pick<Dispatch, "launchSession" | "childMessage" | "sendChild">;
 	steward: Pick<Steward, "postToSession" | "settleAsSteward" | "stewarded">;
 	turn: Pick<Turn, "compactNow" | "runTurn" | "active">;
 }
@@ -82,7 +82,7 @@ export async function createHost(deps: CreateHostDeps): Promise<{ host: PluginHo
 		modelRequests: { completeOnce },
 		projects,
 		occupancy: { held, looping },
-		dispatch: { launchSession, reportBack, childMessage, sendChild },
+		dispatch: { launchSession, childMessage, sendChild },
 		steward: { postToSession, settleAsSteward, stewarded },
 		turn,
 	} = deps;
@@ -170,7 +170,6 @@ export async function createHost(deps: CreateHostDeps): Promise<{ host: PluginHo
 				structuredClone(await (options?.parentId === undefined ? createStandalone(owner, options) : createChild(owner, options))),
 			configure: (owner, sessionId, change) => configureOwn(owner, sessionId, change),
 			launch: (owner, options) => launchSession(owner, options),
-			reportBack: (owner, sessionId, words, options) => reportBack(owner, sessionId, words, options),
 			post: async (owner, sessionId, message) => ({ started: postToSession(owner, sessionId, message) }),
 			respond: async (owner, sessionId, toolCallId, decision) => settleAsSteward(owner, sessionId, toolCallId, { decision }),
 			answer: async (owner, sessionId, toolCallId, value) => settleAsSteward(owner, sessionId, toolCallId, { value }),

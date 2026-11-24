@@ -20,6 +20,7 @@ import type {
 	SessionSummary,
 	ToolResultView,
 	ToolSpec,
+	TurnCause,
 } from "@plume/contract";
 import type { PrefixSegment } from "@plume/llm/prefix-fingerprint";
 import type { ModelConfig, ProviderConfig, ThinkingLevel } from "@plume/llm/types";
@@ -51,6 +52,8 @@ export interface SentRequest {
 /** 压缩要读写的那点会话状态。 */
 export interface CompactingSession {
 	summary: SessionSummary;
+	/** 这一轮是谁引起的（本体记在内存里），给 `context.compact` 的 `session`。 */
+	cause?: TurnCause;
 	record?: ContextRecord;
 	compacting?: boolean;
 	sent?: SentRequest;
@@ -200,7 +203,7 @@ export function createCompactor(deps: CompactorDeps) {
 		let cloned: Message[] | undefined;
 		const input: ContextCompact = {
 			sessionId,
-			session: sessionScope(session.summary),
+			session: sessionScope(session.summary, session.cause),
 			cwd: session.summary.cwd,
 			model: {
 				id: model.id,

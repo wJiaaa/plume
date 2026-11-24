@@ -39,6 +39,7 @@ import { createModelRequests } from "./session/model-requests.ts";
 import { createOccupancy } from "./session/occupancy.ts";
 import { createQueueing } from "./session/queueing.ts";
 import { createRegistry } from "./session/registry.ts";
+import { createSpawnedReports } from "./session/spawned-reports.ts";
 import { createSteward } from "./session/steward.ts";
 import { createTurn } from "./session/turn.ts";
 import { createWake } from "./session/wake.ts";
@@ -185,6 +186,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		},
 		queues: { forget: (sessionIds) => queues.forget(sessionIds) },
 		handed: { forget: (sessionIds) => handed.forget(sessionIds) },
+		spawned: { forget: (sessionIds) => spawned.forget(sessionIds) },
 		held: (session) => held(session),
 		service: {
 			setSessionModel: (sessionId, model) => service.setSessionModel(sessionId, model),
@@ -206,7 +208,6 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		occupancy: { held: (session) => occupancy.held(session), looping: (session) => occupancy.looping(session) },
 		dispatch: {
 			launchSession: (owner, launchOptions) => dispatch.launchSession(owner, launchOptions),
-			reportBack: (owner, sessionId, words, reportOptions) => dispatch.reportBack(owner, sessionId, words, reportOptions),
 			childMessage: (message) => dispatch.childMessage(message),
 			sendChild: (session, message, signal) => dispatch.sendChild(session, message, signal),
 		},
@@ -250,11 +251,18 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		find,
 	});
 	const { handed, queues, drainQueue, enqueue, enqueueTask } = queueing;
+	const spawned = createSpawnedReports({
+		...{ sessions, readMessages: registry.readMessages, whenIdle },
+		host: { toolOwners: () => host.toolOwners() },
+		...{ background },
+		quitting: () => quitting,
+		log,
+	});
 	const wake = createWake({ ...{ background }, quitting: () => quitting, ...{ held, sessions }, runTurn: (...args) => turn.runTurn(...args), emit });
 	const dispatch = createDispatch({
 		...{ host, messagesOf, readMessages: registry.readMessages, observe, lifecycle, find, recordOf, sessions, begin, whenIdle, log },
 		quitting: () => quitting,
-		...{ background, held },
+		...{ spawned, held },
 		runTurn: (...args) => turn.runTurn(...args),
 		...{ parentStatus, enqueueTask, queues, handed, commit },
 	});
@@ -274,8 +282,9 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
 		submitPrompt: dispatch.submitPrompt,
 		commitPrompt: messages.commitPrompt,
 		relocate: lifecycle.relocate,
-		...{ observe },
+		...{ observe, spawned },
 		handedPrompts: queueing.handedPrompts,
+		launchedPrompts: dispatch.launchedPrompts,
 		...{ handed, release, syncBackground, saveSummary },
 		archive: lifecycle.archive,
 		...{ sessions, drainQueue },

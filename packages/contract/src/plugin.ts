@@ -31,6 +31,7 @@ import type {
 	ProviderSettings,
 	SessionKind,
 	SessionSummary,
+	SpawnedFrom,
 	ThinkingLevel,
 	TurnStop,
 } from "./service.ts";
@@ -172,11 +173,36 @@ export interface SessionScope {
 	kind: SessionKind;
 	parentId?: string;
 	owner?: string;
-	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
+	spawnedFrom?: SpawnedFrom;
 	project?: string;
 	/** 代管这个会话的插件，见 `SessionSummary.steward`。插件据此只对自己代管的会话收紧工具、改提示词。 */
 	steward?: string;
+	/** 这一轮（闲着时是上一轮）是谁引起的，见 `TurnCause`。应用重启后、还没跑过一轮的会话没有。 */
+	cause?: TurnCause;
 }
+
+/**
+ * 一轮是谁引起的，本体在这一轮开头那句写进会话时定下：插件要据此决定能做什么（比如只有人引起的那一轮能开会话），
+ * 不用从消息记录里往回猜。
+ * - `human`：人说的。输入框里发的、界面的「继续」、侧边聊天替人交过来的都算；一轮中途人插话，这一轮从那时起也算人的。
+ * - `launch`：插件经 `ctx.sessions.launch` 开出这个会话时发的第一句（`plugin` 是开它的插件）。
+ * - `steward`：代管、管理这个会话的插件经 `ctx.sessions.post` 转进来的话。
+ * - `peer`：别的会话寄来的信（`from` 是寄信的会话 id）叫起的。
+ * - `report`：从这里开出去的会话交回（`from` 是交回的那个会话 id）叫起的。
+ * - `runtime`：别的运行时的事叫起的：约好的唤醒、cron、监视。子会话、独立会话里的每一轮都是建它的插件跑的，也算这一种。
+ *
+ * 这个会话自己派出去的事（子 Agent、一次性后台命令）回来叫起的那一轮，沿用派它出去的那一轮的：上一轮收尾时还在等它们，
+ * 回来以后那一轮接着做的还是同一件事。收尾时没在等的（挂着的监视、约好的唤醒）叫起的算 `runtime`。
+ * 一轮做完前又读到信、交回而接着做的，从那时起按读到的算；做到一半顺带读进的不改。钩子 `prompt.submit` 问的那一刻那句还没写进会话，
+ * 读到的是上一轮的。只记在内存里：应用退出时这一轮也停了。
+ */
+export type TurnCause =
+	| { by: "human" }
+	| { by: "launch"; plugin: string }
+	| { by: "steward"; plugin: string }
+	| { by: "peer"; from: string }
+	| { by: "report"; from: string }
+	| { by: "runtime" };
 
 /** 审批卡上写什么，见 `ApprovalRequest`。`expiresAt` 由本体弹卡时定。 */
 export type ApprovalContent = Omit<ApprovalRequest, "type" | "toolCallId" | "tool" | "expiresAt">;
@@ -479,10 +505,10 @@ export interface WakeupInput {
 }
 
 /**
- * 一份后台结果在对话里画成的那一行，`BackgroundChannel.report`、`ReportOptions.delivery`、`SessionAccess.reportBack` 给的都是它。
+ * 一份后台结果在对话里画成的那一行，`BackgroundChannel.report`、`ReportOptions.delivery` 给的都是它。
  * 宿主只留这几个字段、拷一份（`details` 要能存成 JSON），记下是哪个插件交的（`DeliveredReport.plugin`），那一行交给这个插件经
  * `ui.agentDelivery` 登记的组件画，没登记就画成宿主默认的一行（`title` 和收场）。`sessionId`（点了去哪个会话）插件写不了，
- * 只有开出来的会话交回时宿主填上。
+ * 只有开出来的会话每轮交回来处时宿主填上（见 `SessionLaunch.spawnedFrom`）。
  */
 export type DeliveryInput = Pick<DeliveredReport, "id" | "title" | "status" | "incomplete" | "inline" | "details">;
 
@@ -504,7 +530,7 @@ export type LetterFate = { status: "read" } | { status: "dropped" } | { status: 
  * 信和后台结果走同一条路：收件方忙着时在下一个步骤边界读到，闲着时为它开一轮，送达经钩子 prompt.submit（`synthetic`）。
  * 前面带一句本体的话：这不是用户说的，不构成用户的授权。信不替人做主：收件方的人按了停，信不叫醒它，留到人下次开口（`held`）。
  *
- * 防几个会话原地来回由本体管，不靠哪个插件记账：一个会话接连被别的会话的信、开出来的会话的交回（`SessionAccess.reportBack`）
+ * 防几个会话原地来回由本体管，不靠哪个插件记账：一个会话接连被别的会话的信、开出来的会话的交回（见 `SessionLaunch.spawnedFrom`）
  * 叫起超过 10 轮、这期间人一句话也没说时，之后这两种都不再叫醒它，留到人下次开口时接在那句后面读，对话里提示一句；人开口后从头数。
  * 本来要收场的一轮因为它们接着跑，和闲着时被叫醒一样算一轮。后台命令、约好的唤醒叫起的几轮不算。
  * 寄信的会话归档以后不能再寄（它收工了，在跑的那一轮也一样）。
@@ -1275,14 +1301,24 @@ export interface SessionLaunch {
 	/** 思考档位；不给用设置里的默认推理强度。不认识的档位抛错；模型没有这一档时，跑的时候就近落到它有的那一档（和输入框里选的一样）。 */
 	thinking?: ThinkingLevel;
 	/**
-	 * 从哪个会话开出来的，记进新会话摘要的 `spawnedFrom`；那个会话要在、不能是子会话。不给就不记。
-	 * 要经 `SessionAccess.reportBack` 交回、要 `fork` 时，`toolCallId` 得是本插件注册的工具在那个会话里的一次调用（提出开新会话的那次）。
-	 * `name` 是开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字）：一组互相开出来的会话靠它称呼彼此，不给就不记。
+	 * 从哪个会话开出来的，记进新会话摘要的 `spawnedFrom`（字段的意思见 `SpawnedFrom`）；那个会话要在、不能是子会话。不给就不记。
+	 * 宿主只核这些字段属实，不管该不该开：
+	 * - `toolCallId` 要是本插件注册的工具在 `callIn`（不给时是 `sessionId`）里的一次调用，否则抛错。
+	 * - `callIn` 只能是来处下面的子会话（`parentId` 是来处，比如侧边聊天），否则抛错；给了它就要给 `toolCallId`。
+	 * - `name` 不合规（小写字母、数字、连字符，最长 24 个字）时抛错。
+	 *
+	 * `reportBack: true` 要宿主每轮交回，这时 `toolCallId` 必须给、`callIn` 不能给（那次调用在来处里，交回记在它名下）：
+	 * 新会话每结束一轮，宿主把收尾那段回复的开头交回那个会话：作为一条运行时送达写进去（带「不是用户说的话」的抬头），
+	 * 对话里画成「来自关联会话」一行（记在本插件名下，登记了 `ui.agentDelivery` 就由它画），点了过去。开出来的第一轮、
+	 * 那个会话寄来的信引起的那一轮收场时叫醒它（它闲着、上一轮以完成收场、没被人按停时；从它开出的会话还有在跑的，等最后一个停下再一起送，
+	 * 最多等一分钟；接连被叫起的轮数有上限，见 `LetterReceipt`）；人在新会话里说话引起的、出错的不叫醒，留到它下一轮开头读；
+	 * 被人按停的那一轮不交；收尾时还有派出去的事没回来的，等回来以后那一轮再交。那次调用后来被撤回截掉了、来处删了或归档了就不交。
+	 * 不给 `reportBack` 就不交回：只记来处和那次调用，那边做完了这边不知道。
 	 */
-	spawnedFrom?: { sessionId: string; toolCallId?: string; name?: string };
+	spawnedFrom?: SpawnedFrom;
 	/**
 	 * 带着来处的对话开：新会话先复制 `spawnedFrom` 那个会话里 `toolCallId` 那次调用之前的全部记录，再发 `message`。
-	 * 要给 `spawnedFrom.toolCallId`，那次调用要在那个会话的记录里，否则抛错。
+	 * 要给 `spawnedFrom.toolCallId`、不能给 `callIn`，那次调用要在那个会话的记录里，否则抛错。
 	 */
 	fork?: boolean;
 	/** 标题；不给就取第一句话的开头。 */
@@ -1306,21 +1342,6 @@ export interface LaunchedSession {
 	idle: Promise<LaunchedIdle>;
 }
 
-/** `SessionAccess.reportBack` 的选项。 */
-export interface ReportBackOptions {
-	/** 对话里那一行，见 `DeliveryInput`。宿主给它填上交回的会话的 id（`DeliveredReport.sessionId`），点了到那个会话。 */
-	delivery: DeliveryInput;
-	/** 同一次送达里本插件交的几份合成一段，见 `ReportFrame`。 */
-	frame?: ReportFrame;
-	/**
-	 * 要不要叫醒开出它的会话。不给或 false 时不叫醒：那个会话正在跑就在两步之间读到，闲着就留到它下一轮开头读（人开口时接在后面）。
-	 * true 时宿主也只在这几种时候叫醒：那个会话闲着、上一轮以完成收场、没被人按停；从它开出来的会话（`spawnedFrom` 指回它的）没有一个在跑——
-	 * 还有在跑的，等最后一个停下再一起叫醒，几份合成一次送达，最多等一分钟，到点还有在跑的也先送；它被信和交回接连叫起的轮数没到上限（见 `LetterReceipt`）。
-	 * 不满足的留到它下一轮开头读。
-	 */
-	wake?: boolean;
-}
-
 /** `LaunchedSession.idle` 兑现时的样子。 */
 export interface LaunchedIdle {
 	/** 最近一轮怎么收场的（第一轮之后还有被唤起的几轮时，是最后那一轮）；会话这期间被删掉时不给。 */
@@ -1340,7 +1361,7 @@ export type SessionEndReason = "deleted" | "archived" | "moved" | "quit";
  *   替人答它和挂在它下面的子会话弹的卡、经 `stop` 停下它正在跑的那一轮；别的会话（人已有的、别的插件代管的）不行，插件自己也不能事后认领；
  * - 管理的会话：声明了 `Plugin.manage` 的插件，人在插件详情里把会话交给它管理（`AgentService.setSessionManager`）以后，
  *   没有别的插件代管的顶层会话它都能像代管一样转话、答卡、停下，人收回授权就不行了。同一时间只有一个插件拿着这份授权；
- * - 开出它的那个会话：`reportBack` 把开出来的会话一轮的结果交回去，来处要是本插件的工具在那里的一次调用；
+ * - 开出它的那个会话：开的时候要了 `reportBack` 的，开出来的会话每一轮的结果由宿主交回去（见 `SessionLaunch.spawnedFrom`），插件不经手；
  * - 调用所在的会话：`ToolRun.background` 送后台结果、`ToolRun.archiveAfterTurn` 收尾后归档；
  * - 子会话的父会话：插件自己建的子会话里，它注册的工具的那次调用拿得到 `ToolRun.parent`（排活、停下、接着做），
  *   人在子会话的卡片上点的 `ToolCardProps.handToParent` 同样只到父会话；
@@ -1457,21 +1478,13 @@ export interface SessionAccess {
 	 * 开一个新会话并发出第一句话（定时任务到点了、人在插件界面上点了「在新会话里执行」）。新会话和人在侧栏新建的一样：
 	 * 进侧栏、不记在插件名下（没有 `owner`），人能接着聊，插件之后不能再往里发、也停不了删不了它（`steward` 开出来的除外：
 	 * 本插件能往里转话、替人答卡，见 `SessionLaunch.steward`）。第一句话照常经
-	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的；对已有会话只有 `reportBack` 往开出它的那个会话交回。
+	 * `prompt.submit`，可能被拦下（这一轮按完成收场）。只能开新的，对已有会话说不上话；给了 `spawnedFrom.reportBack` 的，宿主每轮替它交回来处。
 	 * 建好就返回：`session` 是新会话的摘要，`done` 在这第一轮结束时给出它为什么结束（之后人接着聊的几轮不算）。
 	 * `idle` 在它第一次真闲下来时兑现：第一轮结束，它派出去的后台运行都回来了、送回的结果唤起的几轮也做完了，登记着的一次性后台任务
 	 * 都结束了（被人停掉、撤回而作废的不算在等；挂着的监视、开发服务器、约好的唤醒和 cron 不等，见 `ParentStatus`）。
 	 * 项目、目录、模型、思考档位、`spawnedFrom` 不对时抛错，message 是给人看的话（按界面语言）。
 	 */
 	launch(options: SessionLaunch): Promise<LaunchedSession>;
-	/**
-	 * 把开出来的会话 `sessionId` 一轮的结果交回开出它的那个会话（它的 `spawnedFrom`）：`text` 是写给模型的话，作为一条运行时送达写进那个会话
-	 * （前面带着「不是用户说的话」的抬头），对话里那一行见 `ReportBackOptions.delivery`；叫不叫醒那个会话见 `ReportBackOptions.wake`。
-	 * 每一轮都可以交，宿主不记交过几次。重启以后也能交：认的是 `spawnedFrom`，不是 `launch` 的句柄。
-	 * `sessionId` 没有 `spawnedFrom`、开出它的会话删了或归档了、正在退出时不送，返回 false。
-	 * `spawnedFrom.toolCallId` 不是本插件的工具在那个会话里的一次调用（或撤回时被截掉了）、插件已经停用时抛错。
-	 */
-	reportBack(sessionId: string, text: string, options: ReportBackOptions): boolean;
 	/**
 	 * 往本插件代管的会话里转一句话（外面的人经插件发来的消息；拿着管理授权的插件对没有别的插件代管的顶层会话也能转，见 `Plugin.manage`）：排进这个会话的队（和人在输入框里排的同一条，落盘），
 	 * 会话闲着就当场开一轮，正在跑就排着，不插进这一轮。气泡标着来自本插件（`UserMessage.origin` 是 `plugin`，`fromPlugin` 是本插件），

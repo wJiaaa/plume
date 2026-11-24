@@ -79,6 +79,7 @@ export default {
 		const stale = [...marks.keys()].filter((id) => !live.has(id));
 		for (const id of stale) marks.delete(id);
 		if (stale.length > 0) saveMarks();
+
 		// 新的侧边聊天用哪个模型；没选就跟随主会话。只管新开的，已经开着的沿用它开时的模型。
 		const settings = await ctx.settings({ model: undefined }, normalizeSettings);
 
@@ -288,11 +289,10 @@ export default {
 		ctx.tools.register(DISPATCH_TASK);
 		ctx.tools.register(CONTROL_MAIN);
 
-		/** 卡片开过的会话：从会话列表里认，重开窗口也认得出来。 */
+		/** 卡片开过的会话：从会话列表里认（`spawnedFrom` 记着是这个侧边聊天里的哪次调用开的），重开窗口也认得出来。 */
 		async function startedFrom(sideId: string, callId: string): Promise<string | undefined> {
-			const parentId = sides.get(sideId);
-			if (!parentId) return undefined;
-			return (await ctx.sessions.list()).find((summary) => summary.spawnedFrom?.sessionId === parentId && summary.spawnedFrom.toolCallId === callId)?.id;
+			if (!sides.has(sideId)) return undefined;
+			return (await ctx.sessions.list()).find((summary) => summary.spawnedFrom?.callIn === sideId && summary.spawnedFrom.toolCallId === callId)?.id;
 		}
 		/** 两次点得太快时只开一个。 */
 		const launching = new Map<string, Promise<string>>();
@@ -384,7 +384,9 @@ export default {
 							// 卡上没动过就不给，用默认模型、默认推理强度；认不认得由宿主核。
 							...(choice.model ? { model: choice.model } : {}),
 							...(choice.thinking ? { thinking: choice.thinking } : {}),
-							spawnedFrom: { sessionId: parentId, toolCallId: String(callId) },
+							// 挂在主会话下面，记着是这个侧边聊天里哪张卡开的（`callIn`）。不要 `reportBack`：侧边聊天交出去的事，
+							// 那边每轮的结果不交回主会话、也不叫醒它。
+							spawnedFrom: { sessionId: parentId, toolCallId: String(callId), callIn: side },
 						});
 						return session.id;
 					})().finally(() => launching.delete(key));

@@ -75,13 +75,19 @@ test("control_main：暂停、废清单、接着做、看状态当场生效，�
 	assert.equal((await exec(CONTROL_MAIN, { action: "status" })).isError, true);
 });
 
-async function fixture(t: TestContext) {
-	const directory = mkdtempSync(join(tmpdir(), "plume-side-chat-"));
-	t.onTestFinished(() => rmSync(directory, { recursive: true, force: true }));
+/** `directory` 给了就接着用那个数据目录（重开窗口），`others` 是那时已经在的别的会话。 */
+async function fixture(t: TestContext, directory?: string, others: SessionSummary[] = []) {
+	if (!directory) {
+		const created = mkdtempSync(join(tmpdir(), "plume-side-chat-"));
+		t.onTestFinished(() => rmSync(created, { recursive: true, force: true }));
+		directory = created;
+	}
 	const summaries: SessionSummary[] = [
 		{ id: "main", title: "", cwd: "/w", project: "p1", running: false, createdAt: 0, updatedAt: 0 } as SessionSummary,
 		{ id: "side", title: "", cwd: "/w", running: false, createdAt: 0, updatedAt: 0, parentId: "main", owner: "plume.side-chat" } as SessionSummary,
+		...others,
 	];
+	const deleted: Array<(sessionId: string) => void> = [];
 	const suggestion = { kind: "dispatch_suggestion", title: "修好 a.ts", instruction: "把 /w/a.ts 的类型错误修掉" };
 	const messages: Message[] = [
 		{
@@ -123,7 +129,7 @@ async function fixture(t: TestContext) {
 			list: async () => structuredClone(summaries),
 			get: async (id: string) => structuredClone(summaries.find((summary) => summary.id === id)),
 			messages: async (id: string) => (id === "side" ? structuredClone(messages) : []),
-			onDeleted() {},
+			onDeleted: (listener: (sessionId: string) => void) => void deleted.push(listener),
 			observe() {},
 			async launch(options: SessionLaunch) {
 				launched.push(options);
@@ -142,10 +148,17 @@ async function fixture(t: TestContext) {
 		},
 	} as unknown as PluginContext;
 	await plugin.apply(ctx);
-	return { api: api!, launched, tools, context: layers.get("model.context") as HookLayer<"model.context"> };
+	const remove = (sessionId: string) => {
+		summaries.splice(
+			summaries.findIndex((summary) => summary.id === sessionId),
+			1,
+		);
+		for (const listener of deleted) listener(sessionId);
+	};
+	return { api: api!, launched, tools, directory, remove, context: layers.get("model.context") as HookLayer<"model.context"> };
 }
 
-test("卡片上「开新会话」开在主会话的项目里、记着从哪张卡开出来，点两次只开一个；不是建议卡的不开", async (t) => {
+test("卡片上「开新会话」开在主会话的项目里、记着是侧边聊天里哪张卡开的、不要每轮交回主会话，点两次只开一个；不是建议卡的不开", async (t) => {
 	const f = await fixture(t);
 	assert.deepEqual(f.tools, ["read_main_chat", "dispatch_task", "control_main"]);
 	assert.equal(await f.api.started("side", "call-1"), undefined);
@@ -154,11 +167,33 @@ test("卡片上「开新会话」开在主会话的项目里、记着从哪张�
 	assert.equal(second, "new-1");
 	assert.equal(await f.api.launch("side", "call-1", {}), "new-1");
 	assert.deepEqual(f.launched, [
-		{ project: "p1", message: "把 /w/a.ts 的类型错误修掉", title: "修好 a.ts", spawnedFrom: { sessionId: "main", toolCallId: "call-1" } },
+		{ project: "p1", message: "把 /w/a.ts 的类型错误修掉", title: "修好 a.ts", spawnedFrom: { sessionId: "main", toolCallId: "call-1", callIn: "side" } },
 	]);
 	assert.equal(await f.api.started("side", "call-1"), "new-1");
 	await assert.rejects(f.api.launch("side", "call-2", {}), /卡片/);
 	await assert.rejects(f.api.launch("main", "call-1", {}));
+});
+
+test("卡开过哪个会话从会话列表里认：重开窗口还认得；开出来的会话删了就当没开过，可以再开", async (t) => {
+	const f = await fixture(t);
+	assert.equal(await f.api.launch("side", "call-1", {}), "new-1");
+	const opened = {
+		id: "new-1",
+		title: "修好 a.ts",
+		cwd: "/w",
+		running: false,
+		createdAt: 1,
+		updatedAt: 1,
+		spawnedFrom: { sessionId: "main", toolCallId: "call-1", callIn: "side" },
+	} as SessionSummary;
+	const again = await fixture(t, f.directory, [opened]);
+	assert.equal(await again.api.started("side", "call-1"), "new-1");
+	assert.equal(await again.api.launch("side", "call-1", {}), "new-1");
+	assert.deepEqual(again.launched, []);
+	again.remove("new-1");
+	assert.equal(await again.api.started("side", "call-1"), undefined);
+	assert.equal(await again.api.launch("side", "call-1", {}), "new-1");
+	assert.equal(again.launched.length, 1);
 });
 
 test("卡片上选了模型和思考档位：开出来的会话用它们", async (t) => {

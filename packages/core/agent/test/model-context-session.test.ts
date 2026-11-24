@@ -112,7 +112,10 @@ it("顶层、子会话、独立会话：每个钩子输入和 ToolRun 上的 ses
 	];
 	for (const [id, scope] of expected) {
 		expect([...(seen.get(id)?.keys() ?? [])].sort()).toEqual([...places].sort());
-		for (const place of places) expect(seen.get(id)?.get(place), `${place} 上的 ${scope.kind}`).toEqual(scope);
+		// 这一轮是谁引起的（`cause`）在开头那句写进会话后才定：`prompt.submit` 那时还没有（这是这些会话的第一轮）。
+		const cause = scope.kind === "top" ? { by: "launch", plugin: "test.recorder" } : { by: "runtime" };
+		for (const place of places)
+			expect(seen.get(id)?.get(place), `${place} 上的 ${scope.kind}`).toEqual(place === "prompt.submit" ? scope : { ...scope, cause });
 	}
 	// 摘要上的 `kind` 和钩子里的一致；`ctx.sessions.get` 找不到的是 undefined。
 	expect((await ctx.sessions.get(top.session.id))?.kind).toBe("top");

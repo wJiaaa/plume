@@ -29,7 +29,7 @@ export function DeliveryRow({ delivery, sessionId }: { delivery: DeliveredReport
 }
 
 /**
- * 没人接管的一份：标题说是什么事，失败、没做完挂在右边。带着 `sessionId` 的是开出来的会话交回的（`SessionAccess.reportBack`）：
+ * 没人接管的一份：标题说是什么事，失败、没做完挂在右边。带着 `sessionId` 的是开出来的会话每轮交回的（本体交，见 `SessionLaunch.spawnedFrom`）：
  * 回复本身在那个会话里，点了过去，那个会话删掉了就提示一句。
  */
 function DefaultDelivery({ report }: { report: DeliveredReport }) {

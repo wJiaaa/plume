@@ -98,10 +98,8 @@ export interface HostSessions extends Pick<
 	create(owner: string, options: Parameters<SessionAccess["create"]>[0]): ReturnType<SessionAccess["create"]>;
 	/** `owner` 是调它的插件：agent 只让它改自己建的会话。 */
 	configure(owner: string, sessionId: string, change: Parameters<SessionAccess["configure"]>[1]): ReturnType<SessionAccess["configure"]>;
-	/** `owner` 只用来记日志：开出来的会话不记在插件名下。 */
+	/** `owner` 记日志、核来处（`spawnedFrom.toolCallId` 要是它的工具在 `callIn` 或来处里的一次调用）：开出来的会话不记在插件名下。 */
 	launch(owner: string, options: Parameters<SessionAccess["launch"]>[0]): ReturnType<SessionAccess["launch"]>;
-	/** `owner` 是交回的插件：来处要是它的工具在那里的一次调用。 */
-	reportBack(owner: string, sessionId: string, text: string, options: Parameters<SessionAccess["reportBack"]>[2]): boolean;
 	/** 以下三样的 `owner` 是调它的插件：agent 只让它动自己代管的会话（`SessionSummary.steward`）。 */
 	post(owner: string, sessionId: string, message: string): ReturnType<SessionAccess["post"]>;
 	respond(owner: string, sessionId: string, toolCallId: string, decision: Parameters<SessionAccess["respond"]>[2]): ReturnType<SessionAccess["respond"]>;
@@ -253,7 +251,6 @@ const NO_SESSIONS: HostSessions = {
 	create: async (_owner, options) => missing(options?.parentId),
 	configure: async (_owner, sessionId) => missing(sessionId),
 	launch: async (_owner, options) => missing(options?.spawnedFrom?.sessionId),
-	reportBack: () => false,
 	post: async (_owner, sessionId) => missing(sessionId),
 	respond: async (_owner, sessionId) => missing(sessionId),
 	answer: async (_owner, sessionId) => missing(sessionId),
@@ -948,11 +945,6 @@ export class PluginHost {
 				launch: async (options) => {
 					live();
 					return sessions.launch(name, options);
-				},
-				// 停用、重载以后不再替它交回：交回会叫醒来处，那是一个已经不在的插件的意思。
-				reportBack: (sessionId, words, options) => {
-					live();
-					return sessions.reportBack(name, sessionId, words, options);
 				},
 				// 停用、重载以后不再替它转话、答卡：那是一个已经不在的插件的意思。
 				post: async (sessionId, message) => {

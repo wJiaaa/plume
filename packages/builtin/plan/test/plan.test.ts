@@ -399,7 +399,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 	assert.equal(handed.output.terminate, "done");
 	assert.equal(
 		handed.output.output,
-		`The user approved the plan and handed it to a new session, which carries it out from ${details.file}. Do not carry it out here. That session may message you about intent or trade-offs the plan leaves open; answer from this conversation.`,
+		`The user approved the plan and handed it to a new session, which carries it out from ${details.file}. Do not carry it out here. Each time a turn of that session ends, its result is reported back here; do not wait for it or poll.`,
 	);
 	assert.equal(details.handoff, true);
 	assert.equal(details.model, "m1");
@@ -420,7 +420,7 @@ test("在新会话里执行：计划存成文件，在原会话的项目里开�
 			].join("\n\n"),
 			title: "改登录",
 			model: "m1",
-			spawnedFrom: { sessionId: origin, toolCallId: "call-1" },
+			spawnedFrom: { sessionId: origin, toolCallId: "call-1", reportBack: true },
 		},
 	]);
 	// 开关关了：这个会话之后照常能改文件（人再让它做时）。
