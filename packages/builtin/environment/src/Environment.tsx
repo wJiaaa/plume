@@ -1,6 +1,6 @@
 import type { ImageContent, Locale, SessionView } from "@plume/contract";
 import type { ConversationCardProps, EnvironmentPlace, EnvironmentSectionEntry, LocalizedText, UiContext } from "@plume/contract/ui";
-import { IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
+import { Caret, IconButton, MenuBody, MenuItem, MenuLabel, Popover, ScrollText, Text, useI18n, usePopover } from "@plume/ui";
 import { File, Settings2, SquareMenu } from "@plume/ui/icons";
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MESSAGES } from "./messages.ts";
@@ -26,17 +26,18 @@ const LABEL_KEY = {
 } as const;
 const KEY = "plume.environment.card";
 const listeners = new Set<() => void>();
-/** `hidden` 里是自己几节的名字和别的插件那几节的 `key`（`插件名/id`）。 */
-function read(): { open: boolean; hidden: string[] } {
+const strings = (value: unknown) => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+/**
+ * `hidden` 里是自己几节的名字和别的插件那几节的 `key`（`插件名/id`）；`collapsed` 是收起的分组，记法相同。
+ * 藏起来的一节整个撤下、也不再点亮开关；收起的只折起行，标题留着，提醒照旧。
+ */
+function read(): { open: boolean; hidden: string[]; collapsed: string[] } {
 	try {
 		const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "{}");
 		const value: Record<string, unknown> = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-		return {
-			open: value.open === true,
-			hidden: Array.isArray(value.hidden) ? value.hidden.filter((entry): entry is string => typeof entry === "string") : [],
-		};
+		return { open: value.open === true, hidden: strings(value.hidden), collapsed: strings(value.collapsed) };
 	} catch {
-		return { open: false, hidden: [] };
+		return { open: false, hidden: [], collapsed: [] };
 	}
 }
 let prefs = read();
@@ -117,27 +118,49 @@ export function EnvironmentToggle({ session, ui }: { session: SessionView; ui: U
 /**
  * 每个独立分区共用的外壳。行来自各异步插件，不能在 React 数据上先数；需要显示条数时观察标准行和引用签的 `data-environment-item`，
  * 标题右边的数字才跟实际画出来的一致。没有内容时整块由 CSS 撤下，不留标题和分隔线。
+ *
+ * 点标题收起、展开这一组，跨会话记着。收起时内容仍挂着：条数、「有没有内容」的 CSS 判断都靠画出来的行。
+ * 收起后标题总是带条数（`count: false` 的组也带，不然看不出折了多少），有行在跑时再挂一个绿点。
  */
 function Group({ name, label, showCount = true, children }: { name: string; label: string; showCount?: boolean; children: ReactNode }) {
 	const ref = useRef<HTMLElement>(null);
+	const { collapsed } = usePrefs();
+	const open = !collapsed.includes(name);
 	const [count, setCount] = useState(0);
+	const [running, setRunning] = useState(false);
 	useLayoutEffect(() => {
-		if (!showCount) return;
 		const element = ref.current;
 		if (!element) return;
-		const measure = () => setCount(element.querySelectorAll("[data-environment-item]").length);
+		const measure = () => {
+			setCount(element.querySelectorAll("[data-environment-item]").length);
+			setRunning(element.querySelector(".plume-env-row-icon[data-running]") !== null);
+		};
 		measure();
 		const observer = new MutationObserver(measure);
-		observer.observe(element, { childList: true, subtree: true });
+		observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-running"] });
 		return () => observer.disconnect();
-	}, [showCount]);
+	}, []);
 	return (
 		<section ref={ref} className="plume-environment-group" data-environment-group={name}>
 			<Text as="h3" size="caption" tone="faint" weight="medium" className="plume-environment-group-label">
-				{label}
-				{showCount && count > 0 && <span>{count}</span>}
+				<button
+					type="button"
+					aria-expanded={open}
+					data-environment-group-toggle
+					onClick={() => update({ collapsed: open ? [...collapsed, name] : collapsed.filter((entry) => entry !== name) })}
+				>
+					{label}
+					{(showCount || !open) && count > 0 && <span className="plume-environment-group-count">{count}</span>}
+					{!open && running && <span aria-hidden data-environment-group-running className="plume-environment-group-running" />}
+					<Caret open={open} from="right" size={11} />
+				</button>
 			</Text>
-			<div className="plume-environment-group-content">{children}</div>
+			{/* 不用 `Collapse`：它收着挂上时不画内容，整组会被当成空的撤掉。这里和 `Disclosure` 一样一直画着，只折起高度。 */}
+			<div className="plume-reveal" data-open={open} aria-hidden={!open} inert={!open}>
+				<div>
+					<div className="plume-environment-group-content">{children}</div>
+				</div>
+			</div>
 		</section>
 	);
 }

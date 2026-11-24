@@ -77,6 +77,10 @@
 .plume-environment-group {
 	padding: 6px 6px 8px;
 }
+/* 收起后只剩标题那一行，上下留白一样，标题落在两条分隔线正中。 */
+.plume-environment-group:has(> .plume-reveal:not([data-open="true"])) {
+	padding-bottom: 6px;
+}
 /* 插件组件返回 null 时外壳是空的；整组没有任何非空外壳就撤掉，不留标题和分隔线。 */
 .plume-environment-group:not(:has(.plume-environment-card-section:not(:empty))) {
 	display: none;
@@ -85,14 +89,48 @@
 	border-top: 1px solid var(--plume-line-float);
 }
 .plume-environment-group-label {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
-	padding: 4px 10px;
+	padding: 0 4px;
 	user-select: none;
 }
-.plume-environment-group-label > span {
+/* 整行是收放的按钮；箭头跟在标题后面，不把标题从行图标那一列推开。展开时箭头只在悬停、键盘焦点时露出，收起时一直在。 */
+.plume-environment-group-label > button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+	padding: 4px 6px;
+	border-radius: var(--plume-radius-item);
+	text-align: left;
+	color: inherit;
+	transition: color var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-environment-group-label > button:hover {
+	color: var(--plume-ink);
+}
+.plume-environment-group-label > button > svg {
+	color: var(--plume-ink-faint);
+	opacity: 0;
+	/* `Caret` 用 `rotate` 转向；这里改写了它的过渡，要把 `rotate` 带上。 */
+	transition:
+		rotate var(--plume-t-quick) var(--plume-e-soft),
+		opacity var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-environment-group-label > button:hover > svg,
+.plume-environment-group-label > button:focus-visible > svg,
+.plume-environment-group-label > button[aria-expanded="false"] > svg {
+	opacity: 1;
+}
+.plume-environment-group-count {
 	font-variant-numeric: tabular-nums;
+}
+/* 收起的组里有行在跑：和行图标上那个绿点同一种说法。 */
+.plume-environment-group-running {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-ok);
 }
 .plume-environment-card-section:empty {
 	display: none;

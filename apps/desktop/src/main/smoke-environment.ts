@@ -207,6 +207,32 @@ export async function checkEnvironment(options: {
 		await until(`!(${sectionsMenu})`, "按 Esc 收起菜单");
 		window.webContents.sendInputEvent({ type: "mouseMove", x: 0, y: 0 });
 
+		// 分组收起：点「后台任务」标题，行折起、标题留着带条数和在跑的绿点；关上卡片再打开仍收着，再点一下展开。
+		const jobsGroup = `document.querySelector('[data-environment-group="plume.diagnostics/jobs"]')`;
+		const jobsToggle = `[data-environment-group="plume.diagnostics/jobs"] [data-environment-group-toggle]`;
+		const jobsFolded = `(${jobsGroup}?.querySelector('[data-environment-group-toggle]')?.getAttribute('aria-expanded') === 'false' && ${jobsGroup}.querySelector('.plume-reveal').getBoundingClientRect().height < 1)`;
+		await clickVisible(page, jobsToggle);
+		await until(jobsFolded, "点「后台任务」标题后这一组收起");
+		if (
+			!(await page<boolean>(
+				`${jobsGroup}.querySelector('.plume-environment-group-count')?.textContent === '2' && getComputedStyle(${jobsGroup}).display !== 'none'`,
+			))
+		)
+			throw new Error("收起的「后台任务」没留下标题和条数");
+		if (!(await page<boolean>(`${jobsGroup}.querySelector('[data-environment-group-running]') !== null`)))
+			throw new Error("收起的「后台任务」有服务在跑，标题上却没有绿点");
+		await capture("smoke-environment-group-collapsed.png");
+		await clickVisible(page, `[data-environment-toggle]`);
+		await until(`document.querySelector('[data-environment]') === null`, "关上环境卡片");
+		await clickVisible(page, `[data-environment-toggle]`);
+		await until(jobsFolded, "重开卡片后「后台任务」仍收着");
+		await clickVisible(page, jobsToggle);
+		await until(
+			`${jobsGroup}.querySelector('[data-environment-group-toggle]').getAttribute('aria-expanded') === 'true' && ${jobsGroup}.querySelector('[data-environment-job]').getBoundingClientRect().height > 0 && ${jobsGroup}.querySelector('[data-environment-group-running]') === null`,
+			"再点一下「后台任务」展开、绿点撤下",
+		);
+		await settled();
+
 		const [width, height] = window.getContentSize();
 		window.setContentSize(Math.min(width!, 700), height!);
 		await settled();
