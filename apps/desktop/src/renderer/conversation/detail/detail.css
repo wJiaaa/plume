@@ -114,9 +114,11 @@
 		color: color-mix(in srgb, var(--plume-danger) 92%, var(--plume-code-fg));
 	}
 
+	/* 折不折行只在这里定：写成 `whitespace-pre` 工具类的话，utilities 层压过这一层，开了换行也不折，分栏时左栏的长行会画进右栏。 */
 	.tool-diff-code {
 		min-width: 0;
 		color: var(--plume-code-fg);
+		white-space: pre;
 	}
 
 	.tool-diff-wrap .tool-diff-code {

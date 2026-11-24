@@ -280,7 +280,7 @@ const DiffPage = memo(function DiffPage({
 							onLinePress={onLinePress}
 							onLineEnter={onLineEnter}
 						/>
-						<span className="tool-diff-code flex-1 pr-3.5 pl-2 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
+						<span className="tool-diff-code flex-1 pr-3.5 pl-2">{renderCode(line.text, tokens, parts, line.type)}</span>
 					</div>
 				);
 			})}
@@ -437,7 +437,7 @@ function SplitPaneLine({
 				onLinePress={onLinePress}
 				onLineEnter={onLineEnter}
 			/>
-			<span className="tool-diff-code flex-1 pr-3 pl-1.5 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
+			<span className="tool-diff-code flex-1 pr-3 pl-1.5">{renderCode(line.text, tokens, parts, line.type)}</span>
 		</div>
 	);
 }
@@ -484,7 +484,7 @@ function SplitSideCell({
 				onLinePress={onLinePress}
 				onLineEnter={onLineEnter}
 			/>
-			<span className="tool-diff-code flex-1 pr-3 pl-1.5 whitespace-pre">{renderCode(line.text, tokens, parts, line.type)}</span>
+			<span className="tool-diff-code flex-1 pr-3 pl-1.5">{renderCode(line.text, tokens, parts, line.type)}</span>
 		</div>
 	);
 }
