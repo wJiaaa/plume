@@ -218,13 +218,13 @@
 	height: 13px;
 	flex-shrink: 0;
 	border-radius: var(--plume-radius-item);
-	background: var(--plume-card);
+	background: var(--plume-card-hover);
 }
 
 .git-chip-skeleton-bar {
 	height: 11px;
 	border-radius: var(--plume-radius-item);
-	background: var(--plume-card);
+	background: var(--plume-card-hover);
 }
 
 .git-changes-slot {

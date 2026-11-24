@@ -377,14 +377,21 @@
 
 /*
  * 围栏代码块：每一行铺同一块底，连起来是一块，首尾两行收圆角。行左右各缩进 8px，
- * 底色不贴卡片边，字仍和上下的正文对齐。
+ * 底色不贴卡片边，字仍和上下的正文对齐。主输入框在 `float` 面上，用前景薄纱而非 `--plume-card`，
+ * 避免深色下凹陷或换肤后 `card` 与 `float` 同色融底。
  */
 .plume-composer-field .cm-line.plume-md-codeblock {
 	margin: 0 calc(var(--plume-composer-x) - 8px);
 	padding: 0 8px;
 	font-family: var(--plume-font-mono);
 	font-size: var(--text-code);
-	background: var(--plume-card);
+	background: color-mix(in srgb, var(--plume-fg) 4%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+	.plume-composer-field .cm-line.plume-md-codeblock {
+		background: color-mix(in srgb, var(--plume-fg) 5%, transparent);
+	}
 }
 
 .plume-composer-field .cm-line.plume-md-codeblock-first {

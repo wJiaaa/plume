@@ -86,6 +86,20 @@ export async function checkQuestion(options: {
 		if ((await page(`document.querySelector('${card} [data-ask-custom]')?.placeholder`)) !== "说说你的想法") throw new Error("「其他」一行的输入框占位不对");
 		// 默认项先选上；运行行说在等回答，不是等批准。
 		if ((await page(`document.querySelectorAll('${card} [data-ask-option][data-on]').length`)) !== 1) throw new Error("默认项应该先选上");
+		// 选项底色不依赖 --plume-card：换肤把 --plume-card 改成任意值（包括与 --plume-float 同色）时，未选中选项仍有可见底色且不随之失效。
+		const independentOfCard = (await page(`(() => {
+			const root = document.documentElement;
+			const option = document.querySelector('${card} [data-ask-option]:not([data-on])');
+			if (!option) return false;
+			const before = getComputedStyle(option).backgroundColor;
+			const prev = root.style.getPropertyValue('--plume-card');
+			root.style.setProperty('--plume-card', 'var(--plume-danger)');
+			const after = getComputedStyle(option).backgroundColor;
+			if (prev) root.style.setProperty('--plume-card', prev);
+			else root.style.removeProperty('--plume-card');
+			return before !== '' && before !== 'transparent' && !before.endsWith(', 0)') && !before.endsWith('/ 0)') && after === before;
+		})()`)) as boolean;
+		if (!independentOfCard) throw new Error("未选中选项背景不可见或仍依赖 --plume-card");
 		await until(`document.querySelector('[data-plume-waiting=answer]') !== null`, "运行行说在等你的回答");
 		await capture(window, join(outDir, "smoke-question.png"));
 		await page(`window.plume.saveAppearance({ theme: 'dark' })`);

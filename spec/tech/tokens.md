@@ -46,6 +46,8 @@
 
 面按层叠：`shell` → `sidebar`/`card` → `card-hover`（悬停）→ `elevated`（按下）；`float` 盖在一切上面。照着别处做一个东西时，换的是深度，不是整段类名：放在 card 上的悬停仍然是 `hover:bg-card-hover`，不要为了“看起来深一点”另写一个色值或透明度。
 
+在 `float` 面（弹窗、弹层、审批卡 / 提问卡、主输入框）内部，不要依赖 `--plume-card` 与底面区分层次：浅色下 `card` 与 `float` 接近，深色下 `card` 反比 `float` 暗，数据皮肤还常把 `card` 与 `float` 映射到同一色值导致元素融底。改用前景薄纱（`color-mix(in srgb, var(--plume-fg) …, transparent)` 或 `card-hover` / `elevated`）或描边分层。
+
 ### 圆角、尺寸、字号
 
 - 圆角：`rounded-panel` 12（一整块内容区、设置卡片）、`rounded-field` 8（输入框、提示框、侧栏和列表里的行）、`rounded-item` 6（菜单里的行、分段控件里的一段）。按钮用 Tailwind 刻度：≥ 22px 的按钮 `rounded-lg`（8），≤ 20px 的 `rounded-md`（6）；大卡片、气泡用 `rounded-2xl`。落在两档之间的往小取。
