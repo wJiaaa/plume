@@ -366,6 +366,7 @@ export const zhCN = {
 	"appearance.chatBackgroundEffectAscii": "ASCII",
 	"appearance.chatBackgroundEffectHalftone": "网点",
 	"appearance.chatBackgroundEffectScanlines": "扫描线",
+	"appearance.chatBackgroundEffectGrid": "像素网格",
 	"appearance.chatBackgroundEffectHaze": "雾化",
 	"usage.noPrice": "暂无价格",
 	"week.mon": "一",

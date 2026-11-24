@@ -25,9 +25,9 @@ export interface BackdropSource {
  */
 export const BACKDROP_MAX_EDGE = 2048;
 
-/** 要在渲染进程里逐像素重绘的那几种。`none` 用原图，`haze` 是 CSS 的模糊，都不经过这里。 */
+/** 要在渲染进程里逐像素重绘的那几种。`none` 用原图，`grid`、`haze` 由 CSS 叠加，都不经过这里。 */
 export function redrawn(effect: ChatBackgroundEffect): effect is "dither" | "ascii" | "halftone" | "scanlines" {
-	return effect !== "none" && effect !== "haze";
+	return effect !== "none" && effect !== "grid" && effect !== "haze";
 }
 
 /**

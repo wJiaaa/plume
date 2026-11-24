@@ -22,6 +22,7 @@ const EFFECTS: Record<ChatBackgroundEffect, MessageKey> = {
 	ascii: "appearance.chatBackgroundEffectAscii",
 	halftone: "appearance.chatBackgroundEffectHalftone",
 	scanlines: "appearance.chatBackgroundEffectScanlines",
+	grid: "appearance.chatBackgroundEffectGrid",
 	haze: "appearance.chatBackgroundEffectHaze",
 };
 /** 浓度分五档，落在 CHAT_BACKGROUND_OPACITY 的范围里；中间一档是默认值。 */

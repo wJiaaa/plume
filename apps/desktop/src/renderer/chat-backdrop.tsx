@@ -158,6 +158,7 @@ export function BackdropLayer({
 					<span className="chat-backdrop-haze-strong" />
 				</>
 			)}
+			{effect === "grid" && <span className="chat-backdrop-grid" />}
 			{reading && <span className="chat-backdrop-veil" />}
 		</div>
 	);

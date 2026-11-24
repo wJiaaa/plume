@@ -321,8 +321,12 @@ export async function checkSkinStudio(options: {
 	await until(`document.querySelector('${background} .chat-backdrop')?.dataset.fit === 'tile'`, "背景预览平铺");
 	await wait(async () => (await appearance()).chatBackgroundFit === "tile", "平铺设置落盘");
 	assert.equal(await page(`getComputedStyle(document.querySelector('${background} .chat-backdrop')).backgroundRepeat`), "repeat");
+	await button("像素网格", background);
+	await wait(async () => (await appearance()).chatBackgroundEffect === "grid", "像素网格设置落盘");
+	await until(`document.querySelector('${background} .chat-backdrop[data-backdrop="grid"] > .chat-backdrop-grid') !== null`, "背景预览叠上像素网格");
+	assert.match(await page<string>(`getComputedStyle(document.querySelector('${background} .chat-backdrop-grid')).backgroundImage`), /linear-gradient/);
 	await page(`document.querySelector('${background}').scrollIntoView({ block: 'end' })`);
-	await capture("smoke-skin-background-tile.png");
+	await capture("smoke-skin-background-grid.png");
 
 	// 浏览器 File 与 DragEvent 走真实 drop 处理，不直接调用导入接口绕过界面。
 	await page(`(async () => {

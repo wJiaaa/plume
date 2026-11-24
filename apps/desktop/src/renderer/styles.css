@@ -317,6 +317,17 @@
 		background-repeat: repeat;
 	}
 
+	/*
+	 * 像素网格只叠在线条，不重采样原图：切换当场生效，GIF 仍会动。线色跟当前会话底色走，
+	 * 深色图压暗格缝、浅色图提亮格缝；固定 7px 是视觉纹理，不跟原图分辨率一起缩放。
+	 */
+	.chat-backdrop[data-backdrop="grid"] > .chat-backdrop-grid {
+		background-image: linear-gradient(to right, var(--plume-shell) 1px, transparent 1px), linear-gradient(to bottom, var(--plume-shell) 1px, transparent 1px);
+		background-position: 0 0;
+		background-size: 7px 7px;
+		background-repeat: repeat;
+	}
+
 	.chat-backdrop > .chat-backdrop-haze-soft {
 		filter: blur(var(--haze-soft));
 		mask-image: var(--haze-soft-mask);

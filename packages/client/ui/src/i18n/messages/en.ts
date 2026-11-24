@@ -356,6 +356,7 @@ export const en = {
 	"appearance.chatBackgroundEffectAscii": "ASCII",
 	"appearance.chatBackgroundEffectHalftone": "Halftone",
 	"appearance.chatBackgroundEffectScanlines": "Scanlines",
+	"appearance.chatBackgroundEffectGrid": "Pixel grid",
 	"appearance.chatBackgroundEffectHaze": "Haze",
 	"usage.noPrice": "No price",
 	"week.mon": "Mon",

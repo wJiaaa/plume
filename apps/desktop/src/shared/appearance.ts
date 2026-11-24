@@ -6,7 +6,7 @@
  */
 
 type ThemeSource = "system" | "light" | "dark";
-export type ChatBackgroundEffect = "none" | "dither" | "ascii" | "halftone" | "scanlines" | "haze";
+export type ChatBackgroundEffect = "none" | "dither" | "ascii" | "halftone" | "scanlines" | "grid" | "haze";
 export type ChatBackgroundFit = "cover" | "tile";
 
 export interface Appearance {
@@ -55,7 +55,7 @@ export interface Appearance {
 /** 改外观时传的补丁：值为 null 表示删掉这一项，回到默认。 */
 export type AppearancePatch = { [K in keyof Appearance]?: Appearance[K] | null };
 
-const CHAT_BACKGROUND_EFFECTS: ReadonlySet<string> = new Set<ChatBackgroundEffect>(["none", "dither", "ascii", "halftone", "scanlines", "haze"]);
+const CHAT_BACKGROUND_EFFECTS: ReadonlySet<string> = new Set<ChatBackgroundEffect>(["none", "dither", "ascii", "halftone", "scanlines", "grid", "haze"]);
 const CHAT_BACKGROUND_FITS: ReadonlySet<string> = new Set<ChatBackgroundFit>(["cover", "tile"]);
 
 /** 浓度的两头。再淡就看不见了；再浓，正文压在上面就读不清。 */
