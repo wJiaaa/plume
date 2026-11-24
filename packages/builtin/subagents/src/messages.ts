@@ -9,6 +9,7 @@ const BIN = { zh: DESK === "mac" ? "废纸篓" : "回收站", en: DESK === "wind
 
 const zhCN = {
 	panelTitle: "子 Agent",
+	environmentTitle: "子智能体",
 	panelDescription: "派出去的子智能体的全过程",
 	untitled: "子任务",
 	queued: "排队中",
@@ -29,6 +30,7 @@ const zhCN = {
 	returnFailedCount: "{n} 个出错",
 	returnTip: "{name}（@{agent}）— {outcome}",
 	stop: "停止这个子 Agent（主 Agent 和其他子 Agent 不受影响）",
+	stopAction: "停止",
 	noSession: "先打开一个对话",
 	none: "还没有派出子 Agent",
 	noneDetail: "主 Agent 把一件事派给子智能体时，这里能看到它做的每一步。",
@@ -243,6 +245,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 	"zh-CN": zhCN,
 	en: {
 		panelTitle: "Sub-agents",
+		environmentTitle: "Sub-agents",
 		panelDescription: "Everything the dispatched sub-agents did",
 		untitled: "Sub-task",
 		queued: "Queued",
@@ -263,6 +266,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		returnFailedCount: "{n} failed",
 		returnTip: "{name} (@{agent}) — {outcome}",
 		stop: "Stop this sub-agent (the main agent and other sub-agents keep going)",
+		stopAction: "Stop",
 		noSession: "Open a conversation first",
 		none: "No sub-agents yet",
 		noneDetail: "When the main agent delegates work, every step it takes shows up here.",

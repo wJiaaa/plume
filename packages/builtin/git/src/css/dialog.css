@@ -28,14 +28,13 @@
 .git-dialog {
 	display: flex;
 	flex-direction: column;
-	padding: 16px;
 }
 
 /* 提交到哪儿那一行。 */
 .git-dialog-target {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	padding-bottom: 10px;
 }
 
@@ -67,70 +66,13 @@
 	outline: none;
 }
 
-/* 往左退一点，让分支图标和下面输入框里的字对齐，悬停的底色仍然把图标包进去。 */
 .git-dialog-branch-button {
-	margin-left: -4px;
-	display: flex;
 	min-width: 0;
-	align-items: center;
-	gap: 6px;
-	border-radius: var(--plume-radius-field);
-	padding: 2px 4px;
-	color: var(--plume-ink);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.git-dialog-branch-button:hover {
-	background: var(--plume-card-hover);
-}
-
-.git-dialog-branch-button:disabled {
-	opacity: 0.4;
-}
-
-.git-dialog-menu-row {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 6px;
-}
-
-/* 写提交说明的框：和主输入框同样的描边，聚焦时描边深一档。 */
-.git-dialog-message {
-	border: 1px solid var(--plume-line-soft);
-	border-radius: var(--plume-radius-panel);
-	transition: border-color var(--plume-t-base) var(--plume-e-soft);
-}
-
-.git-dialog-message:focus-within {
-	border-color: color-mix(in srgb, var(--plume-ink-faint) 60%, transparent);
+	max-width: 100%;
 }
 
 .git-dialog-message-body {
 	position: relative;
-}
-
-.git-dialog-textarea {
-	display: block;
-	width: 100%;
-	resize: none;
-	overflow-y: auto;
-	border: none;
-	background: transparent;
-	padding: var(--plume-composer-in) var(--plume-composer-x);
-	color: var(--plume-ink);
-}
-
-.git-dialog-textarea::placeholder {
-	color: var(--plume-ink-faint);
-}
-
-.git-dialog-textarea:focus {
-	outline: none;
-}
-
-.git-dialog-textarea:disabled {
-	opacity: 0.6;
 }
 
 /* 转圈落在第一行字的高度上：模型写的字会从那里出来。 */
@@ -178,30 +120,6 @@
 	gap: 8px;
 }
 
-/* 自己画的勾选框：没勾时勾号透明，框的大小不变，勾上那一下整行的字不挪。 */
-.git-dialog-check {
-	display: flex;
-	width: 15px;
-	height: 15px;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: center;
-	border: 1px solid var(--plume-line);
-	border-radius: var(--plume-radius-item);
-	background: var(--plume-card);
-	color: transparent;
-	transition:
-		color var(--plume-t-quick) var(--plume-e-soft),
-		background-color var(--plume-t-quick) var(--plume-e-soft),
-		border-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.git-dialog-check[data-checked] {
-	border-color: var(--plume-accent);
-	background: var(--plume-accent);
-	color: var(--plume-on-accent);
-}
-
 /* 读屏和键盘用的那个原生勾选框：看不见，但还在可访问树里。 */
 .git-dialog-sr-only {
 	position: absolute;
@@ -225,61 +143,6 @@
 
 .git-dialog-removed {
 	color: var(--plume-danger);
-}
-
-/* 底部三行动作之间留一道窄缝，悬停的底色不连成一片。 */
-.git-dialog-actions {
-	margin-top: 10px;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.git-dialog-action {
-	display: flex;
-	height: 36px;
-	width: 100%;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	border-radius: var(--plume-radius-field);
-	padding: 0 8px;
-	text-align: left;
-	color: var(--plume-ink);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.git-dialog-action:hover {
-	background: var(--plume-card-hover);
-}
-
-.git-dialog-action:disabled {
-	pointer-events: none;
-	opacity: 0.4;
-}
-
-.git-dialog-action-main {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 10px;
-}
-
-/* 转圈和图标占同一格：换了尺寸，按下那一下整行的字会横着挪。 */
-.git-dialog-action-icon {
-	display: flex;
-	width: 15px;
-	height: 15px;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: center;
-	color: var(--plume-ink-faint);
-}
-
-.git-dialog-kbd {
-	border: 1px solid var(--plume-line-soft);
-	border-radius: var(--plume-radius-item);
-	padding: 1px 4px;
 }
 
 /* ── 输入框上方的分支签和改动计数 ───────────────────────────────── */

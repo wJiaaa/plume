@@ -114,21 +114,31 @@ export async function checkEnvironment(options: {
 		// 卡片收着：开关上的圆点和说明数着监视和待触发的检查。
 		if (await page<boolean>(`document.querySelector('[data-environment]') !== null`)) await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "收着的开关上有圆点");
-		await wait(async () => /1 个监视在跑，2 个检查待触发/.test(await toggleLabel()), "开关说明数着监视和待触发的检查");
+		await wait(async () => /1 个监视在跑.*2 个检查待触发/.test(await toggleLabel()), "开关说明数着监视和待触发的检查");
 		await capture("smoke-environment-toggle.png");
 
-		// 打开卡片：「后台任务」一节里服务那一行有端口签、监视那一行有「监视」签，两个检查也列在同一节里；没有「全部停止」。
+		// 打开卡片：「后台任务」和「定时任务」各自分组，服务那一行有端口签、监视那一行有「监视」签，两个检查列在「定时任务」里；没有「全部停止」。
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-port]')?.textContent.startsWith(':') === true`, "服务那一行有端口签", 30_000);
 		await until(`document.querySelector('[data-environment-monitor]') !== null`, "监视那一行有监视签");
 		if (
 			!(await page<boolean>(
-				`document.querySelector('[data-environment-group=background] > .plume-environment-group-label')?.textContent.startsWith('后台') === true`,
+				`document.querySelector('[data-environment-group="plume.diagnostics/jobs"] > .plume-environment-group-label')?.textContent.startsWith('后台任务') === true`,
 			))
 		)
-			throw new Error("后台内容没有归进统一的“后台”分组");
+			throw new Error("后台命令和监视没有归进「后台任务」分组");
+		if (
+			!(await page<boolean>(
+				`document.querySelector('[data-environment-group="plume.diagnostics/wakeups"] > .plume-environment-group-label')?.textContent.startsWith('定时任务') === true`,
+			))
+		)
+			throw new Error("检查和定时任务没有归进独立的「定时任务」分组");
 		if (await page<boolean>(`getComputedStyle(document.querySelector('.plume-environment-card')).backdropFilter !== 'none'`))
 			throw new Error("环境卡片仍在使用毛玻璃，而不是批准的实底浮层");
+		await until(
+			`document.querySelector('[data-git-env-branch]') !== null && document.querySelector('[data-git-env-actions]') !== null && document.querySelector('[data-git-env-changes]') === null`,
+			"环境卡片显示分支与 Git 操作两行，不重复显示改动行",
+		);
 		// 服务打印了本机地址，plume.tools 经 `TrackedJob.stand` 标成挂着的；监视登记时就是挂着的。两样都还在跑，会话却不算还有后台的事没完
 		// （`background` 不再是 true）：stand 没生效的话，它要一直等到最后归档。
 		await wait(async () => (await agent.sessions()).find((item) => !previous.has(item.id))?.background !== true, "服务被认成挂着的，会话不再等它结束");
@@ -137,10 +147,14 @@ export async function checkEnvironment(options: {
 		await until(`document.querySelector('[data-screen=chat] [data-turn-delivery]') !== null`, "服务和监视在跑时交付卡照样画出");
 		await until(`document.querySelector('[data-screen=chat] [data-resume=unfinished] [data-resume-continue]') !== null`, "服务和监视在跑时「继续」照样出现");
 		await wait(async () => idled.has(started), "服务和监视在跑时会话照样发出 idle（完成通知看它）");
-		if ((await page<number>(`document.querySelectorAll('[data-environment-job]').length`)) !== 2) throw new Error("服务和监视应该都还在跑");
-		await until(`document.querySelectorAll('[data-environment-section$="/jobs"] [data-environment-wakeup]').length === 2`, "检查和后台命令列在同一节里，两个");
-		if (await page<boolean>(`document.querySelector('[data-environment-section$="/wakeups"], [data-environment-stop-all]') !== null`))
-			throw new Error("环境卡片里还有单独的定时唤醒一节或「全部停止」");
+		if ((await page<number>(`document.querySelectorAll('[data-environment-section$="/jobs"] [data-environment-job]').length`)) !== 2)
+			throw new Error("服务和监视应该都在「后台任务」节里");
+		await until(
+			`document.querySelectorAll('[data-environment-section$="/wakeups"] [data-environment-wakeup]').length === 2`,
+			"两个检查列在独立的「定时任务」节里",
+		);
+		if (await page<boolean>(`document.querySelector('[data-environment-section$="/jobs"] [data-environment-wakeup], [data-environment-stop-all]') !== null`))
+			throw new Error("定时任务混进了后台任务节，或还留着「全部停止」");
 		if (
 			!(await page<boolean>(
 				`/检查 · \\d+:\\d\\d$/.test(document.querySelector('[data-environment-wakeup][data-plan=checkIn] .plume-env-row-fact').textContent)`,
@@ -202,7 +216,15 @@ export async function checkEnvironment(options: {
 		window.setContentSize(width!, height!);
 		await settled();
 
-		// 取消十分钟那项。
+		// 悬停十分钟那项：卡片多了版本控制区后会滚动，先滚入视口再确认「取消」按钮真正可命中（不被透明的 fact 遮挡），再取消它。
+		const cancelPoint = await page<{ x: number; y: number }>(
+			`(() => { const row = [...document.querySelectorAll('[data-environment-wakeup]')].find((entry) => entry.textContent.includes(${JSON.stringify(CANCEL)})); row.scrollIntoView({ block: 'nearest' }); const r = row.querySelector('[data-wakeup-cancel]').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`,
+		);
+		window.webContents.sendInputEvent({ type: "mouseMove", ...cancelPoint });
+		await settled();
+		if (!(await page<boolean>(`document.elementFromPoint(${cancelPoint.x}, ${cancelPoint.y})?.closest('[data-wakeup-cancel]') !== null`)))
+			throw new Error("定时任务悬停后「取消」按钮被其他元素遮挡，点击不到");
+		await capture("smoke-environment-wakeup-hover.png");
 		await clickVisibleIn(
 			page,
 			`[...document.querySelectorAll('[data-environment-wakeup]')].filter((row) => row.textContent.includes(${JSON.stringify(CANCEL)})).map((row) => row.querySelector('[data-wakeup-cancel]'))`,
@@ -270,7 +292,7 @@ export async function checkEnvironment(options: {
 		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(again)})?.plumeSmokeMark === true`)))
 			throw new Error("换语言后对话被重新挂载了，验不出工具行跟没跟着换");
 		await until(
-			`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`Scheduled check-in ${AGAIN}`)}) && document.querySelector(${JSON.stringify(row)}).textContent.includes(${JSON.stringify(`Check-in · ${FIRE}`)}) && /^Check-in · /.test(document.querySelector('[data-environment-wakeup] .plume-env-row-fact')?.textContent ?? '')`,
+			`document.querySelector(${JSON.stringify(again)}).textContent.includes(${JSON.stringify(`Scheduled check-in ${AGAIN}`)}) && document.querySelector(${JSON.stringify(row)}).textContent.includes(${JSON.stringify(`Check-in · ${FIRE}`)}) && /^Check-in · /.test(document.querySelector('[data-environment-wakeup] .plume-env-row-fact')?.textContent ?? '') && /Commit|Push|Pull|Publish/.test(document.querySelector('[data-git-env-actions]')?.textContent ?? '')`,
 			"换成英文后工具行、送达那一行和卡片当场跟着换",
 		);
 		if (

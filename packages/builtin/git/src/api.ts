@@ -76,6 +76,8 @@ export interface GitStatus {
 	unpushed: number | null;
 	/** 游离 HEAD 指着的短 sha；在分支上时为空。 */
 	head: string | null;
+	/** 当前分支是否是默认分支（按远端 HEAD 或 main/master 判断）。 */
+	isDefaultBranch?: boolean;
 }
 
 export interface GitCommit {

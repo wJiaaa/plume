@@ -565,11 +565,12 @@ export interface EnvironmentSectionProps {
 }
 
 /**
- * 一节放在环境卡片的哪一块。`background` 是人不在时还会动的
- * （在跑的命令、监视、约好的检查）；`output` 是这个会话做出来的（计划、开出来的会话、拉取请求）；`foot` 是卡片底下的一行记录。
- * `background`、`output` 两块的标题和行数由画卡片的插件画，节里只放 `EnvironmentRow`，不画自己的小标题。
+ * 一节放在环境卡片的哪一块。`head` 紧跟页头项目名与打开方式，放工作区快捷操作（如项目脚本）；`vcs` 紧跟页头、独立成块且不画组标题，
+ * 放版本控制快捷操作（分支、提交与推送）；`background` 放后台运行中的事（后台任务、定时任务），排在正文靠前；
+ * `output` 放这个会话产出或关联的对象（子智能体、计划、关联会话、拉取请求），排在后面；`foot` 是卡片底下的一行记录。
+ * `background` 与 `output` 里的每一节按各自 `label` 独立成组，标题和默认条数由画卡片的插件统一画（`count: false` 时只画标题不数条数），节里只放 `EnvironmentRow`，不画自己的小标题。
  */
-export type EnvironmentPlace = "background" | "output" | "foot";
+export type EnvironmentPlace = "head" | "vcs" | "background" | "output" | "foot";
 
 /** 别的插件登记的一节环境卡片，见 `UiContext.useEnvironmentSections`。 */
 export interface EnvironmentSectionEntry {
@@ -580,6 +581,8 @@ export interface EnvironmentSectionEntry {
 	order: number;
 	/** 排在卡片的哪一块。 */
 	place: EnvironmentPlace;
+	/** 组标题右侧是否显示条数；默认 true，设为 false 时只画标题不数条数。 */
+	count: boolean;
 	/** 已经包好错误边界：一节出错只撤下这一节。 */
 	component: ComponentType<EnvironmentSectionProps>;
 	/**
@@ -1102,7 +1105,7 @@ export interface UiContext {
 	/**
 	 * 往会话的环境卡片里加一节（卡片由随应用提供的会话环境插件画，它经 `useEnvironmentSections` 拿到各节、不认是谁登记的）：和这个会话相关的一件周边的事，比如当前分支的拉取请求，每一行都只是入口，
 	 * 点了去插件自己的页面或面板。没什么可说时返回 null，卡片不留空位。`label` 是卡片右键「显示哪些内容」菜单里的名字。
-	 * `place` 定它排在卡片的哪一块（见 `EnvironmentPlace`，默认 `output`）；`background`、`output`、`foot` 里的每一行用 `@plume/ui` 的
+	 * `place` 定它排在卡片的哪一块（见 `EnvironmentPlace`，默认 `output`）；`count` 控制组标题后是否显示条数（默认 `true`，设为 `false` 时不显示）；`background`、`output`、`foot` 里的每一行用 `@plume/ui` 的
 	 * `EnvironmentRow` 画，一张卡片里的行才长得一样。同一块里按 order 从小到大排（默认 0）。id 在插件内唯一，停用时撤下。
 	 *
 	 * `attention` 是一个 React hook：这一节此刻有没有要提醒人的事，有就返回一句给人看的话（按界面语言，「1 个监视在跑，2 个检查待触发」），
@@ -1114,7 +1117,7 @@ export interface UiContext {
 	environmentSection(
 		id: string,
 		component: ComponentType<EnvironmentSectionProps>,
-		options: { label: LocalizedText; place?: EnvironmentPlace; order?: number; attention?: (session: SessionView) => string | undefined },
+		options: { label: LocalizedText; place?: EnvironmentPlace; order?: number; count?: boolean; attention?: (session: SessionView) => string | undefined },
 	): void;
 	/** React hook：各插件登记的环境卡片分区，按 order 排好，给画环境卡片的插件用；增减跟着变。只在组件里调。 */
 	useEnvironmentSections(): readonly EnvironmentSectionEntry[];
@@ -1382,6 +1385,10 @@ export interface SubagentTaskSummary {
 	state: "queued" | "running" | "done" | "failed" | "stopped";
 	startedAt?: number;
 	endedAt?: number;
+	/** 智能体名字（用于头像眨眼节奏与提示）。 */
+	agent?: string;
+	/** 分配好的形象（`shape-color` 字符串，见 `@plume/ui` 的 `parseAvatar`）。 */
+	avatar?: string;
 }
 
 /** `ui.draftInSession` 放进输入框的东西。 */

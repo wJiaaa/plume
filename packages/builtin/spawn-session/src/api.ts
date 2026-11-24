@@ -1,11 +1,21 @@
 /** 逻辑入口经 `ctx.serve` 开给界面入口的接口。 */
 
-import type { ThinkingLevel } from "@plume/contract";
+import type { StopReason, ThinkingLevel } from "@plume/contract";
 
-/** 一条开始了的建议或 offer：从哪次调用开出了哪个会话。 */
+/**
+ * 从当前对话派生出来的关联会话（建议新会话、直接开、offer、移交、计划交给新会话、侧边聊天开新会话、分叉）。
+ * 不管在跑、已停止、已完成还是已归档都保留，直到会话被删除。
+ */
 export interface StartedSuggestion {
-	callId: string;
+	/** 对应的工具调用 id；手动分叉或没带 `toolCallId` 开出的为 undefined。 */
+	callId?: string;
 	sessionId: string;
+	title: string;
+	createdAt: number;
+	running: boolean;
+	background?: true;
+	stopReason?: StopReason;
+	archived?: true;
 }
 
 /** 建议卡上「开始」那一排选的：工作树开关，和新会话的模型、思考档位。 */
@@ -19,7 +29,7 @@ interface StartChoice {
 }
 
 export interface SpawnSessionApi {
-	/** `parentId` 这个对话里开始了的建议和 offer。 */
+	/** `parentId` 这个对话派生出来的全部顶层关联会话，按创建时间从早到晚。 */
 	started(parentId: string): Promise<StartedSuggestion[]>;
 	/**
 	 * 建议卡上点了「开始」：在提建议的对话所在的项目里（不在项目里时是它的目录）开一个新会话，第一句是建议里的那段话，记着从这次调用

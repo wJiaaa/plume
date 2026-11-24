@@ -72,6 +72,13 @@ export async function checkBackgroundJob(options: {
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(`document.querySelector('[data-environment-job]') !== null`, "环境卡显示后台任务");
 		await settled();
+		// 无行尾事实时主体应占满整行宽度，不被隐藏的悬停按钮挤窄。
+		const widthGap = await page<number>(`(() => {
+			const row = document.querySelector('[data-environment-job]');
+			const main = row?.querySelector('.plume-env-row-main');
+			return row && main ? Math.abs(row.getBoundingClientRect().width - main.getBoundingClientRect().width) : 999;
+		})()`);
+		if (widthGap >= 1) throw new Error(`无行尾事实时后台任务主体未占满整行宽度，差值 ${widthGap}px`);
 		await writeFile(join(outDir, "smoke-environment.png"), (await window.webContents.capturePage()).toPNG());
 		// 环境卡开没开记在 localStorage 里、对所有会话生效：看完就收起，后面各段的对话底部不多一张卡。
 		// 它的阴影会漫进转录区，网页预览「复制整页」按片截图时每片底下都带一道。

@@ -59,6 +59,16 @@ async function workspaceStatIn(view: RepoView, none: WorkspaceStat): Promise<Wor
 	return { branch, added, removed, files: entries.length };
 }
 
+/** 读远端默认分支指针（如 `refs/remotes/origin/HEAD` → `origin/main`）。没有时返回空。 */
+async function originDefaultRef(view: RepoView, remote = "origin"): Promise<string | null> {
+	const out = await view
+		.git(["symbolic-ref", "--quiet", `refs/remotes/${remote}/HEAD`])
+		.then((text) => text.trim())
+		.catch(() => "");
+	if (!out.startsWith("refs/remotes/")) return null;
+	return out.slice("refs/remotes/".length) || null;
+}
+
 /**
  * 检出着的分支离上游多远，给输入框上方的分支签用。两次调用而不是 `gitStatus`：那个要走一遍工作区，这个每一轮
  * 结束都读。按上次获取时的远端分支算，这里不获取。没有上游（从没推过、游离）为空：没有距离可说。
@@ -157,6 +167,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 		operation: null,
 		unpushed: null,
 		head: null,
+		isDefaultBranch: false,
 	};
 	// 不在仓库里时视图不搭、交回 null（`ctx.workspace.git`），不另起一次 `rev-parse` 先问：一轮进行时这里每 1.5 秒跑一次。
 	return (await withView(cwd, (view) => gitStatusIn(view)).catch(() => null)) ?? empty;
@@ -227,13 +238,17 @@ async function gitStatusIn(view: RepoView): Promise<GitStatus> {
 	else if (standing.state === "no-upstream" && standing.remote && branch) unpushed = await unpushedWithoutUpstream(view, standing.remote, branch);
 
 	// 游离时 HEAD 指着哪，面板好说点比「不在分支上」更有用的话。只在没有分支名时读。
-	const head =
+	const [head, defaultRef] = await Promise.all([
 		standing.state === "detached"
-			? await view
+			? view
 					.git(["rev-parse", "--short", "HEAD"])
 					.then((out) => out.trim() || null)
 					.catch(() => null)
-			: null;
+			: Promise.resolve(null),
+		branch ? originDefaultRef(view, standing.remote ?? "origin") : Promise.resolve(null),
+	]);
+	const defaultShort = defaultRef ? defaultRef.slice((standing.remote ?? "origin").length + 1) : null;
+	const isDefaultBranch = branch !== null && (defaultShort ? branch === defaultShort : branch === "main" || branch === "master");
 
 	return {
 		branch,
@@ -247,6 +262,7 @@ async function gitStatusIn(view: RepoView): Promise<GitStatus> {
 		operation,
 		unpushed,
 		head,
+		isDefaultBranch,
 	};
 }
 

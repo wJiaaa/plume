@@ -508,6 +508,7 @@ export function GitPanel({ session, cwd: projectDir, shown }: PanelProps) {
 									unpushed={plan.push.count ?? 0}
 									publish={neverPublished && !plan.push.disabled}
 									pushTip={plan.push.tip}
+									canPush={status?.remoteState !== "none" && status?.remoteState !== "detached" && status?.remoteState !== "in-progress"}
 									onClose={pushPopover.close}
 									// 分支换了，这一层的状态和同步计划都要重读，否则弹窗关上后面板还写着旧分支。
 									onBranchChanged={() => void read()}

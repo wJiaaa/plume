@@ -1,7 +1,5 @@
 /**
- * 提交与推送，一个居中的弹窗。
- *
- * 提交是少数几件按下去就改了磁盘的事，值得占住屏幕中间、压暗背后。
+ * 提交与推送弹窗：使用产品统一的 `Dialog` + `DialogAction` 外框与右对齐按钮栏。
  *
  * - **留空就生成**：提交时空着就先让模型写一句，写回输入框——人看得见自己提交的是什么。
  * - **提交到哪个分支**也在这里选：选了新分支不当场创建，名字先记着，真提交那一刻才 `git switch -c`，
@@ -12,19 +10,22 @@
 import {
 	ActionSpinner,
 	Button,
+	ChoiceMark,
+	Dialog,
+	DialogAction,
 	IconButton,
+	Input,
 	MenuBody,
 	MenuItem,
 	MenuLabel,
-	Overlay,
 	OverlayScrollbar,
 	Popover,
-	shortcutLabel,
 	Text,
+	Textarea,
 	useFieldFade,
 	usePopover,
 } from "@plume/ui";
-import { Check, ChevronDown, CloudUpload, GitBranch, GitCommitHorizontal, Languages, Plus, Upload, X } from "@plume/ui/icons";
+import { Check, ChevronDown, GitBranch, GitCommitHorizontal, Languages, Plus, X } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { COMMIT_LANGUAGES, commitLanguageLabel, resolveCommitLanguage } from "./commit-language.ts";
 import type { CommitWork } from "./commit-work.ts";
@@ -32,7 +33,7 @@ import { notify } from "./host.ts";
 import { useT } from "./i18n.ts";
 import { git, settle } from "./remote.ts";
 
-/** `Overlay` 交给内容的那个关闭函数：播完退场再调 `after`。 */
+/** `Dialog` 交给动作和内容的关闭函数：播完退场再调 `after`。 */
 type Dismiss = (after?: () => void) => void;
 
 export interface CommitPushDialogProps {
@@ -44,14 +45,16 @@ export interface CommitPushDialogProps {
 	removedCount: number;
 	busy: boolean;
 	running: boolean;
-	/** 这一次提交的现场，归面板持有，见 `commit-work.ts`。 */
+	/** 这一次提交的现场，归调用方持有，见 `commit-work.ts`。 */
 	work: CommitWork;
-	/** 还没推上去的提交数：没有可推的就真的禁用那一行。 */
+	/** 还没推上去的提交数：没有可推的就禁用推送按钮。 */
 	unpushed: number;
-	/** 远端从没见过这个分支：推送那一行就是发布（这时没有数可报，整条分支都还没离开这台机器）。 */
+	/** 远端从没见过这个分支：推送即为发布。 */
 	publish: boolean;
 	/** 同步计划写好的那句话：几个提交没推，或者已经同步。 */
 	pushTip: string;
+	/** 当前是否具备推送条件（无远端或游离 HEAD 时隐藏「提交并推送」）。默认 true。 */
+	canPush?: boolean;
 	onClose: () => void;
 	onCommit: (message: string) => Promise<boolean>;
 	onCommitAndPush: (message: string, includeUnstaged: boolean) => Promise<boolean>;
@@ -73,6 +76,7 @@ export function CommitPushDialog({
 	unpushed,
 	publish,
 	pushTip,
+	canPush = true,
 	onClose,
 	onCommit,
 	onCommitAndPush,
@@ -234,17 +238,53 @@ export function CommitPushDialog({
 	const hasChanges = stagedCount > 0 || (includeUnstaged && unstagedCount > 0);
 	const disabled = busy || running || workingAction !== null || generating;
 	const languageTip = t("commit.languageIs", { language: commitLanguageLabel(resolvedLanguage) });
+	const pushLabel = publish ? t("sync.publishBranch") : unpushed > 0 ? `${t("common.push")} (${unpushed})` : t("common.push");
 
 	return (
-		<Overlay onClose={onClose} width={460} label={t("commit.commit")}>
+		<Dialog
+			onClose={onClose}
+			width={480}
+			icon={<GitCommitHorizontal size={16} strokeWidth={1.9} className="git-dialog-icon-muted" />}
+			title={hasChanges ? t("commit.commit") : pushLabel}
+			label={t("commit.commit")}
+			actions={(dismiss) => (
+				<>
+					<DialogAction disabled={disabled} onClick={() => dismiss()}>
+						{t("common.cancel")}
+					</DialogAction>
+					{hasChanges ? (
+						<>
+							{canPush && (
+								<DialogAction disabled={disabled} onClick={() => void handleCommitAndPush(dismiss)}>
+									{workingAction === "commitAndPush" && <ActionSpinner size={12} />}
+									{t("commit.commitAndPush")}
+								</DialogAction>
+							)}
+							<DialogAction tone="primary" disabled={disabled} onClick={() => void handleCommit(dismiss)}>
+								{workingAction === "commit" && <ActionSpinner size={12} />}
+								{t("commit.commit")}
+							</DialogAction>
+						</>
+					) : (
+						<DialogAction tone="primary" label={pushTip} disabled={disabled || (unpushed === 0 && !publish)} onClick={() => void handlePush(dismiss)}>
+							{workingAction === "push" && <ActionSpinner size={12} />}
+							{pushLabel}
+						</DialogAction>
+					)}
+				</>
+			)}
+		>
 			{(dismiss) => (
 				<Text as="div" size="detail" className="git-dialog">
 					{/* 提交到哪儿。这一行能点：展开是本地分支，末尾一项是新建。 */}
 					<div className="git-dialog-target">
+						<Text size="detail" tone="muted" className="git-shrink-0">
+							{t("commit.commitTo")}
+						</Text>
 						{target.kind === "new" ? (
 							<Text as="div" size="label" weight="semibold" className="git-dialog-new-branch">
 								<GitBranch size={13} strokeWidth={2} className="git-dialog-icon-faint" />
-								<input
+								<Input
 									ref={newBranchField}
 									value={target.name}
 									onChange={(e) => setTarget({ kind: "new", name: e.target.value })}
@@ -263,62 +303,59 @@ export function CommitPushDialog({
 								<IconButton size="sm" label={t("common.cancel")} onClick={() => setTarget({ kind: "current" })} icon={<X size={12} strokeWidth={2} />} />
 							</Text>
 						) : (
-							<button type="button" disabled={disabled} onClick={branchMenu.toggle} className="git-dialog-branch-button">
-								<GitBranch size={13} strokeWidth={2} className="git-dialog-icon-faint" />
-								<Text size="label" weight="semibold" className="git-dialog-truncate">
-									{branch}
-								</Text>
+							<Button
+								variant="subtle"
+								size="sm"
+								disabled={disabled}
+								menu={branchMenu.open}
+								onClick={branchMenu.toggle}
+								icon={<GitBranch size={13} strokeWidth={2} className="git-dialog-icon-faint" />}
+								className="git-dialog-branch-button"
+							>
+								<span className="git-dialog-truncate">{branch}</span>
 								<ChevronDown size={12} strokeWidth={2} className="git-dialog-icon-muted" />
-							</button>
+							</Button>
 						)}
 					</div>
 
 					{branchMenu.open && (
 						<Popover anchor={branchMenu.anchor} onClose={branchMenu.close} placement="bottom" align="start" width="compact" label={t("commit.commitTo")}>
-							<MenuBody>
+							<MenuBody insetIcons>
 								<MenuLabel>{t("commit.commitTo")}</MenuLabel>
 								{(locals.length > 0 ? locals : [branch]).map((name) => (
 									<MenuItem
 										key={name}
+										icon={<GitBranch size={12} strokeWidth={1.8} />}
 										selected={name === branch}
 										trailing={name === branch ? <Check size={13} strokeWidth={2.2} /> : undefined}
 										onClick={() => void switchTo(name)}
 									>
-										<span className="git-dialog-menu-row">
-											<GitBranch size={12} strokeWidth={1.8} className="git-dialog-icon-faint" />
-											<span className="git-dialog-truncate">{name}</span>
-										</span>
+										{name}
 									</MenuItem>
 								))}
 								<MenuItem
+									icon={<Plus size={12} strokeWidth={2} />}
 									onClick={() => {
 										branchMenu.close();
 										setTarget({ kind: "new", name: "" });
 									}}
 								>
-									<span className="git-dialog-menu-row">
-										<Plus size={12} strokeWidth={2} className="git-dialog-icon-faint" />
-										<span>{t("commit.newBranch")}</span>
-									</span>
+									{t("commit.newBranch")}
 								</MenuItem>
 							</MenuBody>
 						</Popover>
 					)}
 
-					{/*
-					 * 写什么：和主输入框同一副圆角和描边，但不带它的阴影——这个框长在已经浮起来的弹窗里，再加一层阴影就从卡片里鼓出来了。
-					 * 内衬用主输入框的那两个变量，它的呼吸感调了，这里跟着动。
-					 */}
-					<Text as="div" size="label" className="git-dialog-message">
+					<div className="plume-textarea-shell">
 						<div ref={messageScroller} className="plume-scroll-host git-dialog-message-body">
-							<textarea
+							<Textarea
 								ref={messageField}
 								value={message}
 								onChange={(e) => setMessage(e.target.value)}
 								placeholder={generating ? t("commit.generating") : t("commit.autoPlaceholder")}
 								disabled={disabled}
 								rows={3}
-								className="plume-field-fade git-dialog-textarea"
+								className="plume-textarea plume-field-fade"
 								onKeyDown={(e) => {
 									if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 										e.preventDefault();
@@ -326,7 +363,6 @@ export function CommitPushDialog({
 									}
 								}}
 							/>
-							{/* 生成中由输入框自己交代：此刻发生的是模型在写字，放在字会出现的地方。 */}
 							{generating && (
 								<span className="git-dialog-spinner">
 									<ActionSpinner size={12} />
@@ -335,7 +371,6 @@ export function CommitPushDialog({
 							<OverlayScrollbar viewport={messageField} orientation="vertical" />
 						</div>
 
-						{/* 用什么语言生成，一直在：打第一个字时整行消失、框矮一截，人正打着字脚下的东西动了。 */}
 						<div className="git-dialog-language">
 							<Button
 								variant="subtle"
@@ -352,7 +387,7 @@ export function CommitPushDialog({
 								<ChevronDown size={9} strokeWidth={2} />
 							</Button>
 						</div>
-					</Text>
+					</div>
 
 					{languageMenu.open && (
 						<Popover anchor={languageMenu.anchor} onClose={languageMenu.close} placement="bottom" align="end" width="compact" label={t("commit.language")}>
@@ -375,10 +410,7 @@ export function CommitPushDialog({
 					{unstagedCount > 0 && (
 						<label className="git-dialog-include">
 							<span className="git-dialog-include-main">
-								{/* 自己画的方框：原生 checkbox 两个平台长得不一样。真正的 input 只对读屏可见，键盘和读屏走它。 */}
-								<span aria-hidden data-checked={includeUnstaged || undefined} className="git-dialog-check">
-									<Check size={11} strokeWidth={3} />
-								</span>
+								<ChoiceMark checked={includeUnstaged} kind="checkbox" />
 								<input
 									type="checkbox"
 									checked={includeUnstaged}
@@ -397,80 +429,8 @@ export function CommitPushDialog({
 							</Text>
 						</label>
 					)}
-
-					{/* 做哪一个。上面的框已经画出了下沿，不再补分隔线。 */}
-					<div className="git-dialog-actions">
-						<ActionRow
-							icon={<GitCommitHorizontal size={15} strokeWidth={1.9} />}
-							label={t("commit.commit")}
-							trailing={
-								<kbd className="git-dialog-kbd">
-									<Text size="caption" tone="faint" mono>
-										{shortcutLabel("⌘↩")}
-									</Text>
-								</kbd>
-							}
-							working={workingAction === "commit"}
-							disabled={disabled || !hasChanges}
-							onClick={() => void handleCommit(dismiss)}
-						/>
-						<ActionRow
-							icon={<CloudUpload size={15} strokeWidth={1.9} />}
-							label={t("commit.commitAndPush")}
-							working={workingAction === "commitAndPush"}
-							disabled={disabled || !hasChanges}
-							onClick={() => void handleCommitAndPush(dismiss)}
-						/>
-						<ActionRow
-							icon={<Upload size={15} strokeWidth={1.9} />}
-							label={publish ? t("sync.publishBranch") : t("common.push")}
-							tip={pushTip}
-							trailing={
-								unpushed > 0 ? (
-									<Text size="caption" tone="faint" mono numeric>
-										{unpushed}
-									</Text>
-								) : undefined
-							}
-							working={workingAction === "push"}
-							disabled={disabled || (unpushed === 0 && !publish)}
-							onClick={() => void handlePush(dismiss)}
-						/>
-					</div>
 				</Text>
 			)}
-		</Overlay>
-	);
-}
-
-/** 弹窗底部那三行，一个样子：分开写的话高度、圆角、转圈的尺寸三处都对不齐。 */
-function ActionRow({
-	icon,
-	label,
-	tip,
-	trailing,
-	working,
-	disabled,
-	onClick,
-}: {
-	icon: React.ReactNode;
-	label: string;
-	tip?: string;
-	trailing?: React.ReactNode;
-	working: boolean;
-	disabled: boolean;
-	onClick: () => void;
-}) {
-	return (
-		<button type="button" disabled={disabled} onClick={onClick} {...(tip ? { "data-plume-tip": tip } : {})} className="git-dialog-action">
-			<span className="git-dialog-action-main">
-				{/* 转圈的那一枚和图标一样大：换了尺寸，按下去那一下整行的字会横着挪。 */}
-				<span className="git-dialog-action-icon">{working ? <ActionSpinner size={14} /> : icon}</span>
-				<Text size="label" className="git-dialog-truncate">
-					{label}
-				</Text>
-			</span>
-			{trailing}
-		</button>
+		</Dialog>
 	);
 }

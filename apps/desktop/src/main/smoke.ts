@@ -1909,6 +1909,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await until(`document.querySelectorAll('${tasksPanel} [data-subagent-task]').length === 2`, "后台任务面板列出两个子 Agent");
 		await delay(300);
 		await capture(window, join(outDir, "smoke-tasks-subagents.png"));
+		// 运行中的子智能体也要实时显示在环境卡片里：收起时开关亮圆点，打开后运行中的排在第一位并带运行点。
+		await until(`document.querySelector('[data-environment-toggle] [data-environment-dot]') !== null`, "子智能体运行时收起的环境开关亮圆点");
+		await click("[data-environment-toggle]");
+		await until(
+			`(() => { const rows = [...document.querySelectorAll('[data-environment-group="plume.subagents/subagents"] [data-environment-subagent]')]; return rows.length === 2 && rows[0].textContent.includes(${JSON.stringify(TASK_TITLE)}) && rows[0].querySelector('.plume-env-row-icon[data-running]') !== null; })()`,
+			"环境卡片在子智能体运行时实时列出运行中的子智能体",
+		);
+		await capture(window, join(outDir, "smoke-environment-subagent-running.png"));
+		await click("[data-environment-toggle]");
+		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 		await click(`${tasksPanel} [data-subagent-task] button`, containing(TASK_TITLE));
 		await until(
 			`document.querySelector('${agentsPanel} [data-sub-header]')?.textContent.includes(${JSON.stringify(TASK_TITLE)})`,
@@ -1996,15 +2006,17 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			throw new Error("操控区插话没有送进子会话");
 		if (toolNames(sideRequest).includes("task")) throw new Error("侧边聊天不该拿到 task");
 		if (!JSON.stringify(sideRequest.messages).includes("派个子 Agent 写一份说明")) throw new Error("侧边聊天的提问里没有主对话的内容");
-		// 子 Agent 和侧边聊天统一并进“产出”，不再按插件身份重复画“子智能体”“侧边聊天”小标题。
+		// 环境卡片里「子智能体」独立成组，不把侧边聊天放进环境卡片，点了直接打开「子 Agent」面板。
 		if (!(await page(`document.querySelector('[data-environment]') !== null`))) await click("[data-environment-toggle]");
 		await until(
-			`document.querySelector('[data-environment-group=output] [data-environment-section=children] [data-environment-child]') !== null`,
-			"环境卡片的产出里列出子会话",
+			`document.querySelector('[data-environment-group="plume.subagents/subagents"] > .plume-environment-group-label')?.textContent === '子智能体' && document.querySelectorAll('[data-environment-group="plume.subagents/subagents"] [data-environment-subagent]').length === 2`,
+			"环境卡片里有独立的「子智能体」分组（标题后不显示数量）并列出 2 个子智能体",
 		);
-		if (await page(`document.querySelector('[data-environment-section=children] .plume-environment-section-label') !== null`))
-			throw new Error("环境卡片仍按子会话来源重复画小标题");
+		if (await page(`document.querySelector('[data-environment]')?.textContent.includes(${JSON.stringify(SIDE_QUESTION)}) === true`))
+			throw new Error("侧边聊天不该被放进环境卡片");
 		await capture(window, join(outDir, "smoke-environment-children.png"));
+		await click('[data-environment-group="plume.subagents/subagents"] [data-environment-subagent] .plume-env-row-main[data-plume-tip="@general"]');
+		await until(`document.querySelector('${shown("plume.subagents/agents")}') !== null`, "点击环境卡片里的子智能体直接切到子 Agent 面板");
 		await click("[data-environment-toggle]");
 		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 		childrenPhase = false;

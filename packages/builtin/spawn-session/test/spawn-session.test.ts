@@ -14,11 +14,12 @@ import type {
 	ToolDefinition,
 	ToolRun,
 } from "@plume/contract";
-import type { SpawnSessionApi } from "../src/api.ts";
+import type { SpawnSessionApi, StartedSuggestion } from "../src/api.ts";
 import { checkSpawn } from "../src/check.ts";
 import plugin from "../src/index.ts";
 import { reportTail, reportText } from "../src/prompt.ts";
 import { Reports } from "../src/reports.ts";
+import { environmentStatus } from "../src/state.ts";
 import { humanTurn } from "../src/turns.ts";
 
 const BACKGROUND =
@@ -503,4 +504,106 @@ it("fork、移交开出的会话带过来的建议卡在这里开不了：复制
 	const own = await plugged({ createdAt: 500, messages: [copied] });
 	await own.api.start("p1", "c1", { worktree: false });
 	expect(own.launched).toHaveLength(1);
+});
+
+it("started：列全部派生顶层关联会话（含直接开、计划、移交、分叉），停止/完成/出错/归档都保留，排除子会话与独立会话，按创建时间排序", async () => {
+	const sessions: SessionSummary[] = [
+		{
+			id: "s-fork",
+			title: "手动分叉",
+			cwd: "/repo",
+			createdAt: 300,
+			updatedAt: 350,
+			running: false,
+			kind: "top",
+			forkedFrom: { sessionId: "p1" },
+			stop: { reason: "aborted" },
+		},
+		{
+			id: "s-plan",
+			title: "执行计划",
+			cwd: "/repo",
+			createdAt: 100,
+			updatedAt: 500,
+			running: false,
+			kind: "top",
+			spawnedFrom: { sessionId: "p1", toolCallId: "plan_call" },
+			stop: { reason: "done" },
+		},
+		{
+			id: "s-direct",
+			title: "直接开出",
+			cwd: "/repo",
+			createdAt: 200,
+			updatedAt: 250,
+			running: true,
+			kind: "top",
+			spawnedFrom: { sessionId: "p1" },
+		},
+		{
+			id: "s-archived",
+			title: "已归档的关联会话",
+			cwd: "/repo",
+			createdAt: 400,
+			updatedAt: 410,
+			running: false,
+			archived: true,
+			kind: "top",
+			spawnedFrom: { sessionId: "p1", toolCallId: "c1" },
+			stop: { reason: "done" },
+		},
+		// 排除：子智能体/侧边聊天、独立会话、别的父会话派生的。
+		{
+			id: "s-child",
+			title: "子智能体",
+			cwd: "/repo",
+			createdAt: 50,
+			updatedAt: 60,
+			running: true,
+			kind: "child",
+			parentId: "p1",
+			spawnedFrom: { sessionId: "p1" },
+		},
+		{
+			id: "s-standalone",
+			title: "独立会话",
+			cwd: "/repo",
+			createdAt: 60,
+			updatedAt: 70,
+			running: false,
+			kind: "standalone",
+			spawnedFrom: { sessionId: "p1" },
+		},
+		{
+			id: "s-other",
+			title: "别处开出的",
+			cwd: "/repo",
+			createdAt: 80,
+			updatedAt: 90,
+			running: true,
+			kind: "top",
+			spawnedFrom: { sessionId: "p2", toolCallId: "x" },
+		},
+	];
+	const { api } = await plugged({ sessions });
+	expect(await api.started("p1")).toEqual([
+		{ callId: "plan_call", sessionId: "s-plan", title: "执行计划", createdAt: 100, running: false, stopReason: "done" },
+		{ sessionId: "s-direct", title: "直接开出", createdAt: 200, running: true },
+		{ sessionId: "s-fork", title: "手动分叉", createdAt: 300, running: false, stopReason: "aborted" },
+		{ callId: "c1", sessionId: "s-archived", title: "已归档的关联会话", createdAt: 400, running: false, stopReason: "done", archived: true },
+	]);
+});
+
+it("environmentStatus：按会话状态给出持久展示态，停止、完成、出错、归档都不丢", () => {
+	const base: StartedSuggestion = { sessionId: "s1", title: "t", createdAt: 10, running: false };
+	expect(environmentStatus({ ...base, running: true }, undefined)).toBe("running");
+	expect(environmentStatus({ ...base, background: true }, undefined)).toBe("running");
+	expect(environmentStatus({ ...base, running: true }, "waiting")).toBe("waiting");
+	expect(environmentStatus({ ...base, stopReason: "aborted" }, undefined)).toBe("stopped");
+	expect(environmentStatus({ ...base, stopReason: "done" }, undefined)).toBe("done");
+	expect(environmentStatus({ ...base, stopReason: "error" }, undefined)).toBe("failed");
+	expect(environmentStatus({ ...base, stopReason: "max_turns" }, undefined)).toBe("failed");
+	expect(environmentStatus({ ...base, stopReason: "stalled" }, undefined)).toBe("failed");
+	expect(environmentStatus({ ...base, stopReason: "done", archived: true }, undefined)).toBe("archived");
+	expect(environmentStatus(base, undefined)).toBe("started");
 });

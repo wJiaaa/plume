@@ -1,0 +1,15 @@
+/*
+ * 环境卡片版本控制菜单里的局部排版（行本身用 @plume/ui 的 EnvironmentRow / EnvironmentSplitRow）。
+ */
+
+.git-env-skeleton {
+	display: flex;
+	align-items: center;
+	height: 30px;
+	padding: 0 8px;
+}
+
+.git-env-menu-notice {
+	padding: 6px 10px;
+	color: var(--plume-warning);
+}

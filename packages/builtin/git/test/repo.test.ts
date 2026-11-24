@@ -109,3 +109,22 @@ test("符号链接按 git 的样子读：内容是指向的路径，不顺着读
 		await rm(outside, { recursive: true, force: true });
 	}
 });
+
+test("gitStatus.isDefaultBranch：区分默认分支与功能分支", async () => {
+	const repoDir = await mkdtemp(join(tmpdir(), "plume-git-default-"));
+	try {
+		assert.deepEqual(await initRepo(repoDir), { ok: true });
+		execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir });
+		execFileSync("git", ["config", "user.name", "Test"], { cwd: repoDir });
+		execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/main"], { cwd: repoDir });
+		await writeFile(join(repoDir, "base.txt"), "line1\n");
+		await stagePaths(repoDir, ["base.txt"]);
+		await commitStaged(repoDir, "init");
+
+		assert.equal((await gitStatus(repoDir)).isDefaultBranch, true);
+		await createBranch(repoDir, "feat/demo");
+		assert.equal((await gitStatus(repoDir)).isDefaultBranch, false);
+	} finally {
+		await rm(repoDir, { recursive: true, force: true });
+	}
+});

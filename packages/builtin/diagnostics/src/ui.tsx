@@ -94,11 +94,17 @@ export default {
 		});
 		ui.panel("output", Output, { title: (locale) => MESSAGES[locale].output, listed: false });
 		const sections = environmentSections(runtime);
-		ui.environmentSection("jobs", sections.Background, {
+		ui.environmentSection("jobs", sections.Jobs, {
 			label: (locale) => MESSAGES[locale].jobs,
 			place: "background",
 			order: 10,
-			attention: sections.useAttention,
+			attention: sections.useJobsAttention,
+		});
+		ui.environmentSection("wakeups", sections.Wakeups, {
+			label: (locale) => MESSAGES[locale].wakeups,
+			place: "background",
+			order: 15,
+			attention: sections.useWakeupsAttention,
 		});
 		ui.environmentSection("compactions", sections.Compactions, {
 			label: (locale) => MESSAGES[locale].compactions,

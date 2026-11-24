@@ -1,4 +1,4 @@
-import { IconButton, MenuBody, MenuItem, Popover, useI18n, usePopover } from "@plume/ui";
+import { EnvironmentSplitRow, IconButton, MenuBody, MenuItem, Popover, useI18n, usePopover } from "@plume/ui";
 import { ChevronDown, FolderOpen, SquareArrowOutUpRight } from "@plume/ui/icons";
 import { attachmentActions } from "../composer/attachments/actions.ts";
 import { openLabel, setOpenTarget, targetLabel, useOpenTarget, useOpenTargets } from "./open-targets.ts";
@@ -9,9 +9,9 @@ function targetIcon(target: { id: string; icon?: string }, size: number) {
 }
 
 /**
- * 环境入口和文件预览共享默认目标，选择后立即打开当前目录。`compact` 放在一行的右端（环境卡片的页头）：只写应用名，
- * 「在…中打开」交给悬停提示；`compact: "icon"` 只剩应用图标和下拉箭头，一颗带框（和 ghost 按钮同一道线、同一档 26px 高）的分体按钮，
- * 放进面板顶栏那排图标按钮里。
+ * 环境入口和文件预览共享默认目标，选择后立即打开当前目录。整行形态直接使用 `@plume/ui` 的 `EnvironmentSplitRow`：
+ * 平时是一整行无框按钮，悬停或展开菜单时浮出中间竖线，右端下拉切换默认应用；`compact` 放进紧凑栏头时只写应用名；
+ * `compact: "icon"` 只剩应用图标和下拉箭头，一颗带框（和 ghost 按钮同一道线、同一档 26px 高）的分体按钮，放进面板顶栏那排图标按钮里。
  */
 export function ProjectOpener({ path, compact = false }: { path: string; compact?: boolean | "icon" }) {
 	const { t } = useI18n();
@@ -23,8 +23,9 @@ export function ProjectOpener({ path, compact = false }: { path: string; compact
 		if (menu.open) menu.close();
 		else menu.openAt(anchor);
 	};
+	const menuWidth = !compact && menu.anchor instanceof HTMLElement && menu.anchor.offsetWidth > 0 ? menu.anchor.offsetWidth : "default";
 	const menuPopover = menu.open && (
-		<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end">
+		<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width={menuWidth}>
 			<MenuBody insetIcons>
 				{targets.map((target) => (
 					<MenuItem
@@ -98,18 +99,18 @@ export function ProjectOpener({ path, compact = false }: { path: string; compact
 	}
 
 	return (
-		<div className="flex min-w-0 items-center gap-0.5">
-			<button
-				type="button"
-				className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-field px-2 text-left text-label hover:bg-card-hover active:bg-elevated"
-				data-plume-tip={path}
+		<>
+			<EnvironmentSplitRow
+				icon={targetIcon(current, 15)}
+				title={openLabel(current)}
+				tip={path}
+				ariaLabel={t("sessionMenu.openIn")}
+				menuLabel={t("sessionMenu.openIn")}
+				open={menu.open}
 				onClick={() => open(current.id)}
-			>
-				{current.icon ? <img src={current.icon} width={16} height={16} alt="" /> : <FolderOpen size={14} />}
-				<span className="truncate">{openLabel(current)}</span>
-			</button>
-			<IconButton size="sm" label={t("sessionMenu.openIn")} icon={<ChevronDown size={13} />} onClick={(event) => toggleMenu(event.currentTarget)} />
+				onMenuClick={toggleMenu}
+			/>
 			{menuPopover}
-		</div>
+		</>
 	);
 }

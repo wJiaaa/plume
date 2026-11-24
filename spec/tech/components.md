@@ -24,7 +24,7 @@
 | `AgentAvatar`、`AvatarPile`、`assignAvatars` | 智能体头像、状态表情与叠放；按种类稳定分配，插件与产品共用 | `ui/motion.css` |
 | `Collapse` | 展开、收起时保留内容直到尺寸过渡完成，支持减少动态效果 | `ui/motion.css` |
 | `FlowRow` | 转录里的过程行：思考、一段工具活、压缩、送达和来信那一行，插件的工具卡片画成一行时也用它（建议新会话写到一半、开始以后，侧边聊天交出去以后） | `ui/flow.css` |
-| `EnvironmentRow` | 环境卡片“后台”“产出”和页脚的一行：统一图标、说明、淡色行尾、运行点、悬停动作与细进度线，插件不自己画另一套 | `ui/environment.css` |
+| `EnvironmentRow`、`EnvironmentSplitRow` | 环境卡片的一行：`EnvironmentRow` 给“后台”“关联”、页脚和单项操作行；`EnvironmentSplitRow` 给顶部与版本控制的分体操作行 / 整行下拉（打开方式、项目脚本、分支切换、Git 快捷操作），插件不自己画另一套 | `ui/environment.css` |
 | `ApprovalFrame`、`ApprovalExpiry` | 审批卡的外框（收放的标题栏、类型小标签、倒计时、+N）和每秒走的「m:ss 后失效」；产品的通用审批卡、插件的提问卡共用外框，自己画外框的插件卡（计划、MCP 表单）只用倒计时 | Tailwind 类 |
 | `Sideways` | 横向标签栏，普通鼠标滚轮横滚，触摸板保持原生方向；PR 账号标签复用 | `ui/scroll.css` |
 | `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |
@@ -32,7 +32,7 @@
 | `useMovableBar`、`useToolbarPlacement`、`HANDLES` 等选区几何 | 标注工具条的落点和拖动：看图器里贴窗口底边、截图浮层里跟着选区；选区的手柄、移动、缩放 | 无 |
 | `PageTopRow` | 页面每一栏最上面那一行（两栏页面的栏头）：顶行高、左右内边距，不拖窗口（拖窗口归宿主的标题栏） | Tailwind 类 |
 
-只有类名组合、没有组件的：`text`（faint、error、link）、`fieldLabel`（标签在上、控件在下）、`proposal`（转录里等人点的提议卡：建议新会话、侧边聊天交出去；输入框上方等人答的卡用 `ApprovalFrame`）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
+只有类名组合、没有组件的：`text`（faint、error、link，还在进行的那句话上的扫光 glide）、`fieldLabel`（标签在上、控件在下）、`proposal`（转录里等人点的提议卡：建议新会话、侧边聊天交出去；输入框上方等人答的卡用 `ApprovalFrame`）、`textarea`（无框的多行框；主输入框不用它，是 `apps/desktop/src/renderer/composer/` 里的编辑器）。
 
 悬停提示靠 `data-plume-tip` 属性，`main.tsx` 启动时调一次 `installTooltips()`。弹层只留在触发元素所在的那一列：正文是 `<main>`，面板列带 `plume-panel` 类。
 

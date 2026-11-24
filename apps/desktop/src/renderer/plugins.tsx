@@ -812,10 +812,12 @@ function registerEnvironmentSection(plugin: string, id: unknown, component: unkn
 	// i18n-exempt：插件作者的接口错误，只写入加载日志。
 	if (typeof id !== "string" || id === "") throw new Error("环境卡片的一节需要 id");
 	if (typeof component !== "function" && (typeof component !== "object" || component === null)) throw new Error(`环境卡片的一节 ${id} 需要一个组件`);
-	const { label, place = "output", order = 0, attention } = (options ?? {}) as Record<string, unknown>;
+	const { label, place = "output", order = 0, count = true, attention } = (options ?? {}) as Record<string, unknown>;
 	if (!validTitle(label)) throw new Error(`环境卡片的一节 ${id} 需要 label`);
-	if (place !== "background" && place !== "output" && place !== "foot") throw new Error(`环境卡片的一节 ${id} 的 place 不认识`);
+	if (place !== "head" && place !== "vcs" && place !== "background" && place !== "output" && place !== "foot")
+		throw new Error(`环境卡片的一节 ${id} 的 place 不认识`);
 	if (typeof order !== "number" || !Number.isFinite(order)) throw new Error("order 必须是数字");
+	if (typeof count !== "boolean") throw new Error(`环境卡片的一节 ${id} 的 count 需要是布尔值`);
 	if (attention !== undefined && typeof attention !== "function") throw new Error(`环境卡片的一节 ${id} 的 attention 要是一个 hook`);
 	const key = `${plugin}/${id}`;
 	const Section = component as ComponentType<EnvironmentSectionProps>;
@@ -832,6 +834,7 @@ function registerEnvironmentSection(plugin: string, id: unknown, component: unkn
 			label: label as EnvironmentSectionEntry["label"],
 			order,
 			place,
+			count,
 			component: Wrapped,
 			...(attention ? { attention: attentionProbe(plugin, attention as (session: SessionView) => string | undefined) } : {}),
 		},

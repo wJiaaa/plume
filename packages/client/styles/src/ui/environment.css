@@ -10,13 +10,21 @@
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
 	min-height: 32px;
-	border-radius: var(--plume-radius-item);
-	color: var(--plume-ink);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+	border-radius: var(--plume-radius-field);
+	color: color-mix(in srgb, var(--plume-ink) 85%, transparent);
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft);
 }
 @media (hover: hover) {
-	.plume-env-row:has(> button.plume-env-row-main):hover {
+	.plume-env-row:has(> button.plume-env-row-main):hover,
+	.plume-env-row[data-has-action]:hover {
 		background: var(--plume-card-hover);
+		color: var(--plume-ink);
+	}
+	.plume-env-row:has(> button.plume-env-row-main):hover .plume-env-row-icon,
+	.plume-env-row[data-has-action]:hover .plume-env-row-icon {
+		color: var(--plume-ink-muted);
 	}
 }
 .plume-env-row:has(> button.plume-env-row-main:active) {
@@ -28,10 +36,35 @@
 	align-items: center;
 	gap: 10px;
 	min-width: 0;
-	padding: 6px 8px;
-	border-radius: var(--plume-radius-item);
+	padding: 6px 10px;
+	border-radius: var(--plume-radius-field);
 	text-align: left;
 	font-size: var(--text-detail);
+	font-weight: 500;
+}
+
+.plume-env-row-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.plume-env-row[data-stacked] .plume-env-row-main {
+	align-items: flex-start;
+	padding-block: 7px;
+}
+.plume-env-row[data-stacked] .plume-env-row-icon {
+	margin-top: 2px;
+}
+.plume-env-row[data-stacked] .plume-env-row-detail {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* 带底部进度条时留出底部空隙，避免细线紧贴文字或按钮。 */
+.plume-env-row[data-has-progress] .plume-env-row-main {
+	padding-bottom: 12px;
 }
 
 .plume-env-row-icon {
@@ -59,8 +92,15 @@
 }
 /* 悬停时行有了底色，绿点外那一圈跟着换成悬停后的颜色，不留一圈亮边。 */
 @media (hover: hover) {
-	.plume-env-row:has(> button.plume-env-row-main):hover .plume-env-row-icon[data-running]::after {
+	.plume-env-row:has(> button.plume-env-row-main):hover .plume-env-row-icon[data-running]::after,
+	.plume-env-row[data-has-action]:hover .plume-env-row-icon[data-running]::after {
 		box-shadow: 0 0 0 2px color-mix(in srgb, var(--plume-fg) 5%, var(--plume-env-row-ring, var(--plume-float)));
+	}
+}
+@media (hover: hover) and (prefers-color-scheme: dark) {
+	.plume-env-row:has(> button.plume-env-row-main):hover .plume-env-row-icon[data-running]::after,
+	.plume-env-row[data-has-action]:hover .plume-env-row-icon[data-running]::after {
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--plume-fg) 7.5%, var(--plume-env-row-ring, var(--plume-float)));
 	}
 }
 
@@ -69,15 +109,6 @@
 	min-width: 0;
 }
 
-.plume-env-row-tail {
-	display: grid;
-	justify-items: end;
-	align-items: center;
-	padding-right: 6px;
-}
-.plume-env-row-tail > * {
-	grid-area: 1 / 1;
-}
 .plume-env-row-fact {
 	display: inline-flex;
 	align-items: center;
@@ -90,9 +121,21 @@
 		opacity var(--plume-t-quick) var(--plume-e-soft),
 		color var(--plume-t-quick) var(--plume-e-soft);
 }
+.plume-env-row > .plume-env-row-fact {
+	padding-right: 10px;
+}
+.plume-env-row > .plume-env-row-fact:empty {
+	display: none;
+}
 
-/* 动作平时藏着，悬停或键盘焦点进了这一行才盖住行尾：一列「停止」「取消」常驻，读起来全是按钮。 */
+/* 动作平时藏着且脱离网格流，不挤占标题宽度；悬停或键盘焦点进来时才浮在行右端、盖住行尾。 */
+/* 必须带 z-index 且隐藏后的 fact 禁用 pointer-events：否则 opacity < 1 的 fact 会建立层叠上下文盖在 opacity: 1 的按钮上拦住点击。 */
 .plume-env-row-action {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	z-index: 1;
+	transform: translateY(-50%);
 	height: 22px;
 	padding: 0 8px;
 	border-radius: var(--plume-radius-item);
@@ -106,14 +149,25 @@
 		color var(--plume-t-quick) var(--plume-e-soft),
 		background-color var(--plume-t-quick) var(--plume-e-soft);
 }
-.plume-env-row:hover .plume-env-row-action,
-.plume-env-row:focus-within .plume-env-row-action {
+.plume-env-row[data-stacked] .plume-env-row-action {
+	top: 6px;
+	transform: none;
+}
+.plume-env-row:hover .plume-env-row-action {
 	opacity: 1;
 	pointer-events: auto;
 }
-.plume-env-row[data-has-action]:hover .plume-env-row-fact,
-.plume-env-row[data-has-action]:focus-within .plume-env-row-fact {
+.plume-env-row:has(:focus-visible) .plume-env-row-action {
+	opacity: 1;
+	pointer-events: auto;
+}
+.plume-env-row[data-has-action]:hover > .plume-env-row-fact {
 	opacity: 0;
+	pointer-events: none;
+}
+.plume-env-row[data-has-action]:has(:focus-visible) > .plume-env-row-fact {
+	opacity: 0;
+	pointer-events: none;
 }
 .plume-env-row-action:hover {
 	color: var(--plume-danger);
@@ -128,19 +182,19 @@
 
 .plume-env-row-progress {
 	position: absolute;
-	right: 8px;
-	bottom: 3px;
-	left: 34px;
+	right: 10px;
+	bottom: 5px;
+	left: 36px;
 	height: 2px;
 	overflow: hidden;
 	border-radius: var(--plume-radius-item);
-	background: var(--plume-line-float);
+	background: var(--plume-line-soft);
 	pointer-events: none;
 }
 .plume-env-row-progress > i {
 	display: block;
 	height: 100%;
-	background: color-mix(in srgb, var(--plume-fg) 38%, transparent);
+	background: color-mix(in srgb, var(--plume-fg) 26%, transparent);
 	transform-origin: left;
 	transition:
 		transform var(--plume-t-slow) linear,
@@ -153,4 +207,141 @@
 .plume-env-row[data-urgent] .plume-env-row-icon,
 .plume-env-row[data-urgent] .plume-env-row-fact {
 	color: var(--plume-accent);
+}
+
+/*
+ * 环境卡片顶部工作区与版本控制的分体行 / 下拉行（见 row/EnvironmentRow.tsx 的 EnvironmentSplitRow）。
+ * 与 EnvironmentRow 共用 32px 行高、16px 图标列与 field 圆角；悬停或菜单展开时浮出 1px 竖线与双半区底色。
+ */
+.plume-env-split {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+	min-height: 32px;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink-faint);
+	text-align: left;
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft);
+}
+@media (hover: hover) {
+	.plume-env-split:hover:not(:disabled),
+	.plume-env-split[data-open="true"],
+	.plume-env-split[data-working] {
+		background: var(--plume-card-hover);
+	}
+}
+.plume-env-split[data-open="true"],
+.plume-env-split[data-working] {
+	background: var(--plume-card-hover);
+}
+.plume-env-select:active:not(:disabled) {
+	background: var(--plume-elevated);
+}
+.plume-env-select:disabled {
+	opacity: 0.45;
+}
+.plume-env-select[aria-busy="true"] {
+	opacity: 0.6;
+}
+
+.plume-env-split-main,
+.plume-env-split-caret {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 32px;
+	border: 0;
+	background: transparent;
+	color: var(--plume-ink-faint);
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft),
+		opacity var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-env-split-main {
+	flex: 1;
+	min-width: 0;
+	justify-content: flex-start;
+	padding: 0 10px;
+	text-align: left;
+	font-size: var(--text-detail);
+	font-weight: 500;
+}
+.plume-env-split-caret {
+	flex: none;
+	justify-content: center;
+	width: 32px;
+	padding: 0;
+}
+.plume-env-split-sep {
+	flex: none;
+	width: 1px;
+	height: 16px;
+	background: transparent;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+.plume-env-split:hover:not(:disabled) .plume-env-split-sep,
+.plume-env-split[data-open="true"] .plume-env-split-sep {
+	background: var(--plume-line-float);
+}
+
+.plume-env-split-title {
+	flex: 1;
+	min-width: 0;
+	color: color-mix(in srgb, var(--plume-ink) 85%, transparent);
+	transition: color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+@media (hover: hover) {
+	button.plume-env-split-main:hover:not(:disabled):not([aria-disabled="true"]),
+	button.plume-env-split-caret:hover:not(:disabled),
+	.plume-env-select:hover:not(:disabled) .plume-env-split-main:hover,
+	.plume-env-select:hover:not(:disabled) .plume-env-split-caret:hover {
+		background: var(--plume-card-hover);
+		color: var(--plume-ink);
+	}
+	button.plume-env-split-main:hover:not(:disabled):not([aria-disabled="true"]) .plume-env-row-icon,
+	.plume-env-select:hover:not(:disabled) .plume-env-row-icon,
+	.plume-env-select:hover:not(:disabled) .plume-env-split-caret {
+		color: var(--plume-ink);
+	}
+	button.plume-env-split-main:hover:not(:disabled):not([aria-disabled="true"]) .plume-env-split-title,
+	.plume-env-select:hover:not(:disabled) .plume-env-split-title {
+		color: var(--plume-ink);
+	}
+}
+button.plume-env-split-caret[aria-expanded="true"],
+.plume-env-select[data-open="true"] .plume-env-row-icon,
+.plume-env-select[data-open="true"] .plume-env-split-caret,
+.plume-env-select[data-open="true"] .plume-env-split-title {
+	color: var(--plume-ink);
+}
+button.plume-env-split-caret[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+button.plume-env-split-main:active:not(:disabled):not([aria-disabled="true"]),
+button.plume-env-split-caret:active:not(:disabled) {
+	background: var(--plume-elevated);
+}
+button.plume-env-split-main:disabled,
+button.plume-env-split-main[aria-disabled="true"],
+button.plume-env-split-caret:disabled {
+	opacity: 0.45;
+}
+/* 正在执行或刚成功时的反馈行保持清晰可读，不按禁用降透明度。 */
+.plume-env-split[data-working] button.plume-env-split-main:disabled,
+button.plume-env-split-main[data-feedback]:disabled {
+	opacity: 1;
+	color: var(--plume-ink);
+}
+.plume-env-split[data-working] button.plume-env-split-main:disabled .plume-env-split-title,
+button.plume-env-split-main[data-feedback]:disabled .plume-env-split-title {
+	color: var(--plume-ink);
 }

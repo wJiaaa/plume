@@ -1,6 +1,6 @@
 /**
- * 本插件经 `ui.environmentSection` 往环境卡片放两块内容：后台（运行中的命令、监视和约好的检查）与页脚（压缩记录）。
- * 卡片宿主画“后台”标题和统一行骨架，这里只提供 `EnvironmentRow`；没东西时返回 null。
+ * 本插件经 `ui.environmentSection` 往环境卡片放三块内容：后台任务（运行中的命令、服务与监视）、定时任务（约好的检查、定时任务与轮询），
+ * 以及页脚（压缩记录）。卡片宿主按节名画分组标题和统一行骨架，这里只提供 `EnvironmentRow`；没东西时返回 null。
  */
 
 import type { Locale, SessionView, SessionWakeup } from "@plume/contract";
@@ -39,21 +39,18 @@ function wakeupMeta(wakeup: SessionWakeup, locale: Locale): string {
 }
 
 export function environmentSections(runtime: Runtime) {
-	/** 这个会话在后台的事，一行一项：人写的说明在左，端口、种类和时间在右，停下或取消只在悬停时盖住行尾。 */
-	function Background({ session }: EnvironmentSectionProps) {
-		const { resolvedLocale } = useI18n();
-		const words = MESSAGES[resolvedLocale];
+	/** 运行中的后台命令、服务与监视，一行一项；停下只在悬停时盖住行尾。 */
+	function Jobs({ session }: EnvironmentSectionProps) {
+		const words = MESSAGES[useI18n().resolvedLocale];
 		const id = session.summary.id;
 		const data = runtime.state.useSnapshot(id, true, true);
 		const [busy, setBusy] = useState<string>();
 		const jobs = data.jobs.filter((job) => job.finishedAt === undefined);
-		const { wakeups } = data;
-		const now = useNow(wakeups.length > 0, 1000);
-		if (jobs.length === 0 && wakeups.length === 0 && !data.error) return null;
-		const act = async (key: string, run: () => PromiseLike<unknown>) => {
-			setBusy(key);
+		if (jobs.length === 0 && !data.error) return null;
+		const stop = async (jobId: string) => {
+			setBusy(jobId);
 			try {
-				await run();
+				await runtime.api.stop(id, jobId, false);
 				await runtime.state.refresh(id);
 			} catch (error) {
 				runtime.ui.notify(String(error), "error");
@@ -70,29 +67,57 @@ export function environmentSections(runtime: Runtime) {
 				)}
 				{jobs.map((job) => {
 					const port = job.endpoints[0]?.port;
+					const fact =
+						job.wakes || port !== undefined ? (
+							<>
+								{job.wakes && <span data-environment-monitor>{words.monitor}</span>}
+								{port !== undefined && <span data-environment-port>:{port}</span>}
+							</>
+						) : undefined;
 					return (
 						<EnvironmentRow
 							key={job.id}
 							icon={job.wakes ? <Eye size={14} /> : <SquareTerminal size={14} />}
 							title={job.description || job.command}
-							fact={
-								<>
-									{job.wakes && <span data-environment-monitor>{words.monitor}</span>}
-									{port !== undefined && <span data-environment-port>:{port}</span>}
-								</>
-							}
+							fact={fact}
 							running
 							tip={job.wakes ? `${words.monitorTip}\n${job.command}` : job.command}
 							onClick={() => runtime.openJob(id, job.id)}
 							action={{
 								label: words.stop,
 								disabled: busy === job.id || job.status === "stopping",
-								onClick: () => void act(job.id, () => runtime.api.stop(id, job.id, false)),
+								onClick: () => void stop(job.id),
 							}}
 							data-environment-job={job.id}
 						/>
 					);
 				})}
+			</>
+		);
+	}
+
+	/** 约好的检查、定时任务和轮询，独立成节；取消只在悬停时盖住行尾。 */
+	function Wakeups({ session }: EnvironmentSectionProps) {
+		const { resolvedLocale } = useI18n();
+		const words = MESSAGES[resolvedLocale];
+		const id = session.summary.id;
+		const { wakeups } = runtime.state.useSnapshot(id, true, false);
+		const [busy, setBusy] = useState<string>();
+		const now = useNow(wakeups.length > 0, 1000);
+		if (wakeups.length === 0) return null;
+		const cancel = async (wakeupId: string) => {
+			setBusy(wakeupId);
+			try {
+				await runtime.api.cancelWakeup(id, wakeupId);
+				await runtime.state.refresh(id);
+			} catch (error) {
+				runtime.ui.notify(String(error), "error");
+			} finally {
+				setBusy(undefined);
+			}
+		};
+		return (
+			<>
 				{wakeups.map((wakeup) => {
 					const left = wakeup.nextAt - now;
 					const progress = wakeup.kind === "wakeup" ? left / Math.max(1, wakeup.nextAt - wakeup.createdAt) : undefined;
@@ -104,14 +129,14 @@ export function environmentSections(runtime: Runtime) {
 							key={wakeup.id}
 							icon={planOf(wakeup) === "loop" ? <Repeat2 size={14} /> : <AlarmClock size={14} />}
 							title={wakeupLabel(wakeup)}
-							fact={wakeupMeta(wakeup, resolvedLocale)}
+							detail={wakeupMeta(wakeup, resolvedLocale)}
 							progress={progress}
 							urgent={left <= 60_000}
 							tip={tip}
 							action={{
 								label: words.wakeupCancel,
 								disabled: busy === wakeup.id,
-								onClick: () => void act(wakeup.id, () => runtime.api.cancelWakeup(id, wakeup.id)),
+								onClick: () => void cancel(wakeup.id),
 								"data-wakeup-cancel": "",
 							}}
 							data-environment-wakeup={wakeup.id}
@@ -138,14 +163,21 @@ export function environmentSections(runtime: Runtime) {
 		);
 	}
 
-	/** `attention`：会自己叫醒这个会话的有几个，在跑的监视与待触发的检查、定时任务、轮询。 */
-	function useAttention(session: SessionView): string | undefined {
+	/** 后台任务节的 `attention`：会自己叫醒这个会话的在跑监视。 */
+	function useJobsAttention(session: SessionView): string | undefined {
 		const words = MESSAGES[useI18n().resolvedLocale];
-		const { jobs, wakeups } = runtime.state.useSnapshot(session.summary.id, true);
-		const plans: Record<Plan, number> = { checkIn: 0, prompt: 0, loop: 0 };
-		for (const wakeup of wakeups) plans[planOf(wakeup)]++;
-		return words.attention(jobs.filter((job) => job.wakes && job.finishedAt === undefined).length, plans);
+		const { jobs } = runtime.state.useSnapshot(session.summary.id, true);
+		return words.jobsAttention(jobs.filter((job) => job.wakes && job.finishedAt === undefined).length);
 	}
 
-	return { Background, Compactions, useAttention };
+	/** 定时任务节的 `attention`：待触发的检查、定时任务与轮询。 */
+	function useWakeupsAttention(session: SessionView): string | undefined {
+		const words = MESSAGES[useI18n().resolvedLocale];
+		const { wakeups } = runtime.state.useSnapshot(session.summary.id, true);
+		const plans: Record<Plan, number> = { checkIn: 0, prompt: 0, loop: 0 };
+		for (const wakeup of wakeups) plans[planOf(wakeup)]++;
+		return words.wakeupsAttention(plans);
+	}
+
+	return { Jobs, Wakeups, Compactions, useJobsAttention, useWakeupsAttention };
 }

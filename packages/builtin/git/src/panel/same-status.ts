@@ -37,6 +37,7 @@ export function sameStatus(a: GitStatus | null, b: GitStatus | null): boolean {
 		a.operation === b.operation &&
 		a.unpushed === b.unpushed &&
 		a.head === b.head &&
+		a.isDefaultBranch === b.isDefaultBranch &&
 		sameFiles(a.staged, b.staged) &&
 		sameFiles(a.unstaged, b.unstaged)
 	);

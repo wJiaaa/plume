@@ -1,31 +1,3 @@
-/* 子会话列表面板仍用这一行；环境卡片本身用 @plume/ui 的 EnvironmentRow。 */
-.plume-environment-grow {
-	min-width: 0;
-	flex: 1;
-}
-.plume-environment-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-	min-width: 0;
-	min-height: 32px;
-	padding: 4px 8px;
-	text-align: left;
-	color: var(--plume-ink);
-	border-radius: var(--plume-radius-field);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-.plume-environment-row:hover {
-	background: var(--plume-card-hover);
-}
-.plume-environment-row:active {
-	background: var(--plume-elevated);
-}
-.plume-environment-row > svg {
-	flex-shrink: 0;
-}
-
 /* 右边那一列的直接子元素；空处让点击穿回转录，只有实底卡片接事件。 */
 .plume-environment {
 	pointer-events: auto;
@@ -39,14 +11,15 @@
 
 /* 批准稿的“会话仪表卡”：实底浮层，不用毛玻璃，正文不会透进来和卡片里的事实抢对比度。 */
 .plume-environment-card {
-	--plume-env-row-ring: var(--plume-float);
+	--plume-env-surface: color-mix(in srgb, var(--plume-float) 55%, var(--plume-shell));
+	--plume-env-row-ring: var(--plume-env-surface);
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
 	border: 1px solid var(--plume-line-float);
 	border-radius: var(--plume-radius-panel);
-	background: var(--plume-float);
+	background: var(--plume-env-surface);
 	transform-origin: top right;
 	animation: plume-environment-in var(--plume-t-quick) var(--plume-e-soft);
 }
@@ -71,44 +44,52 @@
 	animation: plume-environment-out var(--plume-t-quick) var(--plume-e-soft) forwards;
 }
 
-.plume-environment-card-head {
+/* 顶部工作区块和版本控制块：共用统一行高、图标列与对齐基准，空时整块折叠不占分隔线。 */
+.plume-environment-card-head,
+.plume-environment-card-vcs {
 	flex: none;
-	padding: 11px 10px 10px 14px;
-	border-bottom: 1px solid var(--plume-line-float);
-}
-.plume-environment-place {
 	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
+	flex-direction: column;
+	padding: 6px;
 }
-.plume-environment-project {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.plume-environment-card-head:not(:has(.plume-environment-card-section:not(:empty))),
+.plume-environment-card-vcs:not(:has(.plume-environment-card-section:not(:empty))) {
+	display: none;
 }
 
 .plume-environment-card-body {
 	overflow-y: auto;
 	min-height: 0;
-	padding: 0 6px 4px;
 	overscroll-behavior: contain;
+}
+.plume-environment-card-body:not(:has(.plume-environment-card-section:not(:empty))) {
+	display: none;
+}
+.plume-environment-card-head:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-vcs,
+.plume-environment-card-head:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-body,
+.plume-environment-card-vcs:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-body,
+.plume-environment-card-head:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-foot,
+.plume-environment-card-vcs:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-foot,
+.plume-environment-card-body:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-card-foot {
+	border-top: 1px solid var(--plume-line-float);
 }
 
 .plume-environment-group {
-	padding: 0 2px 4px;
+	padding: 6px 6px 8px;
 }
-/* 插件组件返回 null 时外壳是空的；整组没有任何非空外壳就撤掉，不留标题。 */
+/* 插件组件返回 null 时外壳是空的；整组没有任何非空外壳就撤掉，不留标题和分隔线。 */
 .plume-environment-group:not(:has(.plume-environment-card-section:not(:empty))) {
 	display: none;
+}
+.plume-environment-group:has(.plume-environment-card-section:not(:empty)) ~ .plume-environment-group {
+	border-top: 1px solid var(--plume-line-float);
 }
 .plume-environment-group-label {
 	display: flex;
 	align-items: baseline;
 	gap: 6px;
-	padding: 11px 8px 3px;
+	padding: 4px 10px;
+	user-select: none;
 }
 .plume-environment-group-label > span {
 	font-variant-numeric: tabular-nums;
@@ -122,7 +103,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	padding: 4px 8px 6px;
+	padding: 4px 10px 2px;
 }
 .plume-environment-reference {
 	display: inline-flex;
@@ -181,14 +162,11 @@
 .plume-environment-more:hover {
 	color: var(--plume-ink-muted);
 }
-.plume-environment-error {
-	padding: 8px 10px;
-}
 
 /* 各节都没内容时保留一条恢复入口；正常有内容时不占位。 */
 .plume-environment-card-empty {
 	display: none;
-	padding: 10px 8px;
+	padding: 6px;
 }
 .plume-environment-card:not(:has(.plume-environment-card-section:not(:empty))) > .plume-environment-card-empty {
 	display: block;
@@ -196,11 +174,11 @@
 .plume-environment-card-empty > button {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 10px;
 	width: 100%;
-	min-height: 30px;
-	padding: 0 8px;
-	border-radius: var(--plume-radius-item);
+	min-height: 32px;
+	padding: 0 10px;
+	border-radius: var(--plume-radius-field);
 	text-align: left;
 	color: var(--plume-ink-faint);
 	transition:
@@ -218,8 +196,7 @@
 /* 压缩记录等 foot 节是整张卡片的注脚，不再占“产出”里一层。 */
 .plume-environment-card-foot {
 	flex: none;
-	padding: 4px 6px 6px;
-	border-top: 1px solid var(--plume-line-float);
+	padding: 6px;
 }
 .plume-environment-card-foot:not(:has(.plume-environment-card-section:not(:empty))) {
 	display: none;
@@ -240,15 +217,10 @@
 }
 .plume-environment-toggle-dot {
 	position: absolute;
-	top: -4px;
-	right: -6px;
+	top: -3px;
+	right: -4px;
 	width: 6px;
 	height: 6px;
 	border-radius: var(--plume-radius-field);
 	background: var(--plume-accent);
-}
-
-.plume-environment-child-list {
-	overflow: auto;
-	padding: 8px;
 }

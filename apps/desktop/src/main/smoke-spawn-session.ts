@@ -25,7 +25,7 @@ const ARCHIVING = "好，这就归档。";
 /**
  * 开新会话（内置插件 plume.spawn-session）：假模型在对话里调 `spawn_session`（`own_initiative`），对话里画出建议卡片，但环境卡片不列、开关不提醒；
  * 点「开始」，新会话开在同一处、记着来处，第一句是「背景 + 任务」，环境卡片“产出”里出现带运行点的标准行；跑完第一轮后它的汇报交回原对话：
- * 那边多一行「来自关联会话」，被叫起一轮；调用处卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方钉着那个会话跑完了，点过去看过就收走。
+ * 那边多一行「来自关联会话」，被叫起一轮；调用处卡片缩成一行「新会话 · 标题」，点了到那个会话；输入框上方那一条在新会话跑着时列着它、点了过去，跑完就收走。
  * 回到原对话说一件无关的新事，假模型调 `spawn_session`（`offer`）：输入框上方弹出「要另开一个会话吗？」，调用等着；点「就在这里做」，
  * 调用的位置留一行「问过要不要另开会话 · 就在这里做」，模型接着在这里做。在新会话里说「做完就归档」，假模型调 `archive_session`：
  * 这一轮停在这一下（之后不再问模型），收场后会话归档，界面离开它。
@@ -173,11 +173,17 @@ export async function checkSpawnSession(options: {
 		const branch = (await promisify(execFile)("git", ["symbolic-ref", "--short", "HEAD"], { cwd: startedCwd })).stdout.trim();
 		if (!branch.startsWith("plume/session-")) throw new Error(`新会话的工作树不在它自己的分支上：${branch}`);
 		await until(`document.querySelector('[data-screen=chat] [data-spawn-suggestion=started]') !== null`, "卡片缩成一行「新会话」");
-		await clickVisible(page, `[data-environment-toggle]`);
-		const startedEntry = "[data-environment-group=output] [data-spawn-environment][data-state=started]";
+		// 输入框上方钉着交出去的那个会话：在跑时列着、写着标题，跑完就收走（结果交回成「来自关联会话」那一行）。
+		const handedOff = `[data-screen=chat] [data-handed-off-row="${startedId}"]`;
 		await until(
-			`document.querySelector(${JSON.stringify(startedEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`,
-			"开出以后环境卡片的产出里出现新会话",
+			`document.querySelector(${JSON.stringify(handedOff)})?.dataset.state === 'running' && document.querySelector(${JSON.stringify(handedOff)}).textContent.includes(${JSON.stringify(TITLE)})`,
+			"输入框上方那一条列着在跑的新会话",
+		);
+		await clickVisible(page, `[data-environment-toggle]`);
+		const startedEntry = '[data-environment-group="plume.spawn-session/started-sessions"] [data-spawn-environment][data-state=started]';
+		await until(
+			`document.querySelector('[data-environment-group="plume.spawn-session/started-sessions"] > .plume-environment-group-label')?.textContent === '关联会话' && document.querySelector(${JSON.stringify(startedEntry)})?.textContent.includes(${JSON.stringify(TITLE)}) === true`,
+			"开出以后环境卡片的「关联会话」分组（标题后不显示数量）里出现新会话",
 		);
 		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(startedEntry + " .plume-env-row-icon[data-running]")}) !== null`)))
 			throw new Error("正在运行的新会话没有在图标上挂运行点");
@@ -193,18 +199,23 @@ export async function checkSpawnSession(options: {
 		await until(chatHas(RECEIVED), "交回叫起原对话一轮");
 		if (await page<boolean>(`[...document.querySelectorAll('[data-screen=chat] [data-plume-quote=user]')].some(e => e.textContent.includes('session-report'))`))
 			throw new Error("交回的结果画成了人的气泡");
-		// 输入框上方钉着交出去的那个会话：人没看着时它跑完了，这一行说「已完成 · 未查看」，点了过去。
-		const handedOff = `[data-screen=chat] [data-handed-off-row="${startedId}"]`;
-		await until(`document.querySelector(${JSON.stringify(handedOff)})?.dataset.state === 'done'`, "输入框上方那一条说新会话跑完了");
-		if (!(await page<boolean>(`document.querySelector(${JSON.stringify(handedOff)}).textContent.includes(${JSON.stringify(TITLE)})`)))
-			throw new Error("输入框上方那一条没写交出去的会话的标题");
+		// 人没看着时新会话跑完了：输入框上方那一行不等人点进去看过就收走。
+		await until(`document.querySelector(${JSON.stringify(handedOff)}) === null`, "新会话跑完后输入框上方那一条收走");
 		await capture("smoke-spawn-session-report.png");
 
-		await clickVisible(page, handedOff);
-		await until(chatHas(CLEANED), "输入框上方那一条点了到新会话");
+		await clickVisible(page, `${delivery} button`);
+		await until(chatHas(CLEANED), "「来自关联会话」那一行点了到新会话");
 		await clickVisible(page, `[data-plume-row="${parentId}"] > button`);
 		if (!briefed) throw new Error("新会话的第一句不是「背景 + 任务」");
-		await until(`${chatHas(RECEIVED)} && document.querySelector(${JSON.stringify(handedOff)}) === null`, "回到原对话，看过的那一行收走");
+		await until(`${chatHas(RECEIVED)} && document.querySelector(${JSON.stringify(handedOff)}) === null`, "回到原对话，输入框上方没有那一条");
+		// 环境卡片里的「关联会话」在会话停止/完成后仍一直保留显示，不因停止或看过而消失。
+		await clickVisible(page, `[data-environment-toggle]`);
+		await until(
+			`document.querySelector(${JSON.stringify(startedEntry)})?.dataset.spawnStatus === 'done' && document.querySelector(${JSON.stringify(startedEntry)})?.textContent.includes('已完成') === true`,
+			"结束后回到原对话，环境卡片「关联会话」里仍保留该会话并显示已完成",
+		);
+		await clickVisible(page, `[data-environment-toggle]`);
+		await until(`document.querySelector('[data-environment]') === null`, "收起环境卡片");
 
 		// 说一件无关的新事：模型先问要不要另开，调用等人选；选「就在这里做」，留一行记录，模型接着在这里做。
 		await page(`document.querySelector('.cm-content').focus()`);

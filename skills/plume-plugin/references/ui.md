@@ -59,7 +59,7 @@ export default {
 | `ui.composerChip(id, Component, { side, order })` | 输入框上方、项目签那一行加一格，见「项目签那一行」 |
 | `ui.composerAbove(id, Component, { order })` | 主输入框上方独占一行，收到 `{ session }`；返回 null 不占位，组件自己管理展开退场，不会浮到转录侧面 |
 | `ui.conversationCard(id, Component, { order, lane })` | 跟着会话的一张卡片，见「跟着会话的卡片」 |
-| `ui.environmentSection(id, Component, { label, place?, order?, attention? })` | 往会话的环境卡片里加一节，见「环境卡片」 |
+| `ui.environmentSection(id, Component, { label, place?, order?, count?, attention? })` | 往会话的环境卡片里加一节，见「环境卡片」 |
 | `ui.useEnvironmentSections()` | 给画环境卡片的插件用的 React hook，拿到各插件登记的节，见「环境卡片」 |
 | `ui.sessionToolbar(id, Component)` | 有会话的标题栏里放局部控件，见「标题栏和会话菜单」 |
 | `ui.sessionMenuItem(id, { label, icon?, run })` | 会话操作菜单加一项，见「标题栏和会话菜单」 |
@@ -412,15 +412,15 @@ ui.conversationCard("todo", TodoCard);
 
 ## 环境卡片
 
-会话的环境卡片由内置的 `plume.environment` 画。`ui.environmentSection(id, Component, { label, place?, order?, attention? })` 往里加一节；插件不按自己的身份再造一层信息架构，而是把内容放进这张卡片固定的语义位置。
+会话的环境卡片由内置的 `plume.environment` 画。`ui.environmentSection(id, Component, { label, place?, order?, count?, attention? })` 往里加一节；插件不按自己的身份再造一层信息架构，而是把内容放进这张卡片固定的语义位置。
 
-- 组件收到 `{ session }`；没东西时返回 null，不占位。`label` 是卡片右键「显示哪些内容」菜单里的名字。
-- `place` 有三个值：`background` 是人不在时还会动的命令、监视和检查；`output` 是计划、真正开出的会话和拉取请求；`foot` 是压缩记录这类整张卡片的注脚。缺省是 `output`。
-- `background`、`output`、`foot` 里的每一项用 `EnvironmentRow`，不要画自己的小标题。卡片统一画「后台」「产出」标题、行高、图标列、淡色行尾、运行点和细进度线。同一个 place 内按 order 从小到大排。
+- 组件收到 `{ session }`；没东西时返回 null，不占位。`label` 既是卡片里这一节的组标题，也是卡片右键「显示哪些内容」菜单里的名字。
+- `place` 有五个值：`head` 紧跟页头项目名与打开方式，放工作区快捷操作（如项目脚本）；`vcs` 紧跟页头、独立成块且不画组标题，放版本控制快捷操作（分支、提交与推送）；`background` 放后台任务、定时任务，排在正文靠前；`output` 放子智能体、计划、关联会话、拉取请求，排在后面；`foot` 是压缩记录这类整张卡片的注脚。缺省是 `output`。
+- `head`、`vcs` 里的分体操作行 / 下拉行用 `EnvironmentSplitRow`，单项行用 `EnvironmentRow`；`background`、`output`、`foot` 里的每一项用 `EnvironmentRow`，不要画自己的小标题。`background` 和 `output` 的每一节由卡片按其 `label` 独立成组并统一画标题、数量计数（默认显示，传 `count: false` 时不显示）、行高、图标列、淡色行尾、运行点和细进度线；同一个 place 内按 order 从小到大排。
 - `attention(session)` 是一个 React hook（规则同 hook），这一节有要提醒人的事时返回一句话（按界面语言），没有返回 undefined：卡片收着、这一节没被藏起来时（只在这时调，要读的数据可以只在被调时拉），标题栏的环境开关上挂一个圆点，这句话按节的 order 接在开关说明后面。
 - 会自己叫醒这个会话的事才提醒：监视、待触发的检查和定时任务。普通长跑服务不算，尚未开始的会话建议也只留在原本的建议卡，不进环境卡片、不点亮环境开关。
 
-`ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`，以及 `label`、`place`、`order`、已包好错误边界的 `component`），按 order 排好。
+`ui.useEnvironmentSections()` 是给画环境卡片的插件用的 React hook：返回各插件登记的节（`key` 为 `插件名/id`，以及 `label`、`place`、`order`、`count`、已包好错误边界的 `component`），按 order 排好。
 
 ## 输入框的灰字建议、回复里的标记
 
@@ -731,7 +731,7 @@ Plume 自带的界面侧服务：
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
 | `background.jobs.view` | 内置插件 plume.diagnostics（选中那个任务、打开后台任务面板） | `open(sessionId, jobId)`：人点了对话里某个后台任务（逻辑入口里 `ctx.sessions.jobs` 列出的那些）那一行时调，不改变送达或命令状态。plume.tools 画的「后台命令完成」那一行用它，没人提供时那一行不给点 |
-| `subagents.tasks` | 内置插件 plume.subagents | `watch(sessionId, listener)`：先给一次这个会话派出去的子 Agent（`SubagentTaskSummary`：`id`、说明、状态、起止时间），之后每变一次给一次，返回退订函数；`open(sessionId, taskId)` 打开子 Agent 面板、选中那一个；`stop(taskId)` 叫它停下。plume.diagnostics 的后台任务面板用它把子 Agent 和后台命令列在一起，没人提供时只列后台命令 |
+| `subagents.tasks` | 内置插件 plume.subagents | `watch(sessionId, listener)`：先给一次这个会话派出去的子 Agent（`SubagentTaskSummary`：`id`、说明、状态、起止时间、智能体名 `agent`、形象 `avatar`），之后每变一次给一次，返回退订函数；`open(sessionId, taskId)` 打开子 Agent 面板、选中那一个；`stop(taskId)` 叫它停下。plume.diagnostics 的后台任务面板、plume.environment 的环境卡片用它列子 Agent 与头像，没人提供时退回中性图标或只列后台命令 |
 
 ## 共享模块
 

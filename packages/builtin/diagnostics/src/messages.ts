@@ -10,6 +10,7 @@ const zhCN = {
 	trajectory: "调用轨迹",
 	traceDescription: "逐轮查看请求、工具、审批和重试",
 	jobs: "后台任务",
+	wakeups: "定时任务",
 	jobRunning: "运行中",
 	jobStopped: "已停止",
 	queued: "排队中",
@@ -85,15 +86,16 @@ const zhCN = {
 	nextAt: (time: string) => `下次 ${time}`,
 	wakeupExpires: (time: string) => `${time} 到期`,
 	wakeupCancel: "取消",
-	/** 卡片收着时开关旁那句：会自己叫醒会话的有几个；一个都没有是 undefined。 */
-	attention: (monitors: number, plans: Record<Plan, number>): string | undefined => {
+	/** 卡片收着时开关旁那句：在跑的监视；没有是 undefined。 */
+	jobsAttention: (monitors: number): string | undefined => (monitors > 0 ? `${monitors} 个监视在跑` : undefined),
+	/** 卡片收着时开关旁那句：待触发的检查、定时任务和轮询；没有是 undefined。 */
+	wakeupsAttention: (plans: Record<Plan, number>): string | undefined => {
 		const pending = [
 			...(plans.checkIn > 0 ? [`${plans.checkIn} 个检查`] : []),
 			...(plans.prompt > 0 ? [`${plans.prompt} 个定时任务`] : []),
 			...(plans.loop > 0 ? [`${plans.loop} 个轮询`] : []),
 		];
-		const parts = [...(monitors > 0 ? [`${monitors} 个监视在跑`] : []), ...(pending.length > 0 ? [`${pending.join("、")}待触发`] : [])];
-		return parts.length > 0 ? parts.join("，") : undefined;
+		return pending.length > 0 ? `${pending.join("、")}待触发` : undefined;
 	},
 	monitorTip: "有新输出就会叫醒 agent，每送一批就是一轮",
 	portFailed: (reason: string) => `端口查询失败：${reason}`,
@@ -122,6 +124,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		trajectory: "Trajectory",
 		traceDescription: "Inspect requests, tools, approvals and retries by turn",
 		jobs: "Background jobs",
+		wakeups: "Scheduled",
 		jobRunning: "Running",
 		jobStopped: "Stopped",
 		queued: "Queued",
@@ -196,15 +199,15 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		nextAt: (time: string) => `next ${time}`,
 		wakeupExpires: (time: string) => `expires ${time}`,
 		wakeupCancel: "Cancel",
-		attention: (monitors: number, plans: Record<Plan, number>) => {
+		jobsAttention: (monitors: number) => (monitors > 0 ? `${monitors} ${monitors === 1 ? "monitor running" : "monitors running"}` : undefined),
+		wakeupsAttention: (plans: Record<Plan, number>) => {
 			const count = (n: number, one: string, many: string) => (n > 0 ? [`${n} ${n === 1 ? one : many}`] : []);
 			const pending = [
 				...count(plans.checkIn, "check-in", "check-ins"),
 				...count(plans.prompt, "scheduled prompt", "scheduled prompts"),
 				...count(plans.loop, "loop", "loops"),
 			];
-			const parts = [...count(monitors, "monitor running", "monitors running"), ...(pending.length > 0 ? [`${pending.join(", ")} pending`] : [])];
-			return parts.length > 0 ? parts.join("; ") : undefined;
+			return pending.length > 0 ? `${pending.join(", ")} pending` : undefined;
 		},
 		monitorTip: "New output wakes the agent; every batch is a turn",
 		portFailed: (reason: string) => `Port lookup failed: ${reason}`,

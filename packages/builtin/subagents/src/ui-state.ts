@@ -45,6 +45,9 @@ function watch(parent: string, state: Roster): void {
 			if (!alive) return;
 			state.snapshot = { ...state.snapshot, ready: true, error: error instanceof Error ? error.message : String(error) };
 			for (const listener of state.listeners) listener();
+		} finally {
+			// 流意外结束时清掉句柄，后续再挂载订阅才能重新拉流。
+			if (alive) state.cancel = undefined;
 		}
 	})();
 }
@@ -103,6 +106,19 @@ export function refreshFaces(): void {
 }
 
 /** 这个父会话的名单里每个名字的脸；名单外的名字（删掉的定义）由 `avatarOf` 另算。 */
+export function avatarsFor(parent: string | undefined): Avatars {
+	return (parent && faces.get(parent)) || BUILTIN_FACES;
+}
+
+/** 组件外订阅一个父会话的头像表变化，首次订阅时按需拉取。 */
+export function watchFaces(parent: string, listener: () => void): () => void {
+	if (!asked.has(parent)) loadFaces(parent);
+	faceListeners.add(listener);
+	return () => {
+		faceListeners.delete(listener);
+	};
+}
+
 export function useAvatars(parent: string | undefined): Avatars {
 	useEffect(() => {
 		if (parent && !asked.has(parent)) loadFaces(parent);
@@ -114,7 +130,7 @@ export function useAvatars(parent: string | undefined): Avatars {
 				faceListeners.delete(listener);
 			};
 		},
-		() => (parent && faces.get(parent)) || BUILTIN_FACES,
+		() => avatarsFor(parent),
 	);
 }
 

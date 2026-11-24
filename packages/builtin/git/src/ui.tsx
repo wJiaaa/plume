@@ -8,15 +8,17 @@ import { FolderGit2, GitCompare } from "@plume/ui/icons";
 import type { GitApi } from "./api.ts";
 import dialogCss from "./css/dialog.css";
 import diffCss from "./css/diff.css";
+import environmentCss from "./css/environment.css";
 import panelCss from "./css/panel.css";
 import sharedCss from "./git.css";
 import { BranchChip, ChangeBar } from "./panel/composer.tsx";
+import { EnvBranchSection, EnvGitActionsSection } from "./panel/EnvironmentSections.tsx";
 import { GitPanel } from "./panel/GitPanel.tsx";
 import { PANEL_ID, setHost } from "./panel/host.ts";
 import { setGit } from "./panel/remote.ts";
 import type { WorktreeApi } from "./worktree/api.ts";
 import { WorktreeSlot } from "./worktree/chip.tsx";
-import { WORKTREE_MESSAGES } from "./messages.ts";
+import { MESSAGES, WORKTREE_MESSAGES } from "./messages.ts";
 import { setWorktreeHost } from "./worktree/remote.ts";
 import { WorktreesSettings } from "./worktree/settings.tsx";
 import { deleteNote, WorktreeMark } from "./worktree/sidebar.tsx";
@@ -34,7 +36,7 @@ function mountStyles(): void {
 		style.dataset.pluginStyle = id;
 		document.head.append(style);
 	}
-	style.textContent = [sharedCss, panelCss, diffCss, dialogCss, worktreeCss].join("\n");
+	style.textContent = [sharedCss, panelCss, diffCss, dialogCss, environmentCss, worktreeCss].join("\n");
 }
 
 export default {
@@ -53,6 +55,17 @@ export default {
 			shortcut: "CommandOrControl+Shift+R",
 			// 要在项目里才列：不属于项目的聊天没有可看的检出。项目还不是仓库也列，面板里有「初始化仓库」「让 Agent 处理」。
 			available: ({ cwd }) => Boolean(cwd),
+		});
+		// 环境卡片版本控制区：分支切换与 Git 快捷操作，顺序与 t3code 一致，可在右键菜单分别显隐。
+		ui.environmentSection("branch", EnvBranchSection, {
+			label: (locale) => String(MESSAGES[locale]["env.sectionBranch"]),
+			place: "vcs",
+			order: 10,
+		});
+		ui.environmentSection("actions", EnvGitActionsSection, {
+			label: (locale) => String(MESSAGES[locale]["env.sectionActions"]),
+			place: "vcs",
+			order: 20,
 		});
 		// 分支紧跟在项目后面：发送前要确认的就是「哪个项目、哪个分支」。
 		ui.composerChip("branch", BranchChip, { side: "start" });

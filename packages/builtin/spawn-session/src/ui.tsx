@@ -10,7 +10,7 @@
  * 只有没跑完要说，它改变人接下来做什么。它每结束一轮，这个对话里另有一行「来自关联会话」（本体画）。
  * offer 的卡由本体摆在输入框上方（`ui.requestCard`），人选完在调用的位置留一行「问过要不要另开会话 · 选了什么」；选了新会话、开出来以后同样缩成那一行。
  *
- * 环境卡片不列建议：建议只有真的开出了会话，才作为一条“产出”出现。待决定的建议仍留在它原本的工具卡片位置，不让环境卡片变成第二个决策入口。
+ * 环境卡片不列建议：建议只有真的开出了会话，才出现在「关联会话」里；直接开、offer、移交、计划交给新会话、侧边聊天开新会话、分叉开出的顶层会话也都列在这里，停止或结束后继续保留显示。待决定的建议仍留在它原本的工具卡片位置，不让环境卡片变成第二个决策入口。
  *
  * 开出来的会话「没跑完」「已完成」一直这么说，人看过以后也不清掉：插件读不到侧栏的已读状态。工作树开关从模型说的起步，没有「新会话默认开」的设置可跟。
  */
@@ -21,9 +21,9 @@ import { proposal } from "@plume/styles";
 import { ApprovalFrame, Button, EnvironmentRow, FlowRow, IconButton, Text, Toggle, useI18n, useNow, WorktreeToggle } from "@plume/ui";
 import { Archive, BellOff, ChevronRight, Forward, MessageCircle, MessageSquarePlus, SquarePen, Undo2, X } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import type { SpawnSessionApi, SpawnSettings } from "./api.ts";
+import type { SpawnSessionApi, SpawnSettings, StartedSuggestion } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
-import { connect, dismiss, refreshStarted, useDismissed, useStarted } from "./state.ts";
+import { connect, dismiss, environmentStatus, refreshStarted, useDismissed, useStarted } from "./state.ts";
 import spawnCss from "./spawn-session.css";
 import {
 	ARCHIVE_SESSION,
@@ -61,13 +61,6 @@ function useText() {
 interface Suggestion {
 	callId: string;
 	details: SessionSuggestion;
-}
-
-/** 这个对话里提过的建议，按先后。参数被退回、还没返回的不算：工具那一行自己说了哪里不对。 */
-function suggestionsIn(messages: SessionView["messages"]): Suggestion[] {
-	return messages.flatMap((message) =>
-		message.role === "toolResult" && !message.isError && isSuggestion(message.details) ? [{ callId: message.toolCallId, details: message.details }] : [],
-	);
 }
 
 /** 模型撤回了的建议（`dismiss_task`）。 */
@@ -383,16 +376,6 @@ function OfferCard({ request, queued, answer, fallback }: RequestCardProps) {
 	);
 }
 
-/** 这个会话里的全部建议，按消息记住：输出时视图每一拍都换，消息没变，不用每拍把整段转录再翻一遍。 */
-function useSuggestions(session: SessionView): { all: Suggestion[]; withdrawn: Set<string> } {
-	const { messages } = session;
-	const { createdAt } = session.summary;
-	return useMemo(() => {
-		const copied = inheritedIn(messages, createdAt);
-		return { all: suggestionsIn(messages).filter((one) => !copied.has(one.callId)), withdrawn: withdrawnIn(messages) };
-	}, [messages, createdAt]);
-}
-
 /** 运行中的新会话用经过时间，和环境卡片里别的后台运行同一套机器事实。 */
 function environmentElapsed(at: number, now: number): string {
 	const seconds = Math.max(0, Math.floor((now - at) / 1000));
@@ -401,38 +384,40 @@ function environmentElapsed(at: number, now: number): string {
 	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-/** 环境卡片“产出”只列已经真正开出的建议会话；待决定、收起、撤回和过期的建议全不出现。 */
+/**
+ * 环境卡片「关联会话」节：列从当前对话派生出来的全部顶层关联会话（建议卡开出的、直接开、offer、移交、计划交给新会话、
+ * 侧边聊天开新会话、分叉）。待决定、收起、撤回和过期的建议不出现；已经开出的会话无论运行中、已停止、已完成、没跑完还是已归档都一直保留显示。
+ */
 function StartedSessionsSection({ session }: EnvironmentSectionProps) {
 	const parentId = session.summary.id;
 	const started = useStarted(parentId);
-	const { all } = useSuggestions(session);
-	const begun = all.flatMap((one) => {
-		const found = started.find((done) => done.callId === one.callId);
-		return found ? [{ ...one, startedId: found.sessionId }] : [];
-	});
-	if (begun.length === 0) return null;
+	if (started.length === 0) return null;
 	return (
 		<div data-spawn-section="">
-			{begun.map((one) => (
-				<StartedEntry key={one.callId} callId={one.callId} title={one.details.title} startedId={one.startedId} />
+			{started.map((entry) => (
+				<StartedEntry key={entry.sessionId} entry={entry} />
 			))}
 		</div>
 	);
 }
 
-function StartedEntry({ callId, title, startedId }: { callId: string; title: string; startedId: string }) {
+function StartedEntry({ entry }: { entry: StartedSuggestion }) {
 	const text = useText();
-	const status = useStatus(startedId);
-	const started = ui.useSession(startedId);
-	const now = useNow(status === "running", 1000);
+	const activity = ui.useSessionActivity(entry.sessionId);
+	const status = environmentStatus(entry, activity);
+	const running = status === "running";
+	const now = useNow(running, 1000);
+	const fact =
+		status === "running" ? `${text.running} · ${environmentElapsed(entry.createdAt, now)}` : status === "archived" ? text.archivedStatus : text[status];
 	return (
 		<EnvironmentRow
 			icon={<MessageSquarePlus size={14} strokeWidth={1.8} />}
-			title={title}
-			fact={status === "running" && started ? environmentElapsed(started.summary.createdAt, now) : text[status]}
-			running={status === "running"}
-			onClick={() => void ui.openSession(startedId)}
-			data-spawn-environment={callId}
+			title={entry.title || text.newSession}
+			fact={fact}
+			running={running}
+			onClick={() => void ui.openSession(entry.sessionId)}
+			data-spawn-environment={entry.callId ?? entry.sessionId}
+			data-spawn-session={entry.sessionId}
 			data-state="started"
 			data-spawn-status={status}
 		/>
@@ -458,7 +443,7 @@ export default {
 	apply(context) {
 		ui = context;
 		api = context.remote<SpawnSessionApi>();
-		connect(api);
+		connect(api, context);
 		mountStyles();
 		context.toolCard(SPAWN_SESSION, SpawnCard);
 		context.toolCard(HAND_OFF, HandOffCard);
@@ -482,9 +467,10 @@ export default {
 			page: "general",
 		});
 		context.environmentSection("started-sessions", StartedSessionsSection, {
-			label: (locale) => MESSAGES[locale].newSession,
+			label: (locale) => MESSAGES[locale].relatedSessions,
 			place: "output",
 			order: 40,
+			count: false,
 		});
 	},
 } satisfies UiPlugin;

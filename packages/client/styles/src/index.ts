@@ -11,6 +11,11 @@ export const text = {
 	faint: "text-caption text-ink-faint",
 	error: "text-detail text-danger",
 	link: "text-accent hover:underline",
+	/**
+	 * 还在进行的那句话上扫过一道光（`.plume-glide`，motion.css）：转录里「正在跑」只有这一种说法。挂在装字的那个元素上，
+	 * 字色由它接管（平时是 faint，光带经过时深一档），不要再给同一个元素写颜色；进行完了就拿掉。
+	 */
+	glide: "plume-glide",
 };
 
 /** 单行输入框和下拉框：无描边的一块 card 底，悬停、聚焦时深一档。高度只有 control 这一档。 */

@@ -1,5 +1,15 @@
 import type { DeliveredReport, SessionView, UserMessage } from "@plume/contract";
-import type { AgentDeliveryProps, ComposerAboveProps, PanelProps, Remote, ToolCardProps, TurnFooterProps, UiContext, UiPlugin } from "@plume/contract/ui";
+import type {
+	AgentDeliveryProps,
+	ComposerAboveProps,
+	EnvironmentSectionProps,
+	PanelProps,
+	Remote,
+	ToolCardProps,
+	TurnFooterProps,
+	UiContext,
+	UiPlugin,
+} from "@plume/contract/ui";
 import {
 	AgentAvatar,
 	AvatarPile,
@@ -7,7 +17,9 @@ import {
 	Button,
 	Card,
 	Caret,
+	EnvironmentRow,
 	FlowRow,
+	formatAvatar,
 	IconButton,
 	MenuBody,
 	MenuItem,
@@ -15,6 +27,7 @@ import {
 	Popover,
 	Text,
 	useI18n,
+	useNow,
 	usePopover,
 } from "@plume/ui";
 import {
@@ -38,7 +51,7 @@ import { callCount, elapsed, ordered } from "./format.ts";
 import { fill, MESSAGES } from "./messages.ts";
 import { AgentsSection, connectSettings } from "./settings.tsx";
 import { connectStructured, hasContent, StructuredOutput } from "./structured.tsx";
-import { avatarOf, type Avatars, connect, choose, retryRoster, useAvatars, useChosen, useRoster, watchRoster } from "./ui-state.ts";
+import { avatarOf, avatarsFor, type Avatars, connect, choose, retryRoster, useAvatars, useChosen, useRoster, watchFaces, watchRoster } from "./ui-state.ts";
 import { descriptionOf, dispatchFromProgress, isActive, isDispatch, reportProse, wayBack, type TaskRecord } from "./types.ts";
 import css from "./subagents.css";
 
@@ -611,6 +624,75 @@ function AgentsPanel({ session }: PanelProps) {
 	);
 }
 
+function environmentElapsed(at: number, now: number): string {
+	const seconds = Math.max(0, Math.floor((now - at) / 1000));
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** 环境卡片「关联」里的子 Agent 节：只列本会话派出的子智能体，点了在子 Agent 面板里打开对应那一页。 */
+function SubagentsEnvironmentSection({ session }: EnvironmentSectionProps) {
+	const text = MESSAGES[useI18n().resolvedLocale];
+	const parent = session.summary.id;
+	const roster = useRoster(parent);
+	const avatars = useAvatars(parent);
+	const tasks = ordered(roster.tasks);
+	const now = useNow(
+		tasks.some((task) => task.state === "running"),
+		1000,
+	);
+	const [stopping, setStopping] = useState<string>();
+	if (tasks.length === 0) return null;
+	return (
+		<>
+			{tasks.map((task) => {
+				const active = isActive(task);
+				const fact = task.state === "running" ? `${text.running} · ${environmentElapsed(task.startedAt ?? task.createdAt, now)}` : text[task.state];
+				return (
+					<EnvironmentRow
+						key={task.id}
+						icon={<AgentAvatar avatar={avatarOf(avatars, task.agent)} size={16} mood={moods[task.state]} seed={task.agent} host=".plume-env-row" />}
+						title={task.description || text.untitled}
+						fact={fact}
+						running={task.state === "running"}
+						tip={`@${task.agent}`}
+						onClick={() => reveal(task)}
+						action={
+							active
+								? {
+										label: text.stopAction,
+										disabled: stopping === task.session,
+										onClick: () => {
+											setStopping(task.session);
+											void api
+												.stop(task.session)
+												.catch((error: unknown) => ui.notify(String(error), "error"))
+												.finally(() => setStopping((current) => (current === task.session ? undefined : current)));
+										},
+									}
+								: undefined
+						}
+						data-environment-subagent={task.session}
+					/>
+				);
+			})}
+		</>
+	);
+}
+
+/** `attention`：有子智能体正在运行或排队时点亮环境开关（跑完会自动叫醒主会话）。 */
+function useSubagentsAttention(session: SessionView): string | undefined {
+	const text = MESSAGES[useI18n().resolvedLocale];
+	const roster = useRoster(session.summary.id);
+	const running = roster.tasks.filter((task) => task.state === "running").length;
+	const queued = roster.tasks.filter((task) => task.state === "queued").length;
+	if (running === 0 && queued === 0) return undefined;
+	return [running > 0 ? fill(text.nRunning, { n: running }) : undefined, queued > 0 ? fill(text.nQueued, { n: queued }) : undefined]
+		.filter(Boolean)
+		.join(" · ");
+}
+
 export default {
 	name: "plume.subagents",
 	apply(context) {
@@ -651,12 +733,43 @@ export default {
 		});
 		context.composerAbove("agents", AgentsBar);
 		context.turnFooter("report", AgentTurnFooter);
-		// 后台任务面板经它把子 Agent 和后台命令列在一起，点了打开这里的面板、选中那个子 Agent。
+		context.environmentSection("subagents", SubagentsEnvironmentSection, {
+			label: (locale) => MESSAGES[locale].environmentTitle,
+			place: "output",
+			order: 20,
+			count: false,
+			attention: useSubagentsAttention,
+		});
+		// 后台任务面板、环境卡片经它读取子 Agent 列表与头像，点了打开这里的面板、选中那个子 Agent。
 		context.provide("subagents.tasks", {
-			watch: (parent, listener) =>
-				watchRoster(parent, (tasks) =>
-					listener(tasks.map((task) => ({ id: task.session, title: task.description, state: task.state, startedAt: task.startedAt, endedAt: task.endedAt }))),
-				),
+			watch: (parent, listener) => {
+				let current: TaskRecord[] = [];
+				const emit = () => {
+					const avatars = avatarsFor(parent);
+					listener(
+						current.map((task) => ({
+							id: task.session,
+							title: task.description,
+							state: task.state,
+							startedAt: task.startedAt,
+							endedAt: task.endedAt,
+							agent: task.agent,
+							avatar: formatAvatar(avatarOf(avatars, task.agent)),
+						})),
+					);
+				};
+				const stopFaces = watchFaces(parent, () => {
+					if (current.length > 0) emit();
+				});
+				const stopRoster = watchRoster(parent, (tasks) => {
+					current = tasks;
+					emit();
+				});
+				return () => {
+					stopRoster();
+					stopFaces();
+				};
+			},
 			open: (parent, session) => reveal({ parent, session }),
 			stop: async (session) => {
 				await api.stop(session);

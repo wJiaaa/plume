@@ -321,10 +321,29 @@ export default {
 
 		const api: SpawnSessionApi = {
 			async started(parentId) {
-				return (await ctx.sessions.list()).flatMap((summary): StartedSuggestion[] => {
-					const from = summary.spawnedFrom;
-					return from?.sessionId === String(parentId) && from.toolCallId ? [{ callId: from.toolCallId, sessionId: summary.id }] : [];
-				});
+				const target = String(parentId);
+				return (await ctx.sessions.list())
+					.filter(
+						(summary) =>
+							!summary.parentId &&
+							summary.kind !== "child" &&
+							summary.kind !== "standalone" &&
+							(summary.spawnedFrom?.sessionId === target || summary.forkedFrom?.sessionId === target),
+					)
+					.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+					.map((summary): StartedSuggestion => {
+						const callId = summary.spawnedFrom?.sessionId === target ? summary.spawnedFrom.toolCallId : undefined;
+						return {
+							...(callId ? { callId } : {}),
+							sessionId: summary.id,
+							title: summary.title,
+							createdAt: summary.createdAt ?? 0,
+							running: summary.running === true,
+							...(summary.background ? { background: true } : {}),
+							...(summary.stop?.reason ? { stopReason: summary.stop.reason } : {}),
+							...(summary.archived ? { archived: true } : {}),
+						};
+					});
 			},
 			async offersWorktree(parentId) {
 				const parent = await ctx.sessions.get(String(parentId));
