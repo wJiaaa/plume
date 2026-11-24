@@ -10,34 +10,75 @@ import { renderPlan, SUBMIT_PLAN, type ApprovedPlan } from "./plan.ts";
 
 /**
  * 这一轮工具表里别的插件提供的、提示词要点名的工具（按 `ToolDefinition.category` 找到的名字）：`checklist` 记进度清单，
- * `question` 停下来问人。没有就不点名，说法退回不靠那件工具的那一种。
+ * `question` 停下来问人，`delegate` 把一件事交给子智能体。没有就不点名，说法退回不靠那件工具的那一种。
  */
 export interface PlanTools {
 	checklist?: string;
 	question?: string;
+	delegate?: string;
 }
 
 /**
  * 计划模式开着时系统提示词末尾多的一段。提问那一段必须明说通用准则（「有合理理解就照做」）在这里不适用：
  * 不说的话两条一起读，模型把拿不准的地方当成假设直接交，计划模式从来不问。
+ *
+ * 只给计划的几节标题、再催一句「简短」，模型交上来的是一张目标清单（「降低视觉权重」「优化反馈」），没查清现状、没定做法，
+ * 接手的还得自己决定。所以先给一条顺序（照 Claude Code 计划模式的理解、设计、复核几段，和 qwen-code 的「先摸清全局再定局部」）：
+ * 读透再定、问早问齐、把每个决定定下来（照 Codex 计划模式「决策完整」要定的那几样：接口和数据、数据怎么走、边界和失败、
+ * 怎么证明做成了）、交之前对着代码复核。计划本身照 Claude Code：背景、只写推荐的那条路、点名关键文件和可复用的现有函数、
+ * 单独一节写怎么验证；另外要求背景写出查到的现状（带 `path:line`），每条改动写到具体做法。
+ * 计划会交给不在这场对话里的人或新会话去做（「在新会话里执行」），路径和复用点写在计划里，接手的不用再把这一轮查过的重查一遍。
  */
 // i18n-exempt：发给模型的提示词。
 export function planSection(tools: PlanTools): string {
+	const ask = tools.question ? `with \`${tools.question}\`` : "the user";
 	return (
 		"Plan mode is on. You are planning a change, not making it: files stay unchanged until the user approves a plan. " +
 		"Tools that edit files refuse, and shell commands run in a read-only sandbox where any write fails; everything else, " +
 		"including the network, works as usual. A request to do the work while plan mode is on is a request to plan it. " +
 		`A plan is not a task list${tools.checklist ? `; \`${tools.checklist}\` is for tracking the work once the plan is approved` : ""}.\n\n` +
-		"Explore before you ask. What the code can answer — where something lives, how it works now, what depends on it — find out " +
-		"yourself and do not ask. Planning is when asking is cheapest, so the general rule to take a reasonable reading and state the " +
-		"assumption does not apply here: for every choice about intent, scope or a trade-off that would change the plan and that the " +
-		`code cannot settle, ask ${tools.question ? `with \`${tools.question}\`` : "the user"} before you submit, giving the real options and the one you recommend. If the user ` +
-		"skips a question, go with your recommendation and record it as an assumption.\n\n" +
+		"Work through these steps, and go back to an earlier one whenever something you learn changes the picture:\n\n" +
+		"1. Understand. Read the code the request touches before deciding anything: trace the paths it runs through, find the " +
+		"callers of what you would change, and look for existing functions, components and patterns that already do part of the " +
+		"job, so the plan reuses them instead of adding new code. Understand how the pieces fit together before you settle on local " +
+		"edits; do not plan from the first relevant file." +
+		(tools.delegate
+			? ` When the scope is uncertain or spans several areas, give separate read-only searches to \`${tools.delegate}\` in parallel, ` +
+				"each with its own focus; when the task sits in files you already know, read them yourself."
+			: "") +
+		"\n\n" +
+		"2. Ask. What the code can answer — where something lives, how it works now, what depends on it — find out yourself and do " +
+		"not ask. Planning is when asking is cheapest, so the general rule to take a reasonable reading and state the assumption " +
+		"does not apply here: for every choice about intent, scope or a trade-off that would change the plan and that the code " +
+		`cannot settle, ask ${ask} before you submit, giving the real options and the one you recommend. Ask as soon as such a ` +
+		"choice shows up rather than after the plan is written, and put related questions together. A vague request may need " +
+		"several rounds; a focused fix may need none. If the user skips a question, go with your recommendation and record it as " +
+		"an assumption.\n\n" +
+		"3. Design. Pick the approach that fits how the codebase already works rather than a parallel pattern; for a bug, fix the " +
+		"cause where it starts, not where it shows. Then settle everything the implementer would otherwise have to decide: the " +
+		"interfaces, types and data that change, how data flows through the change, the edge cases and failure modes and how each is " +
+		"handled, and what will show that the change works.\n\n" +
+		"4. Review. Before you submit, reread the critical files the plan changes and check every claim it makes about the code " +
+		"against them, then check the plan against what the user asked for: nothing missing, nothing they did not ask for." +
+		(tools.delegate ? ` For a large or risky change, have \`${tools.delegate}\` check the finished plan against the code with a fresh read.` : "") +
+		"\n\n" +
 		`Submit only when the plan is decision complete: whoever carries it out has nothing left to decide. Call \`${SUBMIT_PLAN}\` with ` +
-		"the plan as Markdown — a title, a brief summary, the key changes, the test plan, and the assumptions and defaults you chose; " +
-		"usually three to five short sections. Group changes by behaviour or subsystem rather than file by file, and name a path only " +
-		"where it prevents a mistake. Give the least detail that keeps the implementation safe and leave out what is unaffected. If " +
-		"the user sends it back, submit a complete replacement. Once it is approved every tool is available again."
+		"the plan as Markdown, written for someone who will carry it out without this conversation:\n" +
+		"- A `#` title naming the change.\n" +
+		"- Context: why the change is being made — the problem or need, what prompted it, and the intended outcome — and the current " +
+		"state you found that the plan rests on: what the code does now and, for a bug, the root cause, with `path:line`.\n" +
+		"- The changes: only the approach you recommend, not the alternatives you ruled out. Group them by behaviour or subsystem " +
+		"rather than file by file, and under each say concretely what changes — the files, and the functions, components, props, " +
+		'styles or values in them, and any new or changed interface or data shape. A line that only names a goal ("tighten the ' +
+		'hierarchy", "improve feedback") is not a change; say what is done to reach it. For a change that repeats across many files, ' +
+		"describe the pattern once and list a few representative paths. Point to existing functions and utilities to reuse, with " +
+		"their paths, and say how the edge cases and failures are handled.\n" +
+		"- Verification: how to check the change end to end — the commands to run, the tests to add or run, and the concrete " +
+		"scenarios to try with what each should show.\n" +
+		"- Assumptions and defaults you chose, if there are any.\n" +
+		"Keep it concise enough to scan quickly but detailed enough to carry out without investigating again: cut what is unaffected, " +
+		"never the how. Submitting is how you ask for approval; do not ask in your reply whether the plan looks right. If the user " +
+		"sends it back, submit a complete replacement. Once it is approved every tool is available again."
 	);
 }
 

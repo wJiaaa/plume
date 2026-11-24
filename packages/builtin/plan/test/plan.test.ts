@@ -265,13 +265,16 @@ test("/plan 不带话是开关，带话先开再发后半句；新对话的开�
 	assert.deepEqual(await plan.sections("fresh"), ["plan"]);
 });
 
-test("提示词点名的记清单、问人的工具按声明的类别找，工具表里没有就不点名", () => {
-	const named = planSection({ checklist: "track", question: "ask_question" });
+test("提示词点名的记清单、问人、派子智能体的工具按声明的类别找，工具表里没有就不点名", () => {
+	const named = planSection({ checklist: "track", question: "ask_question", delegate: "hand_off" });
 	assert.match(named, /A plan is not a task list; `track` is for tracking the work once the plan is approved\./);
 	assert.match(named, /ask with `ask_question` before you submit/);
+	assert.match(named, /give separate read-only searches to `hand_off` in parallel/);
+	assert.match(named, /have `hand_off` check the finished plan/);
 	const bare = planSection({});
 	assert.match(bare, /A plan is not a task list\.\n/);
 	assert.match(bare, /ask the user before you submit/);
+	assert.doesNotMatch(bare, /in parallel|fresh read/);
 	assert.match(SUBMIT_PLAN_RESULTS.approved("# 计划", false, "track"), /break it into a task list with `track` alongside your first action\./);
 	assert.doesNotMatch(SUBMIT_PLAN_RESULTS.approved("# 计划", false, undefined), /task list/);
 	assert.match(unsubmittedPlanNote(undefined), /还缺用户的决定，就直接问用户。/);

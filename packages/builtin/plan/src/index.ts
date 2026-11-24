@@ -94,7 +94,7 @@ export default {
 
 		ctx.hook("model.context", (input, next) => {
 			if (!store.has(input.sessionId)) return next(input);
-			const tools = { checklist: toolOf("checklist", input.tools), question: toolOf("question", input.tools) };
+			const tools = { checklist: toolOf("checklist", input.tools), question: toolOf("question", input.tools), delegate: toolOf("delegate", input.tools) };
 			return next({ ...input, sections: [...input.sections, { id: "plan", text: planSection(tools) }] });
 		});
 
