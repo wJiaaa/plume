@@ -225,20 +225,19 @@
 	}
 
 	/*
-	 * 围栏代码块：标题栏（图标、语言名，右边换行、复制、在终端运行）和代码同在一个框里。
+	 * 围栏代码块：没有标题栏，默认自动换行。复制（可执行命令还有在终端运行）收在右列顶部，代码从第一行就开始。
 	 *
-	 * 框画在外层，里面的 `pre` 把自己那套底色、描边、圆角撤掉，否则标题栏和代码是两块拼起来的。
-	 * 按钮常驻：它们一块只出现一次，不会满页重复。
-	 *
-	 * 宽度跟着代码：三行短代码不必拉成一整栏宽的大框。至少 318px（窄栏里取栏宽），语言名和按钮总放得下。
+	 * 两列网格：左列是代码，右列是按钮簇，单行时左右居中对齐同一行，多行时按钮停在右上角、代码不会钻到按钮底下。
+	 * 框画在外层，里面的 `pre` 把自己那套底色、描边、圆角撤掉。宽度跟着代码、不超过正文栏。
 	 */
 	.markdown .markdown-code {
-		/* 横向滑块的定位框，见 `MarkdownCode`。 */
 		position: relative;
 		/* 代码块在统一间隙外再留 3px：一块贴进来的东西比一段话略多一点呼吸空间。 */
 		margin-block: 0.2em;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: start;
 		width: fit-content;
-		min-width: min(100%, 318px);
 		background: var(--markdown-code-sunk);
 		color: var(--plume-code-fg);
 		border: 1px solid color-mix(in srgb, var(--plume-code-fg) 10%, transparent);
@@ -255,37 +254,45 @@
 	}
 
 	.markdown .markdown-code-head {
-		/* 代码主题可与页面深浅不同，标题栏控件必须跟随代码字色。 */
+		/* 代码主题可与页面深浅不同，操作按钮必须跟随代码字色。 */
 		--plume-ink: var(--plume-code-fg);
 		--plume-ink-faint: color-mix(in srgb, var(--plume-code-fg) 65%, transparent);
 		--plume-card-hover: color-mix(in srgb, var(--plume-code-fg) 8%, transparent);
+		/* 放在右列；DOM 里它在代码前面，读屏和 Tab 先到按钮。 */
+		grid-column: 2;
+		grid-row: 1;
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		/* 左边和代码的左边对齐。 */
-		padding: 6px 8px 0 calc(10px + 1ch);
-		font-family: var(--plume-font-mono);
-		font-size: var(--text-code);
-		line-height: 24px;
-		color: color-mix(in srgb, var(--plume-code-fg) 80%, transparent);
+		gap: 4px;
+		/* 和第一行代码居中对齐：代码上下内边距 12px，按钮（IconButton size=sm）高 22px；单行时上下对称。 */
+		padding-block: max(4px, calc(12px + (var(--text-code) * var(--plume-code-line-height) - 22px) / 2));
+		padding-inline: 0 8px;
 		user-select: none;
 	}
 
 	.markdown .markdown-code > pre {
+		grid-column: 1;
+		grid-row: 1;
 		background: transparent;
 		border: 0;
 		border-radius: 0;
-		padding: 6px calc(10px + 1ch) 12px;
+		overflow-x: hidden;
+		padding: 12px 1ch 12px calc(10px + 1ch);
+	}
+
+	.markdown .markdown-code pre code {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	/* 框宽还在缓向新内容时暂不折行，避免过渡中途被短暂夹出多余换行、把高度顶跳。 */
+	.markdown .markdown-code[data-growing-width] pre code {
+		white-space: pre;
 	}
 
 	/* 正在输出的代码块里的一段，见 `MarkdownCode` 的 `fading`：块级，浏览器才能只重排正在长的那一段。 */
 	.markdown .markdown-code-chunk {
 		display: block;
-	}
-
-	.markdown .markdown-code[data-wrap] pre code {
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
 	}
 
 	.markdown code {

@@ -24,7 +24,8 @@ export async function checkMarkdownWidths({
 		}
 	};
 	const code = `const a = 1;\nconst longer = "${"abcdefghij".repeat(14)}";`;
-	const text = `\`\`\`ts\n${code}\n\`\`\`\n\n| 项 | 说明 |\n| --- | --- |\n| 一 | 短说明 |\n| 第二个比较长的项目 | ${"逐渐增加的详细说明".repeat(6)} |\n\n尺寸验证结束。`;
+	const shell = "git branch -d feat/session-row-menu-delete";
+	const text = `\`\`\`ts\n${code}\n\`\`\`\n\n\`\`\`sh\n${shell}\n\`\`\`\n\n| 项 | 说明 |\n| --- | --- |\n| 一 | 短说明 |\n| 第二个比较长的项目 | ${"逐渐增加的详细说明".repeat(6)} |\n\n尺寸验证结束。`;
 	const size = window.getSize();
 	const theme = nativeTheme.themeSource;
 	const reduced = await page<string | null>(`document.documentElement.getAttribute('data-reduce-motion')`);
@@ -91,8 +92,47 @@ export async function checkMarkdownWidths({
 					`document.querySelector('.markdown-code').getBoundingClientRect().width <= document.querySelector('.markdown-code').parentElement.getBoundingClientRect().width + 1`,
 					"窄窗代码块不撑破正文",
 				);
-				await clickReal(window, ".markdown-code-head button:first-of-type");
-				assert.ok(await page<boolean>(`document.querySelector('.markdown-code').hasAttribute('data-wrap')`), "代码换行开关有效");
+				const codeLayout = await page<{
+					tsHeadText: string;
+					tsButtons: number;
+					tsWrapped: boolean;
+					tsOverflow: number;
+					tsInlineHead: boolean;
+					shellHeadText: string;
+					shellButtons: number;
+					shellSingleLine: boolean;
+					shellCentered: boolean;
+				}>(`(() => {
+					const [ts, sh] = [...document.querySelectorAll('.markdown-code')];
+					const tsPre = ts.querySelector('pre');
+					const tsCode = ts.querySelector('pre code');
+					const tsHead = ts.querySelector('.markdown-code-head');
+					const tsRect = ts.getBoundingClientRect();
+					const tsHeadRect = tsHead.getBoundingClientRect();
+					const shPre = sh.querySelector('pre');
+					const shHead = sh.querySelector('.markdown-code-head');
+					const shRect = sh.getBoundingClientRect();
+					const shHeadRect = shHead.getBoundingClientRect();
+					const shPreRect = shPre.getBoundingClientRect();
+					return {
+						tsHeadText: tsHead.textContent.trim(),
+						tsButtons: tsHead.querySelectorAll('button').length,
+						tsWrapped: getComputedStyle(tsCode).whiteSpace === 'pre-wrap',
+						tsOverflow: tsPre.scrollWidth - tsPre.clientWidth,
+						tsInlineHead: tsHeadRect.top >= tsRect.top && tsHeadRect.left >= tsPre.getBoundingClientRect().right - 1,
+						shellHeadText: shHead.textContent.trim(),
+						shellButtons: shHead.querySelectorAll('button').length,
+						shellSingleLine: Math.abs(shPreRect.height - shHeadRect.height) <= 2,
+						shellCentered: Math.abs((shHeadRect.top + shHeadRect.bottom) / 2 - (shRect.top + shRect.bottom) / 2) <= 2,
+					};
+				})()`);
+				assert.equal(codeLayout.tsHeadText, "", "普通代码块不显示语言名");
+				assert.equal(codeLayout.tsButtons, 1, "普通代码块只显示复制按钮");
+				assert.ok(codeLayout.tsWrapped && codeLayout.tsOverflow <= 1, `代码块默认自动换行不横溢：${JSON.stringify(codeLayout)}`);
+				assert.ok(codeLayout.tsInlineHead, `复制按钮在右列不单占一行：${JSON.stringify(codeLayout)}`);
+				assert.equal(codeLayout.shellHeadText, "", "shell 代码块不显示语言名");
+				assert.equal(codeLayout.shellButtons, 2, "可执行 shell 代码块显示执行和复制两个按钮");
+				assert.ok(codeLayout.shellSingleLine && codeLayout.shellCentered, `单行命令与按钮同行垂直居中：${JSON.stringify(codeLayout)}`);
 				await clickReal(window, ".markdown-table-toggle");
 				assert.equal(await page<string>(`document.querySelector('.markdown-table').dataset.wrap`), "true", "表格换行开关有效");
 				window.setSize(size[0]!, size[1]!);
@@ -111,7 +151,7 @@ export async function checkMarkdownWidths({
 			"长回复稳定",
 		);
 		const longId = await page<string>(`document.querySelector('[data-plume-session]').dataset.plumeSession`);
-		await until(`document.querySelectorAll('[data-markdown-measured]').length === 40`, "代码和表格已记下真尺寸");
+		await until(`document.querySelectorAll('[data-markdown-measured]').length === 60`, "代码和表格已记下真尺寸");
 		await clickReal(window, `[data-plume-row="${shortId}"] > button`);
 		await clickReal(window, `[data-plume-row="${longId}"] > button`);
 		await until(`document.querySelector('[data-plume-session]')?.dataset.plumeSession === ${JSON.stringify(longId)}`, "切回长回复");
@@ -134,9 +174,9 @@ export async function checkMarkdownWidths({
 		await page(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
 		const narrowed = await geometry();
 		assert.ok(Math.abs(narrowed.before - narrowed.actual) < 1, `变窄后不沿用错误尺寸：${JSON.stringify(narrowed)}`);
-		// 滚到屏外代码上时，观察器会补量横向溢出，不能因为之前跳过测量而丢掉横向滑块。
-		await page(`document.querySelector('.markdown-code').scrollIntoView({block:'center'})`);
-		await until(`document.querySelector('.markdown-code .plume-hthumb') !== null`, "代码露面后横向滑块恢复");
+		// 滚到屏外表格上时，观察器会补量横向溢出，不能因为之前跳过测量而丢掉横向滑块。
+		await page(`document.querySelector('.markdown-table').scrollIntoView({block:'center'})`);
+		await until(`document.querySelector('.markdown-table .plume-hthumb') !== null`, "表格露面后横向滑块恢复");
 		console.log("PLUME_SMOKE_MARKDOWN_LAYOUT", JSON.stringify({ remembered, narrowed }));
 	} finally {
 		await page(
