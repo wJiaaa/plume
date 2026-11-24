@@ -116,14 +116,10 @@ export function CodeView({ path, text, wrap, reveal }: { path: string; text: str
 
 	return (
 		// `relative`：滑块对着这一块定位，而不是整个窗口。
+		// 只画竖向滑块（同 t3code 的源码预览和 diff）：横向用触控板、Shift+滚轮照样滚，滑块只会压在最后一行上。
 		<div className="plume-scroll-host relative flex min-h-0 flex-1">
 			<div ref={host} className="file-code min-h-0 min-w-0 flex-1 overflow-hidden" />
-			{scroller && (
-				<>
-					<OverlayScrollbar viewport={scrollerRef} orientation="vertical" />
-					<OverlayScrollbar viewport={scrollerRef} orientation="horizontal" />
-				</>
-			)}
+			{scroller && <OverlayScrollbar viewport={scrollerRef} orientation="vertical" />}
 		</div>
 	);
 }

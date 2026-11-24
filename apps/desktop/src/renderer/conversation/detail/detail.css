@@ -46,11 +46,6 @@
 		padding-bottom: 6px;
 	}
 
-	.tool-diff-scroll[data-hscroll="on"] > .tool-diff-sheet,
-	.tool-diff-split-pane[data-hscroll="on"] > * {
-		padding-bottom: 12px;
-	}
-
 	.tool-diff-hunk + .tool-diff-hunk {
 		border-top: 1px solid var(--plume-line-soft);
 	}

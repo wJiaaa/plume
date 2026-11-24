@@ -1,6 +1,6 @@
 import type { ChangeHunk, ChangeLine } from "@plume/contract";
 import type { FileDiffLineMark, FileDiffLineTarget, FileDiffProps } from "@plume/contract/ui";
-import { MarkNumber, OverlayScrollbar, useI18n } from "@plume/ui";
+import { MarkNumber, useI18n } from "@plume/ui";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Token } from "../../markdown/highlight.ts";
 import { useDiffHighlight } from "./diff-highlight.ts";
@@ -70,6 +70,7 @@ function renderCode(text: string, tokens: Token[] | undefined, parts: InlinePart
  * - 纯新增或纯删除文件在分栏模式下自动退回通栏单列，不留半边空白、不无故挤出横滚条；
  * - 真实双侧改动在分栏不换行时拆成左右两个独立横滚窗格，长行不再把对侧推出视野；
  * - 统一模式不换行时行铺在和最长那行一样宽的一层上，左缘色条和行号钉在左侧，横滚时仍能看见。
+ * - 横向不画滚动条（同 t3code）：触控板、Shift+滚轮照样横滚；滑块压在最后一行上、或在底下多留一条，读 diff 时都只是干扰。
  */
 export const DiffView = memo(function DiffView({
 	hunks,
@@ -131,7 +132,7 @@ export const DiffView = memo(function DiffView({
 
 	let offset = 0;
 	return (
-		<div className="plume-scroll-host relative" data-diff-layout={shown.effectiveLayout}>
+		<div data-diff-layout={shown.effectiveLayout}>
 			<div
 				ref={scroller}
 				className={`tool-diff-scroll font-mono text-code ${wrap ? "tool-diff-wrap" : ""} ${outerScrolls ? "overflow-x-auto" : "overflow-x-hidden"}`}
@@ -181,7 +182,6 @@ export const DiffView = memo(function DiffView({
 					{shown.truncated && <div className="sticky left-0 w-max px-3 py-1.5 text-caption text-ink-faint">{t("diffView.truncated")}</div>}
 				</div>
 			</div>
-			{outerScrolls && <OverlayScrollbar viewport={scroller} orientation="horizontal" placement="sticky" />}
 		</div>
 	);
 });
@@ -310,8 +310,6 @@ const SplitHunk = memo(function SplitHunk({
 	onLineEnter?: (target: FileDiffLineTarget, anchor: HTMLElement) => void;
 }) {
 	const rows = useMemo(() => pairSplitHunk(lines), [lines]);
-	const leftRef = useRef<HTMLDivElement>(null);
-	const rightRef = useRef<HTMLDivElement>(null);
 
 	if (wrap) {
 		return (
@@ -349,8 +347,8 @@ const SplitHunk = memo(function SplitHunk({
 	// 不换行时每行严格同高，左右各占 50% 独立横滚，长行互不挤压、且行与行严格对齐。
 	return (
 		<div className="tool-diff-split-panes">
-			<div className="plume-scroll-host tool-diff-split-left relative min-w-0">
-				<div ref={leftRef} className="tool-diff-split-pane overflow-x-auto">
+			<div className="tool-diff-split-left min-w-0">
+				<div className="tool-diff-split-pane overflow-x-auto">
 					<div className="w-max min-w-full">
 						{rows.map((row, rowIndex) => (
 							<SplitPaneLine
@@ -368,10 +366,9 @@ const SplitHunk = memo(function SplitHunk({
 						))}
 					</div>
 				</div>
-				<OverlayScrollbar viewport={leftRef} orientation="horizontal" placement="sticky" />
 			</div>
-			<div className="plume-scroll-host relative min-w-0">
-				<div ref={rightRef} className="tool-diff-split-pane overflow-x-auto">
+			<div className="min-w-0">
+				<div className="tool-diff-split-pane overflow-x-auto">
 					<div className="w-max min-w-full">
 						{rows.map((row, rowIndex) => (
 							<SplitPaneLine
@@ -389,7 +386,6 @@ const SplitHunk = memo(function SplitHunk({
 						))}
 					</div>
 				</div>
-				<OverlayScrollbar viewport={rightRef} orientation="horizontal" placement="sticky" />
 			</div>
 		</div>
 	);
