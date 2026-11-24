@@ -25,7 +25,7 @@ const PLAN_ON = "Plan mode is on";
  *
  * 1. 新对话里点输入框底下的计划模式开关，发第一句话，开关跟着建出来的会话；假模型先试 `edit`，被拒（「Plan mode: it edits files」），
  *    文件不变，再交计划：转录里接着这一轮的回复出现计划卡（不在输入框上方；运行行说在等回答、卡上没有「允许一次」），
- *    卡头写着计划的标题，右栏自动打开计划面板：顶栏是交计划时写下的文件名（`plan-年月日-时分秒.md`）、在编辑器中打开、`</>`，
+ *    卡头写着计划的标题，右栏自动打开计划面板：顶栏是交计划时写下的文件路径（`…/plans/plan-年月日-时分秒.md`）、在编辑器中打开、`</>`，
  *    下面直接是按文档排版的 Markdown；点 `</>` 看原文，再点回来。
  *    卡在右栏开着（窄）和收起（宽）时，主按钮都不被单独挤到第二行；后面几张卡也量一次。
  * 2. 点「修改…」写意见、修订：模型收到的是没批准和这句意见，开关还开着，它改完再交；这一次点「拒绝」：这一轮停下，开关不动。
@@ -75,11 +75,12 @@ export async function checkPlan(options: {
 		await until(`document.querySelector('[data-plan-body]')?.textContent.includes(${JSON.stringify(title)}) === true`, `${label}：右栏的计划面板读的是这份`);
 		if (!(await page<boolean>(`document.querySelector('[data-plan-body] .markdown.markdown-document h1') !== null`)))
 			throw new Error(`${label}：面板里的计划正文该按文档排版画，标题是一级标题`);
-		// 文件名读第一份字：放不下时 `ScrollText` 会多画一份隐藏的副本。
-		const fileName = await page<string>(
+		// 文件路径读第一份字：放不下时 `ScrollText` 会多画一份隐藏的副本；家目录会缩成 `~`。
+		const filePath = await page<string>(
 			`(() => { const name = document.querySelector('[data-plan-bar] [data-plan-file]')?.cloneNode(true); name?.querySelector('[data-plume-scroll-dup]')?.remove(); return name?.textContent ?? ''; })()`,
 		);
-		if (!/^plan-\d{8}-\d{6}\.md$/.test(fileName)) throw new Error(`${label}：面板顶栏该写着计划文件名，读到的是「${fileName}」`);
+		if (!/^(?:~|[A-Za-z]:[\\/]|\/).*[\\/]plans[\\/]plan-\d{8}-\d{6}\.md$/.test(filePath))
+			throw new Error(`${label}：面板顶栏该写着计划文件路径，读到的是「${filePath}」`);
 		if (!(await page<boolean>(`document.querySelector('[data-plan-bar] [role=group] button') !== null`)))
 			throw new Error(`${label}：面板顶栏该有在编辑器中打开`);
 		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-region] button')].some(button => button.textContent.includes('允许一次'))`))

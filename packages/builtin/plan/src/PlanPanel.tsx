@@ -1,14 +1,14 @@
 /**
  * 右栏的计划面板：把计划摊开读，等审批时划一段字就地留评论。
  *
- * 顶上一条固定的栏：计划文件的名字（批准过好几份时点它切换），右边「在编辑器中打开」（`ui.ProjectOpener` 的图标样子，
+ * 顶上一条固定的栏：计划文件的路径（批准过好几份时点它切换），右边「在编辑器中打开」（`ui.ProjectOpener` 的图标样子，
  * 打开的是交计划时写下的那份文件）和 `</>`（看 Markdown 原文）。下面直接是计划正文，不套卡片：按文档排版画
  * （`ui.Markdown` 的 `variant: "document"`，照 t3code 计划卡的正文），切到 Markdown 原文时同样直接摊开在面板底色上，
  * 不套卡片边框、不限高；两者照常折行，正文一列照 t3code 的 Markdown 文件预览，最宽 896px，面板宽了居中。
  *
  * 评论本身列在审批卡上（`PlanApproval.tsx`），由那里修订或带着接受；面板上那段字画下划线、末尾挂一枚和卡上同号的序号。
  * 批准或打回以后面板只读，那份计划留着看。等审批时正文用审批卡上那一份；其余时候从会话消息里读最后交上来的那份，
- * 重启以后也还在。一个会话批准过好几份时，点顶栏的文件名能切到别的批准过的那几份，打回的不列。
+ * 重启以后也还在。一个会话批准过好几份时，点顶栏的文件路径能切到别的批准过的那几份，打回的不列。
  */
 
 import type { PanelProps, UiContext } from "@plume/contract/ui";
@@ -34,7 +34,7 @@ import { textarea } from "@plume/styles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { offsetIn, paint, rangeIn, selectedText } from "./anchor.ts";
 import { MESSAGES } from "./messages.ts";
-import { approvedPlans, currentPlan, planTitle, renderPlan } from "./plan.ts";
+import { approvedPlans, currentPlan, planDisplayPath, planTitle, renderPlan } from "./plan.ts";
 import { addComment, useReview, useViewing, viewPlan } from "./review.ts";
 
 interface Draft {
@@ -168,7 +168,7 @@ export function planPanel(ui: UiContext) {
 
 		// 摊开的这份计划的文件：等审批时是交上来时写下的那份，批准过的是批准时（带着注意事项）重写的那份。旧会话里交的没有文件。
 		const file = pending && review ? review.file : picked ? picked.file : current?.file;
-		const fileName = file?.split(/[\\/]/).pop() ?? t.title;
+		const fileLabel = file ? planDisplayPath(file) : t.title;
 
 		const pick = () => {
 			const body = bodyRef.current;
@@ -202,13 +202,13 @@ export function planPanel(ui: UiContext) {
 							<button type="button" className="plume-plan-file" onClick={menu.toggle} aria-haspopup="menu" aria-expanded={menu.open} data-plan-switch="">
 								<Caret open={menu.open} from="right" />
 								<Text size="label" weight="medium" className="plume-plan-file-name" data-plume-tip={file} data-plan-file="">
-									<ScrollText text={fileName} />
+									<ScrollText text={fileLabel} />
 								</Text>
 							</button>
 						) : (
 							<span className="plume-plan-file">
 								<Text size="label" weight="medium" className="plume-plan-file-name" data-plume-tip={file} data-plan-file="">
-									<ScrollText text={fileName} />
+									<ScrollText text={fileLabel} />
 								</Text>
 							</span>
 						)}
