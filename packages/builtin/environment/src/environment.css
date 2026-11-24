@@ -47,7 +47,6 @@
 	border: 1px solid var(--plume-line-float);
 	border-radius: var(--plume-radius-panel);
 	background: var(--plume-float);
-	box-shadow: var(--plume-shadow-rest);
 	transform-origin: top right;
 	animation: plume-environment-in var(--plume-t-quick) var(--plume-e-soft);
 }
