@@ -45,7 +45,7 @@ export default {
 | `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
 | `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，见「回复正文的代码块」 |
 | `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片，见「工具卡片」 |
-| `ui.requestCard(kind, Component, { order })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认，见「等人给数据的卡」 |
+| `ui.requestCard(kind, Component, { order, place })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认；`place` 是压在输入框上方（`composer`，默认）还是接在转录里这一轮的回复后面（`transcript`），见「等人给数据的卡」 |
 | `ui.toolLine(tool, { verb, verbFor, subject, file, note, command, job, fields, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
 | `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
 | `ui.page(id, Component, options)` | 往活动栏加一个页面，见「页面」 |
@@ -84,7 +84,7 @@ export default {
 | `ui.FilePreview` | `{ sessionId, path, contents }`，文件标题栏和只读预览；`contents` 是插件经 remote 读取的 `FileContents`，不授予额外文件读取权限 |
 | `ui.documentViewer(extensions, Component)` | 注册只读文档预览，见「文件、终端和系统打开」 |
 | `ui.DocumentPreview` | 文件面板和插件共用的文档展示，同上 |
-| `ui.ProjectOpener` | 以 `{ path, compact? }` 显示目录的打开方式，同上 |
+| `ui.ProjectOpener` | 以 `{ path, compact? }` 显示目录或文件的打开方式，同上 |
 | `ui.quoteAction({ label, run })` | 在主会话划词菜单加一项，见「划词询问」 |
 | `ui.quoteInPanel(panelId, sessionId, quote)` | 把划词引用追加到本插件面板的输入框，同上 |
 | `ui.draftInSession(sessionId \| undefined, { text, images?, send?, replace? })` | 把字和图片写进输入框的草稿，见「提示、开面板、写输入框」 |
@@ -252,8 +252,9 @@ ui.requestCard("ask_user", QuestionCard);
 - 工具经 `run.request({ kind, title, payload })` 要人给数据（见 logic.md），卡片按 `kind` 登记；`request.payload` 是工具给的数据，认不出就返回 `fallback`（产品的通用卡，只能「不答」）。渲染出错时让给下一个注册者。
 - 人答了调 `answer(value)`，`value` 原样交回 `run.request`（工具那边会再核一遍，卡上也先查一遍，拦住手误）；人不答调 `decline()`，工具得到 `reason: "declined"`。没送到时两者都抛错，卡片把错误摆出来、让人再答。一个回答连同附言（评论、修改意见）一起放进 `value`，不用经 `remote` 另交。
 - 代管这个会话的插件可能在外面先答了（`ctx.sessions.answer`、`respond`，见 logic.md「代管会话」）：卡和过期、停下时一样被产品收起，你的卡不用为它另做处理；那次调用底下由产品写「由 X 代答」。
-- 卡片压在输入框正上方的那一格、和审批卡一起排队一次一张、过期（30 分钟，截止时刻在 `request.expiresAt`）、停下这一轮时撤卡都归产品。`queued` 是排在这张后面还在等的张数；`from` 是问的子会话的标题，卡上要写明；`compact` 是窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`permission` 是现在的权限模式，`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `answer`，别的档调用不改，只在人点了卡上的按钮时调。外框用 `ApprovalFrame`（收放的标题栏、倒计时、+N），或自己画、标题行放 `ApprovalExpiry`（`at={request.expiresAt}`）、有排队时写 `+{queued}`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
-- 卡片一出来把焦点给它，键盘能直接答。
+- 摆在哪由登记时的 `place` 定：`composer`（默认）压在输入框正上方、和审批卡同一格，适合要人马上答、和回复无关的（提问、表单）；`transcript` 画在转录末尾、接着这一轮的回复、运行行上面，适合要对着回复读的（`plan` 插件的计划卡）。转录翻到更早几轮时 `transcript` 的卡不画，回到最新才看得到；子会话的卡浮在父会话输入框上方时不论选哪个都在那一格。外框照摆的地方选：压在输入框上方是浮层（`ApprovalFrame`），转录里的不用玻璃和投影，和 `@plume/styles` 的 `proposal` 一样是一道线、淡淡的 card 底。
+- 和审批卡一起排队一次一张、过期（30 分钟，截止时刻在 `request.expiresAt`）、停下这一轮时撤卡都归产品。`queued` 是排在这张后面还在等的张数；`from` 是问的子会话的标题，卡上要写明；`compact` 是窄窗口，面板区一次只摆一格，开面板会盖住卡片，要读的东西画在卡里。`permission` 是现在的权限模式，`allowAuto()` 只把请求批准切到帮我批准（「接受并开启自动模式」），先切再 `answer`，别的档调用不改，只在人点了卡上的按钮时调。外框用 `ApprovalFrame`（收放的标题栏、倒计时、+N），或自己画、标题行放 `ApprovalExpiry`（`at={request.expiresAt}`）、有排队时写 `+{queued}`。例子是 `packages/builtin/ask-user`（`ApprovalFrame`）、`plan` 插件（`ApprovalExpiry`、「接受并开启自动模式」先 `allowAuto()` 再 `answer`）和 `mcp` 插件的表单。
+- 卡片一出来把焦点给它，键盘能直接答；摆在转录里的用 `focus({ preventScroll: true })`，人往上翻着读时不被拽下来。
 - 等这张卡时那句状态由 `run.request` 带 `waiting` 给（「等你批准计划」，按 `ctx.locale()`）；不给时宿主说「等待你的回答」。
 
 ## 面板
@@ -501,7 +502,7 @@ ui.linkOpener({
 - `ui.useFileMenu(root)`：组件内调用的 hook，返回 `{ open, onContextMenu(event, { path, onOpen }), element }`；复用打开方式、在访达中显示和复制路径菜单。
 - `ui.documentViewer(extensions, Component)`：注册只读文档预览，扩展名小写且不带点；同扩展名后注册的生效，停用后恢复前一个。
 - `ui.DocumentPreview`：`{ name, identity, readBytes(signal), fallback? }`，文件面板和插件共用的文档展示；调用方负责读取与权限校验，只交数据、不交磁盘路径，identity 随文件版本改变；无匹配或渲染失败回到 fallback。
-- `ui.ProjectOpener`：以 `{ path }` 显示整行目录打开方式，`compact: true` 时只写应用名、适合放在环境卡片页头；复用文件预览的默认应用与选择菜单，只有用户点击才调用系统打开。
+- `ui.ProjectOpener`：以 `{ path }` 显示整行打开方式（目录或文件都行），`compact: true` 时只写应用名、适合放在环境卡片页头，`compact: "icon"` 时只剩应用图标和下拉箭头、一颗带框的分体按钮，适合放进面板顶栏那排图标按钮；复用文件预览的默认应用与选择菜单，只有用户点击才调用系统打开。
 - `ui.terminalOpener(open)`：为文件树等入口登记「在终端中打开」：人点击后调用 `open(directory, sessionId)`，目录和归属会话由宿主提供。一个插件保留一个处理器，最新登记的优先；停用后恢复前一个，没有处理器时宿主提示终端插件没有加载，执行失败弹提示条。
 - `ui.terminalRunner(run)`：为回复里 shell 代码块（`bash`、`sh`、`zsh`、`shell`、`console`、`terminal`）的「在终端运行」登记处理器：人点击后调用 `run(command, sessionId)`，命令已去掉 `$ ` / `> ` 提示符和注释行，要带回车原样执行；登记规则和没有处理器时的提示同 `ui.terminalOpener`。
 - `ui.openPath(path)`：用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开；直接打开会运行它的（程序、脚本、应用）和网络共享上的改成在所在文件夹里指出来并提示；打不开时抛错（话给人看）。路径由逻辑入口算好经 `ctx.serve` 交回，逻辑入口不自己起系统的打开命令。
@@ -550,7 +551,7 @@ ui.queueAction({
 
 ## 复用产品的组件
 
-- `ui.Markdown`：`{ text, sessionId?, streaming?, className?, inline? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走。
+- `ui.Markdown`：`{ text, sessionId?, streaming?, className?, inline?, variant? }`，复用产品正文渲染；指定 sessionId 时文件签按该会话解析，不指定时继承所在转录。`inline` 只画一句话里的行内记号（代码、加粗、强调、删除线），包在一个带 `className` 的 `span` 里，链接和图片只留字；代码和加粗的样子由宿主定（卡片底色、正文色、等宽代码字号），不跟着正文的代码外观设置走。`variant: "document"` 是摊开读一整份文档（计划、报告）的排版：标题档拉开、章节前多留白，样子由宿主定，插件不自己写字号。
 - `ui.ModelSelect`：产品的模型下拉，`{ value, onChange(modelId), ariaLabel, inheritLabel, inheritDetail?, inheritedModelId?, inheritedSource?, disabled?, compact? }`；`value` 为空串是「跟随」，菜单顶上那一项就是它，选了 `onChange("")`；`compact` 只剩一枚箭头，贴在它管的按钮旁边当分体按钮（计划卡的「在新会话里执行」），选了什么由那颗按钮自己说。设置页里的用法见「设置分区」的 `session-models`。
 - `ui.ModelControls`：输入框右下角那两枚（模型、思考档位），样子和菜单都和输入框里的一样：`{ model, thinking?, onModelChange(modelId), onThinkingChange(level), disabled? }`；`model` 为空串、`thinking` 不给时显示默认模型和默认推理强度。不改哪个会话，只把选择交出来，给开新会话前先选好怎么跑的地方用（建议新会话的卡片、要不要另开的卡、侧边聊天交出去的卡），选的再交给 `ctx.sessions.launch`。
 

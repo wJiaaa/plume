@@ -58,6 +58,7 @@ export function Transcript({
 	edits,
 	renderUserMessage,
 	replyText,
+	request,
 }: Pick<ConversationProps, "renderUserMessage" | "replyText"> & {
 	view: SessionView;
 	/**
@@ -71,6 +72,11 @@ export function Transcript({
 	onQuote: (quote: DraftQuote) => void;
 	/** 撤回、编辑、分叉。不给就没有（插件的子会话）。 */
 	edits?: MessageEdits;
+	/**
+	 * 说了摆在转录里的等人卡（`ui.requestCard` 的 `place: "transcript"`，见 `ApprovalOverlay`）：接在这一轮的回复后面、运行行前面。
+	 * 等着的总是在跑的那一轮，所以只在窗口挂到最新时画；翻到更早几轮时不画，回到最新才看得到。
+	 */
+	request?: ReactNode;
 }) {
 	const id = view.summary.id;
 	const quoteActions = useQuoteActions();
@@ -472,6 +478,7 @@ export function Transcript({
 									)}
 									{range.end === allBlocks.length && (
 										<>
+											{request}
 											{/* 一整轮都在，不随每次工具调用来去；结论在来的时候这一行只是看不见、高度不变。见 `RunningRow`。 */}
 											<RunningRow
 												running={running}

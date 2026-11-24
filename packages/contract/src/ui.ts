@@ -494,6 +494,13 @@ export interface RequestCardProps {
 	fallback: ReactNode;
 }
 
+/**
+ * `ui.requestCard` 的卡摆在哪。`composer`：压在输入框正上方，和审批卡同一格，适合要人马上答、和回复内容无关的（提问、表单）。
+ * `transcript`：画在转录末尾、接着这一轮的回复，像回复的一部分，适合答案要对着回复读的（计划）；转录翻到更早几轮时不画，
+ * 回到最新才看得到。子会话（侧边聊天、子 Agent）的卡浮在父会话的输入框上方时不论选哪个都在那一格：父会话的转录里没有它的回复。
+ */
+export type RequestCardPlace = "composer" | "transcript";
+
 /** 始终位于主输入框上方的一整行，不随转录滚动或浮到侧边。 */
 export interface ComposerAboveProps {
 	session: SessionView;
@@ -516,6 +523,11 @@ export interface MarkdownProps {
 	 * 结构化回报里一条记录的一句话用它：交给整个 Markdown 会包出段落，原样摆着反引号又像一份没排版的草稿。
 	 */
 	inline?: boolean;
+	/**
+	 * 排版。缺省是回复正文那一套；`document` 是摊开读一整份文档（计划、报告）的排版：标题档拉开（约 1.43 / 1.29 / 1.14 倍），
+	 * 章节前多留白，行高稍紧，读起来是一份分了节的文件，不是一段回复。只排版，链接、文件签、代码块照旧。
+	 */
+	variant?: "document";
 }
 
 export interface ComposerItemProps {
@@ -989,10 +1001,10 @@ export interface UiContext {
 	 */
 	agentDelivery(component: ComponentType<AgentDeliveryProps>): void;
 	/**
-	 * 当前项目的系统打开方式；复用文件预览的默认目标和菜单。缺省是一整行「在 某应用 中打开」；`compact` 只写应用名，
-	 * 放在一行的右端（环境卡片的页头）。
+	 * 用系统里的应用打开 `path`（目录或文件）；复用文件预览的默认目标和菜单。缺省是一整行「在 某应用 中打开」；`compact` 只写应用名，
+	 * 放在一行的右端（环境卡片的页头）；`compact: "icon"` 只剩应用图标和一枚箭头，一颗带框的分体按钮，放在面板顶栏这种一排图标按钮里。
 	 */
-	readonly ProjectOpener: ComponentType<{ path: string; compact?: boolean }>;
+	readonly ProjectOpener: ComponentType<{ path: string; compact?: boolean | "icon" }>;
 	/**
 	 * 人明确选择入口时在主窗口打开一个会话，和点侧栏里那一行一样；不会自动发送，不替人换屏（只在人点了插件界面上的按钮时调，
 	 * 如「打开上次会话」打开插件经 `ctx.sessions.launch` 开出来的会话）。没有的会话抛错。
@@ -1030,8 +1042,9 @@ export interface UiContext {
 	/**
 	 * 给 `run.request` 画卡，见 `RequestCardProps`。`kind` 是 `HumanRequest.kind`；order 和让位规则同 `toolCard`：渲染出错时让给下一个，
 	 * 都不行用产品的通用卡。
+	 * `place` 定卡摆在哪（见 `RequestCardPlace`，默认 `composer`），按这个 kind 排在最前的那一个注册者的为准（它渲染出错、让给下一个时卡不挪地方）。
 	 */
-	requestCard(kind: string, component: ComponentType<RequestCardProps>, options?: { order?: number }): void;
+	requestCard(kind: string, component: ComponentType<RequestCardProps>, options?: { order?: number; place?: RequestCardPlace }): void;
 	/**
 	 * 往工作区加一个面板，标签按会话保留，宽度和收起偏好在窗口内共享。
 	 * 全屏按会话保存，盖满工作区；窄窗口也盖满工作区，正文和面板放不下横排时上下排列。

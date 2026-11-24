@@ -1,5 +1,7 @@
 /**
- * 计划模式交上来的计划，等人拍板的那张卡（`ui.requestCard`）：一行标题、一排动作；有评论时评论按序号列在卡上，下面接一个补充框。
+ * 计划模式交上来的计划，等人拍板的那张卡（`ui.requestCard`，`place: "transcript"`）：画在转录里、接着交计划的那一轮回复，
+ * 不压在输入框上方——人读完回复、顺着往下就是这张卡，批的是刚读到的东西。上面一条是「Plume 提出了一个计划」和这份计划的标题、倒计时和「打开计划」（「等你批准计划」由底下的运行行说），
+ * 下面一排动作；有评论时评论按序号列在卡上，下面接一个补充框。
  *
  * 计划本身在右栏的计划面板里读、划线评论（`PlanPanel.tsx`），评论落在这张卡上——序号和面板里那段字末尾的那枚一样，对得上号。
  * 四个动作各是一个按钮，键盘直达：Esc 修改，⌘↵ 主按钮，⇧⌘↵ 接受。窄窗口的面板区一次只摆一格，开面板会盖住这张卡，
@@ -12,12 +14,12 @@
 
 import type { Remote, RequestCardProps, UiContext } from "@plume/contract/ui";
 import { ApprovalExpiry, Button, IconButton, macKeyboard, MarkNumber, Scroller, shortcutLabel, Text, Textarea, useI18n } from "@plume/ui";
-import { MessageCircle, X } from "@plume/ui/icons";
+import { ListOrdered, MessageCircle, X } from "@plume/ui/icons";
 import { text as textStyles, textarea } from "@plume/styles";
 import { useEffect, useRef, useState } from "react";
 import type { PlanApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
-import { planFeedback, type PlanReply } from "./plan.ts";
+import { planFeedback, type PlanReply, planTitle, readPlanRequest } from "./plan.ts";
 import { removeComment, showPlan, useReview } from "./review.ts";
 
 const EMPTY: never[] = [];
@@ -39,7 +41,8 @@ function Keys({ keys }: { keys: string[] }) {
 
 export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string) {
 	return function PlanApproval({ request, sessionId, answer: reply, decline, permission, allowAuto, compact, queued, fallback }: RequestCardProps) {
-		const plan = typeof request.payload === "string" ? request.payload : "";
+		const payload = readPlanRequest(request.payload);
+		const plan = payload?.plan ?? "";
 		const t = MESSAGES[useI18n().resolvedLocale];
 		const review = useReview(sessionId);
 		const comments = review?.requestId === request.toolCallId ? review.comments : EMPTY;
@@ -68,13 +71,14 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 
 		// 每份计划交上来时替人打开一次面板；人关了不追。窄窗口开面板会盖住这张卡，不开。
 		useEffect(() => {
-			if (showPlan(sessionId, request.toolCallId, plan) && !compact) ui.openPanel(panel, sessionId);
+			if (payload && showPlan(sessionId, request.toolCallId, plan, payload.file) && !compact) ui.openPanel(panel, sessionId);
 			// oxlint-disable-next-line react-hooks/exhaustive-deps -- 每份计划交上来时只开一次面板，plan、compact 变了不追
 		}, [sessionId, request.toolCallId]);
-		// 卡片一出来焦点就在它身上，快捷键不用先点一下。
-		useEffect(() => cardRef.current?.focus(), []);
+		// 卡片一出来焦点就在它身上，快捷键不用先点一下。卡在转录里：不为了焦点滚动，人往上翻着读回复时不被拽到底下来。
+		useEffect(() => cardRef.current?.focus({ preventScroll: true }), []);
 
 		if (!plan.trim()) return <>{fallback}</>;
+		const title = planTitle(plan);
 
 		/*
 		 * 「接受并开启自动模式」只在请求批准档时给：已经是帮我批准或完全访问，这颗按钮要么什么也不改，要么把完全访问降回去——
@@ -160,9 +164,19 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 		return (
 			<div ref={cardRef} tabIndex={-1} onKeyDown={onKey} aria-busy={pending} data-approval-card="" data-approval-plan="" className="plume-plan-card">
 				<div className="plume-plan-card-head">
-					<Text size="body" weight="medium" className="plume-plan-card-title" data-approval-title="">
-						{t.approvalTitle}
-					</Text>
+					{/* 和输入框上计划模式的开关、转录里「提交计划」那一行同一枚。 */}
+					<ListOrdered size={15} strokeWidth={1.8} aria-hidden className="plume-plan-card-icon" />
+					{/* 「等你批准计划」由底下的运行行说（`run.request` 的 `waiting`），卡上不再说一遍。 */}
+					<div className="plume-plan-card-heading">
+						<Text size="body" weight="medium" className="plume-plan-card-title" data-approval-title="">
+							{t.approvalTitle}
+						</Text>
+						{title && (
+							<Text size="caption" tone="muted" className="plume-plan-card-subject" data-approval-plan-title="" data-plume-tip={title}>
+								{title}
+							</Text>
+						)}
+					</div>
 					{request.expiresAt !== undefined && <ApprovalExpiry at={request.expiresAt} />}
 					{queued > 0 && (
 						<Text size="caption" tone="faint" data-approval-queued="">
@@ -175,123 +189,125 @@ export function planApproval(ui: UiContext, api: Remote<PlanApi>, panel: string)
 						</Text>
 					</button>
 				</div>
-				{compact && (
-					<Scroller className="plume-plan-card-body">
-						<ui.Markdown text={plan} sessionId={sessionId} />
-					</Scroller>
-				)}
-				{editing ? (
-					<form
-						className="plume-plan-revise"
-						onSubmit={(event) => {
-							event.preventDefault();
-							revise();
-						}}
-					>
-						{comments.length > 0 && (
-							<Scroller className="plume-plan-comments">
-								<ol className="plume-plan-comment-list" data-plan-comment-list="">
-									{comments.map((comment, index) => (
-										<li key={comment.id} className="plume-plan-comment" data-plan-comment-chip="">
-											<MarkNumber n={index + 1} className="plume-plan-comment-mark" />
-											<div className="plume-plan-comment-main">
-												<Text as="p" size="caption" tone="faint" className="plume-plan-comment-quote">
-													<MessageCircle size={12} strokeWidth={1.8} aria-hidden />
-													<span>{comment.quote.replace(/\s+/g, " ")}</span>
-												</Text>
-												<Text as="p" size="label" className="plume-plan-comment-text">
-													{comment.text}
-												</Text>
-											</div>
-											<IconButton
-												size="sm"
-												icon={<X size={13} strokeWidth={1.9} />}
-												label={t.deleteComment}
-												onClick={() => removeComment(sessionId, comment.id)}
-											/>
-										</li>
-									))}
-								</ol>
-							</Scroller>
-						)}
-						<div className="plume-plan-input">
-							<Textarea
-								autoFocus={revising}
-								rows={2}
-								value={said}
-								disabled={pending}
-								placeholder={comments.length > 0 ? t.addMore : t.revisePlaceholder}
-								aria-label={t.revise}
-								onChange={(event) => setSaid(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.nativeEvent.isComposing) return;
-									if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-										event.preventDefault();
-										accept();
-									} else if (event.key === "Enter" && !event.shiftKey) {
-										event.preventDefault();
-										revise();
-									} else if (event.key === "Escape") {
-										event.preventDefault();
-										event.stopPropagation();
-										cancelRevise();
-									}
-								}}
-								className={`plume-plan-textarea ${textarea}`}
-								data-plan-revise-input=""
-							/>
-						</div>
-						<div className="plume-plan-actions" data-approval-plan-actions="">
-							{/* 有评论时这一排仍然能拒绝、能接受：评论只是把「修订」顶成主按钮，别的路一条不少。 */}
-							{comments.length > 0 ? (
-								<Button variant="soft" disabled={pending} onClick={reject} data-plan-action="reject">
-									{t.reject}
-								</Button>
-							) : (
-								<Button variant="soft" disabled={pending} onClick={cancelRevise}>
-									{t.cancel}
-									<Keys keys={["Esc"]} />
-								</Button>
+				<div className="plume-plan-card-main">
+					{compact && (
+						<Scroller className="plume-plan-card-body">
+							<ui.Markdown text={plan} sessionId={sessionId} />
+						</Scroller>
+					)}
+					{editing ? (
+						<form
+							className="plume-plan-revise"
+							onSubmit={(event) => {
+								event.preventDefault();
+								revise();
+							}}
+						>
+							{comments.length > 0 && (
+								<Scroller className="plume-plan-comments">
+									<ol className="plume-plan-comment-list" data-plan-comment-list="">
+										{comments.map((comment, index) => (
+											<li key={comment.id} className="plume-plan-comment" data-plan-comment-chip="">
+												<MarkNumber n={index + 1} className="plume-plan-comment-mark" />
+												<div className="plume-plan-comment-main">
+													<Text as="p" size="caption" tone="faint" className="plume-plan-comment-quote">
+														<MessageCircle size={12} strokeWidth={1.8} aria-hidden />
+														<span>{comment.quote.replace(/\s+/g, " ")}</span>
+													</Text>
+													<Text as="p" size="label" className="plume-plan-comment-text">
+														{comment.text}
+													</Text>
+												</div>
+												<IconButton
+													size="sm"
+													icon={<X size={13} strokeWidth={1.9} />}
+													label={t.deleteComment}
+													onClick={() => removeComment(sessionId, comment.id)}
+												/>
+											</li>
+										))}
+									</ol>
+								</Scroller>
 							)}
+							<div className="plume-plan-input">
+								<Textarea
+									autoFocus={revising}
+									rows={2}
+									value={said}
+									disabled={pending}
+									placeholder={comments.length > 0 ? t.addMore : t.revisePlaceholder}
+									aria-label={t.revise}
+									onChange={(event) => setSaid(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.nativeEvent.isComposing) return;
+										if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+											event.preventDefault();
+											accept();
+										} else if (event.key === "Enter" && !event.shiftKey) {
+											event.preventDefault();
+											revise();
+										} else if (event.key === "Escape") {
+											event.preventDefault();
+											event.stopPropagation();
+											cancelRevise();
+										}
+									}}
+									className={`plume-plan-textarea ${textarea}`}
+									data-plan-revise-input=""
+								/>
+							</div>
+							<div className="plume-plan-actions" data-approval-plan-actions="">
+								{/* 有评论时这一排仍然能拒绝、能接受：评论只是把「修订」顶成主按钮，别的路一条不少。 */}
+								{comments.length > 0 ? (
+									<Button variant="soft" disabled={pending} onClick={reject} data-plan-action="reject">
+										{t.reject}
+									</Button>
+								) : (
+									<Button variant="soft" disabled={pending} onClick={cancelRevise}>
+										{t.cancel}
+										<Keys keys={["Esc"]} />
+									</Button>
+								)}
+								<span className="plume-plan-spacer" />
+								{handoffButton}
+								<span className="plume-plan-main">
+									<Button variant="soft" disabled={pending} onClick={accept} {...(notesTip ? { label: notesTip } : {})} data-plan-action="accept">
+										{t.accept}
+										<Keys keys={["⌘", "↩"]} />
+									</Button>
+									<Button type="submit" variant="primary" disabled={pending || !feedback} data-plan-send-revision="">
+										{t.sendRevision}
+										<Keys keys={["↩"]} />
+									</Button>
+								</span>
+							</div>
+						</form>
+					) : (
+						<div className="plume-plan-actions" data-approval-plan-actions="">
+							<Button variant="soft" disabled={pending} onClick={reject} data-plan-action="reject">
+								{t.reject}
+							</Button>
+							<Button variant="soft" disabled={pending} onClick={() => setRevising(true)} data-plan-action="revise">
+								{t.revise}
+								<Keys keys={["Esc"]} />
+							</Button>
 							<span className="plume-plan-spacer" />
 							{handoffButton}
 							<span className="plume-plan-main">
-								<Button variant="soft" disabled={pending} onClick={accept} {...(notesTip ? { label: notesTip } : {})} data-plan-action="accept">
+								{offerAuto && (
+									<Button variant="soft" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
+										{t.acceptAuto}
+										<Keys keys={["⇧", "⌘", "↩"]} />
+									</Button>
+								)}
+								<Button variant="primary" disabled={pending} onClick={accept} data-plan-action="accept">
 									{t.accept}
 									<Keys keys={["⌘", "↩"]} />
 								</Button>
-								<Button type="submit" variant="primary" disabled={pending || !feedback} data-plan-send-revision="">
-									{t.sendRevision}
-									<Keys keys={["↩"]} />
-								</Button>
 							</span>
 						</div>
-					</form>
-				) : (
-					<div className="plume-plan-actions" data-approval-plan-actions="">
-						<Button variant="soft" disabled={pending} onClick={reject} data-plan-action="reject">
-							{t.reject}
-						</Button>
-						<Button variant="soft" disabled={pending} onClick={() => setRevising(true)} data-plan-action="revise">
-							{t.revise}
-							<Keys keys={["Esc"]} />
-						</Button>
-						<span className="plume-plan-spacer" />
-						{handoffButton}
-						<span className="plume-plan-main">
-							{offerAuto && (
-								<Button variant="soft" disabled={pending} onClick={acceptAuto} data-plan-action="accept-auto">
-									{t.acceptAuto}
-									<Keys keys={["⇧", "⌘", "↩"]} />
-								</Button>
-							)}
-							<Button variant="primary" disabled={pending} onClick={accept} data-plan-action="accept">
-								{t.accept}
-								<Keys keys={["⌘", "↩"]} />
-							</Button>
-						</span>
-					</div>
-				)}
+					)}
+				</div>
 			</div>
 		);
 	};

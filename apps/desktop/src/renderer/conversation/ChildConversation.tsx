@@ -127,6 +127,21 @@ export function ChildConversation({
 								{...(edits ? { edits } : {})}
 								{...(renderUserMessage ? { renderUserMessage } : {})}
 								{...(replyText ? { replyText } : {})}
+								{...(approval
+									? {
+											request: (
+												<ApprovalOverlay
+													request={approval}
+													queued={view.queuedApprovals}
+													sessionId={view.summary.id}
+													compact={false}
+													place="transcript"
+													respond={async (decision) => await respond(view.summary.id, approval.toolCallId, decision)}
+													answer={async (value) => await answer(view.summary.id, approval.toolCallId, value)}
+												/>
+											),
+										}
+									: {})}
 							/>
 						</FileScope.Provider>
 					</Arrival.Provider>
@@ -159,6 +174,7 @@ export function ChildConversation({
 					queued={view.queuedApprovals}
 					sessionId={view.summary.id}
 					compact={false}
+					place="composer"
 					respond={async (decision) => await respond(view.summary.id, approval.toolCallId, decision)}
 					answer={async (value) => await answer(view.summary.id, approval.toolCallId, value)}
 				/>

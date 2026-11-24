@@ -16,7 +16,7 @@
  * - 截图浮层、钉图窗口的组件同一时间各只有一个，后注册的生效。插件停用时连同它的全局快捷键一起撤掉。
  */
 
-import type { AgentService, Locale, OutgoingMessage, PluginStatus, RegisteredToolInfo, SessionView } from "@plume/contract";
+import type { AgentService, Locale, OutgoingMessage, PendingRequest, PluginStatus, RegisteredToolInfo, SessionView } from "@plume/contract";
 import type {
 	CodeBlockProps,
 	ComposerAboveProps,
@@ -48,6 +48,7 @@ import type {
 	PinnedShotProps,
 	ProjectInfo,
 	QueueAction,
+	RequestCardPlace,
 	RequestCardProps,
 	QuoteAction,
 	DraftQuote,
@@ -135,6 +136,8 @@ const toolPrefixes = registry.handlers<Entry<ToolCardProps>>();
 const inlineCards = new WeakMap<Entry<ToolCardProps>, true | ((args: Record<string, unknown>, argumentsText: string | undefined) => boolean)>();
 /** `ui.requestCard`：按 `HumanRequest.kind` 认的、`run.request` 的卡。 */
 const requestCards = registry.handlers<Entry<RequestCardProps>>();
+/** `ui.requestCard(…, { place: "transcript" })`：卡画在转录末尾，不压在输入框上方。没登记在这里的都是 `composer`。 */
+const transcriptCards = new WeakSet<Entry<RequestCardProps>>();
 
 /** `keyName` 是按什么认这一类（工具名、`HumanRequest.kind`、语言），只用来说清报错。 */
 // i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志，界面上不显示。
@@ -1504,7 +1507,13 @@ function context(name: string, agent: Remote<AgentService>): UiContext {
 			if (inline === true || typeof inline === "function") inlineCards.set(entry, inline);
 		}),
 		toolLine: live((tool, line, options) => registerToolLine(name, tool, line, options)),
-		requestCard: live((kind, component, options) => register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind")),
+		requestCard: live((kind, component, options) => {
+			const place = options?.place ?? "composer";
+			// i18n-exempt：给插件作者的报错，被 loadPluginUis 接住只进日志。
+			if (place !== "composer" && place !== "transcript") throw new Error(`等人卡片 ${kind} 的 place 只能是 composer 或 transcript`);
+			const entry = register(requestCards, "等人卡片", name, kind, component, options, "请求的 kind");
+			if (place === "transcript") transcriptCards.add(entry);
+		}),
 		panel: live((id, component, options) => registerPanel(name, id, component, options)),
 		page: live((id, component, options) => registerPage(name, id, component, options)),
 		skin: (skin) => {
@@ -1856,6 +1865,16 @@ async function allowAuto(): Promise<void> {
 	if (settingsView()?.permissionMode !== "ask") return;
 	await modelsAgent().setPermissionMode("auto");
 	await refreshModels();
+}
+
+/**
+ * 这张卡摆在哪：审批卡和没人登记的等人卡都在输入框上方；等人卡按这个 kind 排在最前的那一个注册者说的。
+ * 登记变了答案跟着变，调用方用 `usePluginRegistrations` 的修订号重问。
+ */
+export function requestPlace(request: PendingRequest): RequestCardPlace {
+	if (request.type !== "request") return "composer";
+	const entry = requestCards.get(request.kind)?.[0];
+	return entry && transcriptCards.has(entry) ? "transcript" : "composer";
 }
 
 /** `run.request` 的卡：按 `kind` 找插件登记的，渲染出错让给下一个，都不行用 `fallback`（产品的通用卡）。 */

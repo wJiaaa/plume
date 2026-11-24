@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { test } from "vitest";
 import type {
 	ContextCompact,
@@ -213,7 +213,13 @@ test("交计划：只能人答；批准就地关掉开关，拒绝结束这一�
 	await plan.api.set("main", true);
 	assert.equal((await plan.submit("child", "# 计划", { accept: true })).output.isError, true);
 	const declined = await plan.submit("main", "# 改登录\n\n概要");
-	assert.deepEqual(declined.asked, [{ kind: SUBMIT_PLAN, title: "Plume 提出了一个计划", payload: "# 改登录\n\n概要", waiting: "等你批准计划" }]);
+	// 交上来就写成文件，卡和面板拿着它的路径（面板顶栏「在编辑器中打开」）。
+	const drafted = (declined.asked[0] as { payload: { file: string } }).payload.file;
+	assert.match(drafted, /[\\/]plans[\\/]plan-\d{8}-\d{6}\.md$/);
+	assert.equal(await readFile(drafted, "utf8"), "# 改登录\n\n概要\n");
+	assert.deepEqual(declined.asked, [
+		{ kind: SUBMIT_PLAN, title: "Plume 提出了一个计划", payload: { plan: "# 改登录\n\n概要", file: drafted }, waiting: "等你批准计划" },
+	]);
 	assert.equal(declined.output.terminate, "done");
 	assert.ok((await plan.execute("main", "edit")).reached?.readOnly);
 	// 交回来的不成形（空的修改意见、认不出的回答）：和什么都没说的拒绝一样，这一轮停下。
@@ -223,9 +229,12 @@ test("交计划：只能人答；批准就地关掉开关，拒绝结束这一�
 	}
 
 	const approved = await plan.submit("main", "# 改登录\n\n概要", { accept: true });
-	assert.match(approved.output.output, /^The user approved the plan\. Plan mode is off; every tool is available again\. The plan is saved at .*plan-\d+\.md\./);
+	assert.match(
+		approved.output.output,
+		/^The user approved the plan\. Plan mode is off; every tool is available again\. The plan is saved at .*plan-\d{8}-\d{6}\.md\./,
+	);
 	const { file, approvedAt } = approved.output.details as { file: string; approvedAt: number };
-	assert.equal(file, join(dirname(file), `plan-${approvedAt}.md`));
+	assert.equal(file, (approved.asked[0] as { payload: { file: string } }).payload.file, "批准的就是交上来时写下的那份文件");
 	assert.equal(await readFile(file, "utf8"), "# 改登录\n\n概要\n");
 	assert.deepEqual(approved.output.details, { kind: "plan", plan: "# 改登录\n\n概要", approved: true, approvedAt, file });
 	assert.equal((await plan.execute("main", "edit")).reached?.readOnly, undefined);
@@ -322,7 +331,9 @@ test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停�
 	const revised = await plan.submit("main", "# 改登录", { accept: false, feedback: "  先别动数据库  " });
 	assert.match(revised.output.output, /Feedback: 先别动数据库[\s\S]*Revise the plan/);
 	assert.equal(revised.output.terminate, undefined);
-	assert.deepEqual(revised.output.details, { kind: "plan", plan: "# 改登录", approved: false, feedback: "先别动数据库" });
+	const { file: revisedFile, ...revisedDetails } = revised.output.details as { file: string };
+	assert.deepEqual(revisedDetails, { kind: "plan", plan: "# 改登录", approved: false, feedback: "先别动数据库" });
+	assert.match(revisedFile, /plan-\d{8}-\d{6}\.md$/);
 	assert.ok((await plan.execute("main", "edit")).reached?.readOnly);
 
 	const approved = await plan.submit("main", "# 改登录", { accept: true, note: "> 第二节\n\n注意兼容" });
@@ -330,6 +341,8 @@ test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停�
 	const details = approved.output.details as { notes?: string; approvedAt?: number };
 	assert.equal(details.notes, "> 第二节\n\n注意兼容");
 	assert.equal(typeof details.approvedAt, "number");
+	// 批准时带着注意事项重写同一个文件：交给新会话、压缩后重读的都是这一份。
+	assert.equal(await readFile((details as { file: string }).file, "utf8"), "# 改登录\n\n## 执行时注意\n> 第二节\n\n注意兼容\n");
 });
 
 test("压缩把批准计划的那次结果折进摘要头时，计划接在头的第一条后面；结果还留着时不重复；交给新会话的不写成执行它", async () => {

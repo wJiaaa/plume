@@ -396,13 +396,14 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 					</div>
 				)}
 				{view && <ComposerAbove session={view} />}
-				{/* 等人决定的那一次调用压在输入框正上方，对话在它上面照样能翻。 */}
+				{/* 等人决定的那一次调用压在输入框正上方，对话在它上面照样能翻。说了摆在转录里的卡（计划）由转录画，见 `Conversation`。 */}
 				{view && (
 					<ApprovalOverlay
 						request={view.approval}
 						queued={view.queuedApprovals}
 						sessionId={view.summary.id}
 						compact={layoutMode(windowWidth) === "compact"}
+						place="composer"
 						respond={async (decision) => {
 							if (view.approval) await agent.respond(view.summary.id, view.approval.toolCallId, decision);
 						}}

@@ -3,10 +3,11 @@
  *
  * - 输入框底下那排的开关（`ui.composerItem`），挨着权限：关着是一颗淡色图标，开着带字、用强调色。新对话里拨的是
  *   逻辑入口记着的新对话开关，第一句话发出去时交给建出来的会话。
- * - 计划卡（`ui.requestCard`，`PlanApproval.tsx`）：等人拍板，拒绝、修改、接受、接受并开启自动模式。
+ * - 计划卡（`ui.requestCard`，`PlanApproval.tsx`）：等人拍板，拒绝、修改、接受、接受并开启自动模式。摆在转录里、接着这一轮的回复
+ *   （`place: "transcript"`），不压在输入框上方。
  * - 计划面板（`PlanPanel.tsx`）：计划在右栏按 Markdown 读，等审批时划线评论。计划交上来时由计划卡替人打开一次。
- * - `submit_plan` 在转录里读成一行「提交计划 标题」（`ui.toolLine`），和别的工具一样并进一段活：批没批、交给了谁，
- *   审批卡和交出去的会话那一条（宿主画在输入框上方）已经说了。
+ * - `submit_plan` 在转录里读成一行「提交计划 标题」（`ui.toolLine`；等人拍板时扫着光说「正在提交计划」，计划卡就接在它下面），和别的工具一样并进一段活：批没批、交给了谁，
+ *   计划卡（接在回复后面）和交出去的会话那一条（宿主画在输入框上方）已经说了。
  * - 环境卡片里「计划」一节（`ui.environmentSection`，`PlansSection.tsx`）：批准过的每一份一行，点了在面板里摊开那一份。
  */
 
@@ -96,9 +97,12 @@ export default {
 			// 没交过计划的对话里没什么可看：只从计划卡、环境卡片打开，不在开始页列出。
 			listed: false,
 		});
-		ui.requestCard(SUBMIT_PLAN, planApproval(ui, api, PANEL));
+		// 摆在转录里：计划是这一轮回复的结论，批它时要对着回复读，卡接在回复后面，而不是和提问卡一样压在输入框上方。
+		ui.requestCard(SUBMIT_PLAN, planApproval(ui, api, PANEL), { place: "transcript" });
 		ui.toolLine(SUBMIT_PLAN, {
 			verb: (locale) => MESSAGES[locale].submitted,
+			// 等人拍板时还在进行：这一行扫着光说「正在提交计划」，计划卡就在它下面；答完了才是「提交计划」。
+			verbFor: ({ live }, locale) => (live ? MESSAGES[locale].submitting : undefined),
 			subject: planSubject,
 			// 和输入框上计划模式那颗开关同一枚。
 			icon: ListOrdered,

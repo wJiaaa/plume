@@ -6,13 +6,16 @@
  *
  * 审批（放不放行）只有这一张卡，插件换不掉。
  * 同一格也摆等人给数据的卡（`run.request`，提问卡、计划卡、表单）：插件按 `kind` 登记（`ui.requestCard`），没有时退回一张只能「不答」的通用卡。
+ * 登记时说了 `place: "transcript"` 的（计划卡）不在这一格，由转录画在末尾、接着这一轮的回复（`Transcript` 的 `request`），
+ * 用的也是这个组件，`place` 说这一处只画哪一种。
  */
 
 import type { ApprovalDecision, ApprovalRequest, HumanRequest, PendingRequest, ToolKind } from "@plume/contract";
+import type { RequestCardPlace } from "@plume/contract/ui";
 import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } from "@plume/ui";
 import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";
-import { RequestCardSlot } from "../plugins.tsx";
+import { RequestCardSlot, requestPlace, usePluginRegistrations } from "../plugins.tsx";
 
 /** 卡片右上角的小标签：要做的是哪一类事（`ApprovalRequest.kind` 是 `ToolKind` 里这几种时）；别的照原样写。 */
 const KIND_LABEL: Partial<Record<string, MessageKey>> = {
@@ -32,6 +35,7 @@ function approvalReason(reason: string | undefined, detail: string): string | un
  * `from`：问的是插件的子会话（侧边聊天、子 Agent），卡上写明是它在请求，给它的标题。
  * `compact`：窄窗口，面板区一次只摆一格，交给插件画的等人卡（打开面板会盖住卡片）。
  * `queued`：排在这张后面还在等的张数。`respond` 答审批（等人给数据的卡上「不答」也是它的 `reject`），`answer` 交回数据。
+ * `place`：这一处只画摆在这里的卡（见 `requestPlace`）。不给就都画：子会话的卡浮在父会话输入框上方，父会话的转录里没有它的回复。
  */
 export function ApprovalOverlay({
 	request,
@@ -41,6 +45,7 @@ export function ApprovalOverlay({
 	answer,
 	from,
 	compact,
+	place,
 }: {
 	request: PendingRequest | undefined;
 	queued?: number | undefined;
@@ -49,11 +54,15 @@ export function ApprovalOverlay({
 	answer: (value: unknown) => Promise<void>;
 	from?: string;
 	compact: boolean;
+	place?: RequestCardPlace;
 }) {
-	if (!request) return null;
+	// 插件登记变了，卡摆在哪跟着变。
+	usePluginRegistrations();
+	if (!request || (place !== undefined && requestPlace(request) !== place)) return null;
 	const source = from !== undefined ? { from } : {};
+	// 在转录里和上面那一行（交上这张卡的那次调用）、下面的运行行各隔开一截，三样不挤在一起。
 	return (
-		<div data-approval-region="" className="flex shrink-0 justify-center pb-2">
+		<div data-approval-region={place ?? "composer"} className={place === "transcript" ? "flex pt-3 pb-3" : "flex shrink-0 justify-center pb-2"}>
 			{request.type === "request" ? (
 				<RequestCardSlot
 					request={request}

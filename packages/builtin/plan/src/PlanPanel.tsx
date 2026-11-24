@@ -1,15 +1,20 @@
 /**
  * 右栏的计划面板：把计划摊开读，等审批时划一段字就地留评论。
  *
+ * 顶上一条固定的栏：计划文件的名字（批准过好几份时点它切换），右边「在编辑器中打开」（`ui.ProjectOpener` 的图标样子，
+ * 打开的是交计划时写下的那份文件）和 `</>`（看 Markdown 原文）。下面直接是计划正文，不套卡片：按文档排版画
+ * （`ui.Markdown` 的 `variant: "document"`，照 t3code 计划卡的正文），照常折行；正文一列照 t3code 的 Markdown 文件预览，最宽 896px，面板宽了居中。
+ *
  * 评论本身列在审批卡上（`PlanApproval.tsx`），由那里修订或带着接受；面板上那段字画下划线、末尾挂一枚和卡上同号的序号。
  * 批准或打回以后面板只读，那份计划留着看。等审批时正文用审批卡上那一份；其余时候从会话消息里读最后交上来的那份，
- * 重启以后也还在。一个会话批准过好几份时，状态那一行右边能切到别的批准过的那几份，打回的不列。
+ * 重启以后也还在。一个会话批准过好几份时，点顶栏的文件名能切到别的批准过的那几份，打回的不列。
  */
 
 import type { PanelProps, UiContext } from "@plume/contract/ui";
 import {
 	Button,
 	Caret,
+	CodeBlock,
 	IconButton,
 	MarkNumber,
 	MenuBody,
@@ -18,12 +23,13 @@ import {
 	Popover,
 	relativeTime,
 	Scroller,
+	ScrollText,
 	Text,
 	Textarea,
 	useI18n,
 	usePopover,
 } from "@plume/ui";
-import { ArrowUp, ListOrdered, MessageSquare } from "@plume/ui/icons";
+import { ArrowUp, Code, ListOrdered, MessageSquare } from "@plume/ui/icons";
 import { textarea } from "@plume/styles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { offsetIn, paint, rangeIn, selectedText } from "./anchor.ts";
@@ -89,6 +95,8 @@ export function planPanel(ui: UiContext) {
 		const [draft, setDraft] = useState<Draft | null>(null);
 		const [note, setNote] = useState("");
 		const [marks, setMarks] = useState<Mark[]>([]);
+		/** 看 Markdown 原文；评论只能划在渲染好的正文上。 */
+		const [source, setSource] = useState(false);
 
 		// 已经评论过的那几段一直标着；换了一份计划或者审批结束，标记跟着评论一起没了。
 		useEffect(() => {
@@ -111,7 +119,8 @@ export function planPanel(ui: UiContext) {
 			const watch = new ResizeObserver(place);
 			watch.observe(body);
 			return () => watch.disconnect();
-		}, [owner, comments, text]);
+			// 切到原文再切回来正文是新画的一份：标记跟着重新挂。
+		}, [owner, comments, text, source]);
 
 		// 正在写评论的那一段：焦点进了评论框，原生选区就没了，得另外标着人才知道在评哪儿。
 		const start = draft?.start;
@@ -157,6 +166,10 @@ export function planPanel(ui: UiContext) {
 
 		if (!sessionId || text === null) return <PanelEmpty icon={ListOrdered} title={t.none} />;
 
+		// 摊开的这份计划的文件：等审批时是交上来时写下的那份，批准过的是批准时（带着注意事项）重写的那份。旧会话里交的没有文件。
+		const file = pending && review ? review.file : picked ? picked.file : current?.file;
+		const fileName = file?.split(/[\\/]/).pop() ?? t.title;
+
 		const pick = () => {
 			const body = bodyRef.current;
 			const selection = window.getSelection();
@@ -183,44 +196,68 @@ export function planPanel(ui: UiContext) {
 
 		return (
 			<>
-				<Scroller className="plume-plan-panel" contentClassName="plume-plan-body" scrollRef={scrollRef}>
-					{pending ? (
-						<Text as="p" size="caption" tone="faint" className="plume-plan-status" data-plan-hint="">
-							<MessageSquare size={13} strokeWidth={1.8} aria-hidden />
-							{t.commentHint}
-						</Text>
-					) : (
-						<div className="plume-plan-status">
-							<Text size="caption" tone={picked || approved ? "accent" : "faint"} className="plume-plan-grow" data-plan-status="">
-								{picked || approved ? t.approved : t.declined}
-							</Text>
-							{switchable && (
-								<Button size="xs" variant="subtle" menu={menu.open} onClick={menu.toggle} data-plan-switch="">
-									{t.approvedCount(plans.length)}
-									<Caret open={menu.open} />
-								</Button>
+				<div className="plume-plan-view">
+					<div className="plume-plan-bar plume-scroll" data-plan-bar="">
+						{switchable ? (
+							<button type="button" className="plume-plan-file" onClick={menu.toggle} aria-haspopup="menu" aria-expanded={menu.open} data-plan-switch="">
+								<Caret open={menu.open} from="right" />
+								<Text size="label" weight="medium" className="plume-plan-file-name" data-plume-tip={file} data-plan-file="">
+									<ScrollText text={fileName} />
+								</Text>
+							</button>
+						) : (
+							<span className="plume-plan-file">
+								<Text size="label" weight="medium" className="plume-plan-file-name" data-plume-tip={file} data-plan-file="">
+									<ScrollText text={fileName} />
+								</Text>
+							</span>
+						)}
+						{file && <ui.ProjectOpener path={file} compact="icon" />}
+						<Button
+							size="sm"
+							icon={<Code size={14} strokeWidth={1.8} />}
+							label={source ? t.showRendered : t.showSource}
+							pressed={source}
+							onClick={() => {
+								setDraft(null);
+								setSource((was) => !was);
+							}}
+							data-plan-source=""
+						/>
+					</div>
+					<Scroller className="plume-plan-panel" scrollRef={scrollRef}>
+						<div className="plume-plan-column">
+							{pending && !source && (
+								<Text as="p" size="caption" tone="faint" className="plume-plan-hint" data-plan-hint="">
+									<MessageSquare size={13} strokeWidth={1.8} aria-hidden />
+									{t.commentHint}
+								</Text>
+							)}
+							{source ? (
+								<CodeBlock>{text}</CodeBlock>
+							) : (
+								/* 松开鼠标时取选区：双击、三击选词选段也是松开之后才定。 */
+								<div className="plume-plan-anchor">
+									<div
+										ref={bodyRef}
+										onMouseUp={(event) => {
+											if (event.button === 0) requestAnimationFrame(pick);
+										}}
+										data-plan-body=""
+									>
+										<ui.Markdown text={text} sessionId={sessionId} variant="document" />
+									</div>
+									{/* 每条评论那段字的末尾一枚序号，和审批卡上那条评论前面的数一样。不接鼠标：挡着它就划不了后面的字。 */}
+									{marks.map((mark) => (
+										<MarkNumber key={mark.id} n={mark.n} className="plume-plan-mark" data-plan-mark={mark.n} style={{ left: mark.x, top: mark.y }} />
+									))}
+								</div>
 							)}
 						</div>
-					)}
-					{/* 松开鼠标时取选区：双击、三击选词选段也是松开之后才定。 */}
-					<div className="plume-plan-anchor">
-						<div
-							ref={bodyRef}
-							onMouseUp={(event) => {
-								if (event.button === 0) requestAnimationFrame(pick);
-							}}
-							data-plan-body=""
-						>
-							<ui.Markdown text={text} sessionId={sessionId} />
-						</div>
-						{/* 每条评论那段字的末尾一枚序号，和审批卡上那条评论前面的数一样。不接鼠标：挡着它就划不了后面的字。 */}
-						{marks.map((mark) => (
-							<MarkNumber key={mark.id} n={mark.n} className="plume-plan-mark" data-plan-mark={mark.n} style={{ left: mark.x, top: mark.y }} />
-						))}
-					</div>
-				</Scroller>
+					</Scroller>
+				</div>
 				{menu.open && (
-					<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="end" width="wide">
+					<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="start" width="wide">
 						<MenuBody>
 							{plans.map((plan) => (
 								<MenuItem

@@ -832,6 +832,61 @@
 		contain-intrinsic-size: auto 9000px;
 		margin: 0;
 	}
+	/*
+	 * 一整份文档的排版（`MarkdownProps.variant` 是 `document`，计划面板用它）：照 t3code 计划卡的正文。
+	 * 和回复正文只差在这几处——标题四档拉开到 20 / 18 / 16 / 14px（14px 正文下），章节前留白随之放大；行高稍紧；
+	 * 列表项更紧、缩进 1.25 倍；引用线跟着字色、字不退色；加粗一律 600；行内代码底色深一档。块间距、链接、文件签、代码块照旧。
+	 * 章节前的留白 = 想要的 20px 减去统一间隙（0.65em），按各级标题自己的字号折成 em。
+	 */
+	.markdown.markdown-document {
+		line-height: 1.625;
+		color: color-mix(in srgb, var(--plume-ink) 90%, var(--plume-bg));
+	}
+
+	.markdown.markdown-document :is(h1, h2, h3, h4) {
+		line-height: 1.3;
+		margin-bottom: 0;
+	}
+
+	.markdown.markdown-document h1 {
+		font-size: 1.42857em;
+		margin-top: 0.55em;
+	}
+
+	.markdown.markdown-document h2 {
+		font-size: 1.28571em;
+		margin-top: 0.6em;
+	}
+
+	.markdown.markdown-document h3 {
+		font-size: 1.14286em;
+		margin-top: 0.68em;
+	}
+
+	.markdown.markdown-document h4 {
+		font-size: 1em;
+		margin-top: 0.78em;
+	}
+
+	.markdown.markdown-document :is(ul, ol) {
+		gap: 0.25em;
+		padding-left: 1.25em;
+	}
+
+	.markdown.markdown-document blockquote {
+		border-left-color: color-mix(in srgb, currentColor 35%, transparent);
+		color: inherit;
+	}
+
+	.markdown.markdown-document strong,
+	:root[data-platform="darwin"] .markdown.markdown-document strong {
+		font-weight: 600;
+		color: var(--plume-ink);
+	}
+
+	.markdown.markdown-document :not(pre) > code {
+		background: color-mix(in srgb, var(--plume-ink) 10%, transparent);
+	}
 }
 
 /*

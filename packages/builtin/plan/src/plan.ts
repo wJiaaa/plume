@@ -20,7 +20,7 @@ export interface PlanDetails {
 	feedback?: string;
 	/** 批准的时刻，面板按它分出批准过的每一份。 */
 	approvedAt?: number;
-	/** 批准时存下的计划文件（会话临时目录里的 `plans/plan-<批准时刻>.md`，带着注意事项）；没写成就没有。 */
+	/** 这份计划的文件（会话临时目录里的 `plans/plan-<提交时刻>.md`，见 `planFileName`）：交上来时就写，批准时带着注意事项重写。 */
 	file?: string;
 	/** 人选了在新会话里执行：这个会话就此停下，实施在新会话里。 */
 	handoff?: boolean;
@@ -31,6 +31,31 @@ export interface PlanDetails {
 function isPlanDetails(value: unknown): value is PlanDetails {
 	const details = value as Partial<PlanDetails> | undefined;
 	return details?.kind === "plan" && typeof details.plan === "string" && typeof details.approved === "boolean";
+}
+
+/**
+ * 等人拍板时交给计划卡的 `payload`：计划正文，和交上来时写下的那份文件（面板顶栏拿它「在编辑器中打开」）。
+ */
+export interface PlanRequest {
+	plan: string;
+	file: string;
+}
+
+/** 认 `payload`：形状不对（不是计划模式交的）时没有。 */
+export function readPlanRequest(payload: unknown): PlanRequest | undefined {
+	const value = (payload && typeof payload === "object" ? payload : {}) as Partial<PlanRequest>;
+	return typeof value.plan === "string" && typeof value.file === "string" ? { plan: value.plan, file: value.file } : undefined;
+}
+
+/**
+ * 计划文件的名字：`plan-20261123-231602.md`，按本机时间到秒。文件名就写在面板顶栏上，一串毫秒数人读不出是哪一份；
+ * 同一个会话一秒里交两份的事不会有。
+ */
+export function planFileName(at: number): string {
+	const date = new Date(at);
+	const two = (value: number) => String(value).padStart(2, "0");
+	const day = `${date.getFullYear()}${two(date.getMonth() + 1)}${two(date.getDate())}`;
+	return `plan-${day}-${two(date.getHours())}${two(date.getMinutes())}${two(date.getSeconds())}.md`;
 }
 
 /** 计划在面板、交给模型的结果和压缩摘要里长的样子：带着批准时附上的注意事项。 */
@@ -93,11 +118,11 @@ export function planSubject(args: Record<string, unknown>): string | undefined {
 }
 
 // i18n-exempt：认计划里概要那一节的标题，不显示。
-const SUMMARY_HEADINGS = new Set(["概要", "摘要", "概述", "summary", "overview", "tl;dr"]);
+const SUMMARY_HEADINGS = new Set(["概要", "摘要", "概述", "背景", "summary", "overview", "context", "tl;dr"]);
 const SUMMARY_MAX = 300;
 
 /**
- * 计划的概要：叫「概要」「摘要」「Summary」的那一节的第一段，没有这一节就取标题下面的第一段。
+ * 计划的概要：叫「概要」「背景」「Summary」「Context」的那一节的第一段，没有这一节就取标题下面的第一段。
  * 交给新会话时放在计划文件路径前面，让它先知道要做的是什么。只取一段、截到三百字：全文在文件里，
  * 这里再抄一份就是两处可能对不上的计划。
  */
@@ -128,6 +153,8 @@ export interface CurrentPlan {
 	plan: string;
 	/** `open`：还没有结果，在等审批，或者那一轮断在了半路。 */
 	status: "approved" | "declined" | "open";
+	/** 这份计划的文件；还在等的、断在半路的没有结果可读，就没有。 */
+	file?: string;
 }
 
 /**
@@ -145,7 +172,11 @@ export function currentPlan(messages: readonly Message[]): CurrentPlan | null {
 				message.toolCallId,
 				message.isError || !isPlanDetails(details)
 					? "error"
-					: { plan: renderPlan(details.plan, details.notes), status: details.approved ? "approved" : "declined" },
+					: {
+							plan: renderPlan(details.plan, details.notes),
+							status: details.approved ? "approved" : "declined",
+							...(details.file ? { file: details.file } : {}),
+						},
 			);
 		} else if (message?.role === "assistant") {
 			for (let at = message.content.length - 1; at >= 0; at--) {

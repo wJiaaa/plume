@@ -7,11 +7,13 @@ import { useLiveSession } from "../session-live.ts";
 import { type Inline, parseInline } from "./inline.ts";
 import { Markdown } from "./Markdown.tsx";
 
-export function PluginMarkdown({ sessionId, inline, ...props }: MarkdownProps) {
+export function PluginMarkdown({ sessionId, inline, variant, className, ...rest }: MarkdownProps) {
 	const view = useLiveSession(sessionId);
 	const files = useFileScopeValue(view?.summary.id ?? "", view?.summary.cwd ?? "", view?.messages ?? NO_MESSAGES);
 	const scope = view ? files : null;
-	if (inline) return <InlineMarks text={props.text} className={props.className} />;
+	if (inline) return <InlineMarks text={rest.text} className={className} />;
+	// 排版归本体：插件只说要哪一种，类名和样子在 `markdown.css` 的 `.markdown-document`。
+	const props = { ...rest, className: variant === "document" ? `${className ?? ""} markdown-document` : (className ?? "") };
 	return sessionId ? (
 		<FileScope.Provider value={scope}>
 			<Markdown {...props} />

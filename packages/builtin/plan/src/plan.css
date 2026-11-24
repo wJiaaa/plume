@@ -2,33 +2,58 @@
  * 计划卡、计划面板的布局。插件单独构建，产品的 Tailwind 扫不到这里的类名；字交给 Text，颜色只取 var(--plume-*)。
  */
 
-/* 审批卡：和产品的审批卡同一块玻璃，压在输入框正上方。 */
+/*
+ * 计划卡摆在转录里、接着这一轮的回复（`ui.requestCard` 的 `place: "transcript"`）：不是浮层，不用玻璃和投影，
+ * 和转录里等人点的提议卡（`@plume/styles` 的 `proposal`）同一种外框——一道线、淡淡的 card 底。上面一条（谁提了什么计划、
+ * 倒计时、打开计划）垫一层 card，和下面的动作分开；动作区就是外框的底。
+ */
 .plume-plan-card {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
 	width: 100%;
+	/* 不铺满对话那一栏：一排动作放得下就够，再宽只是按钮之间空出一大截。放不下时接受那一组整个换到第二行，见 `.plume-plan-actions`。 */
+	max-width: 600px;
 	max-height: min(560px, calc(100dvh - 14rem));
 	overflow: hidden;
-	padding: 14px 16px 12px;
 	border: 1px solid var(--plume-line);
 	border-radius: var(--plume-radius-panel);
-	background: color-mix(in srgb, var(--plume-float) 92%, transparent);
-	box-shadow: var(--plume-shadow-glass);
-	backdrop-filter: blur(40px) saturate(1.6);
+	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
 	outline: none;
+	animation: plume-plan-card-in var(--plume-t-slow) var(--plume-e-out);
+}
+
+@keyframes plume-plan-card-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
 }
 
 .plume-plan-card-head {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
-	gap: 12px;
+	gap: 10px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	background: var(--plume-card);
 }
 
-.plume-plan-card-title {
+.plume-plan-card-icon {
+	flex-shrink: 0;
+	color: var(--plume-ink-muted);
+}
+
+.plume-plan-card-heading {
+	display: flex;
 	min-width: 0;
 	flex: 1;
+	flex-direction: column;
+}
+
+.plume-plan-card-title,
+.plume-plan-card-subject {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -39,6 +64,15 @@
 	cursor: pointer;
 }
 
+.plume-plan-card-main {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 10px;
+	padding: 10px 14px 12px;
+}
+
+/* 窄窗口时计划正文画在卡里（面板会盖住这张卡）。 */
 .plume-plan-card-body {
 	min-height: 0;
 	margin: 0 -8px;
@@ -72,7 +106,7 @@
 	gap: 10px;
 	padding: 8px 6px 8px 10px;
 	border-radius: var(--plume-radius-field);
-	background: var(--plume-shell);
+	background: var(--plume-card);
 }
 
 .plume-plan-comment-mark {
@@ -107,7 +141,7 @@
 	flex-shrink: 0;
 	padding: 8px 12px;
 	border-radius: var(--plume-radius-field);
-	background: var(--plume-shell);
+	background: var(--plume-card);
 }
 
 .plume-plan-textarea {
@@ -143,8 +177,7 @@
 	gap: 2px;
 }
 
-.plume-plan-spacer,
-.plume-plan-grow {
+.plume-plan-spacer {
 	flex: 1;
 	min-width: 0;
 }
@@ -179,14 +212,73 @@
 
 /* 面板。 */
 .plume-plan-panel {
+	min-height: 0;
+	flex: 1;
+}
+
+/*
+ * 正文一列照 t3code 的 Markdown 文件预览（`mx-auto max-w-4xl px-6 py-5`）：连内边距最宽 896px，面板宽了居中，
+ * 窄了铺满、左右留 24px。宽度和边距放在滚动容器里面这一列上：限滚动容器会把滚动条也挤到中间。
+ */
+.plume-plan-column {
+	box-sizing: border-box;
+	max-width: 896px;
+	margin-inline: auto;
+	padding: 20px 24px;
+}
+
+/*
+ * 面板：顶上一条固定的栏（文件名、在编辑器中打开、看原文），下面滚动的是计划正文。
+ */
+.plume-plan-view {
+	display: flex;
 	height: 100%;
+	min-height: 0;
+	flex-direction: column;
 }
 
-.plume-plan-body {
-	padding: 16px 20px;
+.plume-plan-bar {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 16px 10px 12px;
+	border-bottom: 1px solid var(--plume-line-soft);
 }
 
-.plume-plan-status {
+/* 文件名占满剩下的宽度：长了渐隐、悬停滚着读（`ScrollText`），不把右边的按钮挤走。批准过好几份时它是切换的按钮。 */
+.plume-plan-file {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 6px 3px 4px;
+	border-radius: var(--plume-radius-field);
+	color: var(--plume-ink-faint);
+	text-align: left;
+}
+
+button.plume-plan-file {
+	cursor: pointer;
+	transition: background-color var(--plume-t-quick);
+}
+
+button.plume-plan-file:hover {
+	background: var(--plume-card-hover);
+}
+
+button.plume-plan-file:active {
+	background: var(--plume-elevated);
+}
+
+.plume-plan-file-name {
+	display: flex;
+	min-width: 0;
+}
+
+/* 等审批时正文上方那句「选中文字留评论」。 */
+.plume-plan-hint {
 	display: flex;
 	align-items: center;
 	gap: 6px;

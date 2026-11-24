@@ -23,7 +23,7 @@ import type { Plugin, ToolDefinition } from "@plume/contract";
 import type { PlanApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
 import { handoffPrompt } from "./handoff.ts";
-import { approvedPlans, planTitle, readPlanReply, renderPlan, SUBMIT_PLAN, type PlanDetails } from "./plan.ts";
+import { approvedPlans, planFileName, planTitle, readPlanReply, renderPlan, SUBMIT_PLAN, type PlanDetails, type PlanRequest } from "./plan.ts";
 import { approvedPlanNote, planSection, refusal, SUBMIT_PLAN_DESCRIPTION, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "./prompt.ts";
 import { PlanStore } from "./store.ts";
 
@@ -170,27 +170,34 @@ export default {
 				const plan = typeof args.plan === "string" ? args.plan.trim() : "";
 				if (!plan) return { output: SUBMIT_PLAN_RESULTS.missing, isError: true };
 				const text = MESSAGES[ctx.locale()];
-				const answer = await run.request({ kind: SUBMIT_PLAN, title: text.approvalTitle, payload: plan, waiting: text.approvalWaiting });
+				/*
+				 * 计划交上来就存成文件：等人拍板时面板顶栏能把它交给编辑器打开；批准时带着注意事项重写同一个文件，交给新会话靠它，
+				 * 原地执行时压缩以后路径还在，随时能重读。直接写，不走 `run.files.write`：这次调用带着计划模式的 `readOnly`，
+				 * 那条路会拒；这里落的是会话自己的草稿，不是工作区。
+				 */
+				const directory = join(run.scratchDir, "plans");
+				await mkdir(directory, { recursive: true });
+				const file = join(directory, planFileName(Date.now()));
+				await writeFile(file, `${plan}\n`, "utf8");
+				const answer = await run.request({
+					kind: SUBMIT_PLAN,
+					title: text.approvalTitle,
+					payload: { plan, file } satisfies PlanRequest,
+					waiting: text.approvalWaiting,
+				});
 				const reply = answer.answered ? readPlanReply(answer.value) : undefined;
 				if (reply?.accept === false) {
 					return {
 						output: SUBMIT_PLAN_RESULTS.revise(reply.feedback),
-						details: { kind: "plan", plan, approved: false, feedback: reply.feedback } satisfies PlanDetails,
+						details: { kind: "plan", plan, approved: false, feedback: reply.feedback, file } satisfies PlanDetails,
 					};
 				}
 				// 没有反馈就没有可改的方向：这一轮停在这里，人说要改什么，开关不动。
-				if (!reply) return { output: SUBMIT_PLAN_RESULTS.declined, details: { kind: "plan", plan, approved: false } satisfies PlanDetails, terminate: "done" };
+				if (!reply)
+					return { output: SUBMIT_PLAN_RESULTS.declined, details: { kind: "plan", plan, approved: false, file } satisfies PlanDetails, terminate: "done" };
 				const notes = reply.note;
 				const approvedAt = Date.now();
-				/*
-				 * 计划连同注意事项存成文件：交给新会话靠它；原地执行时压缩以后路径还在，随时能重读。
-				 * 直接写，不走 `run.files.write`：这次调用带着计划模式的 `readOnly`，那条路会拒；这里落的是会话自己的草稿，
-				 * 不是工作区，何况它是「批准之后」的产物。
-				 */
-				const directory = join(run.scratchDir, "plans");
-				await mkdir(directory, { recursive: true });
-				const file = join(directory, `plan-${approvedAt}.md`);
-				await writeFile(file, `${renderPlan(plan, notes)}\n`, "utf8");
+				if (notes) await writeFile(file, `${renderPlan(plan, notes)}\n`, "utf8");
 				// 开关就地关掉：这一轮剩下的调用经过的是同一层，从此放行，不用等下一轮。
 				store.set(run.sessionId, false);
 				const details: PlanDetails = { kind: "plan", plan, approved: true, ...(notes ? { notes } : {}), approvedAt, file };

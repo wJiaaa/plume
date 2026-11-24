@@ -24,7 +24,9 @@ const PLAN_ON = "Plan mode is on";
  * 权限模式管不着：
  *
  * 1. 新对话里点输入框底下的计划模式开关，发第一句话，开关跟着建出来的会话；假模型先试 `edit`，被拒（「Plan mode: it edits files」），
- *    文件不变，再交计划：输入框上方出现计划卡（运行行说在等回答、卡上没有「允许一次」），右栏自动打开计划面板。
+ *    文件不变，再交计划：转录里接着这一轮的回复出现计划卡（不在输入框上方；运行行说在等回答、卡上没有「允许一次」），
+ *    卡头写着计划的标题，右栏自动打开计划面板：顶栏是交计划时写下的文件名（`plan-年月日-时分秒.md`）、在编辑器中打开、`</>`，
+ *    下面直接是按文档排版的 Markdown；点 `</>` 看原文，再点回来。
  *    卡在右栏开着（窄）和收起（宽）时，主按钮都不被单独挤到第二行；后面几张卡也量一次。
  * 2. 点「修改…」写意见、修订：模型收到的是没批准和这句意见，开关还开着，它改完再交；这一次点「拒绝」：这一轮停下，开关不动。
  * 3. 权限切到完全访问再发一句：`edit` 照样被拒，命令跑在只读沙箱里写不出文件，申请离开沙箱的被拒；计划卡照样出来、停着不被自动放行。
@@ -71,8 +73,26 @@ export async function checkPlan(options: {
 	const planCard = async (title: string, label: string) => {
 		await until(`document.querySelector('${card}') !== null && document.querySelector('[data-plume-waiting=answer]') !== null`, label);
 		await until(`document.querySelector('[data-plan-body]')?.textContent.includes(${JSON.stringify(title)}) === true`, `${label}：右栏的计划面板读的是这份`);
+		if (!(await page<boolean>(`document.querySelector('[data-plan-body] .markdown.markdown-document h1') !== null`)))
+			throw new Error(`${label}：面板里的计划正文该按文档排版画，标题是一级标题`);
+		// 文件名读第一份字：放不下时 `ScrollText` 会多画一份隐藏的副本。
+		const fileName = await page<string>(
+			`(() => { const name = document.querySelector('[data-plan-bar] [data-plan-file]')?.cloneNode(true); name?.querySelector('[data-plume-scroll-dup]')?.remove(); return name?.textContent ?? ''; })()`,
+		);
+		if (!/^plan-\d{8}-\d{6}\.md$/.test(fileName)) throw new Error(`${label}：面板顶栏该写着计划文件名，读到的是「${fileName}」`);
+		if (!(await page<boolean>(`document.querySelector('[data-plan-bar] [role=group] button') !== null`)))
+			throw new Error(`${label}：面板顶栏该有在编辑器中打开`);
 		if (await page<boolean>(`[...document.querySelectorAll('[data-approval-region] button')].some(button => button.textContent.includes('允许一次'))`))
 			throw new Error("计划卡上不该有审批的「允许一次」");
+		// 摆在转录里（`ui.requestCard` 的 `place: "transcript"`），接在回复后面，输入框上方那一格里没有它。
+		if (
+			!(await page<boolean>(
+				`document.querySelector('[data-plume-session] ${card}') !== null && document.querySelector('.plume-composer-dock ${card}') === null`,
+			))
+		)
+			throw new Error("计划卡该画在转录里，不在输入框上方");
+		if (!(await page<boolean>(`document.querySelector('${card} [data-approval-plan-title]')?.textContent.includes(${JSON.stringify(title)}) === true`)))
+			throw new Error(`${label}：卡头该写着计划的标题「${title}」`);
 	};
 	/**
 	 * 卡上的主按钮（接受那一组的最后一颗）不单独占一行：和别的按钮至少一颗在同一行上。收起、展开右栏时等卡片宽度停下来再量。
@@ -178,6 +198,15 @@ export async function checkPlan(options: {
 		if (!(await page<boolean>(toggleOn))) throw new Error("建出来的会话没接上新对话的计划模式开关");
 		await mainNotAlone("右栏开着、卡片窄");
 		await capture("smoke-plan-card.png");
+		// 顶栏的 `</>`：看原文（等宽的 Markdown，`#` 还在），再点回排版后的正文。
+		await clickVisible(page, `[data-plan-source]`);
+		await until(
+			`document.querySelector('[data-plan-body]') === null && [...document.querySelectorAll('pre')].some(pre => pre.textContent.includes('# 改 hello.txt'))`,
+			"点 </> 看计划原文",
+		);
+		await capture("smoke-plan-source.png");
+		await clickVisible(page, `[data-plan-source]`);
+		await until(`document.querySelector('[data-plan-body] .markdown-document') !== null`, "再点 </> 回到排版后的计划");
 		// 收起右栏看宽的那一种，再打开：后面每份新计划还要在面板里读到。
 		await clickVisible(page, `button[aria-label="收起面板"]`);
 		await until(
@@ -253,12 +282,12 @@ export async function checkPlan(options: {
 		const stop = (await agent.sessions()).find((item) => item.id === sessionId)?.stop;
 		if (stop && stop.reason !== "done") throw new Error(`批准的那一轮没有正常收尾：${JSON.stringify(stop)}`);
 
-		// 4. 环境卡片的“产出”里列出批准的计划，不再重复画“计划”小标题；看完收起，免得它留在后面的截图里。
+		// 4. 环境卡片里「计划」独立成组列出批准的计划；看完收起，免得它留在后面的截图里。
 		await until(`document.querySelector('[data-environment-toggle]') !== null`, "环境开关在");
 		await clickVisible(page, `[data-environment-toggle]`);
 		await until(
-			`document.querySelector('[data-environment-group=output] [data-plan-environment]')?.textContent.includes('改 hello.txt（定稿）') === true`,
-			"环境卡片的产出里列出批准的计划",
+			`document.querySelector('[data-environment-group="plume.plan/plans"] > .plume-environment-group-label')?.textContent.startsWith('计划') === true && document.querySelector('[data-environment-group="plume.plan/plans"] [data-plan-environment]')?.textContent.includes('改 hello.txt（定稿）') === true`,
+			"环境卡片的「计划」分组里列出批准的计划",
 		);
 		await capture("smoke-plan-environment.png");
 		await clickVisible(page, `[data-environment-toggle]`);

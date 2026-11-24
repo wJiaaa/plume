@@ -21,6 +21,8 @@ export interface PlanReview {
 	/** 哪一次 `submit_plan`（调用 id）。模型改完再交是新的一次，评论跟着清空。 */
 	requestId: string;
 	text: string;
+	/** 交上来时写下的计划文件（`PlanRequest.file`）。 */
+	file: string;
 	comments: PlanComment[];
 }
 
@@ -52,11 +54,11 @@ export function useViewing(sessionId: string | undefined): number | undefined {
 }
 
 /** 记下这次审批的计划；是新的一次返回 true——只有这时才替人打开面板，人关掉以后不再追着开。 */
-export function showPlan(sessionId: string, requestId: string, text: string): boolean {
+export function showPlan(sessionId: string, requestId: string, text: string, file: string): boolean {
 	if (state.reviews[sessionId]?.requestId === requestId) return false;
 	// 又交了一份：先前挑着看的那份让位，审批完面板停在新的这份上。
 	const { [sessionId]: _picked, ...viewing } = state.viewing;
-	update({ reviews: { ...state.reviews, [sessionId]: { requestId, text, comments: [] } }, viewing });
+	update({ reviews: { ...state.reviews, [sessionId]: { requestId, text, file, comments: [] } }, viewing });
 	return true;
 }
 

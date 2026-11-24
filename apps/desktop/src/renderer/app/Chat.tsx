@@ -9,6 +9,7 @@ import { clamp, layoutMode, panelWidthFor, SCREEN_MIN } from "../layout.ts";
 import { useLiveSession } from "../session-live.ts";
 import { ChatBackdrop } from "../chat-backdrop.tsx";
 import { notify } from "../toast/index.ts";
+import { ApprovalOverlay } from "../conversation/ApprovalOverlay.tsx";
 import { Transcript } from "../conversation/Transcript.tsx";
 import type { MessageEdits } from "../conversation/message-edits.ts";
 import type { DraftQuote } from "../conversation/quote.ts";
@@ -724,6 +725,8 @@ function Conversation({ view }: { view: SessionView }) {
 		},
 		[id],
 	);
+	const compact = useAppPick((app) => layoutMode(app.windowWidth) === "compact");
+	const approval = view.approval;
 	return (
 		<TranscriptScope arrival={arrival} files={files}>
 			<Transcript
@@ -733,6 +736,22 @@ function Conversation({ view }: { view: SessionView }) {
 				onOpenSettings={onOpenSettings}
 				onQuote={onQuote}
 				{...(view.summary.owner ? {} : { edits })}
+				// 说了摆在转录里的等人卡（计划）接在这一轮的回复后面；别的照旧压在输入框上方，见 `Composer`。
+				request={
+					<ApprovalOverlay
+						request={approval}
+						queued={view.queuedApprovals}
+						sessionId={id}
+						compact={compact}
+						place="transcript"
+						respond={async (decision) => {
+							if (approval) await agent.respond(id, approval.toolCallId, decision);
+						}}
+						answer={async (value) => {
+							if (approval) await agent.answer(id, approval.toolCallId, value);
+						}}
+					/>
+				}
 			/>
 		</TranscriptScope>
 	);
