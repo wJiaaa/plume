@@ -2,6 +2,42 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.1] - 2026-11-24
+
+<!-- plume:notes en -->
+### Changes
+
+- **Unified multi-file diff for delivery reviews.** Reviewing changes from a delivery card now shares the same multi-file diff experience as the Git panel, complete with the sticky toolbar, unified or split comparison, and expand/collapse controls.
+- **Cleaner diff and file preview scrolling.** Enabling word wrap in diff view now wraps long lines properly instead of letting left-column lines spill into the right pane in split view. Horizontal scrollbars are also hidden in diff and file previews while trackpad gestures and Shift+scroll continue to pan horizontally.
+- **Open right-side panels in one step.** Clicking `+` in the right panel area now opens a panel menu directly instead of creating a throwaway start-page tab first.
+- **New Pixel grid chat backdrop effect.** Choose Pixel grid in chat background settings to overlay crisp grid lines right on top of your wallpaper. It applies instantly via CSS without resampling the image, so animated GIFs keep playing.
+- **More reliable cross-session handbacks and code block layout.** Handing results back from spawned sessions at the end of each turn is now handled by core, ensuring the originating session still wakes up even when mid-turn or batched messages arrive. Code blocks in chat also restore the language label to the top-left header with action buttons on the right and code cleanly below.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **交付审核用上统一的多文件 diff 视图。** 现在打开交付卡的审核面板，和 Git 面板一样支持顶部工具栏、全部展开/折叠以及统一/分栏对比，一次审完多个文件改动更顺手。
+- **diff 换行与横向浏览更利落。** 修复了差异视图开启自动换行后长行未真正折行、分栏模式下左栏内容画进右栏的问题；diff 和文件预览也去掉了视觉上多余的横向滚动条，触控板和 Shift+滚轮仍可照常横滚。
+- **右侧面板区点「+」直接选面板。** 以前点右侧面板区的「+」会先多开一个开始页标签再挑选，现在直接弹出面板菜单，点选后即可打开对应面板。
+- **会话背景新增「像素网格」效果。** 新的像素网格效果直接在原图上叠一层随底色自适应的规则格线，不需要重新采样图片，切换立即生效，动态 GIF 背景也能照常播放。
+- **跨会话交回更可靠，代码块标题栏归位。** 开出来的会话每轮结束后的结果交回改由本体统一接管，即使一轮中途或同批多信里读到来处的消息，收尾交回也能准确叫醒来处；对话里的代码块恢复为左上角显示语言名、右侧放操作按钮、代码紧接在标题栏下方的布局。
+
+### 新功能
+
+- **desktop**: 会话背景新增「像素网格」效果，叠在原图上且保留 GIF 动画 (`3aed2eb`)
+- **desktop**: 右侧面板区「+」改为弹出面板菜单，不再新开开始页标签 (`70e4713`)
+- **ui**: MenuItem 透传 data-* 属性，与 Button 和 IconButton 保持一致 (`757ee73`)
+- **core**: 开出来的会话每轮交回改由本体做，插件按 reportBack 选要不要交、读 session.cause 认这一轮是谁引起的 (`80cd8ac`)
+- **desktop**: diff 和文件预览不再显示横向滚动条，触控板和 Shift+滚轮照样横滚 (`d56b734`)
+- **core**: 交付卡的审核面板改成和 Git 面板一样的多文件 diff，可切换左右分栏对比 (`e7a8c43`)
+- **ui**: 新增公共的多文件 diff 组件，Git 面板和交付审核面板共用一套工具栏和文件行 (`287e100`)
+
+### 修复
+
+- **core**: 开出来的会话在一轮中途或同批多信里读到来处的信，收尾交回照样叫醒来处 (`032f2e8`)
+- **desktop**: 代码块的语言名回到左上角的标题栏，按钮在右，代码在标题栏下面 (`cc9a922`)
+- **desktop**: diff 开了自动换行后长行真的折行，分栏时左栏的长行不再画进右栏 (`6754bcf`)
+
 ## [0.9.0] - 2026-11-24
 
 <!-- plume:notes en -->
