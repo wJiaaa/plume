@@ -2,6 +2,68 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.0] - 2026-11-24
+
+<!-- plume:notes en -->
+### Changes
+
+- **Spot active chats and pending approvals at a glance.** When projects are folded in the sidebar, you used to have to open them one by one to find out which sessions were running or waiting for approval. A new "In progress" section above Pinned mirrors every running, waiting-for-approval, errored or unread finished chat with its project name. Collapsed project and section headers now also show the most urgent status inside the group instead of just a count.
+- **Faster sidebar actions and cleaner renaming.** The one-click archive button is back on hover next to "…", and renaming a session now opens a centered dialog instead of a cramped sidebar popover that could accidentally trigger row hover cards.
+- **Run project scripts from the environment card.** A new built-in Project Scripts plugin lets you run common dev, test or build commands in one click from the top of the environment card, import scripts from `.plume/scripts.json`, and run setup commands automatically whenever a new worktree is created.
+- **Collapsible, better-organized environment card.** The environment card now groups version control, sub-agents and linked sessions into distinct sections with clean outlines. Click any section title to fold or unfold it so long lists of sub-agents or background tasks no longer take over the card.
+- **Rebuilt Git diff view.** The Git panel now renders syntax-highlighted diffs with word-level emphasis and a sticky toolbar for file counts, expand/collapse all, unified or split view, word wrap and flat or tree file lists. Added or deleted files stay full-width in split view, while side-by-side edits scroll independently.
+- **Clearer planning and document-style plan reading.** Plan approval cards now appear right below the turn's reply instead of covering the input bar. The plan panel uses centered document typography, expands raw Markdown without a height cap, and shows the plan file's path in its header. Plan mode also pushes the agent to inspect the codebase thoroughly and write concrete file-level changes.
+- **Separate `$` skills from `/` commands.** Typing `/` in the composer now lists only commands, while `$` opens the skill picker and highlights `$skill` mentions anywhere in your message so skills and commands no longer collide.
+- **Refreshed settings and batch archive management.** Settings returns to a full-height left sidebar with a breadcrumb header and centered card groups. Archived chats are now grouped into collapsible cards with batch restore and delete, and dialog action buttons have clearer fill and hover states.
+- **Polish and fixes.** Refined Markdown spacing, body font size and inline code contrast; fixed the text-selection quote menu jumping to the top-left corner when switching sessions; cleared finished handed-off sessions from above the composer; and localized sub-agent status lines.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **一眼看出哪些会话在跑、哪些在等批准。** 以前项目一折起来，想知道里面有没有会话卡在等批准或已经跑完，得一个个展开翻。现在侧栏置顶上方新增「进行中」分组，把正在运行、等待批准以及跑完或出错还没看的会话多列一份并标明所属项目；折起来的项目和分区标题也不再只显示数字，直接亮出组里最要紧的状态。
+- **侧栏操作更顺手。** 悬停在会话行上恢复了排在「⋯」右侧的一键归档按钮；重命名会话改成居中的标准对话框，长标题更好改，打开时也不会误触侧栏悬停预览卡。
+- **新增内置项目脚本，工作树可自动初始化。** 常用的启动、测试、构建命令现在可以直接配进项目脚本，在环境卡片顶上一键运行，也支持从仓库的 `.plume/scripts.json` 导入，并可在新建工作树后自动执行环境准备脚本。
+- **环境卡片分组更清楚，也能按组收起。** 版本控制、子智能体与关联会话按节排布，卡片去掉多余阴影只留细描边；点击分组标题就能折叠或展开，子智能体和后台任务多时不再把整张卡片撑满。
+- **重做 Git 差异视图。** Git 改动视图现在支持按文件语言的语法高亮与词级改动强调，顶部常驻工具栏集合了文件数、增删统计、全部展开/折叠、统一/分栏切换、自动换行以及扁平/树状列表切换；分栏下纯新增或纯删除文件自动通栏展示，双侧改动左右独立横滚，深浅色代码配色更清晰。
+- **计划卡不挡输入框，计划面板像文档一样好读。** 计划审批卡移到当前一轮回复的下方；右侧计划面板改用居中文档排版，切到 Markdown 原文时直接完整摊开不限高，顶栏改为显示计划文件路径。计划模式也会引导模型先读透代码、落到具体改法再提交方案。
+- **技能改用 `$` 触发，和 `/` 命令彻底分开。** 输入框里敲 `/` 只弹命令菜单，敲 `$` 弹技能菜单；行首和句中提到的 `$技能名` 都会高亮并生效，不再和同名命令互相遮挡。
+- **设置页与已归档聊天更好管。** 设置浮层回到左侧通顶导航配面包屑顶栏、右侧居中卡片分组的布局；「已归档的聊天」改成可折叠分组卡片，支持批量恢复和批量删除；对话框底部按钮改用更醒目的实体色块样式。
+- **排版与细节修复。** 调整了中文 Markdown 排版、正文字号和行内代码底色；修复切换会话时划词引用菜单甩到窗口左上角的问题；交出去的会话跑完或失败后会自动从输入框上方收走；子智能体提交结果行同步随界面语言切换。
+
+### 新功能
+
+- **desktop**: 折起来的项目和分区标题显示组里最要紧的状态，等批准、出错、跑完没看不再只剩一个数字 (`70bc069`)
+- **desktop**: 侧栏置顶上方新增「进行中」，在跑、等批准和跑完没看的会话多列一份 (`b6c63d1`)
+- **core**: 环境卡片的分组可以点标题收起，子智能体多时不再把卡片撑满 (`7f7a2c7`)
+- **core**: 计划面板顶栏改为显示计划文件路径 (`5e8762a`)
+- **desktop**: 重命名会话改为居中对话框，避免打开对话框时误触侧栏悬停卡 (`ef715c6`)
+- **desktop**: 恢复侧栏会话行悬停时的归档按钮，排在「⋯」右侧 (`994fbce`)
+- **ui**: 重设计对话框底部按钮的实体色块样式，浅色悬停与按下反馈清晰可见 (`90118f3`)
+- **ui**: Segmented 新增紧凑模式与分组无障碍名 (`d430548`)
+- **core**: 新增内置项目脚本插件，支持环境卡片一键运行与工作树自动初始化 (`7764b1c`)
+- **core**: 新增 terminal.exec 服务与工作树创建完成回调 session.worktree.onCreated (`715b734`)
+- 改版会话环境卡片为按节分组布局，补齐版本控制、子智能体与关联会话入口 (`c43de0b`)
+- **desktop**: 设置页已归档聊天改为可折叠分组卡片并支持批量恢复与删除 (`4f979f8`)
+- **core**: 计划模式先读透代码再定方案，计划写到具体改法 (`9d93bad`)
+- 计划卡接在转录里这一轮的回复后面，计划面板改为文档排版、正文居中 (`6fb012d`)
+- 重做 Git 差异视图与代码配色，支持语法高亮、智能分栏与常驻工具栏 (`0e2b783`)
+- 输入框技能改用 $ 触发，与 / 命令分开 (`deaacf5`)
+- **ui**: 设置浮层改回左侧通顶导航与面包屑顶栏，右侧改用居中卡片分组 (`36ff091`)
+- **desktop**: 调整回复 Markdown 中文排版与行内代码底色 (`c3403de`)
+
+### 修复
+
+- **core**: 补全计划面板顶栏显示计划文件路径的接入与文档同步 (`968fe3f`)
+- **desktop**: 交出去的会话在跑完或失败后从输入框上方收走 (`58d3847`)
+- **core**: 环境卡片去掉阴影，只留描边 (`29fef98`)
+- **ui**: 正文字号改为与界面基准字号一致，不再比控件大 1px (`3e8c53e`)
+- **core**: 子智能体提交结果一行随界面语言切换并区分进行中与已完成 (`d10ffc6`)
+- **desktop**: 切换会话时划词菜单立即收起，不再甩到窗口左上角 (`db2a5d1`)
+
+### 重构
+
+- 替换 Git、项目脚本与已归档设置页中手写样式为公共组件 (`51129c2`)
+
 ## [0.8.0] - 2026-11-23
 
 <!-- plume:notes en -->
