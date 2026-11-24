@@ -48,7 +48,7 @@ export function DialogAction({
 			autoFocus={autoFocus}
 			onClick={onClick}
 			data-plume-tip={label}
-			className={`plume-dialog-action ${paint} disabled:opacity-40 ${className}`}
+			className={`plume-dialog-action ${paint} ${className}`}
 			{...rest}
 		>
 			{children}

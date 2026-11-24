@@ -119,12 +119,18 @@
 	padding: 0 16px;
 	border-radius: var(--plume-radius-field);
 	font-size: var(--plume-ui-size);
+	font-weight: 500;
 	/* 中文可在任意字间断行，放进 flex 行会被挤成竖排；不换行后 min-content 即整段文字，flex 压不动它。 */
 	white-space: nowrap;
 	transition:
-		background-color var(--plume-t-quick),
-		color var(--plume-t-quick),
-		opacity var(--plume-t-quick);
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft),
+		opacity var(--plume-t-quick) var(--plume-e-soft);
+}
+
+/* 禁用态写在同一层，避免未分层的悬停规则压过工具类上的 disabled:opacity-40。 */
+.plume-dialog-action:disabled {
+	opacity: 0.4;
 }
 
 .plume-dialog-action-primary {
@@ -132,26 +138,50 @@
 	color: var(--plume-shell);
 }
 
-.plume-dialog-action-primary:hover {
-	opacity: 0.9;
+/* 用实色混色而非改 opacity：主按钮悬停、按下时不透出底下背景，同时有清晰的明暗跨度。 */
+.plume-dialog-action-primary:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-ink) 84%, var(--plume-shell));
 }
 
+.plume-dialog-action-primary:active:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-ink) 74%, var(--plume-shell));
+}
+
+/*
+ * 次要按钮用前景薄纱分级（card-hover → elevated → 更深一档），而不是实色的 `--plume-card`：
+ * 浅色下 `--plume-card` 与白纸几乎同亮，悬停到 `card-hover` 肉眼无感；深色下 `--plume-card` 反比弹窗面 `--plume-float` 更暗。
+ */
 .plume-dialog-action-secondary {
-	background: var(--plume-card);
+	background: var(--plume-card-hover);
 	color: var(--plume-ink);
 }
 
-.plume-dialog-action-secondary:hover {
-	background: var(--plume-card-hover);
+.plume-dialog-action-secondary:hover:not(:disabled) {
+	background: var(--plume-elevated);
+}
+
+.plume-dialog-action-secondary:active:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-fg) 16%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+	.plume-dialog-action-secondary:active:not(:disabled) {
+		background: color-mix(in srgb, var(--plume-fg) 22%, transparent);
+	}
 }
 
 .plume-dialog-action-danger {
-	background: color-mix(in srgb, var(--plume-danger) 10%, transparent);
-	color: var(--plume-danger);
+	background: var(--plume-danger);
+	color: var(--plume-on-accent);
 }
 
-.plume-dialog-action-danger:hover {
-	background: color-mix(in srgb, var(--plume-danger) 18%, transparent);
+/* 悬停和按下往纯黑压暗而不是往前景混：深色下往白字方向混会发粉、降低白字对比度。 */
+.plume-dialog-action-danger:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-danger) 88%, var(--plume-shade));
+}
+
+.plume-dialog-action-danger:active:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-danger) 78%, var(--plume-shade));
 }
 
 /*
