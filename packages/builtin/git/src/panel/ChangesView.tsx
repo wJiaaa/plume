@@ -2,8 +2,8 @@
  * 暂存区，从上往下读的一列。
  */
 
-import { IconButton, PanelEmpty, Scroller, Segmented, SkeletonList, Text, useConfirmer, useNarrow } from "@plume/ui";
-import { Check, ChevronsDownUp, ChevronsUpDown, Columns2, FileSearch, FolderTree, List, Minus, Plus, RotateCcw, Rows3, WrapText } from "@plume/ui/icons";
+import { DiffToolbar, IconButton, PanelEmpty, Scroller, SkeletonList, useConfirmer, useDiffView, useNarrow } from "@plume/ui";
+import { Check, FileSearch, FolderTree, List, Minus, Plus, RotateCcw } from "@plume/ui/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DiffFile, GitStatus, GitStatusFile } from "../api.ts";
 import { DiffCommentsProvider } from "./DiffComments.tsx";
@@ -11,7 +11,6 @@ import type { DiffLayout } from "./DiffView.tsx";
 import { keepUnchangedHunks } from "./diff-merge.ts";
 import { FileDiffList } from "./FileDiffList.tsx";
 import { FileDiffTree } from "./FileDiffTree.tsx";
-import { DiffStat } from "./file-row.tsx";
 import { previewFile } from "./host.ts";
 import { useT } from "./i18n.ts";
 import { baseName, git } from "./remote.ts";
@@ -19,10 +18,8 @@ import { GroupHeader } from "./rows.tsx";
 import type { SyncPlan } from "./sync-plan.ts";
 import type { Act } from "./types.ts";
 
-/** 平铺还是树、分栏还是统一、自动换行：记的是这个人习惯怎么读改动，关掉面板、换会话、重启都留着。 */
+/** 平铺还是树：记的是这个人习惯怎么读改动，关掉面板、换会话、重启都留着。分栏还是统一、换不换行是所有多文件 diff 共用的那一份（`useDiffView`）。 */
 const TREE_VIEW_KEY = "plume.git.changes.tree";
-const DIFF_LAYOUT_KEY = "plume.git.changes.layout";
-const WRAP_LINES_KEY = "plume.git.changes.wrap";
 
 function useBoolPreference(key: string): [boolean, (next: (previous: boolean) => boolean) => void] {
 	const [value, setValue] = useState(() => localStorage.getItem(key) === "1");
@@ -30,14 +27,6 @@ function useBoolPreference(key: string): [boolean, (next: (previous: boolean) =>
 		localStorage.setItem(key, value ? "1" : "0");
 	}, [key, value]);
 	return [value, setValue];
-}
-
-function useLayoutPreference(): [DiffLayout, (next: DiffLayout) => void] {
-	const [layout, setLayout] = useState<DiffLayout>(() => (localStorage.getItem(DIFF_LAYOUT_KEY) === "split" ? "split" : "unified"));
-	useEffect(() => {
-		localStorage.setItem(DIFF_LAYOUT_KEY, layout);
-	}, [layout]);
-	return [layout, setLayout];
 }
 
 function sumStats(files: readonly DiffFile[]): { added: number; removed: number } {
@@ -73,10 +62,10 @@ export function ChangesView({
 }) {
 	const t = useT();
 	const [treeView, setTreeView] = useBoolPreference(TREE_VIEW_KEY);
-	const [diffLayout, setDiffLayout] = useLayoutPreference();
-	const [wrapLines, setWrapLines] = useBoolPreference(WRAP_LINES_KEY);
+	const diffView = useDiffView();
+	// 树自己排文件行（`DiffFileItem`），窄面板按统一视图画这件事要自己算；平铺的列表 `DiffFileList` 自己会算。
 	const [narrowSplit, hostRef] = useNarrow(540);
-	const effectiveLayout: DiffLayout = narrowSplit ? "unified" : diffLayout;
+	const effectiveLayout: DiffLayout = narrowSplit ? "unified" : diffView.layout;
 
 	const [openStaged, setOpenStaged] = useState<Set<string>>(() => new Set());
 	const [openUnstaged, setOpenUnstaged] = useState<Set<string>>(() => new Set());
@@ -167,7 +156,20 @@ export function ChangesView({
 		);
 	}
 
-	const Files = treeView ? FileDiffTree : FileDiffList;
+	const files = (rows: DiffFile[], actions: (file: DiffFile) => React.ReactNode, openPaths: ReadonlySet<string>, onTogglePath: (path: string) => void) =>
+		treeView ? (
+			<FileDiffTree
+				cwd={cwd}
+				files={rows}
+				actions={actions}
+				openPaths={openPaths}
+				onTogglePath={onTogglePath}
+				diffLayout={effectiveLayout}
+				wrapLines={diffView.wrap}
+			/>
+		) : (
+			<FileDiffList cwd={cwd} files={rows} actions={actions} openPaths={openPaths} onTogglePath={onTogglePath} />
+		);
 	const preview = (file: DiffFile) =>
 		sessionId && file.status !== "deleted" && !file.path.endsWith("/") ? (
 			<IconButton
@@ -214,46 +216,15 @@ export function ChangesView({
 	return (
 		<DiffCommentsProvider cwd={cwd} sessionId={sessionId}>
 			<div ref={hostRef} className="git-changes-host">
-				<div className="git-changes-bar">
-					<Text size="caption" tone="muted" numeric className="git-changes-summary">
-						{t("changes.fileCount", { n: totalFiles })}
-					</Text>
-					<DiffStat added={totalStat.added} removed={totalStat.removed} inline />
-					<div className="git-changes-controls">
-						<IconButton
-							label={anyExpanded ? t("changes.collapseAll") : t("changes.expandAll")}
-							icon={anyExpanded ? <ChevronsDownUp size={13} strokeWidth={1.9} /> : <ChevronsUpDown size={13} strokeWidth={1.9} />}
-							size="sm"
-							onClick={toggleAllFiles}
-						/>
-						{!narrowSplit && (
-							<Segmented
-								compact
-								ariaLabel={t("changes.diffLayout")}
-								value={diffLayout}
-								onChange={setDiffLayout}
-								options={[
-									{ value: "unified", label: t("changes.unifiedView"), icon: <Rows3 size={12.5} strokeWidth={1.9} /> },
-									{ value: "split", label: t("changes.splitView"), icon: <Columns2 size={12.5} strokeWidth={1.9} /> },
-								]}
-							/>
-						)}
-						<IconButton
-							label={wrapLines ? t("changes.unwrapLines") : t("changes.wrapLines")}
-							icon={<WrapText size={13} strokeWidth={1.9} />}
-							size="sm"
-							active={wrapLines}
-							onClick={() => setWrapLines((v) => !v)}
-						/>
-						<IconButton
-							label={treeView ? t("changes.flatView") : t("changes.treeView")}
-							icon={treeView ? <List size={13} strokeWidth={1.9} /> : <FolderTree size={13} strokeWidth={1.9} />}
-							size="sm"
-							active={treeView}
-							onClick={() => setTreeView((v) => !v)}
-						/>
-					</div>
-				</div>
+				<DiffToolbar files={totalFiles} added={totalStat.added} removed={totalStat.removed} expanded={anyExpanded} onToggleAll={toggleAllFiles}>
+					<IconButton
+						label={treeView ? t("changes.flatView") : t("changes.treeView")}
+						icon={treeView ? <List size={13} strokeWidth={1.9} /> : <FolderTree size={13} strokeWidth={1.9} />}
+						size="sm"
+						active={treeView}
+						onClick={() => setTreeView((v) => !v)}
+					/>
+				</DiffToolbar>
 
 				<Scroller className="git-enter git-fill" contentClassName="git-changes-list" top="fade" bottom="fade">
 					{stagedPaths.length > 0 && (
@@ -273,15 +244,7 @@ export function ChangesView({
 									/>
 								}
 							/>
-							<Files
-								cwd={cwd}
-								files={stagedRows}
-								actions={unstage}
-								openPaths={openStaged}
-								onTogglePath={toggleStaged}
-								diffLayout={effectiveLayout}
-								wrapLines={wrapLines}
-							/>
+							{files(stagedRows, unstage, openStaged, toggleStaged)}
 						</section>
 					)}
 
@@ -302,15 +265,7 @@ export function ChangesView({
 									/>
 								}
 							/>
-							<Files
-								cwd={cwd}
-								files={unstagedRows}
-								actions={stageOrDiscard}
-								openPaths={openUnstaged}
-								onTogglePath={toggleUnstaged}
-								diffLayout={effectiveLayout}
-								wrapLines={wrapLines}
-							/>
+							{files(unstagedRows, stageOrDiscard, openUnstaged, toggleUnstaged)}
 						</section>
 					)}
 				</Scroller>

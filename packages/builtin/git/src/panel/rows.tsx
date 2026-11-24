@@ -2,10 +2,9 @@
  * 分支页和改动页的几种行：分组标题、一个检出（仓库或工作树）、一个分支。
  */
 
-import { hoverSlot, HoverRow, HoverRowMark, HoverRowReveal, IconButton, ScrollText, Text } from "@plume/ui";
+import { DiffStat, hoverSlot, HoverRow, HoverRowMark, HoverRowReveal, IconButton, ScrollText, Text } from "@plume/ui";
 import { ArrowRightLeft, FolderGit2, GitBranch, GitBranchPlus, GitCompare, GitPullRequestArrow, Trash2 } from "@plume/ui/icons";
 import type { RepoRef } from "../api.ts";
-import { DiffStat } from "./file-row.tsx";
 import { useT } from "./i18n.ts";
 
 /** 两组行之间带名字的分隔。`surface="bar"` 用于改动视图的通栏分区头。 */
@@ -30,7 +29,7 @@ export function GroupHeader({
 			<Text size="caption" tone="faint" numeric className={surface === "bar" ? "git-count-pill git-fixed" : "git-fixed"}>
 				{count}
 			</Text>
-			{stat && <DiffStat added={stat.added} removed={stat.removed} inline className="git-section-stat" />}
+			{stat && <DiffStat added={stat.added} removed={stat.removed} className="git-section-stat" />}
 			{actions && <div className="git-group-actions">{actions}</div>}
 		</div>
 	);

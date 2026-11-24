@@ -1,33 +1,10 @@
 /**
- * 文件列表和目录树的纯计算：路径拆分、紧凑目录树、统计数字缩写。
+ * 目录树的纯计算：把改动的文件排成紧凑目录树。
  *
  * 都是无副作用的纯函数，不碰 DOM 和 React，可以直接单测。
  */
 
 import type { DiffFile } from "../api.ts";
-
-/** 拆出目录前缀和文件名；目录行保留末尾的 `/`，让调用方分清文件和未跟踪目录。 */
-export function splitPath(path: string): { dir: string; name: string } {
-	const dirSuffix = path.endsWith("/") ? "/" : "";
-	const trimmed = dirSuffix ? path.slice(0, -1) : path;
-	const slash = trimmed.lastIndexOf("/");
-	if (slash < 0) return { dir: "", name: path };
-	return {
-		dir: trimmed.slice(0, slash + 1),
-		name: `${trimmed.slice(slash + 1)}${dirSuffix}`,
-	};
-}
-
-/** T3 Code 风格的紧凑统计数：万以内写全，上万缩成 `12.3k` 避免把行尾撑歪。 */
-export function formatStatCount(value: number): string {
-	if (value < 10_000) return String(value);
-	if (value < 999_500) {
-		const k = value / 1000;
-		return `${k < 100 ? k.toFixed(1).replace(/\.0$/, "") : Math.round(k)}k`;
-	}
-	const m = value / 1_000_000;
-	return `${m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.round(m)}m`;
-}
 
 export interface CompactTreeNode {
 	name: string;

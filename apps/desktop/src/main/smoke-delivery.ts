@@ -80,7 +80,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 
 	// 只从卡片进入的审核面板，不污染面板起始页。
 	await click(`${card} button`, "审核");
-	await until(`document.querySelectorAll('[data-delivery-diff]').length === 4`, "审核面板显示本轮全部四个文件");
+	await until(`document.querySelectorAll('[data-delivery-review] [data-diff-file]').length === 4`, "审核面板显示本轮全部四个文件");
 	await capture(window, join(outDir, "smoke-delivery-review.png"));
 
 	// 清掉本次打开的辅助标签，后面的终端验证仍从空面板开始。
@@ -108,8 +108,8 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 
 	const path = join(workspace, "delivery-a.ts");
 	await click(`${card} [data-delivery-file=${JSON.stringify(path)}]`);
-	await until(`document.querySelectorAll('[data-delivery-diff]').length === 1`, "点文件只审核所选文件");
-	await click('[data-delivery-diff] button[aria-label="撤销此文件的改动"]');
+	await until(`document.querySelectorAll('[data-delivery-review] [data-diff-file]').length === 1`, "点文件只审核所选文件");
+	await click('[data-delivery-review] [data-diff-file] button[aria-label="撤销此文件的改动"]');
 	await until(`document.querySelector('[role=dialog]') !== null`, "单文件撤销先确认");
 	await click("[role=dialog] button", "撤销改动");
 	await until(

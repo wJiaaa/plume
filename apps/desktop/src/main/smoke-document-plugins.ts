@@ -96,9 +96,9 @@ export async function checkDocumentPlugins({
 	await writeFile(join(workspace, "comment.txt"), "comment me\n");
 	await page("window.dispatchEvent(new Event('focus'))");
 	await click('[data-panel-tab="plume.git/git"] [role=tab]');
-	const commentFile = `[...document.querySelectorAll('${shown} .git-file')].find((row) => row.querySelector('.git-tree-file-name')?.textContent === 'comment.txt')`;
+	const commentFile = `[...document.querySelectorAll('${shown} [data-diff-file]')].find((row) => row.querySelector('.plume-diff-name')?.textContent === 'comment.txt')`;
 	await until(commentFile, "Git 列出新写的文件");
-	await clickVisibleIn(page, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
+	await clickVisibleIn(page, `[${commentFile}?.querySelector('.plume-diff-toggle')]`, "comment.txt 的展开");
 	await until(`${commentFile}?.querySelector('[data-diff-pick]')`, "改动视图的行号可以评论");
 	await page(`(() => {
 		${commentFile}.querySelector('[data-diff-pick]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -154,7 +154,7 @@ export async function checkDocumentPlugins({
 		);
 		await writeFile(join(outDir, "smoke-panel-window-git.png"), (await detached.webContents.capturePage()).toPNG());
 		if (!(await detachedPage(`Boolean(${commentFile}.querySelector('[data-diff-pick]'))`)))
-			await clickVisibleIn(detachedPage, `[${commentFile}?.querySelector('.git-tree-toggle')]`, "comment.txt 的展开");
+			await clickVisibleIn(detachedPage, `[${commentFile}?.querySelector('.plume-diff-toggle')]`, "comment.txt 的展开");
 		await inDetached(`${commentFile}?.querySelector('[data-diff-pick]')`, "改动视图的行号可以评论");
 		await detached.webContents.executeJavaScript(`(() => {
 			${commentFile}.querySelector('[data-diff-pick]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));

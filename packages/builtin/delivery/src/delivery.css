@@ -118,20 +118,18 @@
 	padding: 8px 12px;
 }
 
-.plume-delivery-sticky {
-	position: sticky;
-	top: 0;
-	z-index: 10;
-	background: var(--plume-shell);
-}
-
-.plume-delivery-diff {
-	margin-bottom: 4px;
+/* 审核面板：工具栏在上，下面的文件列表滚动。文件行和 diff 的样子归 @plume/ui 的多文件 diff。 */
+.plume-delivery-review {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+	flex-direction: column;
 }
 
 .plume-delivery-scroller {
-	height: 100%;
 	min-height: 0;
+	flex: 1 1 0%;
 }
 
 .plume-delivery-action-label {

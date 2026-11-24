@@ -1,6 +1,6 @@
 import type { ChangedFile, SessionView } from "@plume/contract";
 import type { PanelProps, TurnFooterProps, UiContext, UiPlugin } from "@plume/contract/ui";
-import { Button, Caret, IconButton, PanelEmpty, Popover, Scroller, Text, useConfirmer, useI18n } from "@plume/ui";
+import { Button, Caret, DiffFileList, DiffToolbar, IconButton, PanelEmpty, Popover, Scroller, Text, useConfirmer, useI18n } from "@plume/ui";
 import { FileDiff as FileDiffIcon, Files, Undo2 } from "@plume/ui/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DeliveryApi } from "./api.ts";
@@ -250,38 +250,57 @@ function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiC
 	);
 }
 
+/**
+ * 审核面板：公共的多文件 diff（同 Git 面板的改动视图）——顶上工具栏，每个文件一行，默认全部展开，审核就是从上往下读。
+ * 右键是文件菜单，悬停出撤销。
+ */
 function Review({ ui, state, session, timestamp, path }: { ui: UiContext; state: DeliveryState; session: SessionView; timestamp: number; path?: string }) {
 	const messages = MESSAGES[useI18n().resolvedLocale];
 	const { id: sessionId, cwd } = session.summary;
 	const { data, undoing } = state.useDelivery(sessionId, timestamp);
 	const undo = useUndo(ui, state, sessionId, timestamp);
 	const pathMenu = ui.useFileMenu(cwd);
-	const files = (data?.files ?? []).filter((file) => !path || file.path === path);
+	const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
+	const files = (data?.files ?? []).filter((file) => !path || file.path === path).map((file) => ({ ...file, label: relativeTo(cwd, file.path) }));
+	const open = new Set(files.filter((file) => !folded.has(file.path)).map((file) => file.path));
 	return (
 		<>
 			{files.length ? (
-				<Scroller top="none" className="plume-delivery-scroller">
-					{files.map((file) => (
-						<section key={file.path} data-delivery-diff={file.path} className="plume-delivery-diff">
-							<div className="plume-delivery-sticky">
-								<div className="plume-delivery-file-head" onContextMenu={(event) => pathMenu.onContextMenu(event, { path: file.path })}>
-									<FileName path={relativeTo(cwd, file.path)} />
-									<Counts added={file.added} removed={file.removed} />
-									<IconButton
-										size="sm"
-										icon={<Undo2 size={14} />}
-										label={file.canUndo ? messages.revertOne : file.undoReason || messages.cannotRevert}
-										explainDisabled
-										disabled={!file.canUndo || undoing}
-										className={undoing ? "plume-delivery-busy" : ""}
-										onClick={() => undo.ask(file.path)}
-									/>
-								</div>
-							</div>
-							<ui.FileDiff path={file.path} hunks={file.hunks} showPath={false} maxLines={Infinity} />
-						</section>
-					))}
-				</Scroller>
+				<div data-delivery-review className="plume-delivery-review">
+					<DiffToolbar
+						files={files.length}
+						added={files.reduce((sum, file) => sum + file.added, 0)}
+						removed={files.reduce((sum, file) => sum + file.removed, 0)}
+						expanded={open.size > 0}
+						onToggleAll={() => setFolded(open.size ? new Set(files.map((file) => file.path)) : new Set())}
+					/>
+					<Scroller top="none" className="plume-delivery-scroller">
+						<DiffFileList
+							files={files}
+							open={open}
+							onToggle={(filePath) =>
+								setFolded((current) => {
+									const next = new Set(current);
+									if (!next.delete(filePath)) next.add(filePath);
+									return next;
+								})
+							}
+							onFileContextMenu={(event, file) => pathMenu.onContextMenu(event, { path: file.path })}
+							actions={(file) => (
+								<IconButton
+									size="sm"
+									icon={<Undo2 size={13} strokeWidth={1.9} />}
+									label={file.canUndo ? messages.revertOne : file.undoReason || messages.cannotRevert}
+									explainDisabled
+									disabled={!file.canUndo || undoing}
+									className={undoing ? "plume-delivery-busy" : ""}
+									onClick={() => undo.ask(file.path)}
+								/>
+							)}
+							renderDiff={(file, view) => <ui.FileDiff path={file.path} hunks={file.hunks} showPath={false} maxLines={Infinity} {...view} />}
+						/>
+					</Scroller>
+				</div>
 			) : (
 				<PanelEmpty icon={FileDiffIcon} title={messages.fileChanges} />
 			)}

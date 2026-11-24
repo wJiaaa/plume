@@ -120,31 +120,6 @@
 	flex-direction: column;
 }
 
-/* 固定在改动视图顶部的 diff 工具条：总览、全部展开/折叠、统一/分栏分段开关、换行、树切换始终可见。 */
-.git-changes-bar {
-	display: flex;
-	height: 34px;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 8px;
-	border-bottom: 1px solid var(--plume-line-soft);
-	background: var(--plume-shell);
-	padding: 0 10px 0 12px;
-}
-
-.git-changes-summary {
-	flex-shrink: 0;
-	white-space: nowrap;
-}
-
-.git-changes-controls {
-	margin-left: auto;
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 4px;
-}
-
 /* 改动视图通栏铺开：分区头、文件头和 diff 表面从左缘对齐到右缘，不再悬浮在留白里。 */
 .git-changes-list {
 	padding: 0 0 12px;
