@@ -1302,6 +1302,8 @@ export const zhCN = {
 	"common.allProjects": "所有项目",
 	"common.unarchive": "取消归档",
 	"sessionRow.actionsFor": "「{title}」的会话操作",
+	"sessionRow.archive": "归档会话",
+	"sessionRow.archiveFor": "归档会话「{title}」",
 	"settings.archived": "已归档的聊天",
 	"settings.group.about": "关于与归档",
 	"settings.group.data": "数据与统计",

@@ -1345,6 +1345,8 @@ export const en = {
 	"common.allProjects": "All projects",
 	"common.unarchive": "Unarchive",
 	"sessionRow.actionsFor": "Actions for “{title}”",
+	"sessionRow.archive": "Archive the conversation",
+	"sessionRow.archiveFor": "Archive “{title}”",
 	"settings.archived": "Archived chats",
 	"settings.group.about": "About and archive",
 	"settings.group.data": "Data and usage",

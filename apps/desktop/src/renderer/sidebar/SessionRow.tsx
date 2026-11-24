@@ -2,13 +2,13 @@
  * 侧栏里的一段会话：状态点、标题、最后活动距今多久。
  *
  * 悬停的底色挂在外层的行上，不挂在按钮上：标题读不全时 `ScrollText` 靠行上的悬停滚动，两者要认同一个东西。
- * 「⋯」是盖在按钮右端的兄弟节点，不放进按钮里：指针停在它上面时还在行里，底色和字色不会掉。
- * 它打开的就是右键那份菜单（置顶、归档、删除都在里面），行上不再单摆几颗按钮，悬停时只露这一颗。
+ * 「⋯」和「归档」是盖在按钮右端的兄弟节点，不放进按钮里：指针停在它们上面时还在行里，底色和字色不会掉。
+ * 「⋯」打开右键那份菜单（置顶、归档、删除等都在里面），归档是最常用的操作，留在最右端一键点到。
  */
 
 import type { ProjectEntry, SessionStats, SessionSummary } from "@plume/contract";
 import { ActionSpinner, BreatheLoader, HoverRow, HoverRowReveal, hoverSlot, IconButton, ScrollText, TimeAgo, useI18n, usePopover } from "@plume/ui";
-import { ChevronRight, MoreHorizontal } from "@plume/ui/icons";
+import { Archive, ChevronRight, MoreHorizontal } from "@plume/ui/icons";
 import { SessionCard, useSessionCard } from "./SessionCard.tsx";
 import { DropLineIndicator } from "./DropIndicator.tsx";
 import { useSidebarReorderContext, useReorderState } from "./reorder-context.ts";
@@ -65,7 +65,7 @@ export const SessionRow = memo(function SessionRow({
 			{...hover.bind}
 			onPointerMove={(event) => reorder?.registerTarget("session", session.id, event.currentTarget.getBoundingClientRect(), event.clientY, session.project)}
 			onPointerLeave={() => reorder?.clearTarget(session.id)}
-			controls={hoverSlot(1)}
+			controls={hoverSlot(2)}
 			className={`rounded-field active:bg-elevated ${dragging ? "opacity-40" : ""} ${active ? "bg-card-hover" : "hover:bg-card-hover"}`}
 			onContextMenu={(event) => {
 				// 浮层经 portal 画在行外，里面输入框的右键仍交给输入框。
@@ -151,7 +151,7 @@ export const SessionRow = memo(function SessionRow({
 					/>
 				</span>
 			)}
-			<HoverRowReveal className="rounded-r-field">
+			<HoverRowReveal className="gap-0.5 rounded-r-field">
 				<IconButton
 					size="sm"
 					label={t("sessionMenu.actions")}
@@ -164,6 +164,18 @@ export const SessionRow = memo(function SessionRow({
 					className="pointer-events-auto"
 					data-plume-row-more=""
 					icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
+				/>
+				<IconButton
+					size="sm"
+					label={t("sessionRow.archive")}
+					ariaLabel={t("sessionRow.archiveFor", { title })}
+					onClick={() => {
+						hover.dismiss();
+						actions.archive(session.id);
+					}}
+					className="pointer-events-auto"
+					data-plume-row-archive=""
+					icon={<Archive size={13} strokeWidth={1.8} />}
 				/>
 			</HoverRowReveal>
 		</HoverRow>
