@@ -198,12 +198,22 @@ export async function checkPlan(options: {
 		if (!(await page<boolean>(toggleOn))) throw new Error("建出来的会话没接上新对话的计划模式开关");
 		await mainNotAlone("右栏开着、卡片窄");
 		await capture("smoke-plan-card.png");
-		// 顶栏的 `</>`：看原文（等宽的 Markdown，`#` 还在），再点回排版后的正文。
+		// 顶栏的 `</>`：看原文（等宽的 Markdown，`#` 还在），不套卡片边框也不限高截断，再点回排版后的正文。
 		await clickVisible(page, `[data-plan-source]`);
 		await until(
-			`document.querySelector('[data-plan-body]') === null && [...document.querySelectorAll('pre')].some(pre => pre.textContent.includes('# 改 hello.txt'))`,
+			`document.querySelector('[data-plan-body]') === null && document.querySelector('[data-plan-source-body]')?.textContent.includes('# 改 hello.txt') === true`,
 			"点 </> 看计划原文",
 		);
+		const sourceStyle = await page<{ borderTop: string; maxHeight: string; overflowY: string; background: string }>(
+			`(() => {
+				const pre = document.querySelector('[data-plan-source-body]');
+				if (!pre) return null;
+				const style = getComputedStyle(pre);
+				return { borderTop: style.borderTopWidth, maxHeight: style.maxHeight, overflowY: style.overflowY, background: style.backgroundColor };
+			})()`,
+		);
+		if (!sourceStyle || sourceStyle.borderTop !== "0px" || sourceStyle.maxHeight !== "none" || sourceStyle.overflowY !== "visible")
+			throw new Error(`计划原文不该套限高卡片：${JSON.stringify(sourceStyle)}`);
 		await capture("smoke-plan-source.png");
 		await clickVisible(page, `[data-plan-source]`);
 		await until(`document.querySelector('[data-plan-body] .markdown-document') !== null`, "再点 </> 回到排版后的计划");

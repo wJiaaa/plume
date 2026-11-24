@@ -228,6 +228,22 @@
 }
 
 /*
+ * Markdown 原文和排版正文共用同一列：不套卡片边框、不限高度，由外层面板整页滚动，完整展开。
+ * 字色取 `--plume-ink` 而不是 `--plume-code-fg`：没有独立代码块底色，浅色界面配深色代码主题时用 `--plume-code-fg` 会发淡。
+ */
+.plume-plan-source {
+	margin: 0;
+	font-family: var(--plume-font-mono);
+	font-size: var(--plume-code-size);
+	line-height: var(--plume-code-line-height);
+	letter-spacing: var(--plume-code-tracking);
+	font-variant-ligatures: none;
+	color: var(--plume-ink);
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+/*
  * 面板：顶上一条固定的栏（文件名、在编辑器中打开、看原文），下面滚动的是计划正文。
  */
 .plume-plan-view {

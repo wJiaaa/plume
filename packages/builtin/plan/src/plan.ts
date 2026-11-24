@@ -58,6 +58,11 @@ export function planFileName(at: number): string {
 	return `plan-${day}-${two(date.getHours())}${two(date.getMinutes())}${two(date.getSeconds())}.md`;
 }
 
+/** 面板顶栏展示的计划文件路径：家目录缩成 `~`（`/Users/someone/…` 在窄顶栏里只占地方），其余原样。 */
+export function planDisplayPath(file: string): string {
+	return file.replace(/^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/, "~");
+}
+
 /** 计划在面板、交给模型的结果和压缩摘要里长的样子：带着批准时附上的注意事项。 */
 // i18n-exempt：小标题跟着计划一起存进会话、交给模型，不随界面语言变。
 export function renderPlan(plan: string, notes?: string): string {

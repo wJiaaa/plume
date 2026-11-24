@@ -3,7 +3,8 @@
  *
  * 顶上一条固定的栏：计划文件的名字（批准过好几份时点它切换），右边「在编辑器中打开」（`ui.ProjectOpener` 的图标样子，
  * 打开的是交计划时写下的那份文件）和 `</>`（看 Markdown 原文）。下面直接是计划正文，不套卡片：按文档排版画
- * （`ui.Markdown` 的 `variant: "document"`，照 t3code 计划卡的正文），照常折行；正文一列照 t3code 的 Markdown 文件预览，最宽 896px，面板宽了居中。
+ * （`ui.Markdown` 的 `variant: "document"`，照 t3code 计划卡的正文），切到 Markdown 原文时同样直接摊开在面板底色上，
+ * 不套卡片边框、不限高；两者照常折行，正文一列照 t3code 的 Markdown 文件预览，最宽 896px，面板宽了居中。
  *
  * 评论本身列在审批卡上（`PlanApproval.tsx`），由那里修订或带着接受；面板上那段字画下划线、末尾挂一枚和卡上同号的序号。
  * 批准或打回以后面板只读，那份计划留着看。等审批时正文用审批卡上那一份；其余时候从会话消息里读最后交上来的那份，
@@ -14,7 +15,6 @@ import type { PanelProps, UiContext } from "@plume/contract/ui";
 import {
 	Button,
 	Caret,
-	CodeBlock,
 	IconButton,
 	MarkNumber,
 	MenuBody,
@@ -234,7 +234,9 @@ export function planPanel(ui: UiContext) {
 								</Text>
 							)}
 							{source ? (
-								<CodeBlock>{text}</CodeBlock>
+								<pre className="plume-plan-source" data-plan-source-body="">
+									{text}
+								</pre>
 							) : (
 								/* 松开鼠标时取选区：双击、三击选词选段也是松开之后才定。 */
 								<div className="plume-plan-anchor">

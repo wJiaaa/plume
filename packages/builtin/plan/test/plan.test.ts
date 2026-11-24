@@ -24,7 +24,7 @@ import type {
 } from "@plume/contract";
 import type { PlanApi } from "../src/api.ts";
 import plugin from "../src/index.ts";
-import { approvedPlans, currentPlan, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
+import { approvedPlans, currentPlan, planDisplayPath, planSubject, SUBMIT_PLAN } from "../src/plan.ts";
 import { planSection, SUBMIT_PLAN_RESULTS, unsubmittedPlanNote } from "../src/prompt.ts";
 
 const SESSIONS = [
@@ -326,6 +326,13 @@ test("环境卡片列批准过的每一份，按批准先后，打回的、退�
 	assert.equal(planSubject({ plan: "# 移除 Redisson\n\n## 概要\n换成单实例锁。" }), "移除 Redisson");
 	assert.equal(planSubject({ plan: `# ${"长".repeat(50)}` }), "长".repeat(40));
 	assert.equal(planSubject({}), undefined, "参数还在流进来时只说动作");
+	assert.equal(planDisplayPath("/Users/alice/.plume/scratch/s1/plans/plan-20261124-103000.md"), "~/.plume/scratch/s1/plans/plan-20261124-103000.md");
+	assert.equal(planDisplayPath("/home/alice/.plume/scratch/s1/plans/plan-20261124-103000.md"), "~/.plume/scratch/s1/plans/plan-20261124-103000.md");
+	assert.equal(
+		planDisplayPath("C:\\Users\\alice\\.plume\\scratch\\s1\\plans\\plan-20261124-103000.md"),
+		"~\\.plume\\scratch\\s1\\plans\\plan-20261124-103000.md",
+	);
+	assert.equal(planDisplayPath("/tmp/scratch/s1/plans/plan-20261124-103000.md"), "/tmp/scratch/s1/plans/plan-20261124-103000.md");
 });
 
 test("卡上的附言：拒绝带修改意见时回给模型、这一轮不停；接受带评论时评论成为注意事项", async () => {
