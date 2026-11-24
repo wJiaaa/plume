@@ -7,8 +7,8 @@
  * 交回时再看那次调用还在不在（撤回截掉了就不交）。
  * 那一行记在开它的插件名下（`DeliveredReport.plugin`），它登记了 `ui.agentDelivery` 就由它画。
  *
- * 叫不叫醒来处（`wake`），看这一轮是谁引起的（`session.cause`，本体在一轮开头定下，见 `turn-cause.ts`）：开出来的第一轮、
- * 来处寄来的信引起的那一轮叫醒；人在它里面说话引起的、出错的不叫醒，汇报留到来处下一轮开头读。
+ * 叫不叫醒来处（`wake`），看这一轮是谁引起的（`session.cause`）和这一轮读到过谁的信（`session.peerRead`）：开出来的第一轮、
+ * 读到过来处寄来的信的那一轮叫醒；人在它里面说话引起的、出错的不叫醒，汇报留到来处下一轮开头读。
  * 后台结果叫起的那一轮（它派的子 Agent 回来了）沿用引起它的那件事，由本体算好。
  * 一轮收尾时还有派出去的事没回来（`summary.background`），先不交：真正的结论在回来以后那一轮里，那时再交。
  * 那件事要是被人停掉、没再引起新的一轮，等它真闲下来（`whenIdle`）把这一轮的汇报交上，不叫醒——人停下的事不该叫起来处。
@@ -16,7 +16,7 @@
  * 真叫不叫得醒、几份合成一次由送达那边定（见 `wake.ts` 的 `wakeReports`）。
  */
 
-import type { DeliveryInput, Log, Message, TurnCause, TurnStop } from "@plume/contract";
+import type { DeliveryInput, Log, Message, TurnStop } from "@plume/contract";
 import type { BackgroundRuns } from "../background.ts";
 import type { PluginHost } from "../host.ts";
 import type { Session } from "./session.ts";
@@ -65,9 +65,9 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 		if (session.summary.kind !== "top" || !origin?.reportBack || !origin.toolCallId) return;
 		lingering.delete(session.summary.id);
 		if (stop.reason === "aborted" || stop.reason === "interrupted") return;
-		// 收尾时还有事没回来：真正的结论在回来以后那一轮里，那一轮沿用这一轮的 `cause`，到时再定叫不叫醒。
+		// 收尾时还有事没回来：真正的结论在回来以后那一轮里，那一轮沿用这一轮的 `cause` 和 `peerRead`，到时再定叫不叫醒。
 		if (session.summary.background) return linger(session, stop);
-		deliver(session, stop, wakes(session.cause, origin.sessionId));
+		deliver(session, stop, wakes(session, origin.sessionId));
 	}
 
 	function linger(session: Session, stop: TurnStop): void {
@@ -129,9 +129,9 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 	};
 }
 
-/** 开出来的第一轮（来处交代的）、来处寄来的信引起的那一轮收场时叫醒来处。 */
-function wakes(cause: TurnCause | undefined, originId: string): boolean {
-	return cause?.by === "launch" || (cause?.by === "peer" && cause.from === originId);
+/** 开出来的第一轮（来处交代的）、读到过来处寄来的信的那一轮收场时叫醒来处。 */
+function wakes(session: Pick<Session, "cause" | "peerRead">, originId: string): boolean {
+	return session.cause?.by === "launch" || session.peerRead?.has(originId) === true;
 }
 
 /** 最后一段有字的回复。 */

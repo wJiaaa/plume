@@ -214,12 +214,46 @@ it("怎么算：界面的「继续」、侧边聊天交来的算人；子会话�
 	expect(promptCause(userMessage({ content: words }), { kind: "child", launchedBy: undefined }, none)).toEqual({ by: "runtime" });
 	expect(promptCause(userMessage({ content: words }), { kind: "standalone", launchedBy: undefined }, none)).toEqual({ by: "runtime" });
 	const letter = { letter: { peer: { sessionId: "a", from: "a", text: "x" }, settle() {} }, valid: () => true };
+	const fromOrigin = { letter: { peer: { sessionId: "origin", from: "origin", text: "y" }, settle() {} }, valid: () => true };
 	const report = { text: "r", delivery: { id: "d", plugin: "p", title: "t", status: "done" as const, sessionId: "c" }, valid: () => true };
 	const own = { text: "o", valid: () => true };
 	const previous: TurnCause = { by: "launch", plugin: "p" };
 	expect(reportsCause([own, report, letter], previous, true)).toEqual({ by: "peer", from: "a" });
+	expect(reportsCause([letter, fromOrigin], previous, false, "origin")).toEqual({ by: "peer", from: "origin" });
+	expect(reportsCause([letter, fromOrigin], previous, false, "other")).toEqual({ by: "peer", from: "a" });
 	expect(reportsCause([own, report], previous, true)).toEqual({ by: "report", from: "c" });
 	expect(reportsCause([own], previous, true)).toEqual(previous);
 	expect(reportsCause([own], previous, false)).toEqual({ by: "runtime" });
 	expect(reportsCause([own], undefined, true)).toEqual({ by: "runtime" });
+});
+
+it("开出来的会话在人发起的一轮中途读到来处的信：这一轮仍算人的，收尾交回照样叫醒来处；下一轮人再说话不再叫醒", async () => {
+	const { service, seen, say, probed, idle, setTarget, open: release } = await open();
+	const origin = await service.createSession({ cwd: dir });
+	say(origin.id, "do:spawn");
+	// 第一轮交回叫醒 origin，调一次 probe。
+	await probed(1);
+	await idle(origin.id);
+	const child = service.listSessions().find((summary) => summary.spawnedFrom?.sessionId === origin.id)!;
+
+	// 人在 child 里发起第二轮并卡在 slow 上；这期间 origin 寄信给 child。
+	say(child.id, "人说：do:slow");
+	await vi.waitFor(async () => expect((await service.getSession(child.id)).summary.running).toBe(true), { timeout: 5_000, interval: 10 });
+	setTarget(child.id);
+	say(origin.id, "do:mail");
+	await idle(origin.id);
+	// 放开 slow，等信过凑批窗口在步骤间被 child 读入（信里写着 do:probe）。
+	await new Promise((resolve) => setTimeout(resolve, 500));
+	release();
+	// child 读到信调 probe（第 2 次，看到的仍是 human）；收尾交回叫醒闲着的 origin 再调 probe（第 3 次，看到 report）。
+	await probed(3);
+	expect(seen[1]).toEqual({ sessionId: child.id, cause: { by: "human" } });
+	expect(seen[2]).toEqual({ sessionId: origin.id, cause: { by: "report", from: child.id } });
+	await idle(origin.id);
+
+	// 第三轮人在 child 里单纯说话（没再来信）：收尾交回留到下一轮，不叫醒 origin。
+	say(child.id, "再来一句");
+	await idle(child.id);
+	await new Promise((resolve) => setTimeout(resolve, 600));
+	expect(seen).toHaveLength(3);
 });

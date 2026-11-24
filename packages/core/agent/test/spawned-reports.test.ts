@@ -45,9 +45,12 @@ function family(children: Record<string, { toolCallId: string; messages: Message
 		log: () => undefined,
 	});
 	const session = (id: string) => sessions.get(id)!;
-	const end = (id: string, reason: TurnStop["reason"] = "done", cause: TurnCause = LAUNCH) => {
+	const end = (id: string, reason: TurnStop["reason"] = "done", cause: TurnCause = LAUNCH, peers?: readonly string[]) => {
 		const child = children[id];
 		session(id).cause = cause;
+		const inferred = peers ?? (cause.by === "peer" ? [cause.from] : undefined);
+		if (inferred) session(id).peerRead = new Set(inferred);
+		else delete session(id).peerRead;
 		if (child?.background) session(id).summary.background = true;
 		else delete session(id).summary.background;
 		reports.turnEnded(session(id), { reason });
@@ -83,19 +86,21 @@ it("每轮汇报：第一轮和来处的信引起的那一轮叫醒，人说话�
 	child.messages.push(user("<session-message>"), reply("b.ts 也改了"));
 	end("s1", "done", FROM_ORIGIN);
 	expect(sent[2]!.options.wake).toBe(true);
-	// 别的会话的信、运行时叫起的不叫醒来处。
+	// 别的会话的信、运行时叫起的不叫醒来处；人说话的一轮中途读到过来处的信照样叫醒，读到别的会话的信不叫醒。
 	end("s1", "done", { by: "peer", from: "q" });
 	end("s1", "done", { by: "runtime" });
-	expect(sent.slice(3).map((one) => one.options.wake)).toEqual([false, false]);
+	end("s1", "done", { by: "human" }, ["p"]);
+	end("s1", "done", { by: "human" }, ["q"]);
+	expect(sent.slice(3).map((one) => one.options.wake)).toEqual([false, false, true, false]);
 
 	child.messages.push(user("<session-message>"), reply("出错了"));
 	end("s1", "error", FROM_ORIGIN);
-	expect(sent[5]!.options).toMatchObject({ wake: false, delivery: { status: "failed", incomplete: true } });
+	expect(sent[7]!.options).toMatchObject({ wake: false, delivery: { status: "failed", incomplete: true } });
 
-	expect(sent).toHaveLength(6);
+	expect(sent).toHaveLength(8);
 	end("s1", "aborted");
 	end("s1", "interrupted");
-	expect(sent).toHaveLength(6);
+	expect(sent).toHaveLength(8);
 });
 
 it("每轮汇报：收尾时还有事没回来先不交，回来以后那一轮收场时交（它的 cause 由本体沿用上一轮的）；来处那次调用不在了不交；回复只取前 400 字", () => {

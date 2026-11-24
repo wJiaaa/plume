@@ -147,6 +147,8 @@ export interface Session {
 	causeWaited?: boolean;
 	/** 正在跑的这一轮交给循环的那份会话信息（`TurnScope.session`）：一轮中途 `cause` 变了跟着改，之后的钩子、工具读到的是新的。 */
 	turnScope?: SessionScope;
+	/** 这一轮（含收尾时在等的后台结果回来叫起的那一轮）里读到过谁寄来的信：收场交回时据此定叫不叫醒来处（见 `spawned-reports.ts`）。 */
+	peerRead?: Set<string>;
 }
 
 /**

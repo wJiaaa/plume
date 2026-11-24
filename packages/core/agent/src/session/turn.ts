@@ -298,8 +298,20 @@ export function createTurn(deps: TurnDeps): Turn {
 					break;
 				}
 				if (await commitPrompt(session, prompt, verdict.context, () => !controller.signal.aborted && reports.every((report) => report.valid()))) {
+					if (opening) {
+						const carry =
+							!spoke &&
+							session.causeWaited === true &&
+							!reports.some((report) => "letter" in report || ("delivery" in report && Boolean(report.delivery?.sessionId)));
+						if (!carry) delete session.peerRead;
+					}
+					if (letters.length > 0) {
+						const read = (session.peerRead ??= new Set());
+						for (const letter of letters) read.add(letter.peer.sessionId);
+					}
 					// 一轮开头读进的、做完前读进而接着做的，这一轮是它们引起的；做到一半顺带读进的、和人的插话一起读进的不改。
-					if ((opening || ending) && !spoke) setCause(session, reportsCause(reports, session.cause, session.causeWaited === true));
+					if ((opening || ending) && !spoke)
+						setCause(session, reportsCause(reports, session.cause, session.causeWaited === true, session.summary.spawnedFrom?.sessionId));
 					for (const letter of letters) letter.settle({ status: "read" });
 					received = true;
 					delivered = true;
@@ -360,6 +372,7 @@ export function createTurn(deps: TurnDeps): Turn {
 		emit({ type: "hiccups", sessionId, hiccups: [] });
 		setRunning(session, true);
 		// 人发来新消息就从头数；「继续」这类界面替人说的不算，接着做的还是同一件事。
+		if (prompt) delete session.peerRead;
 		if (prompt && !prompt.synthetic) {
 			session.repetition.reset();
 			delete session.autoWakes;
@@ -497,6 +510,7 @@ export function createTurn(deps: TurnDeps): Turn {
 		observe(sessionId, { type: "turnEnd", stop: session.summary.stop });
 		// 开出来的会话把这一轮交回来处；赶在放开会话之前，放开时叫的 `nudgeOrigin` 看得到这一份。
 		spawned.turnEnded(session, final);
+		if (!session.causeWaited) delete session.peerRead;
 		const task = prompt && handedPrompts.get(prompt);
 		if (task) handed.settle(task.childId, task.task, session.summary.stop);
 		// 干净收尾的、人自己的会话，趁缓存还热先问一次要不要压（`compactIdle`）：控制器先不放，压完由它放开会话。

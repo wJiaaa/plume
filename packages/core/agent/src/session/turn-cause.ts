@@ -22,11 +22,12 @@ export function promptCause(
 }
 
 /**
- * 读进来的一批送达是谁的：有信算寄信的会话，有开出去的会话交回的算交回的那个，都没有就是这个会话自己派出去的事回来了——
- * 上一轮收尾时还在等它们（`waited`）就沿用上一轮的，否则是运行时的事（挂着的监视、约好的唤醒）。
+ * 读进来的一批送达是谁的：有信算寄信的会话（几封信一起到时，有来处 `originId` 的先认它），有开出去的会话交回的算交回的那个，
+ * 都没有就是这个会话自己派出去的事回来了——上一轮收尾时还在等它们（`waited`）就沿用上一轮的，否则是运行时的事（挂着的监视、约好的唤醒）。
  */
-export function reportsCause(reports: readonly Report[], previous: TurnCause | undefined, waited: boolean): TurnCause {
-	for (const report of reports) if ("letter" in report) return { by: "peer", from: report.letter.peer.sessionId };
+export function reportsCause(reports: readonly Report[], previous: TurnCause | undefined, waited: boolean, originId?: string): TurnCause {
+	const peers = reports.flatMap((report) => ("letter" in report ? [report.letter.peer.sessionId] : []));
+	if (peers.length > 0) return { by: "peer", from: originId && peers.includes(originId) ? originId : peers[0]! };
 	for (const report of reports) if ("delivery" in report && report.delivery?.sessionId) return { by: "report", from: report.delivery.sessionId };
 	return waited && previous ? previous : { by: "runtime" };
 }
