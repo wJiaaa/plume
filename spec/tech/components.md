@@ -28,6 +28,7 @@
 | `ApprovalFrame`、`ApprovalExpiry` | 审批卡的外框（收放的标题栏、类型小标签、倒计时、+N）和每秒走的「m:ss 后失效」；产品的通用审批卡、插件的提问卡共用外框，自己画外框的插件卡（计划、MCP 表单）只用倒计时 | Tailwind 类 |
 | `Sideways` | 横向标签栏，普通鼠标滚轮横滚，触摸板保持原生方向；PR 账号标签复用 | `ui/scroll.css` |
 | `CodeBlock` | 工具输出、文件内容（改动对比用 `ui.FileDiff`） | `code` |
+| `DiffToolbar`、`DiffFileList`、`DiffFileItem`、`DiffStat`、`useDiffView` | 多文件 diff：工具栏（文件数、增删、全部展开 / 折叠、统一 / 分栏、换行）、一列可展开的文件行（钉顶、悬停动作、状态标）、`+增 −删`；统一 / 分栏和换行是所有多文件 diff 共用的一份。Git 面板、交付卡的审核面板用它，插件不自己画另一套；diff 正文由调用方交 `ui.FileDiff` | `ui/diff.css` |
 | `useAnnotator`、`AnnotateCanvas`、`AnnotateToolbar` | 图片标注：标记清单和撤销（hook）、画标记的画布、深色工具条；看图器和截图插件共用 | `ui.css` 的 `.plume-image-*`、`.plume-annotate-*`（压在图上，颜色不跟主题） |
 | `useMovableBar`、`useToolbarPlacement`、`HANDLES` 等选区几何 | 标注工具条的落点和拖动：看图器里贴窗口底边、截图浮层里跟着选区；选区的手柄、移动、缩放 | 无 |
 | `PageTopRow` | 页面每一栏最上面那一行（两栏页面的栏头）：顶行高、左右内边距，不拖窗口（拖窗口归宿主的标题栏） | Tailwind 类 |

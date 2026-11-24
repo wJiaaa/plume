@@ -1002,6 +1002,121 @@ export function EnvironmentSplitRow({ disabled = false, busy = false, working = 
 } & Record<`data-${string}`, string | undefined>)
 ```
 
+## 多文件 diff
+
+### `DiffToolbar`
+
+```tsx
+/**
+ * 多文件 diff 顶上那一条：文件数、总增删，全部展开 / 折叠，统一 / 分栏，自动换行。放在滚动面外面、列表上方，滚长 diff 时一直够得着。
+ * 统一 / 分栏和换行改的是 `useDiffView` 那一份，不用调用方接；面板窄于 540px 时不给切换。
+ */
+export function DiffToolbar(props: {
+	/** 一共几个文件。 */
+	files: number;
+	added: number;
+	removed: number;
+	/** 现在有没有文件开着：决定那颗按钮是「全部折叠」还是「全部展开」。 */
+	expanded?: boolean;
+	/** 全部展开 / 折叠；不给就没有这颗按钮。 */
+	onToggleAll?: () => void;
+	/** 排在换行后面的别的开关（`sm` 的 `IconButton`），比如平铺 / 树。 */
+	children?: ReactNode;
+})
+```
+
+### `DiffFileList`
+
+```tsx
+/**
+ * 一列文件，各自展开成自己的 diff（手风琴：能把两个文件同时开着往下读）。放在 `Scroller` 里，上方配 `DiffToolbar`。
+ * 展开哪些可以交给它自己记（`initiallyOpen` 定开头全开还是全关），要配「全部展开 / 折叠」时用 `open`、`onToggle` 自己管。
+ * `renderDiff` 拿到的视图已经按人选的和容器宽窄算好，原样交给 `ui.FileDiff`。
+ */
+export function DiffFileList<F extends DiffFileEntry>({ initiallyOpen = false }: {
+	files: readonly F[];
+	renderDiff: (file: F, view: DiffViewOptions) => ReactNode;
+	open?: ReadonlySet<string>;
+	onToggle?: (path: string) => void;
+	initiallyOpen?: boolean;
+	actions?: (file: F) => ReactNode;
+	onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: F) => void;
+	/** 一个文件都没有时说的话；不给就什么都不画。 */
+	emptyLabel?: string;
+})
+
+export interface DiffFileEntry {
+	/** 唯一键：展开状态、`actions`、右键都按它认。 */
+	path: string;
+	/** 行上显示、「复制路径」复制的写法，一般是相对工作目录的路径；不给时用 `path`。 */
+	label?: string;
+	added: number;
+	removed: number;
+	/** 不给就不画状态标。 */
+	status?: DiffFileStatus;
+}
+
+export interface DiffViewOptions {
+	layout: FileDiffLayout;
+	wrap: boolean;
+}
+
+export type DiffFileStatus = "added" | "untracked" | "modified" | "deleted" | "renamed";
+```
+
+### `DiffFileItem`
+
+```tsx
+/**
+ * 一个文件：钉在顶上的那一行（箭头、文件图标、文件名在前目录在后、悬停才出的动作、行尾增删数和状态标），展开时下面是 `children`。
+ * 一般用 `DiffFileList`；自己排文件的（按目录排成树）才直接用它，`indent` 给缩进、`showDir={false}` 只写文件名。
+ * 每个文件带 `data-diff-file={path}`。
+ */
+export function DiffFileItem({ showDir = true }: {
+	file: DiffFileEntry;
+	open: boolean;
+	onToggle: () => void;
+	/** 悬停这一行时出现的按钮（`sm` 的 `IconButton`），排在「复制路径」后面。 */
+	actions?: ReactNode;
+	onContextMenu?: (event: MouseEvent<HTMLElement>) => void;
+	/** 行首缩进，单位 px。 */
+	indent?: number;
+	showDir?: boolean;
+	/** 展开时画在行下面：一般是 `ui.FileDiff`，也可以是占位或一句说明。 */
+	children?: ReactNode;
+})
+```
+
+`DiffFileEntry` 见上文。
+
+### `DiffStat`
+
+```tsx
+/**
+ * `+增 −删`，等宽数字，上万缩成 `12k`。为 0 的那一半不画，两个都是 0 时什么都不画。
+ * 文件行尾用 `align="end"`：右对齐、占一个最小宽度，一列文件的数字对得齐；跟在一句话后面用默认的 `inline`。
+ */
+export function DiffStat({ align = "inline", className = "" }: {
+	added: number;
+	removed: number;
+	align?: "inline" | "end";
+	/** 只放布局。 */
+	className?: string;
+})
+```
+
+### `useDiffView`
+
+```tsx
+/**
+ * 人在 `DiffToolbar` 上选的统一 / 分栏和换行。`DiffFileList` 自己会读；自己画文件行（`DiffFileItem`）的地方用它拿到同一份，
+ * 容器窄于 540px 时按 `unified` 画（`useNarrow(540)`）。
+ */
+export function useDiffView(): DiffViewOptions
+```
+
+`DiffViewOptions` 见上文。
+
 ## 文件图标
 
 ### `lookFor`

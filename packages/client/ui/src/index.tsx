@@ -19,6 +19,7 @@ export { activeLocale, translate } from "./i18n/translate.ts";
 export * from "./avatar/AgentAvatar.tsx";
 export * from "./avatar/AvatarPile.tsx";
 export * from "./avatar/art.ts";
+export * from "./diff/DiffFiles.tsx";
 export * from "./fileIcon.tsx";
 export * from "./hooks/useCopied.ts";
 export * from "./hooks/useLiveRefresh.ts";

@@ -1,0 +1,271 @@
+/*
+ * 多文件 diff（`DiffToolbar`、`DiffFileList`、`DiffFileItem`、`DiffStat`）：工具栏、钉在顶上的文件行、悬停才出的动作、展开的正文。
+ * diff 本身的行、行号、配色归宿主的 `ui.FileDiff`。
+ */
+
+/* ── 工具栏 ─────────────────────────────── */
+
+.plume-diff-bar {
+	display: flex;
+	height: 34px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	background: var(--plume-shell);
+	padding: 0 10px 0 12px;
+}
+
+.plume-diff-bar-count {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.plume-diff-bar-controls {
+	margin-left: auto;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* ── 增删数 ─────────────────────────────── */
+
+.plume-diff-stat {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 5px;
+}
+
+.plume-diff-stat-end {
+	min-width: 44px;
+	justify-content: flex-end;
+	gap: 6px;
+	text-align: right;
+}
+
+.plume-diff-add,
+.plume-diff-copied {
+	color: var(--plume-ok);
+}
+
+.plume-diff-remove {
+	color: var(--plume-danger);
+}
+
+/* ── 文件行 ─────────────────────────────── */
+
+.plume-diff-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.plume-diff-file {
+	border-bottom: 1px solid var(--plume-line-soft);
+}
+
+.plume-diff-file[data-expanded] {
+	border-bottom-color: var(--plume-line);
+}
+
+/* 不透明的底放在外层：滚过去的 diff 不会从圆角、缝里透出来。 */
+.plume-diff-pin {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	--plume-diff-row: var(--plume-shell);
+	--plume-diff-row-hover: color-mix(in srgb, var(--plume-fg) 5.5%, var(--plume-diff-row));
+	background: var(--plume-diff-row);
+}
+
+.plume-diff-file[data-expanded] > .plume-diff-pin {
+	--plume-diff-row: var(--plume-code-bg);
+	border-bottom: 1px solid var(--plume-line-soft);
+}
+
+.plume-diff-head {
+	container-type: inline-size;
+	position: relative;
+	display: flex;
+	height: 32px;
+	align-items: center;
+	gap: 6px;
+	padding: 0 12px 0 10px;
+	transition:
+		color var(--plume-t-quick) var(--plume-e-soft),
+		background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+/* 左缘细边：悬停轻亮，展开着时落成强调色，不用灰块遮住行尾。 */
+.plume-diff-head::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	width: 2px;
+	background: transparent;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-diff-head:hover,
+.plume-diff-head:focus-within {
+	background: var(--plume-diff-row-hover);
+}
+
+.plume-diff-head:hover::before {
+	background: color-mix(in srgb, var(--plume-fg) 26%, transparent);
+}
+
+.plume-diff-file[data-expanded] > .plume-diff-pin > .plume-diff-head::before {
+	background: var(--plume-accent);
+}
+
+.plume-diff-toggle {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 0%;
+	height: 100%;
+	align-items: center;
+	gap: 6px;
+	text-align: left;
+}
+
+.plume-diff-chevron {
+	color: var(--plume-ink-faint);
+}
+
+.plume-diff-head:hover .plume-diff-chevron,
+.plume-diff-file[data-expanded] .plume-diff-chevron {
+	color: var(--plume-ink-muted);
+}
+
+.plume-diff-icon {
+	flex-shrink: 0;
+}
+
+/* 文件名在前满色，目录淡一档跟在后面并先缩：宽窄面板下文件名都对齐同一条左缘。 */
+.plume-diff-path {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 0%;
+	align-items: baseline;
+	gap: 6px;
+	overflow: hidden;
+}
+
+.plume-diff-name,
+.plume-diff-dir {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-diff-name {
+	flex: 0 1 auto;
+}
+
+.plume-diff-dir {
+	flex: 0 9999 auto;
+}
+
+.plume-diff-deleted {
+	text-decoration: line-through;
+}
+
+/*
+ * 悬停才出的动作：
+ * - 窄行（< 380px）平时不占行宽，悬停时用实色底和左缘渐隐盖住行尾的增删数，不挤文件名；
+ * - 宽行直接排在增删数左边淡入，增删数和状态标一直看得见、不闪不跳。
+ */
+.plume-diff-actions {
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 12px;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding-left: 16px;
+	background: linear-gradient(to right, transparent, var(--plume-diff-row-hover) 14px);
+	opacity: 0;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-diff-head:hover .plume-diff-actions,
+.plume-diff-head:focus-within .plume-diff-actions {
+	pointer-events: auto;
+	opacity: 1;
+}
+
+.plume-diff-meta {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	transition: opacity var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-diff-head:hover .plume-diff-meta,
+.plume-diff-head:focus-within .plume-diff-meta {
+	opacity: 0;
+}
+
+@container (min-width: 380px) {
+	.plume-diff-actions {
+		position: static;
+		padding-left: 0;
+		background: none;
+	}
+
+	.plume-diff-head:hover .plume-diff-meta,
+	.plume-diff-head:focus-within .plume-diff-meta {
+		opacity: 1;
+	}
+}
+
+.plume-diff-status {
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--plume-radius-item);
+	user-select: none;
+}
+
+.plume-diff-status[data-diff-status="added"],
+.plume-diff-status[data-diff-status="untracked"] {
+	background: color-mix(in srgb, var(--plume-ok) 12%, transparent);
+	color: var(--plume-ok);
+}
+
+.plume-diff-status[data-diff-status="modified"] {
+	background: color-mix(in srgb, var(--plume-accent) 12%, transparent);
+	color: var(--plume-accent);
+}
+
+.plume-diff-status[data-diff-status="deleted"] {
+	background: color-mix(in srgb, var(--plume-danger) 12%, transparent);
+	color: var(--plume-danger);
+}
+
+.plume-diff-status[data-diff-status="renamed"] {
+	background: color-mix(in srgb, var(--plume-violet) 14%, transparent);
+	color: var(--plume-violet);
+}
+
+/* 展开的 diff 长出来，而不是一帧之内多出来。 */
+.plume-diff-body {
+	background: var(--plume-code-bg);
+	animation: plume-fade-up var(--plume-t-quick) var(--plume-e-out);
+}
+
+.plume-diff-empty {
+	padding: 24px 12px;
+	text-align: center;
+}
