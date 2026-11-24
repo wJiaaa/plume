@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionSummary } from "@plume/contract";
-import { activityOf, approvalChanged, outcome, sessionsChanged, settle, sortNotices } from "../src/renderer/sidebar/activity.ts";
+import { activityOf, approvalChanged, groupMark, outcome, sessionsChanged, settle, sortNotices } from "../src/renderer/sidebar/activity.ts";
 
 const base: SessionSummary = { id: "s", title: "s", cwd: "/work", createdAt: 0, updatedAt: 0, running: false };
 const running = { ...base, running: true };
@@ -59,4 +59,15 @@ test("通知合起来排：页面的失败排在会话的完成前面，同类�
 		notices.map((notice) => notice.id),
 		["waiting", "failed", "page", "done"],
 	);
+});
+
+test("折起来的一组标题上说最要紧的一件：等批准、在跑、出错、跑完没看，都没有时写条数", () => {
+	const a = { ...base, id: "a" };
+	const b = { ...base, id: "b" };
+	const marks = (map: Record<string, "waiting" | "done" | "failed">) => (id: string) => map[id];
+	assert.equal(groupMark([a, b], marks({})), undefined);
+	assert.equal(groupMark([a, b], marks({ a: "done" })), "done");
+	assert.equal(groupMark([a, b], marks({ a: "done", b: "failed" })), "failed");
+	assert.equal(groupMark([a, { ...b, running: true }], marks({ a: "failed" })), "running");
+	assert.equal(groupMark([a, { ...b, running: true }], marks({ a: "waiting" })), "waiting");
 });

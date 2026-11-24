@@ -22,7 +22,7 @@ import {
 import { ChevronDown, ChevronRight, ChevronUp, Folder, FolderOpen, ListFilter, MoreHorizontal, Plus, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { activeSessions, type Group, groupSessions, nestSpawned, withSpawned, projectSessions, type SessionSort } from "./grouping.ts";
-import { activityOf, busy, useActivityVersion } from "./activity.ts";
+import { activityOf, busy, groupMark, useActivityVersion } from "./activity.ts";
 import { SessionRow } from "./SessionRow.tsx";
 import { projectSort } from "./order.ts";
 import { ListMenu } from "./ListMenu.tsx";
@@ -387,12 +387,32 @@ function SectionLabel({
 	);
 }
 
-/** 折起来的一组在标题上说里面有多少；有在跑的就换成转圈，否则折起来以后侧栏上就没有东西在动了。 */
+const GROUP_MARK = {
+	waiting: { label: "sessionStatus.waiting", dot: "bg-warning" },
+	failed: { label: "sessionStatus.failed", dot: "bg-danger" },
+	done: { label: "sessionStatus.done", dot: "bg-ok" },
+} as const;
+
+/**
+ * 折起来的一组在标题上说里面有多少，或者里面最要紧的那件事，次序和行首状态点一样：等批准、在跑（转圈，否则折起来以后侧栏上就没有东西在动了）、
+ * 出错、跑完没看。只说在跑的话，折起来的项目里有会话停下来等批准、跑完没看，标题上只剩一个数字，要展开才知道。
+ * 展开时什么都不说：行就在底下，各自的点自己说。
+ */
 function GroupActivity({ sessions, collapsed, count }: { sessions: readonly SessionSummary[]; collapsed: boolean; count: number }) {
 	const { t } = useI18n();
+	// 等批准、跑完、出错的记号在 activity.ts 的仓库里、不在摘要里，自己订阅，记号变了标题跟着变。
+	useActivityVersion();
 	if (!collapsed) return null;
+	const mark = groupMark(sessions);
+	if (mark === undefined) return count > 0 ? count : null;
+	if (mark !== "running") {
+		return (
+			<span className="inline-flex size-3.5 items-center justify-center" data-plume-group-mark={mark} role="img" aria-label={t(GROUP_MARK[mark].label)}>
+				<span className={`block size-[7px] rounded-full ${GROUP_MARK[mark].dot}`} />
+			</span>
+		);
+	}
 	const running = sessions.filter((session) => session.running).length;
-	if (running === 0) return count > 0 ? count : null;
 	return (
 		<span
 			className="inline-flex size-3.5 items-center justify-center"

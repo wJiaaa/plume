@@ -130,6 +130,22 @@ export function activityOf(sessionId: string): SessionActivity | undefined {
 	return own;
 }
 
+/**
+ * 一组会话折起来时标题上说哪件事，次序和行首状态点一样：等批准、在跑、出错、跑完没看；都没有是 undefined，标题上写条数。
+ * 在跑看摘要的 `running`，和折起来的标题一直以来的转圈一样。
+ */
+export function groupMark(
+	sessions: readonly SessionSummary[],
+	markOf: (sessionId: string) => SessionActivity | undefined = activityOf,
+): SessionActivity | "running" | undefined {
+	const marks = new Set(sessions.map((session) => markOf(session.id)));
+	if (marks.has("waiting")) return "waiting";
+	if (sessions.some((session) => session.running)) return "running";
+	if (marks.has("failed")) return "failed";
+	if (marks.has("done")) return "done";
+	return undefined;
+}
+
 export function useSessionActivity(sessionId: string): SessionActivity | undefined {
 	return useSyncExternalStore(subscribe, () => activityOf(sessionId));
 }
