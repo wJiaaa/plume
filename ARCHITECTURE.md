@@ -60,13 +60,14 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 - `web`：`web_search`、`web_fetch`
 - `title`：智能标题，开关在设置 › 常规
 - `spawn-session`：`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话每结束一轮经 `ctx.sessions.reportBack` 交回汇报；环境卡片的「产出」只列已经开出的新会话，卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话
-- `git`：分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`
+- `git`：分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`（含工作树创建完成监听 `onCreated`）
 - `mcp`：连 MCP 服务、把工具交给 agent，设置页「MCP」，也接别的插件经服务 `mcp.servers` 替外部应用登记的服务，读插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存
 - `documents`：文件面板和插件经 `ui.DocumentPreview` 共用的只读表格、SQLite 和 Word 预览
 - `diagnostics`：运行诊断：后台任务、运行记录、调用轨迹，往环境卡片里放后台任务（含检查、定时任务和轮询）、压缩记录两节
 - `environment`：会话环境：标题栏的「环境」开关和环境卡片这个容器，自己画打开方式、子会话、引用三节，别的插件经 `ui.environmentSection` 往里放节
 - `browser`：「浏览器」面板和 `browser_*` 工具，设置里从 Chrome 同步登录状态；面板一个标签一页 `<webview>`，挂上后交给逻辑入口，人点的和 `browser_*` 工具都经 `ctx.pages` 驱动同一页；面板 `keepAlive`，最近看过的几个会话的页面挂着；能弹到独立窗口；本地 `.html` 由逻辑入口的本机小服务给
-- `terminal`：shell 用 node-pty 跑在 agent 进程，比面板活得长；「终端」面板用 xterm 经 `ui.remote()` 连上；登记 `ui.terminalOpener`、`ui.terminalRunner` 接本体的「在终端中打开」「在终端运行」
+- `terminal`：shell 用 node-pty 跑在 agent 进程，比面板活得长；「终端」面板用 xterm 经 `ui.remote()` 连上；登记 `ui.terminalOpener`、`ui.terminalRunner` 接本体的「在终端中打开」「在终端运行」；提供服务 `terminal.exec` 供其他插件在终端标签中执行命令、跳转查看与按标记关闭
+- `scripts`：项目脚本：经 `terminal.exec`、`session.worktree` 和 `ui.environmentSection` 在会话环境卡片顶部一键运行开发/测试/构建脚本，支持工作树创建自动初始化（同步/异步）、归档/删除自动停止终端、设置页管理全局与项目配置及 `.plume/scripts.json` 显式导入
 - `side-chat`：「侧边聊天」面板和 `/btw`，侧边聊天是挂在会话下的子会话；`dispatch_task`、`control_main` 经 `ToolRun.parent` 把活排进主会话、停下或接着做
 - `subagents`：`task` 工具把活交给子会话里的子 Agent，「子 Agent」面板看过程；种类全关掉时对模型藏起 `task`
 - `plan`：计划模式：按会话的开关和 `/plan`，开着时不改文件、命令进只读沙箱，`submit_plan` 交计划给人批准，「在新会话里执行」经 `launch` 开新会话

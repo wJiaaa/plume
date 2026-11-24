@@ -150,9 +150,10 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 插件 | 看它的什么 |
 | --- | --- |
 | `todo` | 工具的 details 让本体的转录认得（`category: "checklist"`，不注册卡片）；`step.end` 在本体的结论外面追问一句；工具结果带 `terminate`；`run.calls`；跟着会话的卡片（`ui.conversationCard`）按 `placement` 换外观、`stop` / `carryOn`；插件自带样式表；`messages.ts` |
-| `terminal` | `ctx.serve` / `ui.remote()` 流式输出和取消；原生依赖；`ctx.effect`；多标签面板；点链接打开文件和网址；拖文件进来粘贴路径 |
+| `terminal` | `ctx.serve` / `ui.remote()` 流式输出和取消；原生依赖；`ctx.effect`；多标签面板；点链接打开文件和网址；拖文件进来粘贴路径；`ctx.provide` 提供服务 `terminal.exec` |
+| `scripts` | `inject` 使用服务 `terminal.exec`、`session.worktree`；`ctx.settings` 持久化配置；`ctx.sessionStore` 推送工作树初始化状态；`ui.sessionToolbar`、`ui.composerAbove`、`ui.settingsSection` |
 | `scheduled` | `ctx.dataDir` 存数据；页面（`ui.page`）；常驻定时器按时 `ctx.sessions.launch`；`watch` 推状态、`ui.pageBadge` 挂数目、`ui.composerAbove` 说失败、`ui.openPage`、`ui.openSession` |
-| `git` | 大一点的插件：子进程、`ctx.workspace.git`、`ctx.model.complete`；面板里多个视图、`.cancel()` 叫停远端调用；`ui.composerChip` 的 `send`；`ctx.provide` 提供服务 `session.worktree`；对话自己的工作树（`prompt.submit` 的 `cwd`、`ctx.sessions.onDeleted` / `onArchived`、`ui.sessionMark`、`ui.deleteNote`） |
+| `git` | 大一点的插件：子进程、`ctx.workspace.git`、`ctx.model.complete`；面板里多个视图、`.cancel()` 叫停远端调用；`ui.composerChip` 的 `send`；`ctx.provide` 提供服务 `session.worktree`（含 `onCreated`）；对话自己的工作树（`prompt.submit` 的 `cwd`、`ctx.sessions.onDeleted` / `onArchived`、`ui.sessionMark`、`ui.deleteNote`） |
 | `memory` | `model.context` 按段插提示词、每个会话冻结一份；`ctx.model.complete` 在后台总结；设置分区画进「个性化」页、「智能体」页「会话」卡里一行（`ui.ModelSelect`） |
 | `usage` | 设置 › 数据里的一页（`page: "nav"`、`group: "data"`）；`ctx.model.usage`；SVG 自己画的图表 |
 | `screenshot` | `ui.screen`、`ui.screenOverlay`、`ui.pinnedShot`；标注组件；`ui.composerItem`；占导航一行的设置分区 |

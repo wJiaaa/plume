@@ -1,0 +1,305 @@
+/* plume.scripts 的布局样式。文字交给 @plume/ui 的 Text，环境行用 EnvironmentRow / EnvironmentSplitRow，颜色、圆角、时长只用 var(--plume-*)。 */
+
+.plume-scripts-menu-edit {
+	display: inline-flex;
+	align-items: center;
+}
+
+/* ── 编辑弹窗 ─────────────────────────────────────────────────── */
+
+.plume-scripts-form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.plume-scripts-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.plume-scripts-name-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.plume-scripts-name-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.plume-scripts-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 34px;
+	height: 34px;
+	border: 1px solid var(--plume-line-float);
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-scripts-icon-btn:hover,
+.plume-scripts-icon-btn[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+.plume-scripts-icon-btn:active {
+	background: var(--plume-elevated);
+}
+
+.plume-scripts-icon-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+	padding: 6px;
+}
+
+.plume-scripts-icon-option {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 8px 10px;
+	border: 1px solid var(--plume-line-float);
+	border-radius: var(--plume-radius-item);
+	background: transparent;
+	color: var(--plume-ink-muted);
+	transition:
+		background-color var(--plume-t-quick) var(--plume-e-soft),
+		border-color var(--plume-t-quick) var(--plume-e-soft),
+		color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-scripts-icon-option:hover {
+	background: var(--plume-card-hover);
+	color: var(--plume-ink);
+}
+
+.plume-scripts-icon-option[aria-pressed="true"] {
+	border-color: var(--plume-accent);
+	background: var(--plume-accent-dim);
+	color: var(--plume-ink);
+}
+
+.plume-scripts-command {
+	width: 100%;
+	min-height: 84px;
+	padding: 8px 10px;
+	resize: vertical;
+	font-family: var(--plume-font-mono);
+}
+
+.plume-scripts-toggles {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.plume-scripts-toggle-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
+}
+
+.plume-scripts-toggle-row[data-disabled="true"] {
+	opacity: 0.5;
+}
+
+.plume-scripts-toggle-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.plume-scripts-dialog-spacer {
+	flex: 1;
+}
+
+/* ── 设置页 ───────────────────────────────────────────────────── */
+
+.plume-scripts-scope-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.plume-scripts-scope {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	max-width: 260px;
+	padding: 0 14px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-field);
+	background: transparent;
+	color: var(--plume-ink);
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-scripts-scope:hover,
+.plume-scripts-scope[aria-expanded="true"] {
+	background: var(--plume-card-hover);
+}
+
+.plume-scripts-scope-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-scripts-scope-caret {
+	flex-shrink: 0;
+	color: var(--plume-ink-faint);
+	transition: transform var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-scripts-scope-caret[data-open] {
+	transform: rotate(180deg);
+}
+
+.plume-scripts-scope-note {
+	margin-top: 10px;
+}
+
+.plume-scripts-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 24px 0 10px;
+}
+
+.plume-scripts-head-title {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.plume-scripts-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.plume-scripts-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 36px 24px;
+	text-align: center;
+}
+
+.plume-scripts-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
+}
+
+.plume-scripts-row:hover {
+	background: var(--plume-card-hover);
+}
+
+.plume-scripts-row-mark {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+	color: var(--plume-ink-muted);
+}
+
+.plume-scripts-row-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.plume-scripts-row-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.plume-scripts-row-cmd {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plume-scripts-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 6px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-item);
+	background: var(--plume-card);
+}
+
+.plume-scripts-row-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+.plume-scripts-notice {
+	margin-top: 16px;
+}
+
+/* ── 输入框上方工作树初始化状态条 ─────────────────────────────── */
+
+.plume-scripts-setup-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 7px 12px;
+	margin-bottom: 6px;
+	border: 1px solid var(--plume-line-soft);
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-card);
+}
+
+.plume-scripts-setup-info {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.plume-scripts-setup-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: var(--plume-radius-field);
+	background: var(--plume-accent);
+}
+
+.plume-scripts-setup-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

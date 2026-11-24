@@ -1,0 +1,28 @@
+{
+  "name": "@plume/scripts",
+  "version": "0.1.0",
+  "description": "项目脚本：在会话环境卡片顶部一键运行开发、测试、构建等常用命令，支持工作树创建时自动初始化、归档自动停止与 .plume/scripts.json 导入。",
+  "author": "Plume",
+  "keywords": [
+    "scripts",
+    "actions",
+    "项目脚本",
+    "工作树"
+  ],
+  "plume": {
+    "displayName": "项目脚本",
+    "category": "工作流"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@plumeai/plugin-sdk": "workspace:*",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "vitest": "^5.1.0"
+  }
+}

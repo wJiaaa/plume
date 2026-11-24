@@ -18,6 +18,7 @@
 | [diagnostics.md](diagnostics.md) | 后台任务面板、调用轨迹（运行诊断）、环境卡片（会话环境） |
 | [browser-and-preview.md](browser-and-preview.md) | 内置浏览器、回复内交互网页 |
 | [terminal-and-ssh.md](terminal-and-ssh.md) | 本机终端面板、SSH 运维台与 AI 运维助手 |
+| [scripts.md](scripts.md) | 项目脚本：环境卡片一键运行、工作树初始化、归档自动停止与 `.plume/scripts.json` 导入 |
 | [git.md](git.md) | 分支签、Git 面板、对话工作树、拉取请求 |
 | [plugins-and-market.md](plugins-and-market.md) | 「插件市场」页、插件安装更新与卸载、创建插件与热加载、内置与市场插件清单、密钥加密 |
 | [settings.md](settings.md) | 设置导航、常规、请求重试、项目配置、模型设置与 Magpie、个性化、存储、使用统计、关于、数据目录 |
