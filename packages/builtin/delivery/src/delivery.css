@@ -1,8 +1,9 @@
 .plume-delivery-wrap {
-	margin-top: 12px;
+	margin-top: 8px;
 }
 
 .plume-delivery-card {
+	overflow: hidden;
 	border: 1px solid var(--plume-line);
 	border-radius: var(--plume-radius-panel);
 	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
@@ -10,28 +11,28 @@
 
 .plume-delivery-head {
 	display: flex;
-	min-height: 64px;
+	min-height: 36px;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 12px;
-	padding: 12px;
+	gap: 8px;
+	border-bottom: 1px solid var(--plume-line-soft);
+	padding: 4px 6px 4px 10px;
+	background: color-mix(in srgb, var(--plume-fg) 2.5%, transparent);
 }
 
-.plume-delivery-mark {
-	display: flex;
-	width: 40px;
-	height: 40px;
+.plume-delivery-icon {
+	display: inline-flex;
 	flex-shrink: 0;
 	align-items: center;
-	justify-content: center;
-	border-radius: var(--plume-radius-panel);
-	background: var(--plume-card-hover);
 	color: var(--plume-ink-muted);
 }
 
 .plume-delivery-summary {
+	display: flex;
 	min-width: 0;
 	flex: 1;
+	align-items: center;
+	gap: 8px;
 }
 
 .plume-delivery-heading,
@@ -59,7 +60,7 @@
 
 .plume-delivery-counts {
 	flex-shrink: 0;
-	gap: 6px;
+	gap: 5px;
 }
 
 .plume-delivery-added {
@@ -73,18 +74,18 @@
 }
 
 .plume-delivery-files {
-	padding: 0 4px 4px;
+	padding: 3px;
 }
 
 .plume-delivery-row {
 	display: flex;
 	width: 100%;
-	height: 36px;
+	height: 28px;
 	align-items: center;
-	gap: 12px;
+	gap: 10px;
 	border: none;
-	border-radius: var(--plume-radius-field);
-	padding: 0 12px;
+	border-radius: var(--plume-radius-item);
+	padding: 0 8px;
 	background: transparent;
 	color: var(--plume-ink);
 	text-align: left;
@@ -103,8 +104,9 @@
 }
 
 .plume-delivery-more {
+	height: 24px;
 	justify-content: center;
-	gap: 6px;
+	gap: 4px;
 	color: var(--plume-ink-muted);
 }
 

@@ -37,10 +37,10 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		const middle = reveal.getBoundingClientRect().height;
 		transition.finish();
 		const end = reveal.getBoundingClientRect().height;
-		return { duration, start, middle, end, ok: duration === 300 && start < middle && middle < end && end >= 35, open: reveal.dataset.open, inert: reveal.inert };
+		return { duration, start, middle, end, ok: duration === 300 && start < middle && middle < end && end >= 27, open: reveal.dataset.open, inert: reveal.inert };
 	})()`);
 	if (!(animation as { ok?: boolean }).ok) throw new Error(`交付卡展开动画中间帧不正确：${JSON.stringify(animation)}`);
-	await until(`${visibleRows}.length === 4 && document.querySelector('${card} .plume-reveal').getBoundingClientRect().height >= 35`, "剩余文件展开到完整行高");
+	await until(`${visibleRows}.length === 4 && document.querySelector('${card} .plume-reveal').getBoundingClientRect().height >= 27`, "剩余文件展开到完整行高");
 	await click(`${card} button`, "收起文件");
 	await until(`document.querySelector('${card} .plume-reveal').getBoundingClientRect().height < 1`, "收起文件过渡完成");
 
@@ -69,7 +69,7 @@ export async function checkDelivery({ window, workspace, outDir, page, until, cl
 		`document.activeElement?.hasAttribute('data-delivery-file') && document.querySelector(${JSON.stringify(preview)}) !== null`,
 		"键盘聚焦文件行立即预览",
 	);
-	await contextMenuVisibleIn(page, firstOf(`${card} [data-delivery-file]`), "交付卡片的第一行文件", 40, 18);
+	await contextMenuVisibleIn(page, firstOf(`${card} [data-delivery-file]`), "交付卡片的第一行文件", 40, 14);
 	await until(
 		`document.querySelector('[role=menu]')?.textContent.includes('复制相对路径') && !document.querySelector(${JSON.stringify(preview)})`,
 		"文件右键菜单出现且预览让开",

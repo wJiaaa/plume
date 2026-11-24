@@ -32,18 +32,24 @@ function relativeTo(root: string, path: string): string {
 function FileName({ path }: { path: string }) {
 	const split = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1;
 	return (
-		<Text className="plume-delivery-name">
-			<Text tone="muted">{path.slice(0, split)}</Text>
-			<Text>{path.slice(split)}</Text>
+		<Text size="detail" className="plume-delivery-name">
+			<Text size="detail" tone="muted">
+				{path.slice(0, split)}
+			</Text>
+			<Text size="detail">{path.slice(split)}</Text>
 		</Text>
 	);
 }
 
 function Counts({ added, removed }: { added: number; removed: number }) {
 	return (
-		<Text numeric className="plume-delivery-counts">
-			<Text className="plume-delivery-added">+{added}</Text>
-			<Text tone="danger">−{removed}</Text>
+		<Text size="caption" numeric className="plume-delivery-counts">
+			<Text size="caption" className="plume-delivery-added">
+				+{added}
+			</Text>
+			<Text size="caption" tone="danger">
+				−{removed}
+			</Text>
 		</Text>
 	);
 }
@@ -173,23 +179,27 @@ function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiC
 			<div className="plume-delivery-wrap" onMouseLeave={closeHover} onMouseOver={offRows} onFocus={offRows}>
 				<section data-turn-delivery aria-label={messages.fileChanges} className="plume-delivery-card">
 					<div className="plume-delivery-head">
-						<span className="plume-delivery-mark">
-							<FileDiffIcon size={21} strokeWidth={1.7} />
+						<span className="plume-delivery-icon">
+							<FileDiffIcon size={15} strokeWidth={1.8} />
 						</span>
 						<div className="plume-delivery-summary">
-							<Text as="p" weight="medium" className="plume-delivery-heading">
+							<Text as="p" size="detail" weight="medium" className="plume-delivery-heading">
 								{fill(files.length === 1 ? messages.editedOne : messages.editedN, { n: files.length })}
 							</Text>
 							<Counts added={added} removed={removed} />
 						</div>
 						<div className="plume-delivery-actions">
 							{files.every((file) => file.canUndo) && (
-								<Button size="sm" variant="subtle" icon={<Undo2 size={14} />} loading={undoing} label={messages.revertThis} onClick={() => askUndo()}>
-									<Text className="plume-delivery-action-label">{messages.revert}</Text>
+								<Button size="sm" variant="subtle" icon={<Undo2 size={13} />} loading={undoing} label={messages.revertThis} onClick={() => askUndo()}>
+									<Text size="caption" className="plume-delivery-action-label">
+										{messages.revert}
+									</Text>
 								</Button>
 							)}
-							<Button size="sm" variant="subtle" icon={<Files size={14} />} label={messages.reviewAll} onClick={() => review()}>
-								<Text className="plume-delivery-action-label">{messages.review}</Text>
+							<Button size="sm" variant="soft" icon={<Files size={13} />} label={messages.reviewAll} onClick={() => review()}>
+								<Text size="caption" className="plume-delivery-action-label">
+									{messages.review}
+								</Text>
 							</Button>
 						</div>
 					</div>
@@ -210,10 +220,10 @@ function Delivery({ ui, state, session, timestamp }: TurnFooterProps & { ui: UiC
 										setExpanded(!expanded);
 									}}
 								>
-									<Text size="detail" className="plume-delivery-action-label">
+									<Text size="caption" className="plume-delivery-action-label">
 										{expanded ? messages.collapse : fill(remaining === 1 ? messages.showMoreOne : messages.showMore, { n: remaining })}
 									</Text>
-									<Caret open={expanded} size={14} />
+									<Caret open={expanded} size={13} />
 								</button>
 							</>
 						)}
