@@ -198,15 +198,8 @@ export async function checkSessionWindow(options: {
 						"只关闭会话窗口冒烟新开的面板标签",
 					);
 				}
-				if (saved?.tabs.some((tab) => !tab.panel) && !(await page(`document.querySelector('[data-panel-area] [data-panel-tab="start"]') !== null`))) {
-					await click("[data-panel-area] button[data-panel-add]");
-					await until(`document.querySelector('[data-panel-area] [data-panel-tab="start"]') !== null`, "恢复原来的开始页标签");
-				}
 				const active = saved?.tabs.find((tab) => tab.id === saved.active);
-				if (active)
-					await click(
-						active.panel ? `[data-panel-area] [data-panel-tab-id="${active.id}"] [role=tab]` : '[data-panel-area] [data-panel-tab="start"] [role=tab]',
-					);
+				if (active?.panel) await click(`[data-panel-area] [data-panel-tab-id="${active.id}"] [role=tab]`);
 			}
 			await click(`${row(sessionId)} > button`);
 			await until(

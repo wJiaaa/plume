@@ -123,13 +123,32 @@ export function launch(tabId: string, key: string, scope = scopeOf(state), sessi
 	setTabs(scope, { tabs: tabs.map((tab) => (tab.id === tabId ? { id, panel: key, ...(sessionId ? { sessionId } : {}) } : tab)), active: id });
 }
 
-/** 「+」：开一个开始页标签；已经有开始页就切过去，不并排留几个空的。 */
-export function openStartTab(scope = scopeOf(state)): void {
-	const { tabs } = tabsOf(state, scope);
-	const start = tabs.find((tab) => !tab.panel);
-	if (start) return setTabs(scope, { tabs, active: start.id });
+/**
+ * 「+」菜单选一项：可多开的面板新开一个标签；单实例面板已经开着就切过去（在独立窗口里就拿到前面）。
+ * 当前正停在空的开始页时直接替换掉它，不并排留一个空标签。
+ */
+export function addPanelTab(key: string, scope = scopeOf(state)): void {
+	const entry = listPanels().find((panel) => panel.key === key);
+	if (!entry) return;
+	const { tabs, active } = tabsOf(state, scope);
+	const open = entry.multiple ? undefined : tabs.find((tab) => tab.panel === key && tab.sessionId === undefined);
+	if (open) {
+		const detached = state.panelWindows.find((item) => item.tab === open.id);
+		if (detached) {
+			void window.plume.panelWindows.open(detached);
+			return;
+		}
+		setTabs(scope, { tabs, active: open.id });
+		return;
+	}
+	const current = tabs.find((tab) => tab.id === active);
+	if (current && !current.panel) {
+		launch(current.id, key, scope);
+		return;
+	}
 	const id = crypto.randomUUID();
-	setTabs(scope, { tabs: [...tabs, { id }], active: id });
+	focusChildDraft(id);
+	setTabs(scope, { tabs: [...tabs, { id, panel: key }], active: id });
 }
 
 /**

@@ -81,10 +81,10 @@ export async function checkBrowser(options: {
 		// 浏览器是内置插件，随应用加载。
 		await waitMain(async () => (await agent.plugins()).some((status) => status.key === "browser" && status.state === "active"), "浏览器插件已加载");
 
-		// 从开始页开一个浏览器标签：空白页，地址栏打开本机那一页。
+		// 从添加菜单开一个浏览器标签：空白页，地址栏打开本机那一页。
 		const panel = '[data-panel="plume.browser/browser"]:not([inert])';
 		await clickVisible(page, `button[data-panel-add]`);
-		await until(`document.querySelector('[data-panel-launch="plume.browser/browser"]') !== null`, "开始页列出浏览器");
+		await until(`document.querySelector('[data-panel-launch="plume.browser/browser"]') !== null`, "添加菜单列出浏览器");
 		await clickVisible(page, `[data-panel-launch="plume.browser/browser"]`);
 		await until(
 			`document.querySelector('${panel} [data-browser-empty]') !== null && document.querySelector('${panel} [data-browser-omnibox] input') !== null`,

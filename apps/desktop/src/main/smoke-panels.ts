@@ -107,7 +107,9 @@ export async function checkPanelsFramework(window: BrowserWindow, outDir: string
 	await until(`document.querySelector('${terminal} .xterm-rows')?.textContent.includes('PLUME_42:')`, "刷新后历史输出恢复");
 	await capture("smoke-panel-restored.png");
 	await clickVisible(page, "[data-panel-add]");
-	await until("document.querySelector('[data-panel-launch=\"plume.terminal/terminal\"]') !== null", "「+」打开开始页");
+	await until("document.querySelector('[data-panel-launch=\"plume.terminal/terminal\"]') !== null", "「+」弹出面板菜单");
+	await settle();
+	await capture("smoke-panel-add-menu.png");
 	await clickVisible(page, '[data-panel-launch="plume.terminal/terminal"]');
 	await until(
 		`document.querySelector('${terminal}')?.dataset.terminalId && document.querySelector('${terminal}').dataset.terminalId !== ${JSON.stringify(id)}`,

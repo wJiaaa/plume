@@ -1,6 +1,21 @@
 import type { SessionSummary, SessionView } from "@plume/contract";
 import type { PanelProps } from "@plume/contract/ui";
-import { acceleratorLabel, ClosableTab, IconButton, ResizeHandle, Sideways, translate, useI18n } from "@plume/ui";
+import {
+	acceleratorLabel,
+	ClosableTab,
+	composingKey,
+	IconButton,
+	MENU_MAX_HEIGHT,
+	MenuBody,
+	MenuItem,
+	Popover,
+	ResizeHandle,
+	shortcutLetter,
+	Sideways,
+	translate,
+	useI18n,
+	usePopover,
+} from "@plume/ui";
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
 import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelSurface } from "../panel-surface.tsx";
@@ -18,7 +33,7 @@ import { flushChildDrafts } from "../conversation/child-drafts.ts";
 import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.tsx";
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
-import { closeTab, handlesOf, launch, openStartTab, panelOpenIn, popOutTab, scopeOf, selectTab, setPanelWidth, tabsOf, togglePanel } from "./panels.ts";
+import { addPanelTab, closeTab, handlesOf, launch, panelOpenIn, popOutTab, scopeOf, selectTab, setPanelWidth, tabsOf, togglePanel } from "./panels.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./shell-classes.ts";
 import { parked } from "./sessions.ts";
 
@@ -234,7 +249,7 @@ function PanelLayerTab({
 }
 
 /**
- * 面板区：一张和正文一样的浮起卡片，卡片上面一排标签，每个开着的面板一个，后面的「+」开一个开始页标签。
+ * 面板区：一张和正文一样的浮起卡片，卡片上面一排标签，每个开着的面板一个，后面的「+」弹出面板菜单直接添加。
  * 这个会话的标签都挂着，只有当前那个看得见：后台的终端、计划切回来不重来。右端收起面板区。
  */
 export function PanelArea({
@@ -274,8 +289,21 @@ export function PanelArea({
 	const current = tabs.find((tab) => tab.id === active);
 	const definition = panels.find((entry) => entry.key === current?.panel);
 	const track = useRef<HTMLDivElement>(null);
+	const addMenu = usePopover();
+	const closeAddMenu = useRef(addMenu.close);
+	closeAddMenu.current = addMenu.close;
 	const stacked = arrangement === "column";
-	const addable = available.filter((entry) => entry.listed && (entry.multiple || !tabs.some((tab) => tab.panel === entry.key)));
+	const panelOpen = panelOpenIn(app, scope);
+	const listedPanels = available.filter((entry) => entry.listed);
+	const openedKeys = new Set(group.tabs.filter((tab) => tab.panel && !tab.sessionId).map((tab) => tab.panel!));
+	const addable = listedPanels.filter((entry) => entry.multiple || !openedKeys.has(entry.key));
+	// 切换会话、切换标签、面板区收起或已无可添加项时收起「+」菜单，避免菜单悬在旧上下文上。
+	useEffect(() => {
+		closeAddMenu.current();
+	}, [scope, active]);
+	useEffect(() => {
+		if (!panelOpen || addable.length === 0) closeAddMenu.current();
+	}, [panelOpen, addable.length]);
 	useEffect(() => {
 		const strip = track.current;
 		const tab = strip?.querySelector('[aria-selected="true"]');
@@ -329,7 +357,26 @@ export function PanelArea({
 					})}
 				</Sideways>
 				{addable.length > 0 && (
-					<IconButton size="sm" data-panel-add="" label={t("pane.addTab")} icon={<Plus size={13} strokeWidth={2} />} onClick={() => openStartTab(scope)} />
+					<IconButton
+						size="sm"
+						data-panel-add=""
+						label={t("pane.addTab")}
+						menu={addMenu.open}
+						icon={<Plus size={13} strokeWidth={2} />}
+						onClick={addMenu.toggle}
+					/>
+				)}
+				{addMenu.open && addable.length > 0 && (
+					<PanelAddMenu
+						anchor={addMenu.anchor}
+						panels={listedPanels}
+						openedKeys={openedKeys}
+						onClose={addMenu.close}
+						onSelect={(key) => {
+							addMenu.close();
+							addPanelTab(key, scope);
+						}}
+					/>
 				)}
 			</div>
 			<div className={`ml-auto flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>
@@ -488,6 +535,116 @@ const PanelContents = memo(function PanelContents({ panel, tab, scope, shown }: 
 		/>
 	);
 });
+
+/** 取快捷键的尾键（小写），给「+」菜单打开时的单键直达用。 */
+function panelShortcutKey(shortcut: string | undefined): string | undefined {
+	const tail = shortcut?.split("+").at(-1)?.trim().toLowerCase();
+	return tail || undefined;
+}
+
+/**
+ * 「+」弹出的面板菜单：图标、名字、快捷键；单实例已打开的面板灰显不可重复添加。
+ * 打开时支持方向键 / Home / End 在可用项之间切换焦点，以及直接按对应面板快捷键的尾键打开。
+ */
+function PanelAddMenu({
+	anchor,
+	panels,
+	openedKeys,
+	onClose,
+	onSelect,
+}: {
+	anchor: HTMLElement | { x: number; y: number } | null;
+	panels: readonly PanelEntry[];
+	openedKeys: ReadonlySet<string>;
+	onClose: () => void;
+	onSelect: (key: string) => void;
+}) {
+	const { t, resolvedLocale } = useI18n();
+	const listRef = useRef<HTMLDivElement>(null);
+	const restoreFocus = useRef(false);
+	const latest = useRef({ panels, openedKeys, onSelect });
+	latest.current = { panels, openedKeys, onSelect };
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || composingKey(event)) return;
+			if (event.key === "Escape") {
+				restoreFocus.current = true;
+				return;
+			}
+			const items = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+			if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+				if (items.length === 0) return;
+				event.preventDefault();
+				event.stopPropagation();
+				const current = document.activeElement instanceof HTMLButtonElement ? items.indexOf(document.activeElement) : -1;
+				const next =
+					event.key === "Home"
+						? 0
+						: event.key === "End"
+							? items.length - 1
+							: event.key === "ArrowDown"
+								? (current + 1) % items.length
+								: current <= 0
+									? items.length - 1
+									: current - 1;
+				items[next]?.focus();
+				return;
+			}
+			if (event.metaKey || event.ctrlKey || event.altKey) return;
+			const pressed = shortcutLetter(event) ?? event.key.toLowerCase();
+			if (!pressed) return;
+			const { panels: currentPanels, openedKeys: opened, onSelect: pick } = latest.current;
+			const match = currentPanels.find((panel) => (panel.multiple || !opened.has(panel.key)) && panelShortcutKey(panel.shortcut) === pressed);
+			if (!match) return;
+			event.preventDefault();
+			event.stopPropagation();
+			pick(match.key);
+		};
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, []);
+
+	return (
+		<Popover
+			anchor={anchor}
+			onClose={() => {
+				onClose();
+				if (restoreFocus.current && anchor instanceof HTMLElement && anchor.isConnected) anchor.focus();
+			}}
+			placement="bottom"
+			align="start"
+			width="default"
+			maxHeight={MENU_MAX_HEIGHT}
+			label={t("pane.addTab")}
+		>
+			<MenuBody insetIcons>
+				<div ref={listRef}>
+					{panels.map((panel) => {
+						const Icon = panel.icon ?? PanelRight;
+						const title = localized(panel.title, resolvedLocale);
+						const description = panel.description && localized(panel.description, resolvedLocale);
+						const disabled = !panel.multiple && openedKeys.has(panel.key);
+						return (
+							<MenuItem
+								key={panel.key}
+								data-panel-launch={panel.key}
+								icon={<Icon size={15} />}
+								hint={panel.shortcut ? acceleratorLabel(panel.shortcut) : undefined}
+								title={disabled ? undefined : description}
+								disabled={disabled}
+								className="focus-visible:bg-card-hover"
+								onClick={() => onSelect(panel.key)}
+							>
+								{title}
+							</MenuItem>
+						);
+					})}
+				</div>
+			</MenuBody>
+		</Popover>
+	);
+}
 
 /** 开始页列到这么多个以上，面板够宽时分两列；少的时候分两列会空出半行。 */
 const PANEL_START_TWO_COLUMNS = 6;

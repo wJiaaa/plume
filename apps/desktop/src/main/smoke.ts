@@ -1804,7 +1804,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		// 输入框上方的分支签和改动计数跟着重新探测换成这个仓库的；点改动计数（ui.openPanel）开出 Git 面板，面板里是分支和那个文件。
 		// 提交身份只给这一次，不碰全局配置。
 		await click("button[data-panel-add]");
-		await until(`document.querySelector('[data-panel-launch="plume.terminal/terminal"]') !== null`, "「+」打开开始页");
+		await until(`document.querySelector('[data-panel-launch="plume.terminal/terminal"]') !== null`, "「+」弹出面板菜单");
 		const gitIn = (...args: string[]) =>
 			promisify(execFile)("git", ["-c", "user.name=Plume Smoke", "-c", "user.email=smoke@example.invalid", "-c", "commit.gpgsign=false", ...args], {
 				cwd: workspace,
@@ -1814,7 +1814,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		await gitIn("commit", "-q", "-m", "smoke");
 		await writeFile(join(workspace, "notes.txt"), "git panel\n");
 		await page(`window.dispatchEvent(new Event('focus'))`);
-		await until(`document.querySelector('[data-panel-launch="plume.git/git"]') !== null`, "变成仓库后开始页列出 Git");
+		await until(`document.querySelector('[data-panel-launch="plume.git/git"]') !== null`, "变成仓库后菜单列出 Git");
 		await until(
 			`document.querySelector('.plume-composer-tray')?.textContent.includes('main') && document.querySelector('.plume-composer-tray')?.textContent.includes('+1')`,
 			"输入框上方出现分支签和改动计数",

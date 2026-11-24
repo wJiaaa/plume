@@ -301,14 +301,27 @@ export async function checkDesktopCompat(options: {
 			assert.ok(tab.addHit && tab.closeHit, `${label}：「添加面板」和关闭标签点得到：${JSON.stringify(tab)}`);
 			const tabs = `document.querySelectorAll('[data-panel-area] [role=tablist] [data-panel-tab-id]').length`;
 			const before = await page<number>(tabs);
-			await press("[data-panel-area] [data-panel-add]");
-			await until(`${tabs} === ${before + 1}`, `${label}：「添加面板」多开一个开始页标签`);
+			const addMenu = `[role=menu][aria-label="添加面板"]`;
+			const extraLaunch = `${addMenu} [data-panel-launch]:not(:disabled)`;
+			const extraTab = `[data-panel-area] [role=tablist] [data-panel-tab-id]:not([data-panel-tab="plume/files"])`;
+			const openExtraTab = async (step: string) => {
+				await press("[data-panel-area] [data-panel-add]");
+				await until(`Boolean(${visible(extraLaunch)})`, `${label}：「添加面板」弹出菜单`);
+				await settle();
+				assert.equal(
+					await page<boolean>(`Boolean(document.querySelector('${addMenu} ${FILES_LAUNCH}:disabled'))`),
+					true,
+					`${label}：已打开的项目文件在添加菜单里灰显禁用`,
+				);
+				await press(extraLaunch);
+				await until(`${tabs} === ${before + 1}`, step);
+			};
+			await openExtraTab(`${label}：从添加菜单多开一个标签`);
 			// 中键点标签关掉它，再开一个接着量两个标签。
 			await settle();
-			await press("[data-panel-area] [data-panel-tab=start] [role=tab]", "middle");
-			await until(`${tabs} === ${before}`, `${label}：中键关掉开始页标签`);
-			await press("[data-panel-area] [data-panel-add]");
-			await until(`${tabs} === ${before + 1}`, `${label}：再开一个开始页标签`);
+			await press(`${extraTab} [role=tab]`, "middle");
+			await until(`${tabs} === ${before}`, `${label}：中键关掉新开的标签`);
+			await openExtraTab(`${label}：再从添加菜单开一个标签`);
 			await settle();
 			await headerAlignment(`${label} 两个标签`);
 			// 开合侧栏会让出或收回空间，面板区跟着挪；量落定之后的。
@@ -317,8 +330,8 @@ export async function checkDesktopCompat(options: {
 			await frames(30);
 			await headerAlignment(`${label} 开合侧栏后`);
 			await shot(`desktop-compat-${scale * 100}-${width}x${height}-${theme}.png`);
-			// 把多开的开始页关掉，下一组从项目文件这一个标签开始。
-			await clickEachVisible(page, `[data-panel-area] [data-panel-tab=start] button[aria-label^="关闭"]`);
+			// 把多开的标签关掉，下一组从项目文件这一个标签开始。
+			await clickEachVisible(page, `${extraTab} button[aria-label^="关闭"]`);
 			await until(`${tabs} === ${before}`, `${label}：关掉多开的标签`);
 			results.push({ label, ...geometry, focus: focus.name });
 		}
