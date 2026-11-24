@@ -1,8 +1,23 @@
 /*
- * 转录里工具类写不清的那几样：用户气泡里的 Markdown、刚发出去的气泡入场、折起来的长消息、问题导航的悬停预览。取值只用 token。
+ * 转录里工具类写不清的那几样：转录列的左右留白、用户气泡里的 Markdown、刚发出去的气泡入场、折起来的长消息、问题导航的悬停预览。取值只用 token。
  */
 
 @layer components {
+	/*
+	 * 转录滚动区的左右内衬：栏窄于 520 时问题导航贴边，两边对称 28px；放得开时左边留 48px 给问题导航，
+	 * 右边按剩余空间从输入框外边距（24px）补齐到 48px——宽处与下方输入框同心对齐，窄栏里也不白白丢掉右侧 24px 宽度。
+	 */
+	.plume-transcript-view {
+		padding-inline: 28px;
+	}
+
+	@container (min-width: 520px) {
+		.plume-transcript-view {
+			padding-left: 48px;
+			padding-right: clamp(var(--plume-composer-out), calc(100cqw - var(--plume-content) - 48px), 48px);
+		}
+	}
+
 	/*
 	 * 画完了的一轮在屏幕外不布局也不画，见 `Transcript.tsx` 的 `TurnFrame`。`content-visibility` 带着绘制隔离，伸出外框的
 	 * 阴影、焦点环会被裁掉（实测伸出 5px 的那圈就没了）：裁切边往外放 48px，盖得住最大的阴影（`--plume-shadow-rest` 往下 40px）。

@@ -535,8 +535,11 @@ export async function checkDesktopCompat(options: {
 		const SESSION = "[data-panel-layout] > main [data-plume-session]";
 		const columnSample = `(() => { const session = document.querySelector(${JSON.stringify(SESSION)}), box = session.parentElement, style = getComputedStyle(box);
 			const aside = document.querySelector(${JSON.stringify(SIDEBAR)});
-			return { session: Math.round(session.getBoundingClientRect().width * 10) / 10,
-				composer: Math.round(document.querySelector("main .plume-composer-dock").firstElementChild.getBoundingClientRect().width * 10) / 10,
+			const sRect = session.getBoundingClientRect(), cRect = document.querySelector("main .plume-composer-dock").firstElementChild.getBoundingClientRect();
+			return { session: Math.round(sRect.width * 10) / 10,
+				composer: Math.round(cRect.width * 10) / 10,
+				sessionLeft: Math.round(sRect.left * 10) / 10,
+				composerLeft: Math.round(cRect.left * 10) / 10,
 				room: box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
 				sidebar: aside.inert ? 0 : aside.getBoundingClientRect().width,
 				cap: parseFloat(getComputedStyle(session).maxWidth) }; })()`;
@@ -547,11 +550,14 @@ export async function checkDesktopCompat(options: {
 			await setViewport(width, height, 1);
 			await reset();
 			await until(`getComputedStyle(document.querySelector(${JSON.stringify(SESSION)})).maxWidth !== "864px"`, `${width} 宽窗口里宽档生效`);
-			const open = await page<{ session: number; composer: number; room: number; sidebar: number; cap: number }>(columnSample);
+			const open = await page<{ session: number; composer: number; sessionLeft: number; composerLeft: number; room: number; sidebar: number; cap: number }>(
+				columnSample,
+			);
 			console.log("PLUME_DESKTOP_COMPAT_WIDE " + JSON.stringify({ width, ...open }));
 			assert.ok(open.cap > 864 && open.cap <= 1200, `${width}：宽档上限在 864 到 1200 之间：${JSON.stringify(open)}`);
 			assert.ok(Math.abs(open.session - open.cap) < 1, `${width}：侧栏开着时正文就到上限：${JSON.stringify(open)}`);
 			assert.ok(Math.abs(open.composer - open.session) < 1, `${width}：输入框和正文一样宽：${JSON.stringify(open)}`);
+			assert.ok(Math.abs(open.composerLeft - open.sessionLeft) < 1, `${width}：输入框和正文左右对齐：${JSON.stringify(open)}`);
 			// 侧栏拖到最宽（420）时这一栏少掉的宽度，正文仍放得下：拖侧栏、开合侧栏都不会逐帧重新断行。
 			assert.ok(open.room - (420 - open.sidebar) >= open.cap, `${width}：侧栏拖到最宽时正文仍放得下：${JSON.stringify(open)}`);
 			for (const phase of ["收起", "展开"] as const) {

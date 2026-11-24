@@ -410,8 +410,8 @@ export function Transcript({
 							<Scroller
 								className="flex-1"
 								// 底下留出「回到最新」的高度，它不压在最新那条消息上。见 `scroll.css` 的 `--plume-bottom-inset`。
-								// 左边让出问题导航那一条；栏窄于 520 时导航贴边，两边一样宽，正文不显得被推向右边。
-								contentClassName="px-7 pt-5 pb-[var(--plume-bottom-inset)] @min-[520px]:pr-6 @min-[520px]:pl-12"
+								// 左右内衬由 `.plume-transcript-view` 管（见 `conversation.css`）：左边让出问题导航，宽处补齐对称右边距与输入框对齐。
+								contentClassName="plume-transcript-view pt-5 pb-[var(--plume-bottom-inset)]"
 								fadeTop={32}
 								/*
 								 * 跟着底部走的时候底下不渐隐：输出时内容每长一截就离底几像素、追上又贴底，渐隐跟着一开一合，每一次都是遮罩深度

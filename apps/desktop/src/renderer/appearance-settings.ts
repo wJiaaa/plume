@@ -20,7 +20,7 @@ import type { ManagedSkin } from "./skin-values.ts";
  * 864px 同 theme.css 的 `--plume-content`（窗口窄时退回标准宽度）；
  * CONTENT_CHROME 是对话卡片的外边和转录左右内衬、滚动条，`desktop-compat` 冒烟量着侧栏最宽时正文仍放得下。
  */
-const CONTENT_CHROME = 100;
+const CONTENT_CHROME = 124;
 const WIDE_CONTENT = `clamp(864px, calc(100vw - ${RAIL_WIDTH + SIDEBAR_MAX + CONTENT_CHROME}px), 1200px)`;
 
 let current: Appearance = cleanAppearance(window.plume.appearance);
