@@ -587,7 +587,7 @@
 	}
 
 	/*
-	 * 文件签：单行，类型图标加强调色的名字，悬停才托出底色。短的跟着字走，长的到上限就省略，永不折行。
+	 * 文件签：单行，类型图标加强调色的名字，悬停时给文字加下划线（图标不加）。短的跟着字走，长的到上限就省略，永不折行。
 	 *
 	 * `--markdown-file-chip-max` 是宽栏里的上限，免得一个文件名横贯整行；窄栏里取行宽和它中较小的。签是一个
 	 * 原子的行内盒，行末放不下时整枚挪到下一行——不会图标在这行、名字在下一行。
@@ -601,21 +601,10 @@
 		align-items: center;
 		max-width: min(100%, var(--markdown-file-chip-max));
 		padding: 1.5px 4px;
-		border-radius: var(--plume-radius-item);
 		/* 落在句子的基线上，基线取自名字（见 `[data-file-name]`）。`middle` 按拉丁字母的 x 高居中，名字会比周围的中文低一截。 */
 		vertical-align: baseline;
 		line-height: 1;
 		white-space: nowrap;
-		transition: background-color var(--plume-t-quick) var(--plume-e-out);
-	}
-
-	/*
-	 * 指针在签上（连同它的条）时深一档。条在签外，得有东西说明它是哪一枚的：两样一起亮，就不用猜。链接的
-	 * 下划线关掉了，这也是这枚可点的东西在悬停时唯一的反应。
-	 */
-	.markdown [data-file-link]:hover,
-	.markdown [data-file-link]:has(:focus-visible) {
-		background: var(--plume-card-hover);
 	}
 
 	.markdown [data-file-link] > a {
@@ -636,6 +625,24 @@
 		flex-shrink: 0;
 	}
 
+	/*
+	 * 指针在签上（连同它的条）或键盘聚焦时，给名字与行号亮出下划线，图标不带线。条在签外，得有东西说明
+	 * 它是哪一枚的：两样一起亮，就不用猜。
+	 */
+	.markdown [data-file-name],
+	.markdown [data-file-line] {
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 3px;
+		text-decoration-color: transparent;
+		transition: text-decoration-color var(--plume-t-quick) var(--plume-e-out);
+	}
+
+	.markdown [data-file-link]:hover :is([data-file-name], [data-file-line]),
+	.markdown [data-file-link]:has(:focus-visible) :is([data-file-name], [data-file-line]) {
+		text-decoration-color: currentColor;
+	}
+
 	.markdown [data-file-name] {
 		/* 签的基线来自名字；交给图标的话，SVG 的底边顶替了基线，名字被抬高 1.5px。 */
 		align-self: baseline;
@@ -644,11 +651,11 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		/*
-		 * `overflow: hidden` 横竖都裁：行高 1 的框只有 1em 高，等宽字体的下伸部（g、y 的尾巴）和重音会被裁掉。
-		 * padding 把裁切框纵向撑开，负 margin 抵掉布局影响，省略号的行为不变。
+		 * `overflow: hidden` 横竖都裁：行高 1 的框只有 1em 高，等宽字体的下伸部（g、y 的尾巴）、重音与
+		 * 偏移 3px 的下划线会被裁掉。padding 把裁切框纵向撑开，负 margin 抵掉布局影响，省略号的行为不变。
 		 */
-		padding-block: 0.15em;
-		margin-block: -0.15em;
+		padding-block: 0.25em;
+		margin-block: -0.25em;
 	}
 
 	/*
