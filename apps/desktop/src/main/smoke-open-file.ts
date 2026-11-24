@@ -229,10 +229,24 @@ export async function checkOpenFile(options: {
 
 		// 图片、PDF、音视频：都经 plume-media 协议取，在面板里显示出来。
 		await openChip("pic.png");
-		await until(`${panel}?.querySelector('img')?.naturalWidth === 320`, "图片在面板里显示");
+		await until(
+			`(() => { const img = ${panel}?.querySelector('img'); return img?.naturalWidth === 320 && img.checkVisibility({ visibilityProperty: true, opacityProperty: true }); })()`,
+			"图片在面板里显示",
+		);
 		await capture("smoke-open-file-image.png");
 		await openChip("doc.pdf");
 		await until(`${panel}?.querySelector('embed[type="application/pdf"]') !== null`, "PDF 交给阅读器");
+		const hiddenImage = await page<{ found: boolean; visible: boolean; visibility: string | null }>(
+			`(() => {
+				const img = document.querySelector('[data-panel="plume/file"][inert] img.file-image');
+				return {
+					found: img !== null,
+					visible: img?.checkVisibility({ visibilityProperty: true, opacityProperty: true }) ?? false,
+					visibility: img ? getComputedStyle(img).visibility : null,
+				};
+			})()`,
+		);
+		assert.deepEqual(hiddenImage, { found: true, visible: false, visibility: "hidden" }, "切到其他标签后图片标签里的图片不再可见");
 		const pdf = await page<{ ok: boolean; type: string | null; head: string }>(
 			`fetch(${panel}.querySelector('embed').src).then(async (response) => ({ ok: response.ok, type: response.headers.get('content-type'), head: new TextDecoder().decode((await response.arrayBuffer()).slice(0, 5)) }))`,
 		);

@@ -142,7 +142,8 @@ export function ImagePane({ src, name }: { src: string; name: string }) {
 						transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${effective})`,
 						// 放大过 3 倍改用最近邻：这时要分清的是哪个像素是哪个，平滑反而碍事。
 						imageRendering: effective >= 3 ? "pixelated" : "auto",
-						visibility: natural ? "visible" : "hidden",
+						// 图到之前藏着，到了之后不写死 visible，好继承隐藏标签等祖先的 visibility。
+						visibility: natural ? undefined : "hidden",
 					}}
 				/>
 			</div>

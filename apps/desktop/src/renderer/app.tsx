@@ -278,8 +278,8 @@ function Shell() {
 				className="relative isolate min-h-0 min-w-0 flex-1 overflow-hidden"
 				style={{ marginRight: CARD_INSET, marginBottom: CARD_INSET }}
 			>
-				{/* 设置页只盖住工作区，常驻网页仍留在同一层、同一节点。 */}
-				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible"}`}>
+				{/* 设置页只盖住工作区，常驻网页仍留在同一层、同一节点；叠加 opacity-0 防止内部 visibility: visible 穿透。 */}
+				<div inert={screen !== "chat"} className={`absolute inset-0 flex ${screen === "chat" ? "" : "invisible opacity-0"}`}>
 					<ChatWorkspace
 						fatal={fatal}
 						slideWidth={moving && !compact ? available - CARD_INSET : undefined}

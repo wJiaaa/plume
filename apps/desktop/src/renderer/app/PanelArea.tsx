@@ -209,6 +209,7 @@ function PanelLayerTab({
 	const { layout, left, width, side } = last.current;
 	const moving = app.panelMoving && pane?.focused === true;
 	const shown = current && layout.shown && app.screen === "chat" && panelGroup(app, scope).active === tab.id;
+	const hidden = !shown && !(moving && panelGroup(app, scope).active === tab.id);
 	const motion = moving ? panelMotion(layout.shown) : "";
 	const floor = current ? pane.floor : undefined;
 	return (
@@ -226,7 +227,8 @@ function PanelLayerTab({
 				data-panel-layer={scope}
 				data-panel-tab-id={tab.id}
 				inert={!shown}
-				className={`pointer-events-none absolute inset-0 overflow-hidden ${!shown && !(moving && panelGroup(app, scope).active === tab.id) ? "invisible" : ""}`}
+				// 同时给 opacity-0：只靠 visibility: hidden 时，后代或插件若显式声明 visibility: visible 会穿透出来。
+				className={`pointer-events-none absolute inset-0 overflow-hidden ${hidden ? "invisible opacity-0" : ""}`}
 			>
 				<div className={`plume-panel plume-freeze absolute ${motion}`} style={layout.panel}>
 					{/* 和 PanelArea 里面板的身子对齐：标签行在身子上面，身子从它下面开始、带 1px 描边。 */}
@@ -235,7 +237,7 @@ function PanelLayerTab({
 							id={`panel-content:${tab.id}`}
 							data-panel={panel.key}
 							inert={!shown}
-							className="plume-dock-pane pointer-events-auto absolute overflow-auto origin-top-left"
+							className={`plume-dock-pane ${shown ? "pointer-events-auto" : "pointer-events-none"} absolute overflow-auto origin-top-left`}
 							// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
 							style={floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
 						>
