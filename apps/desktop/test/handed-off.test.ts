@@ -12,7 +12,7 @@ function session(id: string, extra: Partial<SessionSummary> = {}): SessionSummar
 	return { id, title: id, cwd: "/work", createdAt: 0, updatedAt: 0, running: false, ...extra };
 }
 
-test("只列从这个会话交出去、此刻有话可说的：在跑（含等后台回来）、在等、跑完还没看；归档的、别处开的、看过的不列", () => {
+test("只列从这个会话交出去、还在进行的：在跑（含等后台回来）、在等；跑完、出错（看没看过都一样）、归档的、别处开的不列", () => {
 	const from = { sessionId: "main" };
 	const sessions = [
 		session("plan", { spawnedFrom: from, running: true }),
@@ -21,16 +21,16 @@ test("只列从这个会话交出去、此刻有话可说的：在跑（含等�
 		session("other", { spawnedFrom: { sessionId: "elsewhere" }, running: true }),
 		session("plain", { running: true }),
 		session("review", { spawnedFrom: from }),
+		session("broken", { spawnedFrom: from }),
 		session("asking", { spawnedFrom: from, running: true }),
 		session("archived", { spawnedFrom: from, archived: true }),
 	];
-	const marks: Record<string, SessionActivity> = { review: "done", asking: "waiting", archived: "done" };
+	const marks: Record<string, SessionActivity> = { review: "done", broken: "failed", asking: "waiting", archived: "done" };
 	assert.deepEqual(
 		handedOffFrom(sessions, (id) => marks[id], "main").map((row) => [row.session.id, row.state]),
 		[
 			["plan", "running"],
 			["background", "running"],
-			["review", "done"],
 			["asking", "waiting"],
 		],
 	);

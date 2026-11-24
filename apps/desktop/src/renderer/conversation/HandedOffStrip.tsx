@@ -1,5 +1,5 @@
 /**
- * 输入框上方那一条：这个会话交出去的会话此刻怎么样了（计划交给新会话、建议的新会话，`handed-off.ts`）。
+ * 输入框上方那一条：这个会话交出去、还在进行的会话此刻怎么样了（计划交给新会话、建议的新会话，`handed-off.ts`）。
  *
  * 交出去以后这个会话多半停在那里，人盯着的是这个对话；那边在读什么、跑什么，不该要人去侧栏里找。
  * 它不画在转录里：转录记的是这个会话说过、做过的事，那边的进度不是这里发生的，钉在一处、聊到哪都看得见。
@@ -19,8 +19,6 @@ import { SessionStatus } from "../sidebar/SessionRow.tsx";
 import { notify } from "../toast/index.ts";
 import { describeOne } from "./call-words.ts";
 import { type HandedOff, handedOffFrom, useSessionDoing } from "./handed-off.ts";
-
-const SAYS = { waiting: "sessionStatus.waiting", done: "sessionStatus.done", failed: "sessionStatus.failed" } as const;
 
 export const HandedOffStrip = memo(function HandedOffStrip({ parentId, sessions }: { parentId: string; sessions: readonly SessionSummary[] }) {
 	// 记号变了（等批准、跑完、看过）跟着重算；名单本身随会话列表来。
@@ -43,13 +41,7 @@ function Row({ row }: { row: HandedOff }) {
 	const { session } = row;
 	const running = row.state === "running";
 	const block = useSessionDoing(session.id, running);
-	const state = running
-		? block
-			? describeOne(block, session.cwd)
-			: undefined
-		: row.state === "waiting"
-			? waitingWords(waitOf(session.id), t)
-			: t(SAYS[row.state as keyof typeof SAYS]);
+	const state = running ? (block ? describeOne(block, session.cwd) : undefined) : waitingWords(waitOf(session.id), t);
 	// 扫光按拍走，和转录里的运行行一样（`ticked.ts`）：每帧推会让整页跟着重画。
 	const said = useRef<HTMLSpanElement>(null);
 	useTickedAnimations(said, GLIDE, running);

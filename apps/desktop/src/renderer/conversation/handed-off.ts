@@ -10,7 +10,7 @@ import type { SessionActivity } from "@plume/contract/ui";
 import { useSyncExternalStore } from "react";
 import { busy } from "../sidebar/activity.ts";
 
-type HandedOffState = "running" | SessionActivity;
+type HandedOffState = "running" | "waiting";
 
 export interface HandedOff {
 	session: SessionSummary;
@@ -18,9 +18,9 @@ export interface HandedOff {
 }
 
 /**
- * 从 `parentId` 交出去、此刻值得说一声的会话。在跑、在等人的要说；跑完、出错的留到人点进去看过为止——侧栏的
- * `done`/`failed` 本来就是「你还没看」，打开那个会话时清掉，这一行跟着走。什么也没发生过的不占地方，归档的也不列：
- * 它不在侧栏里了，点过去也是离开。
+ * 从 `parentId` 交出去、此刻还在进行的会话：在跑（含等后台回来）、在等人。跑完、出错的不列：这一条说的是那边此刻在做什么，
+ * 做完了还钉在这里，就只能靠点进那个会话才收得掉；结果看侧栏行首的记号，开会话的插件交回了的，对话里还有一行「来自关联会话」。
+ * 归档的也不列：它不在侧栏里了，点过去也是离开。
  */
 export function handedOffFrom(
 	sessions: readonly SessionSummary[],
@@ -32,7 +32,7 @@ export function handedOffFrom(
 		if (session.spawnedFrom?.sessionId !== parentId || session.archived) continue;
 		const own = activityOf(session.id);
 		// 和侧栏行首同一个次序：等人批准排最前，那是一个会一直等下去的会话。
-		const state = own === "waiting" ? own : busy(session) ? "running" : own;
+		const state = own === "waiting" ? own : busy(session) ? "running" : undefined;
 		if (state) out.push({ session, state });
 	}
 	return out;
