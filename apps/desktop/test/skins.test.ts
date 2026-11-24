@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { test } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { effectiveChatBackdrop } from "../src/renderer/chat-backdrop-settings.ts";
 import { skinValues } from "../src/renderer/skin-values.ts";
 import { skinRegistry } from "../src/renderer/skins.ts";
 import { uiLifetime } from "../src/renderer/ui-lifetime.ts";
@@ -19,6 +20,7 @@ import {
 } from "../src/shared/appearance.ts";
 
 const hasToken = (token: string) => ["bg", "fg", "root", "accent-dim"].includes(token);
+const ONE_PIXEL_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZP8sAAAAASUVORK5CYII=";
 
 test("侧栏停靠和抽屉都铺自己的底色（.sidebar-surface），不和窗口外圈连成一片，也不按皮肤分支", () => {
 	const source = readFileSync(new URL("../src/renderer/app.tsx", import.meta.url), "utf8");
@@ -39,6 +41,63 @@ test("旧种子皮肤不接管偏好，数据皮肤必须同时提供名字和�
 	for (const skin of [null, [], { name: "" }, { mode: "invalid" }, { light: [] }, { light: { missing: "red" } }, { dark: { bg: 2 } }, { light: { bg: " " } }]) {
 		assert.throws(() => skinValues(skin, hasToken));
 	}
+});
+
+test("皮肤背景只接受内嵌的真实图片和声明式参数，且必须随数据皮肤注册", () => {
+	const background = {
+		image: ONE_PIXEL_PNG,
+		fit: "cover",
+		effect: "grid",
+		opacity: 0.52,
+		onNewChat: true,
+		inChat: true,
+	} as const;
+	assert.deepEqual(skinValues({ name: "Nyx", mode: "dark", background }, hasToken).managed, { name: "Nyx", mode: "dark", background });
+	for (const invalid of [
+		{ image: "https://example.com/skin.png" },
+		{ image: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" },
+		{ image: ONE_PIXEL_PNG.replace("image/png", "image/webp") },
+		{ image: ONE_PIXEL_PNG, effect: "custom-css" },
+		{ image: ONE_PIXEL_PNG, opacity: 1 },
+	])
+		assert.throws(() => skinValues({ name: "Nyx", mode: "dark", background: invalid }, hasToken));
+	assert.throws(() => skinValues({ background }, hasToken), /requires name and mode/);
+});
+
+test("皮肤背景只覆盖显示，撤下后原样恢复全局背景及其开关", () => {
+	const global: Appearance = {
+		chatBackground: "chat-123.jpg",
+		chatBackgroundEffect: "dither",
+		chatBackgroundFit: "tile",
+		chatBackgroundOpacity: 0.08,
+		chatBackgroundOnNewChat: false,
+		chatBackgroundInChat: true,
+	};
+	const background = {
+		image: ONE_PIXEL_PNG,
+		fit: "cover",
+		effect: "grid",
+		opacity: 0.52,
+		onNewChat: true,
+		inChat: false,
+	} as const;
+	assert.deepEqual(effectiveChatBackdrop(global, { name: "Nyx", mode: "dark", background }), {
+		source: { kind: "skin", image: ONE_PIXEL_PNG },
+		effect: "grid",
+		fit: "cover",
+		opacity: 0.52,
+		onNewChat: true,
+		inChat: false,
+	});
+	assert.deepEqual(effectiveChatBackdrop(global, undefined), {
+		source: { kind: "global", name: "chat-123.jpg" },
+		effect: "dither",
+		fit: "tile",
+		opacity: 0.08,
+		onNewChat: false,
+		inChat: true,
+	});
+	assert.equal(global.chatBackground, "chat-123.jpg");
 });
 
 test("皮肤更新不叠样式表，null 和卸载恢复前一套及管理状态，坏数据不留下半套", (t) => {
@@ -83,7 +142,7 @@ test("皮肤更新不叠样式表，null 和卸载恢复前一套及管理状态
 			else Reflect.deleteProperty(globalThis, name);
 		});
 	}
-	let managed: { name: string; mode: "system" | "light" | "dark" } | undefined;
+	let managed: { name: string; mode: "system" | "light" | "dark"; background?: unknown } | undefined;
 	const skins = skinRegistry((value) => {
 		managed = value;
 	});
@@ -107,7 +166,9 @@ test("皮肤更新不叠样式表，null 和卸载恢复前一套及管理状态
 	assert.equal(styles[0]!.sheet.disabled, false);
 	skins.remove("legacy");
 	assert.ok(styles.every((style) => style.removed));
-	skins.set("studio", data);
+	const background = { image: ONE_PIXEL_PNG, fit: "cover", effect: "grid", opacity: 0.52, onNewChat: true, inChat: true } as const;
+	skins.set("studio", { ...data, background });
+	assert.deepEqual(managed, { name: "Finch", mode: "dark", background });
 	skins.remove("studio");
 	assert.equal(managed, undefined);
 });

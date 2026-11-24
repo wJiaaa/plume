@@ -11,6 +11,7 @@ import { findCodeTheme, withHanFallback } from "@plume/ui";
 import { codePalette } from "./code-appearance.ts";
 import { RAIL_WIDTH, SIDEBAR_MAX } from "./layout.ts";
 import { type Appearance, type AppearancePatch, cleanAppearance, editableAppearancePatch, effectiveAppearance, patchAppearance } from "../shared/appearance.ts";
+import type { ManagedSkin } from "./skin-values.ts";
 
 /*
  * 宽档的对话列：只跟窗口宽度走，按侧栏拖到最宽（`SIDEBAR_MAX`）留出位置，不跟侧栏此刻多宽、开没开走。
@@ -25,7 +26,7 @@ const WIDE_CONTENT = `clamp(864px, calc(100vw - ${RAIL_WIDTH + SIDEBAR_MAX + CON
 let current: Appearance = cleanAppearance(window.plume.appearance);
 const listeners = new Set<() => void>();
 let sheet: CSSStyleSheet | undefined;
-let managedSkin: { name: string; mode: "system" | "light" | "dark" } | undefined;
+let managedSkin: ManagedSkin | undefined;
 
 export function useManagedSkin(): typeof managedSkin {
 	return useSyncExternalStore(

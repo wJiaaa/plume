@@ -50,7 +50,7 @@ export default {
 | `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
 | `ui.page(id, Component, options)` | 往活动栏加一个页面，见「页面」 |
 | `ui.usePageToolbar(items)` | 页面组件里调用的 hook，往窗口左上角后退、前进后面放这一页的图标按钮，见「页面」 |
-| `ui.skin({ name?, mode?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤，见「皮肤」 |
+| `ui.skin({ name?, mode?, background?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；数据皮肤可带独立会话背景，见「皮肤」 |
 | `ui.useTheme()` / `ui.setTheme(theme)` | 读、改应用的主题偏好（设置 › 外观的跟随系统、浅色、深色），见「皮肤」 |
 | `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`，见「皮肤」 |
 | `ui.onSessionsChanged(listener)` | 订阅所有会话的已保存消息、摘要和删除变化，见「会话变化与停止按钮」 |
@@ -677,11 +677,13 @@ function ModelSetting() {
 
 同时提供 `name`（非空、最多 80 字符）和 `mode: "system" | "light" | "dark"` 时成为管理配色的数据皮肤。宿主暂时忽略用户保存的界面种子与深浅模式，外观页实时显示当前皮肤名和只读配色；字体、代码外观和其他偏好仍可改，原配色不被改写，皮肤停用后恢复。只提供 `{ light, dark }` 的普通皮肤不接管偏好，用户明确设置的项仍优先。深浅模式由宿主主进程按窗口暂存，插件不访问内部配置或 `window.plume`。
 
+数据皮肤可带 `background: { image, fit?, effect?, opacity?, onNewChat?, inChat? }`。`image` 只接受 5 MB 以内、真实签名匹配的 PNG/JPEG/GIF/WebP Base64 data URL，不接受路径、HTTP(S)、SVG 或 CSS；`fit` 是 `cover | tile`，`effect` 是 `none | dither | ascii | halftone | scanlines | grid | haze`，`opacity` 是 0.05–0.65，两个显示位置默认都开。它只在这套皮肤生效时覆盖会话背景，撤下或切换皮肤后立即恢复人的全局背景；不会改写全局设置，也不会让全局背景存储清理原图。
+
 只传 `{ name: "Plume", mode: "system" }`、不传 token 时，使用产品原生配色并跟随系统；`light`、`dark` 则固定模式。这和 `ui.skin(null)` 不同：前者暂时管理配色并屏蔽原有种子覆盖，后者退出管理、恢复原用户偏好。
 
 要让人在插件里切「跟随系统 / 浅色 / 深色」，就是改外观页那三张主题卡片，不是做一套皮肤：`ui.setTheme("dark")` 等同人在外观页点「深色」，存盘、各窗口同步；组件里用 `ui.useTheme()` 读当前选的是哪张。有皮肤接管深浅模式时外观页的主题只读，`setTheme` 同样不改，所以先 `ui.skin(null)` 撤下自己的皮肤再调。只在人点了插件界面上的按钮时调，不在工具或定时逻辑里替人改。
 
-背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、背景效果（含叠在原图上的像素网格）、浓淡，以及窗口外圈和对话区的磨砂质感（不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。
+背景操作复用 `<ui.ChatBackgroundSettings title="…" />`，`title` 来自插件文案，省略时用产品的「会话背景」。这个自包含的组件管理全局的图片、显示位置、铺满／平铺、背景效果（含叠在原图上的像素网格）、浓淡，以及窗口外圈和对话区的磨砂质感（不看皮肤、不要图；外观页不再有背景设置），支持选图和拖入图片，不向插件暴露磁盘路径。用户在该组件做的修改直接保存到全局背景偏好，切换皮肤或停用插件不撤销；图片格式和体积检查、复制、失败提示和跨窗口更新均由宿主负责，不另存一份背景。当前数据皮肤带有独立 `background` 时，实际会话暂时优先画皮肤图，但这个组件仍预览和编辑全局图；撤下皮肤后按原设置恢复。
 
 `root` 是窗口最外层（活动栏、顶上那一条）的底色，默认跟随 `shell`；`sidebar` 是侧栏的那一档：侧栏一栏和窄窗口的抽屉取 `shell` 和它六四开混出来的颜色，和外圈、对话都差一档，Windows、Linux 顶上那条带子也铺它；`accent-dim` 是强调弱底，默认是强调色的 10% 透明底。数据皮肤可直接给出完整的面、线、字 token；若一份配色只适用于一个模式，给 `light`、`dark` 同一组 token，并用 `mode` 指定深浅模式。
 

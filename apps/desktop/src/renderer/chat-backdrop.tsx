@@ -2,7 +2,7 @@
  * 会话背后那张图。
  *
  * 一张图、一种效果、一种深浅，只算一次：结果是一个 blob URL，对话区和设置页的预览共用它。换了图就把旧图的 URL
- * 全部收回；只换效果时旧的留着，新的算好之前画面不会先空一下。
+ * 全部收回；只换效果时旧的留着，新的算好之前画面不会先空一下。皮肤自己的内嵌背景只覆盖显示，不改人的全局背景引用。
  *
  * 逐像素重绘在主线程做：一张缩到 2048 边长的图主线程最长阻塞几十毫秒，只在换图、换效果、换深浅时各发生一次，
  * 不值得为它起一个 Worker。
@@ -11,19 +11,46 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import type { ChatBackgroundEffect, ChatBackgroundFit } from "../shared/appearance.ts";
 import { CHAT_BACKGROUND_DEFAULTS } from "../shared/appearance.ts";
-import { useAppearance, useDark } from "./appearance-settings.ts";
+import { useAppearance, useDark, useManagedSkin } from "./appearance-settings.ts";
 import { BACKDROP_MAX_EDGE, type BackdropSource, lumaOf, redraw, redrawn, themed } from "./chat-backdrop-effects.ts";
+import { effectiveChatBackdrop } from "./chat-backdrop-settings.ts";
 
-let held: { name: string; original: Promise<Blob | null>; decoded?: Promise<BackdropSource> } | null = null;
-const urls = new Map<string, Promise<string | null>>();
+interface ImageSource {
+	key: string;
+	direct?: string;
+	original(): Promise<Blob | null>;
+}
 
-function imageOf(name: string) {
-	if (held?.name !== name) {
-		for (const url of urls.values()) void url.then((value) => value && URL.revokeObjectURL(value));
-		urls.clear();
-		held = { name, original: window.plume.chatBackground.read(name).then((bytes) => (bytes ? new Blob([bytes as Uint8Array<ArrayBuffer>]) : null)) };
+interface HeldImage {
+	consumers: number;
+	original: Promise<Blob | null>;
+	decoded?: Promise<BackdropSource>;
+	urls: Map<string, Promise<string | null>>;
+}
+
+const held = new Map<string, HeldImage>();
+
+function imageOf(source: ImageSource): HeldImage {
+	let image = held.get(source.key);
+	if (!image) {
+		image = { consumers: 0, original: source.original(), urls: new Map() };
+		held.set(source.key, image);
 	}
-	return held;
+	return image;
+}
+
+function retain(source: ImageSource): void {
+	imageOf(source).consumers++;
+}
+
+function release(key: string): void {
+	const image = held.get(key);
+	if (!image || --image.consumers > 0) return;
+	held.delete(key);
+	for (const url of image.urls.values())
+		void url.then((value) => {
+			if (value?.startsWith("blob:")) URL.revokeObjectURL(value);
+		});
 }
 
 async function decode(blob: Blob): Promise<BackdropSource> {
@@ -48,51 +75,94 @@ async function render(source: BackdropSource, effect: "dither" | "ascii" | "half
 	return canvas.convertToBlob({ type: "image/png" });
 }
 
-function backdropUrl(name: string, effect: ChatBackgroundEffect, light: boolean): Promise<string | null> {
-	const image = imageOf(name);
+function backdropUrl(source: ImageSource, effect: ChatBackgroundEffect, light: boolean): Promise<string | null> {
+	const image = imageOf(source);
 	const key = redrawn(effect) ? `${effect}:${themed(effect) && light}` : "original";
-	let url = urls.get(key);
+	let url = image.urls.get(key);
 	if (!url) {
-		url = image.original.then(async (blob) => {
-			if (!blob) return null;
-			if (!redrawn(effect)) return URL.createObjectURL(blob);
-			try {
-				image.decoded ??= decode(blob);
-				return URL.createObjectURL(await render(await image.decoded, effect, light));
-			} catch {
-				// 解不开或画不出来时退回原图：背景少一层效果，好过整块消失。
-				return URL.createObjectURL(blob);
-			}
-		});
-		urls.set(key, url);
+		url =
+			!redrawn(effect) && source.direct
+				? Promise.resolve(source.direct)
+				: image.original.then(async (blob) => {
+						if (!blob) return null;
+						if (!redrawn(effect)) return URL.createObjectURL(blob);
+						try {
+							image.decoded ??= decode(blob);
+							return URL.createObjectURL(await render(await image.decoded, effect, light));
+						} catch {
+							// 解不开或画不出来时退回原图：背景少一层效果，好过整块消失。
+							return URL.createObjectURL(blob);
+						}
+					});
+		image.urls.set(key, url);
 	}
 	return url;
 }
 
-/** 此刻该画的那张图；没设背景、或图还没读出来时为 null。 */
-export function useChatBackdropImage(): string | null {
-	const appearance = useAppearance();
-	const name = appearance.chatBackground ?? null;
-	const effect = appearance.chatBackgroundEffect ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundEffect;
-	const light = !useDark();
-	const [shown, setShown] = useState<{ name: string; url: string } | null>(null);
+function useBackdropUrl(source: ImageSource | null, effect: ChatBackgroundEffect, light: boolean): string | null {
+	const key = source?.key ?? null;
+	const [shown, setShown] = useState<{ key: string; url: string } | null>(null);
 	useEffect(() => {
-		if (!name) return;
+		if (!source) {
+			setShown(null);
+			return;
+		}
+		retain(source);
+		return () => release(source.key);
+		// source 的工厂函数每次渲染都会重建，真正决定图片身份的是稳定的 key。
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key]);
+	useEffect(() => {
+		if (!source) return;
 		let live = true;
-		void backdropUrl(name, effect, light).then((url) => {
-			if (live && url) setShown({ name, url });
+		void backdropUrl(source, effect, light).then((url) => {
+			if (live && url) setShown({ key: source.key, url });
 		});
 		return () => {
 			live = false;
 		};
-	}, [name, effect, light]);
-	// 换了图之后，上一张的 URL 已经收回，不能再拿来画。
-	return name && shown?.name === name ? shown.url : null;
+		// source 的工厂函数每次渲染都会重建，真正决定图片身份的是稳定的 key。
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key, effect, light]);
+	return key && shown?.key === key ? shown.url : null;
+}
+
+function globalSource(name: string | undefined): ImageSource | null {
+	return name
+		? {
+				key: `global:${name}`,
+				original: () => window.plume.chatBackground.read(name).then((bytes) => (bytes ? new Blob([bytes as Uint8Array<ArrayBuffer>]) : null)),
+			}
+		: null;
+}
+
+function skinSource(image: string): ImageSource {
+	return {
+		key: `skin:${image}`,
+		direct: image,
+		original: () =>
+			fetch(image)
+				.then((response) => response.blob())
+				.catch(() => null),
+	};
+}
+
+/** 全局背景设置页预览的图片；即使皮肤有独立背景，这里仍编辑和预览人的全局背景。 */
+export function useChatBackdropImage(): string | null {
+	const appearance = useAppearance();
+	const effect = appearance.chatBackgroundEffect ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundEffect;
+	return useBackdropUrl(globalSource(appearance.chatBackground), effect, !useDark());
+}
+
+function useEffectiveBackdrop() {
+	const selected = effectiveChatBackdrop(useAppearance(), useManagedSkin());
+	const source = selected.source.kind === "skin" ? skinSource(selected.source.image) : globalSource(selected.source.name ?? undefined);
+	return { ...selected, url: useBackdropUrl(source, selected.effect, !useDark()) };
 }
 
 /**
  * 铺在对话区底下的那一层。新对话里是原样；有了消息以后整张图压淡一半，见 styles.css 的 .chat-backdrop。
- * 两处各有一个开关，只开一处时另一处不画。
+ * 皮肤独立背景优先；撤下皮肤后重新使用人的全局图片和显示位置，不改写那份偏好。
  *
  * 两种之间当场切换，不过渡：正文是同一帧画出来的，图慢慢淡下去就是原样的图在字底下多留三百多毫秒，
  * 从新对话进到会话看着像整页闪了一下。
@@ -101,21 +171,12 @@ export function useChatBackdropImage(): string | null {
  */
 export function ChatBackdrop({ empty, headerHeight = 0 }: { empty: boolean; headerHeight?: number }) {
 	const appearance = useAppearance();
-	const url = useChatBackdropImage();
-	const enabled = empty
-		? (appearance.chatBackgroundOnNewChat ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundOnNewChat)
-		: (appearance.chatBackgroundInChat ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundInChat);
+	const backdrop = useEffectiveBackdrop();
+	const enabled = empty ? backdrop.onNewChat : backdrop.inChat;
 	return (
 		<>
-			{enabled && appearance.chatBackground && url && (
-				<BackdropLayer
-					url={url}
-					effect={appearance.chatBackgroundEffect ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundEffect}
-					opacity={appearance.chatBackgroundOpacity ?? CHAT_BACKGROUND_DEFAULTS.chatBackgroundOpacity}
-					reading={!empty}
-					fit={appearance.chatBackgroundFit ?? "cover"}
-					headerHeight={headerHeight}
-				/>
+			{enabled && backdrop.url && (
+				<BackdropLayer url={backdrop.url} effect={backdrop.effect} opacity={backdrop.opacity} reading={!empty} fit={backdrop.fit} headerHeight={headerHeight} />
 			)}
 			{/* 磨砂是整个窗口的质感，不看背景图的显示位置。 */}
 			{appearance.grain && <GrainLayer headerHeight={headerHeight} />}

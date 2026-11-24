@@ -17,6 +17,7 @@ export async function checkSkinStudio(options: {
 	setModel(override: ((request: Record<string, unknown>) => FakeReply) | undefined): void;
 }): Promise<void> {
 	const { window, agent, plugin, outDir, setModel } = options;
+	const skinBackgroundImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZP8sAAAAASUVORK5CYII=";
 	const page = <T>(code: string) => window.webContents.executeJavaScript(code) as Promise<T>;
 	const wait = async (condition: () => Promise<boolean>, label: string) => {
 		const deadline = Date.now() + 15_000;
@@ -52,7 +53,7 @@ export async function checkSkinStudio(options: {
 	const library = async () =>
 		JSON.parse(await readFile(join(plumeHome(), "plugin-data/plume.skin-studio/skins.json"), "utf8")) as {
 			activeId: string | null;
-			custom: Array<{ id: string; name: string; base: string; colors: Record<string, string> }>;
+			custom: Array<{ id: string; name: string; base: string; colors: Record<string, string>; background?: { image: string } }>;
 		};
 	const settings = async (section: string) => {
 		window.webContents.send("plume:command", "settings");
@@ -351,6 +352,57 @@ export async function checkSkinStudio(options: {
 	})()`);
 	await until(`document.querySelector('${background} [role=alert]')?.textContent.includes('20 MB')`, "超限图片在读取前拒绝");
 	assert.equal((await appearance()).chatBackground, droppedImage);
+
+	// 皮肤自己的图片只覆盖显示，不改全局背景槽位；撤下皮肤后同一张全局图按原设置回来。
+	const globalBeforeSkin = await appearance();
+	await button("导入别人分享的皮肤");
+	await type(
+		'[name="skin-json"]',
+		JSON.stringify({
+			name: "独立背景冒烟",
+			base: "dark",
+			colors: saved.colors,
+			background: { image: skinBackgroundImage, fit: "cover", effect: "dither", opacity: 0.52, onNewChat: true, inChat: true },
+		}),
+	);
+	await button("导入并应用", "[role=dialog]");
+	await until(`!document.querySelector('[role=dialog]')`, "导入独立背景皮肤");
+	const backgroundSkin = (await library()).custom.find((skin) => skin.name === "独立背景冒烟");
+	assert.ok(backgroundSkin);
+	assert.equal(backgroundSkin.background?.image, skinBackgroundImage);
+	await page(
+		`window.__skinClipboardWrite = navigator.clipboard.writeText.bind(navigator.clipboard); navigator.clipboard.writeText = async value => { window.__skinCopied = value; }; void 0;`,
+	);
+	try {
+		await click(`[data-skin-id="${backgroundSkin.id}"] button[aria-label^="复制"]`);
+		await until(`typeof window.__skinCopied === 'string'`, "复制带独立背景的 JSON");
+		assert.equal(JSON.parse(await page<string>(`window.__skinCopied`)).background.image, skinBackgroundImage);
+	} finally {
+		await page(`navigator.clipboard.writeText = window.__skinClipboardWrite; delete window.__skinClipboardWrite; delete window.__skinCopied;`);
+	}
+	await until(`document.querySelector('[data-screen=empty] > .chat-backdrop[data-backdrop="dither"]') !== null`, "皮肤独立背景画到新对话");
+	const skinUrl = await page<string>(`getComputedStyle(document.querySelector('[data-screen=empty] > .chat-backdrop')).backgroundImage.slice(5, -2)`);
+	const previewUrl = await page<string>(
+		`getComputedStyle(document.querySelector('${background} [data-chat-background-preview] .chat-backdrop')).backgroundImage.slice(5, -2)`,
+	);
+	assert.match(skinUrl, /^blob:/);
+	assert.match(previewUrl, /^blob:/);
+	await wait(
+		async () =>
+			page<boolean>(
+				`Promise.all([fetch(${JSON.stringify(skinUrl)}), fetch(${JSON.stringify(previewUrl)})]).then(async responses => (await Promise.all(responses.map(response => response.blob()))).every(blob => blob.size > 0)).catch(() => false)`,
+			),
+		"皮肤背景和全局预览的对象 URL 同时有效",
+	);
+	assert.deepEqual(await appearance(), globalBeforeSkin, "应用皮肤背景不改全局外观数据");
+	await capture("smoke-skin-owned-background.png");
+	await button("恢复原外观");
+	await wait(async () => (await library()).activeId === null, "撤下独立背景皮肤");
+	await until(
+		`getComputedStyle(document.querySelector('[data-screen=empty] > .chat-backdrop')).backgroundImage.startsWith('url("blob:')`,
+		"撤下皮肤恢复全局背景",
+	);
+	assert.deepEqual(await appearance(), globalBeforeSkin, "恢复全局背景后设置仍未改写");
 
 	await settings("外观");
 	await until(`document.querySelector('[data-screen=settings] [data-plume-code-appearance]') !== null`, "外观页打开");

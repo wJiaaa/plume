@@ -1,8 +1,8 @@
-import { skinValues } from "./skin-values.ts";
+import { type ManagedSkin, skinValues } from "./skin-values.ts";
 
-/** 各插件的皮肤按注册先后叠放；撤下最后一个后，连同管理状态一起恢复前一个。 */
-export function skinRegistry(changed: (skin: { name: string; mode: "system" | "light" | "dark" } | undefined) => void) {
-	let entries: Array<{ plugin: string; style: HTMLStyleElement; managed: { name: string; mode: "system" | "light" | "dark" } | undefined }> = [];
+/** 各插件的皮肤按注册先后叠放；撤下最后一个后，连同管理状态和皮肤背景一起恢复前一个。 */
+export function skinRegistry(changed: (skin: ManagedSkin | undefined) => void) {
+	let entries: Array<{ plugin: string; style: HTMLStyleElement; managed: ManagedSkin | undefined }> = [];
 	const enableLatest = () => {
 		entries.forEach(({ style }, index) => {
 			if (style.sheet) style.sheet.disabled = index !== entries.length - 1;

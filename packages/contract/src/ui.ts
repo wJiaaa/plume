@@ -827,12 +827,29 @@ export interface PinnedShotProps {
 	dragMove(dx: number, dy: number): void;
 }
 
+export type SkinBackgroundEffect = "none" | "dither" | "ascii" | "halftone" | "scanlines" | "grid" | "haze";
+export type SkinBackgroundFit = "cover" | "tile";
+
+/** 皮肤自己的会话背景；撤下皮肤后恢复人的全局背景，不改写或删除全局图片。 */
+export interface SkinBackground {
+	/** PNG、JPEG、GIF 或 WebP 的 Base64 data URL；不接受路径、网络地址、SVG 或 CSS。 */
+	image: string;
+	fit?: SkinBackgroundFit;
+	effect?: SkinBackgroundEffect;
+	/** 0.05–0.65。 */
+	opacity?: number;
+	onNewChat?: boolean;
+	inChat?: boolean;
+}
+
 /** 浅色、深色分别覆盖哪些 token，值是 CSS 值；没写的沿用默认。 */
 export interface Skin {
 	/** 数据皮肤的显示名；与 mode 一起提供时接管配色，外观页只读展示，停用后恢复用户偏好。 */
 	name?: string;
 	/** 临时覆盖应用深浅模式，不改写用户保存的主题偏好；system 跟随系统。不提供 token 时使用产品默认配色。 */
 	mode?: "system" | "light" | "dark";
+	/** 皮肤独立背景；必须与 name、mode 一起提供。 */
+	background?: SkinBackground;
 	light?: Partial<Record<SkinToken, string>>;
 	dark?: Partial<Record<SkinToken, string>>;
 }
