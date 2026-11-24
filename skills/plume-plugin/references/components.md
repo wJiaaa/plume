@@ -453,7 +453,7 @@ export function ContextMenu({ width = "default" }: {
 
 ```tsx
 /** 菜单里的一行。 */
-export function MenuItem({ className = "" }: {
+export function MenuItem({ className = "", ...data }: DataAttributes & {
 	icon?: React.ReactNode;
 	children: React.ReactNode;
 	/** 解释这个选项的第二行。 */

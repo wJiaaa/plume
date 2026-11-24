@@ -12,6 +12,7 @@ import { createContext, useContext } from "react";
 
 import { ScrollText } from "../scroll/ScrollText.tsx";
 import { shortcutLabel } from "../keyboard.ts";
+import type { DataAttributes } from "../primitives/Button.tsx";
 
 /**
  * 这个菜单的行是否都留着图标那一列，连没有图标的行也留。
@@ -79,7 +80,8 @@ export function MenuItem({
 	title,
 	className = "",
 	onClick,
-}: {
+	...data
+}: DataAttributes & {
 	icon?: React.ReactNode;
 	children: React.ReactNode;
 	/**
@@ -117,6 +119,7 @@ export function MenuItem({
 
 	return (
 		<button
+			{...data}
 			type="button"
 			role={checked === undefined ? "menuitem" : "menuitemcheckbox"}
 			aria-checked={checked}
