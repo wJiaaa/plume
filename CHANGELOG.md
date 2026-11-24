@@ -2,6 +2,44 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.2] - 2026-11-24
+
+<!-- plume:notes en -->
+### Changes
+
+- **Cleaner, wrapped-by-default code blocks.** Code blocks in chat no longer take up an extra header bar for the language label. Long lines wrap automatically, while Copy (and Run in terminal for shell commands) sit cleanly in the top-right corner—centered alongside single-line commands and tucked out of the way for multi-line blocks.
+- **Skins can carry their own chat backdrop.** Themes can now include a dedicated background image and effect without touching your global wallpaper settings. Turning the skin off automatically brings your original backdrop back.
+- **Better contrast inside overlays with custom skins.** Fixed question-card options, fenced code blocks in the composer, and Git branch loading states blending into the card background under custom skins.
+- **Tighter chat alignment and delivery cards.** Wide windows now keep the transcript column and composer aligned flush on both edges so delivery cards no longer jut out to the right. Delivery card headers and file rows are more compact, and hovering or focusing a file link underlines the text instead of filling a heavy gray pill.
+- **Side-panel image and menu fixes.** Switching away from an image tab in the side panel no longer leaves the image visible over other tabs. Git and Project files entries in the side-panel menu now also show localized descriptions.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **代码块去掉标题栏，默认自动换行。** 对话里的代码块不再单占一行显示语言名和换行开关，长代码默认折行；复制按钮（可执行 shell 命令还带「在终端运行」）收在右上角，单行命令与按钮同行垂直居中，多行代码时也不遮挡正文。
+- **皮肤可自带独立会话背景，不覆盖原有壁纸。** 皮肤现在可以附带专属会话背景与滤镜效果，不会改写你的全局背景设置；撤下皮肤后自动回到你原来的壁纸。
+- **换肤后浮层内元素层次更分明。** 修复了使用换肤工坊或自定义皮肤时，提问卡选项、输入框代码块以及 Git 分支菜单加载骨架容易融进浮层背景的问题。
+- **宽窗排版对齐，交付卡与文件签更轻盈。** 宽窗下正文列与下方输入框严格左右对齐，交付卡不再向右探出；文件交付卡收紧了顶栏与文件行高度，减少回复底部占位；文件签悬停与聚焦时改为淡入文字下划线，不再铺整块灰底。
+- **侧边面板看图与菜单细节修复。** 修复了在侧边面板打开图片后切到其他标签页时图片仍穿透残留的问题；为侧边面板菜单里的「Git」和「项目文件」补全了中英文描述。
+
+### 新功能
+
+- **desktop**: 代码块去掉标题栏并默认自动换行，操作按钮收在右上角 (`dbd3794`)
+- 皮肤可携带独立会话背景并保留全局图片 (`507b336`)
+
+### 修复
+
+- **desktop**: 宽窗下转录列与输入框左右对齐，交付卡不再向右探出 (`63b9c33`)
+- 侧边面板的 Git 与项目文件项补充中英文描述 (`78c83ec`)
+- **core**: 收紧文件交付卡片的头部与文件行尺寸，减少回复底部占位 (`db12153`)
+- **desktop**: 文件签悬停与聚焦时改为文字下划线，不再铺灰色底色 (`00b6ec8`)
+- 换肤后提问卡选项等浮层内元素不再融进卡片背景 (`e80ab3d`)
+- **desktop**: 侧边面板查看图片后切到其他标签不再残留显示图片 (`f213bce`)
+
+### 文档
+
+- 同步换肤工坊细粒度 token 覆写与 Clawd 预设说明 (`7a5e393`)
+
 ## [0.9.1] - 2026-11-24
 
 <!-- plume:notes en -->
