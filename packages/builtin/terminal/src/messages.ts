@@ -22,6 +22,7 @@ const zhCN = {
 	close: "关闭",
 	copy: "复制",
 	paste: "粘贴",
+	unsupportedWaitForExit: "cmd.exe 不支持等待脚本执行完成，请改用 PowerShell 后重试。",
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = {
@@ -44,5 +45,6 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		close: "Close",
 		copy: "Copy",
 		paste: "Paste",
+		unsupportedWaitForExit: "Waiting for script completion is not supported in cmd.exe. Please use PowerShell instead.",
 	},
 };

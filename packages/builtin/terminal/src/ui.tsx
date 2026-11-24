@@ -39,6 +39,34 @@ export default {
 		const refreshEnv = () => void api.refreshEnv().catch(() => undefined);
 		window.addEventListener("focus", refreshEnv);
 		ui.effect(() => window.removeEventListener("focus", refreshEnv));
+
+		/** 由逻辑侧 `closeByTag` 触发的程序化关闭集合：命中后跳过「前台程序仍在运行」确认框。 */
+		const programmaticCloses = new Set<string>();
+		const panelWatch = api.watchPanels();
+		ui.effect(() => panelWatch.cancel());
+		void (async () => {
+			try {
+				for await (const signal of panelWatch) {
+					if (signal.type === "open") {
+						ui.openPanel("terminal", signal.sessionId, { tab: signal.tab, background: !signal.reveal });
+					} else {
+						programmaticCloses.add(signal.tab);
+						ui.closePanel("terminal", signal.sessionId, signal.tab);
+						// 若该标签未挂载（不在当前窗口），一段时间后回收标记避免残留。
+						setTimeout(() => programmaticCloses.delete(signal.tab), 5_000);
+					}
+				}
+			} catch {
+				// 逻辑入口重启或停用时正常结束。
+			}
+		})();
+
+		const consumeProgrammaticClose = (tab: string): boolean => {
+			if (!programmaticCloses.has(tab)) return false;
+			programmaticCloses.delete(tab);
+			return true;
+		};
+
 		ui.terminalOpener(async (directory, sessionId) => {
 			ui.openPanel("terminal", sessionId);
 			await api.openDirectory(sessionId, directory);
@@ -71,7 +99,9 @@ export default {
 			return (
 				<TerminalPane
 					api={api}
+					sessionId={sessionId ?? null}
 					cwd={cwd ?? session?.summary.cwd ?? ""}
+					consumeProgrammaticClose={consumeProgrammaticClose}
 					directoryRequest={request}
 					takeDirectory={async (id) => (sessionId ? await api.takeDirectory(sessionId, id) : false)}
 					onDirectoryError={(error) => ui.notify(String(error), "error")}

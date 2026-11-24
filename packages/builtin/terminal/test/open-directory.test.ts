@@ -44,6 +44,7 @@ it("终端逻辑入口跨窗口推送目录请求，领取和删会话后推送�
 		serve: (value: TerminalApi) => {
 			api = value;
 		},
+		provide: () => undefined,
 		effect: (dispose: () => void) => effects.push(dispose),
 		sessions: {
 			onDeleted: (listener: (sessionId: string) => void) => {

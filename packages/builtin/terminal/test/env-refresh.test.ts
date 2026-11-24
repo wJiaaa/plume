@@ -35,6 +35,7 @@ it("逻辑入口：启动时读一次，之后经 refreshEnv 再读；面板连�
 		log: { error: () => undefined },
 		locale: () => "zh",
 		effect: () => undefined,
+		provide: () => undefined,
 		sessions: { onDeleted: () => undefined },
 		serve: (served: TerminalApi) => (api = served),
 	} as unknown as PluginContext;
@@ -70,7 +71,13 @@ it("界面入口：窗口拿到焦点就让逻辑入口刷新，停用后不再�
 	const refreshEnv = vi.fn(async () => undefined);
 	const disposers: Array<() => void> = [];
 	const ui = {
-		remote: () => ({ refreshEnv }),
+		remote: () => ({
+			refreshEnv,
+			watchPanels: () => ({
+				cancel: () => undefined,
+				async *[Symbol.asyncIterator]() {},
+			}),
+		}),
 		terminalOpener: () => undefined,
 		terminalRunner: () => undefined,
 		panel: () => undefined,

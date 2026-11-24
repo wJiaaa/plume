@@ -741,7 +741,8 @@ Plume 自带的服务：
 
 | 服务 | 提供方 | 接口 |
 | --- | --- | --- |
-| `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。建、收回、合并回去都归 plume.git |
+| `session.worktree` | 内置插件 plume.git | `available(cwd)`：这个目录在不在 git 仓库里，在才开得出工作树。`requestFor({ sessionId, toolCallId })`：从这次工具调用开出来的会话（`ctx.sessions.launch` 的 `spawnedFrom`）第一轮开始时在它自己的工作树和分支里跑；先登记再 `launch`，返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后由第一轮取走，撤了会和它抢）。`onCreated(listener)`：订阅会话工作树新建完成（工作树创建并记录后、第一轮进入工作树前调用，传入 `{ sessionId, projectId?, projectRoot, worktreePath, signal }`，支持异步等待），返回取消订阅的函数。建、收回、合并回去都归 plume.git |
+| `terminal.exec` | 内置插件 plume.terminal | `run({ sessionId, cwd, command, env?, title?, tag?, reuseIdle?, reveal?, waitForExit?, signal? })`：在指定会话的交互式终端标签里运行命令，返回 `{ tab, completion? }`（`waitForExit: true` 时观测退出码，不支持的 shell 抛错）；`reveal(sessionId, tab)`：打开并切到该会话指定的终端标签；`closeByTag(sessionId, tag)`：关闭该会话下带指定标记的全部终端 |
 | `mcp.servers` | 内置插件 plume.mcp | `offer(owner, label, servers)`：替 Plume 之外管着它们的应用登记一组 MCP 服务（Claude 格式的 `mcpServers` 对象），整组换掉 `owner`（传自己的 `ctx.name`）上次登记的，当场照新的连；`label` 是那个应用的名字，连接器页标「由 … 管理」，名称、开关、启动方式、变量和删除都锁住，状态、工具、重连、登录照常。这次读不到、读不懂时传 `null`：上一份照留，也不当成撤回。登记方停用后一并撤下，不抄进 MCP 自己的配置。和已有的服务重名的不接 |
 | `session.plan` | 内置插件 plume.plan | `approved(sessionId)`：这个会话照着做的、人批准过的计划（正文连同批准时附的注意事项），没有是 null。会话自己最后批准、没交给新会话执行的那份；会话是计划「在新会话里执行」开出来的，就是交给它的那份。要读计划的插件用它，不认 `submit_plan` 的结果 |
 

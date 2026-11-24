@@ -1909,6 +1909,48 @@ export interface Services {
 	"session.worktree": SessionWorktreeService;
 	"session.plan": SessionPlanService;
 	"mcp.servers": McpServersService;
+	"terminal.exec": TerminalExecService;
+}
+
+/** `terminal.exec` 在终端标签里运行一条命令的参数。 */
+export interface TerminalRunOptions {
+	sessionId: string;
+	cwd: string;
+	command: string;
+	/** 注入给 shell 的环境变量（例如项目根目录、工作树目录）。 */
+	env?: Record<string, string>;
+	/** 终端标签标题；不给时由终端按默认序号命名。 */
+	title?: string;
+	/** 归属标记，用于 `closeByTag` 按标记批量关闭该会话下的终端。 */
+	tag?: string;
+	/** 为真时优先复用该会话下前台无子进程的空闲终端；为假或不给时新开标签。 */
+	reuseIdle?: boolean;
+	/** 是否打开并切到该终端标签（默认 true）；为假时在后台打开，不抢焦点。 */
+	reveal?: boolean;
+	/** 为真时观测命令退出码并经 `completion` 返回；不支持的 shell（如 cmd.exe）抛错。 */
+	waitForExit?: boolean;
+	/** 中止等待完成：`waitForExit` 退订并返回 `{ exitCode: null }`。 */
+	signal?: AbortSignal;
+}
+
+/** `terminal.exec.run` 的结果。 */
+export interface TerminalRunResult {
+	/** 终端面板的标签 id，可传给 `reveal` 跳转查看。 */
+	tab: string;
+	/** `waitForExit: true` 时提供；命令结束返回退出码，终端提前退出、关闭或 signal 中止时为 null。 */
+	completion?: Promise<{ exitCode: number | null }>;
+}
+
+/**
+ * 服务 `terminal.exec`：在指定会话的交互式终端标签里运行命令、跳转查看某个终端标签，或按标记批量关闭终端。
+ * 内置插件 plume.terminal 提供。
+ */
+export interface TerminalExecService {
+	run(options: TerminalRunOptions): Promise<TerminalRunResult>;
+	/** 打开并切到该会话下指定的终端标签。 */
+	reveal(sessionId: string, tab: string): Promise<void>;
+	/** 关闭该会话下带有指定标记的全部终端。 */
+	closeByTag(sessionId: string, tag: string): Promise<void>;
 }
 
 /**
@@ -1937,9 +1979,18 @@ export interface SessionPlanService {
 	approved(sessionId: string): Promise<string | null>;
 }
 
+/** 会话的工作树建好时交给 `SessionWorktreeService.onCreated` 监听器的信息。 */
+export interface WorktreeCreatedInfo {
+	sessionId: string;
+	projectId?: string;
+	projectRoot: string;
+	worktreePath: string;
+	signal: AbortSignal;
+}
+
 /**
  * 服务 `session.worktree`：让开出来的新会话在它自己的 git 工作树和分支里跑，不动项目的检出。内置插件 plume.git 提供。
- * 建、收回、合并回去都归提供方；用的一方只说要不要。
+ * 建、收回、合并回去都归提供方；用的一方只说要不要，或订阅工作树建好后的通知。
  */
 export interface SessionWorktreeService {
 	/** 这个目录在不在 git 仓库里：在才开得出工作树。 */
@@ -1949,6 +2000,11 @@ export interface SessionWorktreeService {
 	 * 登记只用这一次。先登记再 `ctx.sessions.launch`；返回的函数撤销登记，只在 `launch` 抛错时调（开出来以后登记由第一轮取走）。
 	 */
 	requestFor(origin: { sessionId: string; toolCallId: string }): () => void;
+	/**
+	 * 订阅会话工作树新建完成：在工作树创建成功并写入记录后、第一轮进入该目录之前依次调用。
+	 * 异步监听器会被等待；返回取消订阅的函数。
+	 */
+	onCreated(listener: (info: WorktreeCreatedInfo) => void | Promise<void>): () => void;
 }
 
 /**

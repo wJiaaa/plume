@@ -34,11 +34,13 @@ const CODE_DEFAULTS = {
 
 export function TerminalPane({
 	api,
+	sessionId,
 	cwd,
 	tab,
 	shown,
 	setTitle,
 	onClose,
+	consumeProgrammaticClose,
 	directoryRequest,
 	takeDirectory,
 	onDirectoryError,
@@ -46,7 +48,9 @@ export function TerminalPane({
 	droppedPaths,
 }: {
 	api: Remote<TerminalApi>;
+	sessionId: string | null;
 	cwd: string;
+	consumeProgrammaticClose(tab: string): boolean;
 	directoryRequest: DirectoryRequest | null;
 	takeDirectory(id: number): Promise<boolean>;
 	onDirectoryError(error: unknown): void;
@@ -95,7 +99,7 @@ export function TerminalPane({
 	const openHere = () => {
 		if (closing.current) return;
 		const current = generation.current;
-		const pending = api.open(tab, cwd, Math.max(10, size.current.cols), Math.max(4, size.current.rows)).then((opened) => opened.id);
+		const pending = api.open(tab, cwd, Math.max(10, size.current.cols), Math.max(4, size.current.rows), sessionId).then((opened) => opened.id);
 		opening.current = pending;
 		void pending.then(
 			(id) => {
@@ -130,14 +134,25 @@ export function TerminalPane({
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
 	}, [api, tab]);
 
-	// 「终端 1 · node」：开着 dev server 的那个不用点开就认得出来。
-	const title = mine && (mine.process ? `${text.tab(mine.number)} · ${mine.process}` : text.tab(mine.number));
+	// 「终端 1 · node」或自定义标题「Dev · node」：开着 dev server 的那个不用点开就认得出来。
+	const baseTitle = mine ? mine.title || text.tab(mine.number) : undefined;
+	const title = mine && baseTitle ? (mine.process ? `${baseTitle} · ${mine.process}` : baseTitle) : undefined;
 	useEffect(() => setTitle(title), [setTitle, title]);
 
-	/** 关标签就是结束它的 shell。前台跑着别的程序时先问一句：停在提示符上的照旧一点就关。 */
+	/** 关标签就是结束它的 shell。前台跑着别的程序时先问一句：停在提示符上的照旧一点就关；程序化关闭直接放行。 */
 	useEffect(
 		() =>
 			onClose(async () => {
+				if (consumeProgrammaticClose(tab)) {
+					closing.current = true;
+					try {
+						await opening.current?.catch(() => undefined);
+						await api.close(tab);
+					} catch {
+						// 逻辑侧可能已提前关闭该标签，忽略重复关闭错误。
+					}
+					return true;
+				}
 				const current = mineRef.current;
 				if (current?.process) {
 					const go = await closeGate.ask({
@@ -159,7 +174,7 @@ export function TerminalPane({
 				}
 			}),
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- closeGate 每次渲染都是新的，onClose 只登记一次
-		[api, tab, onClose, closeGate.ask, text],
+		[api, tab, onClose, closeGate.ask, text, consumeProgrammaticClose],
 	);
 
 	/*

@@ -21,10 +21,15 @@ export interface TerminalTab {
 	process: string | null;
 	/** 这个 shell 认哪种引号：拖文件进来时按它给路径加引号（见 `drop.ts`）。 */
 	dialect: ShellDialect;
+	/** 可选的自定义标签标题；未设置时按默认序号命名。 */
+	title?: string;
 }
 
 /** shell 的引号规矩：POSIX（含 Windows 上的 Git Bash）、PowerShell、cmd 各不一样。 */
 export type ShellDialect = "posix" | "powershell" | "cmd";
+
+/** 逻辑侧通知界面入口打开、切换或关闭某个终端面板标签。 */
+export type TerminalPanelSignal = { type: "open"; sessionId: string; tab: string; reveal: boolean } | { type: "close"; sessionId: string; tab: string };
 
 /** 历史带原始尺寸重放，ready 后按当前窗口接收新输出；shell 退出时最后一条是 exit。 */
 export type TerminalOutput = { type: "data"; data: string; cols: number; rows: number } | { type: "ready" } | { type: "exit"; code: number };
@@ -36,10 +41,12 @@ export interface TerminalApi {
 	runCommand(sessionId: string, command: string): void;
 	watchDirectory(sessionId: string, call: CallContext): AsyncGenerator<DirectoryRequest | null, void>;
 	takeDirectory(sessionId: string, id: number): boolean;
+	/** 逻辑侧经服务操作终端时通知界面入口开/关标签。 */
+	watchPanels(call: CallContext): AsyncGenerator<TerminalPanelSignal, void>;
 	/** 所有 shell，按打开顺序；之后每变一次推一份完整的，直到取消。 */
 	watch(call: CallContext): AsyncGenerator<TerminalTab[], void>;
 	/** 按稳定标签接回已有 shell；没有（包括 agent 重启后）才新建。目录失效时用主目录。 */
-	open(tab: string, cwd: string, cols: number, rows: number): Promise<TerminalTab>;
+	open(tab: string, cwd: string, cols: number, rows: number, sessionId: string | null): Promise<TerminalTab>;
 	/**
 	 * 连上一个已有的 shell，取消就是断开：shell 照常跑、照常记输出，下次连上时回放。
 	 * shell 已经不在了就直接结束。尺寸给 0 表示还没量到，不改 shell 的尺寸。

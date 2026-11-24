@@ -32,6 +32,30 @@ export interface TerminalSink {
 	exit(code: number): void;
 }
 
+/** 逻辑侧观测单个终端的原始输出与退出（强制关闭或销毁时 code 为 null）。 */
+export interface TerminalObserver {
+	data(chunk: string): void;
+	exit(code: number | null): void;
+}
+
+/** 打开终端时可选附带的会话归属、标题、标记与额外环境变量。 */
+export interface OpenTerminalOptions {
+	sessionId?: string | null;
+	title?: string;
+	tag?: string;
+	extraEnv?: Record<string, string>;
+}
+
+export interface TerminalInfo {
+	id: string;
+	tab?: string;
+	cwd: string;
+	dialect: ShellDialect;
+	shell: string;
+	foreground: string | null;
+	unavailable: boolean;
+}
+
 interface Live {
 	pty: Pty;
 	cwd: string;
@@ -42,9 +66,16 @@ interface Live {
 	scrollback: Array<{ data: string; cols: number; rows: number }>;
 	bytes: number;
 	sinks: Set<TerminalSink>;
+	observers: Set<TerminalObserver>;
+	exited: boolean;
 	/** 起不来的标签没有。 */
 	foreground?: ReturnType<typeof watchForeground>;
 	dialect: ShellDialect;
+	shell: string;
+	sessionId: string | null;
+	title?: string;
+	tag?: string;
+	unavailable: boolean;
 }
 
 export interface RegistryDeps {
@@ -88,12 +119,17 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	const changed = () => {
 		for (const watcher of watchers) watcher();
 	};
+	const tabIdOf = (id: string): string | undefined => {
+		for (const [tab, currentId] of tabs) if (currentId === id) return tab;
+		return undefined;
+	};
 	const tabOf = (id: string, live: Live): TerminalTab => ({
 		id,
 		number: live.number,
 		cwd: live.cwd,
 		process: live.foreground?.current ?? null,
 		dialect: live.dialect,
+		...(live.title ? { title: live.title } : {}),
 	});
 	/** shell 实际起在哪：会话的目录还在就是它，否则（没有会话、目录被删了）是主目录，和别处开一个终端一样。 */
 	const resolve = (cwd: string): string => (cwd && directory(cwd) ? cwd : home);
@@ -107,11 +143,15 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	const list = (): TerminalTab[] => [...terminals].map(([id, live]) => tabOf(id, live));
 
 	/** 在这里新起一个 shell。总是新的，这就是标签条上的「+」；接上已有的是 attach。 */
-	const open = (cwd: string, cols: number, rows: number): TerminalTab => {
+	const open = (cwd: string, cols: number, rows: number, options?: OpenTerminalOptions): TerminalTab => {
 		const dir = resolve(cwd);
 		const id = randomUUID();
 		const shell = pickShell(platform, env, (command) => findExecutable(command, platform, env));
 		const dialect = shellDialect(platform, shell);
+		const mergedEnv = shellEnv(platform, deps.currentEnv?.() ?? env);
+		if (options?.extraEnv) {
+			for (const [key, value] of Object.entries(options.extraEnv)) mergedEnv[key] = value;
+		}
 		let pty: Pty;
 		try {
 			pty = deps.spawnPty(shell, shellArgs(platform, shell), {
@@ -119,10 +159,10 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 				cols: Math.max(2, cols),
 				rows: Math.max(2, rows),
 				cwd: dir,
-				env: shellEnv(platform, deps.currentEnv?.() ?? env),
+				env: mergedEnv,
 			});
 		} catch (error) {
-			return openUnavailable(id, dir, dialect, error, Math.max(2, cols), Math.max(2, rows));
+			return openUnavailable(id, dir, dialect, shell, error, Math.max(2, cols), Math.max(2, rows), options);
 		}
 
 		const live: Live = {
@@ -134,18 +174,29 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 			scrollback: [],
 			bytes: 0,
 			sinks: new Set(),
+			observers: new Set(),
+			exited: false,
 			dialect,
+			shell,
+			sessionId: options?.sessionId ?? null,
+			...(options?.title ? { title: options.title } : {}),
+			...(options?.tag ? { tag: options.tag } : {}),
+			unavailable: false,
 		};
 		live.foreground = watchForeground(pty, shell, changed);
 		pty.onData((chunk) => {
 			live.foreground?.poke();
 			record(live, chunk);
 			for (const sink of live.sinks) sink.data(chunk, live.cols, live.rows);
+			for (const observer of [...live.observers]) observer.data(chunk);
 		});
 		pty.onExit(({ exitCode }) => {
+			live.exited = true;
 			live.foreground?.dispose();
 			for (const sink of live.sinks) sink.exit(exitCode);
 			live.sinks.clear();
+			for (const observer of [...live.observers]) observer.exit(exitCode);
+			live.observers.clear();
 			if (terminals.get(id) === live) terminals.delete(id);
 			changed();
 		});
@@ -160,7 +211,16 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	 * 最可能的原因是 node-pty 没能加载，而面板正是找终端的人会看的地方；报成调用失败的话，面板上什么都
 	 * 没有，也不说为什么。它从不报退出（退出的标签会被拿掉，原因也就跟着没了），和别的标签一样关掉。
 	 */
-	const openUnavailable = (id: string, dir: string, dialect: ShellDialect, error: unknown, cols: number, rows: number): TerminalTab => {
+	const openUnavailable = (
+		id: string,
+		dir: string,
+		dialect: ShellDialect,
+		shell: string,
+		error: unknown,
+		cols: number,
+		rows: number,
+		options?: OpenTerminalOptions,
+	): TerminalTab => {
 		const message = error instanceof Error ? error.message : String(error);
 		const text = `\x1b[31m${message.replace(/\r?\n/g, "\r\n")}\x1b[0m\r\n`;
 		const live: Live = {
@@ -172,7 +232,14 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 			scrollback: [{ data: text, cols, rows }],
 			bytes: text.length,
 			sinks: new Set(),
+			observers: new Set(),
+			exited: false,
 			dialect,
+			shell,
+			sessionId: options?.sessionId ?? null,
+			...(options?.title ? { title: options.title } : {}),
+			...(options?.tag ? { tag: options.tag } : {}),
+			unavailable: true,
 		};
 		terminals.set(id, live);
 		changed();
@@ -194,6 +261,29 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 		for (const chunk of live.scrollback) sink.data(chunk.data, chunk.cols, chunk.rows);
 		live.sinks.add(sink);
 		return () => void live.sinks.delete(sink);
+	};
+
+	/** 订阅单终端原始输出与退出；终端不存在时返回 null。 */
+	const observe = (id: string, observer: TerminalObserver): (() => void) | null => {
+		const live = terminals.get(id);
+		if (!live) return null;
+		live.observers.add(observer);
+		return () => void live.observers.delete(observer);
+	};
+
+	const info = (id: string): TerminalInfo | undefined => {
+		const live = terminals.get(id);
+		if (!live) return undefined;
+		const tab = tabIdOf(id);
+		return {
+			id,
+			...(tab ? { tab } : {}),
+			cwd: live.cwd,
+			dialect: live.dialect,
+			shell: live.shell,
+			foreground: live.foreground?.current ?? null,
+			unavailable: live.unavailable,
+		};
 	};
 
 	/**
@@ -226,6 +316,11 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 			live.pty.kill();
 		} catch {}
 		live.foreground?.dispose();
+		if (!live.exited) {
+			live.exited = true;
+			for (const observer of [...live.observers]) observer.exit(null);
+		}
+		live.observers.clear();
 		terminals.delete(id);
 	};
 
@@ -237,13 +332,27 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 	};
 
 	/** 同一个 tab 的重复挂载（包括不同 renderer）只会起一个 shell。 */
-	const openForTab = (tab: string, cwd: string, cols: number, rows: number): TerminalTab => {
+	const openForTab = (tab: string, cwd: string, cols: number, rows: number, options?: OpenTerminalOptions): TerminalTab => {
 		// i18n-exempt：迟到的界面调用只记日志，不显示为产品文案。
 		if (closed.has(tab)) throw new Error("Terminal tab is closed");
 		const id = tabs.get(tab);
 		const live = id ? terminals.get(id) : undefined;
-		if (id && live) return tabOf(id, live);
-		const opened = open(cwd, cols, rows);
+		if (id && live) {
+			let updated = false;
+			if (!live.sessionId && options?.sessionId) {
+				live.sessionId = options.sessionId;
+			}
+			if (options?.title !== undefined && live.title !== options.title) {
+				live.title = options.title;
+				updated = true;
+			}
+			if (options?.tag !== undefined && live.tag !== options.tag) {
+				live.tag = options.tag;
+			}
+			if (updated) changed();
+			return tabOf(id, live);
+		}
+		const opened = open(cwd, cols, rows, options);
 		tabs.set(tab, opened.id);
 		return opened;
 	};
@@ -253,6 +362,52 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 		const id = tabs.get(tab);
 		tabs.delete(tab);
 		if (id) kill(id);
+	};
+
+	/** 查找指定会话下前台无子进程且未带专用标记的可用空闲终端。 */
+	const findIdleForSession = (sessionId: string): (TerminalInfo & { tab: string }) | null => {
+		for (const [tab, id] of tabs) {
+			if (closed.has(tab)) continue;
+			const live = terminals.get(id);
+			if (!live || live.unavailable || live.exited) continue;
+			if (live.sessionId !== sessionId || live.tag) continue;
+			if ((live.foreground?.current ?? null) !== null) continue;
+			return {
+				id,
+				tab,
+				cwd: live.cwd,
+				dialect: live.dialect,
+				shell: live.shell,
+				foreground: null,
+				unavailable: false,
+			};
+		}
+		return null;
+	};
+
+	const updateMetadata = (id: string, patch: { title?: string; tag?: string }): void => {
+		const live = terminals.get(id);
+		if (!live) return;
+		let updated = false;
+		if (patch.title !== undefined && live.title !== patch.title) {
+			live.title = patch.title || undefined;
+			updated = true;
+		}
+		if (patch.tag !== undefined) live.tag = patch.tag || undefined;
+		if (updated) changed();
+	};
+
+	/** 关闭该会话下带有指定标记的全部终端，并返回被关闭的标签 id。 */
+	const closeByTag = (sessionId: string, tag: string): string[] => {
+		const matchedTabs: string[] = [];
+		for (const [tab, id] of [...tabs]) {
+			const live = terminals.get(id);
+			if (live && live.sessionId === sessionId && live.tag === tag) {
+				matchedTabs.push(tab);
+			}
+		}
+		for (const tab of matchedTabs) closeTab(tab);
+		return matchedTabs;
 	};
 
 	/** 1、2、……，不重用还开着的标签的号。所有 shell 一起编号：标签条把它们并排列着，靠名字来挑。 */
@@ -266,11 +421,16 @@ export function createTerminalRegistry(deps: RegistryDeps) {
 		open,
 		openForTab,
 		closeTab,
+		closeByTag,
+		findIdleForSession,
+		updateMetadata,
+		info,
 		attach,
+		observe,
 		write,
 		resize,
 		kill,
-		/** shell 增减、前台程序变了时调用；返回取消订阅的函数。 */
+		/** shell 增减、前台程序或标题变了时调用；返回取消订阅的函数。 */
 		onChange(listener: () => void): () => void {
 			watchers.add(listener);
 			return () => void watchers.delete(listener);

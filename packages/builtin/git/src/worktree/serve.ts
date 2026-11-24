@@ -15,7 +15,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import type { PluginContext, PromptSubmit } from "@plume/contract";
+import type { PluginContext, PromptSubmit, WorktreeCreatedInfo } from "@plume/contract";
 import { canonicalPath } from "../git/paths.ts";
 import type { ListedWorktree, SessionWorktree, WorktreeApi, WorktreeSettings } from "./api.ts";
 import {
@@ -53,6 +53,8 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 	const picks = new Map<string, boolean>();
 	/** 经服务登记、要工作树的那几次工具调用（`会话 id\n调用 id`）：从它开出来的会话第一轮开始时取走。 */
 	const requested = new Set<string>();
+	/** 经服务订阅工作树新建完成的监听器：建好并落盘后、返回工作树目录前依次执行。 */
+	const createdListeners = new Set<(info: WorktreeCreatedInfo) => void | Promise<void>>();
 	const originKey = (sessionId: string, toolCallId: string) => `${sessionId}\n${toolCallId}`;
 	ctx.provide("session.worktree", {
 		available: async (cwd) => (await repoRoot(cwd)) !== null,
@@ -60,6 +62,10 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 			const key = originKey(origin.sessionId, origin.toolCallId);
 			requested.add(key);
 			return () => void requested.delete(key);
+		},
+		onCreated(listener) {
+			createdListeners.add(listener);
+			return () => void createdListeners.delete(listener);
 		},
 	});
 
@@ -117,6 +123,23 @@ export function serveWorktrees(ctx: PluginContext): WorktreeApi {
 		}
 		await store.setRecord(input.sessionId, { worktree: made.worktree });
 		if (settings.autoClean) void cleanUp(input.cwd, settings);
+		const createdInfo: WorktreeCreatedInfo = {
+			sessionId: input.sessionId,
+			...(session.project ? { projectId: session.project } : {}),
+			projectRoot: input.cwd,
+			worktreePath: made.worktree.cwd,
+			signal: input.signal,
+		};
+		for (const listener of [...createdListeners]) {
+			try {
+				await listener(createdInfo);
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : String(error);
+				// i18n-exempt：日志
+				ctx.log.warn(`会话 ${input.sessionId} 的工作树初始化监听失败：${reason}`);
+				ctx.notice(input.sessionId, reason, "error");
+			}
+		}
 		return made.worktree.cwd;
 	};
 

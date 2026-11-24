@@ -5,7 +5,16 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "vitest";
-import type { PluginContext, PromptSubmit, PromptVerdict, SessionScope, SessionSummary, SessionWorktreeService } from "@plume/contract";
+import type {
+	NoticeLevel,
+	PluginContext,
+	PromptSubmit,
+	PromptVerdict,
+	SessionScope,
+	SessionSummary,
+	SessionWorktreeService,
+	WorktreeCreatedInfo,
+} from "@plume/contract";
 import type { GitApi } from "../src/api.ts";
 import type { WorktreeApi } from "../src/worktree/api.ts";
 import plugin from "../src/index.ts";
@@ -44,6 +53,8 @@ async function load(existing: SessionSummary[] = []) {
 	let api: (GitApi & WorktreeApi) | undefined;
 	let service: SessionWorktreeService | undefined;
 	const archiveCalls: Array<[string, boolean]> = [];
+	const notices: Array<{ sessionId: string; text: string; level?: NoticeLevel }> = [];
+	const warnings: string[] = [];
 	const dataDir = join(dir, "data");
 	await mkdir(dataDir, { recursive: true });
 	const ctx = {
@@ -51,7 +62,8 @@ async function load(existing: SessionSummary[] = []) {
 		dataDir,
 		appDataDir: dir,
 		locale: () => "zh-CN",
-		log: { info() {}, warn() {}, error() {} },
+		log: { info() {}, warn: (msg: string) => void warnings.push(msg), error() {} },
+		notice: (sessionId: string, text: string, level?: NoticeLevel) => void notices.push({ sessionId, text, ...(level ? { level } : {}) }),
 		hook: (name: string, layer: typeof submit) => {
 			if (name === "prompt.submit") submit = layer;
 		},
@@ -118,6 +130,8 @@ async function load(existing: SessionSummary[] = []) {
 		archived: (id: string, on: boolean) => archived!(id, on),
 		settle,
 		archiveCalls,
+		notices,
+		warnings,
 	};
 }
 
@@ -291,4 +305,48 @@ test("从工具调用开出来的会话：那次调用经服务登记过才开�
 	await send(typed, true);
 	assert.ok((await api.worktreeRecord(typed.id))?.worktree);
 	assert.equal(await api.worktreePick(repo), false);
+});
+
+test("onCreated：建好工作树后、返回 cwd 前按顺序调用并等待异步监听，抛错记日志并提示但不破坏工作树记录", async () => {
+	const { api, service, session, send, notices, warnings } = await load();
+	const seen: WorktreeCreatedInfo[] = [];
+	const events: string[] = [];
+	const offFirst = service.onCreated(async (info) => {
+		seen.push(info);
+		// 此时工作树记录已经写入，监听器读得到。
+		assert.ok((await api.worktreeRecord(info.sessionId))?.worktree);
+		events.push("first-start");
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		events.push("first-end");
+	});
+	service.onCreated(() => {
+		events.push("second-throws");
+		throw new Error("setup hook exploded");
+	});
+	service.onCreated(() => {
+		events.push("third-runs");
+	});
+
+	await api.chooseWorktree(repo, true);
+	const one = session("aaaaaaaa-1");
+	const verdict = await send(one, true);
+	const record = await api.worktreeRecord(one.id);
+	assert.ok(record?.worktree);
+	assert.deepEqual(verdict, { block: false, cwd: record.worktree.cwd });
+	assert.deepEqual(events, ["first-start", "first-end", "second-throws", "third-runs"]);
+	assert.equal(seen.length, 1);
+	assert.equal(seen[0]!.sessionId, one.id);
+	assert.equal(seen[0]!.projectId, "p1");
+	assert.equal(seen[0]!.projectRoot, repo);
+	assert.equal(seen[0]!.worktreePath, record.worktree.cwd);
+	assert.ok(seen[0]!.signal instanceof AbortSignal);
+	assert.ok(warnings.some((message) => message.includes("setup hook exploded")));
+	assert.deepEqual(notices, [{ sessionId: one.id, text: "setup hook exploded", level: "error" }]);
+
+	// 取消订阅后不再触发。
+	offFirst();
+	await api.chooseWorktree(repo, true);
+	const two = session("bbbbbbbb-2");
+	await send(two, true);
+	assert.equal(seen.length, 1);
 });

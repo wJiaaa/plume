@@ -5,7 +5,8 @@
 import { createRequire } from "node:module";
 import { release } from "node:os";
 import type { Plugin } from "@plume/contract";
-import type { TerminalApi, TerminalOutput, TerminalTab } from "./api.ts";
+import type { TerminalApi, TerminalOutput, TerminalPanelSignal, TerminalTab } from "./api.ts";
+import { createTerminalExec } from "./exec.ts";
 import { listen } from "./listen.ts";
 import { MESSAGES } from "./messages.ts";
 import { createDirectoryRequests, type DirectoryRequest } from "./open-directory.ts";
@@ -55,6 +56,23 @@ export default {
 			if (pending) directories.take(sessionId, pending.id);
 		});
 
+		const panelListeners = new Set<(signal: TerminalPanelSignal) => void>();
+		const emitPanel = (signal: TerminalPanelSignal) => {
+			for (const listener of panelListeners) listener(signal);
+		};
+		ctx.provide(
+			"terminal.exec",
+			createTerminalExec({
+				registry,
+				emitPanel,
+				platform,
+				unsupportedMessage: () => MESSAGES[ctx.locale()].unsupportedWaitForExit,
+				beforeOpen: async () => {
+					await fresh?.settled();
+				},
+			}),
+		);
+
 		const api: TerminalApi = {
 			openDirectory: (sessionId, directory) => directories.open(sessionId, directory),
 			runCommand: (sessionId, command) => directories.run(sessionId, command),
@@ -66,6 +84,15 @@ export default {
 				});
 				for await (const batch of requests) yield batch[batch.length - 1] ?? null;
 			},
+			async *watchPanels(call) {
+				const signals = listen<TerminalPanelSignal>(call.signal, (emit) => {
+					panelListeners.add(emit);
+					return () => void panelListeners.delete(emit);
+				});
+				for await (const batch of signals) {
+					for (const item of batch) yield item;
+				}
+			},
 			async *watch(call) {
 				const tabs = listen<TerminalTab[]>(call.signal, (emit) => {
 					emit(registry.list());
@@ -74,9 +101,9 @@ export default {
 				// 每次都是完整的一份，攒下好几份时只要最新的。
 				for await (const batch of tabs) yield batch[batch.length - 1] ?? [];
 			},
-			async open(tab, cwd, cols, rows) {
+			async open(tab, cwd, cols, rows, sessionId) {
 				await fresh?.settled();
-				return registry.openForTab(tab, cwd, cols, rows);
+				return registry.openForTab(tab, cwd, cols, rows, { sessionId });
 			},
 			async *attach(id, cols, rows, call) {
 				const output = listen<TerminalOutput>(call.signal, (emit, end) => {
