@@ -227,7 +227,7 @@ export function useSessionCard(): {
 	bind: {
 		onMouseEnter: (event: React.MouseEvent<HTMLElement>) => void;
 		onMouseLeave: () => void;
-		onClick: () => void;
+		onClick: (event: React.MouseEvent<HTMLElement>) => void;
 	};
 	dismiss: () => void;
 } {
@@ -277,6 +277,10 @@ export function useSessionCard(): {
 		dismiss,
 		bind: {
 			onMouseEnter: (event) => {
+				// 经 portal 挂在 body 上的子组件若仍在 React 子树内，合成 onMouseEnter 会按组件树冒泡；
+				// React 用原生 mouseout/mouseover 合成 onMouseEnter，mouseout 时进入的节点在 relatedTarget 上。
+				const entered = event.nativeEvent.type === "mouseout" ? event.nativeEvent.relatedTarget : event.nativeEvent.target;
+				if (!(entered instanceof Node) || !event.currentTarget.contains(entered)) return;
 				if (hoverLayersSuppressed()) return;
 				const box = event.currentTarget.getBoundingClientRect();
 				window.clearTimeout(open.current);
@@ -300,7 +304,8 @@ export function useSessionCard(): {
 				window.clearTimeout(close.current);
 				close.current = window.setTimeout(dismiss, LEAVE_FALLBACK_MS);
 			},
-			onClick: () => {
+			onClick: (event) => {
+				if (!(event.nativeEvent.target instanceof Node) || !event.currentTarget.contains(event.nativeEvent.target)) return;
 				dismiss();
 			},
 		},

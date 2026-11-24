@@ -1,10 +1,9 @@
-/** 会话行和标题栏共用的操作；重命名留在同一个浮层里，失败时保留输入。 */
+/** 会话行和标题栏共用的操作；重命名经对话框完成，失败时保留输入。 */
 import type { ProjectEntry, SessionSummary } from "@plume/contract";
-import { type Anchor, Button, Input, MenuBody, MenuItem, MenuSeparator, Popover, useI18n } from "@plume/ui";
+import { type Anchor, Dialog, DialogAction, type Dismiss, Input, MenuBody, MenuItem, MenuSeparator, Popover, useI18n } from "@plume/ui";
 import {
 	Archive,
 	ArchiveRestore,
-	Check,
 	Columns2,
 	ChevronRight,
 	Copy,
@@ -20,7 +19,6 @@ import {
 	PinOff,
 	Trash2,
 	Unplug,
-	X,
 } from "@plume/ui/icons";
 import { useEffect, useId, useRef, useState } from "react";
 import { attachmentActions } from "../composer/attachments/actions.ts";
@@ -29,6 +27,7 @@ import { notify } from "../toast/index.ts";
 import { SessionMenuItems } from "../plugins.tsx";
 
 const ICON = { size: 13, strokeWidth: 1.8 } as const;
+const RENAME_DIALOG_WIDTH = 420;
 
 export interface SessionMenuActions {
 	archive(sessionId: string, archived?: boolean): void;
@@ -86,13 +85,13 @@ export function SessionMenu({
 		openInLeave.current = window.setTimeout(() => setOpenIn(false), 160);
 	};
 	useEffect(() => () => window.clearTimeout(openInLeave.current), []);
-	const save = async () => {
+	const save = async (dismiss: Dismiss) => {
 		if (saving || !draft.trim()) return;
 		setSaving(true);
 		setError(undefined);
 		try {
 			await actions.rename(session.id, draft);
-			onClose();
+			dismiss();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : String(cause));
 		} finally {
@@ -112,60 +111,62 @@ export function SessionMenu({
 
 	if (mode === "rename") {
 		return (
-			<Popover anchor={anchor} onClose={onClose} {...side} width="compact" role="dialog" label={t("sessionMenu.rename")}>
-				<form
-					className="p-2.5"
-					onSubmit={(event) => {
-						event.preventDefault();
-						void save();
-					}}
-				>
-					<label htmlFor={titleId} className="block pb-1.5 text-detail text-ink-faint">
-						{t("sessionMenu.titleLabel")}
-					</label>
-					<Input
-						id={titleId}
-						name="session-title"
-						autoFocus
-						value={draft}
-						disabled={saving}
-						onChange={(event) => {
-							setDraft(event.target.value);
-							setError(undefined);
+			<Dialog
+				onClose={onClose}
+				width={RENAME_DIALOG_WIDTH}
+				label={t("sessionMenu.rename")}
+				title={t("sessionMenu.rename")}
+				actions={(dismiss) => (
+					<>
+						<div className="flex-1" />
+						<DialogAction disabled={saving} onClick={() => dismiss()}>
+							{t("common.cancel")}
+						</DialogAction>
+						<DialogAction
+							tone="primary"
+							disabled={saving || !draft.trim()}
+							aria-busy={saving || undefined}
+							onClick={() => void save(dismiss)}
+							data-rename-save=""
+						>
+							{t("common.save")}
+						</DialogAction>
+					</>
+				)}
+			>
+				{(dismiss) => (
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							void save(dismiss);
 						}}
-						onKeyDown={(event) => {
-							if (event.key !== "Escape") return;
-							event.stopPropagation();
-							setMode("menu");
-						}}
-						className="plume-field w-full"
-					/>
-					{error && (
-						<p role="alert" className="pt-2 text-detail text-danger">
-							{error}
-						</p>
-					)}
-					<div className="flex justify-end gap-1.5 pt-2.5">
-						<Button
-							type="submit"
-							variant="primary"
-							size="sm"
-							label={t("common.save")}
-							loading={saving}
-							disabled={!draft.trim()}
-							icon={<Check size={13} strokeWidth={2.2} aria-hidden />}
-						/>
-						<Button
-							variant="subtle"
-							size="sm"
-							label={t("common.cancel")}
+					>
+						<label htmlFor={titleId} className="mb-1.5 block text-detail font-medium text-ink">
+							{t("sessionMenu.titleLabel")}
+						</label>
+						<Input
+							id={titleId}
+							name="session-title"
+							autoFocus
+							value={draft}
 							disabled={saving}
-							onClick={() => setMode("menu")}
-							icon={<X size={13} strokeWidth={2} aria-hidden />}
+							aria-invalid={error ? true : undefined}
+							onChange={(event) => {
+								setDraft(event.target.value);
+								setError(undefined);
+							}}
+							className="plume-field w-full"
 						/>
-					</div>
-				</form>
-			</Popover>
+						{error && (
+							<p role="alert" className="mt-1.5 text-caption text-danger">
+								{error}
+							</p>
+						)}
+						{/* 可见的提交按钮在表单外的按钮行里，这一个只让回车能提交。 */}
+						<button type="submit" className="hidden" tabIndex={-1} aria-hidden />
+					</form>
+				)}
+			</Dialog>
 		);
 	}
 

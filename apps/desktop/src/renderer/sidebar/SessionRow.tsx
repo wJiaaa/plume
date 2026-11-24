@@ -59,33 +59,116 @@ export const SessionRow = memo(function SessionRow({
 		state.dropTarget?.kind === "session" && state.dropTarget.id === session.id ? state.dropTarget.placement : null,
 	);
 	return (
-		<HoverRow
-			data-plume-row={session.id}
-			data-plume-row-nested={nested || undefined}
-			{...hover.bind}
-			onPointerMove={(event) => reorder?.registerTarget("session", session.id, event.currentTarget.getBoundingClientRect(), event.clientY, session.project)}
-			onPointerLeave={() => reorder?.clearTarget(session.id)}
-			controls={hoverSlot(2)}
-			className={`rounded-field active:bg-elevated ${dragging ? "opacity-40" : ""} ${active ? "bg-card-hover" : "hover:bg-card-hover"}`}
-			onContextMenu={(event) => {
-				// 浮层经 portal 画在行外，里面输入框的右键仍交给输入框。
-				if (!event.currentTarget.contains(event.target as Node)) return;
-				event.preventDefault();
-				hover.dismiss();
-				menu.openAtPoint(event);
-			}}
-		>
-			{placement && !nested && <DropLineIndicator placement={placement} />}
-			{hover.anchor && !dragging && (
-				<SessionCard
-					session={session}
-					load={loadStats}
-					anchor={hover.anchor}
-					leaving={hover.leaving}
-					onLeft={hover.dismiss}
-					project={session.pinned ? projects.find((entry) => entry.id === session.project)?.name : undefined}
-				/>
-			)}
+		<>
+			<HoverRow
+				data-plume-row={session.id}
+				data-plume-row-nested={nested || undefined}
+				{...hover.bind}
+				onPointerMove={(event) => reorder?.registerTarget("session", session.id, event.currentTarget.getBoundingClientRect(), event.clientY, session.project)}
+				onPointerLeave={() => reorder?.clearTarget(session.id)}
+				controls={hoverSlot(2)}
+				className={`rounded-field active:bg-elevated ${dragging ? "opacity-40" : ""} ${active ? "bg-card-hover" : "hover:bg-card-hover"}`}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					hover.dismiss();
+					menu.openAtPoint(event);
+				}}
+			>
+				{placement && !nested && <DropLineIndicator placement={placement} />}
+				{hover.anchor && !dragging && (
+					<SessionCard
+						session={session}
+						load={loadStats}
+						anchor={hover.anchor}
+						leaving={hover.leaving}
+						onLeft={hover.dismiss}
+						project={session.pinned ? projects.find((entry) => entry.id === session.project)?.name : undefined}
+					/>
+				)}
+				<button
+					type="button"
+					onClick={() => onOpen(session.id)}
+					onPointerDown={(event) => {
+						hover.dismiss();
+						reorder?.startDrag({ kind: "session", id: session.id, project: session.project, title }, event);
+					}}
+					onKeyDown={(event) => {
+						if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+						event.preventDefault();
+						menu.openAt(event.currentTarget);
+					}}
+					// 打开的是哪一段，除了底色也说出来：读屏看不见底色。
+					aria-current={active ? "page" : undefined}
+					className={`flex w-full min-w-0 items-center gap-2 rounded-field pr-1.5 pl-2.5 text-left text-label text-ink ${compact ? "h-[34px]" : "h-[32px]"}`}
+				>
+					{nested && (
+						<span aria-hidden data-plume-row-branch className="relative ml-[5px] w-3.5 shrink-0 self-stretch">
+							<span className="absolute top-[5px] right-[-1px] bottom-1/2 left-[6px] rounded-bl-item border-b border-l border-ink-faint" />
+						</span>
+					)}
+					<span className={followUps ? "flex shrink-0 transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0" : "flex shrink-0"}>
+						<SessionStatus session={session} running={busy(session) || childRunning} />
+					</span>
+					<ScrollText text={title} className="plume-fade-tail min-w-0 flex-1" />
+					{/* 不管列表按什么排，这里都是最后活动的时间：扫一眼要回答的是「这条多久没动了」。悬停按钮出来时它让位，两者不同时出现。 */}
+					{followUps && folded && (
+						<span
+							data-plume-row-folded={followUps.length}
+							// 有在跑的就只剩转圈、不带底，和项目折起来时标题上的转圈一个样子；灰底胶囊只给条数用。
+							className={`flex h-4 shrink-0 items-center justify-center text-caption text-ink-muted tabular-nums transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0 ${
+								followUps.some((child) => child.running) ? "w-3.5" : "min-w-[18px] rounded-full bg-ink/10 px-1.5"
+							}`}
+						>
+							{followUps.some((child) => child.running) ? <ActionSpinner size={14} className="text-accent" /> : followUps.length}
+						</span>
+					)}
+					<TimeAgo
+						iso={new Date(session.updatedAt).toISOString()}
+						className="shrink-0 text-caption text-ink-muted transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0"
+					/>
+				</button>
+				{followUps && onFold && (
+					<span className="absolute top-1/2 left-[7px] flex -translate-y-1/2 opacity-0 transition-opacity group-hover/row:opacity-100 has-[:focus-visible]:opacity-100">
+						<IconButton
+							size="xs"
+							label={t(folded ? "sessionRow.expandFollowUps" : "sessionRow.collapseFollowUps")}
+							ariaLabel={t(folded ? "sessionRow.expandFollowUpsOne" : "sessionRow.collapseFollowUpsOne", { title })}
+							expanded={!folded}
+							onClick={onFold}
+							data-plume-row-fold=""
+							icon={<ChevronRight size={12} strokeWidth={2.2} className={`transition-transform ${folded ? "" : "rotate-90"}`} />}
+						/>
+					</span>
+				)}
+				<HoverRowReveal className="gap-0.5 rounded-r-field">
+					<IconButton
+						size="sm"
+						label={t("sessionMenu.actions")}
+						ariaLabel={t("sessionRow.actionsFor", { title })}
+						menu={menu.open}
+						onClick={(event) => {
+							hover.dismiss();
+							menu.toggle(event);
+						}}
+						className="pointer-events-auto"
+						data-plume-row-more=""
+						icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
+					/>
+					<IconButton
+						size="sm"
+						label={t("sessionRow.archive")}
+						ariaLabel={t("sessionRow.archiveFor", { title })}
+						onClick={() => {
+							hover.dismiss();
+							actions.archive(session.id);
+						}}
+						className="pointer-events-auto"
+						data-plume-row-archive=""
+						icon={<Archive size={13} strokeWidth={1.8} />}
+					/>
+				</HoverRowReveal>
+			</HoverRow>
+			{/* 挂在行外，菜单及其弹出的对话框里的指针、右键事件不再经 React 树冒泡进 HoverRow。 */}
 			{menu.open && (
 				<SessionMenu
 					anchor={menu.anchor}
@@ -96,89 +179,7 @@ export const SessionRow = memo(function SessionRow({
 					actions={actions}
 				/>
 			)}
-			<button
-				type="button"
-				onClick={() => onOpen(session.id)}
-				onPointerDown={(event) => {
-					hover.dismiss();
-					reorder?.startDrag({ kind: "session", id: session.id, project: session.project, title }, event);
-				}}
-				onKeyDown={(event) => {
-					if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
-					event.preventDefault();
-					menu.openAt(event.currentTarget);
-				}}
-				// 打开的是哪一段，除了底色也说出来：读屏看不见底色。
-				aria-current={active ? "page" : undefined}
-				className={`flex w-full min-w-0 items-center gap-2 rounded-field pr-1.5 pl-2.5 text-left text-label text-ink ${compact ? "h-[34px]" : "h-[32px]"}`}
-			>
-				{nested && (
-					<span aria-hidden data-plume-row-branch className="relative ml-[5px] w-3.5 shrink-0 self-stretch">
-						<span className="absolute top-[5px] right-[-1px] bottom-1/2 left-[6px] rounded-bl-item border-b border-l border-ink-faint" />
-					</span>
-				)}
-				<span className={followUps ? "flex shrink-0 transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0" : "flex shrink-0"}>
-					<SessionStatus session={session} running={busy(session) || childRunning} />
-				</span>
-				<ScrollText text={title} className="plume-fade-tail min-w-0 flex-1" />
-				{/* 不管列表按什么排，这里都是最后活动的时间：扫一眼要回答的是「这条多久没动了」。悬停按钮出来时它让位，两者不同时出现。 */}
-				{followUps && folded && (
-					<span
-						data-plume-row-folded={followUps.length}
-						// 有在跑的就只剩转圈、不带底，和项目折起来时标题上的转圈一个样子；灰底胶囊只给条数用。
-						className={`flex h-4 shrink-0 items-center justify-center text-caption text-ink-muted tabular-nums transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0 ${
-							followUps.some((child) => child.running) ? "w-3.5" : "min-w-[18px] rounded-full bg-ink/10 px-1.5"
-						}`}
-					>
-						{followUps.some((child) => child.running) ? <ActionSpinner size={14} className="text-accent" /> : followUps.length}
-					</span>
-				)}
-				<TimeAgo
-					iso={new Date(session.updatedAt).toISOString()}
-					className="shrink-0 text-caption text-ink-muted transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0"
-				/>
-			</button>
-			{followUps && onFold && (
-				<span className="absolute top-1/2 left-[7px] flex -translate-y-1/2 opacity-0 transition-opacity group-hover/row:opacity-100 has-[:focus-visible]:opacity-100">
-					<IconButton
-						size="xs"
-						label={t(folded ? "sessionRow.expandFollowUps" : "sessionRow.collapseFollowUps")}
-						ariaLabel={t(folded ? "sessionRow.expandFollowUpsOne" : "sessionRow.collapseFollowUpsOne", { title })}
-						expanded={!folded}
-						onClick={onFold}
-						data-plume-row-fold=""
-						icon={<ChevronRight size={12} strokeWidth={2.2} className={`transition-transform ${folded ? "" : "rotate-90"}`} />}
-					/>
-				</span>
-			)}
-			<HoverRowReveal className="gap-0.5 rounded-r-field">
-				<IconButton
-					size="sm"
-					label={t("sessionMenu.actions")}
-					ariaLabel={t("sessionRow.actionsFor", { title })}
-					menu={menu.open}
-					onClick={(event) => {
-						hover.dismiss();
-						menu.toggle(event);
-					}}
-					className="pointer-events-auto"
-					data-plume-row-more=""
-					icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
-				/>
-				<IconButton
-					size="sm"
-					label={t("sessionRow.archive")}
-					ariaLabel={t("sessionRow.archiveFor", { title })}
-					onClick={() => {
-						hover.dismiss();
-						actions.archive(session.id);
-					}}
-					className="pointer-events-auto"
-					data-plume-row-archive=""
-					icon={<Archive size={13} strokeWidth={1.8} />}
-				/>
-			</HoverRowReveal>
-		</HoverRow>
+		</>
 	);
 });
 

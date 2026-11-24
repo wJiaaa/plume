@@ -469,75 +469,78 @@ function ProjectHead({
 		actions.newSession({ project: group.id });
 	};
 	return (
-		<HoverRow
-			data-plume-project={group.name}
-			data-plume-project-id={group.id}
-			{...hover.bind}
-			onPointerMove={(event) => reorder?.registerTarget("project", group.id, event.currentTarget.getBoundingClientRect(), event.clientY)}
-			onPointerLeave={() => reorder?.clearTarget(group.id)}
-			controls={hoverSlot(2)}
-			className={`rounded-field transition-colors hover:bg-card-hover ${dragging ? "opacity-40" : ""}`}
-			onContextMenu={(event) => {
-				event.preventDefault();
-				hover.dismiss();
-				// 右键作用于整行，没有哪个按钮可挂，菜单开在指针处。
-				menu.openAtPoint(event);
-			}}
-		>
-			{placement && <DropLineIndicator placement={placement} />}
-			{hover.anchor && !dragging && (
-				<ProjectCard
-					name={group.name}
-					path={group.path}
-					folders={group.folders}
-					count={group.sessions.length}
-					anchor={hover.anchor}
-					leaving={hover.leaving}
-					onLeft={hover.dismiss}
-				/>
-			)}
-			<button
-				type="button"
-				aria-expanded={!collapsed}
-				onClick={onToggleCollapsed}
-				onPointerDown={(event) => {
+		<>
+			<HoverRow
+				data-plume-project={group.name}
+				data-plume-project-id={group.id}
+				{...hover.bind}
+				onPointerMove={(event) => reorder?.registerTarget("project", group.id, event.currentTarget.getBoundingClientRect(), event.clientY)}
+				onPointerLeave={() => reorder?.clearTarget(group.id)}
+				controls={hoverSlot(2)}
+				className={`rounded-field transition-colors hover:bg-card-hover ${dragging ? "opacity-40" : ""}`}
+				onContextMenu={(event) => {
+					event.preventDefault();
 					hover.dismiss();
-					reorder?.startDrag({ kind: "project", id: group.id, title: group.name }, event);
+					// 右键作用于整行，没有哪个按钮可挂，菜单开在指针处。
+					menu.openAtPoint(event);
 				}}
-				className={`flex w-full items-center gap-2 rounded-field pr-2 pl-2.5 text-left text-label text-ink-muted transition-colors ${compact ? "h-[40px]" : "h-[32px]"}`}
 			>
-				{/* 只用文件夹本身表示开合，悬停时不换成箭头。 */}
-				<span className="shrink-0">{collapsed ? <Folder size={16} /> : <FolderOpen size={16} />}</span>
-				<ScrollText text={group.name} className="plume-fade-tail min-w-0 flex-1" />
-				{/*
-				 * 折起来时的数目，或在跑时的转圈。悬停时让开：菜单按钮正落在这个位置上，数字和图标画在同一块像素上哪个都读不出。
-				 * 有东西时才占地方，展开的项目里名字能占满整行。
-				 */}
-				<span className="flex shrink-0 items-center pr-0.5 text-caption text-ink-faint tabular-nums transition-opacity empty:hidden group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0">
-					<GroupActivity sessions={group.sessions} collapsed={collapsed} count={group.sessions.length} />
-				</span>
-			</button>
-			<HoverRowReveal className="gap-0.5 rounded-r-lg">
-				<IconButton
-					size="sm"
-					label={t("projectHead.newSession")}
-					ariaLabel={t("projectHead.newSessionIn", { name: group.name })}
-					onClick={newSession}
-					className="pointer-events-auto"
-					icon={<SquarePen size={13} strokeWidth={1.8} />}
-				/>
-				<IconButton
-					size="sm"
-					label={t("projectHead.actions")}
-					ariaLabel={t("projectHead.actionsFor", { name: group.name })}
-					menu={menu.open}
-					onClick={menu.toggle}
-					className="pointer-events-auto"
-					icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
-				/>
-			</HoverRowReveal>
+				{placement && <DropLineIndicator placement={placement} />}
+				{hover.anchor && !dragging && (
+					<ProjectCard
+						name={group.name}
+						path={group.path}
+						folders={group.folders}
+						count={group.sessions.length}
+						anchor={hover.anchor}
+						leaving={hover.leaving}
+						onLeft={hover.dismiss}
+					/>
+				)}
+				<button
+					type="button"
+					aria-expanded={!collapsed}
+					onClick={onToggleCollapsed}
+					onPointerDown={(event) => {
+						hover.dismiss();
+						reorder?.startDrag({ kind: "project", id: group.id, title: group.name }, event);
+					}}
+					className={`flex w-full items-center gap-2 rounded-field pr-2 pl-2.5 text-left text-label text-ink-muted transition-colors ${compact ? "h-[40px]" : "h-[32px]"}`}
+				>
+					{/* 只用文件夹本身表示开合，悬停时不换成箭头。 */}
+					<span className="shrink-0">{collapsed ? <Folder size={16} /> : <FolderOpen size={16} />}</span>
+					<ScrollText text={group.name} className="plume-fade-tail min-w-0 flex-1" />
+					{/*
+					 * 折起来时的数目，或在跑时的转圈。悬停时让开：菜单按钮正落在这个位置上，数字和图标画在同一块像素上哪个都读不出。
+					 * 有东西时才占地方，展开的项目里名字能占满整行。
+					 */}
+					<span className="flex shrink-0 items-center pr-0.5 text-caption text-ink-faint tabular-nums transition-opacity empty:hidden group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0">
+						<GroupActivity sessions={group.sessions} collapsed={collapsed} count={group.sessions.length} />
+					</span>
+				</button>
+				<HoverRowReveal className="gap-0.5 rounded-r-lg">
+					<IconButton
+						size="sm"
+						label={t("projectHead.newSession")}
+						ariaLabel={t("projectHead.newSessionIn", { name: group.name })}
+						onClick={newSession}
+						className="pointer-events-auto"
+						icon={<SquarePen size={13} strokeWidth={1.8} />}
+					/>
+					<IconButton
+						size="sm"
+						label={t("projectHead.actions")}
+						ariaLabel={t("projectHead.actionsFor", { name: group.name })}
+						menu={menu.open}
+						onClick={menu.toggle}
+						className="pointer-events-auto"
+						icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
+					/>
+				</HoverRowReveal>
+			</HoverRow>
+			{/* 挂在行外，项目菜单及其弹出的编辑/移除对话框里的事件不再经 React 树冒泡进 HoverRow。 */}
 			{menu.open && <ProjectMenu anchor={menu.anchor} project={group} live={live} actions={actions} onNewSession={newSession} onClose={menu.close} />}
-		</HoverRow>
+		</>
 	);
 }
 

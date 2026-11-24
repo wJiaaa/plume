@@ -273,10 +273,24 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click(`${sessionMenu} [role=menuitem]`, "重命名");
 			await until(`document.activeElement?.getAttribute('name') === 'session-title'`, "重命名输入框自动聚焦");
 			await type("[name=session-title]", "   ");
-			await until(`document.querySelector(${JSON.stringify(`${renameDialog} button[type=submit]`)})?.disabled === true`, "空白标题不能保存");
+			await until(`document.querySelector(${JSON.stringify(`${renameDialog} [data-rename-save]`)})?.disabled === true`, "空白标题不能保存");
 			await type("[name=session-title]", "  会话右键回归  ");
+			await until(
+				`document.querySelector(${JSON.stringify(renameDialog)}).getAnimations().every(animation => animation.playState === 'finished')`,
+				"重命名对话框入场动画完成",
+			);
+			// 对话框从菜单里经 portal 挂出，移动指针到对话框上等待超过悬停卡延迟，不应把侧栏悬停卡引出来盖在上面。
+			const renameBox = (await page(
+				`(() => { const r = document.querySelector(${JSON.stringify(renameDialog)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`,
+			)) as {
+				x: number;
+				y: number;
+			};
+			window.webContents.sendInputEvent({ type: "mouseMove", x: renameBox.x, y: renameBox.y });
+			await new Promise((resolve) => setTimeout(resolve, 550));
+			if (await page(`document.querySelector('[data-plume-session-card]') !== null`)) throw new Error("重命名对话框打开期间不应显示会话悬停卡");
 			await capture(window, join(outDir, "smoke-session-rename.png"));
-			await click(`${renameDialog} button[type=submit]`);
+			await click(`${renameDialog} [data-rename-save]`);
 			await until(
 				`document.querySelector(${JSON.stringify(renameDialog)}) === null && document.querySelector('[data-plume-row]')?.textContent.includes('会话右键回归') && document.querySelector('[data-plume-screen-title]')?.textContent === '会话右键回归'`,
 				"重命名同步侧栏和标题栏",
@@ -287,9 +301,13 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			);
 			await until(`document.querySelector(${JSON.stringify(sessionMenu)}) !== null`, "Shift+F10 打开会话菜单");
 			await click(`${sessionMenu} [role=menuitem]`, "重命名");
+			await until(`document.querySelector(${JSON.stringify(renameDialog)}) !== null`, "重命名对话框打开");
 			await type("[name=session-title]", "不保存的标题");
-			await click(`${renameDialog} button[aria-label="取消"]`);
-			await closeSessionMenu();
+			await click(`${renameDialog} button`, "取消");
+			await until(
+				`document.querySelector(${JSON.stringify(sessionMenu)}) === null && document.querySelector(${JSON.stringify(renameDialog)}) === null`,
+				"取消关闭重命名对话框",
+			);
 			if (!(await page(`document.querySelector('[data-plume-row]').textContent.includes('会话右键回归')`))) throw new Error("取消重命名仍改了标题");
 			// 顶部与侧栏复用菜单，但锚点方向不同；用真实键盘打开并量最终位置。
 			const titleButton = 'header button[aria-label="会话操作"]';
@@ -335,8 +353,9 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await until(`document.querySelector(${JSON.stringify(sessionMenu)}) === null`, "再次点击顶部按钮关闭菜单");
 			await openTitleMenu();
 			await click(`${sessionMenu} [role=menuitem]`, "重命名");
+			await until(`document.querySelector(${JSON.stringify(renameDialog)}) !== null`, "顶部重命名对话框打开");
 			await type("[name=session-title]", "这是一段用于验证窄窗口标题让位的很长会话标题，菜单按钮必须始终可见");
-			await click(`${renameDialog} button[type=submit]`);
+			await click(`${renameDialog} [data-rename-save]`);
 			await until(`document.querySelector(${JSON.stringify(renameDialog)}) === null`, "顶部重命名保存");
 			const titleWindowSize = window.getSize();
 			await page(`window.plume.saveAppearance({ theme: "dark" })`);
@@ -361,9 +380,13 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await page(`window.plume.saveAppearance({ theme: "light" })`);
 			await openTitleMenu();
 			await click(`${sessionMenu} [role=menuitem]`, "重命名");
+			await until(`document.querySelector(${JSON.stringify(renameDialog)}) !== null`, "重命名对话框打开");
 			await type("[name=session-title]", "会话右键回归");
-			await click(`${renameDialog} button[type=submit]`);
-			await until(`document.querySelector('[data-plume-screen-title]')?.textContent === '会话右键回归'`, "恢复测试标题");
+			await click(`${renameDialog} [data-rename-save]`);
+			await until(
+				`document.querySelector(${JSON.stringify(renameDialog)}) === null && document.querySelector('[data-plume-screen-title]')?.textContent === '会话右键回归'`,
+				"恢复测试标题",
+			);
 			await openTitleMenu();
 			await click("[data-nav=new-chat]");
 			await until(
@@ -582,9 +605,16 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 				`(() => { const rect = document.querySelector(${JSON.stringify(renameDialog)})?.getBoundingClientRect(); return rect && rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight; })()`,
 				"最小窗口重命名表单不越界",
 			);
+			await until(
+				`document.querySelector(${JSON.stringify(renameDialog)}).getAnimations().every(animation => animation.playState === 'finished')`,
+				"最小窗口重命名对话框入场完成",
+			);
 			await capture(window, join(outDir, "smoke-session-rename-compact.png"));
-			await click(`${renameDialog} button[aria-label="取消"]`);
-			await closeSessionMenu();
+			await click(`${renameDialog} button`, "取消");
+			await until(
+				`document.querySelector(${JSON.stringify(sessionMenu)}) === null && document.querySelector(${JSON.stringify(renameDialog)}) === null`,
+				"取消关闭最小窗口重命名对话框",
+			);
 			window.setSize(menuWindowSize[0]!, menuWindowSize[1]!);
 			await until(`innerWidth > 380`, "恢复正常窗口宽度");
 			await page(`window.plume.saveAppearance({ theme: "light" })`);
