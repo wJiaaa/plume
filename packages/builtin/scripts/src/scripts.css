@@ -30,29 +30,6 @@
 	min-width: 0;
 }
 
-.plume-scripts-icon-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	width: 34px;
-	height: 34px;
-	border: 1px solid var(--plume-line-float);
-	border-radius: var(--plume-radius-field);
-	background: transparent;
-	color: var(--plume-ink);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.plume-scripts-icon-btn:hover,
-.plume-scripts-icon-btn[aria-expanded="true"] {
-	background: var(--plume-card-hover);
-}
-
-.plume-scripts-icon-btn:active {
-	background: var(--plume-elevated);
-}
-
 .plume-scripts-icon-grid {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -87,28 +64,12 @@
 	color: var(--plume-ink);
 }
 
-.plume-scripts-command {
-	width: 100%;
-	min-height: 84px;
-	padding: 8px 10px;
-	resize: vertical;
-	font-family: var(--plume-font-mono);
-}
-
-.plume-scripts-toggles {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
+/* 弹窗里的开关行共用 SettingsCard 与 .plume-settings-row；这里只管水平排布，避免 480px 弹窗触发容器查询折行。 */
 .plume-scripts-toggle-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 8px 12px;
-	border: 1px solid var(--plume-line-soft);
-	border-radius: var(--plume-radius-field);
 }
 
 .plume-scripts-toggle-row[data-disabled="true"] {
@@ -136,23 +97,10 @@
 	gap: 10px;
 }
 
+/* 外观交给公共类 .plume-field；这里只管图标、名称、箭头之间的间距与最大宽度。 */
 .plume-scripts-scope {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	height: 34px;
+	gap: 8px;
 	max-width: 260px;
-	padding: 0 14px;
-	border: 1px solid var(--plume-line);
-	border-radius: var(--plume-radius-field);
-	background: transparent;
-	color: var(--plume-ink);
-	transition: background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.plume-scripts-scope:hover,
-.plume-scripts-scope[aria-expanded="true"] {
-	background: var(--plume-card-hover);
 }
 
 .plume-scripts-scope-name {
@@ -162,13 +110,7 @@
 }
 
 .plume-scripts-scope-caret {
-	flex-shrink: 0;
 	color: var(--plume-ink-faint);
-	transition: transform var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.plume-scripts-scope-caret[data-open] {
-	transform: rotate(180deg);
 }
 
 .plume-scripts-scope-note {
@@ -180,7 +122,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	margin: 24px 0 10px;
+	margin: 32px 0 10px;
 }
 
 .plume-scripts-head-title {
@@ -271,15 +213,17 @@
 
 /* ── 输入框上方工作树初始化状态条 ─────────────────────────────── */
 
+/* 外观与同位置的交接会话条（HandedOffStrip）对齐：36px 高、panel 圆角、card 底色与细边。 */
 .plume-scripts-setup-bar {
 	display: flex;
+	height: 36px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 10px;
-	padding: 7px 12px;
-	margin-bottom: 6px;
+	padding: 0 12px;
+	margin-bottom: 8px;
 	border: 1px solid var(--plume-line-soft);
-	border-radius: var(--plume-radius-field);
+	border-radius: var(--plume-radius-panel);
 	background: var(--plume-card);
 }
 
@@ -290,12 +234,8 @@
 	min-width: 0;
 }
 
-.plume-scripts-setup-dot {
-	width: 6px;
-	height: 6px;
-	flex-shrink: 0;
-	border-radius: var(--plume-radius-field);
-	background: var(--plume-accent);
+.plume-scripts-setup-spinner {
+	color: var(--plume-accent);
 }
 
 .plume-scripts-setup-text {

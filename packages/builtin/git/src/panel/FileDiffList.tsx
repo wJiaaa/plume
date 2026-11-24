@@ -1,5 +1,4 @@
-import { iconColour, lookFor, SkeletonBar, Text } from "@plume/ui";
-import { ChevronRight } from "@plume/ui/icons";
+import { Caret, iconColour, lookFor, SkeletonBar, Text } from "@plume/ui";
 import { useState } from "react";
 import type { DiffFile } from "../api.ts";
 import { BinaryDiff } from "./BinaryDiff.tsx";
@@ -85,7 +84,7 @@ export function FileDiffList({
 						<div className="git-file-pin">
 							<div className="git-file-head">
 								<button type="button" data-plume-tip={file.path} onClick={() => toggle(file.path)} aria-expanded={expanded} className="git-file-toggle">
-									<ChevronRight size={12} strokeWidth={2} className="git-chevron" style={expanded ? { transform: "rotate(90deg)" } : undefined} />
+									<Caret open={expanded} from="right" size={12} strokeWidth={2} className="git-chevron" />
 									<look.Icon size={13} strokeWidth={1.75} className="git-icon" style={{ color: iconColour(look) }} />
 									{/* 文件名排在前面且满色加微重，目录淡一档跟在后面并先缩：宽窄面板下文件名都对齐同一条左缘。 */}
 									<span className="git-file-path">

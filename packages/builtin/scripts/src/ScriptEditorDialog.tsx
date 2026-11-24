@@ -1,4 +1,4 @@
-import { Button, Dialog, Input, Popover, Text, Textarea, Toggle, useConfirmer, useI18n, usePopover } from "@plume/ui";
+import { Button, Dialog, Input, Popover, SettingsCard, Text, TextArea, Toggle, useConfirmer, useI18n, usePopover } from "@plume/ui";
 import { useState } from "react";
 import { MESSAGES } from "./messages.ts";
 import { ScriptIcon } from "./ScriptIcon.tsx";
@@ -98,7 +98,7 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 							{text.cancel}
 						</Button>
 						<Button variant="primary" loading={saving} disabled={!trimmedName || !trimmedCommand} onClick={() => void submit(dismiss)}>
-							{saving ? text.saving : text.save}
+							{text.save}
 						</Button>
 					</>
 				)}
@@ -118,16 +118,14 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 								</Text>
 							</label>
 							<div className="plume-scripts-name-row">
-								<button
-									type="button"
-									className="plume-scripts-icon-btn"
-									aria-label={text.chooseIcon}
-									aria-haspopup="menu"
-									aria-expanded={iconMenu.open}
+								<Button
+									variant="ghost"
+									size="md"
+									label={text.chooseIcon}
+									menu={iconMenu.open}
+									icon={<ScriptIcon icon={icon} size={15} />}
 									onClick={iconMenu.toggle}
-								>
-									<ScriptIcon icon={icon} size={15} />
-								</button>
+								/>
 								<Input
 									id="plume-script-name"
 									name="scriptName"
@@ -179,15 +177,17 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 									{text.commandLabel}
 								</Text>
 							</label>
-							<Textarea
+							<TextArea
 								id="plume-script-command"
 								name="scriptCommand"
-								className="plume-field plume-scripts-command"
+								rows={3}
+								resizable
+								className="plume-textarea-mono"
 								placeholder={text.commandPlaceholder}
 								spellCheck={false}
 								value={command}
-								onChange={(event) => {
-									setCommand(event.target.value);
+								onChange={(next) => {
+									setCommand(next);
 									if (error) setError(null);
 								}}
 							/>
@@ -213,8 +213,8 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 							</Text>
 						</div>
 
-						<div className="plume-scripts-toggles">
-							<div className="plume-scripts-toggle-row" data-disabled={trimmedPreview.length === 0 || undefined}>
+						<SettingsCard>
+							<div data-settings-item="" className="plume-settings-row plume-scripts-toggle-row" data-disabled={trimmedPreview.length === 0 || undefined}>
 								<div className="plume-scripts-toggle-copy">
 									<Text size="label">{text.autoOpenPreview}</Text>
 								</div>
@@ -226,7 +226,7 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 								/>
 							</div>
 
-							<div className="plume-scripts-toggle-row">
+							<div data-settings-item="" className="plume-settings-row plume-scripts-toggle-row">
 								<div className="plume-scripts-toggle-copy">
 									<Text size="label">{text.runOnWorktreeCreate}</Text>
 									<Text size="caption" tone="faint">
@@ -243,7 +243,7 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 								/>
 							</div>
 
-							<div className="plume-scripts-toggle-row" data-disabled={!runOnWorktreeCreate || undefined}>
+							<div data-settings-item="" className="plume-settings-row plume-scripts-toggle-row" data-disabled={!runOnWorktreeCreate || undefined}>
 								<div className="plume-scripts-toggle-copy">
 									<Text size="label">{text.waitForSetup}</Text>
 									<Text size="caption" tone="faint">
@@ -258,7 +258,7 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 								/>
 							</div>
 
-							<div className="plume-scripts-toggle-row">
+							<div data-settings-item="" className="plume-settings-row plume-scripts-toggle-row">
 								<div className="plume-scripts-toggle-copy">
 									<Text size="label">{text.stopOnArchive}</Text>
 									<Text size="caption" tone="faint">
@@ -267,7 +267,7 @@ export function ScriptEditorDialog({ script, onSave, onDelete, onClose }: Script
 								</div>
 								<Toggle checked={stopOnArchive} onChange={setStopOnArchive} ariaLabel={text.stopOnArchive} />
 							</div>
-						</div>
+						</SettingsCard>
 
 						{error && (
 							<Text as="p" size="detail" tone="danger" role="alert">

@@ -1,6 +1,7 @@
 import type { ProjectInfo, Remote, UiContext } from "@plume/contract/ui";
 import {
 	Button,
+	Caret,
 	IconButton,
 	MENU_MAX_HEIGHT,
 	MenuBody,
@@ -15,7 +16,7 @@ import {
 	useI18n,
 	usePopover,
 } from "@plume/ui";
-import { AlertCircle, Check, ChevronDown, Download, Folder, Monitor, Pencil, Plus, RotateCcw, Trash2 } from "@plume/ui/icons";
+import { AlertCircle, Check, Download, Folder, Monitor, Pencil, Plus, RotateCcw, Trash2 } from "@plume/ui/icons";
 import { useCallback, useEffect, useState } from "react";
 import type { ScriptsApi } from "./api.ts";
 import { MESSAGES, type Messages } from "./messages.ts";
@@ -60,10 +61,11 @@ function ScopePicker({
 		<>
 			<button
 				type="button"
-				className="plume-scripts-scope"
+				className="plume-field plume-scripts-scope"
 				aria-label={text.scopeLabel}
 				aria-haspopup="menu"
 				aria-expanded={menu.open}
+				data-plume-field=""
 				data-scripts-scope=""
 				onClick={menu.toggle}
 			>
@@ -71,7 +73,7 @@ function ScopePicker({
 				<Text size="label" className="plume-scripts-scope-name">
 					{value?.name ?? text.globalDefaults}
 				</Text>
-				<ChevronDown size={13} strokeWidth={1.9} className="plume-scripts-scope-caret" data-open={menu.open || undefined} />
+				<Caret open={menu.open} from="down" size={13} strokeWidth={1.9} className="plume-scripts-scope-caret" />
 			</button>
 			{menu.open && (
 				<Popover anchor={menu.anchor} onClose={menu.close} placement="bottom" align="start" width="default" maxHeight={MENU_MAX_HEIGHT}>

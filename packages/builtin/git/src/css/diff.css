@@ -98,9 +98,7 @@
 }
 
 .git-chevron {
-	flex-shrink: 0;
 	color: var(--plume-ink-faint);
-	transition: transform var(--plume-t-quick) var(--plume-e-soft);
 }
 
 .git-file-head:hover .git-chevron,

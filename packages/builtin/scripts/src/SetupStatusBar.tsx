@@ -1,5 +1,5 @@
 import type { ComposerAboveProps, Remote, UiContext } from "@plume/contract/ui";
-import { Button, Text, useI18n } from "@plume/ui";
+import { Button, StatusSpinner, Text, useI18n } from "@plume/ui";
 import { SquareTerminal } from "@plume/ui/icons";
 import type { ScriptsApi } from "./api.ts";
 import { MESSAGES } from "./messages.ts";
@@ -12,7 +12,7 @@ export function SetupStatusBar({ session, api, ui }: ComposerAboveProps & { api:
 	return (
 		<div className="plume-scripts-setup-bar" role="status" data-scripts-setup-status="">
 			<div className="plume-scripts-setup-info">
-				<span className="plume-scripts-setup-dot" aria-hidden />
+				<StatusSpinner size={13} className="plume-scripts-setup-spinner" />
 				<Text size="detail" tone="muted" className="plume-scripts-setup-text">
 					{text.setupRunning(status.scriptName)}
 				</Text>

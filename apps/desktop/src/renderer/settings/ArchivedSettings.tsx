@@ -352,7 +352,7 @@ export function ArchivedSettings({
 								const open = forcedOpen || opened.has(group.key);
 								const selectedInGroup = inSelect ? group.sessions.filter((session) => chosen.has(session.id)).length : 0;
 								return (
-									<section key={group.key} className="plume-settings-card" data-plume-archive-group={group.key} data-open={open ? "true" : "false"}>
+									<Card key={group.key} data-plume-archive-group={group.key} data-open={open ? "true" : "false"}>
 										<button
 											type="button"
 											aria-expanded={open}
@@ -395,7 +395,7 @@ export function ArchivedSettings({
 												))}
 											</div>
 										</Collapse>
-									</section>
+									</Card>
 								);
 							})}
 						</div>

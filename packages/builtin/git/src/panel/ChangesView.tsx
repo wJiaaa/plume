@@ -2,7 +2,7 @@
  * 暂存区，从上往下读的一列。
  */
 
-import { IconButton, PanelEmpty, Scroller, SkeletonList, Text, useConfirmer, useNarrow } from "@plume/ui";
+import { IconButton, PanelEmpty, Scroller, Segmented, SkeletonList, Text, useConfirmer, useNarrow } from "@plume/ui";
 import { Check, ChevronsDownUp, ChevronsUpDown, Columns2, FileSearch, FolderTree, List, Minus, Plus, RotateCcw, Rows3, WrapText } from "@plume/ui/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DiffFile, GitStatus, GitStatusFile } from "../api.ts";
@@ -227,28 +227,16 @@ export function ChangesView({
 							onClick={toggleAllFiles}
 						/>
 						{!narrowSplit && (
-							<div role="group" aria-label={t("changes.diffLayout")} className="git-seg-group">
-								<button
-									type="button"
-									aria-label={t("changes.unifiedView")}
-									aria-pressed={diffLayout === "unified"}
-									data-plume-tip={t("changes.unifiedView")}
-									onClick={() => setDiffLayout("unified")}
-									className="git-seg-btn"
-								>
-									<Rows3 size={12.5} strokeWidth={1.9} />
-								</button>
-								<button
-									type="button"
-									aria-label={t("changes.splitView")}
-									aria-pressed={diffLayout === "split"}
-									data-plume-tip={t("changes.splitView")}
-									onClick={() => setDiffLayout("split")}
-									className="git-seg-btn"
-								>
-									<Columns2 size={12.5} strokeWidth={1.9} />
-								</button>
-							</div>
+							<Segmented
+								compact
+								ariaLabel={t("changes.diffLayout")}
+								value={diffLayout}
+								onChange={setDiffLayout}
+								options={[
+									{ value: "unified", label: t("changes.unifiedView"), icon: <Rows3 size={12.5} strokeWidth={1.9} /> },
+									{ value: "split", label: t("changes.splitView"), icon: <Columns2 size={12.5} strokeWidth={1.9} /> },
+								]}
+							/>
 						)}
 						<IconButton
 							label={wrapLines ? t("changes.unwrapLines") : t("changes.wrapLines")}

@@ -1,5 +1,5 @@
 import { Caret, iconColour, lookFor, Text } from "@plume/ui";
-import { ChevronRight, Folder, FolderOpen } from "@plume/ui/icons";
+import { Folder, FolderOpen } from "@plume/ui/icons";
 import { useMemo, useState } from "react";
 import type { DiffFile } from "../api.ts";
 import { BinaryDiff } from "./BinaryDiff.tsx";
@@ -96,7 +96,7 @@ export function FileDiffTree({
 				<div className="git-file-pin">
 					<div style={{ paddingLeft: `${indent}px` }} className="git-file-head git-tree-file-head">
 						<button type="button" data-plume-tip={file.path} onClick={() => toggleFile(file.path)} aria-expanded={isExpanded} className="git-tree-toggle">
-							<ChevronRight size={12} strokeWidth={2} className="git-chevron" style={isExpanded ? { transform: "rotate(90deg)" } : undefined} />
+							<Caret open={isExpanded} from="right" size={12} strokeWidth={2} className="git-chevron" />
 							<look.Icon size={13} strokeWidth={1.75} className="git-icon" style={{ color: iconColour(look) }} />
 							<Text
 								size="detail"

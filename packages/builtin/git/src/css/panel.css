@@ -145,39 +145,6 @@
 	gap: 4px;
 }
 
-/* T3 Code 风格的统一/分栏分段切换：一眼看出当前模式，点另一格立即切过去。 */
-.git-seg-group {
-	display: inline-flex;
-	align-items: center;
-	gap: 1px;
-	border: 1px solid var(--plume-line-soft);
-	border-radius: var(--plume-radius-item);
-	background: color-mix(in srgb, var(--plume-fg) 3.5%, transparent);
-	padding: 2px;
-}
-
-.git-seg-btn {
-	display: inline-flex;
-	width: 22px;
-	height: 20px;
-	align-items: center;
-	justify-content: center;
-	border-radius: var(--plume-radius-item);
-	color: var(--plume-ink-faint);
-	transition:
-		color var(--plume-t-quick) var(--plume-e-soft),
-		background-color var(--plume-t-quick) var(--plume-e-soft);
-}
-
-.git-seg-btn:hover {
-	color: var(--plume-ink);
-}
-
-.git-seg-btn[aria-pressed="true"] {
-	background: var(--plume-elevated);
-	color: var(--plume-ink);
-}
-
 /* 改动视图通栏铺开：分区头、文件头和 diff 表面从左缘对齐到右缘，不再悬浮在留白里。 */
 .git-changes-list {
 	padding: 0 0 12px;
