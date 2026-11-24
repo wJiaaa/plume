@@ -147,6 +147,12 @@ export async function checkConversations(options: {
 		await window.webContents.insertText("等待停止的一轮");
 		await clickReal(window, "[data-composer-send=send]");
 		await wait(async () => (await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话开始运行");
+		// 在跑的会话在置顶上面的「进行中」多列一份，行尾写所属项目；原分组里那一行还在。
+		await until(
+			`document.querySelector('[data-plume-section="active"]') !== null && document.querySelector('[data-plume-active-row="${sessionId}"]')?.textContent.includes('冒烟项目') && document.querySelector('[data-plume-row="${sessionId}"]') !== null`,
+			"在跑的会话列进「进行中」",
+		);
+		await capture("smoke-sidebar-active.png");
 		await until(`document.querySelector('.cm-placeholder') !== null`, "已发送的草稿清空");
 		await page(`document.querySelector('.cm-content').focus()`);
 		// 忙时回车插进这一轮：模型手上这一步一直没做完，读到之前它在排队条上标着插话；按停后标记去掉，留着等人。
@@ -158,6 +164,10 @@ export async function checkConversations(options: {
 		await window.webContents.insertText("尚未发送的草稿");
 		await clickReal(window, "[data-composer-send=stop]");
 		await wait(async () => !(await agent.sessions()).some((session) => session.id === sessionId && session.running), "会话已停止");
+		await until(`document.querySelector('[data-plume-active-row="${sessionId}"] [data-plume-status-mark="running"]') === null`, "停下后「进行中」里不再转");
+		// 停下了但人正开着它：先留着，切走以后才撤（见下面打开分叉那一步）。
+		if (!(await page<boolean>(`document.querySelector('[data-plume-active-row="${sessionId}"]') !== null`)))
+			throw new Error("开着的会话停下后立刻从「进行中」撤走了");
 		if (!(await page<boolean>(`document.querySelector('[data-queue-row]:not([data-leaving])')?.textContent.includes('排队的下一句')`)))
 			throw new Error("停止后插话丢失");
 		await until(`document.querySelector('[data-queue-row][data-steered]') === null`, "停止后插话成了排着的一条");
@@ -205,6 +215,7 @@ export async function checkConversations(options: {
 		// 二、后续会话同组嵌套，折叠后选中会话会展开；置顶后脱离来源，再取消置顶回去。
 		await clickRealIn(window, lastOf("[data-screen=chat] [data-plume-quote=assistant] [data-message-fork]"), "最后一条回复的分叉");
 		await until(`document.querySelector('[data-plume-screen-title]')?.textContent.endsWith('（分叉）')`, "分叉会话打开");
+		await until(`document.querySelector('[data-plume-section="active"]') === null`, "切走后「进行中」撤掉办完的会话");
 		const forkId = await page<string>(`document.querySelector('[data-plume-session]').dataset.plumeSession`);
 		const forkRow = `[data-plume-row="${forkId}"]`;
 		await until(`document.querySelector('${forkRow}')?.hasAttribute('data-plume-row-nested')`, "分叉缩在来源下面");

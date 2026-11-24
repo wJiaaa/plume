@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionSummary } from "@plume/contract";
-import { groupSessions, projectSessions, nestSpawned, withSpawned } from "../src/renderer/sidebar/grouping.ts";
+import { activeSessions, groupSessions, projectSessions, nestSpawned, withSpawned } from "../src/renderer/sidebar/grouping.ts";
 
 function session(id: string, at: number, project?: string): SessionSummary {
 	return { id, title: id, cwd: "/work", createdAt: at, updatedAt: 100 - at, running: false, kind: "top", ...(project ? { project } : {}) };
@@ -267,5 +267,35 @@ test("拖过的项目单独按手动排，别的项目照旧按选的排法", ()
 			["p1", "p2"],
 			["q2", "q1"],
 		],
+	);
+});
+
+test("进行中：已列的保持先后，新来的接在最后；事办完就撤，人正开着的留到切走", () => {
+	const all = [session("a", 1), session("b", 2), session("c", 3), session("d", 4)];
+	const ids = (list: SessionSummary[]) => list.map((each) => each.id);
+	const none = new Set<string>();
+	// 同时进来的按最后活动先后：updatedAt 是 100 - at，c 比 a 早。
+	const first = activeSessions([], all, (each) => each.id === "a" || each.id === "c", none);
+	assert.deepEqual(ids(first), ["c", "a"]);
+	// a 更新得再勤也不往前挪；b 新来，接在最后。
+	const second = activeSessions(ids(first), all, (each) => each.id !== "d", none);
+	assert.deepEqual(ids(second), ["c", "a", "b"]);
+	// c 办完了：没开着就撤；a 办完了但开着，留下。
+	const third = activeSessions(ids(second), all, (each) => each.id === "b", new Set(["a"]));
+	assert.deepEqual(ids(third), ["a", "b"]);
+	// 开着但从没进过这一段的 d 不因为开着就进来；切走以后 a 撤掉。
+	assert.deepEqual(ids(activeSessions(ids(third), all, (each) => each.id === "b", new Set(["d"]))), ["b"]);
+});
+
+test("进行中：子会话、没标题的、归档了的不列，原来在列的归档或删掉后也撤", () => {
+	const all: SessionSummary[] = [
+		session("top", 1),
+		{ ...session("child", 2), kind: "child", parentId: "top" },
+		{ ...session("blank", 3), title: "" },
+		{ ...session("gone", 4), archived: true },
+	];
+	assert.deepEqual(
+		activeSessions(["gone", "deleted"], all, () => true, new Set(["gone", "deleted"])).map((each) => each.id),
+		["top"],
 	);
 });

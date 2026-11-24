@@ -1,5 +1,5 @@
 /**
- * 把会话分成侧栏的三段：置顶、登记过的项目各自一组，其余的是「聊天」。
+ * 把会话分成侧栏的三段：置顶、登记过的项目各自一组，其余的是「聊天」；置顶上面的「进行中」是镜像，见 `activeSessions`。
  *
  * 只看会话记下的项目 id，不看目录：同一个文件夹可以登记成几个项目，从文件夹认不出是哪一个；
  * 项目移除以后，它的会话记的 id 找不到项目，自然落到「聊天」。归档的会话不在侧栏，在设置 › 已归档的聊天。
@@ -67,6 +67,31 @@ export function groupSessions(
 	for (const group of byId.values()) group.sessions = orderedSessions(group.sessions, projectSort(group.id, sort, dragged), group.sessionOrder);
 	const listed = [...byId.values()].filter((group) => !(hideEmptied && !activeIn.has(group.id) && archivedIn.has(group.id)));
 	return { pinned: pinned.sort((a, b) => b.updatedAt - a.updatedAt), projects: listed, loose: loose.sort((a, b) => b.updatedAt - a.updatedAt) };
+}
+
+/**
+ * 置顶上面的「进行中」：有事的会话（在跑、等人、人没看着时跑完或出错，由 `engaged` 判断）在这里多列一份，原来的分组里照样有它。
+ * 是镜像不是挪过去：状态几秒就变一次，挪来挪去的话正要点的那一行会从指针底下跑掉，也看不出它属于哪个项目。
+ *
+ * `previous` 是上一次的结果。已经在列的保持原来的先后，新来的接在最后（同时来的按最后活动先后），不按活动重排：
+ * 在跑的会话一直在更新，按活动排的话这一段自己就在跳。事办完了、但人正开着它（`lit`）的先留着：
+ * 刚点开一条跑完的，打开就算看过、记号随即清掉，它不该在点下去的那一刻消失；切走以后再撤。
+ */
+export function activeSessions(
+	previous: readonly string[],
+	sessions: readonly SessionSummary[],
+	engaged: (session: SessionSummary) => boolean,
+	lit: ReadonlySet<string>,
+): SessionSummary[] {
+	// 和分组一样只认侧栏上单独成行的会话；子会话在跑、在等都已经算在父会话上。
+	const listed = new Map(sessions.filter((session) => session.title && session.kind === "top" && !session.archived).map((session) => [session.id, session]));
+	const kept = previous.flatMap((id) => {
+		const session = listed.get(id);
+		return session && (engaged(session) || lit.has(id)) ? [session] : [];
+	});
+	const keptIds = new Set(kept.map((session) => session.id));
+	const joined = [...listed.values()].filter((session) => !keptIds.has(session.id) && engaged(session)).sort((a, b) => a.updatedAt - b.updatedAt);
+	return [...kept, ...joined];
 }
 
 /** 来自同一分组的后续会话才嵌套；严格早于后续会话的来源保证不会形成环。 */

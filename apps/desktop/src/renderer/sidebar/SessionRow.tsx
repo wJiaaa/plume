@@ -28,6 +28,7 @@ export const SessionRow = memo(function SessionRow({
 	actions,
 	childRunning = false,
 	nested = false,
+	mirror = false,
 	followUps,
 	folded,
 	onFold,
@@ -35,6 +36,11 @@ export const SessionRow = memo(function SessionRow({
 }: {
 	session: SessionSummary;
 	nested?: boolean;
+	/**
+	 * 「进行中」里的那一份（见 `activeSessions`）：会话在原分组里还有一行。行尾写所属项目而不是时间，离开了分组得说它是谁的；
+	 * 不能拖，顺序是这一段自己定的；标记换成 `data-plume-active-row`，按 `data-plume-row` 找会话、数行的不会多数一份。
+	 */
+	mirror?: boolean;
 	followUps?: readonly SessionSummary[];
 	folded?: boolean;
 	onFold?: () => void;
@@ -53,15 +59,17 @@ export const SessionRow = memo(function SessionRow({
 	const hover = useSessionCard();
 	const requestDelete = use(RequestDeleteContext);
 	const context = useSidebarReorderContext();
-	const reorder = nested ? null : context;
-	const dragging = useReorderState((state) => state.dragging?.kind === "session" && state.dragging.id === session.id);
+	const reorder = nested || mirror ? null : context;
+	// 镜像那一份不跟着原来那一行变淡、画落点线：拖的、放的都是原分组里的那一行。
+	const dragging = useReorderState((state) => !mirror && state.dragging?.kind === "session" && state.dragging.id === session.id);
 	const placement = useReorderState((state) =>
-		state.dropTarget?.kind === "session" && state.dropTarget.id === session.id ? state.dropTarget.placement : null,
+		!mirror && state.dropTarget?.kind === "session" && state.dropTarget.id === session.id ? state.dropTarget.placement : null,
 	);
 	return (
 		<>
 			<HoverRow
-				data-plume-row={session.id}
+				data-plume-row={mirror ? undefined : session.id}
+				data-plume-active-row={mirror ? session.id : undefined}
 				data-plume-row-nested={nested || undefined}
 				{...hover.bind}
 				onPointerMove={(event) => reorder?.registerTarget("session", session.id, event.currentTarget.getBoundingClientRect(), event.clientY, session.project)}
@@ -110,7 +118,7 @@ export const SessionRow = memo(function SessionRow({
 						<SessionStatus session={session} running={busy(session) || childRunning} />
 					</span>
 					<ScrollText text={title} className="plume-fade-tail min-w-0 flex-1" />
-					{/* 不管列表按什么排，这里都是最后活动的时间：扫一眼要回答的是「这条多久没动了」。悬停按钮出来时它让位，两者不同时出现。 */}
+					{/* 不管列表按什么排，这里都是最后活动的时间：扫一眼要回答的是「这条多久没动了」；「进行中」那一份换成所属项目。悬停按钮出来时它让位，两者不同时出现。 */}
 					{followUps && folded && (
 						<span
 							data-plume-row-folded={followUps.length}
@@ -122,10 +130,16 @@ export const SessionRow = memo(function SessionRow({
 							{followUps.some((child) => child.running) ? <ActionSpinner size={14} className="text-accent" /> : followUps.length}
 						</span>
 					)}
-					<TimeAgo
-						iso={new Date(session.updatedAt).toISOString()}
-						className="shrink-0 text-caption text-ink-muted transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0"
-					/>
+					{mirror ? (
+						<span className="max-w-[40%] shrink-0 truncate text-caption text-ink-muted transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0">
+							{projects.find((entry) => entry.id === session.project)?.name ?? t("projectList.recent")}
+						</span>
+					) : (
+						<TimeAgo
+							iso={new Date(session.updatedAt).toISOString()}
+							className="shrink-0 text-caption text-ink-muted transition-opacity group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0"
+						/>
+					)}
 				</button>
 				{followUps && onFold && (
 					<span className="absolute top-1/2 left-[7px] flex -translate-y-1/2 opacity-0 transition-opacity group-hover/row:opacity-100 has-[:focus-visible]:opacity-100">

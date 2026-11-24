@@ -157,6 +157,7 @@ export const zhCN = {
 	"projectMenu.archiveChats": "归档聊天",
 	"workspace.archived": "已归档 {n} 个聊天",
 	"workspace.archiveFailed": "有会话没能归档：{reason}",
+	"projectList.active": "进行中",
 	"projectList.pinned": "置顶",
 	"projectList.projects": "项目",
 	"projectList.recent": "聊天",

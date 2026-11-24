@@ -174,6 +174,7 @@ export const en = {
 	"projectMenu.archiveChats": "Archive the conversations",
 	"workspace.archived": { one: "Archived {n} conversation", other: "Archived {n} conversations" },
 	"workspace.archiveFailed": "Some chats could not be archived: {reason}",
+	"projectList.active": "In progress",
 	"projectList.pinned": "Pinned",
 	"projectList.projects": "Projects",
 	"projectList.recent": "Chats",

@@ -1,5 +1,5 @@
 /**
- * 侧栏的会话列表：最上是「置顶」，「项目」底下每个项目一组，「聊天」是不属于项目的会话。
+ * 侧栏的会话列表：最上是「进行中」（有事的会话多列一份，只在有时出现），然后是「置顶」，「项目」底下每个项目一组，「聊天」是不属于项目的会话。
  *
  * 分组规则在 `grouping.ts`；这里只管画，和折叠、「展开显示」这些只属于界面的状态。
  * 折叠了哪些记在 localStorage 里：理好的侧栏下次打开还是理好的。
@@ -21,7 +21,9 @@ import {
 } from "@plume/ui";
 import { ChevronDown, ChevronRight, ChevronUp, Folder, FolderOpen, ListFilter, MoreHorizontal, Plus, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type Group, groupSessions, nestSpawned, withSpawned, projectSessions, type SessionSort } from "./grouping.ts";
+import { activeSessions, type Group, groupSessions, nestSpawned, withSpawned, projectSessions, type SessionSort } from "./grouping.ts";
+import { activityOf, busy, useActivityVersion } from "./activity.ts";
+import { SessionRow } from "./SessionRow.tsx";
 import { projectSort } from "./order.ts";
 import { ListMenu } from "./ListMenu.tsx";
 import { useHideEmptiedProjects } from "./prefs.ts";
@@ -41,8 +43,9 @@ const SORT_KEY = "plume.sidebar.sort";
 /** 拖过、单独切成手动排序的项目 id；在列表设置里换排法时清空，所有项目跟着新选的排。 */
 const DRAGGED_KEY = "plume.sidebar.manualProjects";
 /**
- * 三个分区的折叠键。项目的键是它的 id（UUID），不会以 `§` 开头，两种键放在一处不会撞。
+ * 四个分区的折叠键。项目的键是它的 id（UUID），不会以 `§` 开头，两种键放在一处不会撞。
  */
+const ACTIVE = "§active";
 const PINNED = "§pinned";
 const PROJECTS = "§projects";
 const RECENT = "§recent";
@@ -117,6 +120,15 @@ export function ProjectList({
 	);
 	/** 有子会话在跑的会话。 */
 	const busyParents = useMemo(() => new Set(sessions.flatMap((session) => (session.parentId && session.running ? [session.parentId] : []))), [sessions]);
+	// 等批准、跑完、出错的记号不在摘要里，在 activity.ts 的仓库里，变了要跟着重算「进行中」。
+	useActivityVersion();
+	/** 「进行中」上一次列的会话：这一段要接着上一次的顺序排，见 `activeSessions`。 */
+	const [activeOrder, setActiveOrder] = useState<readonly string[]>([]);
+	const active = activeSessions(activeOrder, sessions, (session) => busy(session) || busyParents.has(session.id) || activityOf(session.id) !== undefined, lit);
+	if (active.length !== activeOrder.length || active.some((session, index) => session.id !== activeOrder[index])) {
+		// 渲染中按上一次的结果更新：React 会丢掉这一遍、带着新值立刻重来，提交到屏上的只有算好的那一遍。
+		setActiveOrder(active.map((session) => session.id));
+	}
 
 	// 在提交之后写，不在 setState 的更新函数里写：更新函数可能被调用不止一次，写进去的未必是留下来的那一份。
 	useEffect(() => {
@@ -155,10 +167,36 @@ export function ProjectList({
 						onClose={listMenu.close}
 					/>
 				)}
+				{active.length > 0 && (
+					<>
+						<SectionLabel first section="active" sessions={active} count={active.length} collapsed={isCollapsed(ACTIVE)} onToggle={() => toggle(ACTIVE)}>
+							{t("projectList.active")}
+						</SectionLabel>
+						{/* 平铺不嵌套：后续会话在这里各占一行，各自的状态自己说。 */}
+						<Collapse open={!isCollapsed(ACTIVE)}>
+							<div className={`flex flex-col ${gap}`}>
+								{active.map((session) => (
+									<SessionRow
+										key={session.id}
+										mirror
+										session={session}
+										active={lit.has(session.id)}
+										compact={compact}
+										onOpen={actions.open}
+										projects={projects}
+										actions={actions}
+										loadStats={actions.stats}
+										childRunning={busyParents.has(session.id)}
+									/>
+								))}
+							</div>
+						</Collapse>
+					</>
+				)}
 				{groups.pinned.length > 0 && (
 					<>
 						<SectionLabel
-							first
+							first={active.length === 0}
 							section="pinned"
 							sessions={withSpawned(groups.pinned, groups.spawned)}
 							count={withSpawned(groups.pinned, groups.spawned).length}
@@ -184,7 +222,7 @@ export function ProjectList({
 				)}
 				{/* 空列表也保留入口，创建第一个项目不必离开侧栏。 */}
 				<SectionLabel
-					first={groups.pinned.length === 0}
+					first={active.length === 0 && groups.pinned.length === 0}
 					section="projects"
 					sessions={groups.projects.flatMap((group) => withSpawned(group.sessions, groups.spawned))}
 					count={groups.projects.length}
@@ -299,10 +337,10 @@ function SectionLabel({
 	first?: boolean;
 	/**
 	 * 在所在的那一块里吸顶，像项目名那样。只给「聊天」：它不分页，常是整栏最长的一段，项目名都滚走以后，没有别的东西说明这些是谁的会话。
-	 * 「置顶」「项目」不吸顶：它们只是把列表分成几段，钉在顶上不多说什么，还会和项目名抢顶上那个位置。
+	 * 「进行中」「置顶」「项目」不吸顶：它们只是把列表分成几段，钉在顶上不多说什么，还会和项目名抢顶上那个位置。
 	 */
 	held?: boolean;
-	section: "pinned" | "projects" | "recent";
+	section: "active" | "pinned" | "projects" | "recent";
 	count: number;
 	sessions: readonly SessionSummary[];
 	collapsed: boolean;
