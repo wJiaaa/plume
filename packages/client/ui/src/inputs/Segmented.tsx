@@ -13,6 +13,8 @@ export function Segmented<T extends string>({
 	value,
 	onChange,
 	options,
+	compact = false,
+	ariaLabel,
 }: {
 	value: T;
 	onChange: (value: T) => void;
@@ -21,6 +23,10 @@ export function Segmented<T extends string>({
 	 * `label` 无论如何都要给：只有图标、没有名字的控件，读屏读不出，别人也猜不着。
 	 */
 	options: { value: T; label: string; icon?: ReactNode }[];
+	/** 给面板工具栏的紧凑款（单格 20px 高、整条 24px），和旁边的 `sm` 图标按钮平齐。 */
+	compact?: boolean;
+	/** 这一组选项的无障碍名字；不传时不设 `role="group"`。 */
+	ariaLabel?: string;
 }) {
 	const box = useRef<HTMLDivElement>(null);
 	const [rail, setRail] = useState<{ left: number; width: number } | null>(null);
@@ -29,10 +35,17 @@ export function Segmented<T extends string>({
 		// 遍历而不是拼属性选择器：值是调用方给的，转义它要 `CSS.escape`。
 		const selected = Array.from(box.current?.children ?? []).find((node) => node.getAttribute("data-segment") === value);
 		if (selected instanceof HTMLElement) setRail({ left: selected.offsetLeft, width: selected.offsetWidth });
-	}, [value, options]);
+	}, [value, options, compact]);
 
 	return (
-		<div ref={box} data-segmented="" className="relative flex gap-0.5 rounded-lg bg-card p-0.5">
+		<div
+			ref={box}
+			role={ariaLabel ? "group" : undefined}
+			aria-label={ariaLabel}
+			data-segmented=""
+			data-compact={compact ? "" : undefined}
+			className="relative flex gap-0.5 rounded-lg bg-card p-0.5"
+		>
 			{/* 量到之前不画。它一出现就已经在正确的位置上，不需要一段从零滑过来的开场。 */}
 			{rail && (
 				<span
@@ -52,9 +65,9 @@ export function Segmented<T extends string>({
 					aria-pressed={value === option.value}
 					onClick={() => onChange(option.value)}
 					// `relative` 把字提到那块底上面；没有它，滑过去的底会盖住它正要标出的那个词。
-					className={`relative h-[26px] rounded-md text-label transition-colors duration-[var(--plume-t-quick)] ${
+					className={`relative rounded-md transition-colors duration-[var(--plume-t-quick)] ${compact ? "h-5 text-caption" : "h-[26px] text-label"} ${
 						// 图标要方的，字要两边留空。
-						option.icon ? "grid w-[30px] place-items-center" : "px-3"
+						option.icon ? (compact ? "grid w-6 place-items-center" : "grid w-[30px] place-items-center") : compact ? "px-2" : "px-3"
 					} ${value === option.value ? "text-ink" : "text-ink-muted hover:text-ink"}`}
 				>
 					{option.icon ?? option.label}

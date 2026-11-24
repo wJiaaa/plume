@@ -238,7 +238,7 @@ export function WorktreeToggle({ size = "composer", iconOnly = false }: {
 
 ```tsx
 /** 一排互斥的选项，选中的那个下面垫着一块会滑过去的底。 */
-export function Segmented<T extends string>(props: {
+export function Segmented<T extends string>({ compact = false }: {
 	value: T;
 	onChange: (value: T) => void;
 	/**
@@ -246,6 +246,10 @@ export function Segmented<T extends string>(props: {
 	 * `label` 无论如何都要给：只有图标、没有名字的控件，读屏读不出，别人也猜不着。
 	 */
 	options: { value: T; label: string; icon?: ReactNode }[];
+	/** 给面板工具栏的紧凑款（单格 20px 高、整条 24px），和旁边的 `sm` 图标按钮平齐。 */
+	compact?: boolean;
+	/** 这一组选项的无障碍名字；不传时不设 `role="group"`。 */
+	ariaLabel?: string;
 })
 ```
 
