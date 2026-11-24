@@ -54,6 +54,7 @@ export const en = {
 	"nameEditor.name": "Name",
 
 	"fileTree.projectFiles": "Project files",
+	"fileTree.projectFilesDescription": "Browse, search and manage project files",
 	"common.cancel": "Cancel",
 	"common.delete": "Delete",
 	"common.hide": "Hide",

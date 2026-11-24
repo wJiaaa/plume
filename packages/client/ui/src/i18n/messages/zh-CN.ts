@@ -52,6 +52,7 @@ export const zhCN = {
 	"nameEditor.name": "名字",
 
 	"fileTree.projectFiles": "项目文件",
+	"fileTree.projectFilesDescription": "浏览、搜索和管理项目里的文件",
 	"common.cancel": "取消",
 	"common.delete": "删除",
 	"common.hide": "隐藏",

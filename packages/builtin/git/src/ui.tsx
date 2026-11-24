@@ -49,6 +49,7 @@ export default {
 		setHost(ui);
 		ui.panel(PANEL_ID, GitPanel, {
 			title: "Git",
+			description: (locale) => String(MESSAGES[locale]["gitPanel.description"]),
 			restore: true,
 			detachable: true,
 			icon: GitCompare,

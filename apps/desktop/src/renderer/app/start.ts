@@ -101,6 +101,7 @@ export function start(service: Remote<AgentService>): void {
 		ProjectFiles,
 		{
 			title: () => translate("fileTree.projectFiles"),
+			description: () => translate("fileTree.projectFilesDescription"),
 			icon: Folder,
 			shortcut: "CommandOrControl+P",
 			restore: true,
