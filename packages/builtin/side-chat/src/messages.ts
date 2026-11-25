@@ -62,6 +62,8 @@ const zhCN = {
 	controlMainPauseDiscard: "暂停主会话并取消清单",
 	controlMainResume: "让主会话继续",
 	controlMainStatus: "查看主会话状态",
+	sendToSession: "发消息给",
+	letterFrom: (title: string) => (title ? `${title}（侧边聊天）` : "侧边聊天"),
 };
 
 export const MESSAGES: Record<Locale, typeof zhCN> = {
@@ -126,5 +128,7 @@ export const MESSAGES: Record<Locale, typeof zhCN> = {
 		controlMainPauseDiscard: "Pause the main session and drop its plan",
 		controlMainResume: "Resume the main session",
 		controlMainStatus: "Check the main session",
+		sendToSession: "Message session",
+		letterFrom: (title: string) => (title ? `${title} (side chat)` : "Side chat"),
 	},
 };

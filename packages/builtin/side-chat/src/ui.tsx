@@ -17,6 +17,7 @@ import { ChoiceMark, Confirm, PanelEmpty, Text, useI18n } from "@plume/ui";
 import { Activity, History, MessageSquarePlus, MessagesSquare } from "@plume/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type { SideChatApi, SideChatSettings, WaitingEntry } from "./api.ts";
+import { isSentToSession } from "./controls.ts";
 import { dispatchCard } from "./DispatchCard.tsx";
 import { MESSAGES } from "./messages.ts";
 import { TaskStrip, type Waiting } from "./TaskStrip.tsx";
@@ -304,6 +305,14 @@ export default {
 				return undefined;
 			},
 			icon: Activity,
+		});
+		context.toolLine("send_to_session", {
+			verb: (locale) => MESSAGES[locale].sendToSession,
+			subject: (args, details) => {
+				if (isSentToSession(details)) return details.title.slice(0, SUBJECT_CHARS);
+				return typeof args.session_id === "string" && args.session_id.trim() ? args.session_id.trim().slice(0, SUBJECT_CHARS) : undefined;
+			},
+			icon: MessagesSquare,
 		});
 		context.panel(PANEL, SideChatPanel, {
 			title: (locale) => MESSAGES[locale].title,

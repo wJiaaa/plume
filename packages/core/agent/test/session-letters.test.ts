@@ -266,16 +266,49 @@ it("忙着时收到的信，收件方被按停又归档：信是 closed，不一
 	expect(await receipt.read).toEqual({ status: "closed" });
 });
 
-it("只在顶层会话之间：子会话拿不到，寄给子会话、自己、不存在的会话抛错，空信抛错", async () => {
-	// 子会话里那次 `keep` 没有寄信口子，不挂着。
-	const { sessions, asker, target, kept, letterOf } = await open([keepCall, keepCall, { text: "子会话做完" }]);
+it("顶层会话和子会话能寄给其他顶层会话：子会话来源记为父会话、禁寄父会话，独立会话拿不到；寄给子会话/独立会话/自己/不存在或空信抛错", async () => {
+	let requests = 0;
+	const { service, sessions, asker, target, done, kept, letterOf } = await open(() => {
+		const index = requests++;
+		if (index === 0) return keepCall; // asker
+		if (index === 1) return keepCall; // child（拿到 letter 并挂住）
+		if (index === 2) return { text: "收到子会话来信" }; // target 读到子会话寄来的信
+		if (index === 3) return keepCall; // standalone（没有 letter，不挂着）
+		return { text: "做完" };
+	});
 	const letter = (await letterOf())!;
-	const child = await sessions.create({ parentId: target.id });
+	const child = await sessions.create({ parentId: asker.id });
+	const standalone = await sessions.create({ cwd: dir });
 	expect(() => letter(child.id, { from: "问的", text: "x" })).toThrow();
+	expect(() => letter(standalone.id, { from: "问的", text: "x" })).toThrow();
 	expect(() => letter(asker.id, { from: "问的", text: "x" })).toThrow();
 	expect(() => letter("nobody", { from: "问的", text: "x" })).toThrow();
 	expect(() => letter(target.id, { from: "问的", text: "  " })).toThrow();
-	await sessions.send(child.id, "子任务");
+
+	// 子会话能拿到 letter，并单向寄给别的未归档顶层会话；来源 sessionId 记为其父会话 id。
+	const beforeChild = kept.length;
+	void sessions.send(child.id, "子任务");
+	await vi.waitFor(() => expect(kept.length).toBeGreaterThan(beforeChild), { timeout: 5_000, interval: 10 });
+	const childLetter = kept.at(-1)!;
+	expect(childLetter).not.toBeNull();
+	// 子会话不能寄给自己的父会话或别的子会话。
+	expect(() => childLetter(asker.id, { from: "侧边聊天", text: "回父会话" })).toThrow();
+	expect(() => childLetter(child.id, { from: "侧边聊天", text: "回自己" })).toThrow();
+	const receipt = childLetter(target.id, { from: "主会话（侧边聊天）", text: "从侧边转来" });
+	await done(target.id, 1);
+	expect(await receipt.read).toEqual({ status: "read" });
+	expect((await service.getSession(target.id)).messages[0]).toMatchObject({
+		role: "user",
+		synthetic: true,
+		peer: [{ id: receipt.id, sessionId: asker.id, from: "主会话（侧边聊天）", text: "从侧边转来", cwd: dir }],
+	});
+
+	// 父会话归档后，它下面的子会话也不能再寄信。
+	await service.setSessionArchived(asker.id, true);
+	expect(() => childLetter(target.id, { from: "主会话（侧边聊天）", text: "父归档后" })).toThrow("已经归档");
+
+	// 独立会话拿不到 letter。
+	await sessions.send(standalone.id, "独立任务");
 	expect(kept.at(-1)).toBeNull();
 });
 

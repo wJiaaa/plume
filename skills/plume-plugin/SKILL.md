@@ -40,7 +40,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | 工具里跑 shell 命令 | `run.exec`：沙箱档由本体按权限模式定，要更宽一档经 `run.escalate` 申请（只认人答），照 `run.shell()` 的写法拼命令；不自己起进程 |
 | 工具里读、写用户的文件 | `run.files`：本体守读写边界、记改动快照，人撤回时连文件一起退；可能改文件的命令带 `recordChanges` |
 | 工具要问人放不放行，或要人给一份数据（提问、批准计划、填表） | `run.ask`；`run.request`（不是权限，完全访问也照问） |
-| 工具答完后在后台接着做、送回结果，约会话过一会儿接着做，给另一个顶层会话寄信 | `run.background`、`run.track`、`run.schedule`、`run.letter`（除 `track` 外只有顶层会话有） |
+| 工具答完后在后台接着做、送回结果，约会话过一会儿接着做，给另一个顶层会话寄信 | `run.background`、`run.track`、`run.schedule`、`run.letter`（`background`、`schedule` 只有顶层会话有，`letter` 顶层会话和子会话都有、独立会话没有） |
 | 在每次工具调用外面加一层：预先放行、拦截、改参数、改结果、整个接管 | 钩子 `tool.execute` |
 | 一次操作要问人时先替人决定：放行、拒绝，或交给里层弹卡 | 钩子 `tool.approve`；完全访问、`approved`、「以后不再问」由本体放行、到不了这一层，提权只认人答 |
 | 每一轮开始、人的消息写进会话前拦下它，或给模型补一段上下文 | 钩子 `prompt.submit` |

@@ -100,7 +100,7 @@ export interface ToolScope {
 	track(plugin: string, toolCallId: string, job: BackgroundJobInput): TrackedJob;
 	/** `plugin` 的工具在 `toolCallId` 那次调用约一次唤醒（`ToolRun.schedule`，`wakeups.ts`）；子会话没有。 */
 	schedule?(plugin: string, toolCallId: string, wake: WakeupInput): SessionWakeup | undefined;
-	/** 注册这个工具的插件给另一个顶层会话寄信（`ToolRun.letter`）；子会话没有。 */
+	/** 注册这个工具的插件给另一个顶层会话寄信（`ToolRun.letter`）；顶层会话和子会话有，独立会话没有。 */
 	letter?(plugin: string, to: string, letter: LetterInput): LetterReceipt;
 	/** 这一轮以完成收场后归档这个会话（`ToolRun.archiveAfterTurn`）；子会话没有。 */
 	archiveAfterTurn?(): void;

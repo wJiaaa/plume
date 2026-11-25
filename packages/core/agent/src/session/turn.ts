@@ -336,19 +336,22 @@ export function createTurn(deps: TurnDeps): Turn {
 	}
 
 	/**
-	 * `from` 给 `toId` 寄一封信（`ToolRun.letter`）。两边都得是顶层会话；发件方的 id、目录照实填。信是单向的，见 `LetterReceipt`。
-	 * 信不替人做主：人按了停的会话不为它开一轮，留到人开口（`wakeReports`），回执照实说（`held`）。归档了的会话收工了，不再寄信。
+	 * `from` 给 `toId` 寄一封信（`ToolRun.letter`）。收件方必须是未归档的顶层会话；发件方可以是顶层会话或挂在顶层会话下的子会话
+	 * （子会话寄出时来源会话记为其父会话 id，且不能寄给自己的父会话）。发件方的目录照实填。信是单向的，见 `LetterReceipt`。
+	 * 信不替人做主：人按了停的会话不为它开一轮，留到人开口（`wakeReports`），回执照实说（`held`）。所属顶层会话归档了，不再寄信。
 	 */
 	function postLetter(from: Session, toId: string, input: LetterInput): LetterReceipt {
 		const to = sessions.get(String(toId));
 		if (quitting() || !sessions.has(from.summary.id)) throw new Error(text("session.parentStopped"));
-		if (from.summary.archived) throw new Error(text("session.archivedSender"));
-		if (!to || to.summary.kind !== "top" || to.summary.archived || from.summary.kind !== "top" || to === from)
-			throw new Error(text("session.badLetterTarget", { id: String(toId) }));
+		const origin =
+			from.summary.kind === "child" && from.summary.parentId ? sessions.get(from.summary.parentId) : from.summary.kind === "top" ? from : undefined;
+		if (!origin || origin.summary.kind !== "top") throw new Error(text("session.parentStopped"));
+		if (origin.summary.archived) throw new Error(text("session.archivedSender"));
+		if (!to || to.summary.kind !== "top" || to.summary.archived || to === origin) throw new Error(text("session.badLetterTarget", { id: String(toId) }));
 		const words = typeof input?.text === "string" ? input.text.trim() : "";
 		const address = typeof input?.from === "string" ? input.from.trim() : "";
 		if (!words || !address) throw new Error(text("session.emptyMessage"));
-		const peer: PeerLetter = { id: randomUUID(), sessionId: from.summary.id, from: address, text: words, cwd: from.summary.cwd };
+		const peer: PeerLetter = { id: randomUUID(), sessionId: origin.summary.id, from: address, text: words, cwd: from.summary.cwd };
 		// 「会话在不在忙」只看 `held`（见 `Session.controller`），不另看 `summary.running`。
 		const queued = held(to);
 		const read = background.letter(to.summary.id, peer, typeof input.guide === "string" && input.guide.trim() ? input.guide : undefined);
@@ -445,6 +448,8 @@ export function createTurn(deps: TurnDeps): Turn {
 						emit({ type: "toolStart", sessionId, toolCallId, startedAt: at });
 					},
 					traced: (toolCallId, trace) => observe(sessionId, { type: "hooks", toolCallId, ...trace }),
+					// 子会话（挂在顶层会话下）可以单向给别的顶层会话寄信；独立会话不能。
+					...(session.summary.kind !== "standalone" ? { letter: (_plugin, to, letter) => postLetter(session, to, letter) } : {}),
 					// 后台结果只回顶层会话：插件的子会话、独立会话没人等它们的后台结果，见 `ToolRun.background`。
 					...(session.summary.kind !== "top"
 						? {}
@@ -452,7 +457,6 @@ export function createTurn(deps: TurnDeps): Turn {
 								background: (plugin, toolCallId) => background.channel(sessionId, toolCallId, plugin),
 								schedule: (plugin, toolCallId, wake) =>
 									wakeups.schedule(sessionId, plugin, toolCallId, background.channel(sessionId, toolCallId, plugin), wake),
-								letter: (_plugin, to, letter) => postLetter(session, to, letter),
 								archiveAfterTurn: () => void (session.archiveAfterTurn = controller),
 							}),
 					progress: (toolCallId, output, push) => {

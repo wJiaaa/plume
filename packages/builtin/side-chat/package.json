@@ -19,6 +19,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@plume/platform": "workspace:*",
     "@plumeai/plugin-sdk": "workspace:*",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.0",

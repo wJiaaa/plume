@@ -5,10 +5,11 @@
  * - `prompt.submit`：每一问后面附上主会话上次之后的新内容（见 main-chat.ts），每一问读到哪里记在插件数据目录的 `marks.json`，
  *   编辑重问截掉的那几问一起作废；
  *   主会话的下一问后面附上侧边聊天这期间改过的文件（见 changes.ts），经本体的 `ctx.changes` 认改动记录。
- * - `model.context`：身份、准则换成侧边聊天的，工具只留读主会话、交出去、控制主会话、读写文件、跑命令、查网页（见 profile.ts）。
- *   普通会话里藏起这三件侧边聊天专用的，`tool.execute` 再拦一次子 Agent 这类别的会话。
+ * - `model.context`：身份、准则换成侧边聊天的，工具只留读主会话、交出去、控制主会话、给同项目/同仓库会话发消息、读写文件、跑命令、查网页（见 profile.ts）。
+ *   普通会话里藏起这几件侧边聊天专用的，`tool.execute` 再拦一次子 Agent 这类别的会话。
  * - `dispatch_task`、`control_main`（见 controls.ts）：经宿主给的父会话（`ToolRun.parent`）把活排进主会话、让它停下或接着做；
  *   人没点名交给主会话时只留一张卡片，人在卡上选交给主会话、开新会话（`launch`），还是就在这里做。
+ * - `send_to_session`（见 peer.ts）：经宿主寄信原语（`ToolRun.letter`）向同项目或同 Git 仓库内的其他未归档顶层会话直接发单向消息。
  * - `/btw 问题`：开一个新的侧边聊天问这句话，打开面板；主对话里什么都不留。
  * - 排队条上的「在侧边聊天中打开」（界面入口的 `ui.queueAction`）：那条排着的话拿到最早那段侧边聊天去问，附件跟着走。
  * - 在跑时说的话（见 waiting.ts）：回车插进这一轮（`ctx.sessions.steer`），⌘回车排到这一轮之后，插件自己排，`observe` 看到这一轮以完成收场、
@@ -36,6 +37,7 @@ import {
 	withMark,
 } from "./main-chat.ts";
 import { MESSAGES } from "./messages.ts";
+import { createSendToSession } from "./peer.ts";
 import { GUIDELINES_TEXT, IDENTITY, KINDS, READ_MAIN_CHAT_DESCRIPTION, SIDE_ONLY } from "./profile.ts";
 import { createWaiting } from "./waiting.ts";
 
@@ -288,6 +290,13 @@ export default {
 
 		ctx.tools.register(DISPATCH_TASK);
 		ctx.tools.register(CONTROL_MAIN);
+		ctx.tools.register(
+			createSendToSession({
+				parentOf: (sideId) => sides.get(sideId),
+				getSession: (sessionId) => ctx.sessions.get(sessionId),
+				locale: () => ctx.locale(),
+			}),
+		);
 
 		/** 卡片开过的会话：从会话列表里认（`spawnedFrom` 记着是这个侧边聊天里的哪次调用开的），重开窗口也认得出来。 */
 		async function startedFrom(sideId: string, callId: string): Promise<string | undefined> {

@@ -22,6 +22,18 @@ export function isDispatchSuggestion(value: unknown): value is DispatchSuggestio
 	return details?.kind === "dispatch_suggestion" && typeof details.title === "string" && typeof details.instruction === "string";
 }
 
+/** 侧边聊天经 `send_to_session` 给另一个顶层会话发完消息后留在工具结果里的摘要，供转录行显示目标会话名。 */
+export interface SentToSessionDetails {
+	kind: "sent_to_session";
+	sessionId: string;
+	title: string;
+}
+
+export function isSentToSession(value: unknown): value is SentToSessionDetails {
+	const details = value as Partial<SentToSessionDetails> | undefined;
+	return details?.kind === "sent_to_session" && typeof details.sessionId === "string" && typeof details.title === "string";
+}
+
 /** 卡片标题按人数字的方式数（码点）。没给标题就用指令的第一行。 */
 const TITLE_MAX = 60;
 

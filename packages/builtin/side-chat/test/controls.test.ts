@@ -160,7 +160,7 @@ async function fixture(t: TestContext, directory?: string, others: SessionSummar
 
 test("卡片上「开新会话」开在主会话的项目里、记着是侧边聊天里哪张卡开的、不要每轮交回主会话，点两次只开一个；不是建议卡的不开", async (t) => {
 	const f = await fixture(t);
-	assert.deepEqual(f.tools, ["read_main_chat", "dispatch_task", "control_main"]);
+	assert.deepEqual(f.tools, ["read_main_chat", "dispatch_task", "control_main", "send_to_session"]);
 	assert.equal(await f.api.started("side", "call-1"), undefined);
 	const [first, second] = await Promise.all([f.api.launch("side", "call-1", {}), f.api.launch("side", "call-1", {})]);
 	assert.equal(first, "new-1");
@@ -203,9 +203,9 @@ test("卡片上选了模型和思考档位：开出来的会话用它们", async
 	assert.equal(f.launched[0]?.thinking, "high");
 });
 
-test("普通会话的工具表里没有侧边聊天专用的三件", async (t) => {
+test("普通会话的工具表里没有侧边聊天专用的工具", async (t) => {
 	const f = await fixture(t);
-	const names = ["read", "read_main_chat", "dispatch_task", "control_main"].map((name) => ({ name }));
+	const names = ["read", "read_main_chat", "dispatch_task", "control_main", "send_to_session"].map((name) => ({ name }));
 	let seen: string[] = [];
 	await f.context({ sessionId: "main", tools: names, sections: [] } as never, async (input) => {
 		seen = input.tools.map((tool) => tool.name);

@@ -42,7 +42,7 @@ const BUILTIN_TOOLS = {
 	compaction: ["recall"],
 	mcp: ["mcp_search", "mcp_call", "mcp__"],
 	plan: ["submit_plan"],
-	"side-chat": ["read_main_chat", "dispatch_task", "control_main"],
+	"side-chat": ["read_main_chat", "dispatch_task", "control_main", "send_to_session"],
 	skills: ["skill"],
 	"spawn-session": ["spawn_session", "hand_off_to_session", "dismiss_task", "archive_session"],
 	subagents: ["task", "stop_subagent", "yield"],
