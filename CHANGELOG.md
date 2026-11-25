@@ -2,6 +2,36 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.3] - 2026-11-25
+
+<!-- plume:notes en -->
+### Changes
+
+- **Expand linked-session reports in place.** Clicking a "From linked session" row now expands the returned report right inside your current conversation instead of jumping away immediately. A dedicated arrow button at the end of the row opens the linked session when you want to switch over. Session names are now highlighted and left-aligned with tool rows above them.
+- **No more white flashes when toggling the sidebar on large displays.** Fixed brief blank frames when opening or closing the sidebar in maximized windows on 5K and other high-resolution screens by eliminating redundant full-screen clip masks along joined pane edges.
+- **Readable MCP tool labels in transcripts.** On-demand MCP lookups and calls no longer surface raw `mcp_search` or `mcp_call` tool names in the transcript, showing clear action descriptions and matching icons instead.
+- **Plugin SDK testing helper and refreshed model catalog.** Plugin authors can now test logic entry points directly with `@plumeai/plugin-sdk/testing` and `plume-plugin test` (included in new plugin templates), and the bundled model catalog snapshot has been updated.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **关联会话汇报支持就地展开，排版更齐整。** 点击「来自关联会话」不再直接跳走，而是原地展开查看对方交回的汇报内容；行尾新增独立的跳转图标按钮，需要时再切到对应会话。同时统一了过程行与工具行的左边缘对齐，并高亮显示会话名称。
+- **大窗口下开合侧栏不再整块闪白。** 修复了 5K 等大屏最大化或面板展开时开合侧栏偶发白屏闪烁的问题，消除了贴边圆角裁剪产生的整屏显存遮罩。
+- **按需 MCP 工具在转录里不再露出原始工具名。** 按需搜索和调用 MCP 工具时，对话中不再显示 `mcp_search`、`mcp_call`，改为清晰的中文动作说明（如「搜索 MCP 工具」「调用 MCP 工具」）与对应图标。
+- **插件 SDK 新增单测工具并刷新模型目录。** 提供 `@plumeai/plugin-sdk/testing` 与 `plume-plugin test`，无需启动应用即可测试插件逻辑入口，新建插件模板自带测试；同时更新了随应用分发的模型目录快照。
+
+### 新功能
+
+- 插件 SDK 提供单测工具与测试命令，skill 接口参考改为从源码自动生成 (`3b817e9`)
+- 「来自关联会话」一行改为点开查看汇报，行尾新增图标按钮跳转 (`5dccba0`)
+
+### 修复
+
+- 「来自关联会话」对齐工具组标题行并高亮会话名称 (`521d95d`)
+- **core**: 按需搜索的 mcp_search、mcp_call 在转录里说中文，不再露出工具名 (`bb84b33`)
+- **desktop**: 各栏身子的圆角改成四角同半径，贴边处不再生成整屏遮罩 (`4a2b27b`)
+- **desktop**: 大窗口最大化时开合侧栏不再整块闪白 (`43167d7`)
+
 ## [0.9.2] - 2026-11-24
 
 <!-- plume:notes en -->
