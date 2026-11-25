@@ -1,20 +1,22 @@
 /**
  * 插件的子会话（侧边聊天、子 Agent）画在面板里的样子：和主列同一套转录，底下可选带附件的输入框。
  * 插件的 `ui.Conversation` 就是它。会话的一轮只有插件能发起，所以没有「继续」，发出去的字交给插件的 `send`。
- * 子会话等人批准的那一次压在主输入框上方（见 `app/Composer.tsx` 的 `ChildApprovals`），这里只标「等待确认」；插件的独立会话
+ * 子会话等人批准的那一次压在主输入框上方（见 `app/Composer.tsx` 的 `ChildApprovals`），这里只标「等待确认」；插件给了
+ * `approvals: "here"` 的，在屏上时卡压在这里的输入框上方，并认领下来、主输入框上方不再压一张。插件的独立会话
  * 不挂在哪个对话下，没有别处可压，审批卡就压在这里的输入框上方，和主列一样。
  */
 
 import type { ApprovalDecision, Message } from "@plume/contract";
 import type { ConversationProps } from "@plume/contract/ui";
 import { ActionSpinner } from "@plume/ui";
-import { Activity, useCallback, useEffect, useRef, useState } from "react";
+import { Activity, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { FileScope, useFileScopeValue } from "../files/scope.ts";
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { useLiveSession } from "../session-live.ts";
 import { useAppearance } from "../appearance-settings.ts";
 import { GrainLayer } from "../chat-backdrop.tsx";
 import { ApprovalOverlay } from "./ApprovalOverlay.tsx";
+import { useApprovalClaim, ViewShown } from "./approval-claims.ts";
 import { ChildComposer, type ReadComposerDocument } from "./ChildComposer.tsx";
 import type { DraftQuote } from "./quote.ts";
 import { seedChildText } from "./child-drafts.ts";
@@ -39,6 +41,7 @@ export function ChildConversation({
 	composer,
 	empty,
 	tasks: Tasks,
+	approvals,
 	renderUserMessage,
 	replyText,
 	documentText,
@@ -96,7 +99,11 @@ export function ChildConversation({
 	// 还没有会话（侧边聊天的第一句还没发）和会话里还没消息一样，画 `empty`。
 	const loading = sessionId !== undefined && view === undefined && !(opened.fresh && opened.sessionId === sessionId);
 	const blank = !loading && (view === undefined || (view.messages.length === 0 && !view.draft));
-	const approval = view && !view.summary.parentId ? view.approval : undefined;
+	// 子会话的卡默认压在主输入框上方；插件说了画在这里的，在屏上时认领下来，主输入框上方就不再压一张。
+	const shown = useContext(ViewShown);
+	const child = Boolean(view?.summary.parentId);
+	useApprovalClaim(child && approvals === "here" && shown ? sessionId : undefined);
+	const approval = view && (!child || approvals === "here") ? view.approval : undefined;
 	// 插件每次渲染都给一份新的 `composer`；转录的 state 依赖 onSend，函数一变所有 `useTranscript()` 都跟着重画，所以经 ref 读最新的、函数本身不变。
 	const latestComposer = useRef(composer);
 	latestComposer.current = composer;

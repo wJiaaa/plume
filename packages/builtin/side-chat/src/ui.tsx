@@ -193,6 +193,7 @@ function SideChatPanel({ session, tab, shown, setTitle, setUnread, onClose }: Pa
 			<ui.Conversation
 				{...(sideId ? { sessionId: sideId } : {})}
 				reask
+				approvals="here"
 				tasks={Strip}
 				empty={
 					<PanelEmpty icon={MessagesSquare} title={text.title}>

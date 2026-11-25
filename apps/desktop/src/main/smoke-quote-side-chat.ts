@@ -50,6 +50,7 @@ export async function prepareQuoteSideChat(options: Parameters<typeof checkQuote
 	await until(`document.querySelector('[data-panel="plume.side-chat/chat"]:not([inert]) .surface-grain') === null`, "侧聊关掉磨砂");
 	await checkSideCommands(options);
 	await checkUnreadDot(options);
+	await checkSideApproval(options);
 }
 
 /**
@@ -96,6 +97,38 @@ async function checkUnreadDot(options: Parameters<typeof checkQuoteSideChat>[0])
 	await capture(window, join(outDir, "smoke-side-chat-unread.png"));
 	await click('[data-panel-tab="plume.side-chat/chat"] [role=tab]');
 	await until(`!(${dot})`, "切回侧聊标签后未读点灭掉");
+}
+
+/**
+ * 侧聊的审批卡画在侧聊自己的输入框上方，主输入框上方没有（写的是 Plume 的数据目录，任何权限档都弹卡）；切到别的标签（侧聊看不见）时压回主输入框上方、写明来源，
+ * 切回来又挪回侧聊。在侧聊里答，写完收尾。
+ */
+async function checkSideApproval(options: Parameters<typeof checkQuoteSideChat>[0]): Promise<void> {
+	const { window, outDir, page, until, click, capture, setModel } = options;
+	const side = '[data-panel="plume.side-chat/chat"]:not([inert])';
+	setModel((request) =>
+		JSON.stringify(request.messages).includes("toolu_side_write")
+			? { text: "侧聊写好了。" }
+			: { toolCalls: [{ id: "toolu_side_write", name: "write", args: { path: join(outDir, "home", "side-note.txt"), content: "side\n" } }] },
+	);
+	await page(`document.querySelector('${side} .cm-content').focus()`);
+	await window.webContents.insertText("写一份侧聊笔记");
+	await click(`${side} [data-composer-send=send]`);
+	const inSideOnly = `document.querySelectorAll('[data-approval-card]').length === 1 && document.querySelector('${side} [data-approval-card]') !== null && document.querySelector('[data-approval-from]') === null`;
+	await until(inSideOnly, "侧聊的审批卡画在侧聊里、主输入框上方没有");
+	await capture(window, join(outDir, "smoke-side-chat-approval.png"));
+	await click('[data-panel-tab="plume.diagnostics/tasks"] [role=tab]');
+	await until(
+		`(() => { const from = document.querySelector('[data-approval-from]'); return from !== null && from.closest('[data-panel]') === null; })()`,
+		"侧聊看不见时审批卡压回主输入框上方、写明来源",
+	);
+	await click('[data-panel-tab="plume.side-chat/chat"] [role=tab]');
+	await until(inSideOnly, "切回侧聊后审批卡挪回侧聊");
+	await clickVisible(page, `${side} [data-approval-card] button`, /允许一次/);
+	await until(
+		`document.querySelector('[data-approval-card]') === null && document.querySelector('${side}')?.textContent.includes('侧聊写好了。') && document.querySelector('${side} [data-composer-send=stop]') === null`,
+		"在侧聊里批准后写完收尾",
+	);
 }
 
 /** 选区只交给侧聊草稿：复用前台标签，保留附件、来源和旧草稿，搬窗后再由人发送。 */

@@ -101,6 +101,7 @@ import { openViewer } from "./image/index.ts";
 import { copyImage, saveImage } from "./image/image-out.ts";
 import { captureWindow } from "./image/capture-window.ts";
 import { requestReveal } from "./conversation/reveal.ts";
+import { ViewShown } from "./conversation/approval-claims.ts";
 import { setManagedSkin, updateAppearance, useAppearance } from "./appearance-settings.ts";
 import { uiLifetime } from "./ui-lifetime.ts";
 import { usePluginValue } from "./plugin-values.ts";
@@ -1904,7 +1905,9 @@ export function PanelSlot({ panel, props, owner }: { panel: PanelEntry; props: P
 				setFailed(true);
 			}}
 		>
-			<Panel {...scoped} />
+			<ViewShown.Provider value={props.shown}>
+				<Panel {...scoped} />
+			</ViewShown.Provider>
 		</Boundary>
 	);
 }

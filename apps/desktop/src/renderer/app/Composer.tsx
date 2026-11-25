@@ -21,6 +21,7 @@ import { PermissionChip } from "../composer/PermissionPicker.tsx";
 import { ProjectPicker } from "../composer/ProjectPicker.tsx";
 import { conversationDescendants } from "../conversation/descendants.ts";
 import { ApprovalOverlay } from "../conversation/ApprovalOverlay.tsx";
+import { useClaimedApprovals } from "../conversation/approval-claims.ts";
 import { HandedOffStrip } from "../conversation/HandedOffStrip.tsx";
 import { type ComposerSession, EffortTrigger, ModelTrigger } from "../models/index.ts";
 import { effectiveModel } from "../models/session.ts";
@@ -520,10 +521,14 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 
 /**
  * 这个会话的子会话（侧边聊天、子 Agent）在等人批准：卡片照样压在主输入框上方，人的视线在这里；卡上写明是哪个子会话在问。
- * 只看正在跑的：没在跑的不会在等。
+ * 只看正在跑的：没在跑的不会在等。自己的视图在屏上、把卡认领过去的（`ConversationProps.approvals`）不在这里再压一张。
  */
 function ChildApprovals({ parentId, sessions, compact }: { parentId: string; sessions: readonly SessionSummary[]; compact: boolean }) {
-	const children = useMemo(() => conversationDescendants(parentId, sessions).filter((session) => session.running), [sessions, parentId]);
+	const claimed = useClaimedApprovals();
+	const children = useMemo(
+		() => conversationDescendants(parentId, sessions).filter((session) => session.running && !claimed.has(session.id)),
+		[sessions, parentId, claimed],
+	);
 	return children.map((child) => <ChildApproval key={child.id} sessionId={child.id} compact={compact} />);
 }
 

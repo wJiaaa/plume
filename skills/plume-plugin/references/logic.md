@@ -583,7 +583,7 @@ const reply = (await ctx.sessions.messages(child.id)).findLast((message) => mess
 - 父轮正常结束不取消后台，明确停止父会话会取消后台及待送达结果，不连带停止独立 `send` 的侧边聊天。插件停用、父会话删除或应用退出也会取消。插件自己的排队名额和未启动项经 `onStopped`（会话被明确停止时通知，监听随插件卸载）、`onDeleted`、`ctx.effect` 清理。
 - 续跑复用原子会话，重建该种类的提示词与工具限制后再次 `start`；别创建新会话丢掉上下文。种类、排队状态和模型偏好由插件存到 `ctx.dataDir`，宿主不识别这些业务字段。
 - 子会话用什么提示词、哪些工具，经 `model.context`、`tool.execute` 按 `sessionId` 认出自己的会话来改（建的时候记下 id；重启后从 `list()` 里按 `owner` 找回）。各钩子的输入和 `run` 直接带着 `session`（`kind`、`parentId`、`owner`），只想分清子会话和顶层会话时看它就够。隐藏不等于禁用：藏起的工具在 `tool.execute` 里再拦一次。
-- 子会话要人批准时，审批卡压在主输入框上方，卡上写着子会话的标题；界面入口用 `ui.Conversation` 画它、`ui.useSession` 读它（见 ui.md）。
+- 子会话要人批准时，审批卡压在主输入框上方，卡上写着子会话的标题（界面入口给 `ui.Conversation` 传 `approvals: "here"` 时，视图在屏上就画在视图里）；界面入口用 `ui.Conversation` 画它、`ui.useSession` 读它（见 ui.md）。
 - 子会话够得着它的父会话，只此一个：你自己建的子会话里，你自己注册的工具的那次调用拿得到 `run.parent`（别的插件的工具、别人的子会话、顶层会话里都是 `undefined`）。只在这次调用里用：调用答完以后再调它的方法就抛错。
 
 ```ts
