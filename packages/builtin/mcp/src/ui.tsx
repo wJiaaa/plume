@@ -24,7 +24,7 @@ import {
 	useI18n,
 	usePopover,
 } from "@plume/ui";
-import { Globe, LogIn, LogOut, MoreHorizontal, Plug, Plus, RefreshCw, SlidersHorizontal, SquareTerminal, Trash2 } from "@plume/ui/icons";
+import { Globe, LogIn, LogOut, MoreHorizontal, Plug, Plus, RefreshCw, Search, SlidersHorizontal, SquareTerminal, Trash2 } from "@plume/ui/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { McpApi, McpView, ServerDraft, ServerView, VarDraft, VarView } from "./api.ts";
 import { formCard } from "./FormCard.tsx";
@@ -35,6 +35,9 @@ import { type Messages, MESSAGES } from "./messages.ts";
 import { ENV_NAME, HEADER_NAME, looksSecret } from "./vars.ts";
 
 type Notify = (message: string, level?: "info" | "warn" | "error") => void;
+
+/** 转录一行里搜的词只露个开头。 */
+const SUBJECT_CHARS = 40;
 
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -1055,8 +1058,30 @@ export default {
 		// 不管哪台服务的工具都是一类：连着调时合成一段，不和读、跑命令、改文件接；说法照没登记的工具（工具名、「使用工具」）。
 		ui.toolLine("mcp__", { group: "mcp", apart: true }, { match: "prefix" });
 		// 工具多时按需搜索的两个也是 MCP 的活：搜一次、调一次交替着做，不归同一类就一次切成一段。
-		ui.toolLine("mcp_search", { group: "mcp", apart: true });
-		ui.toolLine("mcp_call", { group: "mcp", apart: true });
+		// 它们的名字是通用的，照原名说读不出在干什么：说「搜索 MCP 工具 关键词」「调用 MCP 工具 服务 · 工具」，合在一起数次数。
+		ui.toolLine("mcp_search", {
+			verb: (locale) => MESSAGES[locale].toolSearch,
+			subject: (args) => (typeof args.query === "string" && args.query.trim() ? args.query.trim().slice(0, SUBJECT_CHARS) : undefined),
+			group: "mcp",
+			apart: true,
+			times: true,
+			icon: Search,
+		});
+		ui.toolLine("mcp_call", {
+			verb: (locale) => MESSAGES[locale].toolCall,
+			subject: (args) => {
+				if (typeof args.tool !== "string" || !args.tool.trim()) return undefined;
+				// `mcp__linear__create_issue` 说成「linear · create_issue」；模型写成别的样子的照原样说。
+				return args.tool
+					.trim()
+					.replace(/^mcp__/, "")
+					.replace("__", " · ");
+			},
+			group: "mcp",
+			apart: true,
+			times: true,
+			icon: Plug,
+		});
 		ui.toolCard("mcp_call", Documents, { inline: true });
 		const notify = ui.notify.bind(ui);
 		const openExternal = ui.openExternal.bind(ui);

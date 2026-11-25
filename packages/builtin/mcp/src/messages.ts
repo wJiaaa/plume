@@ -8,6 +8,8 @@ const zhCN = {
 	documentClose: "收起",
 	documentUnavailable: "暂不能预览此文档",
 	documentReadFailed: "文档快照不可读或已改变，请重新获取文档",
+	toolSearch: "搜索 MCP 工具",
+	toolCall: "调用 MCP 工具",
 	noMatch: "没有匹配的连接器",
 	emptyHint: "还没有连接器。连接器经 MCP 协议给 agent 带来新工具：搜索、数据库、浏览器、设计稿……每次调用前都会先问你。",
 	add: "添加",
@@ -130,6 +132,8 @@ export const MESSAGES: Record<Locale, Messages> = {
 		documentClose: "Collapse",
 		documentUnavailable: "Document preview is unavailable",
 		documentReadFailed: "The document snapshot is unreadable or changed. Fetch the document again.",
+		toolSearch: "Search MCP tools",
+		toolCall: "Call an MCP tool",
 		noMatch: "No matching connectors",
 		emptyHint:
 			"No connectors yet. Connectors give the agent new tools over MCP — search, databases, the browser, design files… You are asked before every call.",
