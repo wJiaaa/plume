@@ -705,11 +705,13 @@ function Conversation({ view }: { view: SessionView }) {
 		async (text: string, displayText?: string) => {
 			const session = state.sessions.find((item) => item.id === id);
 			if (!session) throw new Error("Session no longer exists");
-			await enqueue(
+			const queued = await enqueue(
 				id,
 				{ content: [{ type: "text", text }], ...(displayText === undefined ? {} : { displayText }) },
 				(displayText ?? text).replace(/\s+/g, " "),
 			);
+			// 原因 `enqueue` 已经弹了提示条；这里抛错，卡片才知道没发出去，不会画成已发送。
+			if (!queued) throw new Error("Message was not queued");
 		},
 		[id],
 	);
