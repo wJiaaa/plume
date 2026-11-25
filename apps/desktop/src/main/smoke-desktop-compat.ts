@@ -478,7 +478,7 @@ export async function checkDesktopCompat(options: {
 		await reset();
 		const title = `document.querySelector('[data-panel-layout] > main header')?.firstElementChild`;
 		await until(`Boolean(${title})`, "对话的标题栏");
-		const titleSample = `(() => { const el = ${title}, card = el.closest('.rounded-panel');
+		const titleSample = `(() => { const el = ${title}, card = el.closest('[data-panel-layout]');
 			return { title: Math.round(el.getBoundingClientRect().x * 10) / 10, card: Math.round(card.getBoundingClientRect().x * 10) / 10,
 				toolbar: document.querySelector(${JSON.stringify(NAV_TOGGLE)}).getBoundingClientRect().right }; })()`;
 		for (const phase of ["收起", "展开"] as const) {

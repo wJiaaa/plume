@@ -523,7 +523,7 @@
 	 * 内容贴着分隔线——侧栏右边那道描边、面板身子左边那道描边就是分隔线。
 	 * 用属性在外层切，不往各栏传状态：对话、面板区的内容在开合、拖宽度时不跟着重画（见 Chat.tsx 的 ChatScreen）。
 	 */
-	[data-frame-left] :is([data-frame-body], [data-frame-clip], [data-panel-layout]) {
+	[data-frame-left] :is([data-frame-body], [data-frame-clip]) {
 		border-left-width: 0;
 		border-top-left-radius: 0;
 		border-bottom-left-radius: 0;
@@ -546,14 +546,12 @@
 	 * 分屏：两屏之间只有一道 1px 的线（Chat.tsx 的 `data-split-divider`），挨着它的那一边不圆、不描边，和别的栏之间一样拼成一整块。
 	 * 面板身子左边那道分隔线（上一条）选择器更具体，不受影响。
 	 */
-	[data-split-pane="left"] :is([data-frame-body], [data-frame-clip]),
-	[data-split-pane="left"][data-panel-layout] {
+	[data-split-pane="left"] :is([data-frame-body], [data-frame-clip]) {
 		border-right-width: 0;
 		border-top-right-radius: 0;
 		border-bottom-right-radius: 0;
 	}
-	[data-split-pane="right"] :is([data-frame-body], [data-frame-clip]),
-	[data-split-pane="right"][data-panel-layout] {
+	[data-split-pane="right"] :is([data-frame-body], [data-frame-clip]) {
 		border-left-width: 0;
 		border-top-left-radius: 0;
 		border-bottom-left-radius: 0;

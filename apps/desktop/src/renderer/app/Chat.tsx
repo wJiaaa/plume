@@ -287,7 +287,12 @@ function ChatScreen({
 			data-frame-right={(layout.arrangement === "row" && (layout.shown || moving)) || undefined}
 			onPointerDownCapture={takeFocus}
 			onKeyDownCapture={takeFocus}
-			className="absolute top-0 bottom-0 overflow-hidden rounded-panel"
+			/*
+			 * 只裁不圆：滑进滑出的面板区裁在这一屏里就够了，圆角由各栏的身子（`data-frame-body`）自己裁。这里再按圆角裁一次时，
+			 * Chromium 要给里面每块单独合成的内容（转录、渐隐遮罩、光标……）各生成一张和这一屏一样大的遮罩；5K 屏最大化时
+			 * 图块显存超出上限，开合侧栏的那几帧缺块，整块闪白。
+			 */
+			className="absolute top-0 bottom-0 overflow-hidden"
 			style={{ left: pane.left, width: split ? pane.width : "100%" }}
 		>
 			<main
