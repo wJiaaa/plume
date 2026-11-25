@@ -28,6 +28,7 @@ export function investigate(message: string): void {
 	const scope = draftScope();
 	const held = state.drafts[scope]?.trim();
 	setDraft(scope, held ? `${held}\n\n${prompt}` : prompt);
+	focusComposer({ toEnd: true });
 }
 
 /** 把项目里还列在侧栏上的会话都归档。一个一个来：每次都要改同一份会话索引。出错只提示，不往外抛。 */
@@ -158,7 +159,7 @@ export function pluginDraft(draft: {
 		};
 	});
 	if (send) update({ autoSend: scope });
-	focusComposer();
+	focusComposer({ toEnd: true });
 }
 
 /**
@@ -207,5 +208,5 @@ export function createPlugin(): void {
 export function tryPrompt(prompt: string): void {
 	openNew();
 	setDraft(draftScope(), prompt);
-	focusComposer();
+	focusComposer({ toEnd: true });
 }

@@ -163,12 +163,12 @@ export function ChildComposer({
 		view.dispatch({ effects: editable.current.reconfigure([EditorState.readOnly.of(state.readOnly), EditorView.editable.of(!state.readOnly)]) });
 		if (state.readOnly || !hadFocus.current) return;
 		hadFocus.current = false;
-		if (!document.activeElement || document.activeElement === document.body) view.contentDOM.focus({ preventScroll: true });
+		if (!document.activeElement || document.activeElement === document.body) view.focus();
 	}, [state.readOnly]);
 	useEffect(() => {
 		if (!active || loading || !draftKey || !editor.current || !takeChildFocus(draftKey)) return;
 		editor.current.dispatch({ selection: { anchor: editor.current.state.doc.length } });
-		editor.current.contentDOM.focus({ preventScroll: true });
+		editor.current.focus();
 	}, [active, loading, draftKey, draft.quotes, draft.text]);
 
 	/**

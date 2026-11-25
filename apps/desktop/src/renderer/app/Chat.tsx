@@ -582,7 +582,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 					compact={layoutMode(windowWidth) === "compact"}
 					onDraft={(value) => {
 						setDraft(scope, value);
-						focusComposer();
+						focusComposer({ toEnd: true });
 					}}
 				>
 					{/*

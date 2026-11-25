@@ -1440,6 +1440,9 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			);
 			await delay(300);
 			await capture(window, join(outDir, "smoke-create-plugin.png"));
+			// 光标落在 `$plume-plugin ` 末尾而不是 `$` 之前：紧接着打字接在后面。
+			await window.webContents.insertText("x");
+			await until(`document.querySelector('[data-screen=empty] .cm-content')?.textContent === '$plume-plugin x'`, "新建插件：光标落在 $plume-plugin 空格之后");
 			// 草稿撤掉，不带到后面的步骤里。
 			window.webContents.sendInputEvent({ type: "keyDown", keyCode: "A", modifiers: [process.platform === "darwin" ? "meta" : "control"] });
 			window.webContents.sendInputEvent({ type: "keyUp", keyCode: "A", modifiers: [process.platform === "darwin" ? "meta" : "control"] });

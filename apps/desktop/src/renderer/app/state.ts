@@ -7,6 +7,7 @@
 
 import type { AgentService, ProjectEntry, SessionSummary, SessionTarget, SessionView, SettingsView } from "@plume/contract";
 import type { Remote } from "@plume/rpc";
+import { EditorView } from "@codemirror/view";
 import { useSyncExternalStore } from "react";
 import type { PanelWindowTarget } from "../../shared/panel-window.ts";
 import { readPanelPrefs, readPanelTabs, readSidebarPrefs } from "../layout.ts";
@@ -247,11 +248,31 @@ export function setQuotes(scope: string, change: (quotes: DraftQuote[]) => Draft
 	update((current) => ({ quotes: { ...current.quotes, [scope]: change(current.quotes[scope] ?? []) } }));
 }
 
-/** 焦点那一屏的输入框：分屏时两屏各有一个，另一屏的不抢。 */
-export function focusComposer(): void {
-	requestAnimationFrame(() =>
-		(document.querySelector<HTMLElement>("[data-screen-focused] main .cm-content") ?? document.querySelector<HTMLElement>("main .cm-content"))?.focus(),
-	);
+let pendingFocus: { frame: number; toEnd: boolean } | undefined;
+
+/**
+ * 焦点那一屏的输入框：分屏时两屏各有一个，另一屏的不抢。
+ * 经 `EditorView.focus()` 聚焦：直接调 `.cm-content.focus()` 时浏览器会把光标置回行首，CodeMirror 随即把内部选区也覆写成 0。
+ */
+export function focusComposer(options?: { toEnd?: boolean }): void {
+	const toEnd = (pendingFocus?.toEnd ?? false) || options?.toEnd === true;
+	if (pendingFocus) cancelAnimationFrame(pendingFocus.frame);
+	const frame = requestAnimationFrame(() => {
+		pendingFocus = undefined;
+		const el = document.querySelector<HTMLElement>("[data-screen-focused] main .cm-content") ?? document.querySelector<HTMLElement>("main .cm-content");
+		if (!el) return;
+		const view = EditorView.findFromDOM(el);
+		if (!view) {
+			el.focus();
+			return;
+		}
+		if (toEnd) {
+			const end = view.state.doc.length;
+			if (view.state.selection.main.from !== end || view.state.selection.main.to !== end) view.dispatch({ selection: { anchor: end } });
+		}
+		view.focus();
+	});
+	pendingFocus = { frame, toEnd };
 }
 
 /** 只给刚从欢迎页发出消息的那个会话播放入场，切换会话不能借用这个标记。 */

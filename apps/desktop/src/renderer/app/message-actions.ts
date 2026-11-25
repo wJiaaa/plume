@@ -157,7 +157,7 @@ async function restoreDraft(scope: string, message: UserMessage): Promise<void> 
 	setSessionReferences(scope, message.sessionRefs ?? []);
 	const draft = await draftFromMessage(message);
 	update((current) => ({ drafts: { ...current.drafts, [scope]: draft.text }, restored: { ...current.restored, [scope]: draft.attachments } }));
-	if (state.currentId === scope) focusComposer();
+	if (state.currentId === scope) focusComposer({ toEnd: true });
 }
 
 /** 光标放回当前对话的输入框。 */

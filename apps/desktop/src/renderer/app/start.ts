@@ -11,7 +11,20 @@ import { connectLiveSessions } from "../session-live.ts";
 import { startMarket, usePluginDisplayName } from "../market/store.ts";
 import { check as checkUpdates } from "../update/store.ts";
 import { sessionWindows } from "../session-windows.ts";
-import { agent, connectAgent, draftScope, errorText, panelWindow, sessionWindow, setDraft, state, update, useAppPick, useChrome } from "./state.ts";
+import {
+	agent,
+	connectAgent,
+	draftScope,
+	errorText,
+	focusComposer,
+	panelWindow,
+	sessionWindow,
+	setDraft,
+	state,
+	update,
+	useAppPick,
+	useChrome,
+} from "./state.ts";
 import { follow, heldView, openNew, select } from "./sessions.ts";
 import { closeTab, openFileTab, panelScope, persistTabs, removeTab, scopeOf, setPanelOpen, setTabs, showPanel, tabsOf, togglePanel } from "./panels.ts";
 import { openSessionFor, pluginDraft, quoteInPanel } from "./actions.ts";
@@ -64,6 +77,7 @@ export function start(service: Remote<AgentService>): void {
 			openNew(target);
 			const scope = draftScope();
 			setDraft(scope, appendConversationDraft(state.drafts[scope], options.text));
+			focusComposer({ toEnd: true });
 		},
 		draftInSession: async (sessionId, draft) => {
 			// 面板窗口只能交给自己来源的那个会话：主窗口先选中来源会话，再放进它的输入框。不给会话是眼前的输入框。

@@ -73,6 +73,7 @@ export function MarkdownField({
 			parent: host.current!,
 			state: EditorState.create({
 				doc: value,
+				selection: { anchor: value.length },
 				extensions: [
 					history(),
 					keymap.of([

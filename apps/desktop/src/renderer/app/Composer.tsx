@@ -177,7 +177,7 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 		attachments.takeBack(draft.text, draft.attachments);
 		setSessionReferences(scope, [...sessionReferences(scope), ...(draft.sessionRefs ?? entry.message.sessionRefs ?? [])]);
 		if (draft.quotes.length > 0) setQuotes(scope, (current) => [...current, ...draft.quotes]);
-		focusComposer();
+		focusComposer({ toEnd: true });
 	};
 	const quoted = app.quotes[scope] ?? NO_QUOTES;
 	// 撤回、分叉放回来的附件：整份换上，收走。
