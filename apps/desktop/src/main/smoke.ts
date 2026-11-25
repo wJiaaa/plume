@@ -1660,7 +1660,12 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 		if (pending.join() !== "edit") throw new Error(`等待确认的应该只有 edit，实际是 ${pending.join()}`);
 		if ((await page(`document.querySelector('[data-tool=bash]')?.dataset.status`)) !== "done") throw new Error("bash 应该已经直接执行完");
 		const card = (await page(`document.querySelector('[data-approval-card]')?.textContent ?? ''`)) as string;
-		if (!card.includes("Edit hello.txt") || !card.includes("-hello") || !card.includes("+hi")) throw new Error(`审批卡里应该是 edit 的 diff，实际是 ${card}`);
+		// 正文按 edit 声明的 diff 画成 DiffView：删掉的、加上的各是一行，不是一段纯文本。
+		const diffed = await page(`(() => {
+			const lines = (kind) => [...document.querySelectorAll('[data-approval-card] [data-approval-diff] .tool-diff-' + kind)].map((line) => line.textContent).join('\\n');
+			return lines('remove').includes('hello') && lines('add').includes('hi');
+		})()`);
+		if (!card.includes("Edit hello.txt") || diffed !== true) throw new Error(`审批卡里应该是 edit 的 diff，实际是 ${card}`);
 		if ((await page(`document.querySelector('[data-permission-chip]')?.dataset.permissionChip`)) !== "ask") throw new Error("权限签应该是「请求批准」");
 		await delay(300);
 		await capture(window, join(outDir, "smoke-approval.png"));

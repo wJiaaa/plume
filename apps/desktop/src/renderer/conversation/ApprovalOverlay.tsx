@@ -16,6 +16,8 @@ import { ApprovalFrame, Button, type MessageKey, Scroller, translate, useI18n } 
 import { Check, MessageCircle, ShieldCheck, TriangleAlert, X } from "@plume/ui/icons";
 import { useRef, useState } from "react";
 import { RequestCardSlot, requestPlace, usePluginRegistrations } from "../plugins.tsx";
+import { CommandBox, JsonBox } from "./detail/CodeText.tsx";
+import { DiffView } from "./detail/DiffView.tsx";
 
 /** 卡片右上角的小标签：要做的是哪一类事（`ApprovalRequest.kind` 是 `ToolKind` 里这几种时）；别的照原样写。 */
 const KIND_LABEL: Partial<Record<string, MessageKey>> = {
@@ -154,7 +156,7 @@ function PermissionCard({
 			<Scroller className="plume-approval-scroll mx-2 max-h-[min(280px,30dvh)]" contentClassName="px-2 py-2">
 				<FromLine from={from} />
 				{reason && <p className="mb-2.5 whitespace-pre-wrap break-words text-label leading-relaxed text-ink">{reason}</p>}
-				<pre className="whitespace-pre-wrap break-words font-mono text-code text-ink-muted">{request.detail}</pre>
+				<ApprovalDetail request={request} />
 			</Scroller>
 			<PermissionChoices
 				key={request.toolCallId}
@@ -164,6 +166,24 @@ function PermissionCard({
 			/>
 		</ApprovalFrame>
 	);
+}
+
+/**
+ * 正文照工具声明的样子画，和工具卡片的详情一个样子：改一个文件的画 diff，命令、JSON 参数上色；什么都没声明的照纯文本。
+ * 竖着由卡片的滚动区封顶，diff 横着由 `DiffView` 自己滚。
+ */
+function ApprovalDetail({ request }: { request: ApprovalRequest }) {
+	// 原样重写一遍的文件没有一处改动，画出来是个空框；`detail` 那句「no changes」说得清。
+	if (request.diff && request.diff.hunks.length > 0) {
+		return (
+			<div className="overflow-hidden rounded-lg border border-line-soft" data-approval-diff="">
+				<DiffView hunks={request.diff.hunks} path={request.diff.path} />
+			</div>
+		);
+	}
+	if (request.format === "shell") return <CommandBox command={request.detail} />;
+	if (request.format === "json") return <JsonBox text={request.detail} />;
+	return <pre className="whitespace-pre-wrap break-words font-mono text-code text-ink-muted">{request.detail}</pre>;
 }
 
 /**

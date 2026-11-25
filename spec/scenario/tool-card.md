@@ -28,7 +28,7 @@
 
 - 标题栏：标题（`Edit hello.txt`、`Run shell command`）、类型小标签（执行命令 / 写入文件 / 修改文件 / 读取文件，插件的工具写工具名）、倒计时（「4:59 后失效」，`expiresAt`）、后面还排着几张（+N）、收起箭头；整条标题栏都能点着收起。外框是 `@plume/ui` 的 `ApprovalFrame`，插件的提问卡（`plume.ask-user`）也用它；自己画外框的插件卡（计划、MCP 表单）标题行放 `ApprovalExpiry`。
 - 等人给数据的卡（`ui.requestCard`）默认和审批卡同一格；登记时 `place: "transcript"` 的（计划卡）由转录画在末尾、接着这一轮的回复、运行行上面（`Transcript` 的 `request`，同一个 `ApprovalOverlay` 按 `place` 只画该在那里的），转录翻到更早几轮时不画。子会话的卡浮在父会话输入框上方时一律在那一格。转录里的卡不用玻璃和投影，和 `proposal` 同一种外框。
-- 正文：理由（有的话）和 `detail`（命令原文、unified diff 文本、插件工具的 JSON 参数）。
+- 正文：理由（有的话）和正文，正文按请求上的声明画，和工具卡片的详情同一套组件：带 `diff`（`FileDiffDetails`）的画 `DiffView`，`format` 是 `shell` / `json` 的用 `CommandBox` / `JsonBox` 上色，都没有的把 `detail` 照纯文本画。本体不按工具名认正文是什么。
 - 底部三个按钮：拒绝（最左）、以后不再问、允许一次（`primary`）；提权请求和没有 `subject` 的请求只有拒绝、允许一次。
 - 输入框工具栏左边是权限签：「请求批准」/「帮我批准」/「完全访问」（红色），点开是菜单，切到完全访问要在对话框里确认一次。签上是这个会话实际按的那一档：项目配置收紧了就是项目那档（`SessionSummary.projectPermission`，本体算好的，渲染进程不自己读项目配置），菜单改的仍是本机设置。
 
