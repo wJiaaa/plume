@@ -42,6 +42,7 @@ import { PANEL_TOGGLE_ROOM, PanelArea, PanelLayer, panelLayout, type PaneLayout,
 import { closeScreen, parked, select, setSplitShare } from "./sessions.ts";
 import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
+import { FrameRound } from "./FrameRound.tsx";
 import { Composer } from "./Composer.tsx";
 import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
 
@@ -353,7 +354,7 @@ function ChatScreen({
 /**
  * 正文这一列：标题栏在身子上面、压在窗口底色上，和侧栏顶行、面板区的标签行连成窗口顶上的一条；身子从它下面开始。
  * 身子透明、描边透明：外沿和底色是 app.tsx 里底下那一块（`data-frame`）画的，描边只占着 1px，内容不压到外沿上。
- * 圆角和裁切留着，跟着停靠的侧栏、横排的面板区换（styles.css 的 `data-frame-body`），自己铺底色的内容不从外沿的圆角里探出去。
+ * 圆角和裁切留着（圆角裁在里面的 `FrameRound`），跟着停靠的侧栏、横排的面板区换（styles.css 的 `data-frame-body`），自己铺底色的内容不从外沿的圆角里探出去。
  * 标题栏只盖住这一列，跟着这一列的左右边走：侧栏、面板区开合时一起滑。侧栏收起时它的左端要给浮在窗口左上角的按钮让位（`ToolbarOverlap`）。
  */
 export function ScreenCard({ header, fatal, children }: { header: ReactNode; fatal?: string; children: ReactNode }) {
@@ -362,16 +363,18 @@ export function ScreenCard({ header, fatal, children }: { header: ReactNode; fat
 			<div className="relative shrink-0" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
 				{header}
 			</div>
-			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-transparent">
-				{fatal && (
-					<p className="bg-danger px-6 py-2 text-detail text-shell" role="alert">
-						{fatal}
-					</p>
-				)}
-				{/* 页面里的 `PageTopRow` 按这个高度画；标题栏已经在卡片外面，左边不用再给窗口按钮让位。不是 token，皮肤改不了。 */}
-				<div className="flex min-h-0 flex-1 flex-col" style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px` } as CSSProperties}>
-					{children}
-				</div>
+			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden border border-transparent">
+				<FrameRound>
+					{fatal && (
+						<p className="bg-danger px-6 py-2 text-detail text-shell" role="alert">
+							{fatal}
+						</p>
+					)}
+					{/* 页面里的 `PageTopRow` 按这个高度画；标题栏已经在卡片外面，左边不用再给窗口按钮让位。不是 token，皮肤改不了。 */}
+					<div className="flex min-h-0 flex-1 flex-col" style={{ "--plume-top-row-height": `${TOP_ROW_HEIGHT}px` } as CSSProperties}>
+						{children}
+					</div>
+				</FrameRound>
 			</div>
 		</div>
 	);

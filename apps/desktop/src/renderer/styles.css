@@ -522,21 +522,41 @@
 	 * 没有缝。各栏的身子（`data-frame-body`）透明，描边也透明、只占着位置，圆角用来裁内容；挨着别人的那一边在这里去掉圆角和描边，
 	 * 内容贴着分隔线——侧栏右边那道描边、面板身子左边那道描边就是分隔线。
 	 * 用属性在外层切，不往各栏传状态：对话、面板区的内容在开合、拖宽度时不跟着重画（见 Chat.tsx 的 ChatScreen）。
+	 *
+	 * 身子和常驻面板的裁剪层自己只按直角裁，圆角裁在里面的 `data-frame-round`（FrameRound.tsx）：它四个角同一个半径，
+	 * 挨着别人的那一边（`--frame-join-*`）整体伸出去一个圆角宽，那两个圆角被外面的直角裁掉；`data-frame-box` 再缩回外面的内框。
+	 * 分屏的压暗层只画底色不裁内容，仍旧直接去掉那一边的圆角。
 	 */
+	[data-frame-round] {
+		top: 0;
+		bottom: 0;
+		left: calc(var(--frame-join-left, 0px) * -1);
+		right: calc(var(--frame-join-right, 0px) * -1);
+		/* 身子带 1px 描边，原来裁内容的是描边里面那一圈，半径小 1px。 */
+		border-radius: calc(var(--plume-radius-panel) - 1px);
+	}
+	[data-frame-clip] > [data-frame-round] {
+		border-radius: var(--plume-radius-panel);
+	}
+	[data-frame-box] {
+		top: 0;
+		bottom: 0;
+		left: var(--frame-join-left, 0px);
+		right: var(--frame-join-right, 0px);
+	}
 	[data-frame-left] :is([data-frame-body], [data-frame-clip]) {
 		border-left-width: 0;
 		border-top-left-radius: 0;
 		border-bottom-left-radius: 0;
+		--frame-join-left: var(--plume-radius-panel);
 	}
 	[data-frame-right] > main [data-frame-body] {
 		border-right-width: 0;
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
+		--frame-join-right: var(--plume-radius-panel);
 	}
 	/* 常驻面板的内容裁在 `data-frame-clip` 里，圆角跟着面板的身子换；它自己没有描边。 */
 	[data-frame-right] :is([data-panel-area], [data-panel-layer]) :is([data-frame-body], [data-frame-clip]) {
-		border-top-left-radius: 0;
-		border-bottom-left-radius: 0;
+		--frame-join-left: var(--plume-radius-panel);
 	}
 	[data-frame-right] [data-panel-area] [data-frame-body] {
 		border-left-width: 1px;
@@ -550,11 +570,13 @@
 		border-right-width: 0;
 		border-top-right-radius: 0;
 		border-bottom-right-radius: 0;
+		--frame-join-right: var(--plume-radius-panel);
 	}
 	[data-split-pane="right"] :is([data-frame-body], [data-frame-clip]) {
 		border-left-width: 0;
 		border-top-left-radius: 0;
 		border-bottom-left-radius: 0;
+		--frame-join-left: var(--plume-radius-panel);
 	}
 	/* 上下排时面板区的标签行夹在两栏中间，同铺在底下那一块上：在两栏之间那 4px 的正中横一道线隔开。不画在面板区身上，免得把它往下顶 1px、和常驻面板的内容错开。 */
 	[data-panel-layout="column"] > [data-panel-area]::before {

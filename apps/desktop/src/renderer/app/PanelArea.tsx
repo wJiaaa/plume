@@ -35,6 +35,7 @@ import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
 import { addPanelTab, closeTab, handlesOf, launch, panelOpenIn, popOutTab, scopeOf, selectTab, setPanelWidth, tabsOf, togglePanel } from "./panels.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./shell-classes.ts";
+import { FrameRound } from "./FrameRound.tsx";
 import { parked } from "./sessions.ts";
 
 /** 弹出去的标签不占这一屏的位置，当前标签移交给仍留在屏内的一个。 */
@@ -232,17 +233,19 @@ function PanelLayerTab({
 			>
 				<div className={`plume-panel plume-freeze absolute ${motion}`} style={layout.panel}>
 					{/* 和 PanelArea 里面板的身子对齐：标签行在身子上面，身子从它下面开始、带 1px 描边。 */}
-					<div data-frame-clip="" className="absolute inset-x-0 bottom-0 overflow-hidden rounded-panel" style={{ top: MAIN_TOOLBAR_HEIGHT }}>
-						<div
-							id={`panel-content:${tab.id}`}
-							data-panel={panel.key}
-							inert={!shown}
-							className={`plume-dock-pane ${shown ? "pointer-events-auto" : "pointer-events-none"} absolute overflow-auto origin-top-left`}
-							// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
-							style={floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
-						>
-							<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
-						</div>
+					<div data-frame-clip="" className="absolute inset-x-0 bottom-0 overflow-hidden" style={{ top: MAIN_TOOLBAR_HEIGHT }}>
+						<FrameRound>
+							<div
+								id={`panel-content:${tab.id}`}
+								data-panel={panel.key}
+								inert={!shown}
+								className={`plume-dock-pane ${shown ? "pointer-events-auto" : "pointer-events-none"} absolute overflow-auto origin-top-left`}
+								// 定宽时贴着左边：面板区靠右停，滑着时它的左边跟着正文走，内容跟着左边，右边先空出一截。
+								style={floor !== undefined ? { top: 1, left: 1, bottom: 1, width: Math.max(0, floor - 2) } : { top: 1, left: 1, right: 1, bottom: 1 }}
+							>
+								<PanelContents panel={panel} tab={tab} scope={scope} shown={shown} />
+							</div>
+						</FrameRound>
 					</div>
 				</div>
 			</div>
@@ -473,8 +476,8 @@ export function PanelArea({
 				{heading}
 			</header>
 			{/* 标签行在身子上面，和对话的标题栏连成窗口顶上的一条。身子透明，外沿是底下那一块画的；横排时身子和对话贴着，左边那道描边就是分隔线（styles.css 的 `data-frame-body`）。 */}
-			<div data-frame-body="" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-transparent">
-				{content}
+			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden border border-transparent">
+				<FrameRound>{content}</FrameRound>
 			</div>
 		</PanelSurface>
 	);
