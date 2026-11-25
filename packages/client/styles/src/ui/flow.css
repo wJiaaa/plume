@@ -14,13 +14,13 @@
 	border-radius: var(--plume-radius-field);
 }
 
-/* 前置槽：只放图标，而且它一直在。 */
+/* 前置槽：只放图标，而且它一直在。按 13px 图标起宽，和工具组标题行（.tool-group-head）的图标与文字左缘对齐。 */
 .plume-flow-lead {
 	display: inline-flex;
 	flex: none;
 	align-items: center;
 	justify-content: center;
-	width: 16px;
+	min-width: 13px;
 	height: 16px;
 	margin-right: 6px;
 }

@@ -53,8 +53,21 @@ function DefaultDelivery({ report, stateKey }: { report: DeliveredReport; stateK
 					<Inbox size={13} strokeWidth={1.8} className="shrink-0" />
 				)
 			}
-			title={target ? <span className="font-normal">{t("delivery.fromSession")}</span> : undefined}
-			summary={report.title}
+			summary={
+				target ? (
+					<>
+						<span className={open ? "text-ink transition-colors" : "text-ink-muted transition-colors"}>{t("delivery.fromSession")}</span>
+						{report.title ? (
+							<>
+								{" "}
+								<span className="text-ink">{report.title}</span>
+							</>
+						) : null}
+					</>
+				) : (
+					report.title
+				)
+			}
 			trailing={outcome ? <span className={failed ? "text-danger" : undefined}>{outcome}</span> : undefined}
 			open={body ? open : undefined}
 			onToggle={body ? () => setOpen((value) => !value) : undefined}
