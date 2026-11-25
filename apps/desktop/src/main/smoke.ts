@@ -1990,9 +1990,12 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			`[...document.querySelectorAll('${agentsPanel} .cm-placeholder')].some((placeholder) => placeholder.checkVisibility()) && ${agentsSend}?.disabled === true`,
 			"插话已排入子会话",
 		);
+		const agentsTabWaiting = `document.querySelector('[data-panel-tab="plume.subagents/agents"] [data-panel-tab-waiting]')`;
+		await until(`${agentsTabWaiting}?.getAttribute('aria-label') === '等待你的批准'`, "子 Agent 等批准时面板标签亮等待点");
 		await delay(300);
 		await capture(window, join(outDir, "smoke-subagent-approval.png"));
 		await click("[data-approval-card] button", "允许一次");
+		await until(`${agentsTabWaiting} === null`, "批准后面板标签的等待点灭掉");
 		await until(`document.querySelector('[data-screen=chat]')?.textContent.includes(${JSON.stringify(TASK_FINAL)})`, "主 Agent 拿到子 Agent 的回答");
 		if ((await readFile(join(workspace, "child.txt"), "utf8").catch(() => "")) !== "child\n") throw new Error("子 Agent 没写出 child.txt");
 		// 里面的活收着：点开收着的活，直到看见 task 的卡片。

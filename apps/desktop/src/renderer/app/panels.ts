@@ -7,6 +7,7 @@ import { listPanels, panelEntry } from "../plugins.tsx";
 import { dropFile, fileOf, isFolder, type LineRange, openFileIn, shownPath } from "../files/open-file.ts";
 import { dropChildDraft, flushChildDrafts, focusChildDraft } from "../conversation/child-drafts.ts";
 import { type Chrome, errorText, type PanelTab, type PanelTabs, panelWindow, sessionWindow, state, update } from "./state.ts";
+import { setTabSessions } from "./tab-sessions.ts";
 
 export function setSidebar(patch: { open?: boolean; width?: number }): void {
 	update(
@@ -290,6 +291,7 @@ export function finishPanelLeave(): void {
 export function removeTab(id: string, scope: string): void {
 	closeGuards.delete(id);
 	tabHandles.delete(id);
+	setTabSessions(id, []);
 	dropFile(id);
 	// 问的时候可能换了会话、开关了别的标签，按现在的算。
 	const { tabs, active } = state.panelTabs[scope] ?? tabsOf(state, scope);
@@ -305,9 +307,9 @@ export function removeTab(id: string, scope: string): void {
 	setTabs(scope, { tabs: rest, active: active === id ? (rest[index] ?? rest[index - 1])!.id : active });
 }
 
-type TabHandles = Pick<PanelProps, "setTitle" | "setUnread" | "onClose">;
+type TabHandles = Pick<PanelProps, "setTitle" | "setUnread" | "setSessions" | "onClose">;
 
-/** 每个标签给面板的 setTitle、setUnread、onClose，同一个标签一直是同一组函数：面板拿它们进 effect 的依赖也不会反复重跑。 */
+/** 每个标签给面板的 setTitle、setUnread、setSessions、onClose，同一个标签一直是同一组函数：面板拿它们进 effect 的依赖也不会反复重跑。 */
 const tabHandles = new Map<string, TabHandles>();
 
 /** 空白页第一次发出去、成了会话 `id`：空白页上开着的标签交给它。 */
@@ -360,6 +362,7 @@ export function forgetPanels(gone: (sessionId: string) => boolean): void {
 	for (const id of dropped) {
 		closeGuards.delete(id);
 		tabHandles.delete(id);
+		setTabSessions(id, []);
 		dropFile(id);
 		dropChildDraft(id);
 	}
@@ -389,6 +392,7 @@ export function handlesOf(id: string): TabHandles {
 			setTitle: (title) => patchTab(id, "title", title),
 			// 没点时不留这个键，存下来的标签和以前一样。
 			setUnread: (unread) => patchTab(id, "unread", unread || undefined),
+			setSessions: (sessionIds) => setTabSessions(id, sessionIds),
 			onClose: (handler) => {
 				closeGuards.set(id, handler);
 				return () => {

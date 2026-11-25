@@ -549,12 +549,20 @@ function AgentTurnFooter({ session, timestamp }: TurnFooterProps) {
 	);
 }
 
-function AgentsPanel({ session }: PanelProps) {
+function AgentsPanel({ session, setSessions }: PanelProps) {
 	const text = MESSAGES[useI18n().resolvedLocale];
 	const parent = session?.summary.id;
 	const roster = useRoster(parent);
 	const selected = useChosen(parent);
 	const tasks = ordered(roster.tasks);
+	// 还没收尾的子 Agent 停下来等人批准时，标签上亮等待点（审批卡照样压在主输入框上方）。
+	const active = roster.tasks.filter(isActive).map((entry) => entry.session);
+	const activeKey = active.join("\n");
+	useEffect(() => {
+		setSessions(active);
+		// 按内容比，不按数组：每次渲染都是新的数组。
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
+	}, [activeKey, setSessions]);
 	const task = tasks.find((entry) => entry.session === selected) ?? tasks[0];
 	const child = ui.useSession(task?.resumable ? task.session : undefined);
 	if (!parent)

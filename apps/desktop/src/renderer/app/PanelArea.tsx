@@ -17,7 +17,7 @@ import {
 	usePopover,
 } from "@plume/ui";
 import { AppWindow, Compass, Maximize2, Minimize2, SquareArrowOutUpRight, PanelRight, Pin, PinOff, Plus } from "@plume/ui/icons";
-import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelSurface } from "../panel-surface.tsx";
 import { MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../../shared/window-chrome.ts";
 import type { TitlebarInsets } from "../titlebar.ts";
@@ -34,6 +34,8 @@ import { ToolbarButton, ToolbarOverlap, WindowHeader } from "../window-controls.
 import { panelGeometry } from "../panel-layout.ts";
 import { type Chrome, type PanelTab, type PanelTabs, panelWindow, state, update, useAppPick, useChrome } from "./state.ts";
 import { addPanelTab, closeTab, handlesOf, launch, panelOpenIn, popOutTab, scopeOf, selectTab, setPanelWidth, tabsOf, togglePanel } from "./panels.ts";
+import { useTabSessions } from "./tab-sessions.ts";
+import { activityOf, useActivityVersion, waitingWords, waitOf } from "../sidebar/activity.ts";
 import { CARD_DRAG, DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./shell-classes.ts";
 import { FrameRound } from "./FrameRound.tsx";
 import { parked } from "./sessions.ts";
@@ -254,6 +256,37 @@ function PanelLayerTab({
 }
 
 /**
+ * 标签的图标，左上角挂一个点：标签名会被截断、标签条会横着溢出，挂在名字后面常被裁掉。
+ * 替它说话的会话（`PanelProps.setSessions`）有停下来等人的，是和侧栏同色、同一句话的等待点，悬停说在等什么；
+ * 否则是面板点亮的未读点。等人的排前面：那是一件会一直等下去的事。
+ */
+function TabIcon({ tab, icon }: { tab: PanelTab; icon: ReactNode }) {
+	const { t } = useI18n();
+	const sessions = useTabSessions(tab.id);
+	// 等待状态在侧栏的活动记录里，跟着它的版本号重算。
+	useActivityVersion();
+	const waiting = sessions.find((sessionId) => activityOf(sessionId) === "waiting");
+	const waitingLabel = waiting === undefined ? undefined : waitingWords(waitOf(waiting), t);
+	return (
+		<span className="relative flex shrink-0" data-plume-tip={waitingLabel}>
+			{icon}
+			{waitingLabel !== undefined ? (
+				<span data-panel-tab-waiting="" role="img" aria-label={waitingLabel} className="absolute -top-0.5 -left-0.5 block size-1.5 rounded-full bg-warning" />
+			) : (
+				tab.unread && (
+					<span
+						data-panel-tab-unread=""
+						role="img"
+						aria-label={t("sessionStatus.unread")}
+						className="absolute -top-0.5 -left-0.5 block size-1.5 rounded-full bg-accent"
+					/>
+				)
+			)}
+		</span>
+	);
+}
+
+/**
  * 面板区：一张和正文一样的浮起卡片，卡片上面一排标签，每个开着的面板一个，后面的「+」弹出面板菜单直接添加。
  * 这个会话的标签都挂着，只有当前那个看得见：后台的终端、计划切回来不重来。右端收起面板区。
  */
@@ -343,18 +376,7 @@ export function PanelArea({
 								closeLabel={t("pane.closeOne", { label })}
 							>
 								<span className="flex items-center gap-1.5">
-									{/* 未读点挂在图标左上角：标签名会被截断、标签条会横着溢出，挂在名字后面常被裁掉。 */}
-									<span className="relative flex shrink-0">
-										<Icon size={13} />
-										{tab.unread && (
-											<span
-												data-panel-tab-unread=""
-												role="img"
-												aria-label={t("sessionStatus.unread")}
-												className="absolute -top-0.5 -left-0.5 block size-1.5 rounded-full bg-accent"
-											/>
-										)}
-									</span>
+									<TabIcon tab={tab} icon={<Icon size={13} />} />
 									<span className="max-w-40 truncate">{label}</span>
 								</span>
 							</ClosableTab>
