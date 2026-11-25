@@ -53,6 +53,7 @@ const BUILTIN_TOOLS = {
 
 /** 内置插件目录 → 它自己定的提示词段名、送达标签。 */
 const BUILTIN_MARKS = {
+	"ask-user": ["choiceCard"],
 	mcp: ["mcpDeferred"],
 	prompt: ["userInstructions", "projectInstructions"],
 	"spawn-session": ["spawnedSession"],

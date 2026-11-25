@@ -51,7 +51,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 - `tools`：read、write、edit、ls、glob、grep、bash、bash_output、monitor，读写经本体的 `run.files`，可能改文件的命令带 `recordChanges` 交给本体观测
 - `delivery`：最新轮交付卡、审核面板，经本体的 `ctx.changes` 汇总、撤销
 - `approval`：钩子 `tool.approve` 上按帮我批准的风险规则放行
-- `ask-user`：`ask_user` 工具和提问卡
+- `ask-user`：`ask_user` 工具和提问卡，回复末尾的选择卡
 - `prompt`：系统提示词、日期、打断说明
 - `compaction`：上下文压缩、`recall`、`/compact`
 - `todo`：`todo_write` 和跟着会话的清单卡片

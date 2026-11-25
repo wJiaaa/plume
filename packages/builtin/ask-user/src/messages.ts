@@ -19,6 +19,8 @@ const zhCN = {
 	sendAnswer: "发送回答",
 	skipDefault: (choice: string) => `跳过将采用：${choice}`,
 	verb: "征询",
+	choiceClose: "关闭",
+	choiceFailed: "没发出去，请再选一次",
 };
 
 export type Messages = typeof zhCN;
@@ -42,5 +44,7 @@ export const MESSAGES: Record<Locale, Messages> = {
 		sendAnswer: "Send the answer",
 		skipDefault: (choice: string) => `Skipping uses: ${choice}`,
 		verb: "Asked",
+		choiceClose: "Dismiss",
+		choiceFailed: "Not sent. Choose again.",
 	},
 };

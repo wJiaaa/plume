@@ -1,0 +1,70 @@
+/* 选择卡的布局。字交给 Text，按钮是 @plume/ui 的 Button，颜色只取 var(--plume-*)。 */
+
+/* 不铺满对话那一列；选完前后同宽。外框和转录里别的提议卡一样：一道线、淡淡的 card 底。 */
+.plume-choice {
+	position: relative;
+	display: flex;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 480px;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 14px;
+	padding: 14px 16px;
+	border: 1px solid var(--plume-line);
+	border-radius: var(--plume-radius-panel);
+	background: color-mix(in srgb, var(--plume-card) 30%, transparent);
+}
+
+.plume-choice p {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+/* 让开右上角的关闭按钮；选完没有它了也留着这段空，说明不重新折行。 */
+.plume-choice .plume-choice-summary {
+	padding-right: 32px;
+	text-wrap: pretty;
+}
+
+/* 答案紧跟着问题。 */
+.plume-choice .plume-choice-answer {
+	margin-top: -8px;
+}
+
+.plume-choice-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 按钮原本不折行、不缩：名字比卡片宽时在按钮里折行，不顶出去。 */
+.plume-choice-option {
+	height: auto;
+	min-height: 32px;
+	max-width: 100%;
+	padding-block: 4px;
+	white-space: normal;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+
+/* 卡片底就是 card，默认的 card 底按钮会融进去：用前景薄纱，任何皮肤和深浅色下都分得开。 */
+.plume-choice-plain:not(:disabled) {
+	background: color-mix(in srgb, var(--plume-fg) 5%, transparent);
+}
+
+.plume-choice-plain:not(:disabled):hover {
+	background: color-mix(in srgb, var(--plume-fg) 10%, transparent);
+}
+
+.plume-choice-plain:not(:disabled):active {
+	background: color-mix(in srgb, var(--plume-fg) 14%, transparent);
+}
+
+.plume-choice-close {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+}

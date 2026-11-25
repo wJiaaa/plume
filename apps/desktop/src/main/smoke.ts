@@ -47,6 +47,7 @@ import { checkGallery } from "./smoke-gallery.ts";
 import { checkMessageEdits } from "./smoke-message-edits.ts";
 import { checkRevertFiles } from "./smoke-revert-files.ts";
 import { checkQuestion } from "./smoke-question.ts";
+import { checkChoice } from "./smoke-choice.ts";
 import { checkNativeUi } from "./smoke-native-ui.ts";
 import { checkPreview } from "./smoke-preview.ts";
 import { checkMarkdownImages } from "./smoke-markdown-images.ts";
@@ -2487,7 +2488,7 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 
 		// 拉取请求、生成式界面、后台命令、网页预览、导航、换肤工坊、会话列表、点开文件不在这条主流程里：
 		// 它们各有单独的一段（`PLUME_SMOKE_ONLY=<段名>`），`pnpm smoke` 和主流程并行跑，见 scripts/smoke.mjs。
-		// 提问、/compact 各开一段会话（新会话、分叉），放在会话数量断言之后。
+		// 提问、选择卡、/compact 各开一段会话（新会话、分叉），放在会话数量断言之后。
 		await checkQuestion({
 			window,
 			outDir,
@@ -2496,6 +2497,18 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			click,
 			capture,
 			setModel: (next) => (override = next),
+			sessionId: recent.id,
+			finalText: FINAL_TEXT,
+		});
+		await checkChoice({
+			window,
+			outDir,
+			page,
+			until,
+			click,
+			capture,
+			setModel: (next) => (override = next),
+			latestSession: async () => recentSessions(await agent.sessions())[0]!.id,
 			sessionId: recent.id,
 			finalText: FINAL_TEXT,
 		});

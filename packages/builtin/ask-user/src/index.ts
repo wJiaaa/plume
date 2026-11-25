@@ -6,9 +6,15 @@
  * 没交回答就收场的（取消、停下这一轮、到时没人答）和核不过的，都是没有答案。
  *
  * 跳过不是同意：没给默认项时，模型只能接着做不依赖这个答案的事。
+ *
+ * 另有一轮收尾时的选择卡（`choices.ts`）：这里只教模型怎么写、记住人关掉了哪张，画和发都在界面入口。
  */
 
+import { join } from "node:path";
 import type { HumanAnswer, Plugin, ToolOutput, UnansweredDetails } from "@plume/contract";
+import { type AskUserApi, DISMISSED } from "./api.ts";
+import { CHOICE_SECTION, CHOICES_PROMPT } from "./choices.ts";
+import { DismissedCards } from "./dismissed.ts";
 import { MESSAGES } from "./messages.ts";
 import { ASK_USER, type CheckedReply, checkReply, readArgs } from "./question.ts";
 
@@ -50,7 +56,7 @@ function unansweredReason(reply: HumanAnswer): UnansweredDetails["unanswered"] |
 
 export default {
 	name: "plume.ask-user",
-	apply(ctx) {
+	async apply(ctx) {
 		ctx.tools.register({
 			name: ASK_USER,
 			description: DESCRIPTION,
@@ -94,5 +100,27 @@ export default {
 				return answerOutput(reply.answered ? checkReply(question, reply.value) : undefined, unansweredReason(reply));
 			},
 		});
+
+		// 只教侧栏里的会话：子会话多半只读、点不了；代管的会话，人在插件那一头，看到的是回复的原文。
+		ctx.hook("model.context", async (input, next) => {
+			if (input.session.kind !== "top" || input.session.steward) return next(input);
+			return next({ ...input, sections: [...input.sections, { id: CHOICE_SECTION, text: CHOICES_PROMPT }] });
+		});
+
+		const shown = ctx.sessionStore(DISMISSED, "");
+		const dismissed = await DismissedCards.open(
+			join(ctx.dataDir, "dismissed.json"),
+			async () => (await ctx.sessions.list()).map((session) => session.id),
+			(message) => ctx.log.warn(message),
+		);
+		for (const [sessionId, card] of dismissed.entries()) shown.set(sessionId, card);
+		ctx.sessions.onDeleted((sessionId) => dismissed.forget(sessionId));
+		const api: AskUserApi = {
+			dismiss(sessionId, card) {
+				dismissed.set(String(sessionId), String(card));
+				shown.set(String(sessionId), String(card));
+			},
+		};
+		ctx.serve(api);
 	},
 } satisfies Plugin;

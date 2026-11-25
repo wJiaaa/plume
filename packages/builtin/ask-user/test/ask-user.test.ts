@@ -10,7 +10,7 @@ import plugin from "../src/index.ts";
 import { ASK_USER, type QuestionReply } from "../src/question.ts";
 
 async function setup() {
-	const loaded = await loadPlugin(plugin, { locale: "zh-CN" });
+	const loaded = await loadPlugin(plugin, { locale: "zh-CN", ctx: { sessions: { list: async () => [] } } });
 	const asked: HumanRequestInput[] = [];
 	/** 调一次 `ask_user`；`reply` 是人在卡上交的回答，或者没答的原因。 */
 	const ask = async (

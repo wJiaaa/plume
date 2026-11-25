@@ -103,6 +103,8 @@ const EXEMPT = [
 	"apps/desktop/src/main/smoke-conversations.ts",
 	// 提问卡真实 Electron 冒烟的中文选择器与断言，同 smoke.ts。
 	"apps/desktop/src/main/smoke-question.ts",
+	// 选择卡真实 Electron 冒烟的假模型回复、中文断言，同 smoke.ts。
+	"apps/desktop/src/main/smoke-choice.ts",
 	// 后台命令送达的冒烟按中文界面读那一行，假模型的回复和断言是写给开发者的。
 	"apps/desktop/src/main/smoke-background-job.ts",
 	"apps/desktop/src/main/smoke-transcript-scroll.ts",
