@@ -116,6 +116,11 @@ async function checkSideApproval(options: Parameters<typeof checkQuoteSideChat>[
 	await click(`${side} [data-composer-send=send]`);
 	const inSideOnly = `document.querySelectorAll('[data-approval-card]').length === 1 && document.querySelector('${side} [data-approval-card]') !== null && document.querySelector('[data-approval-from]') === null`;
 	await until(inSideOnly, "侧聊的审批卡画在侧聊里、主输入框上方没有");
+	// 标题是一串长绝对路径：窄面板里最多两行，按钮那一排整个留在卡片里，不被挤出卡片的最大高度。
+	await until(
+		`(() => { const card = document.querySelector('${side} [data-approval-card]').getBoundingClientRect(); const choices = document.querySelector('${side} [data-permission-choices]').getBoundingClientRect(); const title = document.querySelector('${side} [data-approval-title]'); return choices.bottom <= card.bottom + 0.5 && choices.top >= card.top && title.getClientRects().length > 0 && title.scrollHeight > title.clientHeight; })()`,
+		"窄面板里长标题收成两行、按钮留在卡片里",
+	);
 	await capture(window, join(outDir, "smoke-side-chat-approval.png"));
 	await click('[data-panel-tab="plume.diagnostics/tasks"] [role=tab]');
 	await until(

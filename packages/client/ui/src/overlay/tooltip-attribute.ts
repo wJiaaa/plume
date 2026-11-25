@@ -74,8 +74,8 @@ function ensureHost(): HTMLElement {
  * 就过期了。`pointerover` 时量一次是准的，而且只量指针底下那一个。
  */
 function truncated(el: HTMLElement): boolean {
-	// 四舍五入：分数像素下 scrollWidth 会比 clientWidth 大零点几，那不是截断。
-	return Math.round(el.scrollWidth) > Math.round(el.clientWidth);
+	// 四舍五入：分数像素下 scrollWidth 会比 clientWidth 大零点几，那不是截断。纵向也量：`line-clamp` 截掉的是后面几行。
+	return Math.round(el.scrollWidth) > Math.round(el.clientWidth) || Math.round(el.scrollHeight) > Math.round(el.clientHeight);
 }
 
 /** 最近的带提示的祖先，所以按钮里的图标也算作按钮。 */

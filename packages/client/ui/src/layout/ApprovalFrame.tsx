@@ -71,7 +71,13 @@ export function ApprovalFrame({
 				data-approval-head=""
 			>
 				{icon}
-				<span className="min-w-0 flex-1 break-words text-label font-medium text-ink" data-approval-title="">
+				{/* 最多两行：窄处（面板里）一串长路径能折出十几行，把正文和按钮挤出卡片的最大高度；截掉了才悬停看全文，正文里通常也有。 */}
+				<span
+					className="line-clamp-2 min-w-0 flex-1 break-words text-label font-medium text-ink"
+					data-approval-title=""
+					data-plume-tip={typeof title === "string" ? title : undefined}
+					data-plume-tip-when="truncated"
+				>
 					{title}
 				</span>
 				{kind !== undefined && <span className="shrink-0 text-caption text-ink-faint">{kind}</span>}
