@@ -16,7 +16,7 @@ import type { BackgroundCallState, ChangeHunk } from "@plume/contract";
 import { activeLocale, CopyMark, type MessageKey, Scroller, translate, useNow } from "@plume/ui";
 import { Fragment, type ReactNode, useMemo } from "react";
 import { relativeTo } from "../markdown/assets.ts";
-import { CodeText } from "./detail/CodeText.tsx";
+import { CommandBox, JsonBox } from "./detail/CodeText.tsx";
 import { DiffView } from "./detail/DiffView.tsx";
 import type { Call } from "./grouping.ts";
 import { formatElapsed } from "./running-line.ts";
@@ -131,12 +131,7 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 	if (typeof command === "string") {
 		return (
 			<>
-				{/* 「$ 」悬在左边：命令折行时，接下来的几行和命令的头一个字对齐，不和 $ 对齐。 */}
-				<div className="group/copy relative rounded-lg border border-line-soft bg-code-bg py-1.5 pr-9 pl-[calc(0.625rem+2ch)] indent-[-2ch] font-mono text-code break-all whitespace-pre-wrap text-ink">
-					<span className="select-none text-ink-faint">$ </span>
-					<CodeText text={command} kind="shell" />
-					<CopyMark text={command} />
-				</div>
+				<CommandBox command={command} />
 				{tail}
 			</>
 		);
@@ -160,11 +155,7 @@ export function ToolBody({ call, polls, label }: { call: Call; polls?: Call[] | 
 	const rest = Object.fromEntries(Object.entries(args).filter(([, value]) => typeof value !== "string" || value.trim() !== note));
 	return (
 		<>
-			{Object.keys(rest).length > 0 && (
-				<div className="rounded-lg border border-line-soft bg-code-bg px-2.5 py-1.5 font-mono text-code break-all whitespace-pre-wrap text-ink">
-					<CodeText text={JSON.stringify(rest, null, 2)} kind="json" />
-				</div>
-			)}
+			{Object.keys(rest).length > 0 && <JsonBox text={JSON.stringify(rest, null, 2)} />}
 			{tail}
 		</>
 	);

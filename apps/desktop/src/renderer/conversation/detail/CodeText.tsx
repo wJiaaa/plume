@@ -1,3 +1,4 @@
+import { CopyMark } from "@plume/ui";
 import { TOKEN_CLASS, type Token, tokenizeJson, tokenizeShell } from "./tokens.ts";
 
 export type CodeKind = "shell" | "json" | "text";
@@ -19,5 +20,26 @@ export function CodeText({ text, kind }: { text: string; kind: CodeKind }) {
 				);
 			})}
 		</>
+	);
+}
+
+/** 一条命令的框，工具卡片的详情和审批卡共用。 */
+export function CommandBox({ command }: { command: string }) {
+	return (
+		// 「$ 」悬在左边：命令折行时，接下来的几行和命令的头一个字对齐，不和 $ 对齐。
+		<div className="group/copy relative rounded-lg border border-line-soft bg-code-bg py-1.5 pr-9 pl-[calc(0.625rem+2ch)] indent-[-2ch] font-mono text-code break-all whitespace-pre-wrap text-ink">
+			<span className="select-none text-ink-faint">$ </span>
+			<CodeText text={command} kind="shell" />
+			<CopyMark text={command} />
+		</div>
+	);
+}
+
+/** JSON 参数的框，工具卡片的详情和审批卡共用。 */
+export function JsonBox({ text }: { text: string }) {
+	return (
+		<div className="rounded-lg border border-line-soft bg-code-bg px-2.5 py-1.5 font-mono text-code break-all whitespace-pre-wrap text-ink">
+			<CodeText text={text} kind="json" />
+		</div>
 	);
 }
