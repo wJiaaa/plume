@@ -2,18 +2,19 @@
  * 侧栏里的一段会话：状态点、标题、最后活动距今多久。
  *
  * 悬停的底色挂在外层的行上，不挂在按钮上：标题读不全时 `ScrollText` 靠行上的悬停滚动，两者要认同一个东西。
- * 「⋯」和「归档」是盖在按钮右端的兄弟节点，不放进按钮里：指针停在它们上面时还在行里，底色和字色不会掉。
- * 「⋯」打开右键那份菜单（置顶、归档、删除等都在里面），归档是最常用的操作，留在最右端一键点到。
+ * 置顶、归档和「⋯」是盖在按钮右端的兄弟节点，不放进按钮里：指针停在它们上面时还在行里，底色和字色不会掉。
+ * 置顶和归档是高频操作，排在前面一键点到；「⋯」放在最右端，打开右键那份菜单（置顶、归档、删除等都在里面）。
  */
 
 import type { ProjectEntry, SessionStats, SessionSummary } from "@plume/contract";
 import { ActionSpinner, BreatheLoader, HoverRow, HoverRowReveal, hoverSlot, IconButton, ScrollText, TimeAgo, useI18n, usePopover } from "@plume/ui";
-import { Archive, ChevronRight, MoreHorizontal } from "@plume/ui/icons";
+import { Archive, ChevronRight, MoreHorizontal, Pin, PinOff } from "@plume/ui/icons";
 import { SessionCard, useSessionCard } from "./SessionCard.tsx";
 import { DropLineIndicator } from "./DropIndicator.tsx";
 import { useSidebarReorderContext, useReorderState } from "./reorder-context.ts";
 import { memo, use } from "react";
 import { SessionMarks } from "../plugins.tsx";
+import { notify } from "../toast/index.ts";
 import { busy, type SessionActivity, useSessionActivity, waitingWords, waitOf } from "./activity.ts";
 import { SessionMenu, type SessionMenuActions } from "./SessionMenu.tsx";
 import { RequestDeleteContext } from "./delete-session.tsx";
@@ -74,7 +75,7 @@ export const SessionRow = memo(function SessionRow({
 				{...hover.bind}
 				onPointerMove={(event) => reorder?.registerTarget("session", session.id, event.currentTarget.getBoundingClientRect(), event.clientY, session.project)}
 				onPointerLeave={() => reorder?.clearTarget(session.id)}
-				controls={hoverSlot(2)}
+				controls={hoverSlot(3)}
 				className={`rounded-field active:bg-elevated ${dragging ? "opacity-40" : ""} ${active ? "bg-card-hover" : "hover:bg-card-hover"}`}
 				onContextMenu={(event) => {
 					event.preventDefault();
@@ -157,16 +158,15 @@ export const SessionRow = memo(function SessionRow({
 				<HoverRowReveal className="gap-0.5 rounded-r-field">
 					<IconButton
 						size="sm"
-						label={t("sessionMenu.actions")}
-						ariaLabel={t("sessionRow.actionsFor", { title })}
-						menu={menu.open}
-						onClick={(event) => {
+						label={t(session.pinned ? "sessionRow.unpin" : "sessionRow.pin")}
+						ariaLabel={t(session.pinned ? "sessionRow.unpinFor" : "sessionRow.pinFor", { title })}
+						onClick={() => {
 							hover.dismiss();
-							menu.toggle(event);
+							void actions.pin(session.id, !session.pinned).catch((cause: unknown) => notify(cause instanceof Error ? cause.message : String(cause), "error"));
 						}}
 						className="pointer-events-auto"
-						data-plume-row-more=""
-						icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
+						data-plume-row-pin=""
+						icon={session.pinned ? <PinOff size={13} strokeWidth={1.8} /> : <Pin size={13} strokeWidth={1.8} />}
 					/>
 					<IconButton
 						size="sm"
@@ -179,6 +179,19 @@ export const SessionRow = memo(function SessionRow({
 						className="pointer-events-auto"
 						data-plume-row-archive=""
 						icon={<Archive size={13} strokeWidth={1.8} />}
+					/>
+					<IconButton
+						size="sm"
+						label={t("sessionMenu.actions")}
+						ariaLabel={t("sessionRow.actionsFor", { title })}
+						menu={menu.open}
+						onClick={(event) => {
+							hover.dismiss();
+							menu.toggle(event);
+						}}
+						className="pointer-events-auto"
+						data-plume-row-more=""
+						icon={<MoreHorizontal size={13} strokeWidth={1.8} />}
 					/>
 				</HoverRowReveal>
 			</HoverRow>

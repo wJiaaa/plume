@@ -457,6 +457,11 @@ export async function runSmoke({ window, agent, workspace, file, shutdown, plugi
 			await click("[data-plume-row] [data-plume-row-more]");
 			await click(`${sessionMenu} [role=menuitem]`, "取消置顶");
 			await until(`document.querySelector('[data-plume-section=pinned]') === null`, "行上「⋯」菜单取消置顶生效");
+			// 行上的置顶按钮一键切换置顶与取消置顶。
+			await click("[data-plume-row] [data-plume-row-pin]");
+			await until(`document.querySelector('[data-plume-section=pinned]') !== null`, "行上置顶按钮生效");
+			await click("[data-plume-row] [data-plume-row-pin]");
+			await until(`document.querySelector('[data-plume-section=pinned]') === null`, "行上取消置顶按钮生效");
 			await openSessionMenu();
 			await click(`${sessionMenu} [role=menuitem]`, "标记为未读");
 			await waitFor(async () => savedSummary().unread === true, "当前会话手动未读不立即消失");
