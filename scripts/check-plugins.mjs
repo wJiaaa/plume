@@ -5,9 +5,9 @@
  * 1. 内置插件（packages/builtin/*）和只给冒烟用的测试插件（packages/testing/*）只引用公开接口：规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/imports.mjs），
  *    另外允许 `packages/infra/` 下的通用库（不懂 agent 业务，构建时打进插件），同样要在 package.json 里声明。
  *    从 `@plume/ui` 引用的值只能是给插件用的名单里的（见规则 3）。市场插件在插件仓库里，由它自己的检查管。
- * 2. skill 跟得上接口：`PluginContext`、`UiContext` 的每个成员和 `Hooks` 的每个钩子名，skill 里都要提到
- *    （写成 `ctx.成员`、`ui.成员`、钩子名）；skill 里写的 `ctx.x`、`ui.x`、`hook("x"` 也必须真的存在。
- *    只查名字在不在，参数和语义变了还得人改 skill。
+ * 2. skill 跟得上接口：references/api.md 由 scripts/plugin-api-doc.mjs 从 `@plume/contract` 的类型和注释生成，和代码对不上就失败，
+ *    `--fix` 重新生成；全部成员都列在那里，手写的部分不用逐个提到。skill 里写的 `ctx.x`、`ui.x`、`hook("x"` 必须真的存在。
+ *    只查名字在不在，参数和语义变了还得人改手写的部分。
  * 3. 组件清单跟得上代码：`@plume/ui` 给插件用的名字列在 packages/client/ui/plugin-api.json（这就是它对插件公开的范围），
  *    插件从 `@plume/ui` 引用的值只能是这些名字，名单里的名字 `@plume/ui` 都要真的导出。skill 的 references/components.md
  *    由这份名单、源码里的签名和注释、`@plume/styles` 的类名组合生成，和代码对不上就失败，`--fix` 重新生成。
@@ -16,13 +16,14 @@
  *    名单、匹配方式和例外在 scripts/check-core-names.mjs，规则的来由见 spec/domain/plugin-primitives.md。
  *
  *   node scripts/check-plugins.mjs          # 检查
- *   node scripts/check-plugins.mjs --fix    # 另外重新生成 references/components.md
+ *   node scripts/check-plugins.mjs --fix    # 另外重新生成 references/api.md、references/components.md
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { importProblems, stripComments } from "../packages/sdk/plugin-sdk/lib/lint/imports.mjs";
 import { nameProblems } from "./check-core-names.mjs";
+import { declarationText, docBefore, pluginApiDoc } from "./plugin-api-doc.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const SKILL = join(root, "skills/plume-plugin");
@@ -30,6 +31,7 @@ const UI_SRC = join(root, "packages/client/ui/src");
 const UI_API = join(root, "packages/client/ui/plugin-api.json");
 const STYLES_SRC = join(root, "packages/client/styles/src/index.ts");
 const COMPONENTS_DOC = join(SKILL, "references/components.md");
+const API_DOC = join(SKILL, "references/api.md");
 const UI_PUBLIC = new Set(JSON.parse(readFileSync(UI_API, "utf8")).flatMap((group) => group.names));
 const BUILTIN = join(root, "packages/builtin");
 /** 只给冒烟用的测试插件，和内置插件按同一套规则查。 */
@@ -113,15 +115,17 @@ const hooks = new Set();
 
 const skillFiles = walk(SKILL, [".md"]);
 if (skillFiles.length === 0) report(SKILL, "skill 不在了");
-const skillText = skillFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 
-for (const [owner, names] of Object.entries(api)) {
-	for (const member of names) {
-		if (!new RegExp(`\\b${owner}\\.${member}\\b`).test(skillText))
-			report(SKILL, `没提到 ${owner}.${member}（${owner === "ctx" ? "PluginContext" : "UiContext"} 里有）`);
+{
+	const { doc, problems: apiProblems } = pluginApiDoc(root);
+	for (const problem of apiProblems) report(pluginFile, problem);
+	if (process.argv.includes("--fix")) {
+		writeFileSync(API_DOC, doc);
+		console.log(`已重新生成 ${relative(root, API_DOC)}`);
+	} else if (!existsSync(API_DOC) || readFileSync(API_DOC, "utf8") !== doc) {
+		report(API_DOC, "和代码对不上（@plume/contract 的类型或注释改了）：node scripts/check-plugins.mjs --fix 重新生成");
 	}
 }
-for (const hook of hooks) if (!skillText.includes(hook)) report(SKILL, `没提到钩子 ${hook}`);
 
 /** 文件名里的 `ui.tsx`、`ui.mjs` 不算成员。 */
 const FILE_EXT = new Set(["ts", "tsx", "mjs", "js", "css", "md"]);
@@ -153,37 +157,6 @@ function exportsOf(file, seen = new Set()) {
 	for (const match of code.matchAll(/^export\s*\*\s*from\s*["'](\.[^"']+)["']/gm))
 		for (const name of exportsOf(resolve(dirname(file), match[1]), seen)) names.add(name);
 	return names;
-}
-
-/**
- * 从 start 开始的一段声明的源码。函数到函数体的 `{` 为止（只要签名）；interface 到配对的 `}`；其余到顶层的 `;`。
- * 只数括号，不认字符串：被摘的都是组件签名和类名组合，括号在字符串里也是成对的。
- */
-function declarationText(text, start, kind) {
-	let depth = 0;
-	let params = false;
-	for (let i = start; i < text.length; i++) {
-		const char = text[i];
-		if (char === "(" || char === "[") {
-			depth++;
-			if (char === "(") params = true;
-		} else if (char === ")" || char === "]") depth--;
-		else if (char === "{") {
-			if (kind === "function" && depth === 0 && params) return text.slice(start, i).trimEnd();
-			depth++;
-		} else if (char === "}") {
-			depth--;
-			if (kind === "interface" && depth === 0) return text.slice(start, i + 1);
-		} else if (char === ";" && depth === 0 && kind !== "function" && kind !== "interface") return text.slice(start, i + 1);
-	}
-	return text.slice(start);
-}
-
-/** 紧挨在 start 前面的 `/** … *\/` 注释。文件开头的那段是整个文件的说明，不算。 */
-function docBefore(text, start) {
-	const before = text.slice(0, start).trimEnd();
-	const at = before.lastIndexOf("/**");
-	return before.endsWith("*/") && at > 0 ? before.slice(at) : "";
 }
 
 /**

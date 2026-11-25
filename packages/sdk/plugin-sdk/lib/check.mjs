@@ -1,13 +1,16 @@
 /**
- * 检查一个插件：先用 SDK 自带的 TypeScript 做类型检查（插件作者的机器上不用另装），再跑插件规则（lint/）。
+ * 检查一个插件：先用 SDK 自带的 TypeScript 做类型检查（插件作者的机器上不用另装），再跑插件规则（lint/），最后跑 `test/` 下的测试（test.mjs；package.json 写了自己的 test 脚本的不跑）。
+ * 规则只管写法守不守约定，工具和钩子做得对不对要靠测试。
  * 独立项目的 SDK 链接不在了先链上：npm 装一个包就会删掉它们，类型检查只会报找不到 tsconfig，看不出该做什么。
  */
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { ensureLinked } from "./link.mjs";
 import { formatProblem, lintPlugin } from "./lint/index.mjs";
+import { testPlugin } from "./test.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -23,5 +26,9 @@ export async function checkPlugin(target) {
 	const result = spawnSync(process.execPath, [tsc, "-p", "tsconfig.json"], { stdio: "inherit", cwd: dir });
 	const problems = await lintPlugin(dir);
 	if (problems.length > 0) console.error(`插件规则没通过：\n\n${problems.map((problem) => `  ${formatProblem(problem, dir)}`).join("\n")}\n`);
-	return result.status === 0 && problems.length === 0;
+	// Plume 的两个仓库里的插件写了自己的 test 脚本（vitest），由仓库的检查跑，这里不跑第二遍。
+	const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+	const tests = pkg.scripts?.test ? "own" : await testPlugin(dir);
+	if (tests === "none") console.log("没有测试：工具、钩子的行为写在 test/*.test.ts 里，用 @plumeai/plugin-sdk/testing 跑插件（见 skill「测试」）");
+	return result.status === 0 && problems.length === 0 && tests !== "failed";
 }

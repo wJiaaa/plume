@@ -4,7 +4,8 @@
  * 用 Plume 自己的运行时跑这个文件，插件作者的机器上不用装 Node 和 npm。
  *
  *   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
- *   plume-plugin check [目录]              类型检查和插件规则（公开接口、样式、文案），缺省当前目录
+ *   plume-plugin check [目录]              类型检查、插件规则（公开接口、样式、文案）和测试，缺省当前目录
+ *   plume-plugin test [目录]               只跑 test/ 下的测试（node:test）
  *   plume-plugin build [目录]
  *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/local-plugins，Plume 开着就当场加载
  *   plume-plugin dev [目录] [--to 目录]      构建、装上，之后一改源码就重新来一遍
@@ -19,10 +20,12 @@ import { initPlugin } from "../lib/init.mjs";
 import { installPlugin } from "../lib/install.mjs";
 import { linkSdk } from "../lib/link.mjs";
 import { packPlugin } from "../lib/pack.mjs";
+import { testPlugin } from "../lib/test.mjs";
 
 const USAGE = `用法：
   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
   plume-plugin check [目录]
+  plume-plugin test [目录]
   plume-plugin build [目录]
   plume-plugin install [目录] [--to 目录]
   plume-plugin dev [目录] [--to 目录]
@@ -52,6 +55,10 @@ try {
 	} else if (command === "check") {
 		if (!(await checkPlugin(dir))) process.exitCode = 1;
 		else console.log("✓ 检查通过");
+	} else if (command === "test") {
+		const tests = await testPlugin(dir);
+		if (tests === "failed") process.exitCode = 1;
+		if (tests === "none") console.log("test/ 下没有 *.test.ts");
 	} else if (command === "build") {
 		console.log(`✓ ${await buildPlugin(dir)}`);
 	} else if (command === "install") {

@@ -4,40 +4,28 @@
  */
 
 import { expect, it } from "vitest";
-import type { HumanAnswer, HumanRequestInput, PluginContext, ToolDefinition, ToolOutput, ToolRun } from "@plume/contract";
+import type { HumanAnswer, HumanRequestInput, ToolOutput } from "@plume/contract";
+import { loadPlugin } from "@plumeai/plugin-sdk/testing";
 import plugin from "../src/index.ts";
 import { ASK_USER, type QuestionReply } from "../src/question.ts";
 
 async function setup() {
-	let tool: ToolDefinition | undefined;
-	const ctx = {
-		name: "plume.ask-user",
-		locale: () => "zh-CN",
-		tools: { register: (definition: ToolDefinition) => void (tool = definition) },
-	} as unknown as PluginContext;
-	await plugin.apply(ctx);
-	if (!tool) throw new Error("插件没注册工具");
+	const loaded = await loadPlugin(plugin, { locale: "zh-CN" });
 	const asked: HumanRequestInput[] = [];
 	/** 调一次 `ask_user`；`reply` 是人在卡上交的回答，或者没答的原因。 */
 	const ask = async (
 		args: Record<string, unknown>,
 		reply: QuestionReply | (HumanAnswer & { answered: false }) = { answered: false, reason: "declined" },
-	): Promise<ToolOutput> => {
-		const run = {
-			sessionId: "s",
-			cwd: "/w",
-			signal: new AbortController().signal,
-			progress() {},
-			async request(input: HumanRequestInput) {
+	): Promise<ToolOutput> =>
+		loaded.runTool(ASK_USER, args, {
+			async request<T>(input: HumanRequestInput) {
 				asked.push(input);
-				return typeof reply === "object" && "answered" in reply ? reply : { answered: true, value: reply };
+				const answer: HumanAnswer = typeof reply === "object" && "answered" in reply ? reply : { answered: true, value: reply };
+				// 卡上交回什么形状由工具自己定（T），假的人照 ask_user 的形状答。
+				return answer as HumanAnswer<T>;
 			},
 			permissionMode: async () => "full",
-			tools: () => [],
-			calls: [],
-		} as unknown as ToolRun;
-		return await tool!.execute(args, run);
-	};
+		});
 	return { ask, asked };
 }
 

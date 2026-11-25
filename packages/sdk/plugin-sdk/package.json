@@ -21,11 +21,12 @@
     "./build": "./lib/build.mjs",
     "./lint": "./lib/lint/index.mjs",
     "./manifest": "./lib/manifest.mjs",
-    "./targets": "./lib/targets.mjs"
+    "./targets": "./lib/targets.mjs",
+    "./testing": "./lib/testing.mjs"
   },
   "scripts": {
     "typecheck": "node scripts/build-types.mjs",
-    "test": "vitest run"
+    "test": "vitest run --dir test"
   },
   "dependencies": {
     "@types/node": "^24.10.0",

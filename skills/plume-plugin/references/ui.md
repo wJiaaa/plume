@@ -39,90 +39,7 @@ export default {
 
 ## ui
 
-| 成员 | 用途 |
-| --- | --- |
-| `ui.name` | 插件名 |
-| `ui.openSession(id)` | 用户点击后打开已有会话，和点侧栏那一行一样，不自动发送；没有的会话抛错 |
-| `ui.codeBlock(language, Component, { order, copyText })` | 按语言接管助手正文的围栏块，失败或停用显示源码，见「回复正文的代码块」 |
-| `ui.toolCard(tool, Component, { order, match, inline })` | 给工具注册工具卡片，见「工具卡片」 |
-| `ui.requestCard(kind, Component, { order, place })` | 给 `run.request` 画等人给数据的卡（问题、计划、表单），按 `request.kind` 认；`place` 是压在输入框上方（`composer`，默认）还是接在转录里这一轮的回复后面（`transcript`），见「等人给数据的卡」 |
-| `ui.toolLine(tool, { verb, verbFor, subject, file, note, command, job, fields, group, apart, times, callOnly, icon }, { match? })` | 转录里怎么说自己的工具（动作、对象、文件、归类、怎么数、图标），画法还是通用卡片，见「工具在转录里的说法」 |
-| `ui.panel(id, Component, options)` | 往面板区加一个面板，见「面板」 |
-| `ui.page(id, Component, options)` | 往活动栏加一个页面，见「页面」 |
-| `ui.usePageToolbar(items)` | 页面组件里调用的 hook，往窗口左上角后退、前进后面放这一页的图标按钮，见「页面」 |
-| `ui.skin({ name?, mode?, background?, light, dark })` / `ui.skin(null)` | 更新皮肤或撤下自己的皮肤；数据皮肤可带独立会话背景，见「皮肤」 |
-| `ui.useTheme()` / `ui.setTheme(theme)` | 读、改应用的主题偏好（设置 › 外观的跟随系统、浅色、深色），见「皮肤」 |
-| `ui.ChatBackgroundSettings` | 自包含的背景设置组件，可传 `title`，见「皮肤」 |
-| `ui.onSessionsChanged(listener)` | 订阅所有会话的已保存消息、摘要和删除变化，见「会话变化与停止按钮」 |
-| `ui.effect(dispose)` | 界面入口的生命周期清理，停用、重载或 apply 失败时逆序执行，见「remote」 |
-| `ui.composerItem(id, Component, { side, order })` | 输入框底下那排控件加一格，见「输入框里的一格」 |
-| `ui.composerChip(id, Component, { side, order })` | 输入框上方、项目签那一行加一格，见「项目签那一行」 |
-| `ui.composerAbove(id, Component, { order })` | 主输入框上方独占一行，收到 `{ session }`；返回 null 不占位，组件自己管理展开退场，不会浮到转录侧面 |
-| `ui.conversationCard(id, Component, { order, lane })` | 跟着会话的一张卡片，见「跟着会话的卡片」 |
-| `ui.environmentSection(id, Component, { label, place?, order?, count?, attention? })` | 往会话的环境卡片里加一节，见「环境卡片」 |
-| `ui.useEnvironmentSections()` | 给画环境卡片的插件用的 React hook，拿到各插件登记的节，见「环境卡片」 |
-| `ui.sessionToolbar(id, Component)` | 有会话的标题栏里放局部控件，见「标题栏和会话菜单」 |
-| `ui.sessionMenuItem(id, { label, icon?, run })` | 会话操作菜单加一项，见「标题栏和会话菜单」 |
-| `ui.agentDelivery(Component)` | 画本插件交回的结果在对话里的那一行，见「送达的那一行」 |
-| `ui.mentions(provider)` | 往输入框的 `@` 菜单里供条目，见「`@` 菜单、`/` 命令列表」 |
-| `ui.composerHint(session => text)` | 输入框空着时的灰字建议，按 Tab 填进去，见「输入框的灰字建议、回复里的标记」 |
-| `ui.welcomeLine(locale => ({ text, source }))` | 换掉欢迎页问候下面的那一行，见「欢迎页的那一行」 |
-| `ui.replyText(text => text)` | 画回复正文、复制回复前过一遍，拿掉插件让模型顺带写的标记，见「输入框的灰字建议、回复里的标记」 |
-| `ui.sessionMark(Component)` | 侧栏会话行首空闲时的记号，见「侧栏的记号、删除确认框」 |
-| `ui.deleteNote((sessionId, locale) => text)` | 删除确认框里补一句：删掉这个会话会连带什么、会留下什么，同上 |
-| `ui.notify(message, level)` | 窗口顶上弹一条提示，过一会儿自己消失，见「提示、开面板、写输入框」 |
-| `ui.openPanel(id, sessionId?, { tab, background }?)` / `ui.closePanel(id, sessionId?, tab?)` | 打开、关闭自己注册的面板，同上 |
-| `ui.turnFooter(id, Component, { order })` | 最新结束的回复下面挂组件，见「回复下面的卡片和按钮」 |
-| `ui.replyAction(id, Component, { order })` | 每一轮收尾那条回复底下的操作排里加一个按钮，同上 |
-| `ui.terminalOpener(open)` | 为文件树等入口登记「在终端中打开」，见「文件、终端和系统打开」 |
-| `ui.terminalRunner(run)` | 为回复里 shell 代码块的「在终端运行」登记处理器，同上 |
-| `ui.openFile(path, sessionId)` | 在指定会话的文件面板打开文件，同上 |
-| `ui.findFile(path, sessionId)` | 认出纯文字里印出来的路径指的那个文件，同上 |
-| `ui.droppedPaths(transfer)` | 拖放带着的本机绝对路径，同上 |
-| `ui.useFileMenu(root)` | 组件内调用的 hook，复用打开方式、在访达中显示和复制路径菜单，同上 |
-| `ui.FileDiff` | `{ hunks, path?, showPath?, maxLines?, layout?, wrap?, lineMark?, lineLabel?, onLinePress?, onLineEnter? }`，按文件语言高亮的差异视图，支持统一/分栏切换、自动换行、行内变动强调和行号交互，行号和横向滚动复用产品实现 |
-| `ui.FilePreview` | `{ sessionId, path, contents }`，文件标题栏和只读预览；`contents` 是插件经 remote 读取的 `FileContents`，不授予额外文件读取权限 |
-| `ui.documentViewer(extensions, Component)` | 注册只读文档预览，见「文件、终端和系统打开」 |
-| `ui.DocumentPreview` | 文件面板和插件共用的文档展示，同上 |
-| `ui.ProjectOpener` | 以 `{ path, compact? }` 显示目录或文件的打开方式，同上 |
-| `ui.quoteAction({ label, run })` | 在主会话划词菜单加一项，见「划词询问」 |
-| `ui.quoteInPanel(panelId, sessionId, quote)` | 把划词引用追加到本插件面板的输入框，同上 |
-| `ui.draftInSession(sessionId \| undefined, { text, images?, send?, replace? })` | 把字和图片写进输入框的草稿，见「提示、开面板、写输入框」 |
-| `ui.openConversationDraft({ project?, cwd?, text })` | 人点击明确的按钮后，打开一个项目或目录的空白对话并写进草稿，同上 |
-| `ui.revealToolCall(sessionId, toolCallId)` | 打开会话，转录滚到那次调用的工具卡片放在中间，外层带一下 `data-plume-flash`（插件的样式按它闪）；只在主窗口里能用 |
-| `ui.mediaUrl(name, thumb?)` | 会话媒体目录里一张图给 `<img src>` 的地址，见「图片」 |
-| `ui.openImage(images, index, { from?, edit? })` | 用产品的看图器看几张图，同上 |
-| `ui.captureWindow({ x, y, width, height })` | 截取当前插件界面所在窗口的可见矩形，同上 |
-| `ui.saveImage(src)` / `ui.copyImage(src)` | 和看图器的「另存为」「复制」一样，同上 |
-| `ui.linkOpener({ label, icon?, web?, takesClicks?, file?, open })` | 回复里的网址、文件签多一种打开方式（内置浏览器），见「网址、文件签的打开方式」 |
-| `ui.queueAction({ label, icon?, run })` | 主输入框排队条上，每条排着的消息「更多」菜单里多一项（在侧边聊天中打开），见「排队消息拿到别处去发」 |
-| `ui.openSettings(id)` | 打开本插件注册的、单独占导航一行（`page: "nav"`）的设置分区；不能跳到别的插件或未登记分区 |
-| `ui.openPage(id)` | 人点了按钮时打开本插件注册的页面（输入框上方提示里的「查看」）；不能开别的插件的页面 |
-| `ui.pageBadge(id, { count, label, attention? } \| null)` | 活动栏里本插件那一页的那一格右上角挂一个数，见「页面」 |
-| `ui.openExternal(url)` | 用户点击后在系统浏览器打开 HTTP(S) 链接，不接受带凭据的网址或其他协议 |
-| `ui.openPath(path)` | 用户点击后把本机的文件交给默认程序、文件夹交给文件管理器打开，见「文件、终端和系统打开」 |
-| `ui.revealPath(path)` | 用户点击后在系统的文件管理器里选中它（「在访达中显示」），同上 |
-| `ui.pickFolder(title?)` | 用户点击后弹出系统的选文件夹对话框，交回绝对路径，取消是 null，同上 |
-| `ui.openLink(url, sessionId)` | 用户点击后像回复里的网址那样打开，见「网址、文件签的打开方式」 |
-| `ui.settingsSection(id, Component, options)` | 加一节设置，见「设置分区」 |
-| `ui.ModelSelect` | 产品的模型下拉，见「复用产品的组件」 |
-| `ui.ModelControls` | 输入框右下角那两枚（模型、思考档位），同上 |
-| `ui.useModelDefaults()` | React hook：`{ defaultModel?, sessionModel?, thinking }`——新会话的默认模型、当前会话的模型、默认思考档位，「跟随」时写哪个模型名用它 |
-| `ui.useProjects()` | React hook：侧栏里的项目 `{ id, name, path }[]`，随增删更新；几个项目可能登记在同一个目录上 |
-| `ui.usePluginDisplayName()` | React hook：返回 `(plugin) => string \| undefined`，按插件名（`owner`、`fromPlugin` 里的那种）查人看到的显示名，和侧栏会话卡片、「来自…」同一份；停用、卸载了或还没读到时是 undefined，退回一个通用的词，不把 `plume.xxx` 这种插件名画给人 |
-| `ui.screen` | 截屏的宿主能力：开截图浮层、全局快捷键、桌面路径，见「截屏」 |
-| `ui.screenOverlay(Component)` | 截图浮层里画的组件 |
-| `ui.pinnedShot(Component)` | 钉在桌面上的截图窗口里画的组件 |
-| `ui.ComposerSend` | 产品的发送／停止按钮，见「会话变化与停止按钮」 |
-| `ui.useSession(sessionId)` | React hook：一个会话的视图（摘要、消息、草稿、进度、审批），随它的事件更新；还没读到是 undefined |
-| `ui.useSessionActivity(sessionId)` | React hook：侧栏行首给这个会话的记号，见「会话变化与停止按钮」 |
-| `ui.listCommands({ cwd? })` | 输入框 `/` 菜单此刻有的命令，见「`@` 菜单、`/` 命令列表」 |
-| `ui.Conversation` | 产品的对话视图组件：画一个会话（插件自己的子会话、独立会话），可选底下一个输入框，见「画一个子会话」 |
-| `ui.Markdown` | 复用产品的正文渲染，见「复用产品的组件」 |
-| `ui.remote<T>()` | 调自己逻辑入口经 `ctx.serve` 开的对象，见「remote」 |
-| `ui.useSettings<T>()` | `[设置, 改的函数]`：自己逻辑入口 `ctx.settings` 的那份，两边改了都重画；拿到之前是 undefined。改的函数交回校验过的值，校验不过以错误结束（提示用 `ui.notify`），不用自己回滚 |
-| `ui.useStore<T>(key)`、`ui.useSessionStore<T>(key, sessionId)` | 自己逻辑入口 `ctx.store`、`ctx.sessionStore` 的当前值，`set` 了重画；拿到之前是 undefined |
-| `ui.provide(name, service)` / `ui.useService(name)` | 界面入口之间的服务：一方提供，别的插件的组件里按名字拿到（没人提供是 undefined），见下文「服务」 |
+`ui` 每个成员的签名和说明在 [api.md](api.md) 的 `UiContext`（从类型声明生成，以它为准），卡片收到的 props 在 `ToolCardProps`、`RequestCardProps`。这一页按位置和主题讲怎么用、有哪些坑；放在哪先查上面「窗口里能放东西的地方」，再读对应的那节。这一页很长，不整份读：`grep -n '^#' ui.md` 看目录，只读要用的那几节。
 
 ## 会话变化与停止按钮
 
@@ -408,7 +325,7 @@ ui.conversationCard("todo", TodoCard);
 
 - 收到 `{ sessionId, reports }`，一次送达里本插件交的几份一起给（连着几次只带 `inline` 的送达并成一次），画成一行（子 Agent 的「消息来自 @explore」、plume.tools 的「后台命令完成」，用 `FlowRow`）。每份的 `details` 是你交的时候给的自己的数据，宿主不读，原样带回来。
 - 宿主记着每份是哪个插件交的，只交给那个插件登记的组件；再登记换掉自己前一个，停用时撤下。
-- 没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（开出来的会话交回）画成「来自关联会话」、点了过去；组件出错时只丢这一行。
+- 没登记（或停用了）时宿主按 `title`、`status` 画默认的一行，带 `sessionId` 的（开出来的会话交回）画成「来自关联会话」，点开看交回的汇报、旁边箭头跳过去；组件出错时只丢这一行。
 
 ## 环境卡片
 

@@ -15,6 +15,7 @@ import { checkPlugin } from "../lib/check.mjs";
 import { initPlugin } from "../lib/init.mjs";
 import { installPlugin } from "../lib/install.mjs";
 import { packPlugin } from "../lib/pack.mjs";
+import { testPlugin } from "../lib/test.mjs";
 
 const sdk = resolve(import.meta.dirname, "..");
 const work = mkdtempSync(join(tmpdir(), "plume-plugin-sdk-"));
@@ -32,7 +33,7 @@ test("init 出独立项目：不写依赖，SDK 链进 node_modules，带上 ski
 	assert.equal(pkg.devDependencies, undefined);
 	assert.equal(realpathSync(join(dir, "node_modules/@plumeai/plugin-sdk")), realpathSync(sdk));
 	for (const name of ["@types/node", "@types/react"]) assert.ok(existsSync(join(dir, "node_modules", name, "package.json")), name);
-	for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore", ".claude/skills/plume-plugin/SKILL.md", "src/index.ts", "src/ui.tsx"]) {
+	for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore", ".claude/skills/plume-plugin/SKILL.md", "src/index.ts", "src/ui.tsx", "test/index.test.ts"]) {
 		assert.ok(existsSync(join(dir, file)), file);
 	}
 	assert.doesNotMatch(readFileSync(join(dir, "src/index.ts"), "utf8"), /__NAME__|__TOOL__/);
@@ -50,6 +51,20 @@ test("模板只靠 SDK 就能过类型检查和插件规则（含 @plume/ui/icon
 			.replace("<Card title={text.greeting}>", "<Card title={text.greeting}>\n\t\t\t<Smile size={14} />"),
 	);
 	assert.ok(await checkPlugin(dir));
+});
+
+test("check 用 node:test 跑模板带的测试，测试没过 check 就不通过", async () => {
+	assert.equal(await testPlugin(dir), "passed");
+	const file = join(dir, "test/index.test.ts");
+	const source = readFileSync(file, "utf8");
+	writeFileSync(file, source.replace('"Hello, Ada!"', '"Hello, Grace!"'));
+	try {
+		assert.equal(await testPlugin(dir), "failed");
+		assert.equal(await checkPlugin(dir), false);
+	} finally {
+		writeFileSync(file, source);
+	}
+	assert.ok(!existsSync(join(dir, "node_modules/.plume-test")));
 });
 
 test("构建出的产物：逻辑入口能加载，界面入口把共享模块留给宿主、图标打进去", async () => {

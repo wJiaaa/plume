@@ -15,45 +15,10 @@ export default {
 
 ## ctx
 
-| 成员 | 用途 |
-| --- | --- |
-| `ctx.name` | 插件名 |
-| `ctx.fetch(url, init?)`、`ctx.trash(path)`、`ctx.secrets.seal(value)` / `unseal(sealed)` / `isSealed(value)` | 走系统代理的 HTTP(S) 请求、把文件移到废纸篓、加解密插件要存的密钥，见下面「网络、废纸篓、密钥」 |
-| `ctx.dataDir` | 插件私有的数据目录，加载前已创建。插件自己的文件都放这里 |
-| `ctx.appDataDir` | Plume 自己的数据目录（设置、会话、插件都在这里）。给模型用的工具不要写这里：写得到设置，就改得了自己的权限 |
-| `ctx.tools.register(tool)` | 注册工具（见「工具」），停用时自动注销；返回的函数提前撤下它（工具来自会断开的外部服务时用） |
-| `ctx.tools.names()` | 现在登记着的工具名（各插件的，同名只算一个，停用的不算），给「让人挑工具」的设置用 |
-| `ctx.tools.list()` | 同 `run.tools()`：生效的工具、注册它的插件、种类（`kind`）和类别（`category`），在钩子里按它们找别的插件的工具（「记清单的那件叫什么」「读文件的那件叫什么」）时用，见「按类别找工具」 |
-| `ctx.hook(name, layer, { order })` | 往钩子里加一层，停用时自动移除 |
-| `ctx.effect(dispose)` | 登记清理（定时器、子进程、监听），停用时执行，后登记的先执行 |
-| `ctx.serve(api)` | 把一个对象开给自己的界面入口（见「serve」）；一个插件只能开一个，停用时收回 |
-| `ctx.settings(defaults, normalize?)` | 插件自己的设置：存盘、界面经 `ui.useSettings()` 读改、两边改了都通知，见「设置和运行状态」 |
-| `ctx.store(key, initial)`、`ctx.sessionStore(key, initial)` | 给界面看的运行状态（按会话的会话删掉时丢掉），`set` 了界面跟着重画，见「设置和运行状态」 |
-| `ctx.log` | `info` / `warn` / `error`，自动带插件名，记进数据目录的 `logs/plume.log` |
-| `ctx.locale()` | 当前界面语言 `"zh-CN"` 或 `"en"`，给人看的文字按它选 |
-| `ctx.notice(sessionId, text, level?)` | 在界面上弹一条提示条，`level` 是 `"info"`（默认）、`"warn"`、`"error"`；不管那个会话是不是正开着 |
-| `ctx.model.complete(request)`、`ctx.model.usage()`、`ctx.model.findImageModel(name?, sessionId?)` / `ctx.model.image(request)`、`ctx.media.save` / `read` / `nameOf` | 调一次模型做一件小事（写提交说明、起标题、写压缩摘要）、读花销、生图、存取会话媒体目录里的图，见下面「模型、花销、生图」 |
-| `ctx.providers.provide(source)`、`changed()`、`defaultModel()`、`setDefaultModel(model)` | 把自己存着的模型供应商接进模型设置、读设默认模型，见下面「模型供应商」 |
-| `ctx.sessions.list()` / `get` / `messages`、`compact`、`setTitle`、`setArchived`、`onDeleted` / `onArchived` / `onEnded` / `onContextReset` | 读会话的摘要和消息，现在就压缩（`/compact`）、改标题（侧栏和标题栏上那行字）、归档，会话删掉、归档、在这次运行里不再活着、上下文被重置时收通知，见下面「读会话、改会话」 |
-| `ctx.sessions.models()` | 无凭据的模型目录：`id`、`name`、`contextWindow`、`thinking`；用于插件选择子会话模型，密钥不出宿主 |
-| `ctx.sessions.projects()` | 登记过的项目 `{ id, name, path }[]`，按侧栏的顺序；`launch`、`create`、`configure` 的 `project` 填这里的 `id`。界面入口里用 `ui.useProjects()` |
-| `ctx.sessions.create({ parentId?, title, model?, thinking?, project?, cwd? })` / `send(id, message, { signal })` / `stop(id)` / `delete(id)` / `configure(id, { model?, thinking?, project?, cwd? })` | 插件自己的会话（给 `parentId` 是子会话，不给是独立会话）：建、发一句并等结束、停、删、之后改模型和目录，见「子会话」「独立会话」 |
-| `ctx.sessions.start(id, message)` / `wait(runId)` / `report(runId, text, { frame?, delivery? })` | 子会话的后台运行：派出去、等它结束、把结果送给父会话，见「子会话」 |
-| `ctx.sessions.steer(id, message)` / `onStopped(listener)` | 给正在运行的自有子会话插话；会话被明确停止时通知，见「子会话」 |
-| `ctx.sessions.launch({ project?, cwd?, message, model?, thinking?, spawnedFrom?, title?, steward? })` | 开一个新的顶层会话并发出第一句话，见「开新会话」 |
-| `ctx.sessions.post(sessionId, message)` / `ctx.sessions.respond(sessionId, toolCallId, "once" \| "reject")` / `ctx.sessions.answer(sessionId, toolCallId, value)` | 往自己代管（或管理）的会话里转话、替人答它弹着的卡，见「代管会话」「管理会话」 |
-| `ctx.sessions.observe(listener, { drafts? })` | 只读订阅会话的运行观察（请求、回复、审批、运行状态、收场……）；给 `drafts: true` 另收正在写的回复，见「只读运行观察和后台任务」「正在写的回复（草稿）」 |
-| `ctx.sessions.approval(sessionId)` | 这个会话此刻弹着的那张卡（审批或等人给数据），没有是 undefined；`observe` 只推变化，晚到时用它补上，见「管理会话」 |
-| `ctx.sessions.jobs(sessionId)` / `jobOutput(sessionId, jobId)` / `stopJob(sessionId, jobId, force)` / `wakeups(sessionId)` / `cancelWakeup(sessionId, id)` | 列出、读输出、停掉工具登记的后台任务，列出、取消定时唤醒，见「只读运行观察和后台任务」 |
-| `ctx.sessions.scratchDir(sessionId)` | 这个会话的临时目录（同 `run.scratchDir`），按 `details` 里的路径读回截掉的全文、完整输出时用它确认路径在里面，不自己拼 |
-| `ctx.pages` | 驱动界面入口画的网页（`<webview>`）、在临时沙箱里检查一页，见「网页」 |
-| `ctx.commands.provide(provider)` | 给输入框的 `/` 菜单供命令（见「`/` 命令」），停用时撤下 |
-| `ctx.plugins.list()` | 现在启用着、加载好了的插件：`name`、`dir`（插件目录）、`builtin`。给要读别的插件随包文件的插件用（技能插件读各插件的 `skills/`）；每次调都是当时的样子 |
-| `ctx.plugins.onChange(listener)` | 插件装上、卸下、启用、停用以后叫一次（这时 `list()` 已经是新的），停用时撤下。读别的插件随包文件、又要当场跟上的插件用（MCP 插件读各插件的 `.mcp.json`，装上就连） |
-| `ctx.resources.register(handler)` / `list()` / `keepArtifact(sessionId, tool, content)` | 资源地址 `scheme://路径[:行-行]`：加一种 scheme、列出登记着的、存一大块原文换回地址，见下面「资源地址」 |
-| `ctx.changes.collect(sessionId, ids)` / `undo(sessionId, ids, path?)`、`ctx.workspace.files(root)`、`ctx.workspace.git(root, work)` | 读、撤销本体记下的文件改动，列项目文件，在隔离视图里跑一组只读的 git 命令，见下面「改动和工作区」 |
-| `ctx.provide(name, service)` | 提供一项服务给别的插件用（见下面「服务」），停用时撤下 |
-| `ctx.use(name)` | 用一项别的插件提供的服务，只能用 `inject` 里写了的（见下面「服务」） |
+`ctx` 每个成员的签名和说明在 [api.md](api.md) 的 `PluginContext`（从类型声明生成，以它为准），会话的在 `SessionAccess`。这一页按主题讲怎么用、怎么选、有哪些坑；要做的事对应哪个成员先查 [SKILL.md](../SKILL.md) 的「先判断能不能做成插件」，再读这里对应的那节。这一页很长，不整份读：`grep -n '^#' logic.md` 看目录，只读要用的那几节。
+
+- `ctx.log` 的 `info` / `warn` / `error` 自动带插件名，记进数据目录的 `logs/plume.log`。
+- `ctx.dataDir` 加载前已创建，插件自己的文件都放这里；给模型用的工具不写 `ctx.appDataDir`（写得到设置，就改得了自己的权限）。
 
 ### 网络、废纸篓、密钥
 
@@ -660,7 +625,7 @@ await idle; // 第一次真闲下来：它派出去的子 Agent、一次性的�
 ```
 
 - 返回 `{ session, done, idle }`：`done` 是第一轮为什么结束；`idle` 在它第一次真闲下来时兑现成 `{ stop?, reply }`（最近一轮的收场、最后一段回复）。
-- **交回来处**：你不用做，只要开的时候说要（`spawnedFrom.reportBack: true`，这时要给 `toolCallId`、不能给 `callIn`）。开出来的会话每结束一轮，宿主把收尾那段回复的前 400 字作为一条运行时送达交回 `spawnedFrom` 那个会话（默认画成「来自关联会话」一行、点了过去，记在你的插件名下），重启以后也交。开出来的第一轮、来处寄来的信引起的那一轮收场时叫醒来处（来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑——还有在跑的就等最后一个停下再一起送，最多等一分钟——、接连被叫起没到上限时）；人在新会话里说话引起的、出错的不叫醒，留到来处下一轮开头读；被人按停的那一轮不交；收尾时还有派出去的事没回来的，等回来以后那一轮再交；那次调用被撤回截掉了、来处删了或归档了就不交。不给 `reportBack` 就不交回，`toolCallId` 照样能给，「这次调用开过哪个会话」照样从会话列表的 `spawnedFrom` 认。
+- **交回来处**：你不用做，只要开的时候说要（`spawnedFrom.reportBack: true`，这时要给 `toolCallId`、不能给 `callIn`）。开出来的会话每结束一轮，宿主把收尾那段回复的前 400 字作为一条运行时送达交回 `spawnedFrom` 那个会话（默认画成「来自关联会话」一行，点开看交回的汇报、旁边箭头跳过去，记在你的插件名下），重启以后也交。开出来的第一轮、来处寄来的信引起的那一轮收场时叫醒来处（来处闲着、上一轮以完成收场、没被人按停、从它开出的会话都不在跑——还有在跑的就等最后一个停下再一起送，最多等一分钟——、接连被叫起没到上限时）；人在新会话里说话引起的、出错的不叫醒，留到来处下一轮开头读；被人按停的那一轮不交；收尾时还有派出去的事没回来的，等回来以后那一轮再交；那次调用被撤回截掉了、来处删了或归档了就不交。不给 `reportBack` 就不交回，`toolCallId` 照样能给，「这次调用开过哪个会话」照样从会话列表的 `spawnedFrom` 认。
 - `fork: true` 时新会话先复制来处里 `spawnedFrom.toolCallId` 那次调用之前的全部记录，再发 `message`（把做到一半的事移交出去）；要给 `toolCallId`、不能给 `callIn`。
 - 新会话和人在侧栏新建的一样：进侧栏、没有 `owner`（不记在插件名下）、模型不给就用默认模型，`thinking` 不给用默认推理强度；不认识的模型、档位抛错。开出来就是人的会话：人能接着聊，插件之后不能再 `send`、`stop`、`delete` 它（带 `steward: true` 开出来的由你代管，见「代管会话」；拿着管理授权时能 `stop`，见「管理会话」），`done` 只管第一轮；「这次跑完了没有」看 `idle`（定时任务据此判断能不能开下一次）。
 - 第一句话照常经 `prompt.submit`，画成人的气泡；被拦下时这一轮按 `done` 收场，会话留着。
@@ -829,7 +794,53 @@ ctx.serve(api);
 
 ## 测试
 
-插件自己的纯逻辑（判断、存储、解析）可以在插件目录里写测试（如 `terminal` 插件用 vitest，`package.json` 里加 `test` 脚本）；`pnpm check` 会跑各包的 `test`。
+工具和钩子做得对不对，写测试看：`@plumeai/plugin-sdk/testing` 的 `loadPlugin` 用一个假的 `ctx` 跑插件的 `apply`，再直接跑它注册的工具、按 `order` 串起它加的层，不起 Plume、不调模型。
+
+- **独立项目**：测试放 `test/*.test.ts`，用 Node 自带的 `node:test` 和 `node:assert` 写，不用装测试框架。`plume-plugin check` 会跑它们，测试没过 check 就不通过；只跑测试用 `plume-plugin test`。模板的 `test/index.test.ts` 是一个能跑的例子。
+- **Plume 的两个仓库里**：照仓库的规矩用 vitest，`package.json` 写 `test` 脚本，`pnpm check` 会跑；`loadPlugin` 不依赖测试框架，两边都能用。有自己 `test` 脚本的插件，`plume-plugin check` 不再跑第二遍。
+
+```ts
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { ToolExecution } from "@plume/contract";
+import { loadPlugin } from "@plumeai/plugin-sdk/testing";
+import plugin from "../src/index.ts";
+
+test("拦下读 .env，别的调用原样交给里层", async () => {
+	const loaded = await loadPlugin(plugin, { locale: "zh-CN" });
+	// 只填这一层读的字段
+	const input = (path: string) => ({ call: { id: "c", name: "read", args: { path } } }) as ToolExecution;
+	// 最里层代表本体和别的插件：收到的是这个插件交给里层的输入
+	const inner = async () => ({ output: "ran" });
+	assert.equal((await loaded.hook("tool.execute", input("/w/.env"), inner)).isError, true);
+	assert.deepEqual(await loaded.hook("tool.execute", input("/w/a.ts"), inner), { output: "ran" });
+	await loaded.dispose();
+});
+
+test("工具问人，人拒绝时把本体给的话交给模型", async () => {
+	const loaded = await loadPlugin(plugin);
+	const result = await loaded.runTool("my_tool", { path: "a.ts" }, { ask: async () => "reject", rejection: "rejected" });
+	assert.equal(result.output, "rejected");
+	await loaded.dispose();
+});
+```
+
+`loadPlugin(plugin, options)` 返回的对象：
+
+| 成员 | 做什么 |
+| --- | --- |
+| `runTool(name, args, run?)` | 跑一次插件自己的工具。`run` 缺省带 `sessionId`、`session`（顶层会话）、`toolCallId`、`cwd`、`scratchDir`、`signal`、`progress`、`tools`、`calls`；`ask`、`request`、`exec`、`files`、`permissionMode` 等按这次调用给 |
+| `hook(name, input, inner)` | 插件给这个钩子加的层按 `order` 串起来跑一次，`inner` 是最里层 |
+| `tool(name)` | 插件注册的 `ToolDefinition`（看 `parameters`、`kind` 这些声明） |
+| `emit(event, ...args)` | 触发插件在 `ctx.sessions` 上的订阅：`observe`、`onDeleted`、`onArchived`、`onEnded`、`onStopped`、`onContextReset`；`onDeleted` 同时丢掉那个会话在 `sessionStore` 里的值 |
+| `api`、`commands`、`provided` | 插件 `ctx.serve` 开的接口、`ctx.commands.provide` 供的命令、`ctx.provide` 提供的服务 |
+| `settings`、`store(key)`、`sessionStore(key)` | 插件拿到的设置和运行状态，读出来对 |
+| `notices`、`logs` | `ctx.notice`、`ctx.log` 写过的 |
+| `dispose()` | 跑完 `ctx.effect` 登记的清理（后登记的先执行），删掉临时目录 |
+
+`options`：`locale`（缺省 `"en"`）、`cwd`、`settings`（存着的设置）、`tools`（别的插件的工具，测按类别找工具）、`services`（`ctx.use` 拿到的，名字还要写进 `inject`）、`ctx`（假 `ctx` 没有的成员，普通对象和默认那份浅合并：给 `sessions: { messages }` 不会丢掉 `onDeleted`）。
+
+假的 `ctx` 只实现行为由本体约定好、在内存里就能做对的几样：工具、钩子、`effect`、`settings`、`store`、`sessionStore`、`serve`、`provide` / `use`、命令、日志、提示和会话的订阅。`fetch`、`model`、`workspace`、`sessions.messages` 这些背后是真实的会话、模型和文件，碰到就抛错并说出全名，要的自己经 `options.ctx` 给。所以测试测得到的是插件自己的判断；本体那一侧（参数按 `parameters` 整理、审批、沙箱、钩子链里别的插件的层、系统提示词冻结）测不到，装进 Plume 跑一遍，看调用轨迹（见「只读运行观察和后台任务」的 `hooks`）。
 
 ## 只读运行观察和后台任务
 

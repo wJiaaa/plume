@@ -20,8 +20,8 @@ const manifest = JSON.parse(readFileSync(join(sdk, "package.json"), "utf8"));
 /** 插件名：小写，点分段，段里可以有连字符。 */
 export const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*$/;
 
-/** 只给独立项目的文件。 */
-const STANDALONE_ONLY = new Set(["AGENTS.md", "CLAUDE.md", "gitignore"]);
+/** 只给独立项目的文件。test/ 里是 node:test 写的测试，仓库里的插件照仓库的规矩用 vitest 写。 */
+const STANDALONE_ONLY = new Set(["AGENTS.md", "CLAUDE.md", "gitignore", "test"]);
 
 /** 这份 SDK 是从 npm 装进某个项目的（在 node_modules 里）。 */
 const installed = sdk.split(sep).includes("node_modules");

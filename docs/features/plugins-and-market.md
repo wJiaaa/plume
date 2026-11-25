@@ -40,7 +40,7 @@ Plume 的大部分能力由插件提供：内置插件随应用发、不能停�
 - 「插件市场」页「插件」一类页头右端的「创建插件」：
   - **新建插件**：开一个新对话，输入框里放好 `$plume-plugin`（这份写插件的技能随技能插件提供；技能插件没开着时先跳到它的详情页）。
   - **从本地上传**：把本机构建好的插件文件夹装进本地上传目录，能卸载；选的不是插件时有提示。
-- `plume-plugin` 命令：插件 SDK 随应用发，Plume 生成 `~/.plume/bin/plume-plugin`（Windows 上另有 `plume-plugin.cmd`），用应用自己的运行时执行 `init`、`check`、`build`、`install`、`dev`、`pack`、`link`，不需要本机装 Node 或 npm。`pack` 打出只含发给插件的文件的 `release/<目录名>/`，交给别人「从本地上传」，缺了发市场要写的说明时提一句。独立项目里 npm 装包删掉了指向 SDK 的链接时，`check` 自己链回来。
+- `plume-plugin` 命令：插件 SDK 随应用发，Plume 生成 `~/.plume/bin/plume-plugin`（Windows 上另有 `plume-plugin.cmd`），用应用自己的运行时执行 `init`、`check`、`test`、`build`、`install`、`dev`、`pack`、`link`，不需要本机装 Node 或 npm。`check` 在类型检查和插件规则之后跑 `test/` 下的测试（`test` 只跑测试）：Node 自带的 node:test，插件经 `@plumeai/plugin-sdk/testing` 的 `loadPlugin` 用假的 `ctx` 加载，直接跑它的工具和钩子；`package.json` 写了自己 `test` 脚本的不跑。`pack` 打出只含发给插件的文件的 `release/<目录名>/`，交给别人「从本地上传」，缺了发市场要写的说明时提一句。独立项目里 npm 装包删掉了指向 SDK 的链接时，`check` 自己链回来。
 - 构建把用的 SDK 版本写进 `dist/build.json`。市场插件、本地上传的插件加载失败时，详情页的报错后面说明它是按哪一版 SDK 构建的、和这版 Plume 带的对不上：比 Plume 新的叫人更新 Plume，旧的（含没有这个文件的）叫作者按新版重新构建。不因版本不同拒绝加载。
 - 运行日志：agent 进程的输出（插件的 `ctx.log`、`console`、加载失败）和窗口里的告警、报错一行一条追加进数据目录的 `logs/plume.log`，带时间和来源；启动时超过 5 MiB 挪成 `plume.log.1`。`<webview>` 里网页自己的报错不记。
 - 热加载：Plume 监视 `~/.plume/plugins` 和 `~/.plume/local-plugins`，插件装进来、文件变了、被删了，按文件指纹当场加载、重新加载或卸下。

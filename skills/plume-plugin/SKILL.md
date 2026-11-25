@@ -12,6 +12,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 两个入口一起启用、一起停用。所有注册都记在插件名下，停用或 `apply` 抛错时整体撤销，插件不用自己清理注册。
 
+`ctx`、`run`、钩子、`ui` 每个成员的签名和说明在 [references/api.md](references/api.md)，从类型声明生成，以它为准。logic.md、ui.md 按主题讲怎么用、怎么选、有哪些坑。几份参考都很长，不要整份读：先在下面两张表里查到要用的成员，在 api.md 里搜成员名看签名，再 `grep -n '^#' references/logic.md` 看目录，只读对应的那几节。
+
 ## 只依赖公开接口
 
 写插件只用这几样，不读、不引用宿主的实现代码：
@@ -95,9 +97,10 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 1. **定名字**：插件名小写加点分段（Plume 自己提供的插件都以 `plume.` 开头）；目录名只用小写字母、数字和连字符，它也是 `plume-plugin://` 的主机名。
 2. **搭目录**：`plume-plugin init <目录>` 从模板生成，模板里是一个能跑的工具加卡片，改成自己的。命令在 `~/.plume/bin/plume-plugin`（Windows 的 cmd、PowerShell 里是同目录的 `plume-plugin.cmd`；Plume 启动过一次就有，用 Plume 自己的运行时跑，不用装 Node 和 npm）。Plume 的插件仓库（plume-plugins）里用 `pnpm plugin init plugins/<目录名>`。
 3. **写逻辑入口**（logic.md），要画东西时**写界面入口**（ui.md、components.md），有界面或给人看的文字时照 style-i18n.md。
-4. **构建和加载**：独立项目用 `plume-plugin dev`，插件仓库里用 `pnpm plugin dev plugins/<目录名>`：构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。出了问题看数据目录的 `logs/plume.log`（`~/.plume/logs/plume.log`）：逻辑入口的 `ctx.log`、`console`、加载失败的原因，界面入口渲染出错、`console.warn` / `console.error` 都记在这里，一行带着来源和插件名；加载失败的原因也显示在插件详情页。
-5. **自检**：对照下面的清单，再跑检查（独立项目 `plume-plugin check`：类型检查加插件规则；仓库里 `pnpm check`）。
-6. **交给别人用**：`plume-plugin pack` 构建并打出 `release/<目录名>/`，只含发给插件的文件；对方在插件市场「创建插件 › 从本地上传」里选这个文件夹。本地上传的不跟市场更新，发新版时对方重新上传。
+4. **写测试**：工具、钩子做得对不对，在 `test/*.test.ts` 里用 `@plumeai/plugin-sdk/testing` 跑插件看返回了什么，写法见 logic.md「测试」。模板带了一份。插件的价值大多在逻辑入口，类型检查和插件规则只管写法守不守约定，管不了行为对不对。
+5. **构建和加载**：独立项目用 `plume-plugin dev`，插件仓库里用 `pnpm plugin dev plugins/<目录名>`：构建、装进 `~/.plume/local-plugins/<目录名>/`（和市场装的同名时这一份生效，不被市场更新换掉，卸掉就回到市场那份），之后一改源码就重新构建、装上；Plume 开着的话每次都当场加载，不用重启。只装一次用 `plume-plugin build` 再 `plume-plugin install`。出了问题看数据目录的 `logs/plume.log`（`~/.plume/logs/plume.log`）：逻辑入口的 `ctx.log`、`console`、加载失败的原因，界面入口渲染出错、`console.warn` / `console.error` 都记在这里，一行带着来源和插件名；加载失败的原因也显示在插件详情页。
+6. **自检**：对照下面的清单，再跑检查（独立项目 `plume-plugin check`：类型检查、插件规则和 `test/` 下的测试；仓库里 `pnpm check`）。
+7. **交给别人用**：`plume-plugin pack` 构建并打出 `release/<目录名>/`，只含发给插件的文件；对方在插件市场「创建插件 › 从本地上传」里选这个文件夹。本地上传的不跟市场更新，发新版时对方重新上传。
 
 独立项目里用 npm 装第三方包会删掉 `node_modules` 里指向 SDK 的链接，`plume-plugin check` 发现了会自己链回来（也可以手动 `plume-plugin link`）。构建会把用的 SDK 版本写进 `dist/build.json`：Plume 更新后插件加载失败时，报错后面会说插件是按哪一版 SDK 构建的，按新版重新构建一次。
 
@@ -115,6 +118,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 ├── AGENTS.md、CLAUDE.md、.claude/skills/plume-plugin/   # 只有独立项目有：给接手的 agent
 ├── node_modules/      # 只有独立项目有：init 建的链接，指到随 Plume 发的 SDK；坏了跑 plume-plugin link
 ├── skills/            # 可选：随包的技能，`skills/<名字>/SKILL.md`；装了「技能」插件时进技能目录，和 dist/ 一起装
+├── test/              # 逻辑入口的测试（`*.test.ts`），plume-plugin check 用 node:test 跑；不随包分发
 └── src/
     ├── index.ts       # 逻辑入口（必需）
     ├── ui.tsx         # 界面入口（可选）
@@ -132,20 +136,37 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 
 ## 自检清单
 
+按顺序对，前面的是行为，最容易错、也最难从检查里看出来。
+
+行为（逻辑入口）：
+
+- [ ] 每个工具在 `test/` 里至少有正常和出错两种调用：给模型的写进 `output`，给卡片的写进 `details`，失败带 `isError`。参数的类型、`enum` 本体已按 `parameters` 查过，不再逐个 `typeof`；缺了 `required` 的、空串、取值之间的约束要自己拦。
+- [ ] 钩子的层：不需要处理的调用原样 `next(input)`，测试里也跑一遍这种调用；`order` 选得对（见 logic.md「钩子」）；出错直接抛，不吞。
+- [ ] 问人、等人给数据、跑命令、读写文件走 `run.ask`、`run.request`、`run.exec`、`run.files`，不自己起进程、不绕开本体读写文件。
+- [ ] 逻辑入口自己起的定时器、子进程、监听登记了 `ctx.effect`；界面入口在 apply 中启动的订阅、远端 watch 登记 `ui.effect` 清理（如 `ui.effect(() => call.cancel())`），停用、重载或 apply 失败时都会执行。
+- [ ] 设置用 `ctx.settings`、推给界面的状态用 `ctx.store` / `ctx.sessionStore`，没有自己读写 `settings.json`、自己写 watch 推送循环。
+- [ ] 装进 Plume 实际跑过一遍（`plume-plugin dev`）。测试里的 `ctx` 是假的，测不到本体那一侧：参数整理、审批、沙箱、别的插件的层。层没按预期生效时，看那次调用在调用轨迹里「经过的钩子」（`ctx.sessions.observe` 的 `hooks` 事件），加载和运行出错看 `~/.plume/logs/plume.log` 里带插件名的那几行。
+
+边界：
+
 - [ ] 两个入口的 `name` 相同，`satisfies Plugin` / `satisfies UiPlugin`。
 - [ ] 只 `import type` `@plume/contract`；没有引用公开接口以外的东西。
-- [ ] 工具结果里给模型的写进 `output`，给卡片的写进 `details`；卡片先校验 `details`，认不出就返回 `fallback`。参数的类型、`enum` 本体已按 `parameters` 查过，不再逐个 `typeof`。
-- [ ] 设置用 `ctx.settings`、推给界面的状态用 `ctx.store` / `ctx.sessionStore`，没有自己读写 `settings.json`、自己写 watch 推送循环。
-- [ ] 钩子的层：不需要处理的调用原样 `next(input)`；`order` 选得对（见 logic.md）；出错直接抛，不吞。
-- [ ] 逻辑入口自己起的定时器、子进程、监听登记了 `ctx.effect`；界面入口在 apply 中启动的订阅、远端 watch 登记 `ui.effect` 清理（如 `ui.effect(() => call.cancel())`），停用、重载或 apply 失败时都会执行。
-- [ ] 界面：没写 Tailwind 类；文字用 `Text`，组件只用 components.md 里列的；自己的 CSS 只管布局，颜色只取 `var(--plume-*)`；浅色、深色都能看。
+- [ ] 密钥经 `ctx.secrets` 封好再存，不进 `ctx.settings`、`ctx.store`、日志和界面。
+
+有界面入口或给人看的文字时：
+
+- [ ] 卡片先校验 `details`，认不出就返回 `fallback`。
+- [ ] 没写 Tailwind 类；文字用 `Text`，组件只用 components.md 里列的；自己的 CSS 只管布局，颜色只取 `var(--plume-*)`；浅色、深色都能看。
 - [ ] 给人看的文字中英两份；代码里发给模型的中文标了 `i18n-exempt`。
+
+交付：
+
 - [ ] `README.md` 写了它做什么、怎么用。
-- [ ] 类型检查通过（仓库里 `pnpm check` 通过）；改了界面或行为的，装进 Plume 实际跑一遍。
+- [ ] 检查通过：独立项目 `plume-plugin check`（类型检查、插件规则、测试），仓库里 `pnpm check`。
 
 ## 可以照着写的插件
 
-`todo`、`commands`、`web`、`skills`、`git`、`mcp`、`browser`、`terminal`、`side-chat`、`subagents`、`plan` 随应用发，在本体仓库的 `packages/builtin/` 下；其余在 Plume 插件仓库（plume-plugins）的 `plugins/` 下。拿不到仓库时，以模板和本 skill 里的代码片段为准。
+`todo`、`terminal`、`scripts`、`git`、`commands`、`web`、`mcp`、`skills`、`subagents`、`plan`、`browser`、`side-chat` 随应用发，在本体仓库的 `packages/builtin/` 下；其余在 Plume 插件仓库（plume-plugins）的 `plugins/` 下。拿不到仓库时，以模板和本 skill 里的代码片段为准。
 
 | 插件 | 看它的什么 |
 | --- | --- |
@@ -159,9 +180,8 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | `screenshot` | `ui.screen`、`ui.screenOverlay`、`ui.pinnedShot`；标注组件；`ui.composerItem`；占导航一行的设置分区 |
 | `commands` | `ctx.commands.provide`（每次现读磁盘）；设置分区经 `ui.remote()` 新建、打开、删除文件 |
 | `hooks` | 六个钩子里的四个一起用（`tool.approve` 在 order 2000）；`observe: "all"` 和 `ctx.sessions.onEnded`；运行记录 `watch` 推变化、`ui.replyAction`、`ui.composerAbove`、`ui.openSettings`；`ui.useProjects` 切范围 |
-| `im` | 不给 `page` 的设置分区（画进插件详情）；密钥经 `ctx.secrets` 存进 `ctx.dataDir`，界面只知道存没存 |
 | `index` | `ctx.workspace.files`；按会话缓存、会话删掉时丢掉；设置分区里 `ui.useProjects` |
-| `web` | 只读的工具（不弹审批卡）；API key 不经界面 |
+| `web` | 只读的工具（不弹审批卡）；API key 经 `ctx.secrets` 加密存进 `ctx.dataDir`，不经界面 |
 | `mcp` | 运行中途增减工具；`run.ask`；`run.request` 带 `waiting` 和 `ui.requestCard`；大图放进 `shownImages`；`model.context` 藏工具换成搜索入口；前缀登记卡片；设置分区里的就地编辑、弹窗和 `Popover` 菜单 |
 | `skills` | `model.context` 按磁盘现状加一段；`tool.execute` 按会话状态拒掉调用；`/` 菜单的 `displayText`；`ui.FileDiff` |
 | `subagents` | `start` / `wait` / `report` 后台派发和回报，`steer` 插话；`model.context` 按会话换参数；`step.end` 的 `awaiting`；`ui.Conversation` 局部渲染；「智能体」整页（`page: "agents"`）、`ctx.tools.list()` 挑工具、`ui.ModelSelect` |
