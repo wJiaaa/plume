@@ -164,9 +164,10 @@ ctx.tools.register({
 
 ### 问人
 
-想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, subject?, reason?, escalation? })`：宿主不再在执行前替你问。
+想自己决定问什么（给出 diff、命令原文、只在参数校验完以后问），写 `asks: true`，在 `execute` 里调 `run.ask({ kind, title, detail, format?, diff?, subject?, reason?, escalation? })`：宿主不再在执行前替你问。
 
 - `kind` 是卡片右上角的小标签：`command`、`create`、`modify`、`view` 宿主写成「执行命令」「写入文件」「修改文件」「读取文件」，别的照原样写。
+- 卡片正文默认把 `detail` 照纯文本画。`detail` 是命令时给 `format: "shell"`、是 JSON 参数时给 `format: "json"`，卡片按它上色；改一个文件时给 `diff`（`FileDiffDetails`，和结果 `details` 里声明改动的同一种，可以直接用同一份），卡片画成 diff。正文怎么画归宿主，插件只交数据；给了 `diff` 也照样在 `detail` 里写文本的 diff，代管插件和钩子读的是它。
 - `run.ask` 返回 `"once"`、`"always"` 或 `"reject"`。得到 `"reject"` 时不执行，把 `run.rejection` 原样作为错误结果交回（`{ output: run.rejection, isError: true }`）：那是本体给的一句，说这次调用被人拒了、别原样重试也别换个工具达到同样效果，本体自己拒绝时也是这一句，不自己另写一份。
 - 哪些不弹给人、由本体直接得到 `"once"`（完全访问、外层设了 `approved`、答过「以后不再问」），见钩子 `tool.approve`；`escalation`（申请更宽的沙箱）总是问人；其余要不要真弹给人由钩子 `tool.approve` 定。
 - `subject` 照原样写（命令、路径、站点），不用加自己的插件名：本体把人答的「以后不再问」记在注册这件工具的插件名下，只放行你自己的工具再问同一个 `subject`，别的插件写出同样的字符串不算，你写 `read:<目录>` 也碰不到本体读边界的批准（那是本体名下的）。
@@ -524,7 +525,7 @@ ctx.hook("context.compact", async (input) => {
 | `scratchDirs` | 同 `run.scratchDirs`：同一脉的会话的临时目录，往里写、删里面的东西算正当干活（plume.approval 这么判） |
 | `call` | `{ id, name, args }`：模型发起的调用 |
 | `tool` | `{ name, mutating, plugin }`：被调的工具 |
-| `request` | 要弹给人的那张卡：`{ kind, title, detail, subject?, reason?, escalation? }`；`escalation` 是申请更宽的沙箱 |
+| `request` | 要弹给人的那张卡：`{ kind, title, detail, format?, diff?, subject?, reason?, escalation? }`；`escalation` 是申请更宽的沙箱 |
 | `byLayer` | 是 `tool.execute` 的某一层自己问的，没有 `subject`，只能答这一次 |
 | `permissionMode` | 这次调用所在项目现在的权限模式；`full` 只有提权会带到这里 |
 | `signal` | 用户停止这一轮时中止 |

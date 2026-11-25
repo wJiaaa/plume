@@ -125,12 +125,15 @@ export const editTool: Tool<EditArgs> = {
 				const count = args.replace_all ? occurrences : 1;
 				const diff = computeDiff(before, after);
 				const shown = displayPath(ctx.cwd, ctx.files.resolve(file ?? args.path));
+				// 通用声明（`FileDiffDetails`）：审批卡和转录的通用卡片都按它画 diff。
+				const declared: FileDiffDetails = { path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks };
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({
 						kind: "modify",
 						title: `Edit ${shown}`,
 						detail: formatDiff(diff, shown),
+						diff: declared,
 						subject: absolute,
 					});
 					if (decision !== "once" && decision !== "always") return { value: declinedResult(ctx) };
@@ -146,11 +149,8 @@ export const editTool: Tool<EditArgs> = {
 							text: `Edited ${file ? args.path : shown}: ${count} replacement${count === 1 ? "" : "s"}, +${diff.added} -${diff.removed}.${echo}`,
 						},
 					],
-					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；改了哪个文件由本体记在结果上（`ToolOutput.changes`）。
-					details: {
-						kind: "edit",
-						...({ path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks } satisfies FileDiffDetails),
-					},
+					// 改了哪个文件由本体记在结果上（`ToolOutput.changes`）。
+					details: { kind: "edit", ...declared },
 				};
 				return { text: encodeText(after, layout), value: result };
 			});

@@ -87,12 +87,15 @@ export const writeTool: Tool<WriteArgs> = {
 				const after = decodeText(written).text;
 				const diff = computeDiff(previous?.text ?? "", after);
 				const shown = displayPath(ctx.cwd, ctx.files.resolve(args.path));
+				// 通用声明（`FileDiffDetails`）：审批卡和转录的通用卡片都按它画 diff。
+				const declared: FileDiffDetails = { path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks };
 
 				if (ctx.requestApproval) {
 					const decision = await ctx.requestApproval({
 						kind: "create",
 						title: alreadyExists ? `Overwrite ${shown}` : `Create ${shown}`,
 						detail: formatDiff(diff, shown),
+						diff: declared,
 						subject: absolute,
 					});
 					if (decision !== "once" && decision !== "always") return { value: declinedResult(ctx) };
@@ -106,12 +109,8 @@ export const writeTool: Tool<WriteArgs> = {
 							text: `${alreadyExists ? "Updated" : "Created"} ${shown} (${lines} lines).`,
 						},
 					],
-					// diff 那几项是通用声明（`FileDiffDetails`），转录的通用卡片按它画；改了哪个文件由本体记在结果上（`ToolOutput.changes`）。
-					details: {
-						kind: "write",
-						created: !alreadyExists,
-						...({ path: shown, added: diff.added, removed: diff.removed, hunks: diff.hunks } satisfies FileDiffDetails),
-					},
+					// 改了哪个文件由本体记在结果上（`ToolOutput.changes`）。
+					details: { kind: "write", created: !alreadyExists, ...declared },
 				};
 				return { text: written, value: result };
 			});

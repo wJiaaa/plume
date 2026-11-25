@@ -347,6 +347,7 @@ async function confirmCommandAppData(call: CallFiles, command: string, scope: { 
 			kind: "command",
 			title: text("files.commandAppData", { name: basename(touched[0]!) || touched[0]! }),
 			detail: command,
+			format: "shell",
 			reason: text("files.writeAppDataScope"),
 		}),
 	);

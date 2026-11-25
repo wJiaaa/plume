@@ -604,6 +604,7 @@ export class Connections implements McpResources {
 				kind: "mcp",
 				title: `${server.name} → ${raw.name}`,
 				detail: JSON.stringify(args, null, 2).slice(0, 2000),
+				format: "json",
 				subject: name,
 			});
 			// i18n-exempt：以下都是交给模型的结果。

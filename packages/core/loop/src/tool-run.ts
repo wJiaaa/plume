@@ -433,7 +433,7 @@ async function runTool(call: ToolCallContent, scope: ToolScope, step: readonly T
 		return changed ? { ...rest, changes: changed } : rest;
 	};
 	// 插件的层自己要问时，卡片上是这个调用的参数和它给的理由；没有 subject，只能答这一次。
-	const generic = { kind: call.name, title: call.name, detail: JSON.stringify(call.arguments, null, 2) };
+	const generic = { kind: call.name, title: call.name, detail: JSON.stringify(call.arguments, null, 2), format: "json" as const };
 	// 用到才读设置：不改动工作区的调用不等它，同一批同时跑的照调用的顺序开始。
 	let read: ReturnType<ToolScope["permission"]> | undefined;
 	const permission = () => (read ??= scope.permission());

@@ -326,7 +326,7 @@ export async function authorizeCommand(command: string, title: string | undefine
 	const read = await ctx.files.readCommand(command);
 	if (!read.ok) return errorResult(read.message);
 	if (ask && ctx.requestApproval && !isReadOnlyCommand(command)) {
-		const decision = await ctx.requestApproval({ kind: "command", title: title ?? "Run shell command", detail: command, subject: command });
+		const decision = await ctx.requestApproval({ kind: "command", title: title ?? "Run shell command", detail: command, format: "shell", subject: command });
 		if (decision !== "once" && decision !== "always") return declinedResult(ctx);
 	}
 	return undefined;

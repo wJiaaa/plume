@@ -113,7 +113,14 @@ export function commandAccess(call: CallCommands): Pick<ToolRun, "shell" | "exec
 			const current = granted ?? (await announced());
 			const target = (WIDER[current] ?? []).find((wider) => wider === mode);
 			if (!target) return { granted: false, message: notWider(String(mode), current) };
-			const decision = await call.ask({ kind: "command", title: String(title), detail: String(detail ?? ""), reason: justification, escalation: target });
+			const decision = await call.ask({
+				kind: "command",
+				title: String(title),
+				detail: String(detail ?? ""),
+				format: "shell",
+				reason: justification,
+				escalation: target,
+			});
 			if (decision === "reject") return { granted: false, message: declined(target) };
 			granted = target;
 			return { granted: true };

@@ -16,7 +16,7 @@ import type {
 	UserContent,
 } from "@plume/llm/types";
 import type { CallContext } from "@plume/rpc";
-import type { RevertPlan } from "./changes.ts";
+import type { FileDiffDetails, RevertPlan } from "./changes.ts";
 import type { BackgroundCallState } from "./diagnostics.ts";
 import type { CommandContext, CommandResult, Locale, RegisteredToolInfo, SlashCommand } from "./plugin.ts";
 import type { ClearRange, ClearResult, StorageUse, UsageRequestBucket } from "./usage.ts";
@@ -350,8 +350,18 @@ export interface ApprovalRequest {
 	 */
 	kind: string;
 	title: string;
-	/** 卡片正文：命令、diff，插件的工具是它的参数。 */
+	/**
+	 * 卡片正文的纯文本：命令、diff，插件的工具是它的参数。给了 `diff` 时卡片画 diff，不画它；代管插件、钩子读的始终是它，
+	 * 所以给了 `diff` 也要照样给文本的 diff。
+	 */
 	detail: string;
+	/** `detail` 是什么，卡片按它上色，和工具卡片里画命令、参数的同一种：`shell` 是要跑的命令，`json` 是 JSON 参数。不给时照纯文本画。 */
+	format?: "shell" | "json";
+	/**
+	 * 要改的那一个文件，和工具结果里声明改动的同一种（`FileDiffDetails`）：卡片按它画 diff（行号、增删色、按扩展名上色），
+	 * 和工具卡片里的一个样子。不给时画 `detail`。
+	 */
+	diff?: FileDiffDetails;
 	/**
 	 * 「以后不再问」记下的东西：命令、文件的绝对路径、站点。没有时只能答这一次。本体按发起审批的一方分开记、分开比对：工具经 `run.ask` 给的
 	 * （和本体替没写 `asks` 的工具在执行前问的，subject 是工具名）记在注册这件工具的插件名下，只放行这个插件的工具再问同一个 subject，

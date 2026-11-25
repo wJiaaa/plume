@@ -132,7 +132,9 @@ describe("提权", () => {
 
 		const approved = call("ask", { answers: ["once"] });
 		expect(await approved.escalate({ mode: "danger-full-access", ...request })).toEqual({ granted: true });
-		expect(approved.asked).toEqual([{ kind: "command", title: "提权运行：构建", detail: "make", reason: "要写构建产物", escalation: "danger-full-access" }]);
+		expect(approved.asked).toEqual([
+			{ kind: "command", title: "提权运行：构建", detail: "make", format: "shell", reason: "要写构建产物", escalation: "danger-full-access" },
+		]);
 		// 命令是照会话宣布的那一档的 shell 写的，换档不换 shell。
 		await approved.exec("make");
 		expect(launched.at(-1)).toEqual({ command: "make", mode: "danger-full-access", shellMode: "read-only" });
