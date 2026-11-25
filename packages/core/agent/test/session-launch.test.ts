@@ -215,7 +215,7 @@ it("开出来的会话每结束一轮，本体把收尾那段回复交回来处�
 	expect(delivered).toMatchObject({
 		role: "user",
 		synthetic: true,
-		delivery: [{ plugin: "test.launcher", title: "清理死代码", status: "done", sessionId: launched.session.id }],
+		delivery: [{ plugin: "test.launcher", title: "清理死代码", status: "done", sessionId: launched.session.id, text: "新会话做完了" }],
 	});
 	const words = textOf(delivered);
 	expect(words).toContain("不是用户说的话");

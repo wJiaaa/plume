@@ -16,7 +16,13 @@ const user = (text: string, extra: Partial<Extract<Message, { role: "user" }>> =
 const reply = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] }) as unknown as Message;
 const call = (id: string, name = "spawn_session") => ({ role: "assistant", content: [{ type: "toolCall", id, name, arguments: {} }] }) as unknown as Message;
 
-type Sent = { parentId: string; sessionId: string; text: string; options: { delivery: DeliveryInput; frame?: ReportFrame; wake: boolean }; plugin: string };
+type Sent = {
+	parentId: string;
+	sessionId: string;
+	text: string;
+	options: { delivery: DeliveryInput; reply?: string; frame?: ReportFrame; wake: boolean };
+	plugin: string;
+};
 
 /**
  * 一组会话：p 是来处（里面有 `spawn_session` 的调用 c1、c2），别的按 `spawnedFrom` 挂在它下面。`whenIdle` 由测试放行（`settle`）。
@@ -74,7 +80,7 @@ it("每轮汇报：第一轮和来处的信引起的那一轮叫醒，人说话�
 		parentId: "p",
 		sessionId: "s1",
 		plugin: "plume.test",
-		options: { wake: true, delivery: { title: "标题 s1", status: "done" } },
+		options: { wake: true, reply: "做完了：改了 a.ts", delivery: { title: "标题 s1", status: "done" } },
 	});
 	expect(sent[0]!.text).toContain('name="cli"');
 	expect(sent[0]!.text).toContain("做完了：改了 a.ts");

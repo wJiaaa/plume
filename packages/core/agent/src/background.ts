@@ -165,14 +165,15 @@ export class BackgroundRuns {
 		sessionId: string,
 		launchedId: string,
 		words: string,
-		options: { delivery: DeliveryInput; frame?: ReportFrame; wake: boolean },
+		options: { delivery: DeliveryInput; reply?: string; frame?: ReportFrame; wake: boolean },
 		plugin: string,
 	): void {
 		if (typeof words !== "string" || !words.trim()) throw new Error(text("session.emptyMessage"));
 		const frame = options.frame;
+		const reply = options.reply?.trim();
 		const report: Pending = {
 			text: words,
-			delivery: { ...deliveryOf(options.delivery, plugin), sessionId: launchedId },
+			delivery: { ...deliveryOf(options.delivery, plugin), sessionId: launchedId, ...(reply ? { text: reply } : {}) },
 			...(frame ? { frame: frameOf(frame, plugin) } : {}),
 			valid: () => true,
 		};

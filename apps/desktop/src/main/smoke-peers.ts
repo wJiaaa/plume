@@ -124,20 +124,23 @@ export async function checkPeers(options: {
 		await capture("smoke-peers-answer.png");
 
 		// 第二个对话里来信那一行的箭头跳到第一个对话：那边有「来自 …」那一行和它回的那句，它发的那条是「已送达」。
-		await clickVisible(page, `[data-peer-open]`);
+		await clickVisible(page, `${letterRow} [data-peer-open]`);
 		await until(chatHas(REPLIED), "箭头跳到第一个对话");
 		await until(`document.querySelector(${JSON.stringify(letterRow)})?.textContent.includes('来自') === true`, "第一个对话里有「来自 …」那一行");
 		if (!(await page<string>(`document.querySelector(${JSON.stringify(letterRow)}).textContent`)).includes(QUESTION))
 			throw new Error("来信那一行的摘要不是问题");
 		await until(`document.querySelector('[data-screen=chat] [data-peer-receipt]')?.dataset.peerReceipt === 'delivered'`, "回的那条标「已送达」");
 		await capture("smoke-peers-request.png");
-		// 点发出的那一行跳到对方。
-		await clickVisibleIn(
-			page,
-			`[document.querySelector('[data-screen=chat] [data-peer-receipt] [data-flow-row], [data-screen=chat] [data-peer-receipt] button')]`,
-			"发出的那一行",
+		// 点发出的那一行展开显示发出去的内容、不跳转；点旁边的箭头跳回第二个对话。
+		const sentRow = "[data-screen=chat] [data-peer-receipt]";
+		await clickVisibleIn(page, `[document.querySelector('${sentRow} [data-flow-row], ${sentRow} button')]`, "发出的那一行");
+		await until(
+			`document.querySelector(${JSON.stringify(sentRow)})?.textContent.includes(${JSON.stringify(ANSWER)}) === true && ${chatHas(REPLIED)}`,
+			"发出的那一行点开显示内容且留在当前对话",
 		);
-		await until(chatHas(GOT), "点发出的那一行跳回第二个对话");
+		await capture("smoke-peers-sent-open.png");
+		await clickVisible(page, `${sentRow} [data-peer-open]`);
+		await until(chatHas(GOT), "点发出的那一行旁边的箭头跳回第二个对话");
 		if (!(await agent.sessions()).some((item) => item.id === execId)) throw new Error("第二个对话不见了");
 	} finally {
 		setModel(undefined);
@@ -205,6 +208,20 @@ export async function checkPeers(options: {
 		if (originSeen.includes("<session-message")) throw new Error("来处收到了回寄的信");
 		if (originSeen.split("<session-report").length - 1 !== 2) throw new Error("来处收到的汇报不是两份（第一轮、答复那一轮）");
 		await until(`document.querySelector('[data-screen=chat] [data-peer-receipt]')?.dataset.peerReceipt === 'replied'`, "问的那一行标「已回复」");
+		await clickVisibleIn(
+			page,
+			`[document.querySelector('[data-screen=chat] [data-delivery-row][data-delivery-session] button[aria-expanded]')]`,
+			"来自关联会话那一行",
+		);
+		await until(
+			`document.querySelector('[data-screen=chat] [data-delivery-row][data-delivery-session]')?.textContent.includes(${JSON.stringify(FIRST)}) === true`,
+			"点开来自关联会话一行显示汇报内容",
+		);
+		await clickVisibleIn(page, `[document.querySelector('[data-screen=chat] [data-peer-receipt] button[aria-expanded]')]`, "发消息给那一行");
+		await until(
+			`document.querySelector('[data-screen=chat] [data-peer-receipt]')?.textContent.includes(${JSON.stringify(LEFT_QUESTION)}) === true`,
+			"点开发消息给一行显示发出的内容",
+		);
 		await capture("smoke-peers-reported.png");
 	} finally {
 		setModel(undefined);

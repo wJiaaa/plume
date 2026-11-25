@@ -95,14 +95,15 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 		const messages = readMessages(session);
 		const title = session.summary.title;
 		const status = stop.reason === "done" ? "done" : "failed";
+		const reply = excerpt(lastReply(messages), REPORT_MAX);
 		const delivery: DeliveryInput = { id: `${id}:${messages.length}`, title, status, ...(status === "failed" ? { incomplete: true } : {}) };
-		const text = reportText({ sessionId: id, ...(origin.name ? { name: origin.name } : {}), title, status, reply: excerpt(lastReply(messages), REPORT_MAX) });
+		const text = reportText({ sessionId: id, ...(origin.name ? { name: origin.name } : {}), title, status, reply });
 		const parentId = parent.summary.id;
 		background.reportBack(
 			parentId,
 			id,
 			text,
-			{ delivery, frame: { head: REPORT_HEAD, tail: () => reportTail(waitingOnUser(parentId)) }, wake: wake && status === "done" },
+			{ delivery, ...(reply ? { reply } : {}), frame: { head: REPORT_HEAD, tail: () => reportTail(waitingOnUser(parentId)) }, wake: wake && status === "done" },
 			plugin,
 		);
 	}

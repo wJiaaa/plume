@@ -60,7 +60,10 @@ export const MessageRow = memo(function MessageRow(props: RowProps) {
 	if (message.role === "user") {
 		if (message.synthetic) {
 			// 一次送达里可以既有后台结果、又有别的会话的信：各画各的那一行。
-			const delivery = message.delivery?.length && transcript ? <DeliveryRow delivery={message.delivery} sessionId={transcript.sessionId} /> : null;
+			const delivery =
+				message.delivery?.length && transcript ? (
+					<DeliveryRow delivery={message.delivery} sessionId={transcript.sessionId} stateKey={`delivery-${props.index}`} />
+				) : null;
 			const letters = message.peer?.length ? <PeerLetterRow letters={message.peer} stateKey={`peer-${props.index}`} /> : null;
 			if (!delivery && !letters) return null;
 			return (

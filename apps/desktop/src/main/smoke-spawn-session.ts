@@ -201,10 +201,15 @@ export async function checkSpawnSession(options: {
 			throw new Error("交回的结果画成了人的气泡");
 		// 人没看着时新会话跑完了：输入框上方那一行不等人点进去看过就收走。
 		await until(`document.querySelector(${JSON.stringify(handedOff)}) === null`, "新会话跑完后输入框上方那一条收走");
+		await clickVisible(page, `${delivery} button[aria-expanded]`);
+		await until(
+			`document.querySelector(${JSON.stringify(delivery)})?.textContent.includes(${JSON.stringify(CLEANED)}) === true && ${chatHas(RECEIVED)}`,
+			"「来自关联会话」那一行点开显示汇报内容且留在原对话",
+		);
 		await capture("smoke-spawn-session-report.png");
 
-		await clickVisible(page, `${delivery} button`);
-		await until(chatHas(CLEANED), "「来自关联会话」那一行点了到新会话");
+		await clickVisible(page, `${delivery} [data-delivery-open]`);
+		await until(`${chatHas(PROMPT)} && ${chatHas(CLEANED)}`, "「来自关联会话」那一行旁边的箭头点了到新会话");
 		await clickVisible(page, `[data-plume-row="${parentId}"] > button`);
 		if (!briefed) throw new Error("新会话的第一句不是「背景 + 任务」");
 		await until(`${chatHas(RECEIVED)} && document.querySelector(${JSON.stringify(handedOff)}) === null`, "回到原对话，输入框上方没有那一条");

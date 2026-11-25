@@ -9,12 +9,14 @@
  */
 
 import type { DeliveredReport } from "@plume/contract";
-import { FlowRow, useI18n } from "@plume/ui";
-import { ChevronRight, CircleAlert, Inbox, SquarePen } from "@plume/ui/icons";
+import { Collapse, FlowRow, IconButton, useI18n } from "@plume/ui";
+import { ArrowUpRight, CircleAlert, Inbox, SquarePen } from "@plume/ui/icons";
+import { Markdown } from "../markdown/Markdown.tsx";
 import { AgentDeliverySlot, openReferencedSession, useDeliveryPlugins } from "../plugins.tsx";
 import { notify } from "../toast/index.ts";
+import { useTranscriptDisclosure } from "./view-state.ts";
 
-export function DeliveryRow({ delivery, sessionId }: { delivery: DeliveredReport[]; sessionId: string }) {
+export function DeliveryRow({ delivery, sessionId, stateKey }: { delivery: DeliveredReport[]; sessionId: string; stateKey: string }) {
 	const drawn = useDeliveryPlugins();
 	// 按交它的插件分开，先到的插件在前；同一插件的几份一起交给它。
 	const plugins = [...new Set(delivery.map((report) => report.plugin))];
@@ -23,46 +25,57 @@ export function DeliveryRow({ delivery, sessionId }: { delivery: DeliveredReport
 		return drawn.has(plugin) ? (
 			<AgentDeliverySlot key={plugin} plugin={plugin} sessionId={sessionId} reports={reports} />
 		) : (
-			reports.map((report) => <DefaultDelivery key={`${plugin}:${report.id}`} report={report} />)
+			reports.map((report) => <DefaultDelivery key={`${plugin}:${report.id}`} report={report} stateKey={`${stateKey}-${plugin}-${report.id}`} />)
 		);
 	});
 }
 
 /**
  * 没人接管的一份：标题说是什么事，失败、没做完挂在右边。带着 `sessionId` 的是开出来的会话每轮交回的（本体交，见 `SessionLaunch.spawnedFrom`）：
- * 回复本身在那个会话里，点了过去，那个会话删掉了就提示一句。
+ * 点开读交回的汇报，旁边按钮跳到那个会话（删掉了就提示一句）。
  */
-function DefaultDelivery({ report }: { report: DeliveredReport }) {
+function DefaultDelivery({ report, stateKey }: { report: DeliveredReport; stateKey: string }) {
 	const { t } = useI18n();
+	const [open, setOpen] = useTranscriptDisclosure(stateKey);
 	const failed = report.status === "failed";
 	const target = report.sessionId;
+	const body = report.text?.trim() ?? "";
 	const outcome = failed ? t("delivery.failed") : report.status === "aborted" || report.incomplete ? t("delivery.incomplete") : undefined;
+	const jump = target ? () => void openReferencedSession(target).catch(() => notify(t("peers.sessionGone"), "warn")) : undefined;
+	const row = (
+		<FlowRow
+			icon={
+				failed ? (
+					<CircleAlert size={13} strokeWidth={1.8} className="shrink-0 text-danger" />
+				) : target ? (
+					<SquarePen size={13} strokeWidth={1.8} className="shrink-0" />
+				) : (
+					<Inbox size={13} strokeWidth={1.8} className="shrink-0" />
+				)
+			}
+			title={target ? <span className="font-normal">{t("delivery.fromSession")}</span> : undefined}
+			summary={report.title}
+			trailing={outcome ? <span className={failed ? "text-danger" : undefined}>{outcome}</span> : undefined}
+			open={body ? open : undefined}
+			onToggle={body ? () => setOpen((value) => !value) : undefined}
+			label={report.title}
+		/>
+	);
 	return (
 		<div data-delivery-row="" data-delivery-plugin={report.plugin} data-delivery-session={target}>
-			<FlowRow
-				icon={
-					failed ? (
-						<CircleAlert size={13} strokeWidth={1.8} className="shrink-0 text-danger" />
-					) : target ? (
-						<SquarePen size={13} strokeWidth={1.8} className="shrink-0" />
-					) : (
-						<Inbox size={13} strokeWidth={1.8} className="shrink-0" />
-					)
-				}
-				title={target ? <span className="font-normal">{t("delivery.fromSession")}</span> : undefined}
-				summary={report.title}
-				trailing={
-					target || outcome ? (
-						<>
-							{outcome && <span className={failed ? "text-danger" : undefined}>{outcome}</span>}
-							{/* 点了是去那个会话，不是就地展开：箭头自己画。 */}
-							{target && <ChevronRight size={12} strokeWidth={2} aria-hidden />}
-						</>
-					) : undefined
-				}
-				onToggle={target ? () => void openReferencedSession(target).catch(() => notify(t("peers.sessionGone"), "warn")) : undefined}
-				label={report.title}
-			/>
+			{jump ? (
+				<div className="flex min-w-0 items-center gap-1">
+					{row}
+					<IconButton size="xs" icon={<ArrowUpRight size={12} strokeWidth={1.8} />} label={t("peers.open")} onClick={jump} data-delivery-open="" />
+				</div>
+			) : (
+				row
+			)}
+			{body && (
+				<Collapse open={open} bodyClassName="mt-1.5 border-l-2 border-line pl-3">
+					<Markdown text={body} className="text-label text-ink-muted" />
+				</Collapse>
+			)}
 		</div>
 	);
 }
