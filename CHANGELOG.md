@@ -2,6 +2,38 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.5] - 2026-11-26
+
+<!-- plume:notes en -->
+### Changes
+
+- **Revert messages—and file edits—directly in side chat.** Side chat used to only offer "Edit & resend," leaving no way to pull a message back or undo files edited from a side thread. Every message in side chat now has a Revert action that puts your text, attachments, and session references back into side chat's own composer without touching the main input. When reverted or re-asked turns changed files, you get the same option to roll those files back—and if a file change previously reported to the main session gets rolled back, the main session is reminded to re-read those files on its next turn.
+- **Follow up with existing sessions and get reports back from side chat dispatch cards.** Starting a new session from a side chat dispatch card used to mean tracking its progress manually—and follow-up tweaks could easily spin up another duplicate session. Dispatch cards now list active sessions already opened from that side chat so you can hand follow-up work straight back to them, and "Open new session" now defaults to "Report back when done" so each completed turn delivers its summary right back to the side chat and wakes it up. Plugin sub-sessions can also use `spawnedFrom.callIn` together with `reportBack`.
+- **Refreshed model catalog.** Updated the bundled model catalog snapshot shipped with the app.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **侧边聊天支持撤回任意消息，并可连文件一起回退。** 以前侧边聊天只有「编辑并重新提问」，发出去的消息撤不回，侧边聊天改过的文件也退不回去。现在侧边聊天里的每一句提问都可以直接撤回，原文、附件与会话引用会回到侧边聊天自己的输入框，不影响主对话输入框；撤回或编辑重问涉及文件改动时，可与主对话一样选择连同文件一起退回。如果被截掉的轮次曾把文件改动通知过主会话，主会话下一问前也会再次收到重读提醒。
+- **侧边聊天交办卡片支持选已有会话接着做，开新会话默认「做完送回」。** 以前从侧边聊天交办卡片开出新会话后，后续想继续改容易重复开新会话，也收不到对方做完后的汇报。现在卡片会直接列出这段侧边聊天开过且未归档的会话，一键即可让它接着做；「开新会话」新增默认开启的「做完送回」开关，对方每做完一轮就会把汇报交回这段侧边聊天并唤醒它（插件子会话也同步支持 `spawnedFrom.callIn` 搭配 `reportBack`）。
+- **刷新模型目录快照。** 更新了随应用分发的模型目录快照。
+
+### 新功能
+
+- **core**: 侧边聊天交办卡片支持选已开会话接着做，开新会话默认做完送回 (`1effbd4`)
+- **core**: 带 callIn 的关联会话支持把每轮汇报交回对应子会话 (`3475f71`)
+- **desktop**: 侧边聊天里能撤回任一句，字和附件回到侧边聊天自己的输入框 (`27a4811`)
+- **core**: 侧边聊天这类插件子会话也能撤回，撤回和编辑重发都能连文件一起退 (`4f3b52c`)
+
+### 修复
+
+- **core**: 侧边聊天说过的改动被撤回截掉后，主会话下一问再提醒一次那几个文件 (`c890f08`)
+
+### 文档
+
+- 架构、多会话功能、冒烟和插件 skill 同步侧边聊天交办与做完送回 (`76fdfbb`)
+- 功能说明、冒烟和插件 skill 跟上侧边聊天的撤回 (`416fa43`)
+
 ## [0.9.4] - 2026-11-26
 
 <!-- plume:notes en -->
