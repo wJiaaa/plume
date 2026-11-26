@@ -233,7 +233,7 @@ export type SessionKind = "top" | "child" | "standalone";
  * - `toolCallId`：提出开这个会话的那次调用（一张卡、一次工具调用）。开的插件凭它认出「这次调用开过哪个会话」，本身不带别的意思。
  * - `callIn`：那次调用在哪个会话里，不给就在 `sessionId` 里。只能是来处下面的侧边聊天这类子会话（`parentId` 是来处）。
  * - `name`：开出它的一方叫它的短名（小写字母、数字、连字符，最长 24 个字）。一组互相开出来的会话靠它称呼彼此。
- * - `reportBack`：本体每结束一轮把结果交回来处（见 `SessionLaunch.spawnedFrom`）。
+ * - `reportBack`：本体每结束一轮把结果交回那次调用所在的会话（`callIn`，不给就是来处；见 `SessionLaunch.spawnedFrom`）。
  */
 export interface SpawnedFrom {
 	sessionId: string;

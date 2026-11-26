@@ -1,5 +1,6 @@
 /**
- * 开出来的会话每结束一轮，本体把它收尾那段回复的前 400 字交回开出它的会话（摘要上的 `spawnedFrom`，开的插件要了 `reportBack` 的）。
+ * 开出来的会话每结束一轮，本体把它收尾那段回复的前 400 字交回开出它的那次调用所在的会话（摘要上的 `spawnedFrom`，开的插件要了 `reportBack` 的）：
+ * 一般是来处本身；那次调用在来处下面的子会话里（`callIn`，比如侧边聊天的卡）时交回那个子会话，不交来处——那件事是在子会话里交出去的。
  *
  * 归本体而不归开会话的插件：计划交给新会话、建议开出的新会话说的是同一件事——那边做完了，这边得知道。
  * 交给各插件各记一份，哪个插件没记，那边做完就悄无声息。要不要交回由开的插件选（`spawnedFrom.reportBack`），本体只照办。
@@ -7,8 +8,8 @@
  * 交回时再看那次调用还在不在（撤回截掉了就不交）。
  * 那一行记在开它的插件名下（`DeliveredReport.plugin`），它登记了 `ui.agentDelivery` 就由它画。
  *
- * 叫不叫醒来处（`wake`），看这一轮是谁引起的（`session.cause`）和这一轮读到过谁的信（`session.peerRead`）：开出来的第一轮、
- * 读到过来处寄来的信的那一轮叫醒；人在它里面说话引起的、出错的不叫醒，汇报留到来处下一轮开头读。
+ * 叫不叫醒收件的会话（`wake`），看这一轮是谁引起的（`session.cause`）和这一轮读到过谁的信（`session.peerRead`）：开出来的第一轮、
+ * 读到过来处寄来的信的那一轮叫醒（子会话寄出的信记在来处名下，见 turn 的 `postLetter`，所以 `callIn` 那段寄来的也算）；人在它里面说话引起的、出错的不叫醒，汇报留到来处下一轮开头读。
  * 后台结果叫起的那一轮（它派的子 Agent 回来了）沿用引起它的那件事，由本体算好。
  * 一轮收尾时还有派出去的事没回来（`summary.background`），先不交：真正的结论在回来以后那一轮里，那时再交。
  * 那件事要是被人停掉、没再引起新的一轮，等它真闲下来（`whenIdle`）把这一轮的汇报交上，不叫醒——人停下的事不该叫起来处。
@@ -16,7 +17,7 @@
  * 真叫不叫得醒、几份合成一次由送达那边定（见 `wake.ts` 的 `wakeReports`）。
  */
 
-import type { DeliveryInput, Log, Message, TurnStop } from "@plume/contract";
+import type { DeliveryInput, Log, Message, SpawnedFrom, TurnStop } from "@plume/contract";
 import type { BackgroundRuns } from "../background.ts";
 import type { PluginHost } from "../host.ts";
 import type { Session } from "./session.ts";
@@ -85,11 +86,18 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 	function deliver(session: Session, stop: TurnStop, wake: boolean): void {
 		const id = session.summary.id;
 		const origin = session.summary.spawnedFrom;
-		const parent = origin ? sessions.get(origin.sessionId) : undefined;
-		if (quitting() || !origin?.reportBack || !origin.toolCallId || !parent || parent.summary.kind !== "top" || parent.summary.archived) return;
-		const plugin = callOwner(parent.summary.id, origin.toolCallId);
+		const source = origin ? sessions.get(origin.sessionId) : undefined;
+		if (quitting() || !origin?.reportBack || !origin.toolCallId || !source || source.summary.kind !== "top" || source.summary.archived) return;
+		const parentId = reportTarget(origin);
+		const parent = sessions.get(parentId);
+		// 交给子会话的，子会话关掉（删了）就不交了：那件事是在那里交出去的，换到来处去说没人接得上。
+		if (!parent || (parent !== source && parent.summary.parentId !== source.summary.id)) {
+			log("agent", "warn", `会话 ${id} 没交回去：交出它的 ${parentId} 不在了`);
+			return;
+		}
+		const plugin = callOwner(parentId, origin.toolCallId);
 		if (!plugin) {
-			log("agent", "warn", `会话 ${id} 没交回去：来处 ${parent.summary.id} 里那次调用 ${origin.toolCallId} 不在了`);
+			log("agent", "warn", `会话 ${id} 没交回去：${parentId} 里那次调用 ${origin.toolCallId} 不在了`);
 			return;
 		}
 		const messages = readMessages(session);
@@ -98,7 +106,6 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 		const reply = excerpt(lastReply(messages), REPORT_MAX);
 		const delivery: DeliveryInput = { id: `${id}:${messages.length}`, title, status, ...(status === "failed" ? { incomplete: true } : {}) };
 		const text = reportText({ sessionId: id, ...(origin.name ? { name: origin.name } : {}), title, status, reply });
-		const parentId = parent.summary.id;
 		background.reportBack(
 			parentId,
 			id,
@@ -108,13 +115,13 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 		);
 	}
 
-	/** 从 `parentId` 开出来、此刻弹着卡在等人的会话（它自己或挂在它下面的子会话弹的都算），按来处叫它的短名，没有时是标题。 */
+	/** 交回 `parentId` 的会话里此刻弹着卡在等人的（它自己或挂在它下面的子会话弹的都算），按来处叫它的短名，没有时是标题。 */
 	function waitingOnUser(parentId: string): string[] {
 		const all = [...sessions.values()];
 		const asking = (session: Session) => (session.approvals?.length ?? 0) > 0;
 		return all.flatMap((session) => {
 			const from = session.summary.spawnedFrom;
-			if (from?.sessionId !== parentId || session.summary.archived) return [];
+			if (!from || reportTarget(from) !== parentId || session.summary.archived) return [];
 			const waiting = asking(session) || all.some((child) => child.summary.parentId === session.summary.id && asking(child));
 			// i18n-exempt：发给模型的话（汇报结尾点名在等用户的会话）。
 			return waiting ? [`${from.name ?? session.summary.title}（${session.summary.id}）`] : [];
@@ -128,6 +135,11 @@ export function createSpawnedReports(deps: SpawnedReportsDeps): SpawnedReports {
 			for (const id of sessionIds) lingering.delete(id);
 		},
 	};
+}
+
+/** 交回送到哪个会话：开出它的那次调用所在的会话，见文件头。 */
+export function reportTarget(from: SpawnedFrom): string {
+	return from.callIn ?? from.sessionId;
 }
 
 /** 开出来的第一轮（来处交代的）、读到过来处寄来的信的那一轮收场时叫醒来处。 */

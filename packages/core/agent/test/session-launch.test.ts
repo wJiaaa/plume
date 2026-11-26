@@ -333,7 +333,7 @@ it("fork 带着来处在那次调用之前的记录开；没有调用、短名�
 	await expect(sessions().launch({ cwd: dir, message: "做", spawnedFrom: { sessionId: source.id, name: "Bad Name" } })).rejects.toThrow();
 });
 
-it("调用 id 要是本插件的工具在那个会话里的一次调用：别的会话、没有的调用抛错；挂在来处下面的子会话里的调用要写明 callIn，要交回的不行", async () => {
+it("调用 id 要是本插件的工具在那个会话里的一次调用：别的会话、没有的调用抛错；挂在来处下面的子会话里的调用要写明 callIn", async () => {
 	const { service, sessions, source } = await withSuggestion((last) =>
 		last.includes("侧边看看") ? { toolCalls: [{ id: "call_side", name: "suggest", args: {} }] } : { text: "好了" },
 	);
@@ -350,8 +350,7 @@ it("调用 id 要是本插件的工具在那个会话里的一次调用：别的
 	// `callIn` 只能是挂在来处下面的子会话，还得带上调用 id。
 	await expect(launch({ sessionId: source.id, toolCallId: "call_1", callIn: other.id })).rejects.toThrow("来处不对");
 	await expect(launch({ sessionId: source.id, callIn: side.id })).rejects.toThrow("来处不对");
-	await expect(launch({ sessionId: source.id, toolCallId: "call_side", callIn: side.id, reportBack: true })).rejects.toThrow("要交回来处");
-	await expect(launch({ sessionId: source.id, reportBack: true })).rejects.toThrow("要交回来处");
+	await expect(launch({ sessionId: source.id, reportBack: true })).rejects.toThrow("要交回");
 	await expect(
 		sessions().launch({ cwd: dir, message: "做", fork: true, spawnedFrom: { sessionId: source.id, toolCallId: "call_side", callIn: side.id } }),
 	).rejects.toThrow();
@@ -364,6 +363,53 @@ it("调用 id 要是本插件的工具在那个会话里的一次调用：别的
 	await new Promise((resolve) => setTimeout(resolve, 1_500));
 	expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
 });
+
+it("子会话里的调用开出、要交回的会话：每轮交回那个子会话并叫醒它，不交来处；子会话寄去的信引起的那一轮也叫醒它", async () => {
+	let launchedId = "";
+	const { service, sessions, source } = await withSuggestion(
+		(last) => {
+			if (last.includes("session-report")) return { text: "收到交回的结果" };
+			if (last.includes("侧边看看")) return { toolCalls: [{ id: "call_side", name: "suggest", args: {} }] };
+			if (last.includes("交给它")) return { toolCalls: [{ id: "call_relay", name: "relay", args: {} }] };
+			if (last.includes("再改一下")) return { text: "改好了" };
+			if (last.includes("去做")) return { text: "新会话做完了" };
+			return { text: "好了" };
+		},
+		(ctx) =>
+			ctx.tools.register({
+				name: "relay",
+				description: "转一句",
+				parameters: { type: "object", properties: {} },
+				execute: async (_args, run: ToolRun) => {
+					run.letter?.(launchedId, { from: "侧边", text: "再改一下" });
+					return { output: "已寄出" };
+				},
+			}),
+	);
+	const side = await sessions().create({ parentId: source.id });
+	await sessions().send(side.id, "侧边看看");
+	const launched = await sessions().launch({
+		cwd: dir,
+		message: "去做",
+		title: "改标识",
+		spawnedFrom: { sessionId: source.id, toolCallId: "call_side", callIn: side.id, reportBack: true },
+	});
+	launchedId = launched.session.id;
+	await settled(service, side.id, ["user", "assistant", "toolResult", "assistant", "delivery", "assistant"]);
+	expect((await service.getSession(side.id)).messages[4]).toMatchObject({
+		delivery: [{ plugin: "test.launcher", title: "改标识", status: "done", sessionId: launchedId, text: "新会话做完了" }],
+	});
+	expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+
+	await sessions().send(side.id, "交给它");
+	await settled(service, launchedId, ["user", "assistant", "user", "assistant"]);
+	await settled(service, side.id, [
+		...["user", "assistant", "toolResult", "assistant", "delivery", "assistant"],
+		...["user", "assistant", "toolResult", "assistant", "delivery", "assistant"],
+	]);
+	expect(textOf((await service.getSession(side.id)).messages[10])).toContain("改好了");
+	expect(await roles(service, source.id)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+}, 20_000);
 
 it("来处那次调用的工具换成了别的插件的：不能拿它当来处", async () => {
 	const rival: Plugin = {

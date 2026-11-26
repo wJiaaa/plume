@@ -2,6 +2,7 @@ import type { AgentEvent, TurnStop, UserMessage } from "@plume/contract";
 import type { BackgroundRuns, ReadyKind } from "../background.ts";
 import { text } from "../i18n.ts";
 import type { Session } from "./session.ts";
+import { reportTarget } from "./spawned-reports.ts";
 
 /** 被别的会话的信、开出来的会话的交回接连叫起这么多轮、人一句话也没说时，不再叫醒（见 `wakeReports`）。 */
 const AUTO_WAKE_LIMIT = 10;
@@ -89,13 +90,13 @@ export function createWake(deps: WakeDeps): Wake {
 	}
 
 	/**
-	 * 开出来的会话一轮停下了：开出它的会话可能攒着别的会话交回的、在等它停（见 `wakeReports`）。这一份收场时就交了，
+	 * 开出来的会话一轮停下了：它交回的那个会话（`reportTarget`）可能攒着别的会话交回的、在等它停（见 `wakeReports`）。这一份收场时就交了，
 	 * 攒进的那一批过了聚合窗口才算攒好，等一会儿再看，几份合成一次送达。
 	 */
 	function nudgeOrigin(session: Session): void {
 		const from = session.summary.spawnedFrom;
 		if (!from?.reportBack) return;
-		const originId = from.sessionId;
+		const originId = reportTarget(from);
 		setTimeout(() => {
 			const origin = sessions.get(originId);
 			if (origin) wakeReports(origin);
@@ -116,11 +117,11 @@ export function createWake(deps: WakeDeps): Wake {
 		spawnedWaits.set(id, timer);
 	}
 
-	/** 从 `parentId` 开出来、要交回它（`reportBack`）、没归档的会话还有在跑的。不交回的那些停下了也没东西送来，不等它们。 */
+	/** 要交回 `parentId`（`reportBack`，见 `reportTarget`）、没归档的会话还有在跑的。不交回的那些停下了也没东西送来，不等它们。 */
 	function spawnedRunning(parentId: string): boolean {
 		for (const other of sessions.values()) {
 			const from = other.summary.spawnedFrom;
-			if (from?.sessionId === parentId && from.reportBack && !other.summary.archived && held(other)) return true;
+			if (from?.reportBack && reportTarget(from) === parentId && !other.summary.archived && held(other)) return true;
 		}
 		return false;
 	}

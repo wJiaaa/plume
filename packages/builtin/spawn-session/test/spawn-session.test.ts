@@ -463,5 +463,7 @@ it("系统提示词：要每轮交回来处的会话（不管是哪个插件开�
 	expect(plan[0]!.text).toContain("is reported to that session");
 	expect(await sections({ spawnedFrom: { sessionId: "p1" } })).toEqual([]);
 	expect(await sections({ spawnedFrom: { sessionId: "p1", toolCallId: "card", callIn: "side" } })).toEqual([]);
+	const side = await sections({ spawnedFrom: { sessionId: "p1", toolCallId: "card", callIn: "side", reportBack: true } });
+	expect(side[0]!.text).toContain("Session side, a sub-session of session p1, started you");
 	expect(await sections({ kind: "child", spawnedFrom: { sessionId: "p1", toolCallId: "c", reportBack: true } })).toEqual([]);
 });

@@ -147,12 +147,13 @@ export const results = {
 
 /**
  * 开出来的会话自己的系统提示词那一节：照着任务做、结果放在开头。只放来处的 id 和它叫自己的短名，不放标题——标题会改，
- * 一改这一节就变，缓存跟着失效。
+ * 一改这一节就变，缓存跟着失效。`via` 是开出它的那次调用所在的子会话（`spawnedFrom.callIn`）：交回送到那里，不送来处。
  */
-export function childSection(parentId: string, name: string | undefined): string {
+export function childSection(parentId: string, name: string | undefined, via: string | undefined): string {
+	const starter = via ? `Session ${via}, a sub-session of session ${parentId},` : `Session ${parentId}`;
 	return [
 		"# You are a session started from another session",
-		`Session ${parentId} started you${name ? ` and calls you \`${name}\`` : ""}. Your first message is the task it gave you; do exactly that task, and list unrelated problems you notice as follow-ups instead of fixing them.`,
+		`${starter} started you${name ? ` and calls you \`${name}\`` : ""}. Your first message is the task it gave you; do exactly that task, and list unrelated problems you notice as follow-ups instead of fixing them.`,
 		"Whenever a turn of yours ends, the opening of your final reply (a few hundred characters) is reported to that session, so open with the outcome (what changed, the commit or files, what is left) and put detail after it. The person can also talk to you here directly.",
 		"If you are blocked on something only that session or the person knows, make one short question your final reply and end your turn: the report carries it to that session. Never send progress updates — the reports carry those.",
 		"You can start sessions of your own, but in a turn started by another session's message you may only suggest them.",

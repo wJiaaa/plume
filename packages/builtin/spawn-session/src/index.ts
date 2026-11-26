@@ -89,7 +89,7 @@ export default {
 			if (input.session.kind !== "top") return next({ ...input, tools: input.tools.filter((tool) => !TOOLS.has(tool.name)) });
 			const origin = input.session.spawnedFrom;
 			if (origin?.reportBack)
-				return next({ ...input, sections: [...input.sections, { id: "spawnedSession", text: childSection(origin.sessionId, origin.name) }] });
+				return next({ ...input, sections: [...input.sections, { id: "spawnedSession", text: childSection(origin.sessionId, origin.name, origin.callIn) }] });
 			return next(input);
 		});
 

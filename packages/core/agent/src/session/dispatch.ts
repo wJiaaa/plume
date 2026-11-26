@@ -135,7 +135,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 		const name = typeof from?.name === "string" ? from.name.trim() : "";
 		if (name && !SPAWN_NAME.test(name)) throw new Error(text("session.badSpawnName", { name }));
 		// 只核字段属实，不管该不该开。调用 id 要是本插件的工具在那个会话里的一次调用：插件不能把随便哪个会话填成来处、
-		// 借交回往里说话，也不能冒认别的插件的卡。要交回的（`spawned-reports.ts` 每轮交回），那次调用得在来处本身里，交回记在它名下。
+		// 借交回往里说话，也不能冒认别的插件的卡。要交回的（`spawned-reports.ts` 每轮交回）得给那次调用，交回送到那次调用所在的会话、记在它名下。
 		const toolCallId = typeof from?.toolCallId === "string" ? from.toolCallId : undefined;
 		const callIn = typeof from?.callIn === "string" ? from.callIn : undefined;
 		const reportBack = from?.reportBack === true;
@@ -143,7 +143,7 @@ export function createDispatch(deps: DispatchDeps): Dispatch {
 			const via = callIn === undefined ? source : sessions.get(callIn);
 			if (!via || (callIn !== undefined && (toolCallId === undefined || via.summary.parentId !== source.summary.id || via.summary.kind === "top")))
 				throw new Error(text("session.badSpawnCallIn", { id: String(callIn) }));
-			if (reportBack && (toolCallId === undefined || callIn !== undefined)) throw new Error(text("session.reportNeedsCall"));
+			if (reportBack && toolCallId === undefined) throw new Error(text("session.reportNeedsCall"));
 			if (toolCallId !== undefined && spawned.callOwner(via.summary.id, toolCallId) !== owner)
 				throw new Error(text("session.badSpawnSource", { id: via.summary.id }));
 		}
