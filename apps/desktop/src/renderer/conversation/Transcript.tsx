@@ -51,6 +51,8 @@ import { WorkStep } from "./WorkStep.tsx";
 
 export function Transcript({
 	view,
+	scrollerWidth,
+	fadeSurface,
 	onCarryOn,
 	onOpenSettings,
 	onQuote,
@@ -61,6 +63,10 @@ export function Transcript({
 	request,
 }: Pick<ConversationProps, "renderUserMessage" | "replyText"> & {
 	view: SessionView;
+	/** 侧栏、面板区滑着时定住滚动面的宽度，免得每帧跨图块宽度档位重分配纹理；不在滑时铺满。 */
+	scrollerWidth?: number;
+	/** 背后是纯色底（无背景图、无磨砂）时传 `"shell"`，用轻量上下渐隐条替代整视口 `mask-image`。 */
+	fadeSurface?: "shell";
 	/**
 	 * 以界面的名义说一句「继续」。要稳定的引用：`draw` 跟着它换，`WorkStep` 的 memo 拿 `draw` 判断。
 	 * 不给就没有「继续」的入口（插件的子会话：那里的一轮只有插件能发起）。
@@ -405,100 +411,107 @@ export function Transcript({
 			<MessageEditsContext.Provider value={edits ?? null}>
 				<TranscriptCalls.Provider value={callState}>
 					<TranscriptLive.Provider value={live}>
-						{/* `@container`：栏太窄时问题导航贴到最边上、左右内衬对称，按这一栏量，不按窗口量。 */}
+						{/* `@container`：栏太窄时问题导航贴到最边上；内层另起一份 `@container`，滑动定宽时转录内衬跟着定住不重算。 */}
 						<div className="@container relative flex min-h-0 flex-1 flex-col">
-							<Scroller
-								className="flex-1"
-								// 底下留出「回到最新」的高度，它不压在最新那条消息上。见 `scroll.css` 的 `--plume-bottom-inset`。
-								// 左右内衬由 `.plume-transcript-view` 管（见 `conversation.css`）：左边让出问题导航，宽处补齐对称右边距与输入框对齐。
-								contentClassName="plume-transcript-view pt-5 pb-[var(--plume-bottom-inset)]"
-								fadeTop={32}
-								/*
-								 * 跟着底部走的时候底下不渐隐：输出时内容每长一截就离底几像素、追上又贴底，渐隐跟着一开一合，每一次都是遮罩深度
-								 * 变一下、整块转录重画一遍。读者滚开了才是「下面还有」，那时再淡。
-								 */
-								bottom={follow.away ? "fade" : "none"}
-								scrollRef={follow.scrollRef}
-								onScroll={onScroll}
-								onResize={follow.onResize}
-								onUserScroll={follow.onUserScroll}
-								onHold={follow.hold}
-							>
-								{/* 一个会话一棵树：换会话时整棵重挂，运行行的停留、展开过的连接记录这些行里的状态不带到另一个会话。 */}
-								<div key={id} className="mx-auto flex w-full max-w-[var(--plume-content)] flex-col" data-plume-session={id}>
-									{/* 只挂最近的几轮：一天的会话上千条消息，全挂上每次重绘都要走整棵树。其余的点一下才挂。 */}
-									{hidden > 0 && (
-										<div className="mb-4 flex items-center justify-center">
-											<Button size="sm" icon={<ChevronUp size={14} />} onClick={range.earlier} data-plume-show-earlier="">
-												{/* 「共 N 轮」只在它确实是另一个数字时才出现。 */}
-												{hidden > WINDOW_TURNS
-													? translate("conversation.showEarlier", { n: WINDOW_TURNS, total: hidden })
-													: translate("conversation.showEarlierRest", { n: hidden })}
-											</Button>
-										</div>
-									)}
-									<div ref={rowsRef} className="flex flex-col gap-4" data-plume-transcript-rows="">
-										{turnsOf(blocks).map(({ turn, from, count }) => (
-											<TurnFrame key={`turn:${turn}`} settled={turn !== allBlocks[allBlocks.length - 1]?.turn}>
-												{blocks.slice(from, from + count).map((block, offset) => {
-													const at = from + offset;
-													// 后面已经开了下一轮：这一轮里还在演的字一次补齐，见 `Superseded`。不按有没有下一轮决定套不套：套上、拿掉会让整块重挂。
-													const superseded = block.turn !== allBlocks[allBlocks.length - 1]?.turn;
-													if (block.kind === "plain") {
-														const run = block.runs[0];
-														return run ? (
-															<Superseded.Provider key={runKey(run)} value={superseded}>
-																{draw(run)}
+							<div className="@container mx-auto flex min-h-0 flex-1 flex-col" style={{ width: scrollerWidth ?? "100%" }}>
+								<Scroller
+									className="flex-1"
+									// 底下留出「回到最新」的高度，它不压在最新那条消息上。见 `scroll.css` 的 `--plume-bottom-inset`。
+									// 左右内衬由 `.plume-transcript-view` 管（见 `conversation.css`）：左边让出问题导航，宽处补齐对称右边距与输入框对齐。
+									contentClassName="plume-transcript-view pt-5 pb-[var(--plume-bottom-inset)]"
+									fadeTop={32}
+									fadeSurface={fadeSurface}
+									/*
+									 * 跟着底部走的时候底下不渐隐：输出时内容每长一截就离底几像素、追上又贴底，渐隐跟着一开一合，每一次都是遮罩深度
+									 * 变一下、整块转录重画一遍。读者滚开了才是「下面还有」，那时再淡。
+									 */
+									bottom={follow.away ? "fade" : "none"}
+									scrollRef={follow.scrollRef}
+									onScroll={onScroll}
+									onResize={follow.onResize}
+									onUserScroll={follow.onUserScroll}
+									onHold={follow.hold}
+								>
+									{/*
+									 * 一个会话一棵树：换会话时整棵重挂，运行行的停留、展开过的连接记录这些行里的状态不带到另一个会话。
+									 * 正文列单独合成（用 opacity 而不给里面可能出现的 fixed 换参照，也不裁切阴影）：大屏上只按正文宽度
+									 * （`--plume-content`）分配纹理，不再为左右纯空白分配 5K 图块；栏宽在上限以上变化时零重光栅化。
+									 */}
+									<div key={id} className="mx-auto flex w-full max-w-[var(--plume-content)] flex-col [will-change:opacity]" data-plume-session={id}>
+										{/* 只挂最近的几轮：一天的会话上千条消息，全挂上每次重绘都要走整棵树。其余的点一下才挂。 */}
+										{hidden > 0 && (
+											<div className="mb-4 flex items-center justify-center">
+												<Button size="sm" icon={<ChevronUp size={14} />} onClick={range.earlier} data-plume-show-earlier="">
+													{/* 「共 N 轮」只在它确实是另一个数字时才出现。 */}
+													{hidden > WINDOW_TURNS
+														? translate("conversation.showEarlier", { n: WINDOW_TURNS, total: hidden })
+														: translate("conversation.showEarlierRest", { n: hidden })}
+												</Button>
+											</div>
+										)}
+										<div ref={rowsRef} className="flex flex-col gap-4" data-plume-transcript-rows="">
+											{turnsOf(blocks).map(({ turn, from, count }) => (
+												<TurnFrame key={`turn:${turn}`} settled={turn !== allBlocks[allBlocks.length - 1]?.turn}>
+													{blocks.slice(from, from + count).map((block, offset) => {
+														const at = from + offset;
+														// 后面已经开了下一轮：这一轮里还在演的字一次补齐，见 `Superseded`。不按有没有下一轮决定套不套：套上、拿掉会让整块重挂。
+														const superseded = block.turn !== allBlocks[allBlocks.length - 1]?.turn;
+														if (block.kind === "plain") {
+															const run = block.runs[0];
+															return run ? (
+																<Superseded.Provider key={runKey(run)} value={superseded}>
+																	{draw(run)}
+																</Superseded.Provider>
+															) : null;
+														}
+														/*
+														 * 按开这一轮的那句话起名，不按第一行：跑着的那一轮刚发出时下面是空的，第一行等它开口才有。
+														 * 按第一行起名，开口那一下整块就卸掉重建。没有开口那句的（会话的第 0 轮）才退回第一行。
+														 */
+														const opener = allBlocks[range.start + at - 1];
+														const head = (opener?.turn === block.turn ? opener : block).runs[0];
+														const key = `process:${head ? runKey(head) : block.turn}`;
+														// 按回合算，不按块的位置：正文一开始流式输出，过程就不再排在末尾。和全部的最后一轮比，不和窗口里的：往回翻过页，窗口末尾不是在跑的那一轮。
+														const live = running && block.turn === allBlocks[allBlocks.length - 1]?.turn;
+														return (
+															<Superseded.Provider key={key} value={superseded}>
+																<ProcessBlock block={block} live={live} draw={draw} lastUser={holds(block, lastUser) ? lastUser : undefined} />
 															</Superseded.Provider>
-														) : null;
-													}
-													/*
-													 * 按开这一轮的那句话起名，不按第一行：跑着的那一轮刚发出时下面是空的，第一行等它开口才有。
-													 * 按第一行起名，开口那一下整块就卸掉重建。没有开口那句的（会话的第 0 轮）才退回第一行。
-													 */
-													const opener = allBlocks[range.start + at - 1];
-													const head = (opener?.turn === block.turn ? opener : block).runs[0];
-													const key = `process:${head ? runKey(head) : block.turn}`;
-													// 按回合算，不按块的位置：正文一开始流式输出，过程就不再排在末尾。和全部的最后一轮比，不和窗口里的：往回翻过页，窗口末尾不是在跑的那一轮。
-													const live = running && block.turn === allBlocks[allBlocks.length - 1]?.turn;
-													return (
-														<Superseded.Provider key={key} value={superseded}>
-															<ProcessBlock block={block} live={live} draw={draw} lastUser={holds(block, lastUser) ? lastUser : undefined} />
-														</Superseded.Provider>
-													);
-												})}
-											</TurnFrame>
-										))}
-										{range.end === allBlocks.length && footerTimestamp !== null && <TurnFooters session={view} timestamp={footerTimestamp} />}
-									</div>
-									{more > 0 && (
-										<div className="my-3 flex items-center justify-center">
-											<Button size="sm" icon={<ChevronDown size={14} />} label={translate("conversation.showLaterN", { n: more })} onClick={range.later} />
+														);
+													})}
+												</TurnFrame>
+											))}
+											{range.end === allBlocks.length && footerTimestamp !== null && <TurnFooters session={view} timestamp={footerTimestamp} />}
 										</div>
-									)}
-									{range.end === allBlocks.length && (
-										<>
-											{request}
-											{/* 一整轮都在，不随每次工具调用来去；结论在来的时候这一行只是看不见、高度不变。见 `RunningRow`。 */}
-											<RunningRow
-												running={running}
-												compacting={view.compacting}
-												messages={messages}
-												startedAt={view.startedAt}
-												waiting={view.approval === undefined ? undefined : view.approval.type === "request" ? "answer" : "approval"}
-												waitingText={view.approval?.type === "request" ? view.approval.waiting : undefined}
-												retrying={retrying}
-												handedOff={resume !== null}
-											/>
-											{onCarryOn && resume && <ResumeRow view={view} resume={resume} onCarryOn={onCarryOn} />}
-											{/* 转录的末尾，作为一个元素：它进了视口，就是读者跟上了。零高度，不改变它报告的布局。 */}
-											<div ref={follow.tailRef} aria-hidden className="h-px w-full shrink-0" />
-										</>
-									)}
-								</div>
-								{/* 贴底收起后留在底下的那块空，见 `FollowBottom.slackRef`。在会话那一栏外面：它不是转录的内容。 */}
-								<div ref={follow.slackRef} aria-hidden className="w-full shrink-0" />
-							</Scroller>
+										{more > 0 && (
+											<div className="my-3 flex items-center justify-center">
+												<Button size="sm" icon={<ChevronDown size={14} />} label={translate("conversation.showLaterN", { n: more })} onClick={range.later} />
+											</div>
+										)}
+										{range.end === allBlocks.length && (
+											<>
+												{request}
+												{/* 一整轮都在，不随每次工具调用来去；结论在来的时候这一行只是看不见、高度不变。见 `RunningRow`。 */}
+												<RunningRow
+													running={running}
+													compacting={view.compacting}
+													messages={messages}
+													startedAt={view.startedAt}
+													waiting={view.approval === undefined ? undefined : view.approval.type === "request" ? "answer" : "approval"}
+													waitingText={view.approval?.type === "request" ? view.approval.waiting : undefined}
+													retrying={retrying}
+													handedOff={resume !== null}
+												/>
+												{onCarryOn && resume && <ResumeRow view={view} resume={resume} onCarryOn={onCarryOn} />}
+												{/* 转录的末尾，作为一个元素：它进了视口，就是读者跟上了。零高度，不改变它报告的布局。 */}
+												<div ref={follow.tailRef} aria-hidden className="h-px w-full shrink-0" />
+											</>
+										)}
+									</div>
+									{/* 贴底收起后留在底下的那块空，见 `FollowBottom.slackRef`。在会话那一栏外面：它不是转录的内容。 */}
+									<div ref={follow.slackRef} aria-hidden className="w-full shrink-0" />
+								</Scroller>
+							</div>
 							<BackToLatest
 								show={follow.away || range.end < allBlocks.length}
 								unread={follow.unread}

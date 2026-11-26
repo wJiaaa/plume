@@ -7,7 +7,7 @@ import { MAIN_TOOLBAR_HEIGHT, TOP_ROW_HEIGHT } from "../../shared/window-chrome.
 import { Arrival, useArrival } from "../markdown/useSmoothText.ts";
 import { clamp, layoutMode, panelWidthFor, SCREEN_MIN } from "../layout.ts";
 import { useLiveSession } from "../session-live.ts";
-import { ChatBackdrop } from "../chat-backdrop.tsx";
+import { ChatBackdrop, useHasChatBackdrop } from "../chat-backdrop.tsx";
 import { notify } from "../toast/index.ts";
 import { ApprovalOverlay } from "../conversation/ApprovalOverlay.tsx";
 import { Transcript } from "../conversation/Transcript.tsx";
@@ -80,10 +80,20 @@ export function ChatWorkspace({
 	usePluginUis();
 	const root = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({ width: 0, height: 0 });
+	const skipSlideWidth = useRef(false);
 	useLayoutEffect(() => {
 		const element = root.current;
 		if (!element) return;
-		const measure = () => setSize({ width: element.clientWidth, height: element.clientHeight });
+		const measure = () => {
+			const width = element.clientWidth;
+			const height = element.clientHeight;
+			setSize((current) => {
+				if (current.width === width && current.height === height) return current;
+				// 侧栏滑着且单屏、面板排法与宽度都不受影响时，工作区内的左右位置全靠 CSS 贴边走，不用每帧触发 React 重渲。
+				if (skipSlideWidth.current && current.height === height) return current;
+				return { width, height };
+			});
+		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(element);
@@ -121,6 +131,21 @@ export function ChatWorkspace({
 			...screenLayout(app, pane, { width: pane.width, height: size.height }, slide, shares[pane.scope] ?? 0.4, slideFrom.current),
 		};
 	});
+	const slideStable =
+		slideWidth !== undefined &&
+		!split &&
+		!app.split &&
+		layouts.every(({ layout, landed }) => landed.arrangement === layout.arrangement && landed.panelWidth === layout.panelWidth);
+	skipSlideWidth.current = slideStable;
+	// 滑完或窗口本身变宽时立刻把尺寸同步回来，不留旧宽度。
+	useLayoutEffect(() => {
+		if (slideStable) return;
+		const element = root.current;
+		if (!element) return;
+		const width = element.clientWidth;
+		const height = element.clientHeight;
+		setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+	}, [slideStable, app.windowWidth]);
 	const ordered: PaneLayout[] = layouts.map(({ pane, layout, floor }) => ({ ...pane, layout, floor }));
 	return (
 		<div ref={root} data-split={split ? "" : undefined} className="relative min-h-0 flex-1">
@@ -133,15 +158,25 @@ export function ChatWorkspace({
 						layout={layout}
 						height={size.height}
 						slideTarget={slideTarget}
+						sidebarSliding={slideWidth !== undefined}
 						onShare={(share) => onShare(pane.scope, share)}
 					/>
 				</ToolbarOverlapFor>
 			))}
 			{split && (
 				<>
-					{/* 两屏之间：顶行里竖一小截线，下面一整条，和侧栏、面板区之间的分隔线一个样子。 */}
-					<span aria-hidden className="absolute top-0 h-5 w-px bg-line-float" style={{ left: leftWidth, marginTop: (MAIN_TOOLBAR_HEIGHT - 20) / 2 }} />
-					<span aria-hidden data-split-divider="" className="absolute bottom-0 w-px bg-line-float" style={{ left: leftWidth, top: MAIN_TOOLBAR_HEIGHT }} />
+					{/* 两屏之间：顶行里竖一小截线，下面一整条，和侧栏、面板区之间的分隔线一个样子；单独合成 1px 细条，避免被合并成整屏大层。 */}
+					<span
+						aria-hidden
+						className="absolute top-0 h-5 w-px bg-line-float will-change-transform"
+						style={{ left: leftWidth, marginTop: (MAIN_TOOLBAR_HEIGHT - 20) / 2 }}
+					/>
+					<span
+						aria-hidden
+						data-split-divider=""
+						className="absolute bottom-0 w-px bg-line-float will-change-transform"
+						style={{ left: leftWidth, top: MAIN_TOOLBAR_HEIGHT }}
+					/>
 					<div className="absolute inset-y-0 z-10 w-0" style={{ left: leftWidth }}>
 						<ResizeHandle
 							edge="end"
@@ -212,7 +247,7 @@ function screenLayout(
 	else slideFrom[pane.key] ??= layout.panelWidth;
 	const from = slideFrom[pane.key];
 	const floor = from !== undefined && landed.arrangement === layout.arrangement ? Math.min(from, landed.panelWidth) : undefined;
-	return { layout, slideTarget, floor };
+	return { layout, landed, slideTarget, floor };
 }
 
 /**
@@ -227,6 +262,7 @@ function ChatScreen({
 	layout,
 	height,
 	slideTarget,
+	sidebarSliding,
 	onShare,
 }: {
 	fatal?: string;
@@ -235,6 +271,7 @@ function ChatScreen({
 	layout: ReturnType<typeof panelLayout>;
 	height: number;
 	slideTarget: number | undefined;
+	sidebarSliding: boolean;
 	onShare(share: number): void;
 }) {
 	const app = useChrome();
@@ -246,6 +283,10 @@ function ChatScreen({
 	const session = focused ? focusedSummary : app.sessions.find((entry) => entry.id === scope);
 	const moving = app.panelMoving && focused;
 	const motion = moving ? panelMotion(layout.shown) : "";
+	const slide = useMemo<ChatSlideState | undefined>(
+		() => (slideTarget === undefined ? undefined : { target: slideTarget, sidebar: sidebarSliding }),
+		[slideTarget, sidebarSliding],
+	);
 	/*
 	 * 侧栏开合、拖宽度时，这里每一帧都因尺寸重画一次。对话卡片和面板区的内容只跟自己订阅的状态走，不吃尺寸：
 	 * 元素留住，React 就跳过这两棵子树，只改外层的位置和尺寸。
@@ -301,14 +342,15 @@ function ChatScreen({
 				style={layout.chat}
 				className={`absolute left-0 top-0 flex min-h-0 min-w-0 flex-col ${motion} ${layout.single && layout.shown ? "invisible" : ""}`}
 			>
-				<ChatSlide.Provider value={slideTarget}>{chatCard}</ChatSlide.Provider>
+				<ChatSlide.Provider value={slide}>{chatCard}</ChatSlide.Provider>
 			</main>
 			{listPanels().length > 0 && (
 				<aside
 					aria-label={t("panel.area")}
 					data-panel-area={scope}
 					inert={!layout.shown}
-					className={`plume-panel plume-freeze absolute flex flex-col ${motion} ${layout.single && !layout.shown ? "invisible" : ""}`}
+					// 收着且没在滑时移出绘制，免得离屏面板的边框把工作区顶栏拖进全屏 Overlap 合成层。
+					className={`plume-panel plume-freeze absolute flex flex-col ${motion} ${(layout.single || !moving) && !layout.shown ? "invisible" : ""}`}
 					style={layout.panel}
 					onTransitionEnd={(event) => {
 						if (focused && event.target === event.currentTarget) {
@@ -421,7 +463,8 @@ export function TitleBar({ pane }: { pane?: TitlePane }) {
 		<header
 			data-toolbar-inset=""
 			data-split-title={split ? (other ? "other" : "focused") : undefined}
-			className={`absolute inset-x-0 top-0 z-10 flex items-center ${chat || split ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG} ${other ? "opacity-60" : ""}`}
+			// 单独合成这条顶行：侧栏滑着改 padding-left 时不打脏整屏 `#document`，也不和活动栏、分隔线合成全屏大层。
+			className={`absolute inset-x-0 top-0 z-10 flex items-center will-change-transform ${chat || split ? "gap-1.5" : "gap-3"} ${panelToggle ? PANEL_TOGGLE_ROOM : "pr-6"} ${CARD_DRAG} ${other ? "opacity-60" : ""}`}
 			style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: Math.max(chat || split ? 10 : name ? 14 : 24, overlap) }}
 		>
 			{chat && <SessionTitle key={session.id} session={session} />}
@@ -510,14 +553,30 @@ function StewardMark({ plugin }: { plugin: string }) {
  */
 const CARD_FLOAT_WIDTH = 320 + 32 + 420;
 
-/** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）；不在滑时是 undefined。 */
-const ChatSlide = createContext<number | undefined>(undefined);
+/** 侧栏开合、面板区横排开合，对话那一栏正滑着时，这一栏滑完有多宽（外框，`main` 的宽度）以及是不是侧栏带动；不在滑时是 undefined。 */
+interface ChatSlideState {
+	target: number;
+	sidebar: boolean;
+}
+const ChatSlide = createContext<ChatSlideState | undefined>(undefined);
 
-function useCardRoom(column: HTMLElement | null): boolean {
-	const slideTarget = useContext(ChatSlide);
-	const [room, setRoom] = useState(false);
+/**
+ * 滑动期间的两件事：判断悬浮卡片是否放得下，以及把主转录滚动面（`Scroller`）的宽度定在起止两者中较窄的一头。
+ *
+ * 侧栏开合时 `<main>` 每帧都在变宽窄；滚动面和它的 `.plume-fade-y` 遮罩要是跟着每帧换像素宽度，5K 120Hz 下每两帧就会
+ * 跨过 Chromium 的图块宽度档位、反复分配无法复用的新纹理，迅速打满 1.55GB 图块显存池触发缺块闪烁。
+ * 定住滚动面宽度（居中放着）后，滑着时纹理尺寸一帧不变；面板区开合时窄栏仍要逐帧重排换行，所以只在起止两头都放得下正文
+ * 最大宽度和两侧留白（`cap + 96`）时才定住。
+ */
+function useChatSlide(column: HTMLElement | null, solidFade: boolean): { roomToFloat: boolean; scrollerWidth: number | undefined } {
+	const slide = useContext(ChatSlide);
+	const [roomToFloat, setRoomToFloat] = useState(false);
+	const [scrollerWidth, setScrollerWidth] = useState<number | undefined>(undefined);
 	useLayoutEffect(() => {
-		if (!column) return;
+		if (!column) {
+			setScrollerWidth(undefined);
+			return;
+		}
 		/*
 		 * 侧栏、面板区开合时这一列每一帧一个宽度，跟着量的话卡片会在半路跨过浮动线，换个地方，滑着滑着闪一下。
 		 * 滑着时按滑之前和滑完的宽度里窄的那个定：变窄点下去当场就按滑完的放好，变宽滑完再换。
@@ -525,17 +584,31 @@ function useCardRoom(column: HTMLElement | null): boolean {
 		 */
 		const main = column.closest("main");
 		const start = column.clientWidth;
-		const end = slideTarget === undefined || !main ? undefined : slideTarget - (main.getBoundingClientRect().width - start);
+		const end = slide === undefined || !main ? undefined : slide.target - (main.getBoundingClientRect().width - start);
+		const floor = end === undefined ? undefined : Math.round(Math.min(start, end));
+		let pinned: number | undefined;
+		if (slide !== undefined && end !== undefined && floor !== undefined && floor > 0 && Math.abs(start - end) > 1) {
+			const session = column.querySelector<HTMLElement>("[data-plume-session]");
+			const cap = session ? parseFloat(getComputedStyle(session).maxWidth) : Number.NaN;
+			const wideEnough = Number.isFinite(cap) && floor >= cap + 96;
+			// 纯色底且起止都放得下正文上限和两侧留白时：没有整屏遮罩，正文列本身也已单独合成且宽度全程不变，不用缩窄滚动面（滚动条始终贴卡片最右）。
+			if (!solidFade) {
+				if (slide.sidebar || wideEnough) pinned = floor;
+			} else if (slide.sidebar && !wideEnough) {
+				pinned = floor;
+			}
+		}
+		setScrollerWidth(pinned);
 		const measure = () => {
 			const width = end === undefined ? column.clientWidth : Math.min(start, end);
-			setRoom(width >= CARD_FLOAT_WIDTH);
+			setRoomToFloat(width >= CARD_FLOAT_WIDTH);
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(column);
 		return () => observer.disconnect();
-	}, [column, slideTarget]);
-	return room;
+	}, [column, slide, solidFade]);
+	return { roomToFloat, scrollerWidth };
 }
 
 /**
@@ -566,7 +639,8 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 	const app = useChrome();
 	const { projects, windowWidth } = app;
 	const [column, setColumn] = useState<HTMLElement | null>(null);
-	const roomToFloat = useCardRoom(column);
+	const solidFade = !useHasChatBackdrop(false);
+	const { roomToFloat, scrollerWidth } = useChatSlide(column, solidFade);
 	const [lane, setLane] = useState<HTMLElement | null>(null);
 	const laneOpen = useLaneOpen(lane);
 	// 背景图、磨砂往上铺满透明的标题栏：只有 macOS 的会话窗口标题栏压在对话上；主窗口的标题栏在卡片外面，Windows、Linux 的在顶上那条带子里。
@@ -621,7 +695,7 @@ function ChatBody({ view, loading }: { view?: SessionView; loading: boolean }) {
 			<ChatBackdrop empty={!loading && view.messages.length === 0 && !view.draft} headerHeight={headerHeight} />
 			{laneCards}
 			<div className="relative col-start-1 row-start-1 flex min-h-0 flex-col">
-				{loading ? <ChatLoading /> : <Conversation view={view} />}
+				{loading ? <ChatLoading /> : <Conversation view={view} scrollerWidth={scrollerWidth} fadeSurface={solidFade ? "shell" : undefined} />}
 				{/* 浮着的卡片自己不挡点击：卡片之间、卡片旁边的空处点下去还是转录。 */}
 				{roomToFloat && !laneOpen && !loading && (
 					<div
@@ -695,7 +769,7 @@ function ChatLoading() {
 
 // ── 对话 ────────────────────────────────────────────────────────────
 
-function Conversation({ view }: { view: SessionView }) {
+function Conversation({ view, scrollerWidth, fadeSurface }: { view: SessionView; scrollerWidth?: number; fadeSurface?: "shell" }) {
 	const id = view.summary.id;
 	const arrival = useArrival(id);
 	// 回复里的文件签按这个会话找文件、读文件，见 `files/scope.ts`。
@@ -741,6 +815,8 @@ function Conversation({ view }: { view: SessionView }) {
 		<TranscriptScope arrival={arrival} files={files}>
 			<Transcript
 				view={view}
+				scrollerWidth={scrollerWidth}
+				fadeSurface={fadeSurface}
 				onSend={onSend}
 				onCarryOn={onCarryOn}
 				onOpenSettings={onOpenSettings}

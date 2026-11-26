@@ -128,6 +128,7 @@ export function ChildConversation({
 						<FileScope.Provider value={files}>
 							<Transcript
 								view={view}
+								fadeSurface={grain ? undefined : "shell"}
 								{...(composer && !composer.disabled && (!running || composer.mode === "steer") ? { onSend } : {})}
 								onOpenSettings={onOpenSettings}
 								onQuote={onQuote}

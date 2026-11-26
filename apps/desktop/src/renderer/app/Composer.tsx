@@ -433,8 +433,8 @@ export function Composer({ view, centered = false, cards = false }: { view?: Ses
 						}}
 					/>
 				)}
-				{/* 菜单贴着整个输入框的上沿往上长，和它一样宽。 */}
-				<div className="plume-composer-tray relative">
+				{/* 菜单贴着整个输入框的上沿往上长，和它一样宽。单独提层：侧栏开合横移时不因亚像素对齐反复重光栅化阴影。 */}
+				<div className="plume-composer-tray relative will-change-transform">
 					{commands.menu}
 					{mentions.menu}
 					<ProjectPicker project={project} projects={projects} actions={sidebarActions} onChoose={openNew} disabled={sending !== undefined}>

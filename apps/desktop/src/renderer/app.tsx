@@ -28,6 +28,7 @@ import { createPlugin, investigate, openSettingsSection, tryPrompt } from "./app
 import { SidebarContent, SidebarResizer, SidebarTopRow } from "./app/Sidebar.tsx";
 import { hasSidebar, Rail } from "./app/Rail.tsx";
 import { ChatWorkspace, CurrentChat, CurrentSessionToolbar, pageProps, ScreenCard, TitleBar } from "./app/Chat.tsx";
+import { FrameRound } from "./app/FrameRound.tsx";
 import { SettingsDialog } from "./app/SettingsDialog.tsx";
 
 export function App() {
@@ -244,25 +245,31 @@ function Shell() {
 					style={{ width: compact ? drawerWidth : pushed ? width : 0 }}
 				>
 					{/*
-					 * 里面定宽：收起时只是被裁掉，文字不跟着宽度一起挤。停靠时侧栏是底下那一块（`data-frame`）的左边一截：
-					 * 上、左、下的描边透明、底色不铺到描边下面，透出那一块的外沿；右边那道描边就是两栏之间的分隔线。
-					 * 底色比窗口外圈亮一档（`.sidebar-surface`），会话列表不和窗口底色糊成一片。抽屉整条铺同一个底色。
+					 * 里面定宽：收起时只是被裁掉，文字不跟着宽度一起挤。停靠时定宽这一层单独合成（用 opacity 而不是 transform，不给里面
+					 * fixed 定位的拖拽条换参照），避免宽度过渡每帧打脏底下的 5K `#document` 图块；侧栏身子本身不设 overflow-hidden，圆角
+					 * 裁切交给里面的 `FrameRound`（四角同半径），消除最后那张 Synthesized Clip。
 					 */}
-					<div className="flex h-full flex-col" style={{ width: compact ? drawerWidth : width }}>
+					<div className={`flex h-full flex-col ${compact ? "" : "[will-change:opacity]"}`} style={{ width: compact ? drawerWidth : width }}>
 						<SidebarTopRow divider={!compact && !moving} />
 						<div
-							className={`flex min-h-0 flex-1 flex-col ${compact ? "" : "sidebar-surface overflow-hidden rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"}`}
+							data-frame-sidebar={compact ? undefined : ""}
+							className={`relative flex min-h-0 flex-1 flex-col ${compact ? "" : "sidebar-surface rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"}`}
 							style={compact ? undefined : { marginBottom: CARD_INSET }}
 						>
 							{/*
 							 * 停靠的侧栏开合时，底色跟着宽度露出来、边一直是实的，里面的字和侧栏一起淡入淡出、横着挪 12px，
 							 * 和宽度同一时长、同一曲线。只动透明度和 translate，合成器上就能走完，不碰排版。
 							 * 收着时停在淡出的那一头；开着时不留 translate，免得给里面 fixed 定位的东西换了参照。抽屉整块滑，不淡。
+							 * 抽屉模式外层退成 `contents` 保持同一棵树，窗口跨过 compact 分档时侧栏和已打开的菜单不重挂。
 							 */}
-							<div
-								className={`flex min-h-0 flex-1 flex-col ${moving && !compact ? `transition-[opacity,translate] ${motion}` : ""} ${compact || pushed ? "" : "-translate-x-3 opacity-0"}`}
-							>
-								<SidebarContent />
+							<div className={compact ? "contents" : "absolute inset-0 overflow-hidden"}>
+								<FrameRound disabled={compact}>
+									<div
+										className={`flex min-h-0 flex-1 flex-col ${moving && !compact ? `transition-[opacity,translate] ${motion}` : ""} ${compact || pushed ? "" : "-translate-x-3 opacity-0"}`}
+									>
+										<SidebarContent />
+									</div>
+								</FrameRound>
 							</div>
 						</div>
 					</div>

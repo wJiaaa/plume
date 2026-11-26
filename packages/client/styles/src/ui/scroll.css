@@ -277,6 +277,56 @@ div.plume-composer:focus-within {
 }
 
 /*
+ * 纯色底上的滚动渐隐条（见 `Scroller` 的 `fadeSurface`）：底色已知且无背景图、磨砂时，
+ * 用与上面同一条 ease-out 互补曲线的两条 32/48px 窄条盖在上下沿，视觉等价于 `mask-image`，
+ * 但不用为整张 5K 滚动视口分配几十 MB 的等大遮罩缓冲，宽变时也无需重光栅化整屏遮罩。
+ */
+.plume-scroll-host[data-plume-fade-surface="shell"] {
+	--plume-fade-surface: var(--plume-shell);
+}
+
+.plume-fade-edge-top,
+.plume-fade-edge-bottom {
+	position: absolute;
+	left: 0;
+	right: 0;
+	z-index: 1;
+	height: 0;
+	pointer-events: none;
+	will-change: transform;
+}
+
+.plume-fade-edge-top {
+	top: 0;
+	background: linear-gradient(
+		to bottom,
+		var(--plume-fade-surface) 0%,
+		color-mix(in srgb, var(--plume-fade-surface) 94%, transparent) 12%,
+		color-mix(in srgb, var(--plume-fade-surface) 81%, transparent) 26%,
+		color-mix(in srgb, var(--plume-fade-surface) 62%, transparent) 41%,
+		color-mix(in srgb, var(--plume-fade-surface) 40%, transparent) 57%,
+		color-mix(in srgb, var(--plume-fade-surface) 20%, transparent) 72%,
+		color-mix(in srgb, var(--plume-fade-surface) 6%, transparent) 86%,
+		transparent 100%
+	);
+}
+
+.plume-fade-edge-bottom {
+	bottom: 0;
+	background: linear-gradient(
+		to top,
+		var(--plume-fade-surface) 0%,
+		color-mix(in srgb, var(--plume-fade-surface) 94%, transparent) 12%,
+		color-mix(in srgb, var(--plume-fade-surface) 81%, transparent) 26%,
+		color-mix(in srgb, var(--plume-fade-surface) 62%, transparent) 41%,
+		color-mix(in srgb, var(--plume-fade-surface) 40%, transparent) 57%,
+		color-mix(in srgb, var(--plume-fade-surface) 20%, transparent) 72%,
+		color-mix(in srgb, var(--plume-fade-surface) 6%, transparent) 86%,
+		transparent 100%
+	);
+}
+
+/*
  * 一段展开，而不是出现。
  *
  * `grid-template-rows` 从 0fr 到 1fr，是动画到一个没人量过的高度的唯一办法：内容保持自然尺寸，长高的是它

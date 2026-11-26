@@ -544,6 +544,9 @@
 		left: var(--frame-join-left, 0px);
 		right: var(--frame-join-right, 0px);
 	}
+	[data-frame-sidebar] {
+		--frame-join-right: var(--plume-radius-panel);
+	}
 	[data-frame-left] :is([data-frame-body], [data-frame-clip]) {
 		border-left-width: 0;
 		border-top-left-radius: 0;
@@ -560,7 +563,9 @@
 	}
 	[data-frame-right] [data-panel-area] [data-frame-body] {
 		border-left-width: 1px;
-		border-left-color: var(--plume-line-float);
+	}
+	[data-frame-right] [data-panel-area] [data-panel-body-divider] {
+		display: block;
 	}
 	/*
 	 * 分屏：两屏之间只有一道 1px 的线（Chat.tsx 的 `data-split-divider`），挨着它的那一边不圆、不描边，和别的栏之间一样拼成一整块。
@@ -589,9 +594,9 @@
 	}
 }
 
-/* 复制窗口内内容时，不把浮在内容上方的导航与通知拼进每一片。 */
+/* 复制窗口内内容时，不把浮在内容上方的导航、通知和滚动边缘渐隐条拼进每一片。 */
 @layer components {
-	html[data-capturing-window] :is([data-unread], [data-plume-toaster], .plume-tooltip) {
+	html[data-capturing-window] :is([data-unread], [data-plume-toaster], .plume-tooltip, .plume-fade-edge-top, .plume-fade-edge-bottom) {
 		visibility: hidden !important;
 	}
 }

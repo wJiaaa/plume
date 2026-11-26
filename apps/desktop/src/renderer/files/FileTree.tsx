@@ -275,7 +275,7 @@ export function FileTree({
 				</button>
 			)}
 
-			<Scroller className="flex-1" contentClassName="px-1 py-1">
+			<Scroller className="flex-1" contentClassName="px-1 py-1" fadeSurface="shell">
 				<div
 					ref={rowsHost}
 					role="tree"

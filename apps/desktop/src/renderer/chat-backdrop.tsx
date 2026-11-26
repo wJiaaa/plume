@@ -160,6 +160,14 @@ function useEffectiveBackdrop() {
 	return { ...selected, url: useBackdropUrl(source, selected.effect, !useDark()) };
 }
 
+/** 当前对话区底下有没有非纯色图层（背景图或磨砂）；纯色底时转录可用轻量的上下边缘渐隐条代替整屏遮罩。 */
+export function useHasChatBackdrop(empty: boolean): boolean {
+	const appearance = useAppearance();
+	const backdrop = useEffectiveBackdrop();
+	const enabled = empty ? backdrop.onNewChat : backdrop.inChat;
+	return appearance.grain === true || (enabled && Boolean(backdrop.url));
+}
+
 /**
  * 铺在对话区底下的那一层。新对话里是原样；有了消息以后整张图压淡一半，见 styles.css 的 .chat-backdrop。
  * 皮肤独立背景优先；撤下皮肤后重新使用人的全局图片和显示位置，不改写那份偏好。

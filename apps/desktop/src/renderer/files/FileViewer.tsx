@@ -122,7 +122,7 @@ export function FileViewer({
 					</Button>
 				</div>
 			) : kind === "markdown" && !showSource ? (
-				<Scroller className="flex-1" contentClassName="px-3">
+				<Scroller className="flex-1" contentClassName="px-3" fadeSurface="shell">
 					<div className="py-3">
 						<Markdown text={contents.text} baseDir={directoryOf(path)} sessionId={sessionId} remoteImages />
 					</div>

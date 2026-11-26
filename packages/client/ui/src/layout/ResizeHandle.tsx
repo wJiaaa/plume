@@ -205,7 +205,8 @@ export function ResizeHandle({
 			}}
 			// 除了 `INSIDE` 那一像素都推出去，带子落在窗格边的外面。
 			style={{ width: HIT_WIDTH, [edge === "end" ? "right" : "left"]: INSIDE - HIT_WIDTH }}
-			className="group/resize absolute top-0 bottom-0 z-30 cursor-col-resize [--plume-grip:30px]"
+			// 单独提成 9px 细条层：全高且 z-30，不单独提层时会和顶栏合并成整屏透明 Overlap 大层。
+			className="group/resize absolute top-0 bottom-0 z-30 cursor-col-resize will-change-transform [--plume-grip:30px]"
 		>
 			{/*
 			 * 握把：一小段圆头竖条，中心对着指针，钉在边界本身上。

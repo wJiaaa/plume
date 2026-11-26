@@ -25,6 +25,7 @@ export function Scroller({
 	top = "fade",
 	fadeTop,
 	bottom = "fade",
+	fadeSurface,
 	overscroll = "contain",
 	onScroll,
 	onResize,
@@ -61,6 +62,13 @@ export function Scroller({
 	fadeTop?: number;
 	/** 下沿的同一个问题。 */
 	bottom?: "fade" | "none";
+	/**
+	 * 背后是确定的纯色表面（无背景图、无磨砂）时传对应的面色名，上下沿改用与底色同色的窄渐隐条代替整视口 `mask-image`。
+	 *
+	 * 视觉与 `mask-image` 等价，但在高分大屏上省掉几十 MB 的整视口遮罩缓冲和宽变重光栅化；默认不传仍走 `mask-image`，
+	 * 兼容背景图、卡片和任意半透明表面。
+	 */
+	fadeSurface?: "shell";
 	onScroll?: (element: HTMLDivElement) => void;
 	/** 内容或视口尺寸变了就调用。 */
 	onResize?: (element: HTMLDivElement) => void;
@@ -136,6 +144,12 @@ export function Scroller({
 	const edges = useRef({ top, bottom, fadeTop });
 	edges.current = { top, bottom, fadeTop };
 	const fade = useRef({ top: 0, bottom: 0 });
+	const fadeTopEdge = useRef<HTMLDivElement>(null);
+	const fadeBottomEdge = useRef<HTMLDivElement>(null);
+	const syncFadeEdges = useCallback(() => {
+		if (fadeTopEdge.current) fadeTopEdge.current.style.height = `${fade.current.top}px`;
+		if (fadeBottomEdge.current) fadeBottomEdge.current.style.height = `${fade.current.bottom}px`;
+	}, []);
 	const readFade = useCallback((el: HTMLDivElement, scrollTop: number, scrollHeight: number, clientHeight: number) => {
 		const hidden = scrollHeight - clientHeight;
 		const { top, bottom, fadeTop } = edges.current;
@@ -144,8 +158,14 @@ export function Scroller({
 		const depthBottom = bottom === "fade" && hidden > 1 ? Math.round(Math.min(scrollFade(clientHeight, "bottom"), Math.max(0, hidden - scrollTop))) : 0;
 		return () => {
 			if (fade.current.top === depthTop && fade.current.bottom === depthBottom) return;
-			if (fade.current.top !== depthTop) el.style.setProperty("--plume-fade-top", `${depthTop}px`);
-			if (fade.current.bottom !== depthBottom) el.style.setProperty("--plume-fade-bottom", `${depthBottom}px`);
+			if (fade.current.top !== depthTop) {
+				el.style.setProperty("--plume-fade-top", `${depthTop}px`);
+				if (fadeTopEdge.current) fadeTopEdge.current.style.height = `${depthTop}px`;
+			}
+			if (fade.current.bottom !== depthBottom) {
+				el.style.setProperty("--plume-fade-bottom", `${depthBottom}px`);
+				if (fadeBottomEdge.current) fadeBottomEdge.current.style.height = `${depthBottom}px`;
+			}
 			el.toggleAttribute("data-plume-fading", depthTop > 0 || depthBottom > 0);
 			fade.current = { top: depthTop, bottom: depthBottom };
 		};
@@ -154,8 +174,11 @@ export function Scroller({
 		const el = viewport.current;
 		if (el) readFade(el, el.scrollTop, el.scrollHeight, el.clientHeight)();
 	}, [viewport, readFade]);
-	// 哪一头要渐隐变了（转录离开底部时底下才淡）就当场补上，不等下一次滚动。
-	useLayoutEffect(paintFade, [top, bottom, fadeTop, paintFade]);
+	// 哪一头要渐隐变了（转录离开底部时底下才淡）或切换了纯色渐隐模式就当场补上，不等下一次滚动。
+	useLayoutEffect(() => {
+		paintFade();
+		syncFadeEdges();
+	}, [top, bottom, fadeTop, fadeSurface, paintFade, syncFadeEdges]);
 
 	/** 只读，交回写的那一半——好让 `queueMeasure` 把几个面板的读全排在写前面。 */
 	const read = useCallback<Measure>(() => {
@@ -310,10 +333,10 @@ export function Scroller({
 	 */
 	const chain = overscroll === "auto" || !overflowing ? "overscroll-auto" : "overscroll-contain";
 
-	const fades = top === "fade" || bottom === "fade";
+	const maskFades = !fadeSurface && (top === "fade" || bottom === "fade");
 
 	return (
-		<div className={`plume-scroll-host relative flex min-h-0 flex-col ${className}`}>
+		<div className={`plume-scroll-host relative flex min-h-0 flex-col ${className}`} data-plume-fade-surface={fadeSurface}>
 			<div
 				ref={viewport}
 				onScroll={(event) => {
@@ -354,11 +377,14 @@ export function Scroller({
 				 * 这才是真正的修法：`pre` 本来就自己滚，在这里裁掉正是让它自己滚的前提。阅读列往右边没有
 				 * 意义——真比窗口还宽的东西，宽在它**自己的**盒子里。
 				 */
-				className={`plume-scroll-view min-h-0 flex-auto overflow-x-hidden overflow-y-auto ${chain} ${fades ? "plume-fade-y" : ""} ${contentClassName}`}
+				className={`plume-scroll-view min-h-0 flex-auto overflow-x-hidden overflow-y-auto ${chain} ${maskFades ? "plume-fade-y" : ""} ${contentClassName}`}
 				tabIndex={-1}
 			>
 				{children}
 			</div>
+
+			{fadeSurface && top === "fade" && <div ref={fadeTopEdge} aria-hidden className="plume-fade-edge-top" />}
+			{fadeSurface && bottom === "fade" && <div ref={fadeBottomEdge} aria-hidden className="plume-fade-edge-bottom" />}
 
 			{overflowing && (
 				<div
@@ -377,7 +403,11 @@ export function Scroller({
 					 * 点轨道跳转也随之拿掉。在一条看不见轨道的 10px 窄带上，它本来就没人发现得了，不值得为它
 					 * 换一条拖不动的边。
 					 */
-					className="pointer-events-none absolute top-0 right-0 bottom-0 z-40 w-[10px]"
+					/*
+					 * 单独合成这条 10px 窄轨：它压在滚动合成层之上，不单独提层时会把文档后面其它不重叠的边沿控件
+					 * （顶栏、活动栏等）一起吸进一张跨整屏的 Overlap 大层。
+					 */
+					className="pointer-events-none absolute top-0 right-0 bottom-0 z-40 w-[10px] will-change-transform"
 				>
 					{/* 对辅助技术隐藏：真正滚的是底下的视口。 */}
 					<div

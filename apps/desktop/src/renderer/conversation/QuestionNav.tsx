@@ -168,7 +168,12 @@ export function QuestionNav({
 	};
 
 	return (
-		<nav ref={nav} className="absolute inset-y-3 left-0 z-20 flex w-7 items-center @min-[520px]:left-3" aria-label={t("questionNav.label")}>
+		// 单独合成这条 28px 窄条：侧栏开合时跟着卡片左边横移走合成器，不再每帧重光栅化。
+		<nav
+			ref={nav}
+			className="absolute inset-y-3 left-0 z-20 flex w-7 items-center will-change-transform @min-[520px]:left-3"
+			aria-label={t("questionNav.label")}
+		>
 			<div
 				ref={rail}
 				role="toolbar"

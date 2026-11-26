@@ -9,10 +9,10 @@ import type { ReactNode } from "react";
  * 5K 屏上一张一百多 MB。
  * 里面那一层缩回外层的内框，内容和按它绝对定位的东西都摆在原来的位置。
  */
-export function FrameRound({ children }: { children: ReactNode }) {
+export function FrameRound({ children, disabled = false }: { children: ReactNode; disabled?: boolean }) {
 	return (
-		<div data-frame-round="" className="absolute overflow-hidden">
-			<div data-frame-box="" className="absolute flex flex-col">
+		<div data-frame-round={disabled ? undefined : ""} className={disabled ? "contents" : "absolute overflow-hidden"}>
+			<div data-frame-box={disabled ? undefined : ""} className={disabled ? "contents" : "absolute flex flex-col"}>
 				{children}
 			</div>
 		</div>

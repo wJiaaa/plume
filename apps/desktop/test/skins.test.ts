@@ -27,7 +27,7 @@ test("侧栏停靠和抽屉都铺自己的底色（.sidebar-surface），不和�
 	const aside = source.slice(source.indexOf("<aside"), source.indexOf("</aside>"));
 	assert.match(aside, /compact\s*\?\s*`sidebar-surface [^`]*absolute/);
 	assert.match(aside, /: "relative shrink-0 overflow-hidden"/);
-	assert.match(aside, /"sidebar-surface overflow-hidden rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"/);
+	assert.match(aside, /"sidebar-surface rounded-l-panel border border-transparent border-r-line-float bg-clip-padding"/);
 	assert.doesNotMatch(aside, /managedSkin/);
 });
 

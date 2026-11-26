@@ -1162,6 +1162,8 @@ export function Scroller({ className = "", contentClassName = "", top = "fade", 
 	fadeTop?: number;
 	/** 下沿的同一个问题。 */
 	bottom?: "fade" | "none";
+	/** 背后是确定的纯色表面（无背景图、无磨砂）时传对应的面色名，上下沿改用与底色同色的窄渐隐条代替整视口 `mask-image`。 */
+	fadeSurface?: "shell";
 	onScroll?: (element: HTMLDivElement) => void;
 	/** 内容或视口尺寸变了就调用。 */
 	onResize?: (element: HTMLDivElement) => void;

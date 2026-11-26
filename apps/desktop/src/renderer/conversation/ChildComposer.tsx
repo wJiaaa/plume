@@ -264,7 +264,7 @@ export function ChildComposer({
 	};
 	return (
 		<div className="plume-composer-dock shrink-0" data-compact="">
-			<div className="plume-composer-tray relative" aria-disabled={state.disabled || undefined}>
+			<div className="plume-composer-tray relative will-change-transform" aria-disabled={state.disabled || undefined}>
 				{menu && commands.menu}
 				{mentions.menu}
 				<div

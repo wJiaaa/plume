@@ -31,7 +31,8 @@ export function Rail() {
 	usePluginUis();
 	const go = (next: Screen) => update({ screen: next, drawerOpen: false });
 	return (
-		<nav aria-label={t("app.rail")} className="relative z-30 flex shrink-0 flex-col items-center" style={{ width: RAIL_WIDTH }}>
+		// 单独合成这条 48px 窄栏：带 z-30 时不提层会和顶栏、面板标签行合并成整屏 L 型 Overlap 大层。
+		<nav aria-label={t("app.rail")} className="relative z-30 flex shrink-0 flex-col items-center will-change-transform" style={{ width: RAIL_WIDTH }}>
 			{/* 窗口顶上那一条在这一列的一段：红绿灯在这里，和侧栏身子上面那一截一样高，第一格和身子的顶边对齐。 */}
 			<div aria-hidden className={`w-full shrink-0 ${HEADER_BAR ? "" : DRAG}`} style={{ height: MAIN_TOOLBAR_HEIGHT }} />
 			{/* 撑满整列宽：overflow-y-auto 让横向也裁切，缩到按钮宽时角上伸出去的数目会被裁掉一截。 */}

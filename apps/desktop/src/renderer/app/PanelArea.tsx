@@ -121,7 +121,7 @@ export const PANEL_TOGGLE_ROOM = "pr-11";
 export function PanelToggle({ open, scope }: { open: boolean; scope: string }) {
 	const { t } = useI18n();
 	return (
-		<div data-panel-toggle="" className="absolute top-0 right-px z-10 flex items-center pr-3" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
+		<div data-panel-toggle="" className="absolute top-0 right-px z-10 flex items-center pr-3 will-change-transform" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
 			<IconButton
 				className={NO_DRAG}
 				label={t(open ? "panel.hide" : "panel.show")}
@@ -139,7 +139,8 @@ export function PanelResizer({ scope, width, windowWidth, max }: { scope: string
 	const resize = (next: number) => setPanelWidth(scope, clamp(Math.round(next), PANEL_MIN, max));
 	return (
 		// 压在常驻面板的内容层上面（那一层在工作区的最后，见 Chat.tsx 的 `ChatWorkspace`），把手右半截不被它挡住。
-		<div className="absolute inset-y-0 z-10 w-0" style={{ left: windowWidth - width }}>
+		// 贴着右边用 `right: width` 定位：侧栏滑动改变工作区宽度时，把手纯靠 CSS 钉在面板左沿，不依赖每帧 JS 重算宽度。
+		<div className="absolute inset-y-0 z-10 w-0" style={{ right: width }}>
 			<ResizeHandle edge="start" width={width} min={PANEL_MIN} max={max} onResize={resize} onReset={() => resize(windowWidth / 2)} label={t("panel.resize")} />
 		</div>
 	);
@@ -490,17 +491,23 @@ export function PanelArea({
 		<PanelSurface layout={`${arrangement}:${maximized}`} contentId={`panel-content:${active}`}>
 			<header
 				data-toolbar-inset=""
-				className={`relative flex shrink-0 items-center gap-1 ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
+				className={`relative flex shrink-0 items-center gap-1 will-change-transform ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
 				style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: underToolbar ? Math.max(10, overlap) : 10 }}
 			>
 				{/* 横排时左端竖一小截线，和下面对话、面板区之间那道分隔线在同一列，把顶上这一条分成对话、面板两段（侧栏那一道见 SidebarTopRow）。 */}
 				{arrangement === "row" && <span aria-hidden data-panel-divider="" className="absolute top-1/2 left-0 h-5 w-px -translate-y-1/2 bg-line-float" />}
 				{heading}
 			</header>
-			{/* 标签行在身子上面，和对话的标题栏连成窗口顶上的一条。身子透明，外沿是底下那一块画的；横排时身子和对话贴着，左边那道描边就是分隔线（styles.css 的 `data-frame-body`）。 */}
+			{/* 标签行在身子上面，和对话的标题栏连成窗口顶上的一条。身子透明，外沿是底下那一块画的；横排时那道 1px 分隔线画在下面单独的细条上，避免把整块身子并进全高合成层。 */}
 			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden border border-transparent">
 				<FrameRound>{content}</FrameRound>
 			</div>
+			<span
+				aria-hidden
+				data-panel-body-divider=""
+				className="pointer-events-none absolute bottom-0 left-0 z-10 hidden w-px bg-line-float will-change-transform"
+				style={{ top: MAIN_TOOLBAR_HEIGHT }}
+			/>
 		</PanelSurface>
 	);
 }

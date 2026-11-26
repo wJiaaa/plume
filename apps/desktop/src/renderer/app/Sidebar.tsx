@@ -45,7 +45,7 @@ export function SidebarTopRow({ divider }: { divider: boolean }) {
 			<span
 				aria-hidden
 				data-sidebar-divider=""
-				className={`absolute top-1/2 right-0 h-5 w-px -translate-y-1/2 bg-line-float ${divider ? "transition-opacity duration-[var(--plume-t-base)]" : "opacity-0"}`}
+				className={`absolute top-1/2 right-0 h-5 w-px -translate-y-1/2 bg-line-float will-change-transform ${divider ? "transition-opacity duration-[var(--plume-t-base)]" : "opacity-0"}`}
 			/>
 		</div>
 	);
