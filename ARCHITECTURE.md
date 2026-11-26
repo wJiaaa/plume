@@ -59,7 +59,7 @@ agent 进程  utilityProcess               apps/desktop/src/main/agent-process.t
 - `commands`：`/` 命令，读 `.plume/commands`、`.claude/commands` 里的 Markdown
 - `web`：`web_search`、`web_fetch`
 - `title`：智能标题，开关在设置 › 常规
-- `spawn-session`：`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话的系统提示词里多一节说明来处、汇报只取回复开头（每轮交回由本体做，`packages/core/agent/src/session/spawned-reports.ts`，开的插件要了 `spawnedFrom.reportBack` 才交，计划开出的也一样；侧边聊天开新会话记着是哪张卡开的（`toolCallId` 加 `callIn`），不要交回）；环境卡片的「产出」只列已经开出的新会话，卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话
+- `spawn-session`：`spawn_session` 的三种发起方式：offer 经 `run.request` 弹卡等人选、人要求时当场开、建议卡；`hand_off_to_session` 把做到一半的事 fork 出去，`dismiss_task` 撤回建议；开出来的会话的系统提示词里多一节说明来处、汇报只取回复开头（每轮交回由本体做，`packages/core/agent/src/session/spawned-reports.ts`，开的插件要了 `spawnedFrom.reportBack` 才交，计划开出的也一样；侧边聊天开新会话记着是哪张卡开的（`toolCallId` 加 `callIn`），卡上开着「做完送回」时要交回，交回那段侧边聊天、不交主会话）；环境卡片的「产出」只列已经开出的新会话，卡片上的工作树开关；`archive_session` 在这一轮收场后归档这个对话
 - `git`：分支签、改动计数、Git 面板、对话自己的工作树，服务 `session.worktree`（含工作树创建完成监听 `onCreated`）
 - `mcp`：连 MCP 服务、把工具交给 agent，设置页「MCP」，也接别的插件经服务 `mcp.servers` 替外部应用登记的服务，读插件随包带的 `.mcp.json`；像密钥的值和 OAuth 令牌经 `ctx.secrets` 加密存
 - `documents`：文件面板和插件经 `ui.DocumentPreview` 共用的只读表格、SQLite 和 Word 预览
