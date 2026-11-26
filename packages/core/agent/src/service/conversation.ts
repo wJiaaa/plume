@@ -105,14 +105,11 @@ export function conversationService(
 		async editMessage(sessionId, index, message, options) {
 			const session = find(sessionId);
 			// 最后一个参数可能是运行时追加的 CallContext：`files` 只认明确的 true，`timestamp` 只认数字。
-			const at = await sentAt(session, index, { reask: true, timestamp: options?.timestamp });
+			const at = await sentAt(session, index, { timestamp: options?.timestamp });
 			const prompt = userMessage(message);
 			if (quitting()) throw new Error(text("session.parentStopped"));
-			// 文件先退回去，退不回去就整件不做：对话不截、也不重发。插件的子会话不退文件（界面也不问），见 `sentAt`。
-			if (options?.files === true) {
-				if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
-				await rewindFiles(session, at, true);
-			}
+			// 文件先退回去，退不回去就整件不做：对话不截、也不重发。
+			if (options?.files === true) await rewindFiles(session, at, true);
 			// 中间等过读库：再看一眼，这期间开始的一轮不能被截掉一半。
 			if (held(session)) throw new Error(text("session.running"));
 			await rewind(session, at);

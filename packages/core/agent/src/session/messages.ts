@@ -31,7 +31,7 @@ export interface MessagesDeps {
 export interface Messages {
 	commit(session: Session, message: Message, allowed?: () => boolean): Promise<boolean>;
 	rewind(session: Session, keep: number): Promise<void>;
-	sentAt(session: Session, index: number, options?: { reask?: boolean; timestamp?: unknown }): Promise<number>;
+	sentAt(session: Session, index: number, options?: { timestamp?: unknown }): Promise<number>;
 	rewindFiles(session: Session, index: number, restore: boolean): Promise<RevertPlan>;
 	commitPrompt(session: Session, prompt: UserMessage, context: string | undefined, allowed: () => boolean): Promise<boolean>;
 }
@@ -107,14 +107,13 @@ export function createMessages(deps: MessagesDeps): Messages {
 	/**
 	 * 编辑、撤回的对象：人发的第 `index` 条（不能是界面替人说的那句）在会话里实际是第几条。
 	 *
-	 * 先做截断前的检查。插件的子会话默认不让人截：那里的一轮只有插件能发起。`reask` 为真（编辑重发）时放行，
-	 * 插件在界面上开了 `ConversationProps.reask`（侧边聊天）就是同意宿主替它重跑这一问；撤回、退文件仍然不行。
+	 * 先做截断前的检查：正在跑的不截。插件的子会话也能截：界面只在插件开了 `ConversationProps.reask`（侧边聊天）的视图里给编辑重问和撤回，
+	 * 开了就是同意宿主替它截掉、重跑这一问；子 Agent 的全过程不开，界面上没有这几样。
 	 *
 	 * 再认位置。给了 `timestamp`（界面上那一条的）就拿它核对：界面的序号可能和会话差几条，
 	 * 按时间戳认回那一条，同 `forkSession`；认不出就报错，不截错地方。
 	 */
-	async function sentAt(session: Session, index: number, options: { reask?: boolean; timestamp?: unknown } = {}): Promise<number> {
-		if (session.summary.owner && !options.reask) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
+	async function sentAt(session: Session, index: number, options: { timestamp?: unknown } = {}): Promise<number> {
 		if (held(session)) throw new Error(text("session.running"));
 		const messages = await messagesOf(session);
 		const { timestamp } = options;

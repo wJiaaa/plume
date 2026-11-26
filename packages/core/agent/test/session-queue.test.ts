@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -184,7 +184,7 @@ it("交过来的任务排进父会话：闲着马上开始，消息标着来自�
 	expect((await service.getSession(main.id)).queue).toEqual([]);
 });
 
-it("插件的子会话能编辑重发（侧边聊天的「重新提问」），撤回、退文件仍然只给人自己的会话", async () => {
+it("插件的子会话能编辑重发（侧边聊天的「重新提问」）和撤回", async () => {
 	const { service, owner, settled } = await open((conversation) => ({ text: `答：${conversation}` }));
 	const main = await service.createSession({ cwd: dir });
 	const side = await owner().create({ parentId: main.id });
@@ -192,8 +192,43 @@ it("插件的子会话能编辑重发（侧边聊天的「重新提问」），�
 	await service.editMessage(side.id, 0, { content: [{ type: "text", text: "改过的问题" }] }, undefined);
 	await settled(side.id, 1);
 	expect((await service.getSession(side.id)).messages.map(words)).toEqual(["改过的问题", "答：改过的问题"]);
-	await expect(service.revertMessage(side.id, 0, undefined)).rejects.toThrow("test.owner");
-	await expect(service.editMessage(side.id, 0, { content: [{ type: "text", text: "再改" }] }, { files: true })).rejects.toThrow("test.owner");
+	await owner().send(side.id, "第二问");
+	expect(await service.revertPlan(side.id, 2, undefined)).toMatchObject({ files: [] });
+	await service.revertMessage(side.id, 2, undefined);
+	expect((await service.getSession(side.id)).messages.map(words)).toEqual(["改过的问题", "答：改过的问题"]);
+});
+
+it("插件的子会话撤回、编辑重发时连它改过的文件一起退：新建的删掉，对话截掉", async () => {
+	const { service, owner, settled } = await open(
+		(conversation, step) =>
+			conversation === "写个 a.ts" && step === 0 ? { toolCalls: [{ id: "put_a", name: "put", args: { path: "a.ts" } }] } : { text: "好" },
+		(ctx) =>
+			ctx.tools.register({
+				name: "put",
+				description: "写文件",
+				parameters: { type: "object", properties: { path: { type: "string" } } },
+				async execute(args, run) {
+					const { path } = await run.files.change(String(args.path), async () => ({ text: "new\n", value: undefined }));
+					return { output: `wrote ${path}` };
+				},
+			}),
+	);
+	const main = await service.createSession({ cwd: dir });
+	const side = await owner().create({ parentId: main.id });
+	await owner().send(side.id, "第一问");
+	await owner().send(side.id, "写个 a.ts");
+	expect(await readFile(join(main.cwd, "a.ts"), "utf8")).toBe("new\n");
+	expect((await service.revertPlan(side.id, 2, undefined)).files).toMatchObject([{ added: 1, removed: 0, problem: null }]);
+	await service.revertMessage(side.id, 2, { files: true });
+	await expect(readFile(join(main.cwd, "a.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+	expect((await service.getSession(side.id)).messages.map(words)).toEqual(["第一问", "好"]);
+
+	await owner().send(side.id, "写个 a.ts");
+	expect(await readFile(join(main.cwd, "a.ts"), "utf8")).toBe("new\n");
+	await service.editMessage(side.id, 2, { content: [{ type: "text", text: "算了" }] }, { files: true });
+	await expect(readFile(join(main.cwd, "a.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+	await settled(side.id, 2);
+	expect((await service.getSession(side.id)).messages.map(words)).toEqual(["第一问", "好", "算了", "好"]);
 });
 
 it("回执：交过去的排着、在跑、随父会话停下可继续、重新排进去做完，收了场的能移除", async () => {

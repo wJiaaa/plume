@@ -826,7 +826,7 @@ export interface AgentService {
 	 * 编辑重发：第 `index` 条（人发的消息）连同它之后的全部截掉，拿 `message` 重新开始一轮。截完就返回，这一轮经 watch 推送。
 	 * 正在跑时报错。图片块可以只带 `media`（会话里存着的那张），不用把像素再传一遍。
 	 * `files` 为真时先把截掉的那段改过的文件退回去（本体按截掉那段结果里的 `ToolResultMessage.changes` 退），退不回去就报错，对话不截、也不重发。
-	 * 插件的子会话也能编辑重发（插件经 `ConversationProps.reask` 同意了），但不带 `files`；撤回、演算、分叉仍然只给人自己的会话。
+	 * 插件的子会话（插件经 `ConversationProps.reask` 同意了）也能编辑重发、撤回、演算，分叉只给人自己的会话。
 	 * `timestamp` 是界面上那一条的时间戳：序号对不上时按它认回那一条，认不出就报错，不截错地方。
 	 */
 	editMessage(sessionId: string, index: number, message: OutgoingMessage, options: { files?: boolean; timestamp?: number } | undefined): Promise<void>;
