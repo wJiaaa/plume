@@ -2,6 +2,47 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.4] - 2026-11-26
+
+<!-- plume:notes en -->
+### Changes
+
+- **Readable diffs, highlighted commands, and safer layout in approval cards.** Reviewing file edits, shell commands, or tool arguments used to mean reading plain gray monospace text—and long file paths in narrow panels could push the action buttons right out of the card. Approval cards now render file changes with line numbers, add/remove highlights, and syntax coloring matching tool cards, highlight shell commands and JSON arguments, and clamp long titles to two lines (with the full title on hover) so the buttons stay visible.
+- **One-click choice cards when the agent offers options.** When a turn wraps up with a few approaches to choose from, you no longer need to type out "go with option A." The agent can now finish with a choice card: click an option to send it as your message, dismiss the card, or simply type your own reply. Card actions that fail to queue now report the error and let you retry instead of appearing as sent.
+- **Smoother side chat and sub-agent workflows.** Approvals triggered in a side chat now appear right above its own composer while the tab is visible, falling back to the main composer only when the panel is hidden or in the background so requests are never missed. Panel tabs also show a waiting dot when a sub-agent needs approval or input, and side chats can now message other active top-level sessions in the same project or Git repository.
+- **Eliminated white flashes when toggling the sidebar on 5K 120Hz displays.** On high-refresh 5K screens with long transcripts and an open side panel, opening or closing the sidebar could still exhaust tile memory and flash blank bands. Isolating edge layers, using lightweight edge fades on solid backgrounds, and avoiding unnecessary re-layouts during sidebar transitions sharply reduces tile memory and keeps slides smooth.
+- **Quick pin in the sidebar, fixed draft cursor placement, and refreshed model catalog.** Hovering a session row restores the one-click pin button, ordered Pin, Archive, and "…" on the far right to match project rows. Creating a plugin or pre-filling a draft now places the cursor at the end of the text rather than the beginning, and the bundled model catalog snapshot has been updated.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **审批卡支持 diff 与语法着色，窄面板不再挤出按钮。** 以前审批改文件、跑命令或调用工具时，正文只有一段灰色纯文本，很难一眼看清改了哪几行，长路径标题在窄面板里还会把按钮挤出卡片。现在文件修改直接按工具卡片同款的 diff 视图展示（带行号、增删色条和按文件类型上色），命令与 JSON 参数也按语法着色；长标题最多显示两行（悬停可看全文），操作按钮始终留在卡片内。
+- **回复末尾新增方案选择卡。** Agent 做完一轮并列出几个待选方案时，不再需要手动打字回复，回复末尾会直接出现选择卡，点选一项即可当成你的消息发出（也可以关闭或直接打字跳过）。同时修复了卡片中点击发送的消息未能入队时仍误显示为已发送的问题。
+- **侧边聊天与子 Agent 协作更顺手。** 在侧边聊天里触发的审批卡现在直接画在侧边聊天的输入框上方，只有面板收起或标签在后台时才回退到主输入框上方提醒；子 Agent 等待批准或回答时，面板标签图标上会亮起等待点；侧边聊天也可以直接向同项目或同一 Git 仓库内的其他未归档顶层会话发消息。
+- **5K 120Hz 大屏开合侧栏不再闪白。** 修复了高刷大屏同时打开长对话和右侧面板时，开合侧栏仍可能打满图块显存导致整条闪白的问题；通过边沿控件独立提层、纯色底面轻量化渐隐以及减少滑动期间的重排与纹理分配，显著降低显存峰值，切换更稳。
+- **侧栏恢复悬停置顶，修复草稿光标位置并刷新模型目录。** 侧栏会话行悬停时恢复一键置顶按钮，按「置顶、归档、⋯」排列并与项目行对齐；新建插件或预填、恢复草稿聚焦输入框时，光标现在会落在内容末尾而非行首；同时更新了随应用分发的模型目录快照。
+
+### 新功能
+
+- **desktop**: 审批卡正文按声明画成 diff，命令和参数按语法上色，和工具卡片一个样子 (`641d077`)
+- **core**: 审批请求可以声明正文是一个文件的 diff、一条命令还是 JSON 参数 (`6a53b0f`)
+- **core**: agent 给出几个方案时回复末尾出一张选择卡，点一项就当人的消息发出去 (`272ec5e`)
+- **desktop**: 子 Agent 等人批准时，面板标签上亮等待点 (`0449edb`)
+- **desktop**: 侧边聊天的审批卡画在侧边聊天里，看不见时才压到主输入框上方 (`bf82c57`)
+- **desktop**: 恢复侧栏会话行悬停时的置顶按钮，并将「⋯」移至最右端 (`b330ed4`)
+- **core**: 侧边聊天可直接向同项目或同 Git 仓库的其他顶层会话发消息 (`fd2e129`)
+
+### 修复
+
+- 5K 120Hz 开合侧栏时不再打满图块显存导致整屏闪烁 (`3f6ee86`)
+- **desktop**: 卡片里点的消息没排上时报失败，不再显示成已发送 (`0b59758`)
+- **ui**: 审批卡标题最多两行，窄面板里按钮不再被挤出卡片 (`383feba`)
+- **desktop**: 新建插件和预填草稿聚焦输入框时，光标落在内容末尾而非行首 (`e826bd2`)
+
+### 重构
+
+- **desktop**: 工具卡片详情里的命令框和参数框抽成共用组件 (`5adbcc3`)
+
 ## [0.9.3] - 2026-11-25
 
 <!-- plume:notes en -->
