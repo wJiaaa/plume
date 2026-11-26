@@ -3,8 +3,8 @@
  * 删父会话时一起删，都和普通会话一样；这里只管它和普通会话不一样的地方：
  *
  * - `prompt.submit`：每一问后面附上主会话上次之后的新内容（见 main-chat.ts），每一问读到哪里记在插件数据目录的 `marks.json`，
- *   编辑重问截掉的那几问一起作废；
- *   主会话的下一问后面附上侧边聊天这期间改过的文件（见 changes.ts），经本体的 `ctx.changes` 认改动记录。
+ *   编辑重问、撤回截掉的那几问一起作废；
+ *   主会话的下一问后面附上侧边聊天这期间改过的文件（见 changes.ts），经本体的 `ctx.changes` 认改动记录；说过的改动被编辑重问、撤回截掉了再说一次。
  * - `model.context`：身份、准则换成侧边聊天的，工具只留读主会话、交出去、控制主会话、给同项目/同仓库会话发消息、读写文件、跑命令、查网页（见 profile.ts）。
  *   普通会话里藏起这几件侧边聊天专用的，`tool.execute` 再拦一次子 Agent 这类别的会话。
  * - `dispatch_task`、`control_main`（见 controls.ts）：经宿主给的父会话（`ToolRun.parent`）把活排进主会话、让它停下或接着做；
@@ -23,7 +23,7 @@ import { join } from "node:path";
 import type { Message, Plugin, PromptSection, SessionMessage, StopReason } from "@plume/contract";
 import { type LaunchChoice, normalizeSettings, type SideChatApi } from "./api.ts";
 import { createSideChatBindings } from "./bindings.ts";
-import { changeIds, sideChangesNote } from "./changes.ts";
+import { changeIds, cutTold, sideChangesNote, toldIn, type Told } from "./changes.ts";
 import { CONTROL_MAIN, DISPATCH_TASK, isDispatchSuggestion } from "./controls.ts";
 import {
 	type HistoryArgs,
@@ -52,12 +52,14 @@ export default {
 		const live = new Set(all.map((summary) => summary.id));
 		/**
 		 * 每段侧边聊天已经告诉过主会话到哪里：几条消息、最后一条的时刻。读过的那段还原样在就从条数接着读；
-		 * 编辑重问截掉过一段（那一条的时刻对不上了）就只认之后写的，截掉后接着写的消息落在旧的条数里面，按条数会漏掉。
+		 * 编辑重问、撤回截掉过一段（那一条的时刻对不上了）就只认之后写的，截掉后接着写的消息落在旧的条数里面，按条数会漏掉。
 		 * 只在内存里：重启前没来得及说的不再补，加载时从现有的末尾算起，免得把早就说过的改动再说一遍。
 		 */
 		const noted = new Map<string, Mark>();
 		const markOf = (messages: readonly Message[]): Mark => ({ seen: messages.length, lastAt: messages.at(-1)?.timestamp ?? 0 });
 		for (const sideId of sides.keys()) noted.set(sideId, markOf(await ctx.sessions.messages(sideId).catch(() => [])));
+		/** 每段侧边聊天说过的改动记在哪几条上，那几条被截掉时再说一次（见 `cutTold`）。同 `noted` 只在内存里。 */
+		const told = new Map<string, Told[]>();
 
 		const marksFile = join(ctx.dataDir, "marks.json");
 		const marks = new Map<string, MarkLog>(
@@ -94,18 +96,21 @@ export default {
 			return side.id;
 		}
 
-		/** 这个主会话旁边的侧边聊天上次告诉它之后改过的文件，说过的往后挪；没有就是空的。 */
+		/** 这个主会话旁边的侧边聊天上次告诉它之后改过的文件，说过的往后挪，说过又被截掉的再说一次；没有就是空的。 */
 		async function sideChanges(parentId: string): Promise<string | undefined> {
 			const paths = new Set<string>();
 			for (const [sideId, parent] of sides) {
 				if (parent !== parentId) continue;
 				const messages = await ctx.sessions.messages(sideId).catch(() => undefined);
 				if (!messages) continue;
+				const cut = cutTold(told.get(sideId) ?? [], messages);
+				for (const path of cut.paths) paths.add(path);
 				const mark = noted.get(sideId) ?? { seen: 0, lastAt: 0 };
 				const intact = mark.seen <= messages.length && (mark.seen === 0 || messages[mark.seen - 1]?.timestamp === mark.lastAt);
 				const fresh = intact ? messages.slice(mark.seen) : messages.filter((message) => message.timestamp > mark.lastAt);
 				const ids = changeIds(fresh);
 				noted.set(sideId, markOf(messages));
+				told.set(sideId, [...cut.kept, ...toldIn(messages, fresh)]);
 				if (ids.length === 0) continue;
 				// 改动记录读不出来（快照已清掉、会话没了）时少说几个文件，不拦下主会话这一问。
 				const summary = await ctx.changes.collect(sideId, ids).catch(() => undefined);
@@ -130,6 +135,7 @@ export default {
 		ctx.sessions.onDeleted((sessionId) => {
 			sides.delete(sessionId);
 			noted.delete(sessionId);
+			told.delete(sessionId);
 			waiting.forget(sessionId);
 			lastStop.delete(sessionId);
 			if (marks.delete(sessionId)) saveMarks();

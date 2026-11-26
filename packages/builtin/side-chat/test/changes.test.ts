@@ -92,8 +92,14 @@ test("侧边聊天改过的文件在主会话的下一问后面说一次；加�
 	// 说过一次就不再说。
 	assert.deepEqual(await f.ask("main"), { block: false });
 	assert.deepEqual(f.collected, [["a", "b", "c"]]);
-	// 侧边聊天编辑重问截掉了后面那段、又写了新的：新写的照样说，不因为条数变少漏掉。
+	// 侧边聊天编辑重问截掉了后面那段、又写了新的：新写的照样说，不因为条数变少漏掉；说过又被截掉的再说一次
+	// （连文件撤回时那几个文件退回去了，主会话手里是改过的样子）。
 	f.messages.set("side", [result(["old"]), { ...result(["d"]), timestamp: 5 } as Message]);
-	await f.ask("main");
+	assert.equal(((await f.ask("main")) as { context: string }).context, sideChangesNote(["/w/a.ts", "/w/b.ts", "/w/c.ts", "/w/d.ts"]));
+	assert.deepEqual(f.collected, [["a", "b", "c"], ["d"]]);
+	// 撤回截掉了说过的那条、没写新的：只再说截掉的那条改过的；之后不再说。
+	f.messages.set("side", [result(["old"])]);
+	assert.equal(((await f.ask("main")) as { context: string }).context, sideChangesNote(["/w/d.ts"]));
+	assert.deepEqual(await f.ask("main"), { block: false });
 	assert.deepEqual(f.collected, [["a", "b", "c"], ["d"]]);
 });
