@@ -124,9 +124,8 @@ export function UserBubble({ message, index, last = false }: { message: UserMess
 				setEditing(false);
 				void edits.edit(index, message, edited, files);
 			};
-			// 子会话改不了主对话的文件，它截的也不是那几轮。
 			const plan = edits.revertPlan;
-			if (edits.aside || !plan) return send(false);
+			if (!plan) return send(false);
 			// 截掉的那几轮改过文件时先问要不要一起退回；取消就回到编辑框，改好的字还在。
 			void filesBack.check(
 				() => plan(index, message),

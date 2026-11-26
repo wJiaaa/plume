@@ -54,7 +54,7 @@ export function ChildConversation({
 }: ConversationProps & {
 	/** 插件画的子会话任务（`ConversationProps.tasks`）上那几样操作，由宿主接到 agent 上。 */
 	taskActions: ChildTaskActions;
-	/** 子会话只给编辑重问（见 `MessageEdits.aside`），由宿主按插件的 `reask` 拼好。 */
+	/** 子会话只给编辑重问和撤回（见 `MessageEdits.aside`），由宿主按插件的 `reask` 拼好。 */
 	edits?: MessageEdits;
 	documentText: ReadComposerDocument;
 	onOpenSettings: () => void;

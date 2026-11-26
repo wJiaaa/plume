@@ -1,4 +1,4 @@
-import type { SessionSummary, SessionTarget, SessionView } from "@plume/contract";
+import type { SessionSummary, SessionTarget, SessionView, UserMessage } from "@plume/contract";
 import type { ConversationProps, PageProps } from "@plume/contract/ui";
 import { ActionSpinner, composingKey, ResizeHandle, Splitter, translate, useI18n, useConfirmer, usePopover } from "@plume/ui";
 import { Folder, MoreHorizontal, Plug, X } from "@plume/ui/icons";
@@ -44,7 +44,7 @@ import { CARD_DRAG, HEADER_BAR, NO_DRAG } from "./shell-classes.ts";
 import { sidebarActions } from "./actions.ts";
 import { FrameRound } from "./FrameRound.tsx";
 import { Composer } from "./Composer.tsx";
-import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertMessage } from "./message-actions.ts";
+import { attachToComposer, cardActions, carryOn, editMessage, enqueue, forkFrom, retryMessage, revertChildMessage, revertMessage } from "./message-actions.ts";
 
 /** 一屏：哪个会话（`scope`，空白页是 `""`）、焦点在不在它上面、在工作区里的左边和宽度。 */
 interface Pane {
@@ -873,18 +873,26 @@ export function PluginConversation(props: ConversationProps) {
 		setQuotes(draftScope(state.view), (quotes) => [...quotes, quote]);
 		focusComposer();
 	}, []);
-	// 插件开了 `reask` 时，人在子会话里说的最后一句能编辑重问；截掉的那几轮没碰主对话的文件，不问要不要退。
+	// 插件开了 `reask` 时，人在子会话里说的最后一句能编辑重问；有输入框存草稿时任一句能撤回，这句放回那个输入框。
+	// 截掉的那几轮改过文件时，两样都照主对话问要不要连文件一起退回。
 	const { sessionId, reask } = props;
+	const draftKey = props.composer?.draftKey;
 	const edits = useMemo<MessageEdits | undefined>(
 		() =>
 			reask && sessionId
 				? {
 						aside: true,
-						edit: async (index, message, text) => await editMessage(sessionId, index, message, text),
+						edit: async (index, message, text, files) => await editMessage(sessionId, index, message, text, files),
 						retry: async (index, message) => await retryMessage(sessionId, index, message),
+						revertPlan: async (index, message) => await agent.revertPlan(sessionId, index, { timestamp: message.timestamp }),
+						...(draftKey
+							? {
+									revert: async (index: number, message: UserMessage, files: boolean) => await revertChildMessage(sessionId, draftKey, index, message, files),
+								}
+							: {}),
 					}
 				: undefined,
-		[reask, sessionId],
+		[reask, sessionId, draftKey],
 	);
 	return (
 		<ChildConversation

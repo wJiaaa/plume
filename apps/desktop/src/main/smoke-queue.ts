@@ -7,9 +7,10 @@ import { clickRealIn, lastOf } from "./smoke-kit.ts";
 /**
  * 排队条的「更多」菜单经真界面走一遍：主会话正忙（假模型挂着不收尾）时回车，话落进排队条；装着侧边聊天时这一行是
  * 「更多」菜单，里面有「编辑」和插件加的「在侧边聊天中打开」。点后者：这一行收走，侧边聊天面板里问这句话、回答画在那里，
- * 主对话里不留。接着在侧边聊天里编辑重问那一句：只有「编辑并重新提问」、没有撤回和分叉，重问照样附上主会话的内容
+ * 主对话里不留。接着在侧边聊天里编辑重问那一句：有「编辑并重新提问」和撤回、没有分叉，重问照样附上主会话的内容
  * （读到哪里随截掉的那一问退回去）。再让侧边聊天把一件事交给忙着的主会话，看回执条：排着时撤回、那句话回到侧边聊天的输入框；
- * 再交一次，主会话停下后照旧排着，「立即执行」让主会话为它跑一轮，再停下它记成随主会话停下，最后移除；假模型交还。
+ * 再交一次，主会话停下后照旧排着，「立即执行」让主会话为它跑一轮，再停下它记成随主会话停下，最后移除；
+ * 最后撤回侧边聊天里最后那句：那一问和回答从侧边聊天的转录里没了，字回到侧边聊天的输入框、不进主输入框；假模型交还。
  */
 export async function checkQueueActions(options: {
 	window: BrowserWindow;
@@ -75,9 +76,9 @@ export async function checkQueueActions(options: {
 			throw new Error("拿去侧边聊天问的话不该进主对话");
 		await capture(window, join(outDir, "smoke-queue-side-chat.png"));
 
-		// 侧边聊天里只有编辑重问：按钮在最后那句底下，编辑框的确认叫「重新提问」。
-		if (await page(`document.querySelector('${side} [data-message-undo], ${side} [data-message-fork]') !== null`))
-			throw new Error("侧边聊天里不该有撤回和分叉");
+		// 侧边聊天里有编辑重问和撤回、没有分叉：编辑按钮在最后那句底下，编辑框的确认叫「重新提问」。
+		if (await page(`document.querySelector('${side} [data-message-fork]') !== null`)) throw new Error("侧边聊天里不该有分叉");
+		if (await page(`document.querySelector('${side} [data-message-undo]') === null`)) throw new Error("侧边聊天里应该有撤回");
 		await clickRealIn(window, lastOf(`${side} [data-message-edit]`), "侧边聊天最后一条消息的编辑");
 		await until(`document.querySelector('${side} textarea') !== null`, "侧边聊天的编辑框出现");
 		if (!(await page(`document.querySelector('${side} button[data-plume-tip="重新提问"]') !== null`)))
@@ -126,6 +127,18 @@ export async function checkQueueActions(options: {
 		await capture(window, join(outDir, "smoke-task-strip-stopped.png"));
 		await click(`${side} [data-task-dismiss]`);
 		await until(`document.querySelector('${side} [data-task]') === null`, "移除以后回执条没了");
+
+		// 撤回侧边聊天里最后那句（回执条上收回又发出的那句；没改过文件，最后一句不用确认）：截掉那一问和回答，字回到侧边聊天的输入框，主输入框不动。
+		const sideUsers = `document.querySelectorAll('${side} [data-plume-quote=user]').length`;
+		const usersBefore = (await page(sideUsers)) as number;
+		await clickRealIn(window, lastOf(`${side} [data-message-undo]`), "侧边聊天最后一条消息的撤回");
+		await until(
+			`${sideUsers} === ${usersBefore - 1} && document.querySelector('${side} .cm-content')?.textContent.includes(${JSON.stringify(task)})`,
+			"撤回截掉了侧边聊天的最后一问，那句话回到侧边聊天的输入框",
+		);
+		if (await page(`document.querySelector('${chat} .cm-content')?.textContent.includes(${JSON.stringify(task)})`))
+			throw new Error("侧边聊天撤回的那句不该进主输入框");
+		await capture(window, join(outDir, "smoke-side-chat-revert.png"));
 	} finally {
 		setModel(undefined);
 	}

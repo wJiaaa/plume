@@ -6,7 +6,7 @@ import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useI18n } from "@plume/ui";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildFocus, type ChildDraft } from "./child-drafts.ts";
+import { childDraft, EMPTY_CHILD_DRAFT, setChildDraft, subscribeChildDrafts, takeChildFocus, takeChildRestore, type ChildDraft } from "./child-drafts.ts";
 import type { PickedFile } from "../composer/attachments/picked.ts";
 import { ComposerSend, ComposerShell } from "../composer/index.ts";
 import { ContextMeter } from "../composer/ContextMeter.tsx";
@@ -92,6 +92,14 @@ export function ChildComposer({
 		state: { attachments: draft.attachments, setAttachments: (files) => changeDraft((current) => ({ ...current, attachments: files })) },
 	});
 	const files = Boolean(composer.sendMessage);
+	// 撤回放回来的附件（见 `restoreChildDraft`）：草稿换了就看一眼，有就整份换上、收走。纯文字的输入框收不了附件，只放回字。
+	useEffect(() => {
+		if (!draftKey) return;
+		const restored = takeChildRestore(draftKey);
+		if (restored && files) attachments.restore(restored);
+		// `attachments` 每次渲染都是新的；放回的附件只跟着草稿来。
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- 见上
+	}, [draftKey, saved, files]);
 	const history = useInputHistory({
 		messages,
 		attachments: attachments.attachments.length + (draft.sessionRefs?.length ?? 0),

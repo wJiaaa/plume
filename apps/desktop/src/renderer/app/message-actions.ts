@@ -4,6 +4,7 @@ import { notify } from "../toast/index.ts";
 import { withSessionReferences } from "../composer/session-references.ts";
 import { sessionReferences, setSessionReferences } from "../composer/SessionReferences.tsx";
 import { draftFromMessage, editedContent } from "../conversation/revert-draft.ts";
+import { restoreChildDraft } from "../conversation/child-drafts.ts";
 import type { DraftAttachment } from "../composer/attachments/read.ts";
 import { agent, errorText, focusComposer, type QueuedDraft, queuedDrafts, state, update } from "./state.ts";
 import { beginReask, select, settleReask, updateView } from "./sessions.ts";
@@ -136,6 +137,21 @@ export async function revertMessage(sessionId: string, index: number, message: U
 	}
 	if (files) touchWorkingTree();
 	await restoreDraft(sessionId, message);
+}
+
+/**
+ * 插件子会话（侧边聊天）里的撤回：同上，只是这条放回它自己的输入框（`draftKey`，见 `ConversationProps.reask`），不碰主对话的输入框。
+ */
+export async function revertChildMessage(sessionId: string, draftKey: string, index: number, message: UserMessage, files: boolean): Promise<void> {
+	try {
+		await agent.revertMessage(sessionId, index, { files, timestamp: message.timestamp });
+	} catch (error) {
+		notify(translate("turn.revertFailed", { reason: errorText(error) }), "error");
+		return;
+	}
+	if (files) touchWorkingTree();
+	const draft = await draftFromMessage(message);
+	restoreChildDraft(draftKey, draft.text, draft.attachments, message.sessionRefs ?? []);
 }
 
 /** 分叉：新会话开在这一屏；在问题上分叉的，问题放回新会话的输入框，在回复上分叉的输入框是空的。 */

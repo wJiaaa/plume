@@ -15,6 +15,7 @@ export const EMPTY_CHILD_DRAFT: ChildDraft = { text: "", attachments: [], quotes
 const PREFIX = "plume.child-draft:";
 const drafts = new Map<string, ChildDraft>();
 const focus = new Set<string>();
+const restoring = new Map<string, DraftAttachment[]>();
 const listeners = new Set<() => void>();
 const changed = () => {
 	for (const listener of listeners) listener();
@@ -118,6 +119,23 @@ export function seedChildText(key: string, text: string): void {
 	setChildDraft(key, { ...childDraft(key), text });
 }
 
+/**
+ * 撤回放回来的那句：字和会话引用换掉草稿（引文留着），附件等这个输入框收走、整份换上——它按自己的规则给附件重新编号，
+ * 和主输入框收撤回放回的附件是同一套（`useComposerAttachments` 的 `restore`）。显示时聚焦到末尾。
+ */
+export function restoreChildDraft(key: string, text: string, attachments: DraftAttachment[], sessionRefs: SessionReference[]): void {
+	focus.add(key);
+	restoring.set(key, attachments);
+	setChildDraft(key, { ...childDraft(key), text, sessionRefs });
+}
+
+/** 输入框收走撤回放回的附件，只收一次。 */
+export function takeChildRestore(key: string): DraftAttachment[] | undefined {
+	const files = restoring.get(key);
+	restoring.delete(key);
+	return files;
+}
+
 /** 新开的面板标签：标签里 `draftKey` 是它的输入框首次显示时拿到焦点，人打开就能打字。 */
 export function focusChildDraft(key: string): void {
 	focus.add(key);
@@ -139,6 +157,7 @@ export function dropChildDraft(key: string): void {
 	localStorage.removeItem(PREFIX + key);
 	drafts.delete(key);
 	focus.delete(key);
+	restoring.delete(key);
 	changed();
 }
 
