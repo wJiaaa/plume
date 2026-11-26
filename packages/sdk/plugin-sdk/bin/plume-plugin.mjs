@@ -4,7 +4,7 @@
  * 用 Plume 自己的运行时跑这个文件，插件作者的机器上不用装 Node 和 npm。
  *
  *   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
- *   plume-plugin check [目录]              类型检查、插件规则（公开接口、样式、文案）和测试，缺省当前目录
+ *   plume-plugin check [目录] [--strict-style] 类型检查、插件规则（公开接口、样式、文案）和测试，缺省当前目录；--strict-style 额外按 Plume 设计系统严查样式
  *   plume-plugin test [目录]               只跑 test/ 下的测试（node:test）
  *   plume-plugin build [目录]
  *   plume-plugin install [目录] [--to 目录]  装进 ~/.plume/local-plugins，Plume 开着就当场加载
@@ -24,7 +24,7 @@ import { testPlugin } from "../lib/test.mjs";
 
 const USAGE = `用法：
   plume-plugin init <目录> [--name 插件名] [--display 市场里的名字]
-  plume-plugin check [目录]
+  plume-plugin check [目录] [--strict-style]
   plume-plugin test [目录]
   plume-plugin build [目录]
   plume-plugin install [目录] [--to 目录]
@@ -32,13 +32,18 @@ const USAGE = `用法：
   plume-plugin pack [目录] [--out 目录]
   plume-plugin link [目录]`;
 
+const BOOLEAN_FLAGS = new Set(["strict-style"]);
 const [command, ...rest] = process.argv.slice(2);
 const positional = [];
 const flags = {};
 for (let index = 0; index < rest.length; index++) {
 	const arg = rest[index];
-	if (arg.startsWith("--")) flags[arg.slice(2)] = rest[++index];
-	else positional.push(arg);
+	if (arg.startsWith("--")) {
+		const name = arg.slice(2);
+		flags[name] = BOOLEAN_FLAGS.has(name) ? true : rest[++index];
+	} else {
+		positional.push(arg);
+	}
 }
 const dir = positional[0] ?? process.cwd();
 
@@ -53,7 +58,7 @@ try {
 				: "  写法见 .claude/skills/plume-plugin/SKILL.md；写完 plume-plugin check、plume-plugin dev",
 		);
 	} else if (command === "check") {
-		if (!(await checkPlugin(dir))) process.exitCode = 1;
+		if (!(await checkPlugin(dir, { strictStyle: Boolean(flags["strict-style"]) }))) process.exitCode = 1;
 		else console.log("✓ 检查通过");
 	} else if (command === "test") {
 		const tests = await testPlugin(dir);

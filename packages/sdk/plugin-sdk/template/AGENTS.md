@@ -8,7 +8,7 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `~/.plume/bin/plume-plugin check` | 类型检查，加上插件规则（只引用公开接口、不写死色值和 Tailwind 类、界面文字不写死中文），再跑 `test/` 下的测试 |
+| `~/.plume/bin/plume-plugin check [--strict-style]` | 类型检查，加上插件规则（只引用公开接口、不写产品 Tailwind 类、CSS 不污染全局、界面文字不写死中文；加 `--strict-style` 额外按 Plume 设计系统严查样式），再跑 `test/` 下的测试 |
 | `~/.plume/bin/plume-plugin test` | 只跑 `test/*.test.ts`（Node 自带的 node:test，用 `@plumeai/plugin-sdk/testing` 跑插件） |
 | `~/.plume/bin/plume-plugin build` | 打出 `dist/index.mjs`（和 `dist/ui.mjs`） |
 | `~/.plume/bin/plume-plugin install` | 把 `package.json`、`README.md`、`dist/` 复制进 `~/.plume/local-plugins/<目录名>/`，Plume 开着的话当场加载 |

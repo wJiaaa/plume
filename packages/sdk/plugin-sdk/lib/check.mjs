@@ -16,15 +16,16 @@ const require = createRequire(import.meta.url);
 
 /**
  * @param {string} target 插件目录（有 tsconfig.json）
+ * @param {{ strictStyle?: boolean }} [options] strictStyle 为真时按 Plume 设计系统严查样式
  * @returns {Promise<boolean>} 通过没有；报错直接打到终端
  */
-export async function checkPlugin(target) {
+export async function checkPlugin(target, options = {}) {
 	const dir = resolve(target);
 	if (ensureLinked(dir)) console.log("node_modules 里指向 SDK 的链接不在了（npm 装包时会删掉它们），已重新链上");
 	const tsc = join(dirname(require.resolve("typescript/package.json")), "bin/tsc");
 	// 在插件目录里跑，报错里的路径相对插件目录（src/ui.tsx），不是一长串 ../。
 	const result = spawnSync(process.execPath, [tsc, "-p", "tsconfig.json"], { stdio: "inherit", cwd: dir });
-	const problems = await lintPlugin(dir);
+	const problems = await lintPlugin(dir, { strictStyle: options.strictStyle });
 	if (problems.length > 0) console.error(`插件规则没通过：\n\n${problems.map((problem) => `  ${formatProblem(problem, dir)}`).join("\n")}\n`);
 	// Plume 的两个仓库里的插件写了自己的 test 脚本（vitest），由仓库的检查跑，这里不跑第二遍。
 	const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));

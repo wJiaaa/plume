@@ -5,6 +5,7 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -128,4 +129,19 @@ test("pack 打出只含发给插件的文件的文件夹，说出发市场前还
 	assert.ok(!existsSync(join(packed.dir, "node_modules")));
 	assert.ok(packed.problems.some((problem) => problem.includes("description")));
 	await assert.rejects(packPlugin(dir, join(dir, "dist")));
+});
+
+test("plume-plugin check 默认放行带作用域的自定义样式，--strict-style 无论放目录前后都严格拦截", async () => {
+	const css = join(dir, "src/custom.css");
+	const bin = join(sdk, "bin/plume-plugin.mjs");
+	writeFileSync(css, ".hello-card { color: #2563eb; font-size: 14px; transition: opacity 150ms; }\n");
+	try {
+		assert.equal(await checkPlugin(dir), true);
+		assert.equal(await checkPlugin(dir, { strictStyle: true }), false);
+		assert.equal(spawnSync(process.execPath, [bin, "check", dir], { encoding: "utf8" }).status, 0);
+		assert.equal(spawnSync(process.execPath, [bin, "check", "--strict-style", dir], { encoding: "utf8" }).status, 1);
+		assert.equal(spawnSync(process.execPath, [bin, "check", dir, "--strict-style"], { encoding: "utf8" }).status, 1);
+	} finally {
+		rmSync(css, { force: true });
+	}
 });

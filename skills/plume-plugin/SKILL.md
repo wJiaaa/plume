@@ -28,7 +28,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 | `node:*`、自己 `package.json` 里声明的第三方包 | 逻辑入口随便用；界面入口只能用浏览器能跑的 |
 | 仓库里的插件（见文末） | 照着写 |
 
-宿主运行时的一切从 `ctx` / `ui` 上拿。`@plume/ui` 只开放 components.md 里的名字，引用别的类型检查就失败；`plume-plugin check` 还会查 import、色值和 Tailwind 类、写死的中文（Plume 的两个仓库里是 `pnpm check:plugins`，同一套规则）。
+宿主运行时的一切从 `ctx` / `ui` 上拿。`@plume/ui` 只开放 components.md 里的名字，引用别的类型检查就失败；`@plume/ui` 和 `var(--plume-*)` 是推荐选项，作者也可以自己写 CSS 设计界面。`plume-plugin check` 默认会查 import、不能用的产品 Tailwind 类、全局 CSS 污染和写死的中文；若要按 Plume 原生设计系统严格检查（色值、排版、圆角、过渡时长），加上 `--strict-style`（Plume 仓库内的内置插件和模板默认跑严格检查）。
 
 ## 先判断能不能做成插件
 
@@ -156,7 +156,7 @@ description: 写、改、排查 Plume 插件：工具、钩子（tool.execute、
 有界面入口或给人看的文字时：
 
 - [ ] 卡片先校验 `details`，认不出就返回 `fallback`。
-- [ ] 没写 Tailwind 类；文字用 `Text`，组件只用 components.md 里列的；自己的 CSS 只管布局，颜色只取 `var(--plume-*)`；浅色、深色都能看。
+- [ ] 没写产品的 Tailwind 类；自己的 CSS 选择器都带插件前缀类或放进 `@scope (.前缀)`，不污染宿主和其他插件；浅色、深色都能看（若用 `@plume/ui` 和 `var(--plume-*)` 对齐原生风格，可跑 `plume-plugin check --strict-style` 验收）。
 - [ ] 给人看的文字中英两份；代码里发给模型的中文标了 `i18n-exempt`。
 
 交付：

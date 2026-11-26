@@ -40,8 +40,9 @@ const SCANNED = ["apps/desktop/src/renderer", "packages/client"];
 /** 不经 Tailwind 的代码：只查规则 3。 */
 const OTHER = ["apps/desktop/src/main", "apps/desktop/src/preload", "apps/desktop/src/shared"];
 /**
- * 插件：查规则 3、5、6、7，规则和插件作者的 `plume-plugin check` 是同一份（插件 SDK 的 lib/lint/styles.mjs），色值的例外写在文件里
- * （`color-exempt`），不在下面的表里。插件 SDK 的模板就是仓库外插件的起点，和插件按同一套规则查。市场插件在插件仓库里，由它自己的检查管。
+ * 插件：仓库内的内置插件、测试插件和模板按严格模式（`{ strict: true }`）查规则 3、5、6、7 以及全局 CSS 污染
+ * （规则来自插件 SDK 的 lib/lint/styles.mjs，色值例外写在文件里的 `color-exempt` 注释，不在下面的表里）。
+ * 外部插件跑 `plume-plugin check` 默认只查 Tailwind 类名和全局 CSS 污染，传 `--strict-style` 才启用完整设计系统检查。
  */
 const PLUGINS = ["packages/builtin", "packages/testing", "packages/sdk/plugin-sdk/template"];
 
@@ -313,10 +314,10 @@ async function main() {
 		for (const file of await filesUnder(join(root, dir), [".ts", ".tsx"])) checkColors(file, await readFile(file, "utf8"));
 	}
 
-	// 规则 3、5、6、7：插件。
+	// 规则 3、5、6、7 与全局样式隔离：仓库内的插件和模板走严格模式。
 	for (const file of (await Promise.all(PLUGINS.map((dir) => filesUnder(join(root, dir), [".ts", ".tsx", ".css"])))).flat()) {
 		const text = await readFile(file, "utf8");
-		for (const { index, rule, message } of pluginStyleProblems(file, text, valid)) report(file, index, text, rule, message);
+		for (const { index, rule, message } of pluginStyleProblems(file, text, valid, { strict: true })) report(file, index, text, rule, message);
 	}
 
 	// 规则 4：SkinToken 和 theme.css 一一对应。推导系数（k）、动效（t、e）、阴影、控件和菜单、主输入框、对话列、窗格的尺寸不给皮肤改。

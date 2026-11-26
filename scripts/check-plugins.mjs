@@ -306,7 +306,7 @@ function componentsDoc() {
 		"",
 		"界面入口能用的 `@plume/ui` 组件和 `@plume/styles` 类名组合，就是这一页列出的这些；`@plume/ui` 的其他导出是产品内部用的，`pnpm check:plugins` 会拦。签名和注释摘自源码：解构的参数只留有默认值的（其余的看后面的类型），`keyof typeof` 的常量只列键，注释只取第一段。",
 		"",
-		"怎么选：文字一律用 `Text`（字号档位自带行高、字距和字重，不在 CSS 里写字号）；按钮、输入框、开关、菜单、对话框用对应组件；工具卡片的外框用 `Card`。组件不够时用下面的类名组合，再不够才写自己的样式（见 [style-i18n.md](style-i18n.md)）。",
+		"`@plume/ui` 是推荐选项，不是强制要求：想贴合 Plume 原生外观并自动适配浅深色和换肤时，文字用 `Text`（字号档位自带行高、字距和字重），按钮、输入框、开关、菜单、对话框用对应组件，工具卡片的外框用 `Card`；不够用再配下面的类名组合，也可以自己写 CSS 自定义样式（见 [style-i18n.md](style-i18n.md)）。",
 		"",
 		...groups.flatMap((group) => [`## ${group.title}`, "", ...group.names.map(describe)]),
 		"## `@plume/styles` 的类名组合",

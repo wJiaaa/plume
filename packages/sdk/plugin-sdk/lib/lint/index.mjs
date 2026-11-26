@@ -29,15 +29,17 @@ const lineAt = (text, index) => text.slice(0, index).split("\n").length;
 /**
  * @typedef {{ file: string, line?: number, rule: string, message: string }} Problem
  * @param {string} pluginDir
- * @param {{ isTailwind?: (candidate: string) => boolean }} [options] isTailwind 缺省用 SDK 带的 Tailwind 和 theme.css
+ * @param {{ isTailwind?: (candidate: string) => boolean, strictStyle?: boolean }} [options] isTailwind 缺省用 SDK 带的 Tailwind 和 theme.css；strictStyle 为真时按 Plume 设计系统严查色值、排版、圆角、阴影和过渡时长
  * @returns {Promise<Problem[]>}
  */
 export async function lintPlugin(pluginDir, options = {}) {
 	const isTailwind = options.isTailwind ?? (await pluginTailwind());
+	const strict = Boolean(options.strictStyle);
 	const problems = importProblems(pluginDir).map(({ file, message }) => ({ file, rule: "引用", message }));
 	for (const file of files(pluginDir, [".ts", ".tsx", ".css"])) {
 		const text = readFileSync(file, "utf8");
-		for (const { index, rule, message } of pluginStyleProblems(file, text, isTailwind)) problems.push({ file, line: lineAt(text, index), rule, message });
+		for (const { index, rule, message } of pluginStyleProblems(file, text, isTailwind, { strict }))
+			problems.push({ file, line: lineAt(text, index), rule, message });
 	}
 	// 测试写给开发者看，文案在 src/messages.ts 里本来就是两种语言：都不查中文。
 	for (const file of files(pluginDir, [".ts", ".tsx"], ["test"])) {

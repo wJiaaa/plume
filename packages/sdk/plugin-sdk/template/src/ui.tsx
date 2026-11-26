@@ -1,7 +1,7 @@
 /**
  * __NAME__ 的界面入口，跑在渲染进程：把 __TOOL__ 的结果画成一张卡片。details 认不出时用通用卡片。
  *
- * 样式只用 @plume/ui 的组件（文字用 Text）和 var(--plume-*)，不写 Tailwind 类（插件单独构建，产品扫不到）。
+ * 推荐用 @plume/ui 组件和 var(--plume-*)（自动适配浅深色与换肤），也可以自己写带作用域前缀的 CSS；不要在 className 里写产品的 Tailwind 类（插件单独构建，产品扫不到）。
  */
 
 import type { ToolCardProps, UiPlugin } from "@plume/contract/ui";

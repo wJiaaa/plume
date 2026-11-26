@@ -34,7 +34,7 @@
 
 ### 插件的卡片
 
-- 只用 `@plume/ui` 组件、`@plume/styles` 的类名组合、`var(--plume-*)`；插件的 `className` 里不写 Tailwind 类（扫不到，`pnpm check:styles` 会报）。
+- 内置与官方卡片用 `@plume/ui` 组件、`@plume/styles` 的类名组合和 `var(--plume-*)`；外部插件可按需自定义样式，但 `className` 里不写产品的 Tailwind 类（扫不到），CSS 选择器要做好作用域隔离（避免污染宿主和其他插件）。
 - `details` 认不出（旧版本存下的、失败的）时渲染 `fallback`。渲染出错由宿主的错误边界兜住，让给下一个注册者，组件里不用自己 try/catch。
 - 允许、拒绝交给审批卡，不在工具卡片里重复做。
 

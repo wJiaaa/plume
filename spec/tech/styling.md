@@ -10,7 +10,9 @@
 - 两处以上会用的组合（控件、卡片、代码、文字）放 `@plume/styles` 的 `src/index.ts`；只用一次的布局（栅格、页面边距、窗口顶行）写在用的地方。
 - 能用 `@plume/ui` 组件的不自己拼类名，见 [`components.md`](./components.md)。
 - 工具类写不清的视觉效果（伪元素、遮罩、`@starting-style`，比如会话背景图）写进渲染进程 `styles.css` 的 `@layer components`，类名带上组件名（`.chat-backdrop`），取值同样只用 token。
-- 产品的 Tailwind 只扫描 `apps/desktop/src/renderer`、`packages/client`。插件单独构建，自己写的 Tailwind 类扫不到：插件用 `@plume/ui` 组件（文字用 `Text`）、`@plume/styles` 导出的组合，再不够用自己的类名加 `var(--plume-*)`；插件自己的 CSS 只管布局和颜色，字号、行高、字距、字体、字重、圆角、阴影只能写单个 `var(--plume-*)` 或关键字。
+- 产品的 Tailwind 只扫描 `apps/desktop/src/renderer`、`packages/client`。插件单独构建，自己写的 Tailwind 类扫不到，且插件样式表直接挂在主文档里，CSS 选择器须带自己的类 / ID 或放进 `@scope (.前缀)`，避免污染宿主和其他插件。
+  - **内置插件、测试插件与模板**（第一方代码）：继续按严格设计系统约束写——用 `@plume/ui` 组件（文字用 `Text`）、`@plume/styles` 导出的组合和 `var(--plume-*)`，CSS 只管布局和颜色，字号、行高、字距、字体、字重、圆角、阴影只能写单个 `var(--plume-*)` 或关键字。
+  - **外部 / 第三方插件**：`@plume/ui` 和 `var(--plume-*)` 是推荐选项而非强制要求；作者可以按需自定义样式和配色，`plume-plugin check` 默认只拦产品 Tailwind 类和全局 CSS 污染，需要对齐 Plume 设计系统时传 `--strict-style`。
 
 ### 不能写的
 
@@ -45,7 +47,7 @@
 2. 颜色、字号、圆角、阴影、字体不用任意值。
 3. 代码里不写色值（例外见 `ALLOWED_COLORS`）。
 4. `SkinToken` 和 theme.css 一致。
-5. `packages/builtin/` 和插件 SDK 的模板（`packages/sdk/plugin-sdk/template`）的 `className` 不写 Tailwind 类；插件 CSS 里的字号、行高、字距、字体、字重、圆角、阴影只取单个 `var(--plume-*)` 或关键字。市场插件由插件仓库自己的检查按同一份规则（插件 SDK 的 `lib/lint/styles.mjs`）查。
+5. `packages/builtin/`、`packages/testing/` 和插件 SDK 的模板（`packages/sdk/plugin-sdk/template`）按严格模式查（`className` 不写 Tailwind 类，CSS 不写无作用域的全局选择器，字号、行高、字距、字体、字重、圆角、阴影只取单个 `var(--plume-*)` 或关键字，不写死色值和数字时长）。外部插件的 `plume-plugin check` 默认只查产品 Tailwind 类和全局 CSS 污染，加 `--strict-style`（或 `lintPlugin(dir, { strictStyle: true })`）才启用完整设计系统检查。
 6. 不写数字时长。
 7. 行内 style 的颜色、圆角、字号、字体、阴影、过渡只用 `var(--plume-*)` 和几个关键字。
 8. ink-muted ≥ 4.5、ink-faint ≥ 3，在 shell、sidebar、card、input、float 上，浅深两种主题。
