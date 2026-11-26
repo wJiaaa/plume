@@ -2,6 +2,7 @@
  * 侧边聊天向同项目 / 同 Git 仓库内的其他顶层会话直接发单向消息（`send_to_session`）。
  *
  * 走本体寄信原语（`ToolRun.letter`）：收件方会看到来自侧边聊天的提示行（不构成用户授权）、遵守收件方的暂停与防打转上限。
+ * 收件方是这段侧边聊天开出、每轮交回这里的会话时，说明换成「答在收尾回复里」：它那一轮的结果随交回送到侧边聊天。
  * 作用范围限在同项目或同 Git 仓库（含工作树与子目录）内，与普通目录相邻的会话互不可写；要发给当前挂载的主会话仍走 `dispatch_task`。
  */
 
@@ -74,6 +75,9 @@ const NOT_HERE: ToolOutput = { output: "send_to_session only works in a side cha
 // i18n-exempt：附加在收件方抬头后的单向说明。
 const ONE_WAY_GUIDE = "（这条消息来自侧边聊天，是单向转交，对方无法接收回信，请勿尝试回复给侧边聊天。）";
 
+// i18n-exempt：收件方是这段侧边聊天开出、每轮交回这里的会话时的说明：答案随交回送到，不用回信。
+const REPORTED_GUIDE = "（这条消息来自开出你的侧边聊天。你这一轮收尾那段回复会交回侧边聊天：结果和要问的都写在收尾回复里，不用、也没法给侧边聊天回信。）";
+
 // i18n-exempt：工具说明、参数和返回给模型的回执都是模型看的，不经界面展示。
 export function createSendToSession(deps: SendToSessionDeps): ToolDefinition {
 	return {
@@ -113,23 +117,26 @@ export function createSendToSession(deps: SendToSessionDeps): ToolDefinition {
 					isError: true,
 				};
 			const from = MESSAGES[deps.locale()].letterFrom(parent.title);
-			const receipt = run.letter(target.id, { from, text: message, guide: ONE_WAY_GUIDE });
+			// 这段侧边聊天开出、要了交回的会话：它每做完一轮，本体把结果交回这里（见 index.ts 的 `launch`）。
+			const reported = target.spawnedFrom?.callIn === run.sessionId && target.spawnedFrom.reportBack === true;
+			const receipt = run.letter(target.id, { from, text: message, guide: reported ? REPORTED_GUIDE : ONE_WAY_GUIDE });
 			const label = target.title || target.id;
+			const back = reported ? "它这一轮做完会把结果交回这里。" : "";
 			const details: SentToSessionDetails = { kind: "sent_to_session", sessionId: target.id, title: label };
 			if (receipt.held) {
 				return {
-					output: `消息已投递给「${label}」，但该会话当前已暂停或已达自动唤醒上限，不会立即开跑；消息会在用户下次在该会话开口时读到。`,
+					output: `消息已投递给「${label}」，但该会话当前已暂停或已达自动唤醒上限，不会立即开跑；消息会在用户下次在该会话开口时读到。${back}`,
 					details,
 				};
 			}
 			if (receipt.queued) {
 				return {
-					output: `消息已投递给「${label}」；对方当前正在执行，会在完成手上这一步后读到。`,
+					output: `消息已投递给「${label}」；对方当前正在执行，会在完成手上这一步后读到。${back}`,
 					details,
 				};
 			}
 			return {
-				output: `消息已发送给「${label}」，对方当前空闲，已开始处理。`,
+				output: `消息已发送给「${label}」，对方当前空闲，已开始处理。${back}`,
 				details,
 			};
 		},

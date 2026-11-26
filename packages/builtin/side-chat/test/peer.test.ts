@@ -84,6 +84,19 @@ test("send_to_session：同项目顶层会话直接发送，支持 session:// �
 	assert.match((await held.call({ session_id: "peer", message: "等开口" })).output as string, /暂停|上限/);
 });
 
+test("send_to_session：发给这段侧边聊天开出、每轮交回这里的会话时，说明换成答在收尾回复里，回执说结果会交回来", async () => {
+	const sessions = [
+		summary({ id: "main", title: "主会话", project: "p1", cwd: "/p1" }),
+		summary({ id: "mine", title: "改标识", project: "p1", cwd: "/p1", spawnedFrom: { sessionId: "main", toolCallId: "c1", callIn: "side", reportBack: true } }),
+		summary({ id: "quiet", title: "不送回", project: "p1", cwd: "/p1", spawnedFrom: { sessionId: "main", toolCallId: "c2", callIn: "side" } }),
+	];
+	const harness = makeHarness(sessions);
+	assert.match((await harness.call({ session_id: "mine", message: "改成大写十六进制" })).output as string, /交回这里/);
+	assert.match(harness.sent[0]?.letter.guide ?? "", /收尾回复/);
+	assert.doesNotMatch((await harness.call({ session_id: "quiet", message: "改一下" })).output as string, /交回这里/);
+	assert.match(harness.sent[1]?.letter.guide ?? "", /单向/);
+});
+
 test("send_to_session：不同项目但同 Git 仓库（含工作树与子目录）允许发送，不同仓库与普通目录拒绝", async (t: TestContext) => {
 	const root = mkdtempSync(join(tmpdir(), "plume-side-peer-"));
 	t.onTestFinished(() => rmSync(root, { recursive: true, force: true }));

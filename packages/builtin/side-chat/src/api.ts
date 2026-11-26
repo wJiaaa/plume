@@ -6,6 +6,14 @@ import type { SessionMessage, ThinkingLevel } from "@plume/contract";
 export interface LaunchChoice {
 	model?: string;
 	thinking?: ThinkingLevel;
+	/** 卡上「做完送回」开着：新会话每做完一轮，本体把结果交回这段侧边聊天，并叫醒它。 */
+	reportBack: boolean;
+}
+
+/** 这段侧边聊天的卡开过的一个会话：卡上「交给它接着做」那一行。 */
+export interface OpenedSession {
+	id: string;
+	title: string;
 }
 
 export interface SideChatEntry {
@@ -56,9 +64,12 @@ export interface SideChatApi {
 	close(tab: string): Promise<void>;
 	/**
 	 * 交出去的卡片上点了「开新会话」：在主会话的项目（不在项目里时是它的目录）里开一个新会话，第一句是卡上那条指令，
-	 * 记着从这次调用开出来（`spawnedFrom`），用卡上选的模型和思考档位（`choice`，没选就是默认的）。同一张卡开过就不再开，返回开出来的会话 id。
+	 * 记着从这次调用开出来（`spawnedFrom`），用卡上选的模型和思考档位（`choice`，没选就是默认的），按卡上的开关决定做完送不送回这里。
+	 * 同一张卡开过就不再开，返回开出来的会话 id。
 	 */
 	launch(sideId: string, callId: string, choice: LaunchChoice): Promise<string>;
+	/** 这段侧边聊天的卡开过、还没归档的会话，新开的在前。 */
+	opened(sideId: string): Promise<OpenedSession[]>;
 	/** 这张卡开过的会话；没开过是 undefined。 */
 	started(sideId: string, callId: string): Promise<string | undefined>;
 }

@@ -10,7 +10,9 @@ import { clickRealIn, lastOf } from "./smoke-kit.ts";
  * 主对话里不留。接着在侧边聊天里编辑重问那一句：有「编辑并重新提问」和撤回、没有分叉，重问照样附上主会话的内容
  * （读到哪里随截掉的那一问退回去）。再让侧边聊天把一件事交给忙着的主会话，看回执条：排着时撤回、那句话回到侧边聊天的输入框；
  * 再交一次，主会话停下后照旧排着，「立即执行」让主会话为它跑一轮，再停下它记成随主会话停下，最后移除；
- * 最后撤回侧边聊天里最后那句：那一问和回答从侧边聊天的转录里没了，字回到侧边聊天的输入框、不进主输入框；假模型交还。
+ * 再撤回侧边聊天里最后那句：那一问和回答从侧边聊天的转录里没了，字回到侧边聊天的输入框、不进主输入框。
+ * 最后是交出去的卡片：「开新会话」那一行的「做完送回」默认开着，开出的会话做完第一轮把汇报交回侧边聊天、叫醒它；
+ * 再要改时第二张卡上多一行「交给「改标识」接着做」，点了侧边聊天用 `send_to_session` 发过去，那一轮做完又交回来。假模型交还。
  */
 export async function checkQueueActions(options: {
 	window: BrowserWindow;
@@ -29,13 +31,27 @@ export async function checkQueueActions(options: {
 	const reasked = "改过的问题";
 	const reaskAnswer = "侧边聊天答了改过的那句。";
 	const task = "把 README 的错字改掉";
+	const launchTask = "把消息标识改成摘要";
+	const followUp = "标识改成大写十六进制";
 	let reaskSawMain = false;
 	setModel((request) => {
-		if (!((request.tools ?? []) as Array<{ name: string }>).some((tool) => tool.name === "read_main_chat")) return { text: "我先想想。", hang: true };
 		// 这一轮的输入：最后一条回复之后的那几条（人的话、附上的主会话内容、工具结果）。
 		const messages = request.messages as Array<{ role: string }>;
 		const turn = JSON.stringify(messages.slice(messages.findLastIndex((message) => message.role === "assistant") + 1));
+		if (!((request.tools ?? []) as Array<{ name: string }>).some((tool) => tool.name === "read_main_chat")) {
+			// 卡片开出来的会话：第一句是卡上的指令；侧边聊天寄来的信要它改成大写。
+			if (JSON.stringify(messages).includes(launchTask)) return { text: turn.includes(followUp) ? "改好了，已是大写。" : "新会话做好了。" };
+			return { text: "我先想想。", hang: true };
+		}
+		if (turn.includes("session-report")) return { text: "收到汇报。" };
 		if (turn.includes("tool_result")) return { text: "交过去了。" };
+		const target = /交给会话「[^」]*」（session:\/\/([\w-]+)）/.exec(turn)?.[1];
+		if (target)
+			return { toolCalls: [{ id: `send-${Date.now()}`, name: "send_to_session", args: { session_id: target, message: `在已有改动上，把${followUp}` } }] };
+		if (turn.includes("另开会话做标识"))
+			return { toolCalls: [{ id: `card-${Date.now()}`, name: "dispatch_task", args: { instruction: launchTask, title: "改标识", user_asked: false } }] };
+		if (turn.includes("标识再改"))
+			return { toolCalls: [{ id: `card-${Date.now()}`, name: "dispatch_task", args: { instruction: followUp, title: "标识改大写", user_asked: false } }] };
 		if (turn.includes("错字")) return { toolCalls: [{ id: `dispatch-${Date.now()}`, name: "dispatch_task", args: { instruction: task, user_asked: true } }] };
 		if (turn.includes(reasked)) {
 			reaskSawMain = turn.includes("先慢慢想");
@@ -139,6 +155,43 @@ export async function checkQueueActions(options: {
 		if (await page(`document.querySelector('${chat} .cm-content')?.textContent.includes(${JSON.stringify(task)})`))
 			throw new Error("侧边聊天撤回的那句不该进主输入框");
 		await capture(window, join(outDir, "smoke-side-chat-revert.png"));
+
+		// 交出去的卡片：开新会话（做完送回默认开着），汇报交回侧边聊天并叫醒它。
+		const sideIdle = `document.querySelector('${side} [data-composer-send=send]') !== null`;
+		const ask = async (words: string) => {
+			await until(sideIdle, "侧边聊天闲着");
+			await page(
+				`(() => { const box = document.querySelector('${side} .cm-content'); box.focus(); document.execCommand('selectAll'); document.execCommand('delete'); })()`,
+			);
+			await window.webContents.insertText(words);
+			await until(`document.querySelector('${side} [data-composer-send=send]')?.disabled === false`, "侧边聊天可以发送");
+			await click(`${side} [data-composer-send=send]`);
+		};
+		const pending = `${side} [data-side-dispatch=pending]`;
+		const reports = `document.querySelectorAll('${side} [data-delivery-row]').length`;
+		await ask("另开会话做标识");
+		await until(`document.querySelector('${pending} [data-side-dispatch-report=on]') !== null`, "卡片上「做完送回」默认开着");
+		if (await page(`document.querySelector('${pending} [data-side-dispatch-action=continue]') !== null`))
+			throw new Error("这段侧边聊天还没开过会话，卡上不该有「接着做」");
+		await capture(window, join(outDir, "smoke-side-dispatch-card.png"));
+		await click(`${pending} [data-side-dispatch-action=new]`);
+		await until(`document.querySelector('${side} [data-side-dispatch=new]') !== null`, "开出新会话，卡片缩成一行");
+		await until(
+			`${reports} === 1 && ${sideIdle} && document.querySelector('${side} [data-child-conversation]')?.textContent.includes('收到汇报。')`,
+			"新会话的汇报交回侧边聊天并叫醒它",
+		);
+
+		// 再要改：第二张卡上有「交给「改标识」接着做」，点了经 send_to_session 发过去，那一轮做完又交回来。
+		await ask("标识再改");
+		await until(
+			`document.querySelector('${pending} [data-side-dispatch-action=continue]')?.textContent.includes('改标识')`,
+			"第二张卡上有交给开过的会话接着做",
+		);
+		await capture(window, join(outDir, "smoke-side-dispatch-continue.png"));
+		await click(`${pending} [data-side-dispatch-action=continue]`);
+		await until(`document.querySelector('${side} [data-side-dispatch=continue]') !== null`, "选了接着做，卡片缩成一行");
+		await until(`${reports} === 2 && ${sideIdle}`, "接着做的那一轮做完，又交回侧边聊天");
+		await capture(window, join(outDir, "smoke-side-dispatch-reported.png"));
 	} finally {
 		setModel(undefined);
 	}

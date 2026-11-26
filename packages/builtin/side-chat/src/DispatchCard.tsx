@@ -3,11 +3,13 @@
  *
  * 交给主会话是排进它的队列（`handToParent`，和人在主输入框里排的同一条队），开新会话经逻辑入口的 `launch` 开在主会话
  * 所在的项目里、记着从这张卡开出来（`spawnedFrom`），在这里做是替人对侧边聊天说一句「就在这里做」——它手上有那条指令，
- * 接着做就是。选过以后缩成一行过程行（`FlowRow`）；开新会话的那一行和建议新会话开始以后的那一行一个样：在跑时扫光、没跑完标红，点了过去。
+ * 接着做就是。这段侧边聊天的卡开过的会话（`opened`）各占一行「交给 X 接着做」：同样替人说一句，侧边聊天用 `send_to_session`
+ * 把这回要改的发过去——那个会话手上已经有上回的指令和改动，要的是改什么，不是从头再来一份。
+ * 选过以后缩成一行过程行（`FlowRow`）；开新会话的那一行和建议新会话开始以后的那一行一个样：在跑时扫光、没跑完标红，点了过去。
  *
  * 卡片的外框、标题行和说明是 `@plume/styles` 的 `proposal`，和主对话里的建议新会话卡同一副骨架。底下不是一排按钮，是一列去处：
- * 一行一个、整行点了就交出去；只有开新会话要选模型和思考档位，它们就放在那一行的右端，一眼看得出只管新会话。
- * 模型和档位从默认的起步，没动过就不交，开出来的会话用默认的。
+ * 一行一个、整行点了就交出去；只有开新会话要选模型、思考档位和做完送不送回，它们就放在那一行的右端，一眼看得出只管新会话。
+ * 模型和档位从默认的起步，没动过就不交，开出来的会话用默认的；「做完送回」默认开着。
  *
  * 参数还在写、或者被点名直接派了的，都是普通的工具行（`fallback`）。
  */
@@ -15,22 +17,28 @@
 import type { ThinkingLevel } from "@plume/contract";
 import type { Remote, ToolCardProps, UiContext } from "@plume/contract/ui";
 import { proposal } from "@plume/styles";
-import { ActionSpinner, FlowRow, Text, useI18n } from "@plume/ui";
-import { ChevronRight, Forward, MessageCircle, SquarePen } from "@plume/ui/icons";
+import { ActionSpinner, ComposerToggle, FlowRow, Text, useI18n } from "@plume/ui";
+import { ChevronRight, CornerDownLeft, Forward, MessageCircle, Repeat, SquarePen } from "@plume/ui/icons";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
-import type { SideChatApi } from "./api.ts";
+import type { OpenedSession, SideChatApi } from "./api.ts";
 import { isDispatchSuggestion } from "./controls.ts";
 import { MESSAGES } from "./messages.ts";
 
-type Choice = "main" | "here";
+type Choice = "main" | "here" | "continue";
+
+/** 选过的去处；交给开过的会话接着做时记着是哪个会话。 */
+interface Picked {
+	choice: Choice;
+	target?: OpenedSession;
+}
 
 /**
- * 人在卡片上选过什么，按调用记。只在这个窗口的内存里：交给主会话、在这里做之后卡片收起来就够了，那件事在主会话
- * 或这里的记录里照样看得到。开新会话的那张不靠它：从会话列表里认得出来（`started`）。
+ * 人在卡片上选过什么，按调用记。只在这个窗口的内存里：交给主会话、在这里做、交给开过的会话之后卡片收起来就够了，那件事在
+ * 主会话、这里或那个会话的记录里照样看得到。开新会话的那张不靠它：从会话列表里认得出来（`started`）。
  */
-const chosen = new Map<string, Choice>();
+const chosen = new Map<string, Picked>();
 const listeners = new Set<() => void>();
-function choose(callId: string, choice: Choice | null): void {
+function choose(callId: string, choice: Picked | null): void {
 	if (choice) chosen.set(callId, choice);
 	else chosen.delete(callId);
 	for (const listener of listeners) listener();
@@ -43,26 +51,36 @@ function subscribe(listener: () => void): () => void {
 const CHOSEN_ICON: Record<Choice, ReactNode> = {
 	main: <Forward size={13} strokeWidth={1.8} />,
 	here: <MessageCircle size={13} strokeWidth={1.8} />,
+	continue: <Repeat size={13} strokeWidth={1.8} />,
 };
 
 export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 	return function DispatchCard({ call, status, result, sessionId, handToParent, fallback }: ToolCardProps) {
 		const text = MESSAGES[useI18n().resolvedLocale];
 		const details = status === "done" ? result?.details : undefined;
-		const choice = useSyncExternalStore(subscribe, () => chosen.get(call.id));
+		const picked = useSyncExternalStore(subscribe, () => chosen.get(call.id));
 		const [started, setStarted] = useState<string | undefined>(undefined);
-		const [busy, setBusy] = useState<Choice | "new" | null>(null);
+		const [opened, setOpened] = useState<OpenedSession[]>([]);
+		/** 正在交的那一行：去处，交给开过的会话时是 `continue:<会话 id>`。 */
+		const [busy, setBusy] = useState<string | null>(null);
 		const [model, setModel] = useState("");
 		const [thinking, setThinking] = useState<ThinkingLevel>();
+		const [reportBack, setReportBack] = useState(true);
 		const ready = isDispatchSuggestion(details) && sessionId !== undefined && handToParent !== undefined;
 
-		// 开新会话那一行要认得出这张卡开过的会话：重开面板、换窗口回来也一样。
+		// 开新会话那一行要认得出这张卡开过的会话：重开面板、换窗口回来也一样。别的卡开过的会话各列一行「交给它接着做」。
 		useEffect(() => {
 			if (!ready) return;
 			let alive = true;
 			void api.started(sessionId, call.id).then(
 				(id) => {
 					if (alive) setStarted(id);
+				},
+				() => undefined,
+			);
+			void api.opened(sessionId).then(
+				(sessions) => {
+					if (alive) setOpened(sessions);
 				},
 				() => undefined,
 			);
@@ -74,28 +92,33 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 		if (!ready) return <>{fallback}</>;
 
 		if (started) return <Started ui={ui} callId={call.id} title={details.title} startedId={started} />;
-		if (choice)
+		if (picked) {
+			const chosenTitle = picked.choice === "main" ? text.dispatchedMain : picked.target ? text.dispatchedContinue(picked.target.title) : text.dispatchHere;
 			return (
-				<div data-side-dispatch={choice} data-side-dispatch-call={call.id}>
-					<FlowRow
-						icon={CHOSEN_ICON[choice]}
-						title={<span className="plume-side-plain">{choice === "main" ? text.dispatchedMain : text.dispatchHere}</span>}
-						summary={details.title}
-					/>
+				<div data-side-dispatch={picked.choice} data-side-dispatch-call={call.id}>
+					<FlowRow icon={CHOSEN_ICON[picked.choice]} title={<span className="plume-side-plain">{chosenTitle}</span>} summary={details.title} />
 				</div>
 			);
+		}
 
-		const act = async (next: Choice | "new") => {
+		const act = async (next: Choice | "new", target?: OpenedSession) => {
 			if (busy) return;
-			setBusy(next);
+			setBusy(target ? `continue:${target.id}` : next);
 			try {
 				if (next === "new") {
-					setStarted(await api.launch(sessionId, call.id, { ...(model ? { model } : {}), ...(thinking ? { thinking } : {}) }));
+					const choice = { ...(model ? { model } : {}), ...(thinking ? { thinking } : {}), reportBack };
+					setStarted(await api.launch(sessionId, call.id, choice));
 					return;
 				}
 				// 先记下，卡片当场收起；没成再退回去。
-				choose(call.id, next);
+				choose(call.id, { choice: next, ...(target ? { target } : {}) });
 				if (next === "main") await handToParent(details.instruction);
+				else if (target)
+					// 气泡里只写交给谁、做什么；会话 id 只给模型，它要拿去 `send_to_session`。
+					await api.ask(sessionId, {
+						content: [{ type: "text", text: text.dispatchContinueMessage(details.title, target.title, target.id) }],
+						displayText: text.dispatchContinueShown(details.title, target.title),
+					});
 				else await api.ask(sessionId, text.dispatchHereMessage(details.title));
 			} catch (error) {
 				if (next !== "new") choose(call.id, null);
@@ -126,6 +149,18 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 						busy={busy}
 						onPick={() => void act("main")}
 					/>
+					{opened.map((target) => (
+						<Destination
+							key={target.id}
+							action="continue"
+							target={target.id}
+							icon={<Repeat size={15} strokeWidth={1.8} />}
+							label={text.dispatchContinue(target.title)}
+							tip={text.dispatchContinueTip}
+							busy={busy}
+							onPick={() => void act("continue", target)}
+						/>
+					))}
 					<Destination
 						action="new"
 						icon={<SquarePen size={15} strokeWidth={1.8} />}
@@ -135,6 +170,16 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 						onPick={() => void act("new")}
 					>
 						<div className="plume-side-dest-model">
+							<ComposerToggle
+								data-side-dispatch-report={reportBack ? "on" : "off"}
+								on={reportBack}
+								onChange={setReportBack}
+								size="sm"
+								iconOnly
+								icon={<CornerDownLeft size={16} strokeWidth={1.8} />}
+								label={text.reportBack}
+								tip={reportBack ? text.reportBackOn : text.reportBackOff}
+							/>
 							<ui.ModelControls
 								model={model}
 								{...(thinking ? { thinking } : {})}
@@ -159,11 +204,13 @@ export function dispatchCard(ui: UiContext, api: Remote<SideChatApi>) {
 }
 
 /**
- * 一个去处：整行是一颗按钮（点击区经 `::after` 铺满整行），行尾悬停时出一个 ›。给了 `children`（开新会话那行的模型和档位）就放在行尾，
- * 浮在点击区上面，点它们是选，不是交出去。正在交的那行图标换成转圈，交的时候几行都按不动。
+ * 一个去处：整行是一颗按钮（点击区经 `::after` 铺满整行），行尾悬停时出一个 ›。给了 `children`（开新会话那行的模型、档位和送回开关）
+ * 就放在行尾，浮在点击区上面，点它们是选，不是交出去。正在交的那行图标换成转圈，交的时候几行都按不动。
+ * 交给开过的会话的几行同一种去处，`target` 是那个会话的 id。
  */
 function Destination({
 	action,
+	target,
 	icon,
 	label,
 	tip,
@@ -172,14 +219,15 @@ function Destination({
 	children,
 }: {
 	action: Choice | "new";
+	target?: string;
 	icon: ReactNode;
 	label: string;
 	tip: string;
-	busy: Choice | "new" | null;
+	busy: string | null;
 	onPick(): void;
 	children?: ReactNode;
 }) {
-	const mine = busy === action;
+	const mine = busy === (target ? `continue:${target}` : action);
 	return (
 		<div className="plume-side-dest" data-busy={mine || undefined}>
 			<button
@@ -190,6 +238,7 @@ function Destination({
 				data-plume-tip={tip}
 				onClick={onPick}
 				data-side-dispatch-action={action}
+				data-side-dispatch-target={target}
 			>
 				{mine ? <ActionSpinner size={15} /> : icon}
 				<Text size="label">{label}</Text>

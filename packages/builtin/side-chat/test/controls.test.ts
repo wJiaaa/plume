@@ -158,25 +158,38 @@ async function fixture(t: TestContext, directory?: string, others: SessionSummar
 	return { api: api!, launched, tools, directory, remove, context: layers.get("model.context") as HookLayer<"model.context"> };
 }
 
-test("卡片上「开新会话」开在主会话的项目里、记着是侧边聊天里哪张卡开的、不要每轮交回主会话，点两次只开一个；不是建议卡的不开", async (t) => {
+test("卡片上「开新会话」开在主会话的项目里、记着是侧边聊天里哪张卡开的、开着「做完送回」时要每轮交回，点两次只开一个；不是建议卡的不开", async (t) => {
 	const f = await fixture(t);
 	assert.deepEqual(f.tools, ["read_main_chat", "dispatch_task", "control_main", "send_to_session"]);
 	assert.equal(await f.api.started("side", "call-1"), undefined);
-	const [first, second] = await Promise.all([f.api.launch("side", "call-1", {}), f.api.launch("side", "call-1", {})]);
+	const choice = { reportBack: true };
+	const [first, second] = await Promise.all([f.api.launch("side", "call-1", choice), f.api.launch("side", "call-1", choice)]);
 	assert.equal(first, "new-1");
 	assert.equal(second, "new-1");
-	assert.equal(await f.api.launch("side", "call-1", {}), "new-1");
+	assert.equal(await f.api.launch("side", "call-1", choice), "new-1");
 	assert.deepEqual(f.launched, [
-		{ project: "p1", message: "把 /w/a.ts 的类型错误修掉", title: "修好 a.ts", spawnedFrom: { sessionId: "main", toolCallId: "call-1", callIn: "side" } },
+		{
+			project: "p1",
+			message: "把 /w/a.ts 的类型错误修掉",
+			title: "修好 a.ts",
+			spawnedFrom: { sessionId: "main", toolCallId: "call-1", callIn: "side", reportBack: true },
+		},
 	]);
 	assert.equal(await f.api.started("side", "call-1"), "new-1");
-	await assert.rejects(f.api.launch("side", "call-2", {}), /卡片/);
-	await assert.rejects(f.api.launch("main", "call-1", {}));
+	assert.deepEqual(await f.api.opened("side"), [{ id: "new-1", title: "修好 a.ts" }]);
+	await assert.rejects(f.api.launch("side", "call-2", choice), /卡片/);
+	await assert.rejects(f.api.launch("main", "call-1", choice));
+});
+
+test("卡片上关掉「做完送回」：开出来的会话不交回", async (t) => {
+	const f = await fixture(t);
+	await f.api.launch("side", "call-1", { reportBack: false });
+	assert.deepEqual(f.launched[0]?.spawnedFrom, { sessionId: "main", toolCallId: "call-1", callIn: "side" });
 });
 
 test("卡开过哪个会话从会话列表里认：重开窗口还认得；开出来的会话删了就当没开过，可以再开", async (t) => {
 	const f = await fixture(t);
-	assert.equal(await f.api.launch("side", "call-1", {}), "new-1");
+	assert.equal(await f.api.launch("side", "call-1", { reportBack: true }), "new-1");
 	const opened = {
 		id: "new-1",
 		title: "修好 a.ts",
@@ -188,17 +201,17 @@ test("卡开过哪个会话从会话列表里认：重开窗口还认得；开�
 	} as SessionSummary;
 	const again = await fixture(t, f.directory, [opened]);
 	assert.equal(await again.api.started("side", "call-1"), "new-1");
-	assert.equal(await again.api.launch("side", "call-1", {}), "new-1");
+	assert.equal(await again.api.launch("side", "call-1", { reportBack: true }), "new-1");
 	assert.deepEqual(again.launched, []);
 	again.remove("new-1");
 	assert.equal(await again.api.started("side", "call-1"), undefined);
-	assert.equal(await again.api.launch("side", "call-1", {}), "new-1");
+	assert.equal(await again.api.launch("side", "call-1", { reportBack: true }), "new-1");
 	assert.equal(again.launched.length, 1);
 });
 
 test("卡片上选了模型和思考档位：开出来的会话用它们", async (t) => {
 	const f = await fixture(t);
-	await f.api.launch("side", "call-1", { model: "p/strong", thinking: "high" });
+	await f.api.launch("side", "call-1", { model: "p/strong", thinking: "high", reportBack: true });
 	assert.equal(f.launched[0]?.model, "p/strong");
 	assert.equal(f.launched[0]?.thinking, "high");
 });

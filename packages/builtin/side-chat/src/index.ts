@@ -14,7 +14,8 @@
  * - 排队条上的「在侧边聊天中打开」（界面入口的 `ui.queueAction`）：那条排着的话拿到最早那段侧边聊天去问，附件跟着走。
  * - 在跑时说的话（见 waiting.ts）：回车插进这一轮（`ctx.sessions.steer`），⌘回车排到这一轮之后，插件自己排，`observe` 看到这一轮以完成收场、
  *   闲下来时一句一句发；插进去没读到的转进队头。
- * - `ctx.serve`：面板列出、新开、提问、插话、排队、停止、关掉侧边聊天；交出去的卡片上「开新会话」。
+ * - `ctx.serve`：面板列出、新开、提问、插话、排队、停止、关掉侧边聊天；交出去的卡片上「开新会话」（开着「做完送回」时本体把它每轮的结果
+ *   交回这段侧边聊天，`spawnedFrom.reportBack`）和「交给开过的会话接着做」要列的会话。
  * - `ctx.settings`：设置 › 智能体里「侧边聊天默认模型」。
  */
 
@@ -377,6 +378,13 @@ export default {
 			},
 			close: (tab: string) => bindings.close(String(tab)),
 			started: (sideId: string, callId: string) => startedFrom(String(sideId), String(callId)),
+			async opened(sideId: string) {
+				const side = sideOf(String(sideId));
+				return (await ctx.sessions.list())
+					.filter((summary) => summary.spawnedFrom?.callIn === side && !summary.archived)
+					.sort((a, b) => b.createdAt - a.createdAt)
+					.map((summary) => ({ id: summary.id, title: summary.title }));
+			},
 			launch(sideId: string, callId: string, choice: LaunchChoice) {
 				const key = `${String(sideId)}:${String(callId)}`;
 				const pending =
@@ -399,9 +407,9 @@ export default {
 							// 卡上没动过就不给，用默认模型、默认推理强度；认不认得由宿主核。
 							...(choice.model ? { model: choice.model } : {}),
 							...(choice.thinking ? { thinking: choice.thinking } : {}),
-							// 挂在主会话下面，记着是这个侧边聊天里哪张卡开的（`callIn`）。不要 `reportBack`：侧边聊天交出去的事，
-							// 那边每轮的结果不交回主会话、也不叫醒它。
-							spawnedFrom: { sessionId: parentId, toolCallId: String(callId), callIn: side },
+							// 挂在主会话下面，记着是这个侧边聊天里哪张卡开的（`callIn`）。卡上开着「做完送回」时要 `reportBack`：
+							// 本体把每轮的结果交回这段侧边聊天（交回 `callIn`），主会话收不到、也不会被叫醒。
+							spawnedFrom: { sessionId: parentId, toolCallId: String(callId), callIn: side, ...(choice.reportBack === true ? { reportBack: true } : {}) },
 						});
 						return session.id;
 					})().finally(() => launching.delete(key));

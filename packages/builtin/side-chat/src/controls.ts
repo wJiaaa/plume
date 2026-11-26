@@ -59,7 +59,8 @@ export const DISPATCH_TASK: ToolDefinition = {
 	description:
 		"把一件需要动手的事交出去（改文件、跑命令、查代码等）。" +
 		"用户明确说了交给主会话（「让主会话做」「交给主会话」）时 user_asked 为 true：直接排进主会话的队列，它在完成当前工作后执行。" +
-		"其余情况 user_asked 为 false：什么都不会开始，侧边聊天里出现一张卡片，由用户选择交给主会话、开一个新会话，还是就在这里做；调用后简短告诉用户卡片在等他选，然后结束这一轮。" +
+		"其余情况 user_asked 为 false：什么都不会开始，侧边聊天里出现一张卡片，由用户选择交给主会话、交给这段侧边聊天开过的会话接着做、开一个新会话，还是就在这里做；调用后简短告诉用户卡片在等他选，然后结束这一轮。" +
+		"已经交给某个会话的事又要改时，照样调用它：卡上列着开过的会话，用户可以选让那个会话接着做；不要让用户为同一件事再开一个新会话。" +
 		"instruction 必须是一条完整、可独立执行的指令——主会话和新会话都看不到侧边聊天的上下文。",
 	parameters: {
 		type: "object",
@@ -77,7 +78,11 @@ export const DISPATCH_TASK: ToolDefinition = {
 		if (args.user_asked !== true) {
 			const details: DispatchSuggestionDetails = { kind: "dispatch_suggestion", title: cardTitle(args.title, instruction), instruction };
 			// 模型得听清楚什么都没开始：一张等人点的卡片，从它这边看和已经派出去一模一样。
-			return { output: "什么都还没开始：侧边聊天里有一张卡片，等用户选交给主会话、开新会话，还是就在这里做。简短告诉用户这件事，然后结束这一轮。", details };
+			return {
+				output:
+					"什么都还没开始：侧边聊天里有一张卡片，等用户选交给主会话、交给这段侧边聊天开过的会话接着做（有的话卡上列着）、开新会话，还是就在这里做。简短告诉用户这件事，然后结束这一轮。",
+				details,
+			};
 		}
 		const { started } = await run.parent.enqueue(instruction);
 		return { output: started ? "主会话当前空闲，已经开始执行。" : "已排入主会话的任务队列，它会在当前工作完成后执行。" };
