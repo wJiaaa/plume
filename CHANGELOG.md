@@ -2,6 +2,25 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.7] - 2026-11-27
+
+<!-- plume:notes en -->
+### Changes
+
+- **Browser screenshots from hidden tabs no longer hang, and the browser stops instantly.** Taking a browser screenshot while the panel tab was hidden—after switching tabs, collapsing the panel, or leaving the conversation page—could hang forever: Electron stops producing frames for hidden `<webview>` guests, and the capture had no timeout while ignoring the stop button, so a stuck capture also left the session busy with no way out. Captures now briefly make the target webview visible while they run (restoring it right after, so nothing flashes on screen), wait two frames so background tabs—freshly resized or never shown—commit their new layout, and time out after 15 seconds or on page destruction or crash. All browser tools now honor the stop button immediately, including wait and hold steps inside page scripts.
+- **"Send now" no longer drops messages on busy sessions.** Clicking "Send now" on a queued message while the session was still finishing its previous turn used to remove the message from the queue before that turn actually ended; when the turn was slow or stuck—and especially when you pressed stop—the message vanished from both the queue and the transcript. A queued message sent on a busy session now stays in the queue and only enters the conversation after the previous turn finishes cleanly; stopping, deleting, or canceling during the wait neither sends it by mistake nor loses it.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **后台标签网页截图不再卡死，浏览器工具支持按停立即中止。** 把面板切到别的标签、收起面板或切出对话页后再截图，截图会永久挂起：Electron 对处于隐藏状态的 `<webview>` 停止出帧，而截图既没有超时也不理会按停，一旦卡住会话就停不下来。现在截图期间临时把目标 webview 恢复可见（结束后立即还原，画面不闪）、先等两帧让后台标签（包括刚改过视口的和从未展示过的）提交新画面，并加上 15 秒超时和页面销毁 / 崩溃中止；所有浏览器工具都响应按停立即中止，页面脚本里的等待步骤也一样。
+- **会话忙时点「现在就发」不再丢消息。** 以前会话还在收尾上一轮时点「现在就发」，消息会在上一轮真正结束前就从队列里删掉；上一轮收尾慢或卡住时——尤其是按停的时候——这条消息会同时从排队条和对话记录里消失。现在会话忙时消息先留在队列里，等上一轮正常收尾后再出队进入对话；等待期间按停、删除或取消都不会误发，消息也不丢。
+
+### 修复
+
+- **core**: 会话忙时点「现在就发」不再提前出队丢消息 (`0457d04`)
+- 后台标签网页截图不再卡死，浏览器工具支持按停立即中止 (`cc57cba`)
+
 ## [0.9.6] - 2026-11-27
 
 <!-- plume:notes en -->
