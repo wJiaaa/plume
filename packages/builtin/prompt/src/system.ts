@@ -140,12 +140,14 @@ function fixedGuidelines(input: Pick<SystemPromptInput, "permissionMode" | "read
  *   它不去查，转去猜。
  *
  * 每档都点明工作区不是能看的范围的边界；能写的两档说清改 Plume 自己的数据目录（`~/.plume`）总要人亲自点头（`RunFiles.change`），
- * 让模型用文件工具去写、卡上有 diff，而不是换 shell 绕过去。
+ * 让模型用文件工具去写、卡上有 diff，而不是换 shell 绕过去。禁的只是用 shell 手改那里的文件：Plume 自己的 `plume-plugin install`/`dev`
+ * 要点名放行，否则模型把「绝不用 shell」读成连装插件也不许，把这条命令推给用户去敲；沙箱挡住时被拒的结果会告诉它怎么提权。
  */
 function outsideGuideline(input: Pick<SystemPromptInput, "permissionMode" | "readOnly">): string {
 	const appData = input.readOnly
 		? ""
-		: " Changing Plume's own data directory (~/.plume) always asks the user, in every permission mode — use the file tools for it so the user sees the diff, never a shell command.";
+		: " Changing Plume's own data directory (~/.plume) always asks the user, in every permission mode — to edit a file there use the file tools so the user sees the diff, never shell redirection, cp, sed -i or the like." +
+			" Installing a plugin is the exception: run Plume's own `~/.plume/bin/plume-plugin install` (or `dev`) yourself instead of handing it to the user — if the sandbox blocks it, ask for wider access and the user approves it there.";
 	if (input.permissionMode === "ask") {
 		return "Reading or writing outside the workspace asks the user for approval — that is a rule, not a malfunction, and not a reason to guess instead of looking. Use the file tools for it.";
 	}

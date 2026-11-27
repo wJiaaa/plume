@@ -114,6 +114,8 @@ describe("系统提示词的段", () => {
 		expect(full).not.toContain("asks the user for approval");
 		expect(full).not.toContain("Writing there is not free");
 		expect(full).toContain("Changing Plume's own data directory (~/.plume) always asks the user");
+		// 不许用 shell 手改 ~/.plume 不等于不许装插件：模型曾因此拒跑 plume-plugin install、推给用户去敲。
+		expect(full).toContain("run Plume's own `~/.plume/bin/plume-plugin install`");
 		const planning = prompt({ permissionMode: "full", readOnly: true });
 		expect(planning).toContain("Full access is on: reading anywhere on this machine");
 		expect(planning).not.toContain("reading and writing anywhere");
