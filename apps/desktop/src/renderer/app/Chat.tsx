@@ -165,17 +165,22 @@ export function ChatWorkspace({
 			))}
 			{split && (
 				<>
-					{/* 两屏之间：顶行里竖一小截线，下面一整条，和侧栏、面板区之间的分隔线一个样子；单独合成 1px 细条，避免被合并成整屏大层。 */}
-					<span
-						aria-hidden
-						className="absolute top-0 h-5 w-px bg-line-float will-change-transform"
-						style={{ left: leftWidth, marginTop: (MAIN_TOOLBAR_HEIGHT - 20) / 2 }}
-					/>
+					{/*
+					 * 两屏之间：顶行里竖一小截线，下面一整条，和侧栏、面板区之间的分隔线一个样子；单独合成 1px 细条，避免被合并成整屏大层。
+					 * Windows、Linux 上标题行在卡片里，这道线从卡片顶边通到底。
+					 */}
+					{!HEADER_BAR && (
+						<span
+							aria-hidden
+							className="absolute top-0 h-5 w-px bg-line-float will-change-transform"
+							style={{ left: leftWidth, marginTop: (MAIN_TOOLBAR_HEIGHT - 20) / 2 }}
+						/>
+					)}
 					<span
 						aria-hidden
 						data-split-divider=""
 						className="absolute bottom-0 w-px bg-line-float will-change-transform"
-						style={{ left: leftWidth, top: MAIN_TOOLBAR_HEIGHT }}
+						style={{ left: leftWidth, top: HEADER_BAR ? 0 : MAIN_TOOLBAR_HEIGHT }}
 					/>
 					<div className="absolute inset-y-0 z-10 w-0" style={{ left: leftWidth }}>
 						<ResizeHandle
@@ -398,13 +403,17 @@ function ChatScreen({
  * 身子透明、描边透明：外沿和底色是 app.tsx 里底下那一块（`data-frame`）画的，描边只占着 1px，内容不压到外沿上。
  * 圆角和裁切留着（圆角裁在里面的 `FrameRound`），跟着停靠的侧栏、横排的面板区换（styles.css 的 `data-frame-body`），自己铺底色的内容不从外沿的圆角里探出去。
  * 标题栏只盖住这一列，跟着这一列的左右边走：侧栏、面板区开合时一起滑。侧栏收起时它的左端要给浮在窗口左上角的按钮让位（`ToolbarOverlap`）。
+ * Windows、Linux 上窗口顶上那一行是带子，底下那一块从带子下面开始：对话的标题栏包在卡片里、是卡片的第一行，身子的顶上不圆
+ * （styles.css 的 `data-header-bar`）；插件市场和插件页的标题在带子里，不传 `header`，卡片从带子下面直接开始，和 macOS 一样。
  */
-export function ScreenCard({ header, fatal, children }: { header: ReactNode; fatal?: string; children: ReactNode }) {
+export function ScreenCard({ header, fatal, children }: { header?: ReactNode; fatal?: string; children: ReactNode }) {
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
-			<div className="relative shrink-0" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
-				{header}
-			</div>
+			{header && (
+				<div className="relative shrink-0" style={{ height: MAIN_TOOLBAR_HEIGHT }}>
+					{header}
+				</div>
+			)}
 			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden border border-transparent">
 				<FrameRound>
 					{fatal && (
@@ -450,8 +459,9 @@ export function TitleBar({ pane }: { pane?: TitlePane }) {
 	const { screen } = app;
 	const { t, resolvedLocale } = useI18n();
 	usePluginUis();
-	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
+	const page = !pane && screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
 	const name = page ? localized(page.title, resolvedLocale) : undefined;
+	const market = !pane && screen === "market";
 	const other = pane && !pane.focused;
 	// 只要摘要：草稿每一拍换的是视图，摘要还是同一个对象，标题栏不跟着重画。会话自己的工具栏单独订阅视图。
 	const current = useAppPick((store) => (other ? undefined : store.view?.summary));
@@ -459,6 +469,11 @@ export function TitleBar({ pane }: { pane?: TitlePane }) {
 	const chat = screen === "chat" && session;
 	const panelToggle = canOpenPanel(app, session, other ? (pane.sessionId ?? "") : scopeOf(app));
 	const split = screen === "chat" && pane?.split === true;
+	/*
+	 * Windows、Linux 上只有对话的标题栏留在卡片里，底下横一道线和身子隔开。开始页没有标题，这一行空着，不画线：
+	 * 画了就是卡片顶上一条空栏。
+	 */
+	const divider = HEADER_BAR && (chat || split);
 	return (
 		<header
 			data-toolbar-inset=""
@@ -490,11 +505,12 @@ export function TitleBar({ pane }: { pane?: TitlePane }) {
 					{name}
 				</span>
 			)}
-			{screen === "market" && (
+			{market && (
 				<div className="flex min-w-0 flex-1 items-center">
 					<MarketToolbar />
 				</div>
 			)}
+			{divider && <span aria-hidden data-title-divider="" className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-line-float" />}
 		</header>
 	);
 }

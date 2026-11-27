@@ -34,14 +34,16 @@ export function SidebarResizer({ width, max }: { width: number; max: number }) {
 /**
  * 侧栏身子上面那一截：窗口顶上那一条在侧栏这一段，红绿灯和前进、后退、侧栏开关浮在这里，能拖窗口。
  * 和对话的标题栏一样高（见 `ScreenCard`），侧栏和对话的身子顶边对齐。
- * Windows、Linux 上按钮在窗口顶上那条带子里，这一截只占位、不拖窗口：对话的身子上面同样空着一行标题栏。
+ * Windows、Linux 上没有这一截：按钮在窗口顶上那条带子里，卡片从带子下面开始，侧栏从卡片顶边开始；对话的标题栏是卡片里的第一行，
+ * 侧栏和它之间那道分隔线就是侧栏身子的右边，从顶通到底。
  *
  * 停靠时右端竖一小截线（`divider`），和下面两栏之间的分隔线在同一列，把这一条分成侧栏、对话两段。开合滑动时它不在：
  * 它长在侧栏右边上，跟着滑会从红绿灯、前进后退、侧栏开关底下扫过去；收起那一下当场藏起，展开滑到位再淡出来。
  */
 export function SidebarTopRow({ divider }: { divider: boolean }) {
+	if (HEADER_BAR) return null;
 	return (
-		<div className={`relative shrink-0 ${HEADER_BAR ? "" : DRAG}`} style={{ height: MAIN_TOOLBAR_HEIGHT }}>
+		<div className={`relative shrink-0 ${DRAG}`} style={{ height: MAIN_TOOLBAR_HEIGHT }}>
 			<span
 				aria-hidden
 				data-sidebar-divider=""

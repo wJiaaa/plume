@@ -16,8 +16,8 @@ import { ImageViewerHost } from "./image/index.ts";
 import { Toaster } from "./toast/index.ts";
 import { InputMenu } from "./composer/InputMenu.tsx";
 import { useManagedSkin } from "./appearance-settings.ts";
-import { checkPanels, listPages, listPanels, matchesShortcut, PageSlot, pageToolbar, usePluginUis } from "./plugins.tsx";
-import { MarketScreen } from "./market/market.tsx";
+import { checkPanels, listPages, listPanels, localized, matchesShortcut, PageSlot, pageToolbar, usePluginUis } from "./plugins.tsx";
+import { MarketScreen, MarketToolbar } from "./market/market.tsx";
 import { NavButtons, SidebarIcon, ToolbarButton, ToolbarOverlap, toolbarReserved, WindowHeader } from "./window-controls.tsx";
 import { nextTurnCwd, panelWindow, sessionWindow, state, update, useAppPick, useChrome } from "./app/state.ts";
 import { DRAG, HEADER_BAR, NO_DRAG, slideMotion } from "./app/shell-classes.ts";
@@ -42,7 +42,7 @@ export function App() {
 }
 
 function Shell() {
-	const { t } = useI18n();
+	const { t, resolvedLocale } = useI18n();
 	const managedSkin = useManagedSkin();
 	const app = useChrome();
 	const { fatal, fullScreen, windowWidth, sidebarOpen, sidebarWidth, drawerOpen, screen, settingsOpen } = app;
@@ -66,7 +66,9 @@ function Shell() {
 	usePluginUis();
 	const panelInWorkspace = screen === "chat" && listPanels().length > 0;
 	// 插件的页面放在后退、前进后面的按钮（`ui.usePageToolbar`）；页面没有侧栏，和侧栏开关不会同时出现。
-	const pageTools = screen.startsWith("page:") ? pageToolbar(screen.slice("page:".length)) : undefined;
+	const page = screen.startsWith("page:") ? listPages().find((entry) => `page:${entry.key}` === screen) : undefined;
+	const pageTitle = page ? localized(page.title, resolvedLocale) : undefined;
+	const pageTools = page ? pageToolbar(page.key) : undefined;
 	/*
 	 * 侧栏收起时红绿灯和前进、后退浮在卡片左上角，顶行从它们右边开始放东西（`ToolbarOverlap`，卡片里的顶行取用）；
 	 * 有顶上那条带子时它们在带子里，卡片不用让。开合时它和侧栏宽度一起滑，见 styles.css 的 `[data-sidebar-sliding]`。
@@ -214,12 +216,13 @@ function Shell() {
 			 * 侧栏、对话、面板区底下那一整块：外沿的圆角描边和对话的底色只由它画，各栏的身子透明（侧栏只在里面铺自己的底色）。
 			 * 外沿交给不随开合变的一层：侧栏收起时最后露出来的是对话的身子，它滑着时为了和侧栏拼平是直角，滑完才圆回来；
 			 * 身子自己画外沿的话，左上角会在滑完那一下从直角跳成圆角。
+			 * Windows、Linux 上顶上那一行归带子，这一块从带子下面就开始，对话的标题栏、面板区的标签行成了卡片自己的第一行。
 			 */}
 			<div
 				aria-hidden
 				data-frame=""
 				className="pointer-events-none absolute rounded-panel border border-line-float bg-shell"
-				style={{ left: RAIL_WIDTH, top: MAIN_TOOLBAR_HEIGHT, right: CARD_INSET, bottom: CARD_INSET }}
+				style={{ left: RAIL_WIDTH, top: HEADER_BAR ? 0 : MAIN_TOOLBAR_HEIGHT, right: CARD_INSET, bottom: CARD_INSET }}
 			/>
 			<Rail />
 			{/*
@@ -296,7 +299,7 @@ function Shell() {
 				</div>
 				{screen !== "chat" && (
 					<main className="absolute inset-0 flex flex-col">
-						<ScreenCard header={<TitleBar />} fatal={fatal}>
+						<ScreenCard header={HEADER_BAR ? undefined : <TitleBar />} fatal={fatal}>
 							<Main />
 						</ScreenCard>
 					</main>
@@ -316,16 +319,33 @@ function Shell() {
 	 */
 
 	/*
-	 * Windows、Linux：顶上一条横贯的带子，后退、前进、侧栏开关在左端，系统按钮在右端，侧栏和卡片都在它下面。
-	 * 带子自己就是拖拽区，下面不再铺设置页的拖拽条，也没有浮在卡片角上的按钮。
+	 * Windows、Linux：顶上一条横贯的带子，后退、前进、侧栏开关（或插件页按钮）在左端，系统按钮在右端，侧栏和卡片都在它下面。
+	 * 带子自己就是拖拽区，下面不再铺设置页的拖拽条，也没有浮在卡片角上的按钮。带子和活动栏同一个底色，连成窗口的外圈。
+	 * 对话的标题栏和面板区标签行留在卡片第一行（顶上不圆，见 styles.css 的 `data-header-bar`）；
+	 * 插件市场面包屑和插件页的页面名直接跟在后退、前进后面放进带子，卡片从带子下面直接开始。
 	 */
 	if (HEADER_BAR)
 		return (
-			<div className={`flex h-full flex-col overflow-hidden ${fill}`} data-plume-head-fill={managedSkin ? "root" : "window"} inert={settingsOpen}>
-				<WindowHeader fill={managedSkin ? "bg-root" : "bg-sidebar"} insets={titlebar}>
-					<div className={`flex items-center gap-0.5 ${NO_DRAG}`}>{toolbar}</div>
+			<div
+				className={`flex h-full flex-col overflow-hidden ${fill}`}
+				data-sidebar-sliding={moving && !compact ? (navOpen ? "open" : "close") : undefined}
+				data-plume-head-fill={managedSkin ? "root" : "window"}
+				inert={settingsOpen}
+			>
+				<WindowHeader fill={managedSkin ? "bg-root" : "bg-shell"} insets={titlebar}>
+					<div className={`flex shrink-0 items-center gap-0.5 ${NO_DRAG}`}>{toolbar}</div>
+					{screen === "market" && (
+						<div className="ml-2.5 mr-2 flex min-w-0 items-center">
+							<MarketToolbar />
+						</div>
+					)}
+					{pageTitle && (
+						<span data-plume-screen-title="" className="ml-2.5 mr-2 min-w-0 truncate text-label font-medium text-ink select-none">
+							{pageTitle}
+						</span>
+					)}
 				</WindowHeader>
-				<div className="relative flex min-h-0 flex-1 overflow-hidden">
+				<div data-header-bar="" className="relative flex min-h-0 flex-1 overflow-hidden">
 					{body}
 					{settingsOpen && <SettingsDialog />}
 					<ImageViewerHost />

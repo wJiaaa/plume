@@ -83,7 +83,7 @@ export async function checkSteward(options: {
 	await waitFor(async () => (await agent.plugins()).some((status) => status.name === PROBE && status.state === "active"), "代管探针已启用");
 
 	/*
-	 * 探针页面经 `ui.usePageToolbar` 放的按钮：画在窗口左上角后退、前进后面，标题栏里的页面名让到它右边（或在它下面那一行），
+	 * 探针页面经 `ui.usePageToolbar` 放的按钮：画在窗口左上角后退、前进后面，页面名跟在它右边同一行（macOS 在顶行，Windows、Linux 在顶上带子里），
 	 * 点了页面跟着开合、按钮换字；离开页面按钮跟着撤掉。
 	 */
 	const pageNav = `[data-nav="page:${PROBE}/probe"]`;
@@ -96,7 +96,7 @@ export async function checkSteward(options: {
 	const clear = await page<boolean>(`(() => {
 		const button = document.querySelector('${pageButton("收起探针列表")}').getBoundingClientRect();
 		const title = document.querySelector('[data-plume-screen-title]').getBoundingClientRect();
-		return button.right <= title.left || button.bottom <= title.top;
+		return button.right <= title.left && Math.abs((button.top + button.bottom) / 2 - (title.top + title.bottom) / 2) <= 1;
 	})()`);
 	if (!clear) throw new Error("代管会话：探针页面的按钮压在页面名上");
 	await capture("page-toolbar.png");

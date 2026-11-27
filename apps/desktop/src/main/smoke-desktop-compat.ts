@@ -13,8 +13,9 @@ const PANEL_TOGGLE = "[data-panel-toggle] button";
 /** 对话卡片里转录的正文那一栏，嵌在里面的子转录不算。 */
 const TRANSCRIPT_TEXT = JSON.stringify("[data-panel-layout] > main [data-plume-session]");
 const SIDEBAR = 'aside[aria-label="侧边栏"]';
-/** 顶行的后退：从插件市场回到刚才的会话。 */
+/** 顶行的后退、前进：从插件市场回到刚才的会话。 */
 const BACK = 'button[aria-label^="后退"]';
+const FORWARD = 'button[aria-label^="前进"]';
 const FILES_LAUNCH = '[data-panel-launch="plume/files"]';
 const FILES_TAB = '[data-panel-area] [data-panel-tab="plume/files"]';
 /** 面板内容不在面板区的卡片里，另放在一层（换会话不搬 DOM），看得见的那一份没有 inert。 */
@@ -155,9 +156,11 @@ export async function checkDesktopCompat(options: {
 			const band = header ? header.getBoundingClientRect() : null;
 			const headerCenter = band ? band.top + band.height / 2 : ${MAIN_TOOLBAR_HEIGHT / 2};
 			// 侧栏、对话、横排的面板区的身子顶边在同一条线上，连成一块。上下排的面板区在对话下面，收着的挪在窗口外，不算。
-			const joined = [document.querySelector('[data-panel-layout] > main [data-frame-body]'), document.querySelector('aside[aria-label="侧边栏"]:not([data-plume-drawer]) .sidebar-surface'),
-				document.querySelector('[data-panel-layout=row][data-frame-right] [data-panel-area] [data-frame-body]')];
-			const tops = joined.filter(Boolean).map(el => el.getBoundingClientRect()).filter(r => r.width > 1).map(r => r.top);
+			// 有带子时标题行在卡片里，侧栏从卡片顶边开始，和对话、面板区的标题行顶边齐：往下挪一个标题行再比。
+			const sidebar = document.querySelector('aside[aria-label="侧边栏"]:not([data-plume-drawer]) .sidebar-surface');
+			const joined = [[document.querySelector('[data-panel-layout] > main [data-frame-body]'), 0], [sidebar, band ? ${MAIN_TOOLBAR_HEIGHT} : 0],
+				[document.querySelector('[data-panel-layout=row][data-frame-right] [data-panel-area] [data-frame-body]'), 0]];
+			const tops = joined.filter(([el]) => el).map(([el, shift]) => [el.getBoundingClientRect(), shift]).filter(([r]) => r.width > 1).map(([r, shift]) => r.top + shift);
 			if (Math.max(...tops) - Math.min(...tops) > 0.5) { errors.push(99); drift.push('身子顶边不齐: ' + tops.join(', ')); }
 			const toggle = document.querySelector(${JSON.stringify(NAV_TOGGLE)});
 			for (const button of toggle ? toggle.parentElement.closest('div').querySelectorAll('button') : []) {
@@ -401,6 +404,22 @@ export async function checkDesktopCompat(options: {
 		 */
 		await clickVisible(page, `[data-nav=market]`);
 		await until(`document.querySelector('[data-screen=chat]')?.checkVisibility({ visibilityProperty: true }) === false`, "插件市场盖住工作区");
+		// 插件市场的面包屑在顶行里（Windows、Linux 在顶上那条带子里，macOS 在卡片外顶行），跟在前进按钮后面，卡片紧接其下。
+		const market = await page<{ inHeader: boolean; clear: boolean; centerError: number; topGap: number }>(`(() => {
+			const header = document.querySelector('[data-plume-window-header]');
+			const crumbs = document.querySelector('[data-market-crumbs]');
+			const forward = document.querySelector(${JSON.stringify(FORWARD)});
+			const body = document.querySelector('[data-screen=market]')?.closest('[data-frame-body]');
+			const cr = crumbs.getBoundingClientRect(), fr = forward.getBoundingClientRect(), br = body.getBoundingClientRect();
+			const band = header ? header.getBoundingClientRect() : null;
+			const center = band ? band.top + band.height / 2 : ${MAIN_TOOLBAR_HEIGHT / 2};
+			return { inHeader: band ? header.contains(crumbs) : true, clear: cr.left >= fr.right,
+				centerError: Math.abs(cr.top + cr.height / 2 - center), topGap: Math.abs(br.top - (band ? band.bottom : ${MAIN_TOOLBAR_HEIGHT})) };
+		})()`);
+		assert.ok(
+			market.inHeader && market.clear && market.centerError <= 0.5 && market.topGap <= 0.5,
+			`插件市场标题在顶行、卡片紧接其下：${JSON.stringify(market)}`,
+		);
 		await clickVisible(page, BACK);
 		await until(
 			`document.querySelector('[data-screen=chat]')?.checkVisibility({ visibilityProperty: true }) === true && Boolean(${visible(FILES_TAB)})`,

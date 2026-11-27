@@ -102,7 +102,7 @@ export function ToolbarButton({
  * 放调用方给的东西，右端空出 `insets.end` 给系统的最小化、最大化、关闭。里面能按的东西由调用方标 no-drag。
  * 底色和窗口外壳同一档，系统按钮的颜色跟着这条带子此刻画出来的颜色走（`useWindowOverlay`）。
  */
-export function WindowHeader({ fill, insets, children }: { fill: "bg-sidebar" | "bg-root"; insets: TitlebarInsets; children?: ReactNode }) {
+export function WindowHeader({ fill, insets, children }: { fill: "bg-sidebar" | "bg-shell" | "bg-root"; insets: TitlebarInsets; children?: ReactNode }) {
 	const band = useRef<HTMLDivElement>(null);
 	const symbol = useRef<HTMLSpanElement>(null);
 	useWindowOverlay(band, symbol);

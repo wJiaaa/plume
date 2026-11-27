@@ -494,9 +494,15 @@ export function PanelArea({
 				className={`relative flex shrink-0 items-center gap-1 will-change-transform ${stacked ? "pr-1.5" : PANEL_TOGGLE_ROOM} ${CARD_DRAG}`}
 				style={{ height: MAIN_TOOLBAR_HEIGHT, paddingLeft: underToolbar ? Math.max(10, overlap) : 10 }}
 			>
-				{/* 横排时左端竖一小截线，和下面对话、面板区之间那道分隔线在同一列，把顶上这一条分成对话、面板两段（侧栏那一道见 SidebarTopRow）。 */}
-				{arrangement === "row" && <span aria-hidden data-panel-divider="" className="absolute top-1/2 left-0 h-5 w-px -translate-y-1/2 bg-line-float" />}
+				{/*
+				 * 横排时左端竖一小截线，和下面对话、面板区之间那道分隔线在同一列，把顶上这一条分成对话、面板两段（侧栏那一道见 SidebarTopRow）。
+				 * Windows、Linux 上这一行是卡片里的第一行：底下横一道线和身子隔开，竖的那道由下面的 `data-panel-body-divider` 从顶通到底。
+				 */}
+				{arrangement === "row" && !HEADER_BAR && (
+					<span aria-hidden data-panel-divider="" className="absolute top-1/2 left-0 h-5 w-px -translate-y-1/2 bg-line-float" />
+				)}
 				{heading}
+				{HEADER_BAR && <span aria-hidden data-title-divider="" className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-line-float" />}
 			</header>
 			{/* 标签行在身子上面，和对话的标题栏连成窗口顶上的一条。身子透明，外沿是底下那一块画的；横排时那道 1px 分隔线画在下面单独的细条上，避免把整块身子并进全高合成层。 */}
 			<div data-frame-body="" className="relative flex min-h-0 flex-1 flex-col overflow-hidden border border-transparent">
@@ -506,7 +512,7 @@ export function PanelArea({
 				aria-hidden
 				data-panel-body-divider=""
 				className="pointer-events-none absolute bottom-0 left-0 z-10 hidden w-px bg-line-float will-change-transform"
-				style={{ top: MAIN_TOOLBAR_HEIGHT }}
+				style={{ top: HEADER_BAR ? 0 : MAIN_TOOLBAR_HEIGHT }}
 			/>
 		</PanelSurface>
 	);

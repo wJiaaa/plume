@@ -528,7 +528,7 @@
 	 * 分屏的压暗层只画底色不裁内容，仍旧直接去掉那一边的圆角。
 	 */
 	[data-frame-round] {
-		top: 0;
+		top: calc(var(--frame-join-top, 0px) * -1);
 		bottom: 0;
 		left: calc(var(--frame-join-left, 0px) * -1);
 		right: calc(var(--frame-join-right, 0px) * -1);
@@ -539,7 +539,7 @@
 		border-radius: var(--plume-radius-panel);
 	}
 	[data-frame-box] {
-		top: 0;
+		top: var(--frame-join-top, 0px);
 		bottom: 0;
 		left: var(--frame-join-left, 0px);
 		right: var(--frame-join-right, 0px);
@@ -582,6 +582,16 @@
 		border-top-left-radius: 0;
 		border-bottom-left-radius: 0;
 		--frame-join-left: var(--plume-radius-panel);
+	}
+	/*
+	 * Windows、Linux（app.tsx 的 `data-header-bar`）：卡片从带子下面开始，对话、面板区的身子上面接着卡片里的标题行，
+	 * 顶上两个角不圆，和标题行拼成一张卡片；外沿的圆角只在卡片的四个角上（`data-frame`）。
+	 * 侧栏、插件市场和插件页没有卡片里的标题行，从卡片顶边直接开始，顶上两个角照旧圆。
+	 */
+	[data-header-bar] :is([data-frame-body]:not(:first-child), [data-frame-clip]) {
+		border-top-left-radius: 0;
+		border-top-right-radius: 0;
+		--frame-join-top: var(--plume-radius-panel);
 	}
 	/* 上下排时面板区的标签行夹在两栏中间，同铺在底下那一块上：在两栏之间那 4px 的正中横一道线隔开。不画在面板区身上，免得把它往下顶 1px、和常驻面板的内容错开。 */
 	[data-panel-layout="column"] > [data-panel-area]::before {
