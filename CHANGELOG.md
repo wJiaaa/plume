@@ -2,6 +2,35 @@
 
 这个文件由 `pnpm release` 生成，条目来自提交信息。写得含糊的提交在这里也含糊，所以值得在提交时就写清楚。
 
+## [0.9.6] - 2026-11-27
+
+<!-- plume:notes en -->
+### Changes
+
+- **Tighter window chrome on Windows and Linux.** Previously, Windows and Linux kept an extra top row below the window header bar to mirror macOS traffic-light spacing, wasting vertical room and splitting Plugin Market breadcrumbs or plugin page titles onto a separate row. The header bar now matches the activity rail's background while the sidebar and main cards start right beneath it: conversation headers and panel tabs sit cleanly as the first row inside their cards, and Plugin Market breadcrumbs and plugin page titles move into the header bar right next to the navigation buttons.
+- **Let the agent install and load local plugins for you.** Asking the agent to install a plugin you just built used to end with it handing you a terminal command to run yourself, because the rule against shell-editing `~/.plume` was read too broadly. Plume's built-in prompt now explicitly allows running `~/.plume/bin/plume-plugin install` and `dev` directly—requesting escalated approval if sandboxed—while still requiring file tools with a visible diff for editing files under `~/.plume`.
+- **Flexible custom styling for third-party plugins.** Running `plume-plugin check` used to enforce Plume's first-party design tokens across the board, blocking custom colors, font sizes, radii, and transitions. Scoped custom CSS is now allowed by default, while `plume-plugin check` focuses on catching broken Tailwind classes and unscoped selectors that could leak into the host UI; pass `--strict-style` whenever you want full Plume design-system enforcement.
+
+<!-- plume:notes zh-CN -->
+### 改动
+
+- **Windows 与 Linux 窗口顶栏更紧凑。** 以前在 Windows 和 Linux 上，顶部标题带下面还会多占一行卡片外顶行，既浪费垂直空间，也让插件市场面包屑和插件页标题与导航按钮拆在两行。现在顶部带子与活动栏底色连成一体，侧栏和卡片紧贴带子下方开始：对话标题栏与面板标签行收进卡片第一行并用细线隔开，插件市场面包屑和插件页标题直接放进顶部带子，紧跟在后退、前进和页面按钮之后。
+- **Agent 会直接帮你执行 `plume-plugin install` / `dev`。** 以前让 Agent 开发或安装本地插件时，它常把「不许用 shell 改 `~/.plume`」理解成连装插件也不能跑，把安装命令推给你自己去终端里敲。现在系统提示词在继续禁止用 shell 直接改写 `~/.plume` 文件的同时，明确放行了 Plume 自带的 `plume-plugin install` 和 `dev`；若被沙箱拦截，Agent 会直接发起提权审批由你放行。
+- **第三方插件默认放行自定义样式，新增全局 CSS 污染检查。** 以前写外部插件时，`plume-plugin check` 会套用 Plume 内置插件的严格规范，禁止写自定义颜色、字号、圆角和动效时长。现在默认允许带作用域的自定义样式，检查聚焦于拦截会静默失效的产品 Tailwind 类名以及可能污染宿主界面的全局选择器；如需严格对齐 Plume 设计系统，可通过 `--strict-style` 开启完整规则检查。
+
+### 新功能
+
+- **desktop**: Windows 与 Linux 窗口收紧顶栏布局，插件市场与插件页标题并入顶部带子 (`b17d1d8`)
+- 外部插件默认允许自定义样式，新增全局 CSS 污染检查与 --strict-style 开关 (`2e3ee19`)
+
+### 修复
+
+- **core**: 系统提示词放行 plume-plugin install 与 dev，不再把装插件推给用户 (`6325378`)
+
+### 文档
+
+- 更新设置文档中 Magpie 用的 Agent 插件目录路径 (`d9103fe`)
+
 ## [0.9.5] - 2026-11-26
 
 <!-- plume:notes en -->
