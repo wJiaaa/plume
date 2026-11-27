@@ -136,6 +136,16 @@ export async function checkBrowser(options: {
 			if (!messages.includes("toolu_browser_next"))
 				return { toolCalls: [{ id: "toolu_browser_next", name: "browser_act", args: { action: "click", selector: "a", read: true } }] };
 			if (!messages.includes("toolu_browser_shot")) return { toolCalls: [{ id: "toolu_browser_shot", name: "browser_screenshot", args: {} }] };
+			// 查出刚才 target=_blank 开在后台、从未切过去看过的标签，改视口后再截图：不能卡死，也不能抢走前台标签。
+			if (!messages.includes("toolu_browser_tabs")) return { toolCalls: [{ id: "toolu_browser_tabs", name: "browser_tabs", args: { action: "list" } }] };
+			const bgTab = /\\"id\\": \\"([^\\"]+)\\",\\n\s*\\"url\\": \\"http:\/\/127\.0\.0\.1:\d+\/tab\\"/.exec(messages)?.[1];
+			if (bgTab && !messages.includes("toolu_browser_bg_shot"))
+				return {
+					toolCalls: [
+						{ id: "toolu_browser_bg_viewport", name: "browser_viewport", args: { tabId: bgTab, width: 320, height: 640, zoom: 1 } },
+						{ id: "toolu_browser_bg_shot", name: "browser_screenshot", args: { tabId: bgTab } },
+					],
+				};
 			return { text: `浏览器验证完成。[另一页](${url}other)` };
 		});
 		await page(`document.querySelector('.cm-content').focus()`);
@@ -158,7 +168,13 @@ export async function checkBrowser(options: {
 		await waitMain(() => titled("Tab page") !== undefined, "target=_blank 的链接开成了后台标签");
 		// 测试用的模型不一定看图：看图的发出去是图片块，不看的由请求那一层换成一句说明；两样都说明工具结果里带着图。
 		assert.ok(last.includes("Screenshot of Next page") && /"type":"image"|image omitted/.test(last), "截图跟在工具结果里");
+		assert.ok(last.includes("Screenshot of Tab page"), "后台隐藏标签改视口后也能截图返回");
 		await waitMain(() => titled("Next page") !== undefined, "页面换到了下一页");
+		assert.equal(
+			await page<string>(`document.querySelector('${panel} [data-browser-omnibox] input')?.value ?? ''`),
+			`${url}next`,
+			"截取后台标签不抢切前台标签",
+		);
 		await until(`document.querySelector('${panel} [data-browser-cursor]') !== null`, "面板上画出 agent 的光标");
 		await capture("smoke-browser-agent.png");
 		const group = '[data-plume-step="group:browser"]';

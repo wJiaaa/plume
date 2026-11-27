@@ -233,7 +233,7 @@ const CONTENT_MAX_FAILURES = 6;
  * 刚换了文档（打开、点链接、后退前进刷新）：短页要等字数停下来才算；不是的（读一页早已开着的）有字就放行，只在空着、还在加载时等。
  * 只保证「不是空页」，不保证异步数据全到了；后者仍由 agent 按具体内容 wait。
  */
-export async function waitForContent(pages: WebPages, id: string, fresh: boolean): Promise<void> {
+export async function waitForContent(pages: WebPages, id: string, fresh: boolean, signal?: AbortSignal): Promise<void> {
 	const deadline = Date.now() + CONTENT_TIMEOUT_MS;
 	let previous = -1;
 	let same = 0;
@@ -241,6 +241,7 @@ export async function waitForContent(pages: WebPages, id: string, fresh: boolean
 	let loadingSince: number | undefined;
 	let failures = 0;
 	for (;;) {
+		if (signal?.aborted) return;
 		const probedAt = Date.now();
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		// 正在卸掉的文档里一次求值可能不回来：每次只等到总时限。
@@ -252,6 +253,7 @@ export async function waitForContent(pages: WebPages, id: string, fresh: boolean
 		])
 			.catch(() => null)
 			.finally(() => clearTimeout(timer));
+		if (signal?.aborted) return;
 		if (state && typeof state.length === "number") {
 			failures = 0;
 			const { url, readyState, length } = state;
@@ -277,7 +279,7 @@ export async function waitForContent(pages: WebPages, id: string, fresh: boolean
 		} else if (++failures >= CONTENT_MAX_FAILURES) return;
 		const rest = CONTENT_POLL_MS - (Date.now() - probedAt);
 		if (Date.now() + Math.max(rest, 0) >= deadline) return;
-		if (rest > 0) await new Promise<void>((resolve) => setTimeout(resolve, rest));
+		if (rest > 0) await pause(rest, signal);
 	}
 }
 
@@ -375,7 +377,19 @@ export interface Condition {
 	timeout?: number;
 }
 
-const pause = (ms: number) => new Promise<false>((resolve) => setTimeout(() => resolve(false), ms));
+const pause = (ms: number, signal?: AbortSignal) =>
+	new Promise<false>((resolve) => {
+		if (signal?.aborted) return resolve(false);
+		const onAbort = () => {
+			clearTimeout(timer);
+			resolve(false);
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve(false);
+		}, ms);
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
 
 /**
  * 等页面出现某段文字、某个可见元素，或某个表达式为真。
@@ -383,7 +397,7 @@ const pause = (ms: number) => new Promise<false>((resolve) => setTimeout(() => r
  * 在逻辑入口里一轮轮问，而不是在页面里等：条件常常要跨一次跳转才成立（提交表单、登录），页面里等的那段脚本跟着旧文档
  * 一起卸掉，再也回不来。每一轮也单独限时，问到正在卸掉的那一页时不至于把整段等待耗在一轮上。
  */
-export async function waitPage(pages: WebPages, id: string, condition: Condition, url: () => string): Promise<{ waited: number }> {
+export async function waitPage(pages: WebPages, id: string, condition: Condition, url: () => string, signal?: AbortSignal): Promise<{ waited: number }> {
 	const given = (["text", "selector", "expression"] as const).filter((name) => condition[name] !== undefined);
 	if (given.length !== 1) throw new Error("wait needs exactly one of text, selector or expression");
 	const timeout = Math.min(Math.max(condition.timeout ?? 10_000, 0), 30_000);
@@ -401,6 +415,7 @@ export async function waitPage(pages: WebPages, id: string, condition: Condition
 	const start = Date.now();
 	let failure = "";
 	for (;;) {
+		if (signal?.aborted) throw new Error("Cancelled");
 		const left = start + timeout - Date.now();
 		const met = await Promise.race([
 			probe().then(
@@ -413,8 +428,9 @@ export async function waitPage(pages: WebPages, id: string, condition: Condition
 					return false;
 				},
 			),
-			pause(Math.min(1_000, Math.max(left, 0))),
+			pause(Math.min(1_000, Math.max(left, 0)), signal),
 		]);
+		if (signal?.aborted) throw new Error("Cancelled");
 		if (met) return { waited: Date.now() - start };
 		if (Date.now() - start >= timeout) {
 			const seconds = Math.round(timeout / 1000);
@@ -424,7 +440,7 @@ export async function waitPage(pages: WebPages, id: string, condition: Condition
 					: `Waited ${seconds} seconds and the condition was not met; the page is at ${url()}`,
 			);
 		}
-		await pause(Math.min(200, Math.max(start + timeout - Date.now(), 0)));
+		await pause(Math.min(200, Math.max(start + timeout - Date.now(), 0)), signal);
 	}
 }
 

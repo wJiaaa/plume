@@ -41,6 +41,51 @@ function fail(error: unknown): ToolOutput {
 	return { output: error instanceof Error ? error.message : String(error), isError: true };
 }
 
+/** 截图在逻辑入口侧同样设限时，防止跨进程调用异常挂起把整轮卡死。 */
+const CAPTURE_TIMEOUT_MS = 15_000;
+
+async function capturePage(web: WebPages, id: string, signal: AbortSignal): Promise<string> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const stop = () => clearTimeout(timer);
+	signal.addEventListener("abort", stop, { once: true });
+	try {
+		return await Promise.race([
+			web.capture(id, { points: true }),
+			new Promise<never>((_resolve, reject) => {
+				timer = setTimeout(() => reject(new Error("Capturing the page timed out after 15 seconds")), CAPTURE_TIMEOUT_MS);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+		signal.removeEventListener("abort", stop);
+	}
+}
+
+/** 工具执行随会话的停止信号立即退出；底层异步如果晚些失败就地吞掉，不变成未处理拒绝。 */
+function withSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) {
+		void work.catch(() => {});
+		return Promise.reject(new Error("Cancelled"));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			void work.catch(() => {});
+			reject(new Error("Cancelled"));
+		};
+		signal.addEventListener("abort", onAbort, { once: true });
+		work.then(
+			(value) => {
+				signal.removeEventListener("abort", onAbort);
+				resolve(value);
+			},
+			(error: unknown) => {
+				signal.removeEventListener("abort", onAbort);
+				reject(error);
+			},
+		);
+	});
+}
+
 /** `question` 查工具表里问人的那件工具叫什么（`category: "question"`）：要人登录、过验证、操作别的窗口时结果里点名它。 */
 export function browserTools(
 	web: WebPages,
@@ -71,23 +116,23 @@ export function browserTools(
 		return { x: Math.round(point.x * factor), y: Math.round(point.y * factor) };
 	};
 
-	async function act(id: string, args: Record<string, unknown>, action: Action, sessionId: string): Promise<unknown> {
+	async function act(id: string, args: Record<string, unknown>, action: Action, sessionId: string, signal: AbortSignal): Promise<unknown> {
 		const maxChars = args.maxChars as number | undefined;
 		if (action === "read") {
 			// 人开着的、点完链接没读的页可能还空着：有字就不等。
-			await waitForContent(web, id, false);
+			await waitForContent(web, id, false, signal);
 			return read(id, { selector: args.selector as string | undefined, offset: args.offset as number | undefined, maxChars });
 		}
 		// 换了一页，读回来的就是 agent 下一步要看的东西，省掉紧跟着的那次 read。
 		if (action === "back" || action === "forward" || action === "reload") {
 			await workspace.history(id, action, sessionId);
-			await waitForContent(web, id, true);
+			await waitForContent(web, id, true, signal);
 			return read(id, { maxChars });
 		}
-		const done = await perform(id, args, action, sessionId);
+		const done = await perform(id, args, action, sessionId, signal);
 		if (args.read !== true) return done;
 		// 动作连同它的结果一次交回：点完、输完、等到以后不必再单独花一轮读。换了文档的先等新页显出内容。
-		await waitForContent(web, id, (done as { navigated?: boolean }).navigated === true);
+		await waitForContent(web, id, (done as { navigated?: boolean }).navigated === true, signal);
 		const page = await read(id, { maxChars });
 		return done && typeof done === "object" && !Array.isArray(done) ? { ...done, page } : { result: done, page };
 	}
@@ -97,6 +142,7 @@ export function browserTools(
 		args: Record<string, unknown>,
 		action: Exclude<Action, "read" | "back" | "forward" | "reload">,
 		sessionId: string,
+		signal: AbortSignal,
 	): Promise<unknown> {
 		if (action === "wait")
 			return waitPage(
@@ -109,6 +155,7 @@ export function browserTools(
 					timeout: args.timeout as number | undefined,
 				},
 				() => workspace.page(id)?.url ?? "",
+				signal,
 			);
 		if (action === "links") return evaluate(web, id, "Array.from(document.querySelectorAll('a[href]')).slice(0,200).map(a=>({text:a.innerText,href:a.href}))");
 		if (action === "eval") {
@@ -215,7 +262,7 @@ export function browserTools(
 						`The page did not open: ${file ?? href} sent the tab to ${failure.detail}, which is not a web page, so the built-in browser did not follow; it most likely wants to launch a desktop app`,
 					);
 				// 文档能读时靠脚本渲染的页多半还空着：等它显出内容再读，不让 agent 拿着一张空页再花一轮。
-				await waitForContent(web, id, true);
+				await waitForContent(web, id, true, run.signal);
 				return result({ tabId: id, page: await read(id, { maxChars: args.maxChars as number | undefined }) });
 			},
 		},
@@ -263,7 +310,7 @@ export function browserTools(
 				if (args.read !== undefined && typeof args.read !== "boolean") throw new Error("read must be true or false");
 				const id = await current(args.tabId, run.sessionId);
 				workspace.select(id);
-				return result(await act(id, args, action, run.sessionId));
+				return result(await act(id, args, action, run.sessionId, run.signal));
 			},
 		},
 		{
@@ -296,7 +343,7 @@ export function browserTools(
 			parameters: { type: "object", properties: { tabId: { type: "string" } }, additionalProperties: false },
 			async execute(args, run) {
 				const id = await current(args.tabId, run.sessionId);
-				const shot = await web.capture(id, { points: true });
+				const shot = await capturePage(web, id, run.signal);
 				const page = workspace.page(id);
 				return {
 					output: `Screenshot of ${page?.title || page?.url || id} (${page?.url ?? ""}).`,
@@ -351,7 +398,13 @@ export function browserTools(
 					isError: true,
 				};
 			workspace.engage(run.sessionId);
-			const { value, met } = await dialogs.answering(run.sessionId, args.dialog === "accept", () => tool.execute(args, run).catch(fail));
+			const { value, met } = await dialogs.answering(run.sessionId, args.dialog === "accept", () =>
+				withSignal(tool.execute(args, run), run.signal).catch((error: unknown) => {
+					// 按停中止原样抛给循环（`tool-run.ts` 记成 cancelled）；普通失败转成错误结果交给模型。
+					if (run.signal.aborted) throw error;
+					return fail(error);
+				}),
+			);
 			if (value.isError) failedSteps.set(run.sessionId, { step, tool: tool.name });
 			return met.length === 0 ? value : { ...value, output: `${value.output}\n${describeNotices(met, question())}` };
 		},

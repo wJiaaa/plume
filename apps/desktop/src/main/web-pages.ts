@@ -366,7 +366,7 @@ export async function callPage(plugin: string, id: string, method: string, args:
 					height: Math.max(1, Math.round(rect.height as number)),
 				};
 			}
-			const image = await contents.capturePage(area);
+			const image = await captureGuest(contents, area);
 			if (image.isEmpty()) throw new Error("The page has nothing drawn to capture right now");
 			return onWhite(options.points === true ? toPoints(contents, image) : image).toDataURL();
 		}
@@ -417,6 +417,131 @@ export async function callPage(plugin: string, id: string, method: string, args:
 		default:
 			throw new Error(`No method ${method}`);
 	}
+}
+
+/** 单次页面截图的最长等待时长；避免页面不出帧时把工具调用永久挂住。 */
+const CAPTURE_TIMEOUT_MS = 15_000;
+/** 唤醒后台隐藏的 `<webview>` 后等它提交最新一帧的最长等待时长。 */
+const WAKE_FRAME_TIMEOUT_MS = 1_000;
+
+/**
+ * 截取 `<webview>` 画面。
+ *
+ * 后台标签、收起面板或切到别的会话/设置页时，宿主容器用 `visibility: hidden; opacity: 0` 隐藏 `<webview>`；
+ * Chromium 对处于 `visibility: hidden` 的 guest 停止出帧，`contents.capturePage()` 会永久不返回。
+ * 截图期间仅对 `<webview>` 自身按引用计数临时设 `visibility: visible`（原本隐藏时仅在祖先存在 `opacity: 0` 压住画面时才唤醒，
+ * 避免视觉穿透；原本可见时同样钉住，防止截图进行中用户切走标签导致中途挂起），原本隐藏的先等两帧确保提交新尺寸与新画面，
+ * 结束或异常时一律还原，且全程带超时与页面销毁中止。
+ */
+async function captureGuest(contents: WebContents, area: Electron.Rectangle | undefined): Promise<NativeImage> {
+	if (contents.isDestroyed()) throw new Error("The browser tab was closed");
+	if (contents.isCrashed()) throw new Error("The page process stopped");
+	const wake = await wakeWebview(contents);
+	try {
+		if (wake.wasHidden) await waitGuestFrame(contents);
+		return await captureWithTimeout(contents, area);
+	} finally {
+		await wake.restore();
+	}
+}
+
+async function wakeWebview(contents: WebContents): Promise<{ wasHidden: boolean; restore(): Promise<void> }> {
+	const host = contents.hostWebContents;
+	const noop = { wasHidden: false, restore: async () => {} };
+	if (!host || host.isDestroyed() || contents.isDestroyed()) return noop;
+	const contentsId = contents.id;
+	const outcome = (await host
+		.executeJavaScript(
+			`(() => {
+				const el = [...document.querySelectorAll("webview")].find((node) => {
+					try { return node.getWebContentsId() === ${contentsId}; } catch { return false; }
+				});
+				if (!el) return null;
+				const wasHidden = getComputedStyle(el).visibility === "hidden";
+				if (wasHidden) {
+					let veiled = false;
+					for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+						if (getComputedStyle(parent).opacity === "0") { veiled = true; break; }
+					}
+					if (!veiled) return null;
+				}
+				const count = Number(el.dataset.plumeCaptureWake || "0");
+				if (count === 0) el.dataset.plumeCapturePrevVis = el.style.visibility;
+				el.dataset.plumeCaptureWake = String(count + 1);
+				el.style.visibility = "visible";
+				return { wasHidden };
+			})()`,
+		)
+		.catch(() => null)) as { wasHidden: boolean } | null;
+	if (!outcome) return noop;
+	return {
+		wasHidden: outcome.wasHidden,
+		async restore() {
+			if (host.isDestroyed()) return;
+			await host
+				.executeJavaScript(
+					`(() => {
+						const el = [...document.querySelectorAll("webview")].find((node) => {
+							try { return node.getWebContentsId() === ${contentsId}; } catch { return false; }
+						});
+						if (!el) return;
+						const next = Math.max(0, Number(el.dataset.plumeCaptureWake || "1") - 1);
+						if (next === 0) {
+							const prev = el.dataset.plumeCapturePrevVis ?? "";
+							delete el.dataset.plumeCaptureWake;
+							delete el.dataset.plumeCapturePrevVis;
+							el.style.visibility = prev;
+						} else {
+							el.dataset.plumeCaptureWake = String(next);
+						}
+					})()`,
+				)
+				.catch(() => {});
+		},
+	};
+}
+
+/** 等被唤醒的页面走过两帧合成（首帧唤醒、次帧提交最新视口与样式）；脚本阻塞时按时限放行，不拖死截图。 */
+async function waitGuestFrame(contents: WebContents): Promise<void> {
+	if (contents.isDestroyed() || contents.isCrashed()) return;
+	await new Promise<void>((resolve) => {
+		const done = () => {
+			clearTimeout(timer);
+			contents.off("destroyed", done);
+			contents.off("render-process-gone", done);
+			resolve();
+		};
+		const timer = setTimeout(done, WAKE_FRAME_TIMEOUT_MS);
+		contents.once("destroyed", done);
+		contents.once("render-process-gone", done);
+		void contents.executeJavaScript("new Promise((next) => requestAnimationFrame(() => requestAnimationFrame(() => next())))").then(done, done);
+	});
+}
+
+async function captureWithTimeout(contents: WebContents, area: Electron.Rectangle | undefined): Promise<NativeImage> {
+	if (contents.isDestroyed()) throw new Error("The browser tab was closed");
+	if (contents.isCrashed()) throw new Error("The page process stopped");
+	return await new Promise<NativeImage>((resolve, reject) => {
+		let settled = false;
+		const finish = (outcome: { ok: true; value: NativeImage } | { ok: false; error: unknown }) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			contents.off("destroyed", onDestroyed);
+			contents.off("render-process-gone", onGone);
+			if (outcome.ok) resolve(outcome.value);
+			else reject(outcome.error);
+		};
+		const onDestroyed = () => finish({ ok: false, error: new Error("The browser tab was closed") });
+		const onGone = () => finish({ ok: false, error: new Error("The page process stopped") });
+		const timer = setTimeout(() => finish({ ok: false, error: new Error("Capturing the page timed out after 15 seconds") }), CAPTURE_TIMEOUT_MS);
+		contents.once("destroyed", onDestroyed);
+		contents.once("render-process-gone", onGone);
+		contents.capturePage(area).then(
+			(image) => finish({ ok: true, value: image }),
+			(error: unknown) => finish({ ok: false, error }),
+		);
+	});
 }
 
 /** 截图按挂着它的窗口所在屏幕的缩放比缩回点：高分屏上一个 CSS 像素占几个物理像素，给模型的图不必跟着翻倍。 */
