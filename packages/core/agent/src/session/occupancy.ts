@@ -9,8 +9,11 @@ export interface OccupancyDeps {
 	nudgeOrigin(session: Session): void;
 	syncBackground(session: Session): boolean;
 	saveSummary(session: Session): void;
+	quitting(): boolean;
 	/** 回边：队列模块后建，在 `createAgent` 里接上。 */
 	drainQueue(session: Session): void;
+	/** 回边：队列模块后建，在 `createAgent` 里接上。 */
+	unsteer(sessionId: string): void;
 	/** 回边：唤醒模块后建，在 `createAgent` 里接上。 */
 	wakeReports(session: Session): void;
 	checkIdle(session: Session): void;
@@ -22,7 +25,7 @@ export interface OccupancyDeps {
 
 export interface Occupancy {
 	held(session: Session): boolean;
-	begin(session: Session, prompt: UserMessage): void;
+	begin(session: Session, prompt: UserMessage | (() => UserMessage | undefined)): void;
 	release(session: Session): void;
 	releaseHold(session: Session, controller: AbortController, settled: boolean): void;
 	setDraft(session: Session, draft: AssistantMessage | undefined): void;
@@ -33,7 +36,7 @@ export interface Occupancy {
 }
 
 export function createOccupancy(deps: OccupancyDeps): Occupancy {
-	const { observe, wakeups, nudgeOrigin, syncBackground, saveSummary, drainQueue, wakeReports, checkIdle, runTurn, emit, summaries } = deps;
+	const { observe, wakeups, nudgeOrigin, syncBackground, saveSummary, quitting, drainQueue, unsteer, wakeReports, checkIdle, runTurn, emit, summaries } = deps;
 
 	/** 会话在忙：有一轮、`/compact` 或收尾的压缩占着它，见 `Session.controller`。 */
 	function held(session: Session): boolean {
@@ -67,8 +70,8 @@ export function createOccupancy(deps: OccupancyDeps): Occupancy {
 		checkIdle(session);
 	}
 
-	/** 开始新的一轮；上一轮还没收完尾（被打断的那一轮）时排在它后面。 */
-	function begin(session: Session, prompt: UserMessage): void {
+	/** 开始新的一轮；上一轮还没收完尾（被打断的那一轮）时排在它后面。传函数时等上一轮结束才取消息，免得等待期间提前出队丢消息。 */
+	function begin(session: Session, prompt: UserMessage | (() => UserMessage | undefined)): void {
 		session.stopped = false;
 		const previous = session.turn;
 		session.controller?.abort();
@@ -76,7 +79,21 @@ export function createOccupancy(deps: OccupancyDeps): Occupancy {
 		session.controller = controller;
 		session.turn = (async () => {
 			await previous;
-			return runTurn(session, prompt, controller);
+			const resolved = typeof prompt === "function" ? (controller.signal.aborted ? undefined : prompt()) : prompt;
+			if (!resolved) {
+				// 等待上一轮收尾期间被按停、再次打断，或这条排队消息被撤回/删掉：放开会话并同步摘要，不另起一轮。
+				if (session.controller === controller) {
+					if (controller.signal.aborted) session.summary.stop = { reason: "aborted" };
+					release(session);
+					if (!quitting()) unsteer(session.summary.id);
+					syncBackground(session);
+					saveSummary(session);
+					wakeReports(session);
+					checkIdle(session);
+				}
+				return { reason: controller.signal.aborted ? ("aborted" as const) : ("done" as const) };
+			}
+			return runTurn(session, resolved, controller);
 		})();
 	}
 

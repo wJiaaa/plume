@@ -67,9 +67,19 @@ export function conversationService(
 			const session = find(sessionId);
 			if (session.summary.owner) throw new Error(text("session.pluginOwned", { plugin: session.summary.owner }));
 			if (quitting()) throw new Error(text("session.parentStopped"));
-			const entry = queues.take(session.summary.id, String(id));
-			// 打断：停下正在跑的那一轮，等它把没答的调用补完、写完会话，再拿这一条开新的一轮。
-			if (entry) begin(session, queuedPrompt(entry, session.controller !== undefined));
+			const target = String(id);
+			if (!queues.has(session.summary.id, target)) return;
+			// 闲着时立刻出队并开跑；正忙时先留在队列里，等上一轮收完尾再真正出队，免得等待期间被停下或卡住时消息凭空消失。
+			if (!session.controller) {
+				const entry = queues.take(session.summary.id, target);
+				if (entry) begin(session, queuedPrompt(entry, false));
+				return;
+			}
+			begin(session, () => {
+				if (quitting()) return undefined;
+				const entry = queues.take(session.summary.id, target);
+				return entry ? queuedPrompt(entry, true) : undefined;
+			});
 		},
 		async steerQueued(sessionId, id) {
 			const session = find(sessionId);

@@ -436,3 +436,67 @@ it("launch 的 idle 等后台送回的结果唤起的那一轮也做完", async 
 	const view = await service.getSession(session.id);
 	expect(view.messages.some((message) => message.role === "user" && message.synthetic && words(message).includes("RESULT"))).toBe(true);
 });
+
+it("忙时「现在就发」等上一轮收尾再出队：等待期间留在队列，按停不丢、删掉不误发", async () => {
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let gates = 0;
+	const { service, settled } = await open(
+		(conversation, step) => {
+			if (step === 0 && (conversation === "旧一轮" || conversation === "再一轮" || conversation === "第三轮"))
+				return { toolCalls: [{ id: `g${++gates}`, name: "gate", args: {} }] };
+			return { text: `答：${conversation}` };
+		},
+		(ctx) =>
+			ctx.tools.register({
+				name: "gate",
+				description: "等测试手动放行（忽略 abort，模拟收尾较慢的工具）",
+				parameters: { type: "object", properties: {} },
+				async execute() {
+					entered.resolve();
+					await release.promise;
+					return { output: "放行" };
+				},
+			}),
+	);
+	const main = await service.createSession({ cwd: dir });
+
+	// 1. 等待上一轮收尾期间，条目仍留在队列里；若这期间按停，旧轮收尾后条目不丢也不误发。
+	service.send(main.id, { content: [{ type: "text", text: "旧一轮" }] });
+	await entered.promise;
+	const kept = await service.queue(main.id, { content: [{ type: "text", text: "别丢" }] }, "别丢");
+	await service.sendQueued(main.id, kept.id);
+	expect((await service.getSession(main.id)).queue.map((item) => item.id)).toEqual([kept.id]);
+	service.stop(main.id);
+	release.resolve();
+	await vi.waitFor(async () => expect((await service.getSession(main.id)).summary.running).toBe(false));
+	const afterStop = await service.getSession(main.id);
+	expect(afterStop.queue.map((item) => item.id)).toEqual([kept.id]);
+	expect(afterStop.messages.filter((message) => message.role === "user").map(words)).toEqual(["旧一轮"]);
+
+	// 2. 等待上一轮收尾期间把该条删掉：旧轮结束后不会把已删的消息发出去。
+	entered = Promise.withResolvers<void>();
+	release = Promise.withResolvers<void>();
+	service.send(main.id, { content: [{ type: "text", text: "再一轮" }] });
+	await entered.promise;
+	await service.sendQueued(main.id, kept.id);
+	expect((await service.removeQueued(main.id, kept.id))?.id).toBe(kept.id);
+	release.resolve();
+	await vi.waitFor(async () => expect((await service.getSession(main.id)).summary.running).toBe(false));
+	expect((await service.getSession(main.id)).queue).toEqual([]);
+	expect((await service.getSession(main.id)).messages.filter((message) => message.role === "user").map(words)).toEqual(["旧一轮", "再一轮"]);
+
+	// 3. 正常等待上一轮收尾：旧轮一结束就出队并启动新一轮。
+	entered = Promise.withResolvers<void>();
+	release = Promise.withResolvers<void>();
+	service.send(main.id, { content: [{ type: "text", text: "第三轮" }] });
+	await entered.promise;
+	const next = await service.queue(main.id, { content: [{ type: "text", text: "立刻接上" }] }, "立刻接上");
+	await service.sendQueued(main.id, next.id);
+	expect((await service.getSession(main.id)).queue.map((item) => item.id)).toEqual([next.id]);
+	release.resolve();
+	await settled(main.id, 4);
+	const done = await service.getSession(main.id);
+	expect(done.queue).toEqual([]);
+	expect(done.messages.filter((message) => message.role === "user").map(words)).toEqual(["旧一轮", "再一轮", "第三轮", "立刻接上"]);
+});
