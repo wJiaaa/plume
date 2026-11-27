@@ -10,7 +10,7 @@
     "start": "electron-vite preview",
     "package": "electron-vite build && node scripts/package.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --dir test"
   },
   "dependencies": {
     "fflate": "^0.8.3",
